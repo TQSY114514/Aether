@@ -151,31 +151,8 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Normal/Arena model selector: single dropdown with optgroups */}
-      {chatMode !== 'arena' && (
-        <div className="px-4 py-1.5 border-b text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-          <span className="mr-2 align-middle" style={{ color: 'var(--text-muted)' }}>{t('chat.model_switch')}:</span>
-          <span className="inline-flex items-center gap-1 align-middle">
-            <select className="text-[11px] border rounded px-2 py-1 bg-white outline-none max-w-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-              value={String(activeModelId ?? '')}
-              onChange={(e) => {
-                const mid = Number(e.target.value)
-                if (!mid || !currentSessionId) return
-                const model = allModels.find(m => m.id === mid)
-                if (model) saveSessionConfig(currentSessionId, { providerId: model.provider_id, modelId: mid })
-              }}>
-              <option value="" disabled>选择模型</option>
-              {allModelOptions.map(g => (
-                <optgroup key={g.providerId} label={g.providerName}>
-                  {g.models.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </span>
-        </div>
-      )}
+      {/* Model selector now lives under the input bar (ChatInput) next to the
+          thinking-effort slider — Claude-Code-style. */}
 
       <ContextBar />
       <ChatWindow />

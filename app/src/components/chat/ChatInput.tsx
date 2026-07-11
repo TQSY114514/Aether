@@ -50,6 +50,14 @@ export default function ChatInput() {
   const runArena = useStore((s) => s.runArena)
   const effortLevel = useStore((s) => s.effortLevel)
   const setEffortLevel = useStore((s) => s.setEffortLevel)
+  const providers = useStore((s) => s.providers)
+  const allModels = useStore((s) => s.allModels)
+  const sessionConfigs = useStore((s) => s.sessionConfigs)
+  const saveSessionConfig = useStore((s) => s.saveSessionConfig)
+
+  // Active model for the current session.
+  const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
+  const activeModelId = cfg?.modelId ?? null
 
   const slashResults = showSlash ? SLASH_COMMANDS.filter(cmd =>
     cmd.id.includes(slashQuery.toLowerCase()) || cmd.label.includes(slashQuery)
@@ -196,6 +204,9 @@ export default function ChatInput() {
         {!sending && (
           <div className="flex items-center gap-2 px-0.5 mt-1.5 flex-wrap">
             <EffortControl level={effortLevel} onChange={setEffortLevel} />
+            <ModelSelector providers={providers} allModels={allModels}
+              activeModelId={activeModelId}
+              onSelect={(mid, pid) => currentSessionId && saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })} />
             <div className="flex items-center gap-1.5">
               {SLASH_COMMANDS.slice(0, 3).map((cmd) => (
                 <button key={cmd.id} onClick={() => {
@@ -213,9 +224,9 @@ export default function ChatInput() {
   )
 }
 
-// Thinking-effort control: a compact 4-step segmented selector (off/low/med/high).
-// Maps to real reasoning params (reasoning_effort for OpenAI o-series,
-// thinking.budget_tokens for Claude) injected in chat.handler via buildReasoningParams.
+// Thinking-effort control: a slider (Claude-Code-style) with 4 detents
+// (off/low/medium/high). Maps to real reasoning params (reasoning_effort for
+// OpenAI o-series, thinking.budget_tokens for Claude) injected in chat.handler.
 const EFFORT_LEVELS: { value: 'off' | 'low' | 'medium' | 'high'; label: string }[] = [
   { value: 'off', label: '关闭' },
   { value: 'low', label: '低' },
@@ -223,18 +234,53 @@ const EFFORT_LEVELS: { value: 'off' | 'low' | 'medium' | 'high'; label: string }
   { value: 'high', label: '高' },
 ]
 function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 'high'; onChange: (v: 'off' | 'low' | 'medium' | 'high') => void }) {
+  const idx = EFFORT_LEVELS.findIndex(l => l.value === level)
   return (
     <div className="flex items-center gap-1.5" title="思考等级：控制模型的推理深度（仅推理模型生效）">
       <Brain size={13} className="text-gray-400 shrink-0" />
-      <div className="flex items-center rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-        {EFFORT_LEVELS.map((l) => (
-          <button key={l.value} onClick={() => onChange(l.value)}
-            className={cn('px-2 py-0.5 text-[10px] transition-colors', level === l.value ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]')}
-            style={level !== l.value ? { color: 'var(--text-muted)' } : {}}>
-            {l.label}
-          </button>
+      <input type="range" min={0} max={3} step={1} value={idx}
+        onChange={(e) => onChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
+        className="w-20 h-1 accent-black cursor-pointer" />
+      <span className="text-[10px] w-6" style={{ color: 'var(--text-muted)' }}>{EFFORT_LEVELS[idx].label}</span>
+    </div>
+  )
+}
+
+// Inline model selector — lives under the input bar next to the thinking slider
+// (Claude-Code-style). A compact <select> grouped by provider.
+function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
+  providers: { id: number; name: string }[]
+  allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]
+  activeModelId: number | null
+  onSelect: (modelId: number, providerId: number) => void
+}) {
+  // Build provider→models groups, skipping empty providers.
+  const groups = providers.map(p => {
+    const ms = allModels.filter(m => m.provider_id === p.id)
+    return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null
+  }).filter(Boolean) as { providerId: number; providerName: string; models: typeof allModels }[]
+
+  if (groups.length === 0) return null
+  return (
+    <div className="flex items-center gap-1.5" title="切换模型">
+      <Cpu size={13} className="text-gray-400 shrink-0" />
+      <select value={String(activeModelId ?? '')}
+        onChange={(e) => {
+          const mid = Number(e.target.value)
+          const model = allModels.find(m => m.id === mid)
+          if (model) onSelect(mid, model.provider_id)
+        }}
+        className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-white"
+        style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+        <option value="" disabled>选择模型</option>
+        {groups.map(g => (
+          <optgroup key={g.providerId} label={g.providerName}>
+            {g.models.map(m => (
+              <option key={m.id} value={m.id}>{m.display_name || m.model_name}</option>
+            ))}
+          </optgroup>
         ))}
-      </div>
+      </select>
     </div>
   )
 }

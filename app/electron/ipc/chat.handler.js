@@ -34,6 +34,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 
     // Get conversation history
     const msgs = db.getMessages(sessionId)
+    // Generate a summary title when the session still has its placeholder title.
+    // More robust than `msgs.length === 1`: also back-fills older sessions whose
+    // title was never set (e.g. created before this feature shipped).
+    const session0 = db.getSessions().find(s => s.id === sessionId)
+    const placeholderTitles = ['新会话', '新对话', 'New Chat']
+    const needsTitle = session0 && placeholderTitles.includes((session0.title || '').trim()) && msgs.length >= 1
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
     if (attachments.length > 0) {
@@ -88,7 +94,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         })
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
-        if (msgs.length === 1) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider })
+        if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
@@ -139,7 +145,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         token_count: tokens,
       })
       // Auto-title: summarize the first exchange instead of copy-pasting raw input.
-      if (msgs.length === 1) {
+      if (needsTitle) {
         await generateSummaryTitle({ sessionId, content, fullContent, model: m, provider: p })
       }
       console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
@@ -200,10 +206,12 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
     clearTimeout(timeout)
     const cleaned = (text || '').trim().replace(/^["“『]|["”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
     if (cleaned) title = cleaned.slice(0, 20)
-  } catch {
+    console.log('[AetherAI] title summary: raw=', JSON.stringify(text).slice(0, 80), '→ title=', title)
+  } catch (e) {
     // network / abort / parse error — keep the fallback
+    console.warn('[AetherAI] title summary failed:', e.message)
   }
-  try { db.renameSession(sessionId, title) } catch {}
+  try { db.renameSession(sessionId, title) } catch (e) { console.warn('[AetherAI] rename failed:', e.message) }
 }
 
 function estimateTokens(text) {
