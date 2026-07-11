@@ -112,6 +112,31 @@ pre.code-block code { display: block; padding: 10px 12px; font-family: 'JetBrain
 .message-enter { animation: springUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 .cursor-blink { animation: blink 0.8s step-end infinite; }
 
+/* Effort slider — a slim track with a rounded thumb (Claude-Code-style). */
+.effort-slider {
+  -webkit-appearance: none; appearance: none;
+  height: 4px; border-radius: 999px; outline: none; cursor: pointer;
+  background: var(--border);
+}
+.effort-slider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--border) var(--fill, 0%));
+}
+.effort-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg-primary);
+  margin-top: -5px; cursor: grab;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform 0.1s ease;
+}
+.effort-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.15); }
+.effort-slider::-moz-range-track { height: 4px; border-radius: 999px; background: var(--border); }
+.effort-slider::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg-primary);
+  background: var(--accent); cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
 /* Smooth overscroll with rubber-band containment */
 .scroll-bounce {
   overscroll-behavior: contain;

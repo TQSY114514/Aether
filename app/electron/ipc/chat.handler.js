@@ -1,6 +1,14 @@
 const { streamChat, completeChat } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
+const fs = require('fs')
+const path = require('path')
+
+// Append-only diagnostic log for the title-summary path, so we can see why a
+// session keeps the placeholder title without needing the dev console.
+function logTitle(...args) {
+  try { fs.appendFileSync(path.join(require('electron').app.getPath('userData'), 'title-debug.log'), args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ') + '\n') } catch {}
+}
 
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
@@ -40,6 +48,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     const session0 = db.getSessions().find(s => s.id === sessionId)
     const placeholderTitles = ['新会话', '新对话', 'New Chat']
     const needsTitle = session0 && placeholderTitles.includes((session0.title || '').trim()) && msgs.length >= 1
+    logTitle('session', sessionId, 'needsTitle=', needsTitle, 'title=', session0?.title, 'msgs=', msgs.length)
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
     if (attachments.length > 0) {
@@ -191,6 +200,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 async function generateSummaryTitle({ sessionId, content, fullContent, model, provider }) {
   const fallback = (content || '新对话').replace(/\s+/g, ' ').trim().slice(0, 30)
   let title = fallback
+  logTitle('generateSummaryTitle start sid=', sessionId, 'model=', model?.model_name, 'provider=', provider?.api_url)
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15000)
@@ -206,12 +216,12 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
     clearTimeout(timeout)
     const cleaned = (text || '').trim().replace(/^["“『]|["”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
     if (cleaned) title = cleaned.slice(0, 20)
-    console.log('[AetherAI] title summary: raw=', JSON.stringify(text).slice(0, 80), '→ title=', title)
+    logTitle('summary raw=', JSON.stringify(text).slice(0, 80), '→ title=', title)
   } catch (e) {
-    // network / abort / parse error — keep the fallback
+    logTitle('summary FAILED:', e.message)
     console.warn('[AetherAI] title summary failed:', e.message)
   }
-  try { db.renameSession(sessionId, title) } catch (e) { console.warn('[AetherAI] rename failed:', e.message) }
+  try { db.renameSession(sessionId, title); logTitle('renamed sid=', sessionId, 'to=', title) } catch (e) { logTitle('rename FAILED:', e.message) }
 }
 
 function estimateTokens(text) {

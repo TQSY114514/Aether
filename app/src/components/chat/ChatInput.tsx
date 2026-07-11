@@ -235,13 +235,15 @@ const EFFORT_LEVELS: { value: 'off' | 'low' | 'medium' | 'high'; label: string }
 ]
 function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 'high'; onChange: (v: 'off' | 'low' | 'medium' | 'high') => void }) {
   const idx = EFFORT_LEVELS.findIndex(l => l.value === level)
+  // Track fill: 0/33/66/100% for off/low/medium/high.
+  const fill = idx <= 0 ? 0 : (idx / (EFFORT_LEVELS.length - 1)) * 100
   return (
     <div className="flex items-center gap-1.5" title="思考等级：控制模型的推理深度（仅推理模型生效）">
       <Brain size={13} className="text-gray-400 shrink-0" />
       <input type="range" min={0} max={3} step={1} value={idx}
         onChange={(e) => onChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
-        className="w-20 h-1 accent-black cursor-pointer" />
-      <span className="text-[10px] w-6" style={{ color: 'var(--text-muted)' }}>{EFFORT_LEVELS[idx].label}</span>
+        className="effort-slider w-20" style={{ ['--fill' as string]: `${fill}%` }} />
+      <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{EFFORT_LEVELS[idx].label}</span>
     </div>
   )
 }
