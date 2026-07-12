@@ -21,8 +21,10 @@ const MAX_DEPTH = 8
 // Run a tool-calling loop. Returns the final assistant text.
 // `onToolCall({ name, args, result, error })` is called for each tool invocation.
 // `options` is spread into each completion request body (used to carry reasoning params).
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, options = {} }) {
-  const toolPayload = tools ? toolsPayload() : []
+// `agentMode`: 'ask' (confirm dangerous tools) | 'auto' (run everything) | 'plan' (safe tools only, block dangerous).
+// `requestPermission({ name, args, risk })`: async, resolves true to allow a dangerous tool. Only called in 'ask' mode.
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, options = {}, agentMode = 'ask', requestPermission }) {
+  const toolPayload = tools ? toolsPayload(agentMode) : []
   let depth = 0
   // We mutate a local copy of the conversation, appending assistant + tool messages.
   const convo = messages.slice()
@@ -44,10 +46,22 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
         } else {
-          try {
-            entry.result = await tool.run(args, { provider, model })
-          } catch (e) {
-            entry.error = e.message || String(e)
+          // Permission gate for dangerous tools. 'plan' mode never runs them;
+          // 'ask' mode requires the user to approve each one; 'auto' runs all.
+          if (tool.risk === 'dangerous' && agentMode !== 'auto') {
+            if (agentMode === 'plan') {
+              entry.error = 'blocked by plan mode (read-only)'
+            } else if (agentMode === 'ask') {
+              const allowed = requestPermission ? await requestPermission({ name: fn.name, args, risk: tool.risk }) : false
+              if (!allowed) { entry.error = 'denied by user' }
+            }
+          }
+          if (!entry.error) {
+            try {
+              entry.result = await tool.run(args, { provider, model })
+            } catch (e) {
+              entry.error = e.message || String(e)
+            }
           }
         }
         onToolCall && onToolCall(entry)

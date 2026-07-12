@@ -8,6 +8,7 @@ import SettingPage from '@/pages/SettingPage'
 import ScoresPage from '@/pages/ScoresPage'
 import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
+import PermissionDialog from '@/components/chat/PermissionDialog'
 import { t } from '@/utils/i18n'
 
 export default function App() {
@@ -132,6 +133,7 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
         {renderPage()}
       </main>
+      <PermissionDialog />
     </div>
   )
 }

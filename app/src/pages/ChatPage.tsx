@@ -5,7 +5,7 @@ import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
-import { MessageSquare, PanelLeft, Cpu, FlaskConical, Wrench } from 'lucide-react'
+import { MessageSquare, PanelLeft, Cpu, FlaskConical } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 export default function ChatPage() {
@@ -25,8 +25,8 @@ export default function ChatPage() {
   const saveSessionConfig = useStore((s) => s.saveSessionConfig)
   const loadModels = useStore((s) => s.loadModels)
   const allModels = useStore((s) => s.allModels)
-  const toolsEnabled = useStore((s) => s.toolsEnabled)
-  const setToolsEnabled = useStore((s) => s.setToolsEnabled)
+  const agentMode = useStore((s) => s.agentMode)
+  const setAgentMode = useStore((s) => s.setAgentMode)
 
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
   const activeProviderId = cfg?.providerId ?? null
@@ -105,13 +105,15 @@ export default function ChatPage() {
             </Tooltip>
           </div>
           </Tooltip>
-          {/* Tools toggle: enable function-calling (read_file / web_search) */}
-          <Tooltip text="启用工具调用（读取本地文件 / 联网搜索）">
-            <button onClick={() => setToolsEnabled(!toolsEnabled)} disabled={chatMode === 'arena'}
-              className={`flex items-center gap-1 px-2 py-1.5 text-xs rounded-lg border transition-colors ${toolsEnabled ? 'bg-black text-white border-black' : ''}`}
-              style={toolsEnabled ? {} : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-              <Wrench size={12} />工具
-            </button>
+          {/* Agent mode: off / ask (confirm risky) / auto (run all) / plan (read-only). */}
+          <Tooltip text="Agent 模式：关闭·询问(危险操作需确认)·自动(全部放行)·规划(只读)">
+            <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
+              {([['off','关'],['ask','询问'],['auto','自动'],['plan','规划']] as const).map(([k,label]) => (
+                <button key={k} onClick={() => setAgentMode(k)} disabled={chatMode === 'arena'}
+                  className={`px-2 py-1.5 transition-colors ${agentMode === k ? 'bg-black text-white' : ''}`}
+                  style={agentMode !== k ? { color: 'var(--text-secondary)' } : {}}>{label}</button>
+              ))}
+            </div>
           </Tooltip>
           {/* Persona selector */}
           <Tooltip text={t('tooltip.persona')}>

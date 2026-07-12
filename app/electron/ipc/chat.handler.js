@@ -4,17 +4,16 @@ const { buildReasoningParams } = require('../llm/reasoning')
 const fs = require('fs')
 const path = require('path')
 
-// Append-only diagnostic log for the title-summary path, so we can see why a
-// session keeps the placeholder title without needing the dev console.
-function logTitle(...args) {
-  try { fs.appendFileSync(path.join(require('electron').app.getPath('userData'), 'title-debug.log'), args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ') + '\n') } catch {}
-}
+// dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
+// scope (so it can be unit-tested) but needs DB access to persist the title.
+let dbHandle = null
 
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
 
 function registerChatHandlers(ipcMain, db, getWebContents) {
-  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, effortLevel = 'off' }) => {
+  dbHandle = db
+  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off' }) => {
     // Save user message
     if (!regenerate) { db.addMessage({ session_id: sessionId, role: 'user', content }) }
     db.touchSession(sessionId)
@@ -99,7 +98,22 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         const finalContent = await runToolLoop({
           provider, model, messages: apiMsgs, signal: controller.signal,
           options: reasoningOpts,
+          agentMode: agentMode || 'ask',
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
+          // Ask the renderer to approve a dangerous tool. Resolves true/false.
+          // Uses a one-shot ipc event round-trip keyed by a request id.
+          requestPermission: ({ name, args, risk }) => new Promise((resolve) => {
+            const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+            const onReply = (_e, r) => {
+              if (!r || r.reqId !== reqId) return
+              wc?.removeListener('chat:permission-reply', onReply)
+              resolve(!!r.allowed)
+            }
+            wc?.on('chat:permission-reply', onReply)
+            wc?.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk })
+            // Auto-deny after 60s of silence so the loop can't hang forever.
+            setTimeout(() => { wc?.removeListener('chat:permission-reply', onReply); resolve(false) }, 60000)
+          }),
         })
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
@@ -191,6 +205,14 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     }
     abortControllers.clear()
   })
+
+  // Renderer replies to a permission-request via this invoke. We just forward
+  // the reply as an event so the waiting requestPermission closure (which uses
+  // wc.on('chat:permission-reply')) picks it up.
+  ipcMain.handle('chat:permission-reply', (event, payload) => {
+    event.sender.send('chat:permission-reply', payload)
+    return true
+  })
 }
 
 // Generate a concise, summarized title for a session's first exchange.
@@ -221,7 +243,7 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
     logTitle('summary FAILED:', e.message)
     console.warn('[AetherAI] title summary failed:', e.message)
   }
-  try { db.renameSession(sessionId, title); logTitle('renamed sid=', sessionId, 'to=', title) } catch (e) { logTitle('rename FAILED:', e.message) }
+  try { dbHandle.renameSession(sessionId, title); logTitle('renamed sid=', sessionId, 'to=', title) } catch (e) { logTitle('rename FAILED:', e.message) }
 }
 
 function estimateTokens(text) {

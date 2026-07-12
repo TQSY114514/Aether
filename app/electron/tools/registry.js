@@ -1,17 +1,19 @@
 // ───────────────────────────────────────────────────────────────────────────
 // Built-in tool registry.
 //
-// Each tool is a plain object: { name, description, parameters, run }.
-// `parameters` is the OpenAI function-call JSON Schema for arguments.
-// `run(args, ctx)` executes the tool and returns a string result (or throws).
+// Each tool is a plain object: { name, description, parameters, risk, run }.
+//   - risk: 'safe' (read-only, no side effects) or 'dangerous' (writes files,
+//     runs commands, or otherwise mutates state). The permission gate in
+//     toolLoop.js consults this: in `ask` mode dangerous tools require a user
+//     confirm before running; in `plan` mode they are blocked entirely.
+//   - run(args, ctx): executes the tool, returns a string result (or throws).
 //
-// We ship two read-only built-ins (read_file, web_search) — deliberately no
-// write/execute tools, since this is a desktop app and destructive actions
-// need a permission model first. New tools are added by appending to TOOLS.
+// `parameters` is the OpenAI function-call JSON Schema for arguments.
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
 const path = require('path')
+const { exec } = require('child_process')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 
@@ -19,6 +21,7 @@ const TOOLS = [
   {
     name: 'read_file',
     description: 'Read the text content of a file at the given absolute path. Returns up to 64KB of UTF-8 text. Use for inspecting local code/config files the user references.',
+    risk: 'safe',
     parameters: {
       type: 'object',
       properties: {
@@ -29,10 +32,6 @@ const TOOLS = [
     run: (args) => {
       const p = String(args.path || '')
       if (!p) throw new Error('path is required')
-      // Resolve but do NOT allow reading outside sensible bounds: we accept any
-      // absolute path the user's OS account can read — the model can only act on
-      // paths the user mentioned, and the user sees each call in the UI before
-      // results go back. (No silent exfiltration: results stay in the chat.)
       const buf = fs.readFileSync(p)
       const text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
       const truncated = buf.length > MAX_READ_BYTES ? `\n\n[truncated, ${buf.length} bytes total]` : ''
@@ -40,8 +39,27 @@ const TOOLS = [
     },
   },
   {
+    name: 'list_dir',
+    description: 'List the entries of a directory at the given absolute path. Returns one entry per line with a trailing / for directories.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the directory.' },
+      },
+      required: ['path'],
+    },
+    run: (args) => {
+      const p = String(args.path || '')
+      if (!p) throw new Error('path is required')
+      const entries = fs.readdirSync(p, { withFileTypes: true })
+      return entries.map(e => e.isDirectory() ? e.name + '/' : e.name).join('\n') || '(empty)'
+    },
+  },
+  {
     name: 'web_search',
     description: 'Search the public web for a query and return short text snippets of the top results. Use when the user asks about recent events, current data, or anything not in your training data.',
+    risk: 'safe',
     parameters: {
       type: 'object',
       properties: {
@@ -49,11 +67,9 @@ const TOOLS = [
       },
       required: ['query'],
     },
-    run: async (args, ctx) => {
+    run: async (args) => {
       const q = String(args.query || '')
       if (!q) throw new Error('query is required')
-      // Use DuckDuckGo's HTML endpoint — no API key required. We fetch a few
-      // result abstracts; full content fetch is intentionally out of scope.
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15000)
       try {
@@ -67,6 +83,52 @@ const TOOLS = [
       } finally {
         clearTimeout(timeout)
       }
+    },
+  },
+  {
+    name: 'write_file',
+    description: 'Write text content to a file at the given absolute path. Creates the file if it does not exist, overwrites if it does. DANGEROUS — mutates the filesystem.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the file to write.' },
+        content: { type: 'string', description: 'The full text content to write.' },
+      },
+      required: ['path', 'content'],
+    },
+    run: (args) => {
+      const p = String(args.path || '')
+      const content = String(args.content ?? '')
+      if (!p) throw new Error('path is required')
+      fs.mkdirSync(path.dirname(p), { recursive: true })
+      fs.writeFileSync(p, content, 'utf-8')
+      return `wrote ${content.length} chars to ${p}`
+    },
+  },
+  {
+    name: 'run_command',
+    description: 'Run a shell command and return its stdout+stderr (up to 8KB). DANGEROUS — executes arbitrary code. Use only when the user explicitly asks for it.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'The shell command to execute.' },
+        cwd: { type: 'string', description: 'Working directory (optional, defaults to user home).' },
+      },
+      required: ['command'],
+    },
+    run: (args) => {
+      const cmd = String(args.command || '')
+      if (!cmd) throw new Error('command is required')
+      const cwd = args.cwd ? String(args.cwd) : undefined
+      return new Promise((resolve, reject) => {
+        exec(cmd, { cwd, maxBuffer: 16 * 1024, timeout: 30000 }, (err, stdout, stderr) => {
+          const out = ((stdout || '') + (stderr ? '\n[stderr]\n' + stderr : '')).slice(0, 8192)
+          if (err && !stdout && !stderr) return reject(new Error(err.message))
+          resolve(out || '(no output)')
+        })
+      })
     },
   },
 ]
@@ -91,8 +153,11 @@ function getTool(name) {
 }
 
 // The OpenAI tools array to send in a chat request: [{type:'function', function:{...}}].
-function toolsPayload() {
-  return TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+// In `plan` mode we only expose safe tools (no writes/commands), so the model
+// cannot even attempt a dangerous action.
+function toolsPayload(mode) {
+  const list = mode === 'plan' ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
+  return list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
 }
 
 module.exports = { TOOLS, getTool, toolsPayload }

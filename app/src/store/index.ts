@@ -67,9 +67,14 @@ interface AppState {
   // Per-message tool-call invocations, keyed by the assistant messageId the
   // tool belongs to. Each entry is the list of tool calls for that message.
   toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null }[]>
-  // Whether the current session should send tools with the request (toggle in UI).
-  toolsEnabled: boolean
-  setToolsEnabled: (v: boolean) => void
+  // Whether the current session should send tools with the request, and the
+  // permission mode: 'ask' (confirm dangerous tools) | 'auto' (run all) |
+  // 'plan' (safe tools only, read-only). 'off' = no tools at all.
+  agentMode: 'off' | 'ask' | 'auto' | 'plan'
+  setAgentMode: (v: 'off' | 'ask' | 'auto' | 'plan') => void
+  // Pending permission requests awaiting a user decision (rendered as a dialog).
+  permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous' }[]
+  resolvePermission: (reqId: string, allowed: boolean) => void
   // Thinking/reasoning effort level sent to the model (real param: reasoning_effort
   // for OpenAI o-series, thinking.budget_tokens for Claude). 'off' = no param.
   effortLevel: 'off' | 'low' | 'medium' | 'high'
@@ -168,7 +173,8 @@ export const useStore = create<AppState>((set, get) => ({
   streamingBySession: {},
   sending: false,
   toolCallsByMessage: {},
-  toolsEnabled: false,
+  agentMode: 'off',
+  permissionRequests: [],
   effortLevel: 'off',
 
   loadSessions: async () => {
@@ -407,7 +413,8 @@ export const useStore = create<AppState>((set, get) => ({
         mode: chatMode,
         personaId: cfg?.personaId ?? null,
         attachments: imageAttachments,
-        useTools: get().toolsEnabled,
+        useTools: get().agentMode !== 'off',
+        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
         effortLevel: get().effortLevel,
         })
     } catch (err) {
@@ -421,7 +428,11 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  setToolsEnabled: (v) => set({ toolsEnabled: v }),
+  setAgentMode: (v) => set({ agentMode: v }),
+  resolvePermission: (reqId, allowed) => {
+    window.electronAPI.chat.replyPermission({ reqId, allowed })
+    set((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
+  },
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
     await window.electronAPI.chat.stop()
@@ -661,5 +672,9 @@ function ensureToolCallListener() {
       const prev = s.toolCallsByMessage[messageId] || []
       return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...prev, tool] } }
     })
+  })
+  // Dangerous-tool permission requests surface as a dialog in the renderer.
+  window.electronAPI.chat.onPermissionRequest((req) => {
+    useStore.setState((s) => ({ permissionRequests: [...s.permissionRequests, req] }))
   })
 }
