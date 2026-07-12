@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
-import { setLang, getLang, t } from '@/utils/i18n'
+import { setLang, detectLang, t, type LangCode, LANGS } from '@/utils/i18n'
+import { getLangDir } from '@/utils/i18n'
+
+// Set <html dir> for RTL languages (Arabic).
+function applyLangDir(code: LangCode) {
+  document.documentElement.dir = getLangDir(code)
+}
+const LANGS_CODES = LANGS.map(l => l.code)
 import { applyTheme } from '@/utils/theme'
 
 interface SessionConfig {
@@ -97,7 +104,7 @@ interface AppState {
   loadScores: () => Promise<void>
 
   // Settings
-  language: 'zh' | 'en'
+  language: LangCode
   theme: string
   fallbackTimeout: number
   fontScale: number            // 0.85–1.25, base font-size multiplier
@@ -107,7 +114,7 @@ interface AppState {
   backgroundOpacity: number   // 0–100, how visible the image is
   backgroundBlur: number      // 0–20px
   loadSettings: () => Promise<void>
-  setLanguage: (lang: 'zh' | 'en') => Promise<void>
+  setLanguage: (lang: LangCode) => Promise<void>
   setTheme: (theme: string) => Promise<void>
   setFallbackTimeout: (ms: number) => Promise<void>
   setFontScale: (v: number) => Promise<void>
@@ -531,7 +538,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Settings
-  language: 'zh',
+  language: 'en',
   theme: 'light',
   fallbackTimeout: 30000,
   fontScale: 1,
@@ -544,7 +551,9 @@ export const useStore = create<AppState>((set, get) => ({
   loadSettings: async () => {
     try {
       const s = await window.electronAPI.settings.getAll()
-      const lang = (s.language === 'en' ? 'en' : 'zh') as 'zh' | 'en'
+      // Resolve language: saved pref > system detection > en.
+      const saved = s.language as LangCode | undefined
+      const lang: LangCode = saved && LANGS_CODES.includes(saved) ? saved : detectLang()
       const theme = s.theme || 'light'
       const timeout = parseInt(s.fallback_timeout_ms || '30000', 10)
       const bgOpacity = parseInt(s.backgroundOpacity ?? '100', 10)
@@ -556,12 +565,14 @@ export const useStore = create<AppState>((set, get) => ({
       setLang(lang)
       applyTheme(theme, bgImage !== null)
       applyFontScale(fontScale)
+      applyLangDir(lang)
       set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, backgroundImage: bgImage, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort })
     } catch {}
   },
   setLanguage: async (lang) => {
     await window.electronAPI.settings.set('language', lang)
     setLang(lang)
+    applyLangDir(lang)
     set({ language: lang })
   },
   setTheme: async (theme) => {

@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { getThemes } from '@/utils/theme'
 import { Info, Save, Check, ImageIcon, Trash2, Download, Upload } from 'lucide-react'
-import { t } from '@/utils/i18n'
+import { t, LANGS } from '@/utils/i18n'
 
 export default function SettingPage() {
   const language = useStore((s) => s.language)
@@ -60,18 +60,11 @@ export default function SettingPage() {
           {/* Language */}
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>{t('settings.language')}</h2>
-            <div className="flex gap-2">
-              <button onClick={() => setLanguage('zh')}
-                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${language === 'zh' ? 'bg-black text-white border-black' : ''}`}
-                style={language !== 'zh' ? { borderColor: 'var(--border)', color: 'var(--text-secondary)' } : {}}>
-                中文
-              </button>
-              <button onClick={() => setLanguage('en')}
-                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${language === 'en' ? 'bg-black text-white border-black' : ''}`}
-                style={language !== 'en' ? { borderColor: 'var(--border)', color: 'var(--text-secondary)' } : {}}>
-                English
-              </button>
-            </div>
+            <select value={language} onChange={(e) => setLanguage(e.target.value as any)}
+              className="w-full max-w-xs px-3 py-2 text-sm rounded-lg border outline-none bg-white"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+              {LANGS.map((l) => <option key={l.code} value={l.code}>{l.native} — {l.label}</option>)}
+            </select>
           </div>
 
           {/* Theme */}

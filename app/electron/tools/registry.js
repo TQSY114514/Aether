@@ -9,13 +9,18 @@
 //   - run(args, ctx): executes the tool, returns a string result (or throws).
 //
 // `parameters` is the OpenAI function-call JSON Schema for arguments.
+//
+// Tool surface mirrors a coding agent (read/search/edit/git/web/memory) so the
+// model can do real work — every mutating tool is gated by the permission model.
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
 const path = require('path')
 const { exec } = require('child_process')
+const { glob } = require('glob')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
+const MAX_GREP_BYTES = 32 * 1024
 
 const TOOLS = [
   {
@@ -26,6 +31,8 @@ const TOOLS = [
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Absolute path to the file to read.' },
+        offset: { type: 'number', description: 'Line number to start reading from (1-based, optional).' },
+        limit: { type: 'number', description: 'Maximum number of lines to read (optional).' },
       },
       required: ['path'],
     },
@@ -33,7 +40,16 @@ const TOOLS = [
       const p = String(args.path || '')
       if (!p) throw new Error('path is required')
       const buf = fs.readFileSync(p)
-      const text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
+      let text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
+      // Line-based slicing if offset/limit given.
+      const offset = Number(args.offset) || 0
+      const limit = Number(args.limit) || 0
+      if (offset > 1 || limit > 0) {
+        const lines = text.split('\n')
+        const start = Math.max(0, (offset ? offset - 1 : 0))
+        const slice = limit > 0 ? lines.slice(start, start + limit) : lines.slice(start)
+        text = slice.join('\n')
+      }
       const truncated = buf.length > MAX_READ_BYTES ? `\n\n[truncated, ${buf.length} bytes total]` : ''
       return text + truncated
     },
@@ -54,6 +70,62 @@ const TOOLS = [
       if (!p) throw new Error('path is required')
       const entries = fs.readdirSync(p, { withFileTypes: true })
       return entries.map(e => e.isDirectory() ? e.name + '/' : e.name).join('\n') || '(empty)'
+    },
+  },
+  {
+    name: 'glob_find',
+    description: 'Find files matching a glob pattern (e.g. **/*.ts) rooted at a directory. Returns matching absolute paths, up to 100.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Glob pattern, e.g. "**/*.ts".' },
+        cwd: { type: 'string', description: 'Absolute directory to search in.' },
+      },
+      required: ['pattern', 'cwd'],
+    },
+    run: async (args) => {
+      const pattern = String(args.pattern || '')
+      const cwd = String(args.cwd || '')
+      if (!pattern) throw new Error('pattern is required')
+      const matches = await glob(pattern, { cwd: cwd || undefined, absolute: true, nodir: true })
+      return matches.slice(0, 100).join('\n') || '(no matches)'
+    },
+  },
+  {
+    name: 'grep_search',
+    description: 'Search file contents under a directory for a regex pattern. Returns matching lines with file:line prefixes, up to 50 hits.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Regular expression to search for.' },
+        cwd: { type: 'string', description: 'Absolute directory to search in.' },
+        glob: { type: 'string', description: 'Optional glob filter, e.g. "*.ts".' },
+      },
+      required: ['pattern', 'cwd'],
+    },
+    run: async (args) => {
+      const pattern = String(args.pattern || '')
+      const cwd = String(args.cwd || '')
+      if (!pattern) throw new Error('pattern is required')
+      const re = new RegExp(pattern)
+      const files = await glob(args.glob || '**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
+      const hits = []
+      outer: for (const f of files.slice(0, 500)) {
+        try {
+          const text = fs.readFileSync(f, 'utf-8')
+          const lines = text.split('\n')
+          for (let i = 0; i < lines.length; i++) {
+            if (re.test(lines[i])) {
+              hits.push(`${path.relative(cwd || path.dirname(f), f)}:${i + 1}: ${lines[i].trim().slice(0, 200)}`)
+              if (hits.length >= 50) break outer
+            }
+          }
+        } catch {}
+      }
+      const out = hits.join('\n').slice(0, MAX_GREP_BYTES)
+      return out || '(no matches)'
     },
   },
   {
@@ -86,6 +158,36 @@ const TOOLS = [
     },
   },
   {
+    name: 'web_fetch',
+    description: 'Fetch a URL and return its text content (HTML stripped to text, up to 16KB). For reading a specific web page the user gave.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The URL to fetch.' },
+      },
+      required: ['url'],
+    },
+    run: async (args) => {
+      const url = String(args.url || '')
+      if (!url) throw new Error('url is required')
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 20000)
+      try {
+        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' } })
+        if (!res.ok) return `[fetch failed: HTTP ${res.status}]`
+        const ct = res.headers.get('content-type') || ''
+        const raw = await res.text()
+        const text = ct.includes('html') ? raw.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
+        return text.slice(0, 16384) + (text.length > 16384 ? '\n[truncated]' : '')
+      } catch (e) {
+        return `[fetch error: ${e.message}]`
+      } finally {
+        clearTimeout(timeout)
+      }
+    },
+  },
+  {
     name: 'write_file',
     description: 'Write text content to a file at the given absolute path. Creates the file if it does not exist, overwrites if it does. DANGEROUS — mutates the filesystem.',
     risk: 'dangerous',
@@ -104,6 +206,33 @@ const TOOLS = [
       fs.mkdirSync(path.dirname(p), { recursive: true })
       fs.writeFileSync(p, content, 'utf-8')
       return `wrote ${content.length} chars to ${p}`
+    },
+  },
+  {
+    name: 'edit_file',
+    description: 'Replace the first occurrence of old_string with new_string in a file. Fails if old_string is not found or appears more than once (ambiguous). DANGEROUS — mutates a file.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the file to edit.' },
+        old_string: { type: 'string', description: 'The exact text to replace (must be unique in the file).' },
+        new_string: { type: 'string', description: 'The replacement text.' },
+      },
+      required: ['path', 'old_string', 'new_string'],
+    },
+    run: (args) => {
+      const p = String(args.path || '')
+      const oldS = String(args.old_string ?? '')
+      const newS = String(args.new_string ?? '')
+      if (!p || !oldS) throw new Error('path and old_string are required')
+      const orig = fs.readFileSync(p, 'utf-8')
+      const idx = orig.indexOf(oldS)
+      if (idx === -1) throw new Error('old_string not found')
+      if (orig.indexOf(oldS, idx + 1) !== -1) throw new Error('old_string is not unique — make it more specific')
+      const updated = orig.slice(0, idx) + newS + orig.slice(idx + oldS.length)
+      fs.writeFileSync(p, updated, 'utf-8')
+      return `edited ${p}: replaced ${oldS.length} chars with ${newS.length} chars`
     },
   },
   {
@@ -129,6 +258,81 @@ const TOOLS = [
           resolve(out || '(no output)')
         })
       })
+    },
+  },
+  {
+    name: 'git_status',
+    description: 'Run `git status --short` in a directory and return the output. Read-only.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+      },
+      required: ['cwd'],
+    },
+    run: (args) => {
+      const cwd = String(args.cwd || '')
+      return new Promise((resolve, reject) => {
+        exec('git status --short', { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
+          if (err) return reject(new Error(stderr || err.message))
+          resolve(stdout || '(clean)')
+        })
+      })
+    },
+  },
+  {
+    name: 'git_diff',
+    description: 'Run `git diff` in a directory and return the output (up to 16KB). Read-only.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        staged: { type: 'boolean', description: 'If true, show staged diff (--cached).' },
+      },
+      required: ['cwd'],
+    },
+    run: (args) => {
+      const cwd = String(args.cwd || '')
+      const flag = args.staged ? ' --cached' : ''
+      return new Promise((resolve, reject) => {
+        exec('git diff' + flag, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
+          if (err) return reject(new Error(stderr || err.message))
+          resolve((stdout || '(no changes)').slice(0, 16384))
+        })
+      })
+    },
+  },
+  {
+    name: 'memory_save',
+    description: 'Save a note to the app\'s persistent memory store. Use for facts the user wants remembered across conversations.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'The text to remember.' },
+      },
+      required: ['content'],
+    },
+    run: (args) => {
+      const content = String(args.content || '')
+      if (!content) throw new Error('content is required')
+      const db = require('../database')
+      db.addMemory({ content })
+      return `saved to memory (${content.length} chars)`
+    },
+  },
+  {
+    name: 'memory_list',
+    description: 'List all saved memory notes. Read-only.',
+    risk: 'safe',
+    parameters: { type: 'object', properties: {} },
+    run: () => {
+      const db = require('../database')
+      const mems = db.getMemories()
+      if (!mems.length) return '(no memories)'
+      return mems.map((m, i) => `[${i + 1}] ${m.content}`).join('\n')
     },
   },
 ]
