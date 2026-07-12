@@ -8,6 +8,16 @@ const path = require('path')
 // scope (so it can be unit-tested) but needs DB access to persist the title.
 let dbHandle = null
 
+// Append-only diagnostic log for the title-summary path, so we can see why a
+// session keeps the placeholder title without needing the dev console.
+function logTitle(...args) {
+  try {
+    const { app } = require('electron')
+    fs.appendFileSync(path.join(app.getPath('userData'), 'title-debug.log'),
+      args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ') + '\n')
+  } catch {}
+}
+
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
 
