@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.png" width="128" height="128" alt="AetherAI logo" />
+
 # AetherAI
 
 **عميل محلي أولاً لمعونة ذكاء اصطناعي متعدد النماذج على سطح المكتب · Electron + React + TypeScript**

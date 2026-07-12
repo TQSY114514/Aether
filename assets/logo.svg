@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#BFDBFE" stop-opacity="0.85"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#bg)"/>
+  <!-- Stylized A / aether spark: a triangle with an orbit ring -->
+  <g transform="translate(256 256)">
+    <!-- Orbit ring -->
+    <ellipse cx="0" cy="0" rx="150" ry="60" fill="none" stroke="#BFDBFE" stroke-width="14" opacity="0.55" transform="rotate(-25)"/>
+    <!-- The A as a bold stroke -->
+    <path d="M -70 80 L 0 -90 L 70 80 M -38 18 L 38 18" fill="none" stroke="url(#glow)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Spark dot -->
+    <circle cx="0" cy="-120" r="14" fill="#FFFFFF"/>
+  </g>
+</svg>

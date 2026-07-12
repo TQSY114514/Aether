@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.png" width="128" height="128" alt="AetherAI logo" />
+
 # AetherAI
 
 **एक स्थानीय-प्रथम, मल्टी-मॉडल डेस्कटॉप AI चैट क्लाइंट · Electron + React + TypeScript**

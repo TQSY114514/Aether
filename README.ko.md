@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.png" width="128" height="128" alt="AetherAI logo" />
+
 # AetherAI
 
 **로컬 우선, 다중 모델 데스크톱 AI 채트 클라이언트 · Electron + React + TypeScript**

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.png" width="128" height="128" alt="AetherAI logo" />
+
 # AetherAI
 
 **Un cliente de chat de IA de escritorio multi-modelo y local-first · Electron + React + TypeScript**
