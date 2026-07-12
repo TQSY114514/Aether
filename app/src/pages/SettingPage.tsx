@@ -4,6 +4,7 @@ import { useUI } from '@/components/ui/feedback'
 import { getThemes } from '@/utils/theme'
 import { Info, Save, Check, ImageIcon, Trash2, Download, Upload } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
+import McpSettings from '@/components/settings/McpSettings'
 
 export default function SettingPage() {
   const language = useStore((s) => s.language)
@@ -56,6 +57,9 @@ export default function SettingPage() {
       <div className="max-w-2xl mx-auto px-6 py-8">
         <h1 className="text-lg font-semibold mb-8" style={{ color: 'var(--text-primary)' }}>{t('settings.title')}</h1>
         <div className="space-y-6">
+
+          {/* MCP servers */}
+          <McpSettings />
 
           {/* Language */}
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>

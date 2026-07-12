@@ -13,6 +13,8 @@ const { registerArenaHandlers } = require('./ipc/arena.handler')
 const { registerMemoryHandlers } = require('./ipc/memory.handler')
 const { registerBackgroundHandlers } = require('./ipc/background.handler')
 const { registerConfigHandlers } = require('./ipc/config.handler')
+const { registerMcpHandlers } = require('./ipc/mcp.handler')
+const mcpManager = require('./mcp/manager')
 
 let mainWindow = null
 let staticServer = null
@@ -79,6 +81,7 @@ function setupIpcHandlers() {
   registerMemoryHandlers(ipcMain, db)
   registerBackgroundHandlers(ipcMain)
   registerConfigHandlers(ipcMain, db)
+  registerMcpHandlers(ipcMain, db)
 }
 
 app.whenReady().then(async () => {
@@ -90,6 +93,14 @@ app.whenReady().then(async () => {
   }
   createWindow()
   setupIpcHandlers()
+  // Connect to all enabled MCP servers so their tools are available before any
+  // chat uses the agent. Failures are logged inside the manager, never thrown.
+  const mcpServers = db.getMcpServers().filter(s => s.enabled).map(s => ({
+    name: s.name, command: s.command,
+    args: (() => { try { return JSON.parse(s.args) } catch { return [] } })(),
+    env: (() => { try { return JSON.parse(s.env) } catch { return {} } })(),
+  }))
+  mcpManager.connectAll(mcpServers).catch(() => {})
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -93,6 +93,8 @@ async function initDatabase() {
   db.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
   db.run('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
   db.run('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  // MCP servers: external tool servers the agent can call via stdio.
+  db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
   // Migrate old schema
@@ -405,6 +407,29 @@ function deleteMemory(id) {
   db.run('DELETE FROM memory WHERE id = ?', [id]); saveDatabase()
 }
 
+// ===== MCP server CRUD =====
+// Each server: { id, name, command, args (JSON array string), env (JSON object string), enabled }.
+function getMcpServers() {
+  const stmt = db.prepare('SELECT * FROM mcp_server ORDER BY id')
+  return allRows(stmt)
+}
+function addMcpServer({ name, command, args = [], env = {}, enabled = 1 }) {
+  db.run('INSERT INTO mcp_server (name, command, args, env, enabled) VALUES (?, ?, ?, ?, ?)',
+    [name, command, JSON.stringify(args), JSON.stringify(env), enabled ? 1 : 0])
+  saveDatabase(); return { lastInsertRowid: lastId() }
+}
+function updateMcpServer(id, data) {
+  const keys = Object.keys(data).filter(k => k !== 'id')
+  if (!keys.length) return
+  // Serialize args/env to JSON strings if given as arrays/objects.
+  const serialized = keys.map(k => k === 'args' || k === 'env' ? JSON.stringify(data[k]) : data[k])
+  db.run(`UPDATE mcp_server SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...serialized, id])
+  saveDatabase()
+}
+function deleteMcpServer(id) {
+  db.run('DELETE FROM mcp_server WHERE id = ?', [id]); saveDatabase()
+}
+
 module.exports = {
   initDatabase, getProviders, getProvider, addProvider, updateProvider, deleteProvider,
   getModels, getAllModels, getModel, addModel, updateModel, deleteModel, getFallbackChain,
@@ -415,4 +440,5 @@ module.exports = {
   getModelScores, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
   getMemories, addMemory, updateMemory, deleteMemory,
+  getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
 }

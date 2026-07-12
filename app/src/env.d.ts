@@ -55,6 +55,14 @@ interface Window {
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
     }
+    mcp: {
+      list: () => Promise<{ id: number; name: string; command: string; args: string[]; env: Record<string, string>; enabled: number }[]>
+      create: (data: { name: string; command: string; args?: string[]; env?: Record<string, string>; enabled?: number }) => Promise<{ lastInsertRowid: number }>
+      update: (id: number, data: Partial<{ name: string; command: string; args: string[]; env: Record<string, string>; enabled: number }>) => Promise<{ success: boolean }>
+      delete: (id: number) => Promise<{ success: boolean }>
+      connect: (id: number) => Promise<{ success: boolean; tools?: { name: string; description: string; risk: string }[]; error?: string }>
+      status: () => Promise<{ connected: string[] }>
+    }
     settings: {
       get: (key: string) => Promise<string | null>
       set: (key: string, value: string) => Promise<void>

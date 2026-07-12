@@ -70,6 +70,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     vote: (data) => ipcRenderer.invoke('arena:vote', data),
     scores: () => ipcRenderer.invoke('arena:scores'),
   },
+  mcp: {
+    list: () => ipcRenderer.invoke('mcp:list'),
+    create: (data) => ipcRenderer.invoke('mcp:create', data),
+    update: (id, data) => ipcRenderer.invoke('mcp:update', id, data),
+    delete: (id) => ipcRenderer.invoke('mcp:delete', id),
+    connect: (id) => ipcRenderer.invoke('mcp:connect', id),
+    status: () => ipcRenderer.invoke('mcp:status'),
+  },
   settings: {
     get: (key) => ipcRenderer.invoke('settings:get', key),
     set: (key, value) => ipcRenderer.invoke('settings:set', key, value),

@@ -186,7 +186,26 @@
       "sidebar.nav.memory": "记忆",
       "chat.arena.min_models": "至少选 2 个模型",
       "agent.trace.title": "Agent 推理过程",
-      "agent.trace.steps": "步"
+      "agent.trace.steps": "步",
+      "mcp.title": "MCP 服务器",
+      "mcp.add": "添加服务器",
+      "mcp.desc": "连接外部工具服务器（stdio）。其工具会并入内置 Agent 工具。",
+      "mcp.name_ph": "服务器名（如 filesystem）",
+      "mcp.command_ph": "命令（如 npx）",
+      "mcp.args_ph": "参数 JSON 数组",
+      "mcp.env_ph": "环境变量 JSON 对象（可选）",
+      "mcp.add_btn": "添加",
+      "mcp.empty": "未配置 MCP 服务器",
+      "mcp.online": "已连接",
+      "mcp.offline": "未连接",
+      "mcp.reconnect": "重新连接",
+      "mcp.added": "服务器已添加",
+      "mcp.deleted": "服务器已移除",
+      "mcp.connected": "已连接 — {0} 个工具",
+      "mcp.connect_failed": "连接失败",
+      "mcp.need_name_command": "名称和命令必填",
+      "mcp.args_json_error": "参数必须是 JSON 数组",
+      "mcp.env_json_error": "环境变量必须是 JSON 对象"
     }
   },
   {

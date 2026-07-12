@@ -14,7 +14,19 @@
 
 const { completeChat } = require('./providerAdapter')
 const { safeParseToolCallArgs } = require('./toolArgs')
-const { getTool, toolsPayload } = require('../tools/registry')
+// Use the MCP-aware merged registry so the agent can call both built-in tools
+// and any connected MCP server's tools. Falls back to the plain built-in
+// registry if the manager isn't loadable for some reason.
+let getTool, toolsPayload
+try {
+  const m = require('../mcp/manager')
+  getTool = m.getMergedTool
+  toolsPayload = m.getMergedToolsPayload
+} catch {
+  const r = require('../tools/registry')
+  getTool = r.getTool
+  toolsPayload = r.toolsPayload
+}
 
 const MAX_DEPTH = 12
 const MAX_TOTAL_CHARS = 200000 // crude context budget across all tool results
