@@ -4,12 +4,15 @@ import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
 import { Copy, Check, RefreshCw } from 'lucide-react'
 import { renderMarkdown } from '@/utils/markdown'
+import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
+import AgentPlanTrace from './AgentPlanTrace'
 
 export default function MessageBubble({ message, searchHighlight }: { message: Message; searchHighlight?: string }) {
   const [copied, setCopied] = useState(false); const regenerate = useStore(s => s.regenerate)
   const bubbleWidth = useStore(s => s.bubbleWidth)
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
+  const planSteps = useStore(s => s.planStepsByMessage[message.id])
   const isUser = message.role === 'user'
   const isStreaming = message.id < 0
   const isError = message.status === 'error'
@@ -30,7 +33,7 @@ export default function MessageBubble({ message, searchHighlight }: { message: M
     const raw = target.getAttribute('data-code') || ''
     navigator.clipboard.writeText(raw.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'))
     const prev = target.textContent
-    target.textContent = '已复制'
+    target.textContent = t('chat.copied')
     target.classList.add('copied')
     setTimeout(() => { target.textContent = prev; target.classList.remove('copied') }, 1200)
   }
@@ -62,11 +65,11 @@ export default function MessageBubble({ message, searchHighlight }: { message: M
               <span className="text-white text-[10px] font-medium">AI</span>
             </div>
             <span className="text-xs font-medium text-gray-500">
-              {isError ? '错误' : isAborted ? '已中止' : 'Assistant'}
+              {isError ? t('chat.error_short') : isAborted ? t('chat.aborted') : 'Assistant'}
             </span>
             {isFallback && message.model_used && (
               <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                由 {message.model_used} 回答（原模型不可用）
+                {t('chat.fallback_label', message.model_used)}
               </span>
             )}
           </div>
@@ -81,6 +84,9 @@ export default function MessageBubble({ message, searchHighlight }: { message: M
           ? { backgroundColor: 'var(--accent)' }
           : isError ? undefined
           : { backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}>
+          {!isUser && planSteps && planSteps.length > 0 && (
+            <AgentPlanTrace steps={planSteps} />
+          )}
           {!isUser && toolCalls && toolCalls.length > 0 && (
             <div className="mb-2">
               {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
@@ -93,7 +99,7 @@ export default function MessageBubble({ message, searchHighlight }: { message: M
           {isStreaming && <span className="inline-block w-1.5 h-4 bg-black/30 ml-0.5 cursor-blink" />}
           {isError && message.error_message && (
             <details className="mt-2 text-xs text-red-400">
-              <summary className="cursor-pointer">错误详情</summary>
+              <summary className="cursor-pointer">{t('chat.error.detail')}</summary>
               <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px]">{message.error_message}</pre>
             </details>
           )}
@@ -104,11 +110,11 @@ export default function MessageBubble({ message, searchHighlight }: { message: M
               {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button onClick={handleCopy} className="p-1 rounded-md hover:bg-[var(--border)] transition-colors" title="复制">
+          <button onClick={handleCopy} className="p-1 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.copy')}>
             {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} style={{ color: 'var(--text-muted)' }} />}
           </button>
           {!isUser && !isStreaming && !isError && (
-            <button className="p-1 rounded-md hover:bg-[var(--border)] transition-colors" title="重新生成" onClick={() => regenerate()}>
+            <button className="p-1 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.regenerate')} onClick={() => regenerate()}>
               <RefreshCw size={12} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}

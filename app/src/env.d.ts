@@ -45,6 +45,7 @@ interface Window {
       send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'ask' | 'auto' | 'plan'; effortLevel?: 'off' | 'low' | 'medium' | 'high' }) => Promise<{ messageId: number }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
       onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null } }) => void) => () => void
+      onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string } }) => void) => () => void
       onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous' }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean }) => Promise<boolean>
       stop: () => Promise<void>

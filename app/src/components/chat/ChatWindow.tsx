@@ -82,11 +82,11 @@ export default function ChatWindow() {
         <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索当前对话..." autoComplete="off"
+            placeholder={t('chat.search_placeholder')} autoComplete="off"
             className="w-full bg-transparent outline-none text-xs" style={{ color: 'var(--text-primary)' }} />
           {searchQuery && (
             <>
-              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{matchCount} 条</span>
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{matchCount} {t('chat.search_count_unit')}</span>
               <button onClick={() => setSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
                 <X size={12} className="text-gray-400" />
               </button>
@@ -100,7 +100,7 @@ export default function ChatWindow() {
           {filteredMessages.length === 0 && !streamingContent && arenaResults.length === 0 && (
             searchQuery ? (
               <div className="text-center py-20">
-                <p className="text-sm shimmer-text">{searchQuery ? '未找到匹配的消息' : '发送一条消息开始对话'}</p>
+                <p className="text-sm shimmer-text">{searchQuery ? t('chat.search_no_match') : t('chat.empty.start')}</p>
               </div>
             ) : (
               <EmptyState />
@@ -128,7 +128,7 @@ export default function ChatWindow() {
           )}
           {arenaResults.length > 0 && (
             <div className="space-y-3">
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 竞技场结果</div>
+              <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
               {arenaResults.map((r) => {
                 const others = arenaResults.filter(x => x.model_id !== r.model_id)
                 const voted = arenaResults.length === 1 // collapsed to winner after voting
@@ -145,12 +145,12 @@ export default function ChatWindow() {
                       <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                         <button onClick={() => arenaVote({ model_id: r.model_id, model_name: r.model_name, content: r.content, provider_name: r.provider_name }, others.map(x => ({ model_id: x.model_id, model_name: x.model_name })))}
                           className="text-xs px-3 py-1 rounded-lg border bg-white hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
-                          ⭐ 最佳回答
+                          ⭐ {t('chat.arena.vote')}
                         </button>
                       </div>
                     )}
                     {voted && (
-                      <div className="px-3 py-2 border-t text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>✅ 已选为最佳回答，评分已更新</div>
+                      <div className="px-3 py-2 border-t text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>✅ {t('chat.arena.voted')}</div>
                     )}
                   </div>
                 )

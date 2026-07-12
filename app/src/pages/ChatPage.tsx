@@ -106,9 +106,9 @@ export default function ChatPage() {
           </div>
           </Tooltip>
           {/* Agent mode: off / ask (confirm risky) / auto (run all) / plan (read-only). */}
-          <Tooltip text="Agent 模式：关闭·询问(危险操作需确认)·自动(全部放行)·规划(只读)">
+          <Tooltip text={t('agent.tooltip')}>
             <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
-              {([['off','关'],['ask','询问'],['auto','自动'],['plan','规划']] as const).map(([k,label]) => (
+              {([['off', t('agent.mode.off')], ['ask', t('agent.mode.ask')], ['auto', t('agent.mode.auto')], ['plan', t('agent.mode.plan')]] as const).map(([k,label]) => (
                 <button key={k} onClick={() => setAgentMode(k)} disabled={chatMode === 'arena'}
                   className={`px-2 py-1.5 transition-colors ${agentMode === k ? 'bg-black text-white' : ''}`}
                   style={agentMode !== k ? { color: 'var(--text-secondary)' } : {}}>{label}</button>
@@ -148,7 +148,7 @@ export default function ChatPage() {
             ))}
           </div>
           {arenaModelIds.length < 2 && (
-            <p className="text-[10px] mt-1" style={{ color: 'var(--warning)' }}>至少选 2 个模型</p>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--warning)' }}>{t('chat.arena.min_models')}</p>
           )}
         </div>
       )}

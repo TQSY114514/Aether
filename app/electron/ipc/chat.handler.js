@@ -100,6 +100,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           options: reasoningOpts,
           agentMode: agentMode || 'ask',
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
+          onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
           // Ask the renderer to approve a dangerous tool. Resolves true/false.
           // Uses a one-shot ipc event round-trip keyed by a request id.
           requestPermission: ({ name, args, risk }) => new Promise((resolve) => {

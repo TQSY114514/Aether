@@ -74,6 +74,8 @@ interface AppState {
   // Per-message tool-call invocations, keyed by the assistant messageId the
   // tool belongs to. Each entry is the list of tool calls for that message.
   toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null }[]>
+  // Per-message agent plan steps (the assistant's reasoning each round).
+  planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
   // Whether the current session should send tools with the request, and the
   // permission mode: 'ask' (confirm dangerous tools) | 'auto' (run all) |
   // 'plan' (safe tools only, read-only). 'off' = no tools at all.
@@ -180,6 +182,7 @@ export const useStore = create<AppState>((set, get) => ({
   streamingBySession: {},
   sending: false,
   toolCallsByMessage: {},
+  planStepsByMessage: {},
   agentMode: 'off',
   permissionRequests: [],
   effortLevel: 'off',
@@ -687,5 +690,13 @@ function ensureToolCallListener() {
   // Dangerous-tool permission requests surface as a dialog in the renderer.
   window.electronAPI.chat.onPermissionRequest((req) => {
     useStore.setState((s) => ({ permissionRequests: [...s.permissionRequests, req] }))
+  })
+  // Agent plan steps (one per loop round) — live reasoning trace for the UI.
+  window.electronAPI.chat.onPlanStep(({ messageId, step }) => {
+    if (!messageId || !step) return
+    useStore.setState((s) => {
+      const prev = s.planStepsByMessage[messageId] || []
+      return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: [...prev, step] } }
+    })
   })
 }

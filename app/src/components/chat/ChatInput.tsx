@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu } from 'lucide-react'
+import { t } from '@/utils/i18n'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 // A long pasted block collapsed into a chip (ChatGPT-style). Kept separate from
@@ -23,13 +24,13 @@ function classifyFile(file: File): 'text' | 'image' {
 }
 
 const SLASH_COMMANDS = [
-  { id: 'summarize', label: '总结', prompt: '请详细总结以上对话的要点，用中文回复。' },
-  { id: 'translate', label: '翻译', prompt: '请将以上内容翻译成中文。' },
-  { id: 'polish', label: '润色', prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
-  { id: 'explain', label: '解释', prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
-  { id: 'continue', label: '续写', prompt: '请基于以上内容自然地继续写作。' },
-  { id: 'code', label: '代码', prompt: '请生成实现以上需求的代码。' },
-]
+  { id: 'summarize', label: () => t('slash.summarize'), prompt: '请详细总结以上对话的要点，用中文回复。' },
+  { id: 'translate', label: () => t('slash.translate'), prompt: '请将以上内容翻译成中文。' },
+  { id: 'polish', label: () => t('slash.polish'), prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
+  { id: 'explain', label: () => t('slash.explain'), prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
+  { id: 'continue', label: () => t('slash.continue'), prompt: '请基于以上内容自然地继续写作。' },
+  { id: 'code', label: () => t('slash.code'), prompt: '请生成实现以上需求的代码。' },
+] as const
 
 export default function ChatInput() {
   const [input, setInput] = useState('')
@@ -60,7 +61,7 @@ export default function ChatInput() {
   const activeModelId = cfg?.modelId ?? null
 
   const slashResults = showSlash ? SLASH_COMMANDS.filter(cmd =>
-    cmd.id.includes(slashQuery.toLowerCase()) || cmd.label.includes(slashQuery)
+    cmd.id.includes(slashQuery.toLowerCase()) || cmd.label().includes(slashQuery)
   ) : []
 
   const handleSubmit = async () => {
@@ -92,13 +93,13 @@ export default function ChatInput() {
     const files = Array.from(e.target.files || [])
     setFileError(null)
     for (const file of files) {
-      if (file.size > MAX_BYTES) { setFileError(`${file.name} 超过 10MB 限制`); continue }
+      if (file.size > MAX_BYTES) { setFileError(t('chat.file_too_large', file.name)); continue }
       const reader = new FileReader()
       reader.onload = () => {
         const dataUrl = reader.result as string
         setPending(prev => [...prev, { name: file.name, mime: file.type || (classifyFile(file) === 'image' ? 'image/png' : 'text/plain'), kind: classifyFile(file), dataUrl }])
       }
-      reader.onerror = () => setFileError(`读取 ${file.name} 失败`)
+      reader.onerror = () => setFileError(t('chat.file_read_failed', file.name))
       reader.readAsDataURL(file)
     }
     e.target.value = ''
@@ -125,7 +126,7 @@ export default function ChatInput() {
     else setShowSlash(false)
   }
 
-  const handleSlashSelect = (cmd: typeof SLASH_COMMANDS[0]) => {
+  const handleSlashSelect = (cmd: typeof SLASH_COMMANDS[number]) => {
     const lines = input.split('\n')
     lines[lines.length - 1] = cmd.prompt
     setInput(lines.join('\n'))
@@ -163,7 +164,7 @@ export default function ChatInput() {
             {snippets.map((s, i) => (
               <span key={s.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
                 <FileText size={11} className="text-gray-400" />
-                粘贴片段 {i + 1} · {s.preview}
+                {t('paste.snippet_n', i + 1)} · {s.preview}
                 <button onClick={() => setSnippets(prev => prev.filter(x => x.id !== s.id))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
               </span>
             ))}
@@ -175,27 +176,27 @@ export default function ChatInput() {
             <div className="slash-menu">
               {slashResults.map((cmd) => (
                 <div key={cmd.id} className="slash-item" onClick={() => handleSlashSelect(cmd)}>
-                  <div className="text-sm font-medium">{cmd.label}</div>
+                  <div className="text-sm font-medium">{cmd.label()}</div>
                   <div className="text-[11px] text-[var(--text-muted)] truncate">{cmd.prompt}</div>
                 </div>
               ))}
             </div>
           )}
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={sending} title="上传文件" className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
+          <button onClick={() => fileInputRef.current?.click()} disabled={sending} title={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
             <Paperclip size={16} className="text-gray-400" />
           </button>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
-            placeholder={chatMode === 'arena' ? '输入问题，多模型同时回答...' : '输入消息... (Shift+Enter 换行)'}
+            placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : t('chat.placeholder')}
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
             disabled={sending} />
           {sending ? (
-            <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title="停止">
+            <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')}>
               <Square size={14} />
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2.5 rounded-xl bg-black text-white hover:opacity-80 transition-opacity', 'disabled:opacity-30')} title="发送">
+              className={cn('shrink-0 p-2.5 rounded-xl bg-black text-white hover:opacity-80 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')}>
               <Send size={14} />
             </button>
           )}
@@ -213,10 +214,10 @@ export default function ChatInput() {
                   const prompt = cmd.prompt
                   setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
                   textareaRef.current?.focus()
-                }} className="qaction">{cmd.label}</button>
+                }} className="qaction">{cmd.label()}</button>
               ))}
             </div>
-            <span className="text-[10px] text-[var(--text-muted)] ml-auto">输入 / 查看全部指令</span>
+            <span className="text-[10px] text-[var(--text-muted)] ml-auto">{t('empty.hint.slash')}</span>
           </div>
         )}
       </div>
@@ -227,23 +228,23 @@ export default function ChatInput() {
 // Thinking-effort control: a slider (Claude-Code-style) with 4 detents
 // (off/low/medium/high). Maps to real reasoning params (reasoning_effort for
 // OpenAI o-series, thinking.budget_tokens for Claude) injected in chat.handler.
-const EFFORT_LEVELS: { value: 'off' | 'low' | 'medium' | 'high'; label: string }[] = [
-  { value: 'off', label: '关闭' },
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
+const EFFORT_LEVELS = [
+  { value: 'off' as const, labelKey: 'effort.off' },
+  { value: 'low' as const, labelKey: 'effort.low' },
+  { value: 'medium' as const, labelKey: 'effort.medium' },
+  { value: 'high' as const, labelKey: 'effort.high' },
 ]
 function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 'high'; onChange: (v: 'off' | 'low' | 'medium' | 'high') => void }) {
   const idx = EFFORT_LEVELS.findIndex(l => l.value === level)
   // Track fill: 0/33/66/100% for off/low/medium/high.
   const fill = idx <= 0 ? 0 : (idx / (EFFORT_LEVELS.length - 1)) * 100
   return (
-    <div className="flex items-center gap-1.5" title="思考等级：控制模型的推理深度（仅推理模型生效）">
+    <div className="flex items-center gap-1.5" title={t('effort.tooltip')}>
       <Brain size={13} className="text-gray-400 shrink-0" />
       <input type="range" min={0} max={3} step={1} value={idx}
         onChange={(e) => onChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
         className="effort-slider w-20" style={{ ['--fill' as string]: `${fill}%` }} />
-      <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{EFFORT_LEVELS[idx].label}</span>
+      <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{t(EFFORT_LEVELS[idx].labelKey)}</span>
     </div>
   )
 }
@@ -264,7 +265,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
 
   if (groups.length === 0) return null
   return (
-    <div className="flex items-center gap-1.5" title="切换模型">
+    <div className="flex items-center gap-1.5" title={t('chat.model_switch')}>
       <Cpu size={13} className="text-gray-400 shrink-0" />
       <select value={String(activeModelId ?? '')}
         onChange={(e) => {
@@ -274,7 +275,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
         }}
         className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-white"
         style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-        <option value="" disabled>选择模型</option>
+        <option value="" disabled>{t('chat.select_model')}</option>
         {groups.map(g => (
           <optgroup key={g.providerId} label={g.providerName}>
             {g.models.map(m => (

@@ -126,7 +126,7 @@ export default function Sidebar() {
                   </div>
                 )}
                 <button onClick={async (e) => { e.stopPropagation()
-                    const ok = await confirm({ title: '删除会话', description: '确定删除此会话？所有消息将被永久删除。', confirmText: '删除', danger: true })
+                    const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
                     if (ok) deleteSession(session.id)
                   }}
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all">
@@ -144,8 +144,8 @@ export default function Sidebar() {
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
-        <NavItem icon={DollarSign} label="Token统计" active={currentView === 'tokens'} onClick={() => setCurrentView('tokens')} />
-        <NavItem icon={Brain} label="记忆" active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
+        <NavItem icon={DollarSign} label={t('sidebar.nav.tokens')} active={currentView === 'tokens'} onClick={() => setCurrentView('tokens')} />
+        <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
         <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>
     </div>

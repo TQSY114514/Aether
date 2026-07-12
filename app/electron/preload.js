@@ -52,6 +52,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:tool-call', handler)
       return () => ipcRenderer.removeListener('chat:tool-call', handler)
     },
+    onPlanStep: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:plan-step', handler)
+      return () => ipcRenderer.removeListener('chat:plan-step', handler)
+    },
     onPermissionRequest: (callback) => {
       const handler = (_e, payload) => callback(payload)
       ipcRenderer.on('chat:permission-request', handler)

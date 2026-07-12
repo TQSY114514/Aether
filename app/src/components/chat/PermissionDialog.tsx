@@ -1,5 +1,6 @@
 import { useStore } from '@/store'
 import { ShieldAlert, FileText, Globe, FileEdit, Terminal } from 'lucide-react'
+import { t } from '@/utils/i18n'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Permission gate for dangerous agent tools.
@@ -12,18 +13,26 @@ import { ShieldAlert, FileText, Globe, FileEdit, Terminal } from 'lucide-react'
 // Mirrors Claude Code's permission UX: risky actions never run silently.
 // ───────────────────────────────────────────────────────────────────────────
 
-const TOOL_META: Record<string, { icon: typeof FileText; label: string }> = {
-  read_file: { icon: FileText, label: '读取文件' },
-  list_dir: { icon: FileText, label: '列出目录' },
-  web_search: { icon: Globe, label: '联网搜索' },
-  write_file: { icon: FileEdit, label: '写入文件' },
-  run_command: { icon: Terminal, label: '执行命令' },
+const TOOL_META: Record<string, { icon: typeof FileText; labelKey: string }> = {
+  read_file: { icon: FileText, labelKey: 'tool.read_file' },
+  list_dir: { icon: FileText, labelKey: 'tool.list_dir' },
+  glob_find: { icon: FileText, labelKey: 'tool.glob_find' },
+  grep_search: { icon: FileText, labelKey: 'tool.grep_search' },
+  web_search: { icon: Globe, labelKey: 'tool.web_search' },
+  web_fetch: { icon: Globe, labelKey: 'tool.web_fetch' },
+  write_file: { icon: FileEdit, labelKey: 'tool.write_file' },
+  edit_file: { icon: FileEdit, labelKey: 'tool.edit_file' },
+  run_command: { icon: Terminal, labelKey: 'tool.run_command' },
+  git_status: { icon: Terminal, labelKey: 'tool.git_status' },
+  git_diff: { icon: Terminal, labelKey: 'tool.git_diff' },
+  memory_save: { icon: FileText, labelKey: 'tool.memory_save' },
+  memory_list: { icon: FileText, labelKey: 'tool.memory_list' },
 }
 
 function summarizeArgs(name: string, args: unknown): string {
   if (!args || typeof args !== 'object') return String(args ?? '')
   const a = args as Record<string, unknown>
-  if (name === 'write_file') return `${a.path}\n(${String(a.content ?? '').length} 字符)`
+  if (name === 'write_file') return `${a.path}\n(${String(a.content ?? '').length} ${t('tool.chars')})`
   if (name === 'run_command') return `${a.command}${a.cwd ? '  @' + a.cwd : ''}`
   return Object.entries(a).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`).join('\n')
 }
@@ -33,7 +42,7 @@ export default function PermissionDialog() {
   const resolve = useStore((s) => s.resolvePermission)
   const req = requests[0]
   if (!req) return null
-  const meta = TOOL_META[req.name] || { icon: ShieldAlert, label: req.name }
+  const meta = TOOL_META[req.name] || { icon: ShieldAlert, labelKey: 'tool.unknown' }
   const Icon = meta.icon
 
   return (
@@ -46,21 +55,21 @@ export default function PermissionDialog() {
             <Icon size={16} style={{ color: 'var(--error)' }} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Agent 请求执行操作</h3>
-            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{meta.label} · 风险等级：高</p>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t('agent.permission.title')}</h3>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t(meta.labelKey)} · {t('tool.risk.high')}</p>
           </div>
         </div>
         <pre className="text-xs font-mono whitespace-pre-wrap break-all rounded-lg p-2.5 mb-4 max-h-32 overflow-y-auto"
           style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{summarizeArgs(req.name, req.args)}</pre>
         <p className="text-[11px] mb-4" style={{ color: 'var(--text-muted)' }}>
-          允许后，模型将立即执行此操作。如不确定，请拒绝。
+          {t('agent.permission.desc')}
         </p>
         <div className="flex justify-end gap-2">
           <button onClick={() => resolve(req.reqId, false)} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>拒绝</button>
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('agent.permission.deny')}</button>
           <button onClick={() => resolve(req.reqId, true)}
             className="px-3.5 py-1.5 text-xs rounded-lg text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: 'var(--error)' }}>允许执行</button>
+            style={{ backgroundColor: 'var(--error)' }}>{t('agent.permission.allow')}</button>
         </div>
       </div>
     </div>
