@@ -5,6 +5,7 @@ import { getThemes } from '@/utils/theme'
 import { Info, Save, Check, ImageIcon, Trash2, Download, Upload } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
 import McpSettings from '@/components/settings/McpSettings'
+import AdvancedSettings from '@/components/settings/AdvancedSettings'
 
 export default function SettingPage() {
   const language = useStore((s) => s.language)
@@ -200,6 +201,9 @@ export default function SettingPage() {
               </div>
             </div>
           </div>
+
+          {/* Advanced generation + title settings */}
+          <AdvancedSettings />
 
           {/* About */}
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>

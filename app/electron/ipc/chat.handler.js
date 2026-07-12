@@ -13,7 +13,7 @@ const abortControllers = new Map()
 
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
-  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off' }) => {
+  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
     // Save user message
     if (!regenerate) { db.addMessage({ session_id: sessionId, role: 'user', content }) }
     db.touchSession(sessionId)
@@ -46,8 +46,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // title was never set (e.g. created before this feature shipped).
     const session0 = db.getSessions().find(s => s.id === sessionId)
     const placeholderTitles = ['新会话', '新对话', 'New Chat']
-    const needsTitle = session0 && placeholderTitles.includes((session0.title || '').trim()) && msgs.length >= 1
-    logTitle('session', sessionId, 'needsTitle=', needsTitle, 'title=', session0?.title, 'msgs=', msgs.length)
+    // Respect the autoTitle setting (default on) and only summarize the first exchange.
+    const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
+    const titleLanguage = db.getSetting('titleLanguage') || 'auto'
+    const needsTitle = autoTitleOn && session0 && placeholderTitles.includes((session0.title || '').trim()) && msgs.length === 1
+    logTitle('session', sessionId, 'needsTitle=', needsTitle, 'autoTitle=', autoTitleOn, 'title=', session0?.title, 'msgs=', msgs.length)
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
     if (attachments.length > 0) {
@@ -79,6 +82,18 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // Previously this slice()d the raw user input into the title (a copy-paste,
     // not a summary). Leaving a neutral default until the summary is generated.
 
+    // Merge reasoning params (effort) with advanced generation params from settings.
+    const reasoningOpts = buildReasoningParams(model.model_name, effortLevel)
+    const genOpts = {}
+    if (genParams.maxTokens && genParams.maxTokens > 0) genOpts.max_tokens = genParams.maxTokens
+    if (genParams.temperature && genParams.temperature > 0) genOpts.temperature = genParams.temperature
+    if (genParams.topP && genParams.topP > 0) genOpts.top_p = genParams.topP
+    const mergedOpts = { ...genOpts, ...reasoningOpts }
+    // Prepend a custom system prefix if set (advanced users).
+    if (systemPrefix && systemPrefix.trim()) {
+      apiMsgs.unshift({ role: 'system', content: systemPrefix.trim() })
+    }
+
     const timeoutMs = parseInt(db.getSetting('fallback_timeout_ms') || '30000', 10)
     let lastError = null
 
@@ -94,10 +109,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       abortControllers.set(msgId, controller)
       const wc = getWebContents()
       try {
-        const reasoningOpts = buildReasoningParams(model.model_name, effortLevel)
         const finalContent = await runToolLoop({
           provider, model, messages: apiMsgs, signal: controller.signal,
-          options: reasoningOpts,
+          options: mergedOpts,
           agentMode: agentMode || 'ask',
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
@@ -118,7 +132,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         })
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
-        if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider })
+        if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
@@ -149,10 +163,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       try {
         let fullContent = ''
         const wc = getWebContents()
-        // Reasoning params (reasoning_effort / thinking.budget_tokens) are spread
-        // into the request body by the adapter via `options`.
-        const reasoningOpts = buildReasoningParams(m.model_name, effortLevel)
-        for await (const delta of streamChat({ provider: p, model: m, messages: apiMsgs, signal: controller.signal, options: reasoningOpts })) {
+        // mergedOpts carries reasoning params + advanced generation params (max_tokens/
+        // temperature/top_p) set in Settings, spread into the request body by the adapter.
+        for await (const delta of streamChat({ provider: p, model: m, messages: apiMsgs, signal: controller.signal, options: mergedOpts })) {
           if (delta) {
             fullContent += delta
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
@@ -170,7 +183,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       })
       // Auto-title: summarize the first exchange instead of copy-pasting raw input.
       if (needsTitle) {
-        await generateSummaryTitle({ sessionId, content, fullContent, model: m, provider: p })
+        await generateSummaryTitle({ sessionId, content, fullContent, model: m, provider: p, titleLanguage })
       }
       console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
@@ -220,17 +233,26 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 // Asks the model for a short topic phrase (e.g. asking "新约能天使值不值得抽"
 // → "新约能天使抽取建议"). Falls back to a truncated version of the user's input
 // if the summary call fails or returns nothing useful. Never throws.
-async function generateSummaryTitle({ sessionId, content, fullContent, model, provider }) {
+async function generateSummaryTitle({ sessionId, content, fullContent, model, provider, titleLanguage = 'auto' }) {
   const fallback = (content || '新对话').replace(/\s+/g, ' ').trim().slice(0, 30)
   let title = fallback
-  logTitle('generateSummaryTitle start sid=', sessionId, 'model=', model?.model_name, 'provider=', provider?.api_url)
+  // Resolve the language the title should be written in. 'auto' defers to a
+  // setting; we just pick a prompt variant per language family.
+  const lang = titleLanguage === 'auto' ? 'zh' : titleLanguage
+  const prompts = {
+    zh: '你是会话主题提炼器。用一个简短的主题短语概括用户的核心诉求，4-12个字，像一个小标题。不要句号、引号、前缀或解释。示例：用户问"新约能天使值不值得抽"→"新约能天使抽取建议"；用户问"这段Python代码为什么报错"→"Python代码排错"。',
+    en: 'You are a session topic distiller. Summarize the user\'s core request as a short title (3-7 words), like a heading. No periods, quotes, prefixes, or explanation. Example: user asks "should I pull New Eiyuu Angel" -> "New Eiyuu Angel pull advice".',
+    ja: 'セッションの主題を短いフレーズ（4-12字）で要約し、小見出しのように出力せよ。句読点・引用符・接頭辞・説明は不要。',
+  }
+  const sysPrompt = prompts[lang] || prompts.zh
+  logTitle('generateSummaryTitle start sid=', sessionId, 'model=', model?.model_name, 'provider=', provider?.api_url, 'lang=', lang)
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15000)
     const text = await completeChat({
       provider, model,
       messages: [
-        { role: 'system', content: '你是会话主题提炼器。用一个简短的主题短语概括用户的核心诉求，4-12个字，像一个小标题。不要句号、引号、前缀或解释。示例：用户问"新约能天使值不值得抽"→"新约能天使抽取建议"；用户问"这段Python代码为什么报错"→"Python代码排错"；用户问"帮我写一封请假邮件"→"撰写请假邮件"。' },
+        { role: 'system', content: sysPrompt },
         { role: 'user', content: `用户：${content}\n\n助手：${(fullContent || '').slice(0, 800)}` },
       ],
       signal: controller.signal,

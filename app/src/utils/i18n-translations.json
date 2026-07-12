@@ -205,7 +205,25 @@
       "mcp.connect_failed": "连接失败",
       "mcp.need_name_command": "名称和命令必填",
       "mcp.args_json_error": "参数必须是 JSON 数组",
-      "mcp.env_json_error": "环境变量必须是 JSON 对象"
+      "mcp.env_json_error": "环境变量必须是 JSON 对象",
+      "settings.generation": "生成参数",
+      "settings.generation.desc": "新消息的高级采样默认值。0 表示使用供应商默认。",
+      "settings.max_tokens": "最大 token",
+      "settings.temperature": "温度",
+      "settings.top_p": "Top P",
+      "settings.system_prefix": "自定义系统前缀",
+      "settings.system_prefix_desc": "加到每条消息的系统提示前。",
+      "settings.titles": "会话标题",
+      "settings.auto_title": "自动生成总结标题",
+      "settings.title_language": "标题语言",
+      "settings.title_language.auto": "跟随界面",
+      "settings.appearance": "外观",
+      "settings.font_scale": "字体缩放",
+      "settings.bubble_width": "气泡宽度",
+      "settings.bg_image": "背景图",
+      "settings.bg_opacity": "不透明度",
+      "settings.bg_blur": "模糊",
+      "settings.bg_clear": "清除"
     }
   },
   {

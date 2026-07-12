@@ -112,6 +112,13 @@ interface AppState {
   fontScale: number            // 0.85–1.25, base font-size multiplier
   bubbleWidth: number          // 60–100 (%), max width of message bubbles
   defaultEffort: 'off' | 'low' | 'medium' | 'high'  // default thinking effort for new sessions
+  // Advanced generation params (advanced users). Empty/0 means "let the provider default".
+  maxTokens: number            // 0 = unset (use provider default); else cap output tokens
+  temperature: number          // 0 = unset; 0.0–2.0 sampling temperature
+  topP: number                 // 0 = unset; 0–1 nucleus sampling
+  systemPrefix: string         // custom text prepended to every system prompt
+  autoTitle: boolean           // auto-generate a summary title for new sessions
+  titleLanguage: string        // language for generated titles ('auto' follows UI lang)
   backgroundImage: string | null
   backgroundOpacity: number   // 0–100, how visible the image is
   backgroundBlur: number      // 0–20px
@@ -121,6 +128,12 @@ interface AppState {
   setFallbackTimeout: (ms: number) => Promise<void>
   setFontScale: (v: number) => Promise<void>
   setBubbleWidth: (v: number) => Promise<void>
+  setMaxTokens: (v: number) => Promise<void>
+  setTemperature: (v: number) => Promise<void>
+  setTopP: (v: number) => Promise<void>
+  setSystemPrefix: (v: string) => Promise<void>
+  setAutoTitle: (v: boolean) => Promise<void>
+  setTitleLanguage: (v: string) => Promise<void>
   setDefaultEffort: (v: 'off' | 'low' | 'medium' | 'high') => Promise<void>
   setBackgroundImage: (dataUrl: string | null) => Promise<void>
   setBackgroundOpacity: (v: number) => Promise<void>
@@ -426,6 +439,8 @@ export const useStore = create<AppState>((set, get) => ({
         useTools: get().agentMode !== 'off',
         agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
         effortLevel: get().effortLevel,
+        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
+        systemPrefix: get().systemPrefix,
         })
     } catch (err) {
       // Drop this session's streaming buffer on error; keep other sessions intact.
@@ -547,6 +562,12 @@ export const useStore = create<AppState>((set, get) => ({
   fontScale: 1,
   bubbleWidth: 85,
   defaultEffort: 'off',
+  maxTokens: 0,
+  temperature: 0,
+  topP: 0,
+  systemPrefix: '',
+  autoTitle: true,
+  titleLanguage: 'auto',
   backgroundImage: null,
   backgroundOpacity: 100,
   backgroundBlur: 0,
@@ -564,12 +585,18 @@ export const useStore = create<AppState>((set, get) => ({
       const fontScale = parseFloat(s.fontScale ?? '1')
       const bubbleWidth = parseInt(s.bubbleWidth ?? '85', 10)
       const defaultEffort = (s.defaultEffort ?? 'off') as 'off' | 'low' | 'medium' | 'high'
+      const maxTokens = parseInt(s.maxTokens ?? '0', 10)
+      const temperature = parseFloat(s.temperature ?? '0')
+      const topP = parseFloat(s.topP ?? '0')
+      const systemPrefix = s.systemPrefix ?? ''
+      const autoTitle = (s.autoTitle ?? '1') === '1'
+      const titleLanguage = s.titleLanguage ?? 'auto'
       const bgImage = await window.electronAPI.background.get()
       setLang(lang)
       applyTheme(theme, bgImage !== null)
       applyFontScale(fontScale)
       applyLangDir(lang)
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, backgroundImage: bgImage, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: bgImage, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort })
     } catch {}
   },
   setLanguage: async (lang) => {
@@ -600,6 +627,12 @@ export const useStore = create<AppState>((set, get) => ({
     await window.electronAPI.settings.set('defaultEffort', v)
     set({ defaultEffort: v, effortLevel: v })
   },
+  setMaxTokens: async (v) => { await window.electronAPI.settings.set('maxTokens', String(v)); set({ maxTokens: v }) },
+  setTemperature: async (v) => { await window.electronAPI.settings.set('temperature', String(v)); set({ temperature: v }) },
+  setTopP: async (v) => { await window.electronAPI.settings.set('topP', String(v)); set({ topP: v }) },
+  setSystemPrefix: async (v) => { await window.electronAPI.settings.set('systemPrefix', v); set({ systemPrefix: v }) },
+  setAutoTitle: async (v) => { await window.electronAPI.settings.set('autoTitle', v ? '1' : '0'); set({ autoTitle: v }) },
+  setTitleLanguage: async (v) => { await window.electronAPI.settings.set('titleLanguage', v); set({ titleLanguage: v }) },
   setBackgroundImage: async (dataUrl) => {
     await window.electronAPI.background.set(dataUrl)
     applyTheme(get().theme, dataUrl !== null)
