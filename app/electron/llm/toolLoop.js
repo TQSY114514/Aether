@@ -14,6 +14,7 @@
 
 const { completeChat } = require('./providerAdapter')
 const { safeParseToolCallArgs } = require('./toolArgs')
+const { applyMiddleware } = require('./toolResultMiddleware')
 // Use the MCP-aware merged registry so the agent can call both built-in tools
 // and any connected MCP server's tools. Falls back to the plain built-in
 // registry if the manager isn't loadable for some reason.
@@ -97,7 +98,10 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         }
         try { onToolCall && onToolCall(entry) } catch {}
         // Append the tool result message so the model can use it next round.
-        const resultContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
+        // Pass it through the middleware chain first: redact secrets, truncate
+        // over-long output so one verbose tool can't dominate the context.
+        const rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
+        const resultContent = applyMiddleware(rawContent, { tool: fn.name, args })
         totalChars += resultContent.length
         convo.push({ role: 'tool', tool_call_id: tc.id, content: resultContent })
       }
