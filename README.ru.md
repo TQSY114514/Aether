@@ -85,6 +85,19 @@ app/
 
 > ⚠️ Перед отправкой на GitHub убедитесь, что `.gitignore` исключает `*.db`, `dist/`, `node_modules/`, `background.img` и любые файлы `.env`.
 
+## 🙏 Благодарности
+
+AetherAI стоит на плечах этих проектов — их идеи сформировали архитектуру и UX:
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — модель разрешений агента, ползунок усилия размышления, визуализация вызовов инструментов, пустое состояние нового чата.
+- [Continue](https://github.com/continuedev/continue) — декларативный подход «конфиг как источник истины», абстракция провайдеров, протокол вызова функций.
+- [Dify](https://github.com/langgen/dify) — паттерны нормализации мультиформатных провайдеров.
+- [Model Context Protocol](https://modelcontextprotocol.io) — спецификация MCP, на которой говорит агент AetherAI.
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — методология копируемых компонентов cn() / cva.
+- [Magic UI](https://github.com/magicuidesign/magicui) — паттерны анимации (потоковый текст, мерцание, blur-fade).
+- [new-api](https://github.com/QuantumNous/new-api) — эталон преобразования reasoning-effort при ретрансляции.
+- [OpenClaw](https://github.com/openclaw/openclaw) — доработка README и вдохновение для онбординга.
+
 ## 📄 Лицензия
 
 MIT

@@ -85,6 +85,19 @@ app/
 
 > ⚠️ GitHub にプッシュする前に、`.gitignore` で `*.db`、`dist/`、`node_modules/`、`background.img`、および `.env` ファイルが除外されていることを確認してください。
 
+## 🙏 謝辞
+
+AetherAI は以下のプロジェクトの肩の上に立っています。そのアイデアがアーキテクチャと UX を形作りました。
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — エージェントの権限モデル、思考強度スライダー、ツール呼び出しの可視化、新規チャットの空状態。
+- [Continue](https://github.com/continuedev/continue) — 宣言的な設定を唯一の真実の情報源とする手法、プロバイダ抽象化、関数呼び出しプロトコル。
+- [Dify](https://github.com/langgen/dify) — 複数フォーマットのプロバイダ正規化パターン。
+- [Model Context Protocol](https://modelcontextprotocol.io) — AetherAI のエージェントが話す MCP 仕様。
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — cn() / cva のコピーペーストコンポーネント手法。
+- [Magic UI](https://github.com/magicuidesign/magicui) — アニメーションパターン（ストリーミングテキスト、シマー、ブラーフェード）。
+- [new-api](https://github.com/QuantumNous/new-api) — 推論強度リレー変換の参考実装。
+- [OpenClaw](https://github.com/openclaw/openclaw) — README の洗練とオンボーディングの着想。
+
 ## 📄 ライセンス
 
 MIT

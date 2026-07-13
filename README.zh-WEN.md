@@ -85,6 +85,19 @@ app/
 
 > ⚠️ 推至 GitHub 之前，務使 `.gitignore` 排除 `*.db`、`dist/`、`node_modules/`、`background.img`，及諸 `.env`。
 
+## 🙏 鳴謝
+
+AetherAI 立於諸專案之肩——其構想啟迪本器之架構與介面：
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)——Agent 授權之制、思考之力滑桿、工具呼叫之可視、新談空態。
+- [Continue](https://github.com/continuedev/continue)——以宣告式配置為本、供應商抽象、函式呼叫之約。
+- [Dify](https://github.com/langgen/dify)——多格式供應商歸一之法。
+- [Model Context Protocol](https://modelcontextprotocol.io)——AetherAI Agent 所操之 MCP 規範。
+- [shadcn/ui](https://github.com/shadcn-ui/ui)——`cn()` / `cva` 複貼元件之法。
+- [Magic UI](https://github.com/magicuidesign/magicui)——動畫之範（流式文字、微光、模糊漸隱）。
+- [new-api](https://github.com/QuantumNous/new-api)——推理之力中轉換算之參。
+- [OpenClaw](https://github.com/openclaw/openclaw)——README 修飾與入門之啟。
+
 ## 📄 授權
 
 MIT

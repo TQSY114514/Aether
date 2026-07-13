@@ -85,6 +85,19 @@ app/
 
 > ⚠️ 推送至 GitHub 前，請確認 `.gitignore` 已排除 `*.db`、`dist/`、`node_modules/`、`background.img` 以及任何 `.env`。
 
+## 🙏 銘謝
+
+AetherAI 站在前人肩上——下列專目的理念形塑了本作的架構與使用體驗：
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — Agent 權限模型、思考強度滑桿、工具呼叫視覺化、新對話空狀態。
+- [Continue](https://github.com/continuedev/continue) — 宣告式「組態即真相」、供應商抽象層、函式呼叫協定。
+- [Dify](https://github.com/langgen/dify) — 多格式供應商正規化模式。
+- [Model Context Protocol](https://modelcontextprotocol.io) — AetherAI Agent 所使用之 MCP 規範。
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — cn() / cva 複製貼上元件方法論。
+- [Magic UI](https://github.com/magicuidesign/magicui) — 動畫模式（串流文字、微光、模糊淡入）。
+- [new-api](https://github.com/QuantumNous/new-api) — 推理強度中繼轉換之參考。
+- [OpenClaw](https://github.com/openclaw/openclaw) — README 潤飾與入門啟發。
+
 ## 📄 授權
 
 MIT

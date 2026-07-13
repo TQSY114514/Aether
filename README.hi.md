@@ -85,6 +85,19 @@ app/
 
 > ⚠️ GitHub पर पुश करने से पहले, सुनिश्चित करें कि `.gitignore` `*.db`, `dist/`, `node_modules/`, `background.img`, और किसी भी `.env` को बाहर रखता है।
 
+## 🙏 आभार
+
+AetherAI इन परियोजनाओं के कंधों पर खड़ा है — इनके विचारों ने वास्तुकला और अनुभव को आकार दिया:
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — एजेंट अनुमति मॉडल, थिंकिंग-प्रयास स्लाइडर, टूल-कॉल विज़ुअलाइज़ेशन, नई-चैट रिक्त स्थिति।
+- [Continue](https://github.com/continuedev/continue) — घोषणात्मक कॉन्फ़िग-एक-सत्य-स्रोत, प्रदाता एब्स्ट्रैक्शन, फ़ंक्शन-कॉलिंग प्रोटोकॉल।
+- [Dify](https://github.com/langgen/dify) — बहु-प्रारूप प्रदाता सामान्यीकरण पैटर्न।
+- [Model Context Protocol](https://modelcontextprotocol.io) — वह MCP विनिर्देश जिसे AetherAI का एजेंट बोलता है।
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — cn() / cva कॉपी-पेस्ट घटक पद्धति।
+- [Magic UI](https://github.com/magicuidesign/magicui) — एनिमेशन पैटर्न (स्ट्रीमिंग पाठ, शिमर, ब्लर-फ़ेड)।
+- [new-api](https://github.com/QuantumNous/new-api) — रीज़निंग-प्रयास रिले रूपांतरण संदर्भ।
+- [OpenClaw](https://github.com/openclaw/openclaw) — README पॉलिश + ऑनबोर्डिंग प्रेरणा।
+
 ## 📄 लाइसेंस
 
 MIT

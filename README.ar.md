@@ -85,6 +85,19 @@ app/
 
 > ⚠️ قبل الدفع إلى GitHub، تأكّد أن `.gitignore` يستثني `*.db` و `dist/` و `node_modules/` و `background.img` وأي ملفّ `.env`.
 
+## 🙏 شكر وتقدير
+
+يقف AetherAI على أكتاف هذه المشاريع — فقد شكّلت أفكارها العمارة وتجربة الاستخدام:
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — نموذج صلاحيات الوكيل، مزلقة جهد التفكير، تصوّر استدعاء الأدوات، الحالة الفارغة لمحادثة جديدة.
+- [Continue](https://github.com/continuedev/continue) — التهيئة التصريحية كمصدر للحقيقة، تجريد المزوّد، بروتوكول استدعاء الدوال.
+- [Dify](https://github.com/langgen/dify) — أنماط تسوية المزوّد متعدّد الصيغ.
+- [Model Context Protocol](https://modelcontextprotocol.io) — مواصفة MCP التي يتحدّث بها وكيل AetherAI.
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — منهجية المكوّنات القابلة للنسخ واللصق عبر `cn()` / `cva`.
+- [Magic UI](https://github.com/magicuidesign/magicui) — أنماط الحركة (بثّ النصّ، الوميض، تلاشٍ بالضباب).
+- [new-api](https://github.com/QuantumNous/new-api) — مرجع تحويل ترحيل جهد الاستدلال.
+- [OpenClaw](https://github.com/openclaw/openclaw) — صقل الـ README وإلهام الإعداد الأوّلي.
+
 ## 📄 الترخيص
 
 MIT

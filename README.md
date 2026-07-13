@@ -85,6 +85,19 @@ app/
 
 > ⚠️ Before pushing to GitHub, make sure `.gitignore` excludes `*.db`, `dist/`, `node_modules/`, `background.img`, and any `.env`.
 
+## 🙏 Acknowledgements
+
+AetherAI stands on the shoulders of these projects — their ideas shaped the architecture and UX:
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — agent permission model, thinking-effort slider, tool-call visualization, the new-chat empty state.
+- [Continue](https://github.com/continuedev/continue) — declarative config-as-source-of-truth, provider abstraction, function-calling protocol.
+- [Dify](https://github.com/langgenius/dify) — multi-format provider normalization patterns.
+- [Model Context Protocol](https://modelcontextprotocol.io) — the MCP spec AetherAI's agent speaks.
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — the `cn()` / `cva` copy-paste component methodology.
+- [Magic UI](https://github.com/magicuidesign/magicui) — animation patterns (streaming text, shimmer, blur-fade).
+- [new-api](https://github.com/QuantumNous/new-api) — reasoning-effort relay conversion reference.
+- [OpenClaw](https://github.com/openclaw/openclaw) — README polish + onboarding inspiration.
+
 ## 📄 License
 
 MIT
