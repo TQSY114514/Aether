@@ -245,5 +245,11 @@
   "settings.agent.browse": "Browse",
   "settings.agent.reset": "Reset",
   "settings.agent.blocklist": "Destructive command blocklist: on",
-  "settings.agent.blocklist_hint": "run_command refuses disk format, recursive force-delete of system dirs, shutdown, download-and-execute pipes, and registry wipes. This is a backstop — keep 'ask' permission mode for untrusted models."
+  "settings.agent.blocklist_hint": "run_command refuses disk format, recursive force-delete of system dirs, shutdown, download-and-execute pipes, and registry wipes. This is a backstop — keep 'ask' permission mode for untrusted models.",
+  "settings.skills.title": "Skills",
+  "settings.skills.desc": "Claude-Code-format SKILL.md skills. The model loads a skill's instructions on demand via the use_skill tool when your request matches.",
+  "settings.skills.rescan": "Rescan",
+  "settings.skills.rescanned": "Scanned — {0} skills loaded",
+  "settings.skills.empty": "No skills found. Drop a folder named <skill>/SKILL.md into .claude/skills/ in your workspace.",
+  "settings.skills.hint": "Scan dirs (precedence): <workspace>/.claude/skills, <workspace>/.aetherai/skills, <userData>/skills, built-in. Only name+description enter the prompt; the body loads via use_skill."
 }

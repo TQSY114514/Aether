@@ -279,6 +279,33 @@ const TOOLS = [
     },
   },
   {
+    // Skills activation (Claude-Code-style progressive disclosure). Returns the
+    // full SKILL.md body so the model can follow the skill's instructions. The
+    // skill list is injected as a system-prompt block separately; this tool only
+    // loads the body when the model decides a skill is relevant. Safe risk so
+    // it's available even in plan mode.
+    name: 'use_skill',
+    description: 'Load the full instructions of a skill by name. Call this when the user\'s request matches a skill listed in <available_skills>, then follow the returned instructions. Returns the skill\'s markdown body.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        skill_name: { type: 'string', description: 'The skill name (as listed in <available_skills>).' },
+      },
+      required: ['skill_name'],
+    },
+    run: (args) => {
+      const name = String(args.skill_name || '')
+      if (!name) throw new Error('skill_name is required')
+      // Lazy require to avoid a load-time cycle (skills.js requires nothing here,
+      // but registry is required early; this keeps the dependency one-directional).
+      const skills = require('../llm/skills')
+      const body = skills.getSkillBody(name)
+      if (body == null) throw new Error(`unknown skill: ${name} (call only skills listed in <available_skills>)`)
+      return body
+    },
+  },
+  {
     name: 'git_status',
     description: 'Run `git status --short` in a directory and return the output. Read-only.',
     risk: 'safe',

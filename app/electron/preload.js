@@ -112,4 +112,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getWorkspace: () => ipcRenderer.invoke('agent:workspace:get'),
     setWorkspace: (dir) => ipcRenderer.invoke('agent:workspace:set', dir),
   },
+  skills: {
+    list: () => ipcRenderer.invoke('skills:list'),
+    rescan: () => ipcRenderer.invoke('skills:rescan'),
+  },
 })

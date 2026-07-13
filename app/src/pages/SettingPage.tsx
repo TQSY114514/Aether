@@ -7,6 +7,7 @@ import { t, LANGS } from '@/utils/i18n'
 import McpSettings from '@/components/settings/McpSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 import AgentSettings from '@/components/settings/AgentSettings'
+import SkillsSettings from '@/components/settings/SkillsSettings'
 
 export default function SettingPage() {
   const language = useStore((s) => s.language)
@@ -208,6 +209,9 @@ export default function SettingPage() {
 
           {/* Agent workspace + safety */}
           <AgentSettings />
+
+          {/* Skills */}
+          <SkillsSettings />
 
           {/* About */}
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>

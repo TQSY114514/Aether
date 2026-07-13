@@ -15,6 +15,7 @@ const { registerBackgroundHandlers } = require('./ipc/background.handler')
 const { registerConfigHandlers } = require('./ipc/config.handler')
 const { registerMcpHandlers } = require('./ipc/mcp.handler')
 const { registerAgentHandlers } = require('./ipc/agent.handler')
+const { registerSkillsHandlers } = require('./ipc/skills.handler')
 const mcpManager = require('./mcp/manager')
 const { setWorkspaceRoot } = require('./tools/sandbox')
 
@@ -86,6 +87,7 @@ function setupIpcHandlers() {
   registerConfigHandlers(ipcMain, db)
   registerMcpHandlers(ipcMain, db)
   registerAgentHandlers(ipcMain, db)
+  registerSkillsHandlers(ipcMain)
 }
 
 app.whenReady().then(async () => {
@@ -93,6 +95,8 @@ app.whenReady().then(async () => {
   // Restore the agent workspace root from settings so the sandbox is active
   // before any tool runs. Falls back to <userData>/workspace if unset.
   try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}
+  // Discover skills (Claude-Code SKILL.md format) from workspace + userData + built-in dirs.
+  try { const { scanSkills } = require('./llm/skills'); const n = scanSkills(); console.log(`[AetherAI] loaded ${n} skills`) } catch (e) { console.warn('[AetherAI] skill scan failed:', e.message) }
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {
     const distDir = path.join(__dirname, '..', 'dist')
     await startStaticServer(distDir)

@@ -107,9 +107,18 @@ async function maybeCompact({ provider, model, messages, budget, signal }) {
 }
 
 // Ask the model to summarize a block of older messages into a compact paragraph.
+// Identifier-preservation instructions (from OpenClaw's compaction-instructions):
+// UUIDs, hashes, IDs, paths, URLs, IPs, ports must survive verbatim so the
+// agent can still act on them after compaction. Summarize in the conversation's
+// primary language.
 async function summarizeHistory({ provider, model, history, signal }) {
-  // Flatten history to a readable transcript for the summarizer.
-  const transcript = history.map(m => {
+  // Drop non-conversational noise (empty tool results, silent assistant turns)
+  // so the summary budget goes to real content.
+  const realHistory = history.filter(m => {
+    const c = typeof m.content === 'string' ? m.content : ''
+    return c.trim().length > 0
+  })
+  const transcript = realHistory.map(m => {
     const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
     if (m.role === 'tool') return `[tool result] ${c}`
     if (m.tool_calls) return `[${m.role}] ${c || ''}\n[tool calls: ${JSON.stringify(m.tool_calls.map(t => t.function?.name))}]`
@@ -118,7 +127,7 @@ async function summarizeHistory({ provider, model, history, signal }) {
   const text = await completeChat({
     provider, model,
     messages: [
-      { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve key decisions, facts, file paths, and any unresolved questions. Do not add commentary.' },
+      { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
       { role: 'user', content: transcript.slice(0, 24000) }, // cap the summarizer input
     ],
     signal,

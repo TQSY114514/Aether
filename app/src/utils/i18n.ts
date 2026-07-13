@@ -344,7 +344,13 @@ const translations: Record<string, Record<string, string>> = {
     "settings.agent.browse": "Browse",
     "settings.agent.reset": "Reset",
     "settings.agent.blocklist": "Destructive command blocklist: on",
-    "settings.agent.blocklist_hint": "run_command refuses disk format, recursive force-delete of system dirs, shutdown, download-and-execute pipes, and registry wipes. This is a backstop — keep 'ask' permission mode for untrusted models."
+    "settings.agent.blocklist_hint": "run_command refuses disk format, recursive force-delete of system dirs, shutdown, download-and-execute pipes, and registry wipes. This is a backstop — keep 'ask' permission mode for untrusted models.",
+    "settings.skills.title": "Skills",
+    "settings.skills.desc": "Claude-Code-format SKILL.md skills. The model loads a skill's instructions on demand via the use_skill tool when your request matches.",
+    "settings.skills.rescan": "Rescan",
+    "settings.skills.rescanned": "Scanned — {0} skills loaded",
+    "settings.skills.empty": "No skills found. Drop a folder named <skill>/SKILL.md into .claude/skills/ in your workspace.",
+    "settings.skills.hint": "Scan dirs (precedence): <workspace>/.claude/skills, <workspace>/.aetherai/skills, <userData>/skills, built-in. Only name+description enter the prompt; the body loads via use_skill."
   },
   "en-upside": {
     "app.name": "ᴉɐɹǝɥʇǝɐ",
@@ -593,7 +599,13 @@ const translations: Record<string, Record<string, string>> = {
     "settings.agent.browse": "ǝsʍoɹq",
     "settings.agent.reset": "ʇǝsǝɹ",
     "settings.agent.blocklist": "uo :ʇsᴉlʞɔolq puɐɯɯoɔ ǝʌᴉʇɔnɹʇsǝp",
-    "settings.agent.blocklist_hint": ".slǝpoɯ pǝʇsnɹʇun ɹoɟ ǝpoɯ uoᴉssᴉɯɹǝd 'ʞsɐ' dǝǝʞ — doʇsʞɔɐq ɐ sᴉ sᴉɥʇ .sǝdᴉʍ ʎɹʇsᴉƃǝɹ puɐ ,sǝdᴉd ǝʇnɔǝxǝ-puɐ-pɐoluʍop ,uʍopʇnɥs ,sɹᴉp ɯǝʇsʎs ɟo ǝʇǝlǝp-ǝɔɹoɟ ǝʌᴉsɹnɔǝɹ ,ʇɐɯɹoɟ ʞsᴉp sǝsnɟǝɹ puɐɯɯoɔ_unɹ"
+    "settings.agent.blocklist_hint": ".slǝpoɯ pǝʇsnɹʇun ɹoɟ ǝpoɯ uoᴉssᴉɯɹǝd 'ʞsɐ' dǝǝʞ — doʇsʞɔɐq ɐ sᴉ sᴉɥʇ .sǝdᴉʍ ʎɹʇsᴉƃǝɹ puɐ ,sǝdᴉd ǝʇnɔǝxǝ-puɐ-pɐoluʍop ,uʍopʇnɥs ,sɹᴉp ɯǝʇsʎs ɟo ǝʇǝlǝp-ǝɔɹoɟ ǝʌᴉsɹnɔǝɹ ,ʇɐɯɹoɟ ʞsᴉp sǝsnɟǝɹ puɐɯɯoɔ_unɹ",
+    "settings.skills.title": "sllᴉʞs",
+    "settings.skills.desc": ".sǝɥɔʇɐɯ ʇsǝnbǝɹ ɹnoʎ uǝɥʍ looʇ llᴉʞs_ǝsn ǝɥʇ ɐᴉʌ puɐɯǝp uo suoᴉʇɔnɹʇsuᴉ s'llᴉʞs ɐ spɐol lǝpoɯ ǝɥʇ .sllᴉʞs pɯ.llᴉʞs ʇɐɯɹoɟ-ǝpoɔ-ǝpnɐlɔ",
+    "settings.skills.rescan": "uɐɔsǝɹ",
+    "settings.skills.rescanned": "pǝpɐol sllᴉʞs }0{ — pǝuuɐɔs",
+    "settings.skills.empty": ".ǝɔɐdsʞɹoʍ ɹnoʎ uᴉ /sllᴉʞs/ǝpnɐlɔ. oʇuᴉ pɯ.llᴉʞs/>llᴉʞs< pǝɯɐu ɹǝploɟ ɐ doɹp .punoɟ sllᴉʞs ou",
+    "settings.skills.hint": ".llᴉʞs_ǝsn ɐᴉʌ spɐol ʎpoq ǝɥʇ ;ʇdɯoɹd ǝɥʇ ɹǝʇuǝ uoᴉʇdᴉɹɔsǝp+ǝɯɐu ʎluo .uᴉ-ʇlᴉnq ,sllᴉʞs/>ɐʇɐpɹǝsn< ,sllᴉʞs/ᴉɐɹǝɥʇǝɐ./>ǝɔɐdsʞɹoʍ< ,sllᴉʞs/ǝpnɐlɔ./>ǝɔɐdsʞɹoʍ< :)ǝɔuǝpǝɔǝɹd( sɹᴉp uɐɔs"
   },
   "zh-CN": {
     "app.name": "AetherAI",

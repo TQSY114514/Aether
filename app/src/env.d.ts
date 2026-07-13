@@ -89,4 +89,8 @@ interface Window {
     getWorkspace: () => Promise<string>
     setWorkspace: (dir: string | null) => Promise<{ success: boolean; root: string }>
   }
+  skills: {
+    list: () => Promise<{ name: string; description: string; filePath: string }[]>
+    rescan: () => Promise<{ success: boolean; count: number }>
+  }
 }

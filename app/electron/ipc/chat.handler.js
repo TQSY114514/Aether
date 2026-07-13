@@ -2,6 +2,7 @@ const { streamChat, completeChat } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
+const skills = require('../llm/skills')
 const fs = require('fs')
 const path = require('path')
 
@@ -129,6 +130,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // then delivered as the assistant message. Falls through to the normal
     // streaming path when useTools is false.
     if (useTools) {
+      // Inject the available-skills list as a system message so the model can
+      // call use_skill when a task matches. Only when tools are on (skills are
+      // meaningless without the tool loop). Done after compaction so the list
+      // is never summarized away.
+      const skillsBlock = skills.formatSkillsForPrompt()
+      const toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
       const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
       const msgId = asstMsg.lastInsertRowid
       const controller = new AbortController()
@@ -136,7 +143,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const wc = getWebContents()
       try {
         const finalContent = await runToolLoop({
-          provider, model, messages: compacted, signal: controller.signal,
+          provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
