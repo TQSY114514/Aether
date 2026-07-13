@@ -10,10 +10,5 @@ files:
   - package.json
 win:
   target:
-    - nsis
+    - dir
   icon: resources/icon.png
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  installerIcon: resources/icon.png
-  uninstallerIcon: resources/icon.png
