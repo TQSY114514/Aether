@@ -31,6 +31,10 @@ try {
 
 const MAX_DEPTH = 12
 const MAX_TOTAL_CHARS = 200000 // crude context budget across all tool results
+// Loop detection (from OpenClaw's before-tool-call loop-detection): if the
+// model calls the same tool with the same args N times in a row, break — it's
+// stuck. Keeps MAX_DEPTH as a hard backstop but catches stuck loops faster.
+const LOOP_REPEAT_LIMIT = 3
 
 // System prompt injected at the head of the conversation to steer the model
 // toward a Plan→Act→Observe rhythm (like a coding agent). The model is told to
@@ -52,6 +56,9 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const toolPayload = tools ? toolsPayload(agentMode) : []
   let depth = 0
   let totalChars = 0
+  // Rolling signature of recent tool calls for loop detection.
+  let lastSig = ''
+  let sigRepeat = 0
   // We mutate a local copy of the conversation, appending assistant + tool messages.
   // Prepend the agent system prompt if the caller didn't already provide one.
   const convo = messages.slice()
@@ -74,7 +81,15 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         const fn = tc.function || {}
         const args = safeParseToolCallArgs(fn.arguments)
         const tool = getTool(fn.name)
+        // Loop detection: same tool + same args repeated back-to-back → stuck.
+        const sig = fn.name + ':' + JSON.stringify(args)
+        if (sig === lastSig) { sigRepeat++ } else { lastSig = sig; sigRepeat = 1 }
         let entry = { name: fn.name, args, result: null, error: null }
+        if (sigRepeat >= LOOP_REPEAT_LIMIT) {
+          entry.error = `loop detected: ${fn.name} called with identical args ${sigRepeat} times — stopping`
+          try { onToolCall && onToolCall(entry) } catch {}
+          return '（检测到工具调用循环，已停止）'
+        }
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
         } else {
