@@ -22,11 +22,11 @@ AetherAI unifies multiple LLM providers (OpenAI / Claude / DeepSeek / local mode
 
 - **Multi-provider abstraction** — a single adapter layer; adding a provider format means one file. Currently OpenAI-compatible (covers OpenRouter, Together, DeepSeek, Ollama's OpenAI shim, LM Studio, …).
 - **Concurrent multi-session streaming** — one chat can stream while you keep talking in another.
-- **Arena** — one prompt, multiple models answer at once; vote for the best and an ELO leaderboard updates automatically.
+- **Arena ⭐** — one prompt, multiple models answer **concurrently**; vote for the best and an **ELO leaderboard** updates automatically. Models are scored **per intent** (coding / math / translation / summary / general) and the best model for each task type is auto-routed. *No other local-first desktop chat app ships a built-in multi-model arena with ELO.*
 - **Personas** — system-prompt presets, switchable per session.
 - **Attachments** — text files are injected as context; images go multimodal (needs a vision model).
 - **Long-paste collapse** — pasting hundreds of lines auto-collapses into an expandable snippet (ChatGPT-style).
-- **Agent (function calling)** — 13 built-in tools (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`) with a Plan→Act→Observe loop, live reasoning trace, loop detection, per-tool timeouts, and context compaction.
+- **Agent (function calling)** — 16 built-in tools (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) with a Plan→Act→Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, and context compaction.
 - **Agent permission modes** — a clear risk-ascending ladder:
   - **Off** — plain chat, no tools.
   - **Plan** — read-only tools (investigate without changes).
