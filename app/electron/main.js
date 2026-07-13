@@ -14,7 +14,9 @@ const { registerMemoryHandlers } = require('./ipc/memory.handler')
 const { registerBackgroundHandlers } = require('./ipc/background.handler')
 const { registerConfigHandlers } = require('./ipc/config.handler')
 const { registerMcpHandlers } = require('./ipc/mcp.handler')
+const { registerAgentHandlers } = require('./ipc/agent.handler')
 const mcpManager = require('./mcp/manager')
+const { setWorkspaceRoot } = require('./tools/sandbox')
 
 let mainWindow = null
 let staticServer = null
@@ -83,10 +85,14 @@ function setupIpcHandlers() {
   registerBackgroundHandlers(ipcMain)
   registerConfigHandlers(ipcMain, db)
   registerMcpHandlers(ipcMain, db)
+  registerAgentHandlers(ipcMain, db)
 }
 
 app.whenReady().then(async () => {
   await db.initDatabase()
+  // Restore the agent workspace root from settings so the sandbox is active
+  // before any tool runs. Falls back to <userData>/workspace if unset.
+  try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {
     const distDir = path.join(__dirname, '..', 'dist')
     await startStaticServer(distDir)

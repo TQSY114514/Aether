@@ -73,7 +73,7 @@ interface AppState {
   sending: boolean
   // Per-message tool-call invocations, keyed by the assistant messageId the
   // tool belongs to. Each entry is the list of tool calls for that message.
-  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null }[]>
+  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null }[]>
   // Per-message agent plan steps (the assistant's reasoning each round).
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
   // Whether the current session should send tools with the request, and the

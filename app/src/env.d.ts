@@ -85,4 +85,8 @@ interface Window {
     export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
     import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
   }
+  agent: {
+    getWorkspace: () => Promise<string>
+    setWorkspace: (dir: string | null) => Promise<{ success: boolean; root: string }>
+  }
 }

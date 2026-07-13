@@ -108,4 +108,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
   },
+  agent: {
+    getWorkspace: () => ipcRenderer.invoke('agent:workspace:get'),
+    setWorkspace: (dir) => ipcRenderer.invoke('agent:workspace:set', dir),
+  },
 })

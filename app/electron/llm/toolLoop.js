@@ -84,7 +84,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         // Loop detection: same tool + same args repeated back-to-back → stuck.
         const sig = fn.name + ':' + JSON.stringify(args)
         if (sig === lastSig) { sigRepeat++ } else { lastSig = sig; sigRepeat = 1 }
-        let entry = { name: fn.name, args, result: null, error: null }
+        let entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null }
         if (sigRepeat >= LOOP_REPEAT_LIMIT) {
           entry.error = `loop detected: ${fn.name} called with identical args ${sigRepeat} times — stopping`
           try { onToolCall && onToolCall(entry) } catch {}
@@ -104,11 +104,13 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
             }
           }
           if (!entry.error) {
+            const t0 = Date.now()
             try {
               entry.result = await tool.run(args, { provider, model })
             } catch (e) {
               entry.error = e.message || String(e)
             }
+            entry.latencyMs = Date.now() - t0
           }
         }
         try { onToolCall && onToolCall(entry) } catch {}

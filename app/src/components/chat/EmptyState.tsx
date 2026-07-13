@@ -1,5 +1,5 @@
 import { useStore } from '@/store'
-import { Sparkles, Keyboard } from 'lucide-react'
+import { Sparkles, Keyboard, Cpu, Brain } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // Example prompts shown on the new-chat empty state (Claude-Code-style).
@@ -16,12 +16,20 @@ const EXAMPLES = [
 export default function EmptyState({ noSession = false }: { noSession?: boolean }) {
   const createSession = useStore((s) => s.createSession)
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const allModels = useStore((s) => s.allModels)
+  const sessionConfigs = useStore((s) => s.sessionConfigs)
+  const effortLevel = useStore((s) => s.effortLevel)
 
   const startWith = async (prompt: string) => {
     if (!currentSessionId) await createSession()
     // Defer one tick so createSession's state update lands before sendMessage reads it.
     setTimeout(() => useStore.getState().sendMessage(prompt), 0)
   }
+
+  // Resolve the active model name for the current session (or the default).
+  const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
+  const activeModel = allModels.find(m => m.id === cfg?.modelId) || allModels.find(m => m.is_primary) || allModels[0]
+  const effortLabel = { off: t('effort.off'), low: t('effort.low'), medium: t('effort.medium'), high: t('effort.high') }[effortLevel]
 
   return (
     <div className="flex-1 flex items-center justify-center px-6 py-12">
@@ -34,9 +42,23 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
           {noSession ? t('chat.no_session') : t('empty.welcome')}
         </h2>
-        <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
           {t('empty.subtitle')}
         </p>
+
+        {/* Active model + thinking-effort hint */}
+        {activeModel && (
+          <div className="flex items-center justify-center gap-3 mb-8 text-[11px]">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <Cpu size={11} className="text-gray-400" />{activeModel.display_name || activeModel.model_name}
+            </span>
+            {effortLevel !== 'off' && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                <Brain size={11} style={{ color: 'var(--accent)' }} />{t('empty.effort')}: {effortLabel}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Example prompt grid */}
         {!noSession && (

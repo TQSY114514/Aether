@@ -6,6 +6,7 @@ import { Info, Save, Check, ImageIcon, Trash2, Download, Upload } from 'lucide-r
 import { t, LANGS } from '@/utils/i18n'
 import McpSettings from '@/components/settings/McpSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
+import AgentSettings from '@/components/settings/AgentSettings'
 
 export default function SettingPage() {
   const language = useStore((s) => s.language)
@@ -204,6 +205,9 @@ export default function SettingPage() {
 
           {/* Advanced generation + title settings */}
           <AdvancedSettings />
+
+          {/* Agent workspace + safety */}
+          <AgentSettings />
 
           {/* About */}
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
