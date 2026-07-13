@@ -10,6 +10,9 @@
 
 </div>
 
+> **상태: 베타.** AetherAI는 개인/취미 프로젝트입니다. 작동하지만 거친 부분이 있을 수 있습니다. 버그 리포트를 환영합니다 — [CONTRIBUTING.md](./CONTRIBUTING.md) 및 [SECURITY.md](./SECURITY.md)를 참조하세요.
+
+
 AetherAI는 여러 LLM 프로바이더(OpenAI / Claude / DeepSeek / 로컬 모델 / 모든 OpenAI 호환 엔드포인트)를 하나의 데스크톱 앱으로 통합합니다. 모든 데이터는 로컬에 저장됩니다. 여러분의 API 키와 대화 내용은 사용자가 설정한 프로바이더를 제외하고는 절대 컴퓨터 밖으로 나가지 않습니다.
 
 ## ✨ 기능

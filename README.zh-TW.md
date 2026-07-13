@@ -10,6 +10,9 @@
 
 </div>
 
+> **狀態：測試版（beta）。** AetherAI 是個人/業餘專案,能用,但會有粗糙之處。歡迎提 bug——見 [CONTRIBUTING.md](./CONTRIBUTING.md) 和 [SECURITY.md](./SECURITY.md)。
+
+
 AetherAI 將多家 LLM 服務供應商（OpenAI / Claude / DeepSeek / 本地模型 / 任何相容 OpenAI 的端點）整合於單一桌面應用。所有資料皆儲存於本地——您的 API 金鑰與對話內容絕不會離開您的裝置，除非送往您所設定的供應商。
 
 ## ✨ 功能特色

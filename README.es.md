@@ -10,6 +10,9 @@
 
 </div>
 
+> **Estado: beta.** AetherAI es un proyecto personal/aficionado. Funciona, pero espera asperezas. Los reportes de errores son bienvenidos — consulta [CONTRIBUTING.md](./CONTRIBUTING.md) y [SECURITY.md](./SECURITY.md).
+
+
 AetherAI unifica varios proveedores de LLM (OpenAI / Claude / DeepSeek / modelos locales / cualquier endpoint compatible con OpenAI) en una sola aplicación de escritorio. Todo se almacena localmente: tus claves API y conversaciones nunca salen de tu equipo excepto hacia los proveedores que configures.
 
 ## ✨ Funciones
