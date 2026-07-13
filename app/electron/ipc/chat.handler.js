@@ -25,7 +25,13 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
     // Save user message
-    if (!regenerate) { db.addMessage({ session_id: sessionId, role: 'user', content }) }
+    if (!regenerate) {
+      db.addMessage({ session_id: sessionId, role: 'user', content })
+    } else {
+      // On regenerate, drop any assistant messages after the last user message
+      // so the discarded reply doesn't resurface on reload.
+      db.deleteAssistantAfterLastUser(sessionId)
+    }
     db.touchSession(sessionId)
 
     // Get model & provider
@@ -129,15 +135,28 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           // Uses a one-shot ipc event round-trip keyed by a request id.
           requestPermission: ({ name, args, risk }) => new Promise((resolve) => {
             const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-            const onReply = (_e, r) => {
-              if (!r || r.reqId !== reqId) return
-              wc?.removeListener('chat:permission-reply', onReply)
-              resolve(!!r.allowed)
+            const safeWc = wc && !wc.isDestroyed() ? wc : null
+            let settled = false
+            const finish = (val) => {
+              if (settled) return
+              settled = true
+              clearTimeout(timer)
+              controller.signal.removeEventListener('abort', onAbort)
+              safeWc?.removeListener('chat:permission-reply', onReply)
+              resolve(val)
             }
-            wc?.on('chat:permission-reply', onReply)
-            wc?.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk })
-            // Auto-deny after 60s of silence so the loop can't hang forever.
-            setTimeout(() => { wc?.removeListener('chat:permission-reply', onReply); resolve(false) }, 60000)
+            const onReply = (_e, r) => { if (r && r.reqId === reqId) finish(!!r.allowed) }
+            const onAbort = () => finish(false)
+            const onTimeout = () => {
+              // Notify the renderer so its dialog dismisses instead of hanging.
+              safeWc?.send('chat:permission-expired', { reqId })
+              finish(false)
+            }
+            const timer = setTimeout(onTimeout, 60000)
+            controller.signal.addEventListener('abort', onAbort)
+            if (!safeWc) { finish(false); return }
+            safeWc.on('chat:permission-reply', onReply)
+            safeWc.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk })
           }),
         })
         const tokens = estimateTokens(finalContent)

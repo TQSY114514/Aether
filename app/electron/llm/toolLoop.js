@@ -63,7 +63,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     const msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
     // Surface the assistant's reasoning this round as a plan step (even if it
     // only contains text, the UI shows it as the agent's current thought).
-    if (msg.content) onPlanStep && onPlanStep({ step: depth, depth, assistantText: msg.content })
+    // Wrapped: a destroyed webContents must not abort the whole loop.
+    try { if (msg.content) onPlanStep && onPlanStep({ step: depth, depth, assistantText: msg.content }) } catch {}
     if (msg.tool_calls && msg.tool_calls.length) {
       // Append the assistant message that requested the calls.
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
@@ -94,7 +95,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
             }
           }
         }
-        onToolCall && onToolCall(entry)
+        try { onToolCall && onToolCall(entry) } catch {}
         // Append the tool result message so the model can use it next round.
         const resultContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
         totalChars += resultContent.length

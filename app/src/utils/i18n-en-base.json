@@ -220,5 +220,17 @@
   "settings.bg_image": "Background image",
   "settings.bg_opacity": "Opacity",
   "settings.bg_blur": "Blur",
-  "settings.bg_clear": "Clear"
+  "settings.bg_clear": "Clear",
+  "settings.about": "About",
+  "settings.about_desc": "AetherAI is a local-first multi-model desktop AI chat client. All data stays on your device.",
+  "settings.background": "Background image",
+  "settings.background.desc": "Upload an image as the chat background. Leave empty for solid color.",
+  "settings.background.upload": "Upload image",
+  "settings.background.clear": "Clear",
+  "settings.background.opacity": "Opacity",
+  "settings.background.blur": "Blur",
+  "settings.background.none": "No background image set",
+  "settings.display": "Display",
+  "settings.default_effort": "Default thinking effort",
+  "settings.default_effort_desc": "Used for new sessions (slider in the chat bar can override)."
 }

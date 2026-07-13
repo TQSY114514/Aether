@@ -75,12 +75,20 @@ export function renderMarkdown(text: string): string {
   t = t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
   t = t.replace(/\*(.+?)\*/g, '<i>$1</i>')
 
-  // Links
+  // Links. Tokenize markdown links FIRST so the bare-URL autolinker below
+  // doesn't re-match the URL inside the generated href attribute.
+  const linkTokens: string[] = []
   t = t.replace(/\[(.+?)\]\((.+?)\)/g, (_, label, url) => {
     const s = safeUrl(url)
-    return s ? `<a href="${s}" target="_blank" rel="noreferrer noopener">${label}</a>` : label
+    const html = s ? `<a href="${s}" target="_blank" rel="noreferrer noopener">${label}</a>` : label
+    const ph = `\x00L${linkTokens.length}\x00`
+    linkTokens.push(html)
+    return ph
   })
-  t = t.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>')
+  // Bare URLs (only those not already inside a link token).
+  t = t.replace(/(?<![="'>])(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>')
+  // Restore markdown-link tokens.
+  t = t.replace(/\x00L(\d+)\x00/g, (_, i) => linkTokens[Number(i)] || '')
 
   // Horizontal rule
   t = t.replace(/^---$/gm, '<hr>')

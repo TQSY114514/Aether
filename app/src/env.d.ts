@@ -47,6 +47,7 @@ interface Window {
       onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null } }) => void) => () => void
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string } }) => void) => () => void
       onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous' }) => void) => () => void
+      onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean }) => Promise<boolean>
       stop: () => Promise<void>
     }
@@ -54,6 +55,7 @@ interface Window {
       send: (params: { sessionId: number; content: string; modelIds: number[] }) => Promise<{ results: ArenaResult[] }>
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
+      stop: () => Promise<void>
     }
     mcp: {
       list: () => Promise<{ id: number; name: string; command: string; args: string[]; env: Record<string, string>; enabled: number }[]>

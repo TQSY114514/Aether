@@ -407,6 +407,23 @@ function deleteMemory(id) {
   db.run('DELETE FROM memory WHERE id = ?', [id]); saveDatabase()
 }
 
+// Drop assistant messages that follow the last user message in a session.
+// Used by regenerate so the discarded reply doesn't resurface on reload.
+function deleteAssistantAfterLastUser(sessionId) {
+  const stmt = db.prepare('SELECT id, role FROM message WHERE session_id = ? ORDER BY id ASC')
+  stmt.bind([sessionId])
+  let lastUserId = 0
+  while (stmt.step()) {
+    const row = stmt.getAsObject()
+    if (String(row.role) === 'user') lastUserId = Number(row.id)
+  }
+  stmt.free()
+  if (lastUserId > 0) {
+    db.run('DELETE FROM message WHERE session_id = ? AND role = ? AND id > ?', [sessionId, 'assistant', lastUserId])
+    saveDatabase()
+  }
+}
+
 // ===== MCP server CRUD =====
 // Each server: { id, name, command, args (JSON array string), env (JSON object string), enabled }.
 function getMcpServers() {
@@ -440,5 +457,6 @@ module.exports = {
   getModelScores, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
   getMemories, addMemory, updateMemory, deleteMemory,
+  deleteAssistantAfterLastUser,
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
 }

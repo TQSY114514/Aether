@@ -461,6 +461,7 @@ export const useStore = create<AppState>((set, get) => ({
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
     await window.electronAPI.chat.stop()
+    await window.electronAPI.arena.stop().catch(() => {})
     // Clear streaming buffers for all sessions; nothing is sending anymore.
     set({ streamingBySession: {}, sending: false })
   },
@@ -480,7 +481,17 @@ export const useStore = create<AppState>((set, get) => ({
     }))
     ensureChunkListener()
     try {
-      await window.electronAPI.chat.send({ sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true, personaId: null })
+      // Reuse sendMessage's full param set so regenerate respects agent mode,
+      // effort, generation params, system prefix, and persona.
+      await window.electronAPI.chat.send({
+        sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
+        personaId: cfg?.personaId ?? null,
+        useTools: get().agentMode !== 'off',
+        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
+        effortLevel: get().effortLevel,
+        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
+        systemPrefix: get().systemPrefix,
+      })
     } catch (err) {
       set((s) => {
         const next = { ...s.streamingBySession }
@@ -723,6 +734,10 @@ function ensureToolCallListener() {
   // Dangerous-tool permission requests surface as a dialog in the renderer.
   window.electronAPI.chat.onPermissionRequest((req) => {
     useStore.setState((s) => ({ permissionRequests: [...s.permissionRequests, req] }))
+  })
+  // A permission request that timed out (user walked away) — drop the dialog.
+  window.electronAPI.chat.onPermissionExpired(({ reqId }) => {
+    useStore.setState((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
   })
   // Agent plan steps (one per loop round) — live reasoning trace for the UI.
   window.electronAPI.chat.onPlanStep(({ messageId, step }) => {

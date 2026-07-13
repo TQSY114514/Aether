@@ -319,7 +319,19 @@ const translations: Record<string, Record<string, string>> = {
     "settings.bg_image": "Background image",
     "settings.bg_opacity": "Opacity",
     "settings.bg_blur": "Blur",
-    "settings.bg_clear": "Clear"
+    "settings.bg_clear": "Clear",
+    "settings.about": "About",
+    "settings.about_desc": "AetherAI is a local-first multi-model desktop AI chat client. All data stays on your device.",
+    "settings.background": "Background image",
+    "settings.background.desc": "Upload an image as the chat background. Leave empty for solid color.",
+    "settings.background.upload": "Upload image",
+    "settings.background.clear": "Clear",
+    "settings.background.opacity": "Opacity",
+    "settings.background.blur": "Blur",
+    "settings.background.none": "No background image set",
+    "settings.display": "Display",
+    "settings.default_effort": "Default thinking effort",
+    "settings.default_effort_desc": "Used for new sessions (slider in the chat bar can override)."
   },
   "en-upside": {
     "app.name": "ᴉɐɹǝɥʇǝɐ",
@@ -543,7 +555,19 @@ const translations: Record<string, Record<string, string>> = {
     "settings.bg_image": "ǝƃɐɯᴉ punoɹƃʞɔɐq",
     "settings.bg_opacity": "ʎʇᴉɔɐdo",
     "settings.bg_blur": "ɹnlq",
-    "settings.bg_clear": "ɹɐǝlɔ"
+    "settings.bg_clear": "ɹɐǝlɔ",
+    "settings.about": "ʇnoqɐ",
+    "settings.about_desc": ".ǝɔᴉʌǝp ɹnoʎ uo sʎɐʇs ɐʇɐp llɐ .ʇuǝᴉlɔ ʇɐɥɔ ᴉɐ doʇʞsǝp lǝpoɯ-ᴉʇlnɯ ʇsɹᴉɟ-lɐɔol ɐ sᴉ ᴉɐɹǝɥʇǝɐ",
+    "settings.background": "ǝƃɐɯᴉ punoɹƃʞɔɐq",
+    "settings.background.desc": ".ɹoloɔ pᴉlos ɹoɟ ʎʇdɯǝ ǝʌɐǝl .punoɹƃʞɔɐq ʇɐɥɔ ǝɥʇ sɐ ǝƃɐɯᴉ uɐ pɐoldn",
+    "settings.background.upload": "ǝƃɐɯᴉ pɐoldn",
+    "settings.background.clear": "ɹɐǝlɔ",
+    "settings.background.opacity": "ʎʇᴉɔɐdo",
+    "settings.background.blur": "ɹnlq",
+    "settings.background.none": "ʇǝs ǝƃɐɯᴉ punoɹƃʞɔɐq ou",
+    "settings.display": "ʎɐldsᴉp",
+    "settings.default_effort": "ʇɹoɟɟǝ ƃuᴉʞuᴉɥʇ ʇlnɐɟǝp",
+    "settings.default_effort_desc": ".)ǝpᴉɹɹǝʌo uɐɔ ɹɐq ʇɐɥɔ ǝɥʇ uᴉ ɹǝpᴉls( suoᴉssǝs ʍǝu ɹoɟ pǝsn"
   },
   "zh-CN": {
     "app.name": "AetherAI",
@@ -767,7 +791,19 @@ const translations: Record<string, Record<string, string>> = {
     "settings.bg_image": "背景图",
     "settings.bg_opacity": "不透明度",
     "settings.bg_blur": "模糊",
-    "settings.bg_clear": "清除"
+    "settings.bg_clear": "清除",
+    "settings.about": "关于",
+    "settings.about_desc": "AetherAI 是本地优先的多模型桌面 AI 聊天客户端，所有数据保留在你的设备上。",
+    "settings.background": "背景图片",
+    "settings.background.desc": "上传图片作为聊天背景。留空则使用纯色。",
+    "settings.background.upload": "上传图片",
+    "settings.background.clear": "清除",
+    "settings.background.opacity": "不透明度",
+    "settings.background.blur": "模糊",
+    "settings.background.none": "未设置背景图片",
+    "settings.display": "显示",
+    "settings.default_effort": "默认思考等级",
+    "settings.default_effort_desc": "用于新会话（聊天栏的滑块可覆盖）。"
   },
   "es": {
     "app.name": "AetherAI",
@@ -2438,7 +2474,7 @@ export function t(key: string, ...args: (string | number)[]): string {
   const table = translations[currentLang] || translations["en"] || {}
   let s = table[key] ?? translations["en"]?.[key] ?? key
   if (args.length) {
-    s = s.replace(/{(d+)}/g, (_, i) => String(args[Number(i)] ?? ""))
+    s = s.replace(/\{(\d+)\}/g, (_, i) => String(args[Number(i)] ?? ""))
   }
   return s
 }

@@ -65,7 +65,7 @@ export function t(key: string, ...args: (string | number)[]): string {
   const table = translations[currentLang] || translations["en"] || {}
   let s = table[key] ?? translations["en"]?.[key] ?? key
   if (args.length) {
-    s = s.replace(/\{(\d+)\}/g, (_, i) => String(args[Number(i)] ?? ""))
+    s = s.replace(/\\{(\\d+)\\}/g, (_, i) => String(args[Number(i)] ?? ""))
   }
   return s
 }

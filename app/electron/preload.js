@@ -62,6 +62,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:permission-request', handler)
       return () => ipcRenderer.removeListener('chat:permission-request', handler)
     },
+    onPermissionExpired: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:permission-expired', handler)
+      return () => ipcRenderer.removeListener('chat:permission-expired', handler)
+    },
     replyPermission: (payload) => ipcRenderer.invoke('chat:permission-reply', payload),
     stop: () => ipcRenderer.invoke('chat:stop'),
   },
@@ -69,6 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     send: (params) => ipcRenderer.invoke('arena:send', params),
     vote: (data) => ipcRenderer.invoke('arena:vote', data),
     scores: () => ipcRenderer.invoke('arena:scores'),
+    stop: () => ipcRenderer.invoke('arena:stop'),
   },
   mcp: {
     list: () => ipcRenderer.invoke('mcp:list'),

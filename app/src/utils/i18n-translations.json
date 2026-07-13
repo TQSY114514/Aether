@@ -223,7 +223,19 @@
       "settings.bg_image": "背景图",
       "settings.bg_opacity": "不透明度",
       "settings.bg_blur": "模糊",
-      "settings.bg_clear": "清除"
+      "settings.bg_clear": "清除",
+      "settings.about": "关于",
+      "settings.about_desc": "AetherAI 是本地优先的多模型桌面 AI 聊天客户端，所有数据保留在你的设备上。",
+      "settings.background": "背景图片",
+      "settings.background.desc": "上传图片作为聊天背景。留空则使用纯色。",
+      "settings.background.upload": "上传图片",
+      "settings.background.clear": "清除",
+      "settings.background.opacity": "不透明度",
+      "settings.background.blur": "模糊",
+      "settings.background.none": "未设置背景图片",
+      "settings.display": "显示",
+      "settings.default_effort": "默认思考等级",
+      "settings.default_effort_desc": "用于新会话（聊天栏的滑块可覆盖）。"
     }
   },
   {

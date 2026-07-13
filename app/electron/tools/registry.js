@@ -109,7 +109,8 @@ const TOOLS = [
       const pattern = String(args.pattern || '')
       const cwd = String(args.cwd || '')
       if (!pattern) throw new Error('pattern is required')
-      const re = new RegExp(pattern)
+      let re
+      try { re = new RegExp(pattern) } catch (e) { return `invalid regex: ${e.message}` }
       const files = await glob(args.glob || '**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
       const hits = []
       outer: for (const f of files.slice(0, 500)) {
@@ -171,6 +172,12 @@ const TOOLS = [
     run: async (args) => {
       const url = String(args.url || '')
       if (!url) throw new Error('url is required')
+      // Reject non-http(s) schemes so a prompt-injected model can't read local
+      // files via file:// (web_fetch is 'safe' and would otherwise bypass the
+      // dangerous-tool permission gate).
+      let parsed
+      try { parsed = new URL(url) } catch { return '[invalid url]' }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '[blocked: non-http(s) url]'
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 20000)
       try {

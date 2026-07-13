@@ -47,11 +47,15 @@ function buildReasoningParams(modelName, effort) {
     return e ? { reasoning_effort: e } : {}
   }
   if (fam === 'claude') {
-    const budget = CLAUDE_BUDGETS[effort]
-    if (!budget) return {}
-    // Claude thinking requires temperature=1 and no top_p/top_k. We return the
-    // thinking block; the adapter/caller is responsible for the temp override.
-    return { thinking: { type: 'enabled', budget_tokens: budget }, temperature: 1, top_p: undefined }
+    // AetherAI only ships an OpenAI-compatible adapter, so Claude models are
+    // reached through a relay/shim. Most relays (new-api, OpenRouter) accept
+    // `reasoning_effort` for Claude and translate it; sending a native Claude
+    // `thinking` block to an OpenAI-shape endpoint usually 400s. So we use the
+    // OpenAI vocabulary here and let the relay handle conversion. We do NOT
+    // force temperature=1/top_p=undefined — those are only required for the
+    // native Claude thinking API and break OpenAI-shape requests.
+    const e = OPENAI_EFFORT[effort]
+    return e ? { reasoning_effort: e } : {}
   }
   // DeepSeek/Qwen: reasoning is usually always-on for these models; sending an
   // extra_body is unreliable across shims, so we send nothing and let the model

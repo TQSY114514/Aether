@@ -235,7 +235,8 @@ const EFFORT_LEVELS = [
   { value: 'high' as const, labelKey: 'effort.high' },
 ]
 function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 'high'; onChange: (v: 'off' | 'low' | 'medium' | 'high') => void }) {
-  const idx = EFFORT_LEVELS.findIndex(l => l.value === level)
+  let idx = EFFORT_LEVELS.findIndex(l => l.value === level)
+  if (idx < 0) idx = 0 // guard against corrupt/unknown stored values
   // Track fill: 0/33/66/100% for off/low/medium/high.
   const fill = idx <= 0 ? 0 : (idx / (EFFORT_LEVELS.length - 1)) * 100
   return (
