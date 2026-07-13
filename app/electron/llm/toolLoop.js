@@ -35,6 +35,12 @@ const MAX_TOTAL_CHARS = 200000 // crude context budget across all tool results
 // model calls the same tool with the same args N times in a row, break — it's
 // stuck. Keeps MAX_DEPTH as a hard backstop but catches stuck loops faster.
 const LOOP_REPEAT_LIMIT = 3
+// Per-tool execution timeout. A tool that hangs (e.g. a dead web_fetch) would
+// otherwise block the loop forever. Wraps every tool.run in a Promise.race.
+const TOOL_TIMEOUT_MS = 30000
+// Permission request timeout. If the user walks away from the approval dialog,
+// default to DENY after this long rather than hanging the agent indefinitely.
+const PERMISSION_TIMEOUT_MS = 120000
 
 // System prompt injected at the head of the conversation to steer the model
 // toward a Plan→Act→Observe rhythm (like a coding agent). The model is told to
@@ -68,7 +74,17 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     depth++
     const opts = { ...options }
     if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
-    const msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
+    // Fetch the assistant message, defensively: a provider hiccup (non-JSON,
+    // connection drop, 5xx) must not crash the loop or lose the partial trace.
+    let msg
+    try {
+      msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
+    } catch (e) {
+      // Could not get a completion — return the error as the final answer so the
+      // user sees what went wrong instead of a silent hang.
+      return `[agent error: ${e && e.message ? e.message : String(e)}]`
+    }
+    if (!msg) msg = { content: '', tool_calls: undefined }
     // Surface the assistant's reasoning this round as a plan step (even if it
     // only contains text, the UI shows it as the agent's current thought).
     // Wrapped: a destroyed webContents must not abort the whole loop.
@@ -99,18 +115,15 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
             if (agentMode === 'plan') {
               entry.error = 'blocked by plan mode (read-only)'
             } else if (agentMode === 'ask') {
-              const allowed = requestPermission ? await requestPermission({ name: fn.name, args, risk: tool.risk }) : false
+              const allowed = await requestPermissionWithTimeout(requestPermission, { name: fn.name, args, risk: tool.risk })
               if (!allowed) { entry.error = 'denied by user' }
             }
           }
           if (!entry.error) {
             const t0 = Date.now()
-            try {
-              entry.result = await tool.run(args, { provider, model })
-            } catch (e) {
-              entry.error = e.message || String(e)
-            }
+            const r = await runToolWithTimeout(tool, args, { provider, model }, controller.signal)
             entry.latencyMs = Date.now() - t0
+            if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }
         }
         try { onToolCall && onToolCall(entry) } catch {}
@@ -135,7 +148,55 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   return '（工具调用达到最大深度，已停止）'
 }
 
-// Fetch the full assistant message object (content + tool_calls) for a
+// Run a tool with a timeout. Resolves to { result } or { error } — never throws
+// (a hung tool must not freeze the loop). The abort signal is internal so
+// stopping generation still works via the loop's outer signal.
+function runToolWithTimeout(tool, args, ctx, signal) {
+  return new Promise((resolve) => {
+    let done = false
+    const timer = setTimeout(() => {
+      if (done) return
+      done = true
+      resolve({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` })
+    }, TOOL_TIMEOUT_MS)
+    // If the outer loop is aborted (user stopped generation), resolve fast.
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve({ error: 'aborted' })
+      }, { once: true })
+    }
+    Promise.resolve()
+      .then(() => tool.run(args, ctx))
+      .then((result) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve({ result })
+      })
+      .catch((e) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve({ error: e && e.message ? e.message : String(e) })
+      })
+  })
+}
+
+// Ask for permission with a timeout. Defaults to DENY if the user doesn't
+// respond — safer than hanging the loop. The chat.handler side also has its
+// own expiry, but this is the hard backstop inside the loop.
+function requestPermissionWithTimeout(requestPermission, payload) {
+  if (!requestPermission) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), PERMISSION_TIMEOUT_MS)
+    Promise.resolve(requestPermission(payload))
+      .then((ok) => { clearTimeout(timer); resolve(!!ok) })
+      .catch(() => { clearTimeout(timer); resolve(false) })
+  })
+}
 // non-streaming completion. Lives on the adapter so provider-specific parsing
 // stays there; here we just call through.
 async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
