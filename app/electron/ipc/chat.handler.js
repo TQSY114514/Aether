@@ -23,6 +23,40 @@ function logTitle(...args) {
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
 
+// ─── Session-scoped permission allow-rules ─────────────────────────────────
+// When the user picks "allow + remember" in the permission dialog, we store a
+// rule so subsequent similar calls skip the dialog. Rules are per-session and
+// cleared on session delete. Granularity:
+//   run_command  → key = first whitespace token (the binary, e.g. "git", "npm")
+//   write/edit   → key = the directory of the path (so all writes under a
+//                  project dir match after one approval)
+//   others       → exact name match (remember "yes to this tool")
+const allowRules = new Map() // sessionId -> Set<string> of `${name}:${key}`
+
+function ruleKey(name, args) {
+  if (name === 'run_command') {
+    const cmd = String(args?.command || '').trim()
+    const firstTok = cmd.split(/\s+/)[0] || cmd
+    return firstTok
+  }
+  if (name === 'write_file' || name === 'edit_file') {
+    const p = String(args?.path || '')
+    const dir = p.includes('/') || p.includes('\\') ? p.replace(/[\\/][^\\/]*$/, '') : p
+    return dir || p
+  }
+  return '*' // any args for this tool name
+}
+function matchAllowRule(sessionId, name, args) {
+  const set = allowRules.get(sessionId)
+  if (!set) return false
+  return set.has(`${name}:${ruleKey(name, args)}`) || set.has(`${name}:*`)
+}
+function addAllowRule(sessionId, name, args) {
+  if (!allowRules.has(sessionId)) allowRules.set(sessionId, new Set())
+  allowRules.get(sessionId).add(`${name}:${ruleKey(name, args)}`)
+}
+function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
+
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
@@ -150,9 +184,46 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
           onTodoUpdate: (todos) => wc?.send('chat:todo-update', { messageId: msgId, sessionId, todos }),
-          // Ask the renderer to approve a dangerous tool. Resolves true/false.
-          // Uses a one-shot ipc event round-trip keyed by a request id.
-          requestPermission: ({ name, args, risk }) => new Promise((resolve) => {
+          // AskUserQuestion: surface a structured question dialog and await the
+          // user's choice. Returns a JSON string of answers so the model can read
+          // them as a tool result.
+          onAskUser: (questions) => new Promise((resolve) => {
+            const reqId = `${msgId}:q:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+            const safeWc = wc && !wc.isDestroyed() ? wc : null
+            let settled = false
+            const finish = (val) => {
+              if (settled) return
+              settled = true
+              clearTimeout(timer)
+              controller.signal.removeEventListener('abort', onAbort)
+              safeWc?.removeListener('chat:question-reply', onReply)
+              resolve(val)
+            }
+            const onReply = (_e, r) => { if (r && r.reqId === reqId) finish(JSON.stringify(r.answers || [])) }
+            const onAbort = () => finish(JSON.stringify([{ question: questions[0]?.question, answer: '(aborted)' }]))
+            const onTimeout = () => { safeWc?.send('chat:question-expired', { reqId }); finish(JSON.stringify([{ answer: '(no response)' }])) }
+            const timer = setTimeout(onTimeout, 300000) // 5 min — questions can wait longer
+            controller.signal.addEventListener('abort', onAbort)
+            if (!safeWc) { finish(JSON.stringify([{ answer: '(no window)' }])); return }
+            safeWc.on('chat:question-reply', onReply)
+            safeWc.send('chat:question', { reqId, messageId: msgId, sessionId, questions })
+          }),
+          // Session-scoped permission allow-rules: when the user picks "allow +
+          // remember" in the dialog, we store a prefix rule and skip the dialog
+          // for matching subsequent calls. Cleared when the session is deleted.
+          //   run_command  → prefix = first 2 space-tokens of the command
+          //                  (e.g. "git status" matches "git diff" via prefix "git")
+          //                  Actually we key on the first token (the binary) to be
+          //                  useful but not over-broad. Edit below.
+          //   write/edit   → prefix = the directory of the path
+          // For run_command we match by the first whitespace token (the binary),
+          // so "npm test" and "npm run build" both match a remembered "npm" rule.
+          // That's the useful granularity Claude Code uses.
+          requestPermission: ({ name, args, risk }) => {
+            // Check session allow-rules first.
+            const rule = matchAllowRule(sessionId, name, args)
+            if (rule) return Promise.resolve(true)
+            return new Promise((resolve) => {
             const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
             const safeWc = wc && !wc.isDestroyed() ? wc : null
             let settled = false
@@ -164,7 +235,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
               safeWc?.removeListener('chat:permission-reply', onReply)
               resolve(val)
             }
-            const onReply = (_e, r) => { if (r && r.reqId === reqId) finish(!!r.allowed) }
+            const onReply = (_e, r) => {
+              if (!r || r.reqId !== reqId) return
+              // If the user chose "allow + remember", persist the rule for the session.
+              if (r.allowed && r.remember) addAllowRule(sessionId, name, args)
+              finish(!!r.allowed)
+            }
             const onAbort = () => finish(false)
             const onTimeout = () => {
               // Notify the renderer so its dialog dismisses instead of hanging.
@@ -176,7 +252,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             if (!safeWc) { finish(false); return }
             safeWc.on('chat:permission-reply', onReply)
             safeWc.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk })
-          }),
+            })
+          },
         })
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
@@ -275,6 +352,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     event.sender.send('chat:permission-reply', payload)
     return true
   })
+  // Same forwarding pattern for AskUserQuestion replies.
+  ipcMain.handle('chat:question-reply', (event, payload) => {
+    event.sender.send('chat:question-reply', payload)
+    return true
+  })
 }
 
 // Generate a concise, summarized title for a session's first exchange.
@@ -327,4 +409,4 @@ function estimateTokens(text) {
   return Math.max(1, Math.ceil(tokens))
 }
 
-module.exports = { registerChatHandlers }
+module.exports = { registerChatHandlers, clearAllowRules }

@@ -64,12 +64,15 @@ export default function PermissionDialog() {
         <p className="text-[11px] mb-4" style={{ color: 'var(--text-muted)' }}>
           {t('agent.permission.desc')}
         </p>
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 flex-wrap">
           <button onClick={() => resolve(req.reqId, false)} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('agent.permission.deny')}</button>
+          <button onClick={() => resolve(req.reqId, true, true)}
+            className="px-3.5 py-1.5 text-xs rounded-lg border transition-colors hover:opacity-90"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>{t('agent.permission.allow_remember')}</button>
           <button onClick={() => resolve(req.reqId, true)}
             className="px-3.5 py-1.5 text-xs rounded-lg text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: 'var(--error)' }}>{t('agent.permission.allow')}</button>
+            style={{ backgroundColor: 'var(--error)' }}>{t('agent.permission.allow_once')}</button>
         </div>
       </div>
     </div>

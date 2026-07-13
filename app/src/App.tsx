@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useRef, useState } from 'react'
 import { useStore } from '@/store'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
@@ -9,6 +9,8 @@ import ScoresPage from '@/pages/ScoresPage'
 import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
+import QuestionDialog from '@/components/chat/QuestionDialog'
+import CommandPalette from '@/components/CommandPalette'
 import { t } from '@/utils/i18n'
 
 export default function App() {
@@ -27,6 +29,7 @@ export default function App() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const mainRef = useRef<HTMLDivElement>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const backgroundOpacity = useStore((s) => s.backgroundOpacity)
   const backgroundBlur = useStore((s) => s.backgroundBlur)
@@ -95,6 +98,12 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+K toggles the command palette.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(o => !o)
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
         createSession()
@@ -140,6 +149,8 @@ export default function App() {
         {renderPage()}
       </main>
       <PermissionDialog />
+      <QuestionDialog />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   )
 }

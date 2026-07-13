@@ -62,6 +62,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:todo-update', handler)
       return () => ipcRenderer.removeListener('chat:todo-update', handler)
     },
+    onQuestion: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:question', handler)
+      return () => ipcRenderer.removeListener('chat:question', handler)
+    },
+    onQuestionExpired: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:question-expired', handler)
+      return () => ipcRenderer.removeListener('chat:question-expired', handler)
+    },
+    replyQuestion: (payload) => ipcRenderer.invoke('chat:question-reply', payload),
     onPermissionRequest: (callback) => {
       const handler = (_e, payload) => callback(payload)
       ipcRenderer.on('chat:permission-request', handler)

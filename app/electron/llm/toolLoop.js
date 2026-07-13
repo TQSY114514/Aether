@@ -59,7 +59,7 @@ For multi-step tasks (3+ steps), call todo_write first to lay out the checklist,
 // `options` is spread into each completion request body (used to carry reasoning params).
 // `agentMode`: 'ask' (confirm dangerous tools) | 'auto' (run everything) | 'plan' (safe tools only, block dangerous).
 // `requestPermission({ name, args, risk })`: async, resolves true to allow a dangerous tool. Only called in 'ask' mode.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onTodoUpdate, options = {}, agentMode = 'ask', requestPermission }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission }) {
   const toolPayload = tools ? toolsPayload(agentMode) : []
   let depth = 0
   let totalChars = 0
@@ -128,7 +128,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
             // Pass the loop's `signal` (the AbortSignal from chat.handler) so a
             // user Stop / tool timeout cancels an in-flight tool.
             // Pass onTodoUpdate so the todo_write tool can stream the checklist to the UI.
-            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate }, signal)
+            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate, onAskUser }, signal)
             entry.latencyMs = Date.now() - t0
             if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }

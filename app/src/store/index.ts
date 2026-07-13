@@ -78,6 +78,9 @@ interface AppState {
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).
   todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
+  // Pending AskUserQuestion dialogs awaiting a user answer.
+  pendingQuestions: { reqId: string; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
+  resolveQuestion: (reqId: string, answers: { question: string; answer: string }[]) => void
   // Agent permission mode, in increasing order of risk:
   //   'off'   — no tools at all (plain chat)
   //   'plan'  — read-only tools only (read_file/list_dir/grep/web_search…); no writes/commands
@@ -90,7 +93,7 @@ interface AppState {
   setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto' | 'yolo') => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).
   permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous' }[]
-  resolvePermission: (reqId: string, allowed: boolean) => void
+  resolvePermission: (reqId: string, allowed: boolean, remember?: boolean) => void
   // Thinking/reasoning effort level sent to the model (real param: reasoning_effort
   // for OpenAI o-series, thinking.budget_tokens for Claude). 'off' = no param.
   effortLevel: 'off' | 'low' | 'medium' | 'high'
@@ -204,6 +207,7 @@ export const useStore = create<AppState>((set, get) => ({
   toolCallsByMessage: {},
   planStepsByMessage: {},
   todosByMessage: {},
+  pendingQuestions: [],
   agentMode: 'off',
   permissionRequests: [],
   effortLevel: 'off',
@@ -472,9 +476,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setAgentMode: (v) => set({ agentMode: v }),
-  resolvePermission: (reqId, allowed) => {
-    window.electronAPI.chat.replyPermission({ reqId, allowed })
+  resolvePermission: (reqId, allowed, remember = false) => {
+    window.electronAPI.chat.replyPermission({ reqId, allowed, remember })
     set((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
+  },
+  resolveQuestion: (reqId, answers) => {
+    window.electronAPI.chat.replyQuestion({ reqId, answers })
+    set((s) => ({ pendingQuestions: s.pendingQuestions.filter((q) => q.reqId !== reqId) }))
   },
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
@@ -769,5 +777,13 @@ function ensureToolCallListener() {
   window.electronAPI.chat.onTodoUpdate(({ messageId, todos }) => {
     if (!messageId || !Array.isArray(todos)) return
     useStore.setState((s) => ({ todosByMessage: { ...s.todosByMessage, [messageId]: todos } }))
+  })
+  // AskUserQuestion — surface a structured question dialog.
+  window.electronAPI.chat.onQuestion(({ reqId, questions }) => {
+    if (!reqId || !Array.isArray(questions)) return
+    useStore.setState((s) => ({ pendingQuestions: [...s.pendingQuestions, { reqId, questions }] }))
+  })
+  window.electronAPI.chat.onQuestionExpired(({ reqId }) => {
+    useStore.setState((s) => ({ pendingQuestions: s.pendingQuestions.filter((q) => q.reqId !== reqId) }))
   })
 }

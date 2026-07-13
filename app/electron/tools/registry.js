@@ -314,6 +314,55 @@ const TOOLS = [
     },
   },
   {
+    // Structured clarification (Claude-Code-style AskUserQuestion). The agent
+    // asks the user to pick from options instead of guessing. ctx.onAskUser
+    // surfaces a tappable dialog; the chosen option label(s) come back as the
+    // tool result. Safe risk (no side effects — just a question).
+    name: 'ask_user',
+    description: 'Ask the user a structured clarifying question with options. Use when the request is ambiguous and a wrong guess would waste effort. The user picks option(s); their choice is returned as the result. Do not overuse — only when genuinely unsure.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array',
+          description: '1-4 questions. Each has 2-4 options.',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', description: 'The question text.' },
+              header: { type: 'string', description: 'A short label (≤12 chars) shown as a chip above the question.' },
+              options: {
+                type: 'array',
+                description: '2-4 options. An "Other" option is auto-added so the user can type a custom answer.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string', description: 'Short option label.' },
+                    description: { type: 'string', description: 'Optional longer explanation shown under the label.' },
+                  },
+                  required: ['label'],
+                },
+              },
+            },
+            required: ['question', 'options'],
+          },
+        },
+      },
+      required: ['questions'],
+    },
+    run: (args, ctx) => {
+      const questions = Array.isArray(args.questions) ? args.questions.slice(0, 4).map(q => ({
+        question: String(q.question || ''),
+        header: q.header ? String(q.header).slice(0, 12) : undefined,
+        options: Array.isArray(q.options) ? q.options.slice(0, 4).map(o => ({ label: String(o.label || ''), description: o.description ? String(o.description) : undefined })) : [],
+      })).filter(q => q.options.length >= 2) : []
+      if (questions.length === 0) throw new Error('ask_user needs 1-4 questions, each with ≥2 options')
+      if (typeof ctx?.onAskUser !== 'function') throw new Error('ask_user not available in this context')
+      return ctx.onAskUser(questions)
+    },
+  },
+  {
     // Structured task list (Claude-Code-style TodoWrite). The agent maintains a
     // checklist so the user can see what's done / in-progress / pending during a
     // multi-step task. The list is NOT returned as a tool result for the model to
