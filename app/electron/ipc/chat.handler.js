@@ -1,6 +1,7 @@
 const { streamChat, completeChat } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
+const { maybeCompact } = require('../llm/compaction')
 const fs = require('fs')
 const path = require('path')
 
@@ -94,6 +95,14 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       if (p) apiMsgs.unshift({ role: 'system', content: p.prompt })
     }
 
+    // Context compaction: if the estimated token count of the conversation is
+    // approaching the model's context window, summarize older history and keep a
+    // recent window + active tool-call pairs intact. Prevents long chats from
+    // 400-ing on context length. Falls back to hard-truncate if summarization
+    // fails. `context_window` may be null if the user didn't set it; default 32k.
+    const ctxBudget = (model.context_window && Number(model.context_window) > 0) ? Number(model.context_window) : 32000
+    const compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget })
+
     // Auto-title: defer to a real AI summary after the first response (see below).
     // Previously this slice()d the raw user input into the title (a copy-paste,
     // not a summary). Leaving a neutral default until the summary is generated.
@@ -105,9 +114,10 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     if (genParams.temperature && genParams.temperature > 0) genOpts.temperature = genParams.temperature
     if (genParams.topP && genParams.topP > 0) genOpts.top_p = genParams.topP
     const mergedOpts = { ...genOpts, ...reasoningOpts }
-    // Prepend a custom system prefix if set (advanced users).
+    // Prepend a custom system prefix if set (advanced users). Done after compaction
+    // so the prefix is never summarized away.
     if (systemPrefix && systemPrefix.trim()) {
-      apiMsgs.unshift({ role: 'system', content: systemPrefix.trim() })
+      compacted.unshift({ role: 'system', content: systemPrefix.trim() })
     }
 
     const timeoutMs = parseInt(db.getSetting('fallback_timeout_ms') || '30000', 10)
@@ -126,7 +136,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const wc = getWebContents()
       try {
         const finalContent = await runToolLoop({
-          provider, model, messages: apiMsgs, signal: controller.signal,
+          provider, model, messages: compacted, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
@@ -194,7 +204,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         const wc = getWebContents()
         // mergedOpts carries reasoning params + advanced generation params (max_tokens/
         // temperature/top_p) set in Settings, spread into the request body by the adapter.
-        for await (const delta of streamChat({ provider: p, model: m, messages: apiMsgs, signal: controller.signal, options: mergedOpts })) {
+        for await (const delta of streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: mergedOpts })) {
           if (delta) {
             fullContent += delta
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
