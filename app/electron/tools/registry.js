@@ -207,13 +207,16 @@ const TOOLS = [
       },
       required: ['path', 'content'],
     },
-    run: (args) => {
+    run: (args, ctx) => {
       const p = String(args.path || '')
       const content = String(args.content ?? '')
       if (!p) throw new Error('path is required')
-      // Sandbox: refuse writes outside the workspace root.
-      const guard = checkWritePath(p)
-      if (!guard.ok) throw new Error(guard.reason)
+      // Sandbox: refuse writes outside the workspace root — unless 'yolo' mode
+      // (full permission, user explicitly accepted the risk).
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(p)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
       fs.mkdirSync(path.dirname(p), { recursive: true })
       fs.writeFileSync(p, content, 'utf-8')
       return `wrote ${content.length} chars to ${p}`
@@ -232,14 +235,16 @@ const TOOLS = [
       },
       required: ['path', 'old_string', 'new_string'],
     },
-    run: (args) => {
+    run: (args, ctx) => {
       const p = String(args.path || '')
       const oldS = String(args.old_string ?? '')
       const newS = String(args.new_string ?? '')
       if (!p || !oldS) throw new Error('path and old_string are required')
-      // Sandbox: refuse edits outside the workspace root.
-      const guard = checkWritePath(p)
-      if (!guard.ok) throw new Error(guard.reason)
+      // Sandbox: refuse edits outside the workspace root — unless 'yolo' mode.
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(p)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
       const orig = fs.readFileSync(p, 'utf-8')
       const idx = orig.indexOf(oldS)
       if (idx === -1) throw new Error('old_string not found')
@@ -261,13 +266,15 @@ const TOOLS = [
       },
       required: ['command'],
     },
-    run: (args) => {
+    run: (args, ctx) => {
       const cmd = String(args.command || '')
       if (!cmd) throw new Error('command is required')
-      // Sandbox: refuse commands matching destructive patterns (format, rm -rf /,
-      // shutdown, download|exec, etc.). Backstop for the ask-mode confirm.
-      const guard = checkCommand(cmd)
-      if (!guard.ok) throw new Error(guard.reason)
+      // Sandbox: refuse commands matching destructive patterns — unless 'yolo'
+      // mode (full permission, user accepted the risk).
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkCommand(cmd)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
       const cwd = args.cwd ? String(args.cwd) : undefined
       return new Promise((resolve, reject) => {
         exec(cmd, { cwd, maxBuffer: 16 * 1024, timeout: 30000 }, (err, stdout, stderr) => {

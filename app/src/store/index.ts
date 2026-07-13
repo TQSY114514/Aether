@@ -76,11 +76,16 @@ interface AppState {
   toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null }[]>
   // Per-message agent plan steps (the assistant's reasoning each round).
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
-  // Whether the current session should send tools with the request, and the
-  // permission mode: 'ask' (confirm dangerous tools) | 'auto' (run all) |
-  // 'plan' (safe tools only, read-only). 'off' = no tools at all.
-  agentMode: 'off' | 'ask' | 'auto' | 'plan'
-  setAgentMode: (v: 'off' | 'ask' | 'auto' | 'plan') => void
+  // Agent permission mode, in increasing order of risk:
+  //   'off'   — no tools at all (plain chat)
+  //   'plan'  — read-only tools only (read_file/list_dir/grep/web_search…); no writes/commands
+  //   'ask'   — dangerous tools require a confirm dialog (recommended)
+  //   'auto'  — run everything, no confirms (still inside the workspace sandbox)
+  //   'yolo'  — FULL permission: skip the workspace path guard AND the command blocklist.
+  //             DANGER: the model can write any file and run any command. Only for
+  //             trusted models + throwaway VMs. Warned on enable.
+  agentMode: 'off' | 'plan' | 'ask' | 'auto' | 'yolo'
+  setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto' | 'yolo') => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).
   permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous' }[]
   resolvePermission: (reqId: string, allowed: boolean) => void

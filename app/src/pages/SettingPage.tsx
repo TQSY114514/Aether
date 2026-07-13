@@ -171,11 +171,11 @@ export default function SettingPage() {
                     <button key={e} onClick={() => setDefaultEffort(e)}
                       className={`px-3 py-1 text-xs transition-colors ${defaultEffort === e ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
                       style={defaultEffort !== e ? { color: 'var(--text-muted)' } : {}}>
-                      {e === 'off' ? '关闭' : e === 'low' ? '低' : e === 'medium' ? '中' : '高'}
+                      {e === 'off' ? t('effort.off') : e === 'low' ? t('effort.low') : e === 'medium' ? t('effort.medium') : t('effort.high')}
                     </button>
                   ))}
                 </div>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t('settings.default_effort_desc', '新会话的默认思考等级（仅推理模型生效）')}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t('settings.default_effort_desc')}</p>
               </div>
             </div>
           </div>

@@ -109,9 +109,11 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
         } else {
-          // Permission gate for dangerous tools. 'plan' mode never runs them;
-          // 'ask' mode requires the user to approve each one; 'auto' runs all.
-          if (tool.risk === 'dangerous' && agentMode !== 'auto') {
+          // Permission gate for dangerous tools:
+          //   plan — blocked (read-only)
+          //   ask  — requires user approval per call
+          //   auto / yolo — run without prompting (yolo also skips the sandbox)
+          if (tool.risk === 'dangerous' && agentMode !== 'auto' && agentMode !== 'yolo') {
             if (agentMode === 'plan') {
               entry.error = 'blocked by plan mode (read-only)'
             } else if (agentMode === 'ask') {
@@ -121,7 +123,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           }
           if (!entry.error) {
             const t0 = Date.now()
-            const r = await runToolWithTimeout(tool, args, { provider, model }, controller.signal)
+            // Pass agentMode in ctx so tools can relax the sandbox in 'yolo' mode.
+            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode }, controller.signal)
             entry.latencyMs = Date.now() - t0
             if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }
