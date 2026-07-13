@@ -124,7 +124,9 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           if (!entry.error) {
             const t0 = Date.now()
             // Pass agentMode in ctx so tools can relax the sandbox in 'yolo' mode.
-            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode }, controller.signal)
+            // Pass the loop's `signal` (the AbortSignal from chat.handler) so a
+            // user Stop / tool timeout cancels an in-flight tool.
+            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode }, signal)
             entry.latencyMs = Date.now() - t0
             if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }
@@ -157,34 +159,21 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
 function runToolWithTimeout(tool, args, ctx, signal) {
   return new Promise((resolve) => {
     let done = false
-    const timer = setTimeout(() => {
+    const finish = (val) => {
       if (done) return
       done = true
-      resolve({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` })
-    }, TOOL_TIMEOUT_MS)
-    // If the outer loop is aborted (user stopped generation), resolve fast.
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        if (done) return
-        done = true
-        clearTimeout(timer)
-        resolve({ error: 'aborted' })
-      }, { once: true })
+      clearTimeout(timer)
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort)
+      resolve(val)
     }
+    const timer = setTimeout(() => finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` }), TOOL_TIMEOUT_MS)
+    // If the outer loop is aborted (user stopped generation), resolve fast.
+    const onAbort = () => finish({ error: 'aborted' })
+    if (signal) signal.addEventListener('abort', onAbort, { once: true })
     Promise.resolve()
       .then(() => tool.run(args, ctx))
-      .then((result) => {
-        if (done) return
-        done = true
-        clearTimeout(timer)
-        resolve({ result })
-      })
-      .catch((e) => {
-        if (done) return
-        done = true
-        clearTimeout(timer)
-        resolve({ error: e && e.message ? e.message : String(e) })
-      })
+      .then((result) => finish({ result }))
+      .catch((e) => finish({ error: e && e.message ? e.message : String(e) }))
   })
 }
 

@@ -18,10 +18,17 @@ function headers(provider) {
 }
 
 // Normalize messages for the wire. OpenAI accepts content as a string or as a
-// multimodal parts array; we pass whatever the caller gave us through, only
-// ensuring every message has a role.
+// multimodal parts array. Crucially, preserve tool_calls (on assistant messages
+// that requested tools) and tool_call_id + name (on tool-role result messages)
+// — dropping either makes the provider 400 on the second round of a tool loop.
 function normalizeMessages(messages) {
-  return messages.map(m => ({ role: m.role, content: m.content }))
+  return messages.map(m => {
+    const out = { role: m.role, content: m.content }
+    if (m.tool_calls) out.tool_calls = m.tool_calls
+    if (m.tool_call_id) out.tool_call_id = m.tool_call_id
+    if (m.name) out.name = m.name
+    return out
+  })
 }
 
 // Stream a completion. Yields delta strings. Throws on non-2xx so the caller

@@ -59,13 +59,24 @@ function defaultWorkspace() {
 function resolveInside(target, { mustExist = false } = {}) {
   const root = getWorkspaceRoot()
   let abs = path.isAbsolute(target) ? target : path.join(root, target)
-  // Try realpath to collapse symlinks/traversals; if the file doesn't exist
-  // yet (write case), realpath fails — fall back to path.normalize lexical check.
+  // Try realpath to collapse symlinks/traversals. If the leaf file doesn't
+  // exist yet (write case), realpath of the LEAF throws — so realpath the
+  // existing PARENT instead and re-append the basename. This catches a symlink
+  // (or Windows junction) inside the workspace whose target points outside it:
+  // without resolving the parent, /workspace/evil_symlink/newfile would pass
+  // the lexical check but write outside the sandbox.
   let resolved
   try { resolved = fs.realpathSync(abs) }
   catch {
     if (mustExist) return { ok: false, reason: 'path does not exist', abs }
-    resolved = path.normalize(abs)
+    try {
+      const parentReal = fs.realpathSync(path.dirname(abs))
+      resolved = path.join(parentReal, path.basename(abs))
+    } catch {
+      // Parent doesn't exist either — pure lexical fallback (least safe, but
+      // the write itself will fail with ENOENT anyway).
+      resolved = path.normalize(abs)
+    }
   }
   const rootResolved = path.normalize(root)
   // Inside check: resolved must equal rootResolved or be under it (with sep).

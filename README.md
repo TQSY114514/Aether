@@ -20,12 +20,20 @@ AetherAI unifies multiple LLM providers (OpenAI / Claude / DeepSeek / local mode
 - **Personas** — system-prompt presets, switchable per session.
 - **Attachments** — text files are injected as context; images go multimodal (needs a vision model).
 - **Long-paste collapse** — pasting hundreds of lines auto-collapses into an expandable snippet (ChatGPT-style).
-- **Agent (function calling)** — 13 built-in tools (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`) with a Plan→Act→Observe loop and live reasoning trace.
-- **Agent permission modes** — Off / Ask (confirm each risky tool) / Auto (allow all) / Plan (read-only). Mirrors a coding agent's permission model.
+- **Agent (function calling)** — 13 built-in tools (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`) with a Plan→Act→Observe loop, live reasoning trace, loop detection, per-tool timeouts, and context compaction.
+- **Agent permission modes** — a clear risk-ascending ladder:
+  - **Off** — plain chat, no tools.
+  - **Plan** — read-only tools (investigate without changes).
+  - **Ask** — confirm each risky action (recommended).
+  - **Auto** — run everything, no confirms, but **inside the workspace sandbox**.
+  - **Yolo** — ⚠️ FULL permission, NO sandbox (writes any path, runs any command). Warned on enable.
+- **Workspace sandbox** — `write_file`/`edit_file` are refused outside the configured workspace root; `run_command` blocks destructive patterns (format, `rm -rf /`, shutdown, download-and-execute). Configurable in Settings → Agent & Safety. Yolo mode bypasses it.
+- **Skills** (Claude-Code `SKILL.md` format) — drop a folder into `<workspace>/.claude/skills/` and the model loads it on demand via the `use_skill` tool. Ships with `release-checklist` and `git-commit` built-in examples. Reusable with the public skill corpus.
+- **Context compaction** — long conversations auto-summarize older history (tool-call/result pairs kept intact; identifiers like UUIDs/paths/IPs preserved verbatim) so chats don't 400 on context length.
 - **MCP support** — connect external stdio MCP servers; their tools merge with the built-ins automatically.
-- **Thinking-effort slider** — real params: OpenAI o-series → `reasoning_effort`, Claude → `thinking.budget_tokens`.
+- **Thinking-effort slider** — real params: OpenAI o-series / gpt-5 / Claude (via relay) → `reasoning_effort`. Only effective on reasoning models (o1/o3/o4/gpt-5/claude/deepseek-r/qwQ); other models ignore it.
 - **Sidebar summaries** — titles are model-generated topic phrases (e.g. "New Eiyuu Angel pull advice"), not copied text.
-- **Advanced settings** — max tokens, temperature, top_p, custom system prefix, per-language auto-titles.
+- **Advanced settings** — max tokens, temperature, top_p, custom system prefix, per-language auto-titles, default thinking effort.
 - **Custom background** — upload an image with opacity / blur controls.
 - **15 UI languages** — English (standard + upside-down), 中文 (简体/繁體/文言), 日本語, español, français, Deutsch, português, русский, українська, العربية (RTL), हिन्दी, 한국어.
 - **Themes** — Light / Dark / Blue / Glass / Retro.

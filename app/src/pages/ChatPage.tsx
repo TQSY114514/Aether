@@ -106,10 +106,10 @@ export default function ChatPage() {
           </div>
           </Tooltip>
           {/* Agent mode (risk-ascending): off → plan (read-only) → ask (confirm) → auto (sandboxed) → yolo (full). */}
-          <Tooltip text={t('agent.tooltip')}>
-            <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
-              {([['off', t('agent.mode.off')], ['plan', t('agent.mode.plan')], ['ask', t('agent.mode.ask')], ['auto', t('agent.mode.auto')], ['yolo', t('agent.mode.yolo')]] as const).map(([k,label]) => (
-                <button key={k} onClick={() => {
+          <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
+            {([['off', t('agent.mode.off')], ['plan', t('agent.mode.plan')], ['ask', t('agent.mode.ask')], ['auto', t('agent.mode.auto')], ['yolo', t('agent.mode.yolo')]] as const).map(([k,label]) => (
+              <Tooltip key={k} text={t(`agent.mode.${k}.desc`)}>
+                <button onClick={() => {
                   if (k === 'yolo') {
                     // High-risk mode: warn before enabling.
                     if (!window.confirm(t('agent.mode.yolo_warn'))) return
@@ -118,9 +118,9 @@ export default function ChatPage() {
                 }} disabled={chatMode === 'arena'}
                   className={`px-2 py-1.5 transition-colors ${agentMode === k ? (k === 'yolo' ? 'bg-red-600 text-white' : 'bg-black text-white') : ''}`}
                   style={agentMode !== k ? { color: k === 'yolo' ? 'var(--error)' : 'var(--text-secondary)' } : {}}>{label}</button>
-              ))}
-            </div>
-          </Tooltip>
+              </Tooltip>
+            ))}
+          </div>
           {/* Persona selector */}
           <Tooltip text={t('tooltip.persona')}>
             <select value={currentPersonaId ?? ''} onChange={(e) => {
