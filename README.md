@@ -4,13 +4,19 @@
 
 # AetherAI
 
-**A local-first, multi-model desktop AI chat client · Electron + React + TypeScript**
+**A local-first, multi-model desktop AI workbench · Electron + React + TypeScript**
+
+![status](https://img.shields.io/badge/status-beta-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
 
 </div>
 
-AetherAI unifies multiple LLM providers (OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint) into one desktop app. Everything is stored locally — your API keys and conversations never leave your machine except to the providers you configure.
+> **Status: beta.** AetherAI is a solo/hobby project. It works, but expect rough
+> edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
+> [SECURITY.md](./SECURITY.md).
+
+AetherAI unifies multiple LLM providers (OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint) into one desktop app — with an agent that can read/write files and run commands, a workspace sandbox, multi-model arena with ELO voting, Claude-Code-style skills, and 15 UI languages. Everything is stored locally — your API keys and conversations never leave your machine except to the providers you configure.
 
 ## ✨ Features
 
