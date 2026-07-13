@@ -225,6 +225,13 @@ function getSessions() {
   const stmt = db.prepare("SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s ORDER BY s.pinned DESC, s.updated_at DESC")
   return allRows(stmt)
 }
+// Fetch a single session by id — a direct indexed lookup, far cheaper than
+// getSessions() (which runs a correlated subquery per session row + sorts all).
+// Used by hot paths like chat:send that only need the current session.
+function getSession(id) {
+  const stmt = db.prepare('SELECT * FROM session WHERE id = ?'); stmt.bind([id])
+  return allRows(stmt)[0] || null
+}
 function createSession({ title = '新会话', persona_id = null }) {
   db.run('INSERT INTO session (title, persona_id, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [title, persona_id])
   saveDatabase(); return { lastInsertRowid: lastId() }
@@ -451,7 +458,7 @@ module.exports = {
   initDatabase, getProviders, getProvider, addProvider, updateProvider, deleteProvider,
   getModels, getAllModels, getModel, addModel, updateModel, deleteModel, getFallbackChain,
   getPersonas, getPersona, addPersona, updatePersona, deletePersona,
-  getSessions, createSession, renameSession, pinSession, deleteSession, touchSession,
+  getSessions, getSession, createSession, renameSession, pinSession, deleteSession, touchSession,
   getMessages, addMessage, updateMessage,
   getSetting, setSetting, getAllSettings,
   getModelScores, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,

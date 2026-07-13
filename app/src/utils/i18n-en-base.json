@@ -192,6 +192,7 @@
   "sidebar.nav.memory": "Memory",
   "chat.arena.min_models": "Select at least 2 models",
   "agent.trace.title": "Agent reasoning",
+  "agent.todos": "Tasks",
   "agent.trace.steps": "steps",
   "agent.trace.plan": "Plan",
   "mcp.title": "MCP Servers",

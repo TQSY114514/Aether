@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
@@ -7,12 +7,14 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
+import TodoList from './TodoList'
 
-export default function MessageBubble({ message, searchHighlight }: { message: Message; searchHighlight?: string }) {
+function MessageBubble({ message, searchHighlight }: { message: Message; searchHighlight?: string }) {
   const [copied, setCopied] = useState(false); const regenerate = useStore(s => s.regenerate)
   const bubbleWidth = useStore(s => s.bubbleWidth)
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
+  const todos = useStore(s => s.todosByMessage[message.id])
   const isUser = message.role === 'user'
   const isStreaming = message.id < 0
   const isError = message.status === 'error'
@@ -84,6 +86,9 @@ export default function MessageBubble({ message, searchHighlight }: { message: M
           ? { backgroundColor: 'var(--accent)' }
           : isError ? undefined
           : { backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}>
+          {!isUser && todos && todos.length > 0 && (
+            <TodoList todos={todos} />
+          )}
           {!isUser && planSteps && planSteps.length > 0 && (
             <AgentPlanTrace steps={planSteps} />
           )}
@@ -123,3 +128,13 @@ export default function MessageBubble({ message, searchHighlight }: { message: M
     </div>
   )
 }
+
+// Memoize: a committed bubble's content/status don't change during a sibling's
+// stream, so skip re-render unless one of these actually differs. The streaming
+// bubble (id<0) re-renders every token — that's expected and handled by the
+// markdown single-slot cache.
+export default memo(MessageBubble, (prev, next) =>
+  prev.message.content === next.message.content &&
+  prev.message.status === next.message.status &&
+  prev.searchHighlight === next.searchHighlight
+)

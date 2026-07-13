@@ -67,15 +67,21 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      await loadSettings()
-      await loadProviders()
-      await loadSessions()
-      await loadPersonas()
-      await loadScores()
-      await loadAllModels()
+      // These 6 loads are independent IPC round-trips — run them in parallel
+      // instead of serially to cut cold-start latency (was 6+N serial awaits).
+      await Promise.all([
+        loadSettings(),
+        loadProviders(),
+        loadSessions(),
+        loadPersonas(),
+        loadScores(),
+        loadAllModels(),
+      ])
+      // Per-provider model loads depend on loadAllModels resolving, but are
+      // themselves independent — parallelize too.
       const providers = useStore.getState().providers
-      for (const p of providers) {
-        await loadModels(p.id)
+      if (providers.length) {
+        await Promise.all(providers.map(p => loadModels(p.id)))
       }
       // Auto-select first session if none selected
       const s = useStore.getState().sessions

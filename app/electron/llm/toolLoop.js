@@ -49,7 +49,8 @@ const AGENT_SYSTEM_PROMPT = `You are an agent with access to tools. Work through
 1. Plan: briefly reason about what to do next.
 2. Act: call a tool (or several) to gather information or make a change.
 3. Observe: read the tool results, then decide the next step.
-Call tools only when they help. When you have the final answer, respond in plain text with no tool calls. Prefer read-only tools (read_file, list_dir, grep_search, glob_find, web_search) before making changes. Be concise in your reasoning.`
+Call tools only when they help. When you have the final answer, respond in plain text with no tool calls. Prefer read-only tools (read_file, list_dir, grep_search, glob_find, web_search) before making changes. Be concise in your reasoning.
+For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along.`
 
 // Run a tool-calling loop. Returns the final assistant text.
 // `onToolCall({ name, args, result, error })` is called for each tool invocation.
@@ -58,7 +59,7 @@ Call tools only when they help. When you have the final answer, respond in plain
 // `options` is spread into each completion request body (used to carry reasoning params).
 // `agentMode`: 'ask' (confirm dangerous tools) | 'auto' (run everything) | 'plan' (safe tools only, block dangerous).
 // `requestPermission({ name, args, risk })`: async, resolves true to allow a dangerous tool. Only called in 'ask' mode.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, options = {}, agentMode = 'ask', requestPermission }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onTodoUpdate, options = {}, agentMode = 'ask', requestPermission }) {
   const toolPayload = tools ? toolsPayload(agentMode) : []
   let depth = 0
   let totalChars = 0
@@ -126,7 +127,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
             // Pass agentMode in ctx so tools can relax the sandbox in 'yolo' mode.
             // Pass the loop's `signal` (the AbortSignal from chat.handler) so a
             // user Stop / tool timeout cancels an in-flight tool.
-            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode }, signal)
+            // Pass onTodoUpdate so the todo_write tool can stream the checklist to the UI.
+            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate }, signal)
             entry.latencyMs = Date.now() - t0
             if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }

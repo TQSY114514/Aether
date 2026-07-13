@@ -23,6 +23,11 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
         {open ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
         {dangerous ? <ShieldAlert size={12} style={{ color: 'var(--warning)' }} /> : <ShieldCheck size={12} className="text-gray-400" />}
         <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{tool.name}</span>
+        {/* Show the model-authored intent description (run_command) inline so the
+            user reads what the command claims to do, not just the raw shell. */}
+        {tool.args && typeof tool.args === 'object' && (tool.args as any).description && (
+          <span className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>— {(tool.args as any).description}</span>
+        )}
         {dangerous && (
           <span className="text-[9px] px-1 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>{t('tool.risk.dangerous')}</span>
         )}

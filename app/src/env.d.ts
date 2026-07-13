@@ -46,6 +46,7 @@ interface Window {
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
       onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null } }) => void) => () => void
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string } }) => void) => () => void
+      onTodoUpdate: (callback: (payload: { messageId: number; sessionId: number; todos: { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[] }) => void) => () => void
       onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous' }) => void) => () => void
       onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean }) => Promise<boolean>

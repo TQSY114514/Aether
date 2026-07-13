@@ -59,10 +59,10 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 
     // Get conversation history
     const msgs = db.getMessages(sessionId)
-    // Generate a summary title when the session still has its placeholder title.
-    // More robust than `msgs.length === 1`: also back-fills older sessions whose
-    // title was never set (e.g. created before this feature shipped).
-    const session0 = db.getSessions().find(s => s.id === sessionId)
+    // Fetch the current session once (a direct indexed lookup, far cheaper than
+    // the getSessions() full-table-scan-with-subquery that ran here twice before).
+    // Used for both the placeholder-title check and the persona_id fallback below.
+    const session0 = db.getSession(sessionId)
     const placeholderTitles = ['新会话', '新对话', 'New Chat']
     // Respect the autoTitle setting (default on) and only summarize the first exchange.
     const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
@@ -87,7 +87,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       }
     }
     // If persona is set, prepend system message (read from session config stored in db)
-    const session = db.getSessions().find(s => s.id === sessionId)
+    // Reuse the session0 fetched above (avoids a second getSessions() scan).
+    const session = session0
     if (personaId) {
     const p2 = db.getPersona(personaId)
     if (p2) apiMsgs.unshift({ role: 'system', content: p2.prompt })
@@ -148,6 +149,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           agentMode: agentMode || 'ask',
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
+          onTodoUpdate: (todos) => wc?.send('chat:todo-update', { messageId: msgId, sessionId, todos }),
           // Ask the renderer to approve a dangerous tool. Resolves true/false.
           // Uses a one-shot ipc event round-trip keyed by a request id.
           requestPermission: ({ name, args, risk }) => new Promise((resolve) => {

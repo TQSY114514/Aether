@@ -256,15 +256,16 @@ const TOOLS = [
   },
   {
     name: 'run_command',
-    description: 'Run a shell command and return its stdout+stderr (up to 8KB). DANGEROUS — executes arbitrary code. Use only when the user explicitly asks for it.',
+    description: 'Run a shell command and return its stdout+stderr (up to 8KB). DANGEROUS — executes arbitrary code. Use only when the user explicitly asks for it. ALWAYS supply a `description` in active voice explaining the intent (e.g. "List files in the project root") so the user sees what the command claims to do, not just raw shell.',
     risk: 'dangerous',
     parameters: {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'The shell command to execute.' },
+        description: { type: 'string', description: 'A short, active-voice summary of what this command does and why (shown to the user). Required.' },
         cwd: { type: 'string', description: 'Working directory (optional, defaults to user home).' },
       },
-      required: ['command'],
+      required: ['command', 'description'],
     },
     run: (args, ctx) => {
       const cmd = String(args.command || '')
@@ -310,6 +311,44 @@ const TOOLS = [
       const body = skills.getSkillBody(name)
       if (body == null) throw new Error(`unknown skill: ${name} (call only skills listed in <available_skills>)`)
       return body
+    },
+  },
+  {
+    // Structured task list (Claude-Code-style TodoWrite). The agent maintains a
+    // checklist so the user can see what's done / in-progress / pending during a
+    // multi-step task. The list is NOT returned as a tool result for the model to
+    // re-read — instead ctx.onTodoUpdate streams it to the UI, and the tool just
+    // acknowledges. Safe risk (no side effects beyond the UI).
+    name: 'todo_write',
+    description: 'Update the visible task checklist for a multi-step task. Call this at the start (to lay out steps), and again whenever a step starts or completes. The list renders live in the UI with a spinner on the in_progress item. Pass the FULL list each time (replace, not append).',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        todos: {
+          type: 'array',
+          description: 'The full task list (replaces the previous one).',
+          items: {
+            type: 'object',
+            properties: {
+              content: { type: 'string', description: 'What this step is.' },
+              status: { type: 'string', enum: ['pending', 'in_progress', 'completed'], description: 'pending = not started, in_progress = working on it now (shows a spinner), completed = done.' },
+              activeForm: { type: 'string', description: 'Present-continuous label shown while in_progress (e.g. "Reading config file"). Optional.' },
+            },
+            required: ['content', 'status'],
+          },
+        },
+      },
+      required: ['todos'],
+    },
+    run: (args, ctx) => {
+      const todos = Array.isArray(args.todos) ? args.todos.map(t => ({
+        content: String(t.content || ''),
+        status: ['pending', 'in_progress', 'completed'].includes(t.status) ? t.status : 'pending',
+        activeForm: t.activeForm ? String(t.activeForm) : undefined,
+      })) : []
+      if (typeof ctx?.onTodoUpdate === 'function') ctx.onTodoUpdate(todos)
+      return `updated ${todos.length} todos`
     },
   },
   {

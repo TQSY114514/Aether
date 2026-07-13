@@ -1,5 +1,15 @@
+// Single-slot memoization: during streaming, renderMarkdown is called once per
+// token on the SAME growing string — but each call has a different (longer) input,
+// so a keyed cache wouldn't help. The single-slot cache only wins when the EXACT
+// same text is re-rendered (e.g. a committed bubble re-rendered because a sibling
+// updated). That case is common (zustand re-renders the whole list) and was the
+// O(N²) jank source. Cost: one string comparison per call.
+let _cacheText: string | null = null
+let _cacheHtml: string | null = null
+
 export function renderMarkdown(text: string): string {
   if (!text) return ''
+  if (text === _cacheText && _cacheHtml !== null) return _cacheHtml
   let t = text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -106,5 +116,7 @@ export function renderMarkdown(text: string): string {
   t = t.replace(/\n/g, '<br>')
   t = blocks.length > 0 ? t : '<p>' + t + '</p>'
   blocks.forEach(({ ph, orig }) => { t = t.replace(ph, orig) })
+  _cacheText = text
+  _cacheHtml = t
   return t
 }

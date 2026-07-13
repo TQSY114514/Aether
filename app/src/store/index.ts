@@ -76,6 +76,8 @@ interface AppState {
   toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null }[]>
   // Per-message agent plan steps (the assistant's reasoning each round).
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
+  // Per-message agent todo checklist (updated via the todo_write tool).
+  todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
   // Agent permission mode, in increasing order of risk:
   //   'off'   — no tools at all (plain chat)
   //   'plan'  — read-only tools only (read_file/list_dir/grep/web_search…); no writes/commands
@@ -201,6 +203,7 @@ export const useStore = create<AppState>((set, get) => ({
   sending: false,
   toolCallsByMessage: {},
   planStepsByMessage: {},
+  todosByMessage: {},
   agentMode: 'off',
   permissionRequests: [],
   effortLevel: 'off',
@@ -286,9 +289,19 @@ export const useStore = create<AppState>((set, get) => ({
   deleteSession: async (id) => {
     await window.electronAPI.session.delete(id)
     const { currentSessionId } = get()
-    if (currentSessionId === id) {
-      set({ currentSessionId: null, messages: [] })
-    }
+    // Clean up per-session state so deleted sessions don't leak streaming
+    // buffers / configs in memory.
+    set((s) => {
+      const nextStream = { ...s.streamingBySession }
+      delete nextStream[id]
+      const nextConfigs = { ...s.sessionConfigs }
+      delete nextConfigs[id]
+      return {
+        streamingBySession: nextStream,
+        sessionConfigs: nextConfigs,
+        ...(currentSessionId === id ? { currentSessionId: null, messages: [] } : {}),
+      }
+    })
     await get().loadSessions()
   },
 
@@ -751,5 +764,10 @@ function ensureToolCallListener() {
       const prev = s.planStepsByMessage[messageId] || []
       return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: [...prev, step] } }
     })
+  })
+  // Agent todo checklist (todo_write tool) — replace the list each update.
+  window.electronAPI.chat.onTodoUpdate(({ messageId, todos }) => {
+    if (!messageId || !Array.isArray(todos)) return
+    useStore.setState((s) => ({ todosByMessage: { ...s.todosByMessage, [messageId]: todos } }))
   })
 }
