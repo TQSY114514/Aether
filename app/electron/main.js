@@ -125,7 +125,9 @@ app.whenReady().then(async () => {
     const updater = require('./updater')
     updater.init(() => mainWindow?.webContents)
     updater.registerHandlers()
-    updater.autoUpdater.checkForUpdatesAndNotifications()
+    // electron-updater's method is checkForUpdates(); the old
+    // checkForUpdatesAndNotifications call doesn't exist here and threw on startup.
+    updater.check().catch(() => {})
   } catch (e) {
     console.warn('[AetherAI] updater init failed:', e.message)
   }

@@ -64,7 +64,7 @@ export default function MemoryPage() {
         {/* Add new memory */}
         <div className="flex gap-2 mb-6">
           <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)}
-            placeholder="添加一条记忆... (例如：用户喜欢用 Python 编程)"
+            placeholder={t('memory.add_placeholder')}
             rows={2}
             className="flex-1 px-3 py-2 text-sm rounded-lg border outline-none resize-none bg-white"
             style={{ borderColor: 'var(--border)' }}

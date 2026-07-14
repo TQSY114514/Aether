@@ -77,20 +77,20 @@ export default function TokenPage() {
 
         {/* Stat tiles */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <Tile label="真实 Tokens" value={fmtTok(stats?.total_tokens || 0)} sub={fmt(stats?.total_tokens || 0)} accent />
-          <Tile label="总请求" value={fmt(stats?.requests || 0)} />
-          <Tile label="总成本" value={fmtCost(stats?.cost || 0)} accent2 />
-          <Tile label="缓存命中率" value={cacheHitRate > 0 ? `${cacheHitRate}%` : '—'} sub={`读 ${fmtTok(stats?.cache_read_tokens || 0)}`} />
+          <Tile label={t('usage.real_tokens')} value={fmtTok(stats?.total_tokens || 0)} sub={fmt(stats?.total_tokens || 0)} accent />
+          <Tile label={t('usage.total_requests')} value={fmt(stats?.requests || 0)} />
+          <Tile label={t('usage.total_cost')} value={fmtCost(stats?.cost || 0)} accent2 />
+          <Tile label={t('usage.cache_hit_rate')} value={cacheHitRate > 0 ? `${cacheHitRate}%` : '—'} sub={`${t('usage.cache_read')} ${fmtTok(stats?.cache_read_tokens || 0)}`} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <Tile small label="输入 Tokens" value={fmtTok(stats?.prompt_tokens || 0)} />
-          <Tile small label="输出 Tokens" value={fmtTok(stats?.completion_tokens || 0)} />
-          <Tile small label="缓存创建" value={fmtTok(stats?.cache_creation_tokens || 0)} />
-          <Tile small label="平均延迟" value={stats?.latency_avg ? `${Math.round(stats.latency_avg)}ms` : '—'} />
+          <Tile small label={t('usage.input_tokens')} value={fmtTok(stats?.prompt_tokens || 0)} />
+          <Tile small label={t('usage.output_tokens')} value={fmtTok(stats?.completion_tokens || 0)} />
+          <Tile small label={t('usage.cache_creation')} value={fmtTok(stats?.cache_creation_tokens || 0)} />
+          <Tile small label={t('usage.avg_latency')} value={stats?.latency_avg ? `${Math.round(stats.latency_avg)}ms` : '—'} />
         </div>
 
         {/* Trend chart */}
-        <Section title="使用趋势">
+        <Section title={t('usage.trend')}>
           {daily.length === 0 ? (
             <Empty />
           ) : (
@@ -114,19 +114,19 @@ export default function TokenPage() {
         {/* Breakdowns */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           {byProvider.length > 0 && (
-            <Section title="供应商统计">
+            <Section title={t('usage.by_provider')}>
               <Table rows={byProvider} nameKey="provider_name" />
             </Section>
           )}
           {byModel.length > 0 && (
-            <Section title="模型统计">
+            <Section title={t('usage.by_model')}>
               <Table rows={byModel} nameKey="model_name" />
             </Section>
           )}
         </div>
 
         {/* Request log */}
-        <Section title="请求日志">
+        <Section title={t('usage.request_log')}>
           {log.length === 0 ? (
             <Empty />
           ) : (
@@ -134,14 +134,14 @@ export default function TokenPage() {
               <table className="w-full text-[11px]">
                 <thead>
                   <tr style={{ color: 'var(--text-muted)' }}>
-                    <th className="text-left px-2 py-1 font-medium">时间</th>
-                    <th className="text-left px-2 py-1 font-medium">供应商</th>
-                    <th className="text-left px-2 py-1 font-medium">模型</th>
-                    <th className="text-right px-2 py-1 font-medium">输入</th>
-                    <th className="text-right px-2 py-1 font-medium">输出</th>
-                    <th className="text-right px-2 py-1 font-medium">成本</th>
-                    <th className="text-right px-2 py-1 font-medium">延迟</th>
-                    <th className="text-right px-2 py-1 font-medium">状态</th>
+                    <th className="text-left px-2 py-1 font-medium">{t('usage.col.time')}</th>
+                    <th className="text-left px-2 py-1 font-medium">{t('usage.col.provider')}</th>
+                    <th className="text-left px-2 py-1 font-medium">{t('usage.col.model')}</th>
+                    <th className="text-right px-2 py-1 font-medium">{t('usage.col.input')}</th>
+                    <th className="text-right px-2 py-1 font-medium">{t('usage.col.output')}</th>
+                    <th className="text-right px-2 py-1 font-medium">{t('usage.col.cost')}</th>
+                    <th className="text-right px-2 py-1 font-medium">{t('usage.col.latency')}</th>
+                    <th className="text-right px-2 py-1 font-medium">{t('usage.col.status')}</th>
                   </tr>
                 </thead>
                 <tbody>

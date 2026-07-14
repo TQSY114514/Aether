@@ -583,4 +583,9 @@ module.exports = {
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },
   removeCredential: function(cid) { return require('./llm/credentialPool').removeCredential(cid) },
+  // Raw sql.js handles for modules that build their own prepared statements
+  // (credentialPool, etc.). These proxy to the live internal Database instance.
+  prepare: (...args) => db ? db.prepare(...args) : null,
+  run: (...args) => { if (db) { db.run(...args); saveDatabase() } },
+  exec: (...args) => db ? db.exec(...args) : [],
 }
