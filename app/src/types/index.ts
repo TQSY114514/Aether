@@ -59,7 +59,7 @@ export interface Message {
   attachment?: { name: string; mime: string; kind: 'text' | 'image'; preview?: string } | null
 }
 
-export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory'
+export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning'
 
 export interface TestConnectionResult {
   success: boolean

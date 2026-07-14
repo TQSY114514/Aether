@@ -135,6 +135,8 @@ interface AppState {
   backgroundImage: string | null
   backgroundOpacity: number   // 0–100, how visible the image is
   backgroundBlur: number      // 0–20px
+  memories: { id: number; content: string; created_at: string }[]
+  loadMemories: () => Promise<void>
   loadSettings: () => Promise<void>
   setLanguage: (lang: LangCode) => Promise<void>
   setTheme: (theme: string) => Promise<void>
@@ -617,6 +619,13 @@ export const useStore = create<AppState>((set, get) => ({
   backgroundImage: null,
   backgroundOpacity: 100,
   backgroundBlur: 0,
+  memories: [],
+  loadMemories: async () => {
+    try {
+      const entries = await window.electronAPI.memory.list()
+      set({ memories: entries })
+    } catch {}
+  },
 
   loadSettings: async () => {
     try {

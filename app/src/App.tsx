@@ -8,6 +8,7 @@ import SettingPage from '@/pages/SettingPage'
 import ScoresPage from '@/pages/ScoresPage'
 import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
+import LearningGraphPage from '@/pages/LearningGraphPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
@@ -126,6 +127,7 @@ export default function App() {
       case 'scores': return <ScoresPage />
       case 'tokens': return <TokenPage />
       case 'memory': return <MemoryPage />
+      case 'learning': return <LearningGraphPage />
     }
   }
 
