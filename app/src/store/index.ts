@@ -556,6 +556,10 @@ export const useStore = create<AppState>((set, get) => ({
         return
       }
       set({ arenaResults: results, sending: false, arenaError: null })
+      // Reload messages so the persisted arena exchange (user prompt + each
+      // model's answer) is in the message list too — survives a reload.
+      get().loadMessages(currentSessionId)
+      get().loadSessions()
     } catch (err) {
       set({ sending: false, arenaError: '竞技场请求失败: ' + (err?.message || String(err)) })
     }

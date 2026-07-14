@@ -18,7 +18,8 @@ export default function AgentSettings() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    window.electronAPI.agent.getWorkspace().then(setWorkspace).catch(() => {})
+    // Guard: agent IPC may be absent on an older preload build.
+    try { window.electronAPI?.agent?.getWorkspace?.().then(setWorkspace).catch(() => {}) } catch {}
   }, [])
 
   const pickFolder = async () => {

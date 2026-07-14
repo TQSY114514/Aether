@@ -74,6 +74,11 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
                 {t('chat.fallback_label', message.model_used)}
               </span>
             )}
+            {message.arena_model && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+                🏟 {message.arena_model}
+              </span>
+            )}
           </div>
         )}
         <div onClick={onBubbleClick} className={`rounded-2xl px-4 py-3 text-sm leading-relaxed break-words relative ${

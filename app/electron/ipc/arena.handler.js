@@ -7,6 +7,10 @@ function registerArenaHandlers(ipcMain, db) {
     const selected = allModels.filter(m => modelIds.includes(m.id))
     if (!selected.length) return { results: [] }
 
+    // Persist the user's arena prompt as a message so it survives a reload
+    // (arena results used to be in-memory only — gone on session switch).
+    db.addMessage({ session_id: sessionId, role: 'user', content })
+
     // Run all selected models CONCURRENTLY (Promise.all) so a slow model no
     // longer blocks the others — each gets its own 60s timeout + abort
     // controller. Results preserve input order. This is the #1-differentiating
@@ -45,6 +49,18 @@ function registerArenaHandlers(ipcMain, db) {
 
     const results = await Promise.all(selected.map(runOne))
     abortControllers.delete(requestId)
+    // Persist each model's answer as an assistant message tagged with
+    // arena_model, so the arena exchange survives a reload (it used to be
+    // in-memory only and vanished on session switch).
+    for (const r of results) {
+      db.addMessage({
+        session_id: sessionId, role: 'assistant', content: r.content || '',
+        model_used: r.model_name, provider_used: null, token_count: null,
+        latency_ms: r.latency_ms || null, status: 'success',
+        arena_model: r.model_name,
+      })
+    }
+    db.touchSession(sessionId)
     return { results }
   })
 

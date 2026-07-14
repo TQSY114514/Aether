@@ -20,19 +20,24 @@ export default function SkillsSettings() {
   const [busy, setBusy] = useState(false)
 
   const load = () => {
-    window.electronAPI.skills.list().then(setSkills).catch(() => setSkills([]))
+    // Guard: window.electronAPI.skills may be undefined if the preload is
+    // from an older build (or the bridge isn't ready yet). Optional-chain +
+    // try/catch so a missing IPC surface never crashes the whole app.
+    try {
+      window.electronAPI?.skills?.list?.().then(setSkills).catch(() => setSkills([]))
+    } catch { setSkills([]) }
   }
   useEffect(() => { load() }, [])
 
   const rescan = async () => {
     setBusy(true)
     try {
-      const res = await window.electronAPI.skills.rescan()
+      const res = await window.electronAPI?.skills?.rescan?.()
       if (res?.success) {
         load()
         toast(t('settings.skills.rescanned', String(res.count)), { type: 'success' })
       }
-    } finally { setBusy(false) }
+    } catch { /* ignore */ } finally { setBusy(false) }
   }
 
   return (
