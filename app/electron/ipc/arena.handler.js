@@ -45,7 +45,7 @@ function registerArenaHandlers(ipcMain, db) {
         // Use completeChatMessage to also get the server-reported usage, so the
         // usage log records real tokens/cost (not a client estimate).
         const { content: answer, usage } = await completeChatMessage({
-          provider: { api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
+          provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
           model: m,
           messages: [{ role: 'user', content }],
           signal: perModel.signal,
@@ -99,7 +99,7 @@ function registerArenaHandlers(ipcMain, db) {
           provider: { api_url: aggregatorModel.api_url, api_key: aggregatorModel.api_key, api_format: 'openai' },
           model: aggregatorModel,
           messages: [
-            { role: 'system', content: '你是一个推理聚合器。以下是多个模型对同一个问题的回答。请综合所有回答，提炼出一个最优的、具有最终决策力的综合答案，解决冲突并保留最强论证。用与原始问题相同的语言回复，不要提及'多模型/聚合/综合'等字眼。' },
+            { role: 'system', content: "You are a reasoning aggregator. Below are answers from multiple models to the same question. Synthesize the best combined answer, resolving contradictions, keeping the strongest arguments. Reply in the same language as the original question. Do not mention 'multiple models/aggregation/synthesis'." },
             { role: 'user', content: `问题：${content}\n\n${answers}` },
           ],
           signal: controller.signal,
