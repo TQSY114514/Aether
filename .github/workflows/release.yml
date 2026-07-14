@@ -1,0 +1,62 @@
+# Builds Windows portable + NSIS installer on tag push and publishes both to the
+# GitHub Release. Runs on ubuntu-latest — a Linux runner avoids the Windows
+# Defender false-positive that deletes electron.exe during local NSIS packaging.
+# electron-builder cross-builds Windows NSIS on Linux via Wine.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # required for electron-builder to create/upload the Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        env:
+          # Skip the electron binary download; electron-builder pulls its own
+          # packaged binary for the target platform during the build step.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: Build renderer (Vite)
+        working-directory: app
+        run: npm run build
+
+      - name: Build & publish Windows artifacts
+        working-directory: app
+        env:
+          # electron-builder reads GH_TOKEN to authenticate to the GitHub
+          # Releases API. GITHUB_TOKEN is auto-provided by Actions and has
+          # contents:write via the permissions: block above.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win nsis portable --x64 --publish always
+
+      # electron-builder --publish always already uploaded both artifacts +
+      # latest.yml + .blockmap to the Release, so this is a SAFETY NET for
+      # inspection if the publish step failed (no-op for the Release itself).
+      - name: Upload artifacts (safety net)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aetherai-win-artifacts
+          path: |
+            app/release/*.exe
+            app/release/latest*.yml
+            app/release/*.blockmap
+          if-no-files-found: warn

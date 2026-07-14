@@ -97,4 +97,13 @@ interface Window {
     list: () => Promise<{ name: string; description: string; filePath: string }[]>
     rescan: () => Promise<{ success: boolean; count: number }>
   }
+  updater: {
+    check: () => Promise<{ currentVersion?: string; updateInfo?: { version?: string } | null; downloaded?: boolean; error?: string }>
+    install: () => Promise<boolean>
+    status: () => Promise<{ currentVersion?: string; updateInfo?: { version?: string } | null; downloaded?: boolean }>
+    onUpdateAvailable: (cb: (p: { version: string }) => void) => () => void
+    onUpdateDownloaded: (cb: (p: { version: string }) => void) => () => void
+    onProgress: (cb: (p: { percent: number }) => void) => () => void
+    onUpToDate: (cb: (p: { version: string }) => void) => () => void
+  }
 }

@@ -132,4 +132,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: () => ipcRenderer.invoke('skills:list'),
     rescan: () => ipcRenderer.invoke('skills:rescan'),
   },
+  updater: {
+    check: () => ipcRenderer.invoke('updater:check'),
+    install: () => ipcRenderer.invoke('updater:install'),
+    status: () => ipcRenderer.invoke('updater:status'),
+    onUpdateAvailable: (cb) => {
+      const h = (_e, p) => cb(p); ipcRenderer.on('updater:update-available', h)
+      return () => ipcRenderer.removeListener('updater:update-available', h)
+    },
+    onUpdateDownloaded: (cb) => {
+      const h = (_e, p) => cb(p); ipcRenderer.on('updater:update-downloaded', h)
+      return () => ipcRenderer.removeListener('updater:update-downloaded', h)
+    },
+    onProgress: (cb) => {
+      const h = (_e, p) => cb(p); ipcRenderer.on('updater:progress', h)
+      return () => ipcRenderer.removeListener('updater:progress', h)
+    },
+    onUpToDate: (cb) => {
+      const h = (_e, p) => cb(p); ipcRenderer.on('updater:up-to-date', h)
+      return () => ipcRenderer.removeListener('updater:up-to-date', h)
+    },
+  },
 })

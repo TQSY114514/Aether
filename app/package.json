@@ -1,6 +1,6 @@
 {
   "name": "aetherai",
-  "version": "0.1.2",
+  "version": "0.1.8",
   "description": "AetherAI - Multi-provider AI aggregation client",
   "main": "electron/main.js",
   "scripts": {
@@ -9,9 +9,11 @@
     "dev": "concurrently -k \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",
     "build": "vite build",
     "build:win": "vite build && electron-builder --win --x64",
+    "build:ci": "vite build && electron-builder --win nsis portable --x64 --publish always",
     "start": "electron ."
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.400.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

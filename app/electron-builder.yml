@@ -8,7 +8,29 @@ files:
   - electron/**/*
   - dist/**/*
   - package.json
+asar: true
+
+# Publish provider: electron-updater reads latest.yml from the latest GitHub
+# Release asset list. owner/repo are also auto-detected from git remote, but set
+# explicitly to be safe. token is NEVER put here — it comes from GH_TOKEN in CI.
+publish:
+  provider: github
+  owner: TQSY114514
+  repo: AetherAI
+  releaseType: release        # publish as a live release (not draft) so updater sees it
+  vPrefixedTagName: true      # v0.1.x tags match the workflow's v* trigger
+
 win:
   target:
-    - dir
+    - nsis
+    - portable
   icon: resources/icon.png
+
+nsis:
+  oneClick: false                          # assisted installer (wizard) — friendlier with SmartScreen
+  perMachine: false                        # per-user install → no UAC on install/update (unsigned-app friendly)
+  allowToChangeInstallationDirectory: true
+  allowElevation: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false

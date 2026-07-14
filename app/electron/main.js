@@ -113,6 +113,18 @@ app.whenReady().then(async () => {
   }))
   mcpManager.connectAll(mcpServers).catch(() => {})
 
+  // Auto-update (electron-updater, GitHub provider). No-op in dev; in a packaged
+  // build it checks the latest Release and downloads if newer. Unsigned build:
+  // update works, SmartScreen warns on first launch of the new version.
+  try {
+    const updater = require('./updater')
+    updater.init(() => mainWindow?.webContents)
+    updater.registerHandlers()
+    updater.autoUpdater.checkForUpdatesAndNotifications()
+  } catch (e) {
+    console.warn('[AetherAI] updater init failed:', e.message)
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
