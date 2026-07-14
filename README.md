@@ -109,14 +109,17 @@ app/
 
 AetherAI stands on the shoulders of these projects — their ideas shaped the architecture and UX:
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — agent permission model, thinking-effort slider, tool-call visualization, the new-chat empty state.
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — agent permission model, thinking-effort slider, tool-call visualization, the new-chat empty state, sub-agent delegation.
 - [Continue](https://github.com/continuedev/continue) — declarative config-as-source-of-truth, provider abstraction, function-calling protocol.
 - [Dify](https://github.com/langgenius/dify) — multi-format provider normalization patterns.
 - [Model Context Protocol](https://modelcontextprotocol.io) — the MCP spec AetherAI's agent speaks.
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — the `cn()` / `cva` copy-paste component methodology.
 - [Magic UI](https://github.com/magicuidesign/magicui) — animation patterns (streaming text, shimmer, blur-fade).
-- [new-api](https://github.com/QuantumNous/new-api) — reasoning-effort relay conversion reference.
-- [OpenClaw](https://github.com/openclaw/openclaw) — README polish + onboarding inspiration.
+- [new-api](https://github.com/QuantumNous/new-api) — reasoning-effort relay conversion reference, usage/cost tracking.
+- [OpenClaw](https://github.com/openclaw/openclaw) — context compaction (pair-preserving split, identifier retention), before-tool-call loop detection, README polish.
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent) — iteration budget pattern, structured long-term memory.
+- [DS4](https://github.com/antirez/ds4) — hierarchical task decomposition before execution.
+- [cc-switch](https://github.com/farion1231/cc-switch) — usage-statistics dashboard layout (cost/cache/trend/provider/model breakdown).
 
 ## 📄 License
 
