@@ -94,6 +94,9 @@ function setupIpcHandlers() {
 
 app.whenReady().then(async () => {
   await db.initDatabase()
+  // Initialize the credential pool after the DB is open so the rotation logic
+  // can read/write provider_credential rows from the first request onwards.
+  try { require('./llm/credentialPool').init(db) } catch {}
   // Restore the agent workspace root from settings so the sandbox is active
   // before any tool runs. Falls back to <userData>/workspace if unset.
   try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}

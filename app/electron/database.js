@@ -97,6 +97,10 @@ async function initDatabase() {
   db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
+  // Per-provider credential pool — multiple API keys per provider with rotation
+  // (least-recently-used) and backoff (cooldown on 429, disabled on 401).
+  db.run('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0)')
+
   // Per-API-call usage log (one row per real provider request, across ALL
   // call sites: primary chat, arena, title-gen, auto-memory, compaction).
   // Drives the TokenPage stats: total tokens / cost / cache hit rate /
@@ -575,4 +579,8 @@ module.exports = {
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
   deleteAssistantAfterLastUser,
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
+  // credential pool: list/add/remove credentials per provider
+  listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
+  addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },
+  removeCredential: function(cid) { return require('./llm/credentialPool').removeCredential(cid) },
 }
