@@ -23,7 +23,11 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends wine64 wine
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            wine32 wine64 wine \
+            xvfb
+      - name: Start virtual display (Wine GUI calls need an X server)
+        run: Xvfb :99 -screen 0 1024x768x24 >/tmp/xvfb.log 2>&1 & echo "Xvfb started"; echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
