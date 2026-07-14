@@ -17,17 +17,24 @@ export default function AgentSettings() {
   const [workspace, setWorkspace] = useState('')
   const [busy, setBusy] = useState(false)
   const [maxIter, setMaxIter] = useState(25)
+  const [autoMemory, setAutoMemory] = useState(true)
 
   useEffect(() => {
     // Guard: agent IPC may be absent on an older preload build.
     try { window.electronAPI?.agent?.getWorkspace?.().then(setWorkspace).catch(() => {}) } catch {}
     try { window.electronAPI?.settings?.get?.('agent_max_iterations').then((v) => { if (v) setMaxIter(parseInt(v, 10) || 25) }).catch(() => {}) } catch {}
+    try { window.electronAPI?.settings?.get?.('auto_memory_enabled').then((v) => setAutoMemory(v !== '0')).catch(() => {}) } catch {}
   }, [])
 
   const saveMaxIter = async (v: number) => {
     const clamped = Math.max(1, Math.min(200, Math.floor(v)))
     setMaxIter(clamped)
     try { await window.electronAPI?.settings?.set?.('agent_max_iterations', String(clamped)) } catch {}
+  }
+
+  const saveAutoMemory = async (v: boolean) => {
+    setAutoMemory(v)
+    try { await window.electronAPI?.settings?.set?.('auto_memory_enabled', v ? '1' : '0') } catch {}
   }
 
   const pickFolder = async () => {
@@ -114,6 +121,20 @@ export default function AgentSettings() {
             onChange={(e) => saveMaxIter(parseInt(e.target.value, 10))}
             className="effort-slider w-full" style={{ ['--fill' as string]: `${((maxIter - 3) / 97) * 100}%` }} />
           <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.max_iterations_hint')}</p>
+        </div>
+
+        {/* Auto long-term memory (Hermes-style) toggle. */}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.auto_memory')}</p>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.auto_memory_hint')}</p>
+          </div>
+          <button onClick={() => saveAutoMemory(!autoMemory)}
+            className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+            style={{ backgroundColor: autoMemory ? 'var(--accent)' : 'var(--border)' }}>
+            <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm"
+              style={{ left: autoMemory ? '20px' : '2px' }} />
+          </button>
         </div>
       </div>
     </div>

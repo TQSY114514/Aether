@@ -2,6 +2,7 @@ const { streamChat, completeChat } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
+const autoMemory = require('../llm/autoMemory')
 const skills = require('../llm/skills')
 const fs = require('fs')
 const path = require('path')
@@ -155,6 +156,13 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     if (systemPrefix && systemPrefix.trim()) {
       compacted.unshift({ role: 'system', content: systemPrefix.trim() })
     }
+    // Auto-memory prefetch (Hermes-style): inject relevant past memories as a
+    // system message so the model can recall context from earlier sessions.
+    // Done once here so BOTH the tool path and the plain streaming path inherit it.
+    // Gateable via the auto_memory_enabled setting (default on).
+    const autoMemoryOn = db.getSetting('auto_memory_enabled') !== '0'
+    const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
+    if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
 
     const timeoutMs = parseInt(db.getSetting('fallback_timeout_ms') || '30000', 10)
     let lastError = null
@@ -170,6 +178,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       // meaningless without the tool loop). Done after compaction so the list
       // is never summarized away.
       const skillsBlock = skills.formatSkillsForPrompt()
+      // memBlock was already injected into `compacted` above (shared by both paths).
       const toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
       const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
       const msgId = asstMsg.lastInsertRowid
@@ -259,6 +268,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
         if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage })
+        // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
+        // worth remembering. Not awaited — must never add latency to the reply.
+        if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
@@ -311,6 +323,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       if (needsTitle) {
         await generateSummaryTitle({ sessionId, content, fullContent, model: m, provider: p, titleLanguage })
       }
+      // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
+      if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
       console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
