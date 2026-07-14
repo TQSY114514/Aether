@@ -62,12 +62,18 @@ class IterationBudget {
 // System prompt injected at the head of the conversation to steer the model
 // toward a Plan→Act→Observe rhythm (like a coding agent). The model is told to
 // think step-by-step, call one tool at a time when useful, and stop when done.
-const AGENT_SYSTEM_PROMPT = `You are an agent with access to tools. Work through the user's request step by step:
+const AGENT_SYSTEM_PROMPT = `You are an autonomous agent with access to tools. Work through the user's request step by step using a Plan→Act→Observe loop:
 1. Plan: briefly reason about what to do next.
-2. Act: call a tool (or several) to gather information or make a change.
+2. Act: call one or more INDEPENDENT tools in the same round (they run in parallel). Use read-only tools (read_file, list_dir, grep_search, glob_find, web_search) to gather context before mutating anything.
 3. Observe: read the tool results, then decide the next step.
-Call tools only when they help. When you have the final answer, respond in plain text with no tool calls. Prefer read-only tools (read_file, list_dir, grep_search, glob_find, web_search) before making changes. Be concise in your reasoning.
-For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along.`
+When you have the final answer, respond in plain text with no tool calls.
+
+Transparency rules:
+- For tasks with 3+ steps, call todo_write FIRST to lay out the checklist, and mark items in_progress→completed as you progress.
+- You may call multiple independent read tools in ONE round — they execute concurrently. Do NOT serialize independent reads.
+- Do NOT repeat a tool call with the same arguments expecting a different result.
+- Prefer read-only tools before any write/run_command.
+Be concise in reasoning; the user can see your plan trace live.`
 
 // Run a tool-calling loop. Returns the final assistant text.
 // `onToolCall({ name, args, result, error })` is called for each tool invocation.
@@ -110,20 +116,23 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     if (msg.tool_calls && msg.tool_calls.length) {
       // Append the assistant message that requested the calls.
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
-      // Execute each tool call (sequentially for determinism).
-      for (const tc of msg.tool_calls) {
+      // Loop detection (signature over the whole round): if the model repeats
+      // the exact same set of tool calls back-to-back, it's stuck.
+      const roundSig = msg.tool_calls.map(tc => (tc.function||{}).name + ':' + (tc.function||{}).arguments).join('||')
+      if (roundSig === lastSig) { sigRepeat++ } else { lastSig = roundSig; sigRepeat = 1 }
+      if (sigRepeat >= LOOP_REPEAT_LIMIT) {
+        try { onToolCall && onToolCall({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
+        return '（检测到工具调用循环，已停止）'
+      }
+      // Execute the tool calls. Independent calls in one round run CONCURRENTLY
+      // (Promise.all) so a multi-tool round takes max(latency) not sum — matches
+      // how Claude Code executes a batch of independent reads in parallel. Order
+      // of results is preserved (Promise.all keeps input order).
+      const execOne = async (tc) => {
         const fn = tc.function || {}
         const args = safeParseToolCallArgs(fn.arguments)
         const tool = getTool(fn.name)
-        // Loop detection: same tool + same args repeated back-to-back → stuck.
-        const sig = fn.name + ':' + JSON.stringify(args)
-        if (sig === lastSig) { sigRepeat++ } else { lastSig = sig; sigRepeat = 1 }
-        let entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null }
-        if (sigRepeat >= LOOP_REPEAT_LIMIT) {
-          entry.error = `loop detected: ${fn.name} called with identical args ${sigRepeat} times — stopping`
-          try { onToolCall && onToolCall(entry) } catch {}
-          return '（检测到工具调用循环，已停止）'
-        }
+        const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null }
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
         } else {
@@ -141,21 +150,20 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           }
           if (!entry.error) {
             const t0 = Date.now()
-            // Pass agentMode in ctx so tools can relax the sandbox in 'yolo' mode.
-            // Pass the loop's `signal` (the AbortSignal from chat.handler) so a
-            // user Stop / tool timeout cancels an in-flight tool.
-            // Pass onTodoUpdate so the todo_write tool can stream the checklist to the UI.
             const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate, onAskUser }, signal)
             entry.latencyMs = Date.now() - t0
             if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }
         }
+        return { tc, entry }
+      }
+      const executed = await Promise.all(msg.tool_calls.map(execOne))
+      // Append results to the conversation in the SAME order the model issued
+      // them (tool_call_id pairing must match the assistant's tool_calls order).
+      for (const { tc, entry } of executed) {
         try { onToolCall && onToolCall(entry) } catch {}
-        // Append the tool result message so the model can use it next round.
-        // Pass it through the middleware chain first: redact secrets, truncate
-        // over-long output so one verbose tool can't dominate the context.
         const rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
-        const resultContent = applyMiddleware(rawContent, { tool: fn.name, args })
+        const resultContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args })
         totalChars += resultContent.length
         convo.push({ role: 'tool', tool_call_id: tc.id, content: resultContent })
       }
