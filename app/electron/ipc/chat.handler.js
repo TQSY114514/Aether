@@ -181,6 +181,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
+          maxIterations: parseInt(db.getSetting('agent_max_iterations') || '25', 10),
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
           onTodoUpdate: (todos) => wc?.send('chat:todo-update', { messageId: msgId, sessionId, todos }),

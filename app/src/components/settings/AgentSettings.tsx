@@ -16,11 +16,19 @@ export default function AgentSettings() {
   const { toast } = useUI()
   const [workspace, setWorkspace] = useState('')
   const [busy, setBusy] = useState(false)
+  const [maxIter, setMaxIter] = useState(25)
 
   useEffect(() => {
     // Guard: agent IPC may be absent on an older preload build.
     try { window.electronAPI?.agent?.getWorkspace?.().then(setWorkspace).catch(() => {}) } catch {}
+    try { window.electronAPI?.settings?.get?.('agent_max_iterations').then((v) => { if (v) setMaxIter(parseInt(v, 10) || 25) }).catch(() => {}) } catch {}
   }, [])
+
+  const saveMaxIter = async (v: number) => {
+    const clamped = Math.max(1, Math.min(200, Math.floor(v)))
+    setMaxIter(clamped)
+    try { await window.electronAPI?.settings?.set?.('agent_max_iterations', String(clamped)) } catch {}
+  }
 
   const pickFolder = async () => {
     setBusy(true)
@@ -94,6 +102,18 @@ export default function AgentSettings() {
             <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.blocklist')}</p>
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.blocklist_hint')}</p>
           </div>
+        </div>
+
+        {/* Max agent iterations (budget) — from Hermes' iteration_budget. */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t('settings.agent.max_iterations')}</label>
+            <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{maxIter}</span>
+          </div>
+          <input type="range" min={3} max={100} step={1} value={maxIter}
+            onChange={(e) => saveMaxIter(parseInt(e.target.value, 10))}
+            className="effort-slider w-full" style={{ ['--fill' as string]: `${((maxIter - 3) / 97) * 100}%` }} />
+          <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.max_iterations_hint')}</p>
         </div>
       </div>
     </div>

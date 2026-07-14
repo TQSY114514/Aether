@@ -29,11 +29,15 @@ try {
   toolsPayload = r.toolsPayload
 }
 
-const MAX_DEPTH = 12
+// Iteration budget (from Hermes' iteration_budget.py): a hard ceiling on how
+// many agent rounds a single user turn can take, exposed to the user so they
+// can raise it for long tasks or lower it to cap runaway loops. Default 25 is
+// higher than the old fixed 12 (too tight for real work) but still bounded.
+const DEFAULT_MAX_ITERATIONS = 25
 const MAX_TOTAL_CHARS = 200000 // crude context budget across all tool results
 // Loop detection (from OpenClaw's before-tool-call loop-detection): if the
 // model calls the same tool with the same args N times in a row, break — it's
-// stuck. Keeps MAX_DEPTH as a hard backstop but catches stuck loops faster.
+// stuck. The iteration budget is the hard backstop; this catches stuck loops faster.
 const LOOP_REPEAT_LIMIT = 3
 // Per-tool execution timeout. A tool that hangs (e.g. a dead web_fetch) would
 // otherwise block the loop forever. Wraps every tool.run in a Promise.race.
@@ -41,6 +45,19 @@ const TOOL_TIMEOUT_MS = 30000
 // Permission request timeout. If the user walks away from the approval dialog,
 // default to DENY after this long rather than hanging the agent indefinitely.
 const PERMISSION_TIMEOUT_MS = 120000
+
+// Minimal IterationBudget (JS port of Hermes' class). consume() before each
+// round; refund() for non-productive rounds so they don't eat the budget.
+class IterationBudget {
+  constructor(maxTotal) {
+    this.maxTotal = maxTotal > 0 ? Math.floor(maxTotal) : DEFAULT_MAX_ITERATIONS
+    this._used = 0
+  }
+  consume() { if (this._used >= this.maxTotal) return false; this._used++; return true }
+  refund() { if (this._used > 0) this._used-- }
+  get used() { return this._used }
+  get remaining() { return Math.max(0, this.maxTotal - this._used) }
+}
 
 // System prompt injected at the head of the conversation to steer the model
 // toward a Plan→Act→Observe rhythm (like a coding agent). The model is told to
@@ -59,9 +76,9 @@ For multi-step tasks (3+ steps), call todo_write first to lay out the checklist,
 // `options` is spread into each completion request body (used to carry reasoning params).
 // `agentMode`: 'ask' (confirm dangerous tools) | 'auto' (run everything) | 'plan' (safe tools only, block dangerous).
 // `requestPermission({ name, args, risk })`: async, resolves true to allow a dangerous tool. Only called in 'ask' mode.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations }) {
   const toolPayload = tools ? toolsPayload(agentMode) : []
-  let depth = 0
+  const budget = new IterationBudget(maxIterations)
   let totalChars = 0
   // Rolling signature of recent tool calls for loop detection.
   let lastSig = ''
@@ -71,8 +88,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const convo = messages.slice()
   if (!convo.some(m => m.role === 'system')) convo.unshift({ role: 'system', content: AGENT_SYSTEM_PROMPT })
 
-  while (depth < MAX_DEPTH) {
-    depth++
+  while (budget.consume()) {
+    const depth = budget.used
     const opts = { ...options }
     if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
     // Fetch the assistant message, defensively: a provider hiccup (non-JSON,
@@ -89,7 +106,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     // Surface the assistant's reasoning this round as a plan step (even if it
     // only contains text, the UI shows it as the agent's current thought).
     // Wrapped: a destroyed webContents must not abort the whole loop.
-    try { if (msg.content) onPlanStep && onPlanStep({ step: depth, depth, assistantText: msg.content }) } catch {}
+    try { if (msg.content) onPlanStep && onPlanStep({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content }) } catch {}
     if (msg.tool_calls && msg.tool_calls.length) {
       // Append the assistant message that requested the calls.
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
@@ -152,7 +169,9 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     return msg.content || ''
   }
   // Depth exhausted — return whatever we last got.
-  return '（工具调用达到最大深度，已停止）'
+  // Budget exhausted — return whatever we last got. Mention the configured
+  // ceiling so the user knows to raise agentMaxIterations for long tasks.
+  return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）`
 }
 
 // Run a tool with a timeout. Resolves to { result } or { error } — never throws
