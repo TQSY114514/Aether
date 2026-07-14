@@ -33,11 +33,23 @@ function normalizeMessages(messages) {
 
 // Stream a completion. Yields delta strings. Throws on non-2xx so the caller
 // can decide whether to fall back to the next model.
+// Requests `stream_options:{include_usage:true}` so the final SSE chunk carries
+// real token usage; the generator exposes it as `.usage` after the loop ends.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
+  const gen = streamChatInner({ provider, model, messages, signal, options })
+  const wrapper = (async function* () {
+    for await (const d of gen) yield d
+    wrapper.usage = gen.usage
+  })()
+  wrapper.usage = null
+  return wrapper
+}
+
+async function* streamChatInner({ provider, model, messages, signal, options = {} }) {
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
-    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
+    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, stream_options: { include_usage: true }, ...options }),
     signal,
   })
   if (!res.ok) {
@@ -50,6 +62,7 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  streamChatInner.usage = null
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -57,27 +70,34 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     const lines = buffer.split('\n')
     buffer = lines.pop() || '' // keep the partial last line
     for (const line of lines) {
-      const delta = parseSSELine(line)
+      const { delta, usage } = parseSSELine(line)
+      if (usage) streamChatInner.usage = usage
       if (delta) yield delta
     }
   }
   // Flush any trailing buffered line.
   if (buffer.startsWith('data: ')) {
-    const delta = parseSSELine(buffer)
+    const { delta, usage } = parseSSELine(buffer)
+    if (usage) streamChatInner.usage = usage
     if (delta) yield delta
   }
 }
 
-// Parse one SSE `data:` line into a content delta (or '' / null).
+// Parse one SSE `data:` line into { delta, usage }. delta is the content
+// string (or '' / null); usage is set when the chunk carries token usage
+// (the final chunk when stream_options.include_usage is on).
 function parseSSELine(line) {
-  if (!line.startsWith('data: ')) return null
+  if (!line.startsWith('data: ')) return {}
   const data = line.slice(6).trim()
-  if (data === '[DONE]' || data === '') return null
+  if (data === '[DONE]' || data === '') return {}
   try {
     const parsed = JSON.parse(data)
-    return parsed.choices?.[0]?.delta?.content || ''
+    return {
+      delta: parsed.choices?.[0]?.delta?.content || '',
+      usage: parsed.usage ? normalizeUsage(parsed.usage) : null,
+    }
   } catch {
-    return null // malformed SSE line — ignore
+    return {} // malformed SSE line — ignore
   }
 }
 
@@ -101,8 +121,9 @@ async function completeChat({ provider, model, messages, signal, options = {} })
 }
 
 // Non-streaming completion returning the full assistant message object
-// ({ content, tool_calls }) so callers (the tool loop) can inspect tool_calls.
-// `tool_calls` is undefined when the model didn't request any.
+// ({ content, tool_calls, usage }) so callers (the tool loop) can inspect
+// tool_calls AND log real server-reported token usage. `tool_calls`/`usage`
+// are undefined when the model didn't request any / the provider didn't report.
 async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
@@ -118,8 +139,25 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
   const data = await res.json()
   const msg = data.choices?.[0]?.message || {}
-  return { content: msg.content || '', tool_calls: msg.tool_calls }
+  return { content: msg.content || '', tool_calls: msg.tool_calls, usage: data.usage }
 }
+
+// Extract a normalized usage shape from a provider response `usage` object.
+// Returns null if none. Captures prompt/completion/total tokens + cache stats
+// (OpenAI: prompt_tokens_details.cached_tokens; Anthropic: cache_read_input_tokens
+// / cache_creation_input_tokens — some relays surface these in usage too).
+function normalizeUsage(u) {
+  if (!u || typeof u !== 'object') return null
+  const num = (v) => (typeof v === 'number' ? v : 0)
+  return {
+    prompt_tokens: num(u.prompt_tokens),
+    completion_tokens: num(u.completion_tokens),
+    total_tokens: num(u.total_tokens),
+    cache_read_tokens: num(u.cache_read_input_tokens) || num(u.prompt_tokens_details?.cached_tokens) || 0,
+    cache_creation_tokens: num(u.cache_creation_input_tokens) || num(u.cache_creation_tokens) || 0,
+  }
+}
+
 
 // List model ids via GET /models. Returns [] on any failure (handlers treat
 // an empty list as "couldn't fetch" rather than crashing).
@@ -162,4 +200,4 @@ async function testConnection({ provider }) {
   }
 }
 
-module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection }
+module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage }

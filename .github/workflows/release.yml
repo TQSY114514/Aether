@@ -70,3 +70,42 @@ jobs:
             app/release/latest*.yml
             app/release/*.blockmap
           if-no-files-found: warn
+
+      # Write a human-readable release body: a download guide (which file to
+      # pick) + an auto-generated changelog from the commits since the last tag.
+      # electron-builder's --publish always leaves the body empty.
+      - name: Write release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG=${GITHUB_REF_NAME}
+          # Find the previous tag for the changelog range.
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            RANGE="${PREV}..${TAG}"
+            LOG=$(git log --pretty=format:'- %s' "$RANGE" | head -40)
+          else
+            LOG=$(git log --pretty=format:'- %s' -20)
+          fi
+          # Mark the Setup exe as recommended; explain each file.
+          cat > /tmp/notes.md <<EOF
+          ## Downloads
+
+          | File | What it is |
+          | --- | --- |
+          | **AetherAI-Setup-${TAG#v}.exe** | 🟢 **Recommended** — installer. Installs per-user (no admin), auto-updates in-app. |
+          | AetherAI-${TAG#v}.exe | Portable single-exe. No install, no auto-update — just run it. |
+          | latest.yml / *.blockmap | Update metadata used by the auto-updater. Ignore unless debugging updates. |
+
+          > First launch of the installer shows a SmartScreen "unknown publisher" warning — expected for an unsigned solo app. The app is safe; all data stays local.
+
+          ## Changes
+
+          ${LOG}
+
+          ---
+
+          **Install:** download the Setup exe, run it, launch AetherAI. **Update later:** Settings → Updates → Check now (the installer auto-updates; portable builds download the new release manually).
+          EOF
+          gh release edit "$TAG" --notes-file /tmp/notes.md

@@ -16,7 +16,7 @@
 > edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
 > [SECURITY.md](./SECURITY.md).
 
-AetherAI unifies multiple LLM providers (OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint) into one desktop app — with an agent that can read/write files and run commands, a workspace sandbox, multi-model arena with ELO voting, Claude-Code-style skills, and 15 UI languages. Everything is stored locally — your API keys and conversations never leave your machine except to the providers you configure.
+AetherAI unifies multiple LLM providers (OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint) into one desktop app — with an agent that can read/write files and run commands, a workspace sandbox, multi-model arena with ELO voting, skills, and 15 UI languages. Everything is stored locally — your API keys and conversations never leave your machine except to the providers you configure.
 
 ## ✨ Features
 
@@ -36,7 +36,7 @@ AetherAI unifies multiple LLM providers (OpenAI / Claude / DeepSeek / local mode
 - **Workspace sandbox** — `write_file`/`edit_file` are refused outside the configured workspace root; `run_command` blocks destructive patterns (format, `rm -rf /`, shutdown, download-and-execute). Configurable in Settings → Agent & Safety. Yolo mode bypasses it.
 - **Skills** (Claude-Code `SKILL.md` format) — drop a folder into `<workspace>/.claude/skills/` and the model loads it on demand via the `use_skill` tool. Ships with `release-checklist` and `git-commit` built-in examples. Reusable with the public skill corpus.
 - **Context compaction** — long conversations auto-summarize older history (tool-call/result pairs kept intact; identifiers like UUIDs/paths/IPs preserved verbatim) so chats don't 400 on context length.
-- **Auto long-term memory** *(Hermes-style)* — before each turn, relevant memories from past chats are injected as context; after the turn, key facts are extracted and saved automatically. The agent recalls your preferences/decisions across sessions without manual note-taking. Toggleable in Settings → Agent.
+- **Auto long-term memory** — before each turn, relevant memories from past chats are injected as context; after the turn, key facts are extracted and saved automatically. The agent recalls your preferences/decisions across sessions without manual note-taking. Toggleable in Settings → Agent.
 - **MCP support** — connect external stdio MCP servers; their tools merge with the built-ins automatically.
 - **Thinking-effort slider** — real params: OpenAI o-series / gpt-5 / Claude (via relay) → `reasoning_effort`. Only effective on reasoning models (o1/o3/o4/gpt-5/claude/deepseek-r/qwQ); other models ignore it.
 - **Sidebar summaries** — titles are model-generated topic phrases (e.g. "New Eiyuu Angel pull advice"), not copied text.

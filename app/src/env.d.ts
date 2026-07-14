@@ -106,4 +106,11 @@ interface Window {
     onProgress: (cb: (p: { percent: number }) => void) => () => void
     onUpToDate: (cb: (p: { version: string }) => void) => () => void
   }
+  usage: {
+    stats: (range?: { since?: string; until?: string }) => Promise<{ requests: number; prompt_tokens: number; completion_tokens: number; total_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost: number; latency_avg: number }>
+    byProvider: (range?: { since?: string; until?: string }) => Promise<{ provider_name: string; requests: number; total_tokens: number; cost: number }[]>
+    byModel: (range?: { since?: string; until?: string }) => Promise<{ model_name: string; requests: number; total_tokens: number; cost: number }[]>
+    daily: (range?: { since?: string; until?: string }) => Promise<{ day: string; requests: number; total_tokens: number; cost: number }[]>
+    log: (range?: { since?: string; until?: string; limit?: number }) => Promise<any[]>
+  }
 }

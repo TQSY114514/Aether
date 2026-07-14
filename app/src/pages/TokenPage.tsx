@@ -1,130 +1,217 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useStore } from '@/store'
+import { t } from '@/utils/i18n'
+
+// ───────────────────────────────────────────────────────────────────────────
+// Usage statistics page. Backed by the usage_log table (one row per real API
+// call), so the numbers are server-reported tokens + computed cost + cache
+// stats — not client estimates. Layout mirrors a cc-switch-style dashboard:
+// stat tiles, a range-pickable trend chart, provider/model breakdowns, and a
+// recent request-log table.
+// ───────────────────────────────────────────────────────────────────────────
+
+type RangeKey = '1d' | '7d' | '30d' | 'all'
+const RANGES: { key: RangeKey; label: string }[] = [
+  { key: '1d', label: '24h' },
+  { key: '7d', label: '7d' },
+  { key: '30d', label: '30d' },
+  { key: 'all', label: 'All' },
+]
+
+function rangeToIso(key: RangeKey): { since?: string; until?: string } {
+  if (key === 'all') return {}
+  const days = key === '1d' ? 1 : key === '7d' ? 7 : 30
+  const since = new Date(Date.now() - days * 86400 * 1000).toISOString()
+  return { since }
+}
+
+const fmt = (n: number) => n.toLocaleString()
+const fmtCost = (n: number) => (n > 0 ? `$${n.toFixed(4)}` : `$0`)
+const fmtTok = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n))
 
 export default function TokenPage() {
-  const messages = useStore((s) => s.messages)
-  const sessions = useStore((s) => s.sessions)
-  const providers = useStore((s) => s.providers)
-
-  // Aggregate stats from current session messages
-  const stats = useMemo(() => {
-    let totalTokens = 0, totalMsgs = 0, userMsgs = 0, asstMsgs = 0
-    const byModel: Record<string, { tokens: number; count: number; cost: number }> = {}
-    for (const m of messages) {
-      totalMsgs++
-      if (m.role === 'user') userMsgs++
-      else if (m.role === 'assistant') asstMsgs++
-      const t = m.token_count || 0
-      totalTokens += t
-      const key = m.model_used || 'unknown'
-      if (!byModel[key]) byModel[key] = { tokens: 0, count: 0, cost: 0 }
-      byModel[key].tokens += t
-      byModel[key].count++
-    }
-    return { totalTokens, totalMsgs, userMsgs, asstMsgs, byModel }
-  }, [messages])
-
-  const [localMsgs, setLocalMsgs] = useState<number[]>([])
-  const [usageHistory, setUsageHistory] = useState<{ date: string; tokens: number; cost: number }[]>([])
+  const [range, setRange] = useState<RangeKey>('7d')
+  const [stats, setStats] = useState<any>(null)
+  const [byProvider, setByProvider] = useState<any[]>([])
+  const [byModel, setByModel] = useState<any[]>([])
+  const [daily, setDaily] = useState<any[]>([])
+  const [log, setLog] = useState<any[]>([])
 
   useEffect(() => {
-    // Load all messages for historical stats
-    const load = async () => {
-      const all: number[] = []
-      const dayMap: Record<string, { tokens: number; cost: number }> = {}
-      for (const s of sessions) {
-        const msgs = await window.electronAPI.message.list(s.id)
-        for (const m of msgs) {
-          const t = m.token_count || 0
-          all.push(t)
-          if (m.created_at) {
-            const day = m.created_at.slice(0, 10)
-            if (!dayMap[day]) dayMap[day] = { tokens: 0, cost: 0 }
-            dayMap[day].tokens += t
-          }
-        }
-      }
-      setLocalMsgs(all)
-      setUsageHistory(Object.entries(dayMap).sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({ date, ...v })))
-    }
-    if (sessions.length > 0) load()
-  }, [sessions.length])
+    const r = rangeToIso(range)
+    Promise.all([
+      window.electronAPI.usage.stats(r),
+      window.electronAPI.usage.byProvider(r),
+      window.electronAPI.usage.byModel(r),
+      window.electronAPI.usage.daily(r),
+      window.electronAPI.usage.log(r),
+    ]).then(([s, p, m, d, l]) => {
+      setStats(s); setByProvider(p || []); setByModel(m || []); setDaily(d || []); setLog(l || [])
+    })
+  }, [range])
 
-  const totalTokens = localMsgs.reduce((a, b) => a + b, 0)
-  const totalMsgsAll = localMsgs.length
+  const cacheHitRate = useMemo(() => {
+    if (!stats) return 0
+    const read = stats.cache_read_tokens || 0
+    const prompt = stats.prompt_tokens || 0
+    if (prompt <= 0) return 0
+    return Math.min(100, Math.round((read / prompt) * 1000) / 10)
+  }, [stats])
+
+  const maxDaily = useMemo(() => Math.max(1, ...daily.map((d) => d.total_tokens || 0)), [daily])
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        <h1 className="text-lg font-semibold mb-6" style={{ color: 'var(--text-primary)' }}>📊 Token 使用统计</h1>
-
-        {/* Overview cards */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="rounded-xl p-4 text-center" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-            <div className="text-2xl font-bold" style={{ color: 'var(--accent)' }}>{(totalTokens / 1000).toFixed(1)}K</div>
-            <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>总 Token 消耗</div>
-          </div>
-          <div className="rounded-xl p-4 text-center" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-            <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{totalMsgsAll}</div>
-            <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>总消息数</div>
-          </div>
-          <div className="rounded-xl p-4 text-center" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-            <div className="text-2xl font-bold" style={{ color: 'var(--success)' }}>{sessions.length}</div>
-            <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>会话数</div>
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>📊 {t('tokens.title')}</h1>
+          <div className="flex gap-1 p-0.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+            {RANGES.map(r => (
+              <button key={r.key} onClick={() => setRange(r.key)}
+                className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${range === r.key ? 'text-white' : ''}`}
+                style={range === r.key ? { backgroundColor: 'var(--accent)' } : { color: 'var(--text-muted)' }}>
+                {r.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Current session model breakdown */}
-        {Object.keys(stats.byModel).length > 0 && (
-          <div className="rounded-xl p-4 mb-6" style={{ border: '1px solid var(--border)' }}>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>当前会话 - 模型用量</h2>
-            <table className="w-full text-xs">
-              <thead>
-                <tr style={{ color: 'var(--text-muted)' }}>
-                  <th className="text-left px-2 py-1">模型</th>
-                  <th className="text-right px-2 py-1">消息数</th>
-                  <th className="text-right px-2 py-1">Token</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(stats.byModel).map(([name, data]) => (
-                  <tr key={name}>
-                    <td className="px-2 py-1" style={{ color: 'var(--text-primary)' }}>{name}</td>
-                    <td className="text-right px-2 py-1" style={{ color: 'var(--text-secondary)' }}>{data.count}</td>
-                    <td className="text-right px-2 py-1 font-mono" style={{ color: 'var(--text-secondary)' }}>{(data.tokens / 1000).toFixed(1)}K</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {/* Stat tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <Tile label="真实 Tokens" value={fmtTok(stats?.total_tokens || 0)} sub={fmt(stats?.total_tokens || 0)} accent />
+          <Tile label="总请求" value={fmt(stats?.requests || 0)} />
+          <Tile label="总成本" value={fmtCost(stats?.cost || 0)} accent2 />
+          <Tile label="缓存命中率" value={cacheHitRate > 0 ? `${cacheHitRate}%` : '—'} sub={`读 ${fmtTok(stats?.cache_read_tokens || 0)}`} />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <Tile small label="输入 Tokens" value={fmtTok(stats?.prompt_tokens || 0)} />
+          <Tile small label="输出 Tokens" value={fmtTok(stats?.completion_tokens || 0)} />
+          <Tile small label="缓存创建" value={fmtTok(stats?.cache_creation_tokens || 0)} />
+          <Tile small label="平均延迟" value={stats?.latency_avg ? `${Math.round(stats.latency_avg)}ms` : '—'} />
+        </div>
 
-        {/* Daily usage chart (simple) */}
-        {usageHistory.length > 0 && (
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>每日用量</h2>
+        {/* Trend chart */}
+        <Section title="使用趋势">
+          {daily.length === 0 ? (
+            <Empty />
+          ) : (
             <div className="space-y-1">
-              {usageHistory.slice(-14).map((day) => {
-                const maxTokens = Math.max(...usageHistory.map(d => d.tokens), 1)
-                const pct = Math.round((day.tokens / maxTokens) * 100)
+              {daily.slice(-30).map((d) => {
+                const pct = Math.round(((d.total_tokens || 0) / maxDaily) * 100)
                 return (
-                  <div key={day.date} className="flex items-center gap-2">
-                    <span className="text-[10px] w-20 text-right shrink-0" style={{ color: 'var(--text-muted)' }}>{day.date}</span>
-                    <div className="flex-1 h-4 rounded" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                  <div key={d.day} className="flex items-center gap-2">
+                    <span className="text-[10px] w-20 text-right shrink-0 font-mono" style={{ color: 'var(--text-muted)' }}>{d.day}</span>
+                    <div className="flex-1 h-3 rounded" style={{ backgroundColor: 'var(--bg-secondary)' }}>
                       <div className="h-full rounded transition-all" style={{ width: `${pct}%`, backgroundColor: 'var(--accent)' }} />
                     </div>
-                    <span className="text-[10px] w-12 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{(day.tokens / 1000).toFixed(0)}K</span>
+                    <span className="text-[10px] w-14 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmtTok(d.total_tokens || 0)}</span>
                   </div>
                 )
               })}
             </div>
-          </div>
-        )}
+          )}
+        </Section>
 
-        {usageHistory.length === 0 && (
-          <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>暂无数据，开始聊天后将自动统计</div>
-        )}
+        {/* Breakdowns */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          {byProvider.length > 0 && (
+            <Section title="供应商统计">
+              <Table rows={byProvider} nameKey="provider_name" />
+            </Section>
+          )}
+          {byModel.length > 0 && (
+            <Section title="模型统计">
+              <Table rows={byModel} nameKey="model_name" />
+            </Section>
+          )}
+        </div>
+
+        {/* Request log */}
+        <Section title="请求日志">
+          {log.length === 0 ? (
+            <Empty />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr style={{ color: 'var(--text-muted)' }}>
+                    <th className="text-left px-2 py-1 font-medium">时间</th>
+                    <th className="text-left px-2 py-1 font-medium">供应商</th>
+                    <th className="text-left px-2 py-1 font-medium">模型</th>
+                    <th className="text-right px-2 py-1 font-medium">输入</th>
+                    <th className="text-right px-2 py-1 font-medium">输出</th>
+                    <th className="text-right px-2 py-1 font-medium">成本</th>
+                    <th className="text-right px-2 py-1 font-medium">延迟</th>
+                    <th className="text-right px-2 py-1 font-medium">状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {log.map((r) => (
+                    <tr key={r.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                      <td className="px-2 py-1 font-mono whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{String(r.created_at || '').slice(5, 16).replace('T', ' ')}</td>
+                      <td className="px-2 py-1 truncate max-w-[120px]" style={{ color: 'var(--text-secondary)' }}>{r.provider_name || '—'}</td>
+                      <td className="px-2 py-1 truncate max-w-[140px] font-mono" style={{ color: 'var(--text-primary)' }}>{r.model_name || '—'}</td>
+                      <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmt(r.prompt_tokens || 0)}</td>
+                      <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{fmt(r.completion_tokens || 0)}</td>
+                      <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{fmtCost(r.cost || 0)}</td>
+                      <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{r.latency_ms ? `${r.latency_ms}ms` : '—'}</td>
+                      <td className="px-2 py-1 text-right font-mono" style={{ color: r.status === 200 ? 'var(--success)' : 'var(--error)' }}>{r.status || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
       </div>
     </div>
   )
+}
+
+function Tile({ label, value, sub, accent, accent2, small }: { label: string; value: string; sub?: string; accent?: boolean; accent2?: boolean; small?: boolean }) {
+  const color = accent ? 'var(--accent)' : accent2 ? 'var(--success)' : 'var(--text-primary)'
+  return (
+    <div className="rounded-xl p-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+      <div className={`${small ? 'text-base' : 'text-xl'} font-bold`} style={{ color }}>{value}</div>
+      {sub && <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</div>}
+      <div className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl p-4 mb-4" style={{ border: '1px solid var(--border)' }}>
+      <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>{title}</h2>
+      {children}
+    </div>
+  )
+}
+
+function Table({ rows, nameKey }: { rows: any[]; nameKey: string }) {
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr style={{ color: 'var(--text-muted)' }}>
+          <th className="text-left px-2 py-1 font-medium">名称</th>
+          <th className="text-right px-2 py-1 font-medium">请求</th>
+          <th className="text-right px-2 py-1 font-medium">Tokens</th>
+          <th className="text-right px-2 py-1 font-medium">成本</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
+            <td className="px-2 py-1 truncate max-w-[160px]" style={{ color: 'var(--text-primary)' }}>{r[nameKey] || '—'}</td>
+            <td className="px-2 py-1 text-right" style={{ color: 'var(--text-secondary)' }}>{r.requests}</td>
+            <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{fmtTok(r.total_tokens || 0)}</td>
+            <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{fmtCost(r.cost || 0)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function Empty() {
+  return <div className="text-center py-8 text-xs" style={{ color: 'var(--text-muted)' }}>暂无数据，发消息后自动统计</div>
 }

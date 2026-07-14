@@ -1,5 +1,17 @@
-const { completeChat } = require('../llm/providerAdapter')
+const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
 const abortControllers = new Map()
+
+// Per-call cost from the model's price columns (USD per 1K tokens).
+// Returns 0 if pricing is unset (unpriced models show as $0, like cc-switch's
+// "未定价"). Cost = (prompt/1000)*in + (completion/1000)*out, minus cached-read
+// tokens which providers don't bill at the full input rate (best-effort).
+function computeCost(model, u) {
+  const inPrice = Number(model.input_price_per_1k) || 0
+  const outPrice = Number(model.output_price_per_1k) || 0
+  if (!inPrice && !outPrice) return 0
+  const billableInput = Math.max(0, u.prompt_tokens - u.cache_read_tokens)
+  return (billableInput / 1000) * inPrice + (u.completion_tokens / 1000) * outPrice
+}
 
 function registerArenaHandlers(ipcMain, db) {
   ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds }) => {
@@ -30,15 +42,28 @@ function registerArenaHandlers(ipcMain, db) {
       const onOuterAbort = () => perModel.abort()
       controller.signal.addEventListener('abort', onOuterAbort, { once: true })
       try {
-        const answer = await completeChat({
+        // Use completeChatMessage to also get the server-reported usage, so the
+        // usage log records real tokens/cost (not a client estimate).
+        const { content: answer, usage } = await completeChatMessage({
           provider: { api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
           model: m,
           messages: [{ role: 'user', content }],
           signal: perModel.signal,
         })
+        const u = normalizeUsage(usage)
+        if (u) db.logUsage({
+          session_id: sessionId, provider_id: m.provider_id, provider_name: m.provider_name,
+          model_name: m.model_name, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens,
+          total_tokens: u.total_tokens, cache_read_tokens: u.cache_read_tokens,
+          cache_creation_tokens: u.cache_creation_tokens,
+          cost: computeCost(m, u), latency_ms: Date.now() - start, status: 200, source: 'arena',
+        })
         return { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
           content: answer, latency_ms: Date.now() - start }
       } catch (err) {
+        const status = err.status || (err.name === 'AbortError' ? 0 : 0)
+        db.logUsage({ session_id: sessionId, provider_id: m.provider_id, provider_name: m.provider_name,
+          model_name: m.model_name, latency_ms: Date.now() - start, status, source: 'arena' })
         return { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
           content: `[Error: ${err.name === 'AbortError' ? 'aborted/timeout' : err.message}]`, latency_ms: Date.now() - start }
       } finally {

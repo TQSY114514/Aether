@@ -60,4 +60,4 @@ async function testConnection({ provider }) {
   return adapterFor(provider).testConnection({ provider })
 }
 
-module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection }
+module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage: require('./openaiAdapter').normalizeUsage }

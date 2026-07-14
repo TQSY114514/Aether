@@ -278,7 +278,7 @@
   "settings.agent.max_iterations": "Max agent iterations",
   "settings.agent.max_iterations_hint": "Hard ceiling on how many tool-call rounds one turn can take. Raise for long multi-step tasks; lower to cap runaway loops. Default 25.",
   "settings.agent.auto_memory": "Auto long-term memory",
-  "settings.agent.auto_memory_hint": "Before each turn, relevant memories from past chats are injected; after, key facts are extracted and saved automatically. (Hermes-style.) Turn off for fully manual memory.",
+  "settings.agent.auto_memory_hint": "Before each turn, relevant memories from past chats are injected; after, key facts are extracted and saved automatically. Turn off for fully manual memory.",
   "settings.skills.title": "Skills",
   "settings.skills.desc": "Claude-Code-format SKILL.md skills. The model loads a skill's instructions on demand via the use_skill tool when your request matches.",
   "settings.skills.rescan": "Rescan",

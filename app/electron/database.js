@@ -97,6 +97,28 @@ async function initDatabase() {
   db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
+  // Per-API-call usage log (one row per real provider request, across ALL
+  // call sites: primary chat, arena, title-gen, auto-memory, compaction).
+  // Drives the TokenPage stats: total tokens / cost / cache hit rate /
+  // per-provider & per-model breakdowns + a request-log table.
+  db.run(`CREATE TABLE IF NOT EXISTS usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER,
+    provider_id INTEGER,
+    provider_name TEXT,
+    model_name TEXT,
+    prompt_tokens INTEGER DEFAULT 0,
+    completion_tokens INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    cache_read_tokens INTEGER DEFAULT 0,
+    cache_creation_tokens INTEGER DEFAULT 0,
+    cost REAL DEFAULT 0,
+    latency_ms INTEGER,
+    status INTEGER,
+    source TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`)
+
   // Migrate old schema
   const cols = {
     provider: getTableColumns('provider'),
@@ -414,6 +436,92 @@ function deleteMemory(id) {
   db.run('DELETE FROM memory WHERE id = ?', [id]); saveDatabase()
 }
 
+// ===== Usage log CRUD =====
+// One row per real API call. `source` tags the call site: 'chat' | 'arena' |
+// 'title' | 'memory' | 'compaction' | 'tool'. cost is computed by the caller
+// from the model's price columns; if unknown, 0.
+function logUsage({ session_id = null, provider_id = null, provider_name = null, model_name = null,
+  prompt_tokens = 0, completion_tokens = 0, total_tokens = 0,
+  cache_read_tokens = 0, cache_creation_tokens = 0, cost = 0, latency_ms = null, status = 200, source = 'chat' }) {
+  db.run(`INSERT INTO usage_log
+    (session_id, provider_id, provider_name, model_name, prompt_tokens, completion_tokens, total_tokens,
+     cache_read_tokens, cache_creation_tokens, cost, latency_ms, status, source)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [session_id, provider_id, provider_name, model_name, prompt_tokens, completion_tokens, total_tokens,
+     cache_read_tokens, cache_creation_tokens, cost, latency_ms, status, source])
+  saveDatabase()
+}
+// Aggregate stats for the TokenPage. Optional since/until (ISO) for the range picker.
+function getUsageStats({ since = null, until = null } = {}) {
+  const where = []
+  const params = []
+  if (since) { where.push('created_at >= ?'); params.push(since) }
+  if (until) { where.push('created_at <= ?'); params.push(until) }
+  const w = where.length ? 'WHERE ' + where.join(' AND ') : ''
+  const stmt = db.prepare(`SELECT
+      COUNT(*) as requests,
+      COALESCE(SUM(prompt_tokens),0) as prompt_tokens,
+      COALESCE(SUM(completion_tokens),0) as completion_tokens,
+      COALESCE(SUM(total_tokens),0) as total_tokens,
+      COALESCE(SUM(cache_read_tokens),0) as cache_read_tokens,
+      COALESCE(SUM(cache_creation_tokens),0) as cache_creation_tokens,
+      COALESCE(SUM(cost),0) as cost,
+      COALESCE(SUM(latency_ms),0) as latency_ms_sum,
+      COUNT(latency_ms) as latency_count
+    FROM usage_log ${w}`)
+  stmt.bind(params)
+  const row = stmt.step() ? stmt.getAsObject() : {}; stmt.free()
+  // Bigints already normalized by getAsObject? No — getAsObject doesn't run allRows coercion.
+  const num = (v) => typeof v === 'bigint' ? Number(v) : (v || 0)
+  return {
+    requests: num(row.requests),
+    prompt_tokens: num(row.prompt_tokens),
+    completion_tokens: num(row.completion_tokens),
+    total_tokens: num(row.total_tokens),
+    cache_read_tokens: num(row.cache_read_tokens),
+    cache_creation_tokens: num(row.cache_creation_tokens),
+    cost: num(row.cost),
+    latency_avg: row.latency_count > 0 ? num(row.latency_ms_sum) / num(row.latency_count) : 0,
+  }
+}
+// Per-provider and per-model breakdowns (same range filter).
+function getUsageByProvider({ since = null, until = null } = {}) {
+  const w = buildRangeWhere(since, until)
+  const stmt = db.prepare(`SELECT provider_name, COUNT(*) as requests,
+      COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost
+    FROM usage_log ${w.where} GROUP BY provider_name ORDER BY cost DESC`)
+  stmt.bind(w.params); const out = allRows(stmt); return out
+}
+function getUsageByModel({ since = null, until = null } = {}) {
+  const w = buildRangeWhere(since, until)
+  const stmt = db.prepare(`SELECT model_name, COUNT(*) as requests,
+      COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost
+    FROM usage_log ${w.where} GROUP BY model_name ORDER BY cost DESC`)
+  stmt.bind(w.params); const out = allRows(stmt); return out
+}
+// Daily series for the trend chart.
+function getUsageDaily({ since = null, until = null } = {}) {
+  const w = buildRangeWhere(since, until)
+  const stmt = db.prepare(`SELECT date(created_at) as day, COUNT(*) as requests,
+      COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost
+    FROM usage_log ${w.where} GROUP BY day ORDER BY day ASC`)
+  stmt.bind(w.params); const out = allRows(stmt); return out
+}
+// Raw request log (most recent first, capped).
+function getUsageLog({ limit = 200, since = null, until = null } = {}) {
+  const w = buildRangeWhere(since, until)
+  const stmt = db.prepare(`SELECT * FROM usage_log ${w.where} ORDER BY id DESC LIMIT ?`)
+  stmt.bind([...w.params, limit]); const out = allRows(stmt); return out
+}
+function buildRangeWhere(since, until) {
+  const where = []
+  const params = []
+  if (since) { where.push('created_at >= ?'); params.push(since) }
+  if (until) { where.push('created_at <= ?'); params.push(until) }
+  return { where: where.length ? 'WHERE ' + where.join(' AND ') : '', params }
+}
+
+
 // Drop assistant messages that follow the last user message in a session.
 // Used by regenerate so the discarded reply doesn't resurface on reload.
 function deleteAssistantAfterLastUser(sessionId) {
@@ -464,6 +572,7 @@ module.exports = {
   getModelScores, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
   getMemories, addMemory, updateMemory, deleteMemory,
+  logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
   deleteAssistantAfterLastUser,
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
 }

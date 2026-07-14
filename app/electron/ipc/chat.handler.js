@@ -1,4 +1,4 @@
-const { streamChat, completeChat } = require('../llm/providerAdapter')
+const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
@@ -303,7 +303,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         const wc = getWebContents()
         // mergedOpts carries reasoning params + advanced generation params (max_tokens/
         // temperature/top_p) set in Settings, spread into the request body by the adapter.
-        for await (const delta of streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: mergedOpts })) {
+        // streamChat returns a generator that exposes .usage (server-reported tokens)
+        // once the stream ends — captured here for the usage log.
+        const stream = streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: mergedOpts })
+        const streamStart = Date.now()
+        for await (const delta of stream) {
           if (delta) {
             fullContent += delta
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
@@ -312,8 +316,20 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         clearTimeout(timeout)
         abortControllers.delete(msgId)
 
+        // Log real server-reported usage (if the provider returned it) with cost.
+        const u = stream.usage ? normalizeUsage(stream.usage) : null
+        if (u) {
+          db.logUsage({
+            session_id: sessionId, provider_id: p.id, provider_name: p.name,
+            model_name: m.model_name, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens, cache_read_tokens: u.cache_read_tokens,
+            cache_creation_tokens: u.cache_creation_tokens,
+            cost: computeCost(m, u), latency_ms: Date.now() - streamStart, status: 200, source: 'chat',
+          })
+        }
+
         // Save to DB FIRST, then send done signal
-        const tokens = estimateTokens(fullContent)
+        const tokens = u ? u.total_tokens : estimateTokens(fullContent)
       db.updateMessage(msgId, {
         content: fullContent,
         status: isFallback ? 'fallback' : 'success',
@@ -422,6 +438,16 @@ function estimateTokens(text) {
     else tokens += 0.25
   }
   return Math.max(1, Math.ceil(tokens))
+}
+
+// Per-call cost from the model's price columns (USD per 1K tokens). 0 if unpriced.
+// Cached-read tokens aren't billed at the full input rate (best-effort).
+function computeCost(model, u) {
+  const inPrice = Number(model.input_price_per_1k) || 0
+  const outPrice = Number(model.output_price_per_1k) || 0
+  if (!inPrice && !outPrice) return 0
+  const billableInput = Math.max(0, (u.prompt_tokens || 0) - (u.cache_read_tokens || 0))
+  return (billableInput / 1000) * inPrice + ((u.completion_tokens || 0) / 1000) * outPrice
 }
 
 module.exports = { registerChatHandlers, clearAllowRules }

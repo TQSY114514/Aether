@@ -153,4 +153,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('updater:up-to-date', h)
     },
   },
+  usage: {
+    stats: (range) => ipcRenderer.invoke('usage:stats', range),
+    byProvider: (range) => ipcRenderer.invoke('usage:by-provider', range),
+    byModel: (range) => ipcRenderer.invoke('usage:by-model', range),
+    daily: (range) => ipcRenderer.invoke('usage:daily', range),
+    log: (range) => ipcRenderer.invoke('usage:log', range),
+  },
 })

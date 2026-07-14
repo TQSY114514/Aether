@@ -88,6 +88,8 @@ function setupIpcHandlers() {
   registerMcpHandlers(ipcMain, db)
   registerAgentHandlers(ipcMain, db)
   registerSkillsHandlers(ipcMain)
+  const { registerUsageHandlers } = require('./ipc/usage.handler')
+  registerUsageHandlers(ipcMain, db)
 }
 
 app.whenReady().then(async () => {
