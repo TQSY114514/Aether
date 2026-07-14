@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   session: {
     list: () => ipcRenderer.invoke('session:list'),
     create: (data) => ipcRenderer.invoke('session:create', data),
+    createAndSelect: (opts) => ipcRenderer.invoke('session:create-and-select', opts),
     rename: (id, title) => ipcRenderer.invoke('session:rename', id, title),
     pin: (id, pinned) => ipcRenderer.invoke('session:pin', id, pinned),
     delete: (id) => ipcRenderer.invoke('session:delete', id),

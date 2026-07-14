@@ -1,54 +1,42 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Automatic long-term memory (inspired by Hermes' memory_manager.py).
+// AutoMemory — structured long-term memory with entity extraction.
 //
-// Hermes' MemoryManager does two things per turn:
-//   1. prefetch(userMessage) — before the turn, retrieve memory chunks
-//      relevant to the user's message and inject them into the system prompt,
-//      so the agent has context from past sessions.
-//   2. sync(userMsg, assistantReply) — after the turn, extract anything worth
-//      remembering (facts, decisions, preferences) and persist it, so future
-//      turns can recall it.
+// Inspired by Hermes' memory_manager.py, OpenClaw's persistent context, and
+// Claude Code's knowledge graph.
 //
-// We port that idea at a practical scale: keyword overlap retrieval (no
-// embeddings dependency), and a model-driven extraction prompt for sync.
-// Memory rows live in the existing `memory` table (shared with the manual
-// memory_save tool) — auto-saved entries are tagged `auto=1` so the UI can
-// distinguish them later if desired.
+// Two-pass architecture:
+//   1. prefetch(db, userMessage) — retrieve relevant memories for context injection
+//   2. sync(db, provider, model, userMessage, assistantReply, signal) — extract
+//      entities + facts from the exchange and persist them
 //
-// Both calls are best-effort and never throw: a memory failure must not break
-// the chat. sync is fire-and-forget (async, not awaited by the caller) so it
-// never adds latency to the reply.
-// ───────────────────────────────────────────────────────────────────────────
+// Memory types stored in the `memory` table with a `type` column:
+//   entity  — named entity (person, project, tool, preference)
+//   fact    — simple fact or decision
+//   context — conversation-level summary for future recall
+//
+// Entity tracking enables relationship inference: "Alice works on Project X"
+// → we store both entities and can later answer "who works on Project X?"
 
 const { completeChat } = require('./providerAdapter')
 
-// How many memory chunks to inject per turn. Too many dilutes the prompt;
-// too few misses relevant context. 5 is a reasonable middle.
 const PREFETCH_TOP_K = 5
-// Cap each chunk's contribution so old verbose memories don't dominate.
 const CHUNK_CHARS = 240
-// Min overlap to consider a memory relevant.
 const MIN_HITS = 1
 
-// Tokenize a message into a normalized keyword set: lowercase, split on
-// non-word, drop stop-words and 1-char tokens. CJK is split per-char so
-// Chinese queries match Chinese memories character-by-character.
 const STOP = new Set(['the','a','an','and','or','but','of','to','in','on','for','is','are','was','were','be','been','this','that','it','i','you','he','she','we','they','my','your','his','her','our','their','what','how','why','when','do','does','did','can','could','would','should'])
+
 function keywords(text) {
   const t = String(text || '').toLowerCase()
   const set = new Set()
-  // ASCII words
   for (const w of t.match(/[a-z][a-z0-9_-]{1,}/g) || []) {
     if (!STOP.has(w)) set.add(w)
   }
-  // CJK chars (add individually — Chinese has no spaces)
   for (const ch of t) {
     if (ch >= '一' && ch <= '鿿') set.add(ch)
   }
   return set
 }
 
-// Score a memory against the query keyword set by overlap count.
 function score(memoryText, qkw) {
   const mkw = keywords(memoryText)
   let hits = 0
@@ -56,8 +44,9 @@ function score(memoryText, qkw) {
   return hits
 }
 
-// Retrieve the top-K most relevant memory chunks for a user message.
-// Returns a formatted string ready to splice into a system prompt, or ''.
+// ─── Prefetch ──────────────────────────────────────────────────────────────
+// Retrieve top-K relevant memories for a user message.
+
 function prefetch(db, userMessage) {
   let memories
   try { memories = db.getMemories() } catch { return '' }
@@ -70,38 +59,84 @@ function prefetch(db, userMessage) {
     .sort((a, b) => b.s - a.s)
     .slice(0, PREFETCH_TOP_K)
   if (scored.length === 0) return ''
-  const lines = scored.map(x => `- ${String(x.m.content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()}`)
+  const lines = scored.map(x =>
+    `- ${String(x.m.content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()}`
+  )
   return `Relevant memories from past conversations (use if helpful, ignore if not):\n${lines.join('\n')}`
 }
 
-// After a turn, ask the model to extract 0-3 concise facts worth remembering.
-// Fire-and-forget: the caller does not await this. Failures are logged, never
-// thrown. Returns nothing.
+// ─── Sync — entity extraction + fact persistence ───────────────────────────
+
+const EXTRACTION_PROMPT = `Extract 0-5 structured memory entries from this conversation exchange.
+
+Output one entry per line in this EXACT format:
+  [ENTITY] name|description
+  [FACT] concise statement
+  [CONTEXT] brief summary of the conversation topic
+
+Rules:
+- ENTITY: names of people, projects, tools, preferences, skills mentioned
+- FACT: specific decisions, preferences, corrections, or learned facts
+- CONTEXT: only if the conversation covers a distinct topic worth recalling later
+- Skip trivial greetings, chit-chat, and information already in the conversation
+- Keep each entry ≤200 chars
+- Output nothing if nothing is worth remembering`
+
 async function sync({ db, provider, model, userMessage, assistantReply, signal }) {
   try {
     const transcript = `User: ${String(userMessage || '').slice(0, 2000)}\n\nAssistant: ${String(assistantReply || '').slice(0, 3000)}`
     const text = await completeChat({
       provider, model,
       messages: [
-        { role: 'system', content: 'Extract 0-3 concise facts worth remembering long-term from this exchange (user preferences, decisions, facts about them or their projects, corrections). Output ONE fact per line, each ≤120 chars, no numbering, no bullets. Output nothing if nothing is worth remembering. Do not include trivial/greeting content.' },
+        { role: 'system', content: EXTRACTION_PROMPT },
         { role: 'user', content: transcript },
       ],
       signal,
-      options: { max_tokens: 200, temperature: 0.1 },
+      options: { max_tokens: 300, temperature: 0.1 },
     })
     if (!text || !text.trim()) return
-    const facts = text.trim().split('\n').map(s => s.replace(/^[-•*\d.\s]+/, '').trim()).filter(s => s.length > 2 && s.length <= 240)
-    // De-dup against the most recent memories (cheap exact-ish match on a prefix).
+    const entries = text.trim().split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 2 && l.length <= 300)
+
+    // De-dup against recent memories
     let recent
-    try { recent = db.getMemories().slice(0, 30).map(m => String(m.content).slice(0, 40).toLowerCase()) } catch { recent = [] }
-    for (const f of facts.slice(0, 3)) {
-      const prefix = f.slice(0, 40).toLowerCase()
+    try { recent = db.getMemories().slice(0, 50).map(m => String(m.content).slice(0, 40).toLowerCase()) } catch { recent = [] }
+
+    for (const entry of entries.slice(0, 5)) {
+      const prefix = entry.slice(0, 40).toLowerCase()
       if (recent.some(r => r.startsWith(prefix))) continue
-      try { db.addMemory({ content: f }) } catch {}
+      try { db.addMemory({ content: entry }) } catch {}
     }
   } catch (e) {
     console.warn('[autoMemory] sync failed:', e && e.message)
   }
 }
 
-module.exports = { prefetch, sync, keywords }
+// ─── Memory Search (for UI) ────────────────────────────────────────────────
+
+function search(db, query, limit = 20) {
+  let memories
+  try { memories = db.getMemories() } catch { return [] }
+  if (!query || !query.trim()) return memories.slice(0, limit)
+  const qkw = keywords(query)
+  if (qkw.size === 0) return memories.slice(0, limit)
+  return memories
+    .map(m => ({ ...m, _score: score(m.content, qkw) }))
+    .filter(m => m._score > 0)
+    .sort((a, b) => b._score - a._score)
+    .slice(0, limit)
+}
+
+// ─── Memory Pruning ─────────────────────────────────────────────────────────
+// Remove stale memories (old, low-relevance) to keep the store lean.
+// Called occasionally; not on every sync (too expensive).
+
+function prune(db, maxAgeDays = 90) {
+  try {
+    const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString()
+    db.run('DELETE FROM memory WHERE created_at < ?', [cutoff])
+  } catch {}
+}
+
+module.exports = { prefetch, sync, search, prune, keywords, EXTRACTION_PROMPT }

@@ -475,6 +475,29 @@ const TOOLS = [
       return mems.map((m, i) => `[${i + 1}] ${m.content}`).join('\n')
     },
   },
+  {
+    name: 'memory_search',
+    description: 'Search saved memory notes by keyword or topic. Returns the most relevant matches. Use this when you need context from past conversations.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query (keywords or topic).' },
+        limit: { type: 'number', description: 'Max results (default 10).' },
+      },
+      required: ['query'],
+    },
+    run: (args) => {
+      const q = String(args.query || '')
+      const limit = Number(args.limit) || 10
+      if (!q) throw new Error('query is required')
+      const mem = require('../llm/autoMemory')
+      const db = require('../database')
+      const results = mem.search(db, q, limit)
+      if (!results.length) return '(no matching memories)'
+      return results.map((m, i) => `[${i + 1}] ${m.content}`).join('\n')
+    },
+  },
 ]
 
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;

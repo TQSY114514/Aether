@@ -63,4 +63,26 @@ function applyMiddleware(content, ctx) {
   return out
 }
 
-module.exports = { applyMiddleware, truncateMiddleware, redactMiddleware, MAX_TOOL_RESULT_CHARS }
+// Structured result detection: if a tool result contains a clearly structured
+// pattern (JSON, XML, key=value), surface it with a summary line for the model.
+// Returns the enriched content.
+function enrichWithSummary(content, toolName) {
+  if (typeof content !== 'string') return content
+  const trimmed = content.trim()
+  // JSON detection
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const obj = JSON.parse(trimmed)
+      const summary = `[${toolName} returned JSON with ${Array.isArray(obj) ? obj.length + ' items' : Object.keys(obj).length + ' fields'}]`
+      return summary + '\n' + content
+    } catch {}
+  }
+  // key=value pattern
+  const kvLines = trimmed.split('\n').filter(l => /^\w[\w\s]*[:=]/.test(l.trim()))
+  if (kvLines.length > 0 && kvLines.length < 20) {
+    return `[${toolName} returned ${kvLines.length} key-value lines]\n` + content
+  }
+  return content
+}
+
+module.exports = { applyMiddleware, truncateMiddleware, redactMiddleware, enrichWithSummary, MAX_TOOL_RESULT_CHARS }

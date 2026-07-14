@@ -12,6 +12,7 @@ import LearningGraphPage from '@/pages/LearningGraphPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import { t } from '@/utils/i18n'
 
 export default function App() {
@@ -148,7 +149,9 @@ export default function App() {
       )}
       {sidebarOpen && <Sidebar />}
       <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
-        {renderPage()}
+        <ErrorBoundary>
+          {renderPage()}
+        </ErrorBoundary>
       </main>
       <PermissionDialog />
       <QuestionDialog />

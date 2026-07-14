@@ -183,19 +183,9 @@ function decodeDataUrlText(dataUrl: string): string {
   }
 }
 
-function guessDefaultModel(allModels: Model[], configs: Record<number, SessionConfig>): { providerId: number | null; modelId: number | null } {
-  // Find a model id that appears in at least one existing session config
-  for (const c of Object.values(configs)) {
-    if (c.modelId && c.providerId) return { providerId: c.providerId, modelId: c.modelId }
-  }
-  // Fall back to primary model
-  const primary = allModels.find(m => m.is_primary)
-  if (primary) return { providerId: primary.provider_id, modelId: primary.id }
-  // Fall back to first model
-  const first = allModels[0]
-  if (first) return { providerId: first.provider_id, modelId: first.id }
-  return { providerId: null, modelId: null }
-}
+// Config bundle shape mirrors `electron/ipc/config.handler.js` (the canonical
+// main-process serializer). The `buildConfigBundle` in `src/types/config.ts`
+// produces the same structure for the renderer-side export path.
 
 export const useStore = create<AppState>((set, get) => ({
   // Navigation
@@ -223,11 +213,8 @@ export const useStore = create<AppState>((set, get) => ({
     set({ sessions })
   },
   createSession: async () => {
-    const result = await window.electronAPI.session.create({})
-    const sid = result.lastInsertRowid as number
-    // Pre-seed a default model config so selectSession doesn't have to rebuild it.
-    let providerId = null, modelId = null
     const allModels = get().allModels
+    let providerId = null, modelId = null
     if (allModels.length > 0) {
       const primary = allModels.find(m => m.is_primary) || allModels[0]
       providerId = primary.provider_id; modelId = primary.id
@@ -244,15 +231,18 @@ export const useStore = create<AppState>((set, get) => ({
         if (all.length > 0) { providerId = all[0].provider_id; modelId = all[0].id }
       } catch {}
     }
-    const cfg: SessionConfig = { providerId, modelId, personaId: null }
-    await window.electronAPI.session.setConfig(sid, cfg)
-    set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [sid]: cfg } }))
-    // Navigate to chat view immediately (feels instant), then select via the same
-    // code path the sidebar uses — that path is verified to highlight correctly.
-    set({ currentView: 'chat' })
-    if (providerId) get().loadModels(providerId)
-    await get().loadSessions()
-    await get().selectSession(sid)
+    // Use the combined create-and-select IPC (1 round-trip instead of 7+).
+    const result = await window.electronAPI.session.createAndSelect({ providerId, modelId, personaId: null })
+    const sid = result.session.id
+    const cfg = result.config
+    set((s) => ({
+      currentView: 'chat',
+      currentSessionId: sid,
+      sessionConfigs: { ...s.sessionConfigs, [sid]: cfg },
+      messages: result.messages || [],
+      sessions: [...s.sessions, result.session],
+    }))
+    if (cfg.providerId) get().loadModels(cfg.providerId)
   },
   selectSession: async (id) => {
     // Pre-load messages from DB before switching (never shows empty state)
@@ -260,11 +250,10 @@ export const useStore = create<AppState>((set, get) => ({
     try { msgs = await window.electronAPI.message.list(id) } catch (e) { console.error('[AetherAI] preload', e) }
     set({ currentSessionId: id, messages: msgs, arenaResults: [] })
     window.electronAPI.session.touch(id).catch(() => {})
-    // Load per-session config from DB, then set currentSessionId
+    // Load per-session config from DB. If missing/incomplete, rebuild from allModels.
     try {
       let cfg = await window.electronAPI.session.getConfig(id)
       if (!cfg || !cfg.modelId) {
-        // Missing or incomplete config — rebuild from allModels
         let providerId = null, modelId = null
         const allModels = get().allModels
         if (allModels.length > 0) {
@@ -272,7 +261,7 @@ export const useStore = create<AppState>((set, get) => ({
           providerId = primary.provider_id; modelId = primary.id
         }
         cfg = { providerId, modelId, personaId: null }
-        await window.electronAPI.session.setConfig(id, cfg)
+        window.electronAPI.session.setConfig(id, cfg).catch(() => {})
       }
       set((s) => ({
         currentSessionId: id,
@@ -332,7 +321,28 @@ export const useStore = create<AppState>((set, get) => ({
   },
   deleteProvider: async (id) => {
     await window.electronAPI.provider.delete(id)
-    await get().loadProviders()
+    const { currentSessionId, sessionConfigs } = get()
+    // Clean up session configs that referenced the deleted provider, and
+    // evict the provider's cached model list so stale rows don't surface.
+    const nextConfigs = { ...sessionConfigs }
+    for (const sid of Object.keys(nextConfigs)) {
+      const numSid = Number(sid)
+      const c = nextConfigs[numSid]
+      if (c.providerId === id) {
+        const cfg = { providerId: null as number | null, modelId: null as number | null, personaId: c.personaId }
+        if (numSid === currentSessionId) await window.electronAPI.session.setConfig(numSid, cfg)
+        nextConfigs[numSid] = cfg
+      }
+    }
+    const nextModels = { ...get().modelsByProvider }
+    delete nextModels[id]
+    set((s) => ({
+      providers: s.providers.filter(p => p.id !== id),
+      allModels: s.allModels.filter(m => m.provider_id !== id),
+      modelsByProvider: nextModels,
+      sessionConfigs: nextConfigs,
+    }))
+    await get().loadAllModels()
   },
 
   // Models
@@ -355,11 +365,25 @@ export const useStore = create<AppState>((set, get) => ({
     if (updated) await get().loadModels(updated.provider_id)
   },
   deleteModel: async (id) => {
-    const { allModels } = get()
+    const { allModels, currentSessionId } = get()
     const target = allModels.find(m => m.id === id)
     await window.electronAPI.model.delete(id)
-    await get().loadAllModels()
-    if (target) await get().loadModels(target.provider_id)
+    const updatedAll = allModels.filter(m => m.id !== id)
+    const nextConfigs = { ...get().sessionConfigs }
+    for (const sid of Object.keys(nextConfigs)) {
+      const numSid = Number(sid)
+      const c = nextConfigs[numSid]
+      if (c.modelId === id) {
+        const fallback = updatedAll.find(m => m.provider_id === c.providerId)
+        const cfg = { providerId: c.providerId, modelId: fallback?.id ?? null, personaId: c.personaId }
+        if (numSid === currentSessionId) await window.electronAPI.session.setConfig(numSid, cfg)
+        nextConfigs[numSid] = cfg
+      }
+    }
+    set((s) => ({ allModels: updatedAll, sessionConfigs: nextConfigs }))
+    if (target) {
+      await get().loadModels(target.provider_id)
+    }
   },
   loadAllModels: async () => {
     const allModels = await window.electronAPI.model.listAll()

@@ -31,6 +31,7 @@ interface Window {
     session: {
       list: () => Promise<Session[]>
       create: (data: any) => Promise<{ lastInsertRowid: number }>
+      createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null }) => Promise<{ session: Session & { id: number }; config: { providerId: number | null; modelId: number | null; personaId: number | null }; messages: Message[] }>
       rename: (id: number, title: string) => Promise<void>
       pin: (id: number, pinned: number) => Promise<void>
       delete: (id: number) => Promise<void>

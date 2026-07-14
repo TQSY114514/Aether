@@ -22,6 +22,11 @@ function logTitle(...args) {
   } catch {}
 }
 
+// Placeholder titles (in any language) that indicate a session hasn't been
+// named yet. When auto-title is on and the session has one of these, we
+// generate a summary title after the first response.
+const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
+
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
 
@@ -99,11 +104,10 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // the getSessions() full-table-scan-with-subquery that ran here twice before).
     // Used for both the placeholder-title check and the persona_id fallback below.
     const session0 = db.getSession(sessionId)
-    const placeholderTitles = ['新会话', '新对话', 'New Chat']
     // Respect the autoTitle setting (default on) and only summarize the first exchange.
     const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
     const titleLanguage = db.getSetting('titleLanguage') || 'auto'
-    const needsTitle = autoTitleOn && session0 && placeholderTitles.includes((session0.title || '').trim()) && msgs.length === 1
+    const needsTitle = autoTitleOn && session0 && PLACEHOLDER_TITLES.has((session0.title || '').trim()) && msgs.length === 1
     logTitle('session', sessionId, 'needsTitle=', needsTitle, 'autoTitle=', autoTitleOn, 'title=', session0?.title, 'msgs=', msgs.length)
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.

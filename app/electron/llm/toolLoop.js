@@ -1,18 +1,17 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Tool-call loop.
+// Agent tool-call loop with integrated planning.
 //
-// stream → detect tool_calls → run tools → append tool results → re-request,
-// until the model returns a final text answer with no tool calls. Hard depth
-// cap to prevent infinite loops. Each tool invocation is reported via the
-// onToolCall callback so the UI can render a live tool-call block.
+// Pipeline: receive → detect tool_calls → run tools → re-request → finalize.
+// Hard depth cap prevents infinite loops. Each invocation is reported via
+// callbacks so the UI renders a live tool-call block + plan trace.
 //
-// This uses non-streaming completeChat under the hood: streaming tool-call
-// argument accumulation is complex and provider-variable, and tool calls are
-// short discrete steps where latency is less noticeable than for long prose.
-// The plain chat path (no tools) still uses streamChat for live token streaming.
+// Planning integration (DS4 / OpenClaw-inspired):
+//   - isComplexRequest() gates whether to invest in explicit planning.
+//   - generatePlan() asks the model for a sub-task breakdown.
+//   - plan_progress tool calls from the model update plan status live.
 // ───────────────────────────────────────────────────────────────────────────
 
-const { completeChat } = require('./providerAdapter')
+const { completeChatMessage } = require('./providerAdapter')
 const { safeParseToolCallArgs } = require('./toolArgs')
 const { applyMiddleware } = require('./toolResultMiddleware')
 // Use the MCP-aware merged registry so the agent can call both built-in tools
@@ -29,25 +28,14 @@ try {
   toolsPayload = r.toolsPayload
 }
 
-// Iteration budget (from Hermes' iteration_budget.py): a hard ceiling on how
-// many agent rounds a single user turn can take, exposed to the user so they
-// can raise it for long tasks or lower it to cap runaway loops. Default 25 is
-// higher than the old fixed 12 (too tight for real work) but still bounded.
+const planning = require('./planning')
+
 const DEFAULT_MAX_ITERATIONS = 25
-const MAX_TOTAL_CHARS = 200000 // crude context budget across all tool results
-// Loop detection (from OpenClaw's before-tool-call loop-detection): if the
-// model calls the same tool with the same args N times in a row, break — it's
-// stuck. The iteration budget is the hard backstop; this catches stuck loops faster.
+const MAX_TOTAL_CHARS = 200000
 const LOOP_REPEAT_LIMIT = 3
-// Per-tool execution timeout. A tool that hangs (e.g. a dead web_fetch) would
-// otherwise block the loop forever. Wraps every tool.run in a Promise.race.
 const TOOL_TIMEOUT_MS = 30000
-// Permission request timeout. If the user walks away from the approval dialog,
-// default to DENY after this long rather than hanging the agent indefinitely.
 const PERMISSION_TIMEOUT_MS = 120000
 
-// Minimal IterationBudget (JS port of Hermes' class). consume() before each
-// round; refund() for non-productive rounds so they don't eat the budget.
 class IterationBudget {
   constructor(maxTotal) {
     this.maxTotal = maxTotal > 0 ? Math.floor(maxTotal) : DEFAULT_MAX_ITERATIONS
@@ -59,87 +47,92 @@ class IterationBudget {
   get remaining() { return Math.max(0, this.maxTotal - this._used) }
 }
 
-// System prompt injected at the head of the conversation to steer the model
-// toward a Plan→Act→Observe rhythm (like a coding agent). The model is told to
-// think step-by-step, call one tool at a time when useful, and stop when done.
-const AGENT_SYSTEM_PROMPT = `You are an autonomous agent with access to tools. Work through the user's request step by step using a Plan→Act→Observe loop:
+// System prompt: Plan→Act→Observe rhythm (coding-agent style).
+// References `plan_progress` when the model has an active plan.
+const AGENT_SYSTEM_PROMPT = `You are an agent with access to tools. Work through the user's request step by step:
 1. Plan: briefly reason about what to do next.
-2. Act: call one or more INDEPENDENT tools in the same round (they run in parallel). Use read-only tools (read_file, list_dir, grep_search, glob_find, web_search) to gather context before mutating anything.
+2. Act: call a tool (or several) to gather information or make a change.
 3. Observe: read the tool results, then decide the next step.
-When you have the final answer, respond in plain text with no tool calls.
+Call tools only when they help. When you have the final answer, respond in plain text with no tool calls. Prefer read-only tools (read_file, list_dir, grep_search, glob_find, web_search) before making changes. Be concise in your reasoning.
+For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along. When an execution plan is shown, call plan_progress with the task id and a brief result as you finish each step.`
 
-Transparency rules:
-- For tasks with 3+ steps, call todo_write FIRST to lay out the checklist, and mark items in_progress→completed as you progress.
-- You may call multiple independent read tools in ONE round — they execute concurrently. Do NOT serialize independent reads.
-- Do NOT repeat a tool call with the same arguments expecting a different result.
-- Prefer read-only tools before any write/run_command.
-Be concise in reasoning; the user can see your plan trace live.`
-
-// Run a tool-calling loop. Returns the final assistant text.
-// `onToolCall({ name, args, result, error })` is called for each tool invocation.
-// `onPlanStep({ step, depth, assistantText })` is called each round so the UI can
-//   render a live trace of the agent's thinking.
-// `options` is spread into each completion request body (used to carry reasoning params).
-// `agentMode`: 'ask' (confirm dangerous tools) | 'auto' (run everything) | 'plan' (safe tools only, block dangerous).
-// `requestPermission({ name, args, risk })`: async, resolves true to allow a dangerous tool. Only called in 'ask' mode.
+// Main entry: run a tool-calling loop with optional planning support.
+// Returns the final assistant text.
 async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations }) {
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
   let totalChars = 0
-  // Rolling signature of recent tool calls for loop detection.
   let lastSig = ''
   let sigRepeat = 0
-  // We mutate a local copy of the conversation, appending assistant + tool messages.
-  // Prepend the agent system prompt if the caller didn't already provide one.
   const convo = messages.slice()
   if (!convo.some(m => m.role === 'system')) convo.unshift({ role: 'system', content: AGENT_SYSTEM_PROMPT })
+
+  let plan = null
+  let planningMode = false
+
+  // Planning gate: if the request is complex enough, generate a plan first.
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
+  if (lastUserMsg && planning.isComplexRequest(lastUserMsg.content, messages.length)) {
+    try {
+      plan = await planning.generatePlan(provider, model, lastUserMsg.content, signal, options)
+      if (plan && plan.tasks.length > 1) {
+        planningMode = true
+        // Inject plan into system context
+        const planBlock = planning.planSystemBlock(plan)
+        convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
+        onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)` })
+      }
+    } catch {}
+  }
 
   while (budget.consume()) {
     const depth = budget.used
     const opts = { ...options }
     if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
-    // Fetch the assistant message, defensively: a provider hiccup (non-JSON,
-    // connection drop, 5xx) must not crash the loop or lose the partial trace.
+    // When planning, also inject the plan_progress tool so the model can report
+    // task completion. Inject plan_progress alongside the regular tools.
+    const effectiveTools = planningMode ? [...toolPayload, ...planning.planToolsPayload()] : toolPayload
+    if (effectiveTools.length) { opts.tools = effectiveTools; opts.tool_choice = 'auto' }
+
     let msg
     try {
       msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
     } catch (e) {
-      // Could not get a completion — return the error as the final answer so the
-      // user sees what went wrong instead of a silent hang.
       return `[agent error: ${e && e.message ? e.message : String(e)}]`
     }
     if (!msg) msg = { content: '', tool_calls: undefined }
-    // Surface the assistant's reasoning this round as a plan step (even if it
-    // only contains text, the UI shows it as the agent's current thought).
-    // Wrapped: a destroyed webContents must not abort the whole loop.
-    try { if (msg.content) onPlanStep && onPlanStep({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content }) } catch {}
+    try { if (msg.content) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content }) } catch {}
+
     if (msg.tool_calls && msg.tool_calls.length) {
-      // Append the assistant message that requested the calls.
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
-      // Loop detection (signature over the whole round): if the model repeats
-      // the exact same set of tool calls back-to-back, it's stuck.
+
+      // Per-round loop detection: identical tool-call set repeated back-to-back.
       const roundSig = msg.tool_calls.map(tc => (tc.function||{}).name + ':' + (tc.function||{}).arguments).join('||')
       if (roundSig === lastSig) { sigRepeat++ } else { lastSig = roundSig; sigRepeat = 1 }
       if (sigRepeat >= LOOP_REPEAT_LIMIT) {
-        try { onToolCall && onToolCall({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
+        try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
         return '（检测到工具调用循环，已停止）'
       }
-      // Execute the tool calls. Independent calls in one round run CONCURRENTLY
-      // (Promise.all) so a multi-tool round takes max(latency) not sum — matches
-      // how Claude Code executes a batch of independent reads in parallel. Order
-      // of results is preserved (Promise.all keeps input order).
+
+      // Execute the round's tool calls CONCURRENTLY (Promise.all) so independent
+      // calls take max(latency) not sum. Results stay in tool_call_id order.
+      // plan_progress is a meta-tool handled inline (no real execution), but it
+      // rides the same parallel path so ordering is preserved.
       const execOne = async (tc) => {
         const fn = tc.function || {}
         const args = safeParseToolCallArgs(fn.arguments)
+        // Plan-progress meta-tool: record + return a synthetic tool result.
+        if (fn.name === 'plan_progress' && planningMode) {
+          const handled = planning.handlePlanProgress(plan, args)
+          if (handled) {
+            return { tc, isPlan: true, entry: { name: fn.name, args, result: `progress recorded for task ${args.task_id}`, error: null, risk: null, latencyMs: null }, planStep: `📊 [${args.task_id}] ${(args.result || '').slice(0, 60)}` }
+          }
+        }
         const tool = getTool(fn.name)
         const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null }
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
         } else {
-          // Permission gate for dangerous tools:
-          //   plan — blocked (read-only)
-          //   ask  — requires user approval per call
-          //   auto / yolo — run without prompting (yolo also skips the sandbox)
           if (tool.risk === 'dangerous' && agentMode !== 'auto' && agentMode !== 'yolo') {
             if (agentMode === 'plan') {
               entry.error = 'blocked by plan mode (read-only)'
@@ -155,37 +148,46 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
             if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }
         }
-        return { tc, entry }
+        return { tc, isPlan: false, entry }
       }
       const executed = await Promise.all(msg.tool_calls.map(execOne))
-      // Append results to the conversation in the SAME order the model issued
-      // them (tool_call_id pairing must match the assistant's tool_calls order).
-      for (const { tc, entry } of executed) {
-        try { onToolCall && onToolCall(entry) } catch {}
+      // Append results in the model's issuance order (tool_call_id pairing).
+      for (const { tc, isPlan, entry, planStep } of executed) {
+        if (isPlan && planStep) {
+          try { onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: planStep }) } catch {}
+        } else {
+          try { onToolCall?.(entry) } catch {}
+        }
         const rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
         const resultContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args })
         totalChars += resultContent.length
         convo.push({ role: 'tool', tool_call_id: tc.id, content: resultContent })
       }
-      // Stop if the accumulated tool output has blown the context budget.
       if (totalChars > MAX_TOTAL_CHARS) {
         return '（工具输出超出上下文预算，已停止）'
       }
-      continue // re-request with tool results
+      // If planning mode is active and all tasks are completed, break out
+      // and produce a final summary.
+      if (planningMode && plan && plan.tasks.every(t => t.status === 'completed')) {
+        const summary = planning.planSummary(plan)
+        convo.push({ role: 'system', content: summary })
+        // One more request to get the model to synthesize the final answer
+        try {
+          const finalMsg = await completeChatMessage({ provider, model, messages: convo, signal, options: { max_tokens: 2048, ...options } })
+          if (finalMsg?.content) return finalMsg.content
+        } catch {}
+        return summary
+      }
+      continue
     }
     // No tool calls — final answer.
     return msg.content || ''
   }
-  // Depth exhausted — return whatever we last got.
-  // Budget exhausted — return whatever we last got. Mention the configured
-  // ceiling so the user knows to raise agentMaxIterations for long tasks.
-  try { onStatus && onStatus({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
-  return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）`
+  try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
+  const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
+  return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}`
 }
 
-// Run a tool with a timeout. Resolves to { result } or { error } — never throws
-// (a hung tool must not freeze the loop). The abort signal is internal so
-// stopping generation still works via the loop's outer signal.
 function runToolWithTimeout(tool, args, ctx, signal) {
   return new Promise((resolve) => {
     let done = false
@@ -193,11 +195,10 @@ function runToolWithTimeout(tool, args, ctx, signal) {
       if (done) return
       done = true
       clearTimeout(timer)
-      if (signal && onAbort) signal.removeEventListener('abort', onAbort)
+      if (signal) signal.removeEventListener('abort', onAbort)
       resolve(val)
     }
     const timer = setTimeout(() => finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` }), TOOL_TIMEOUT_MS)
-    // If the outer loop is aborted (user stopped generation), resolve fast.
     const onAbort = () => finish({ error: 'aborted' })
     if (signal) signal.addEventListener('abort', onAbort, { once: true })
     Promise.resolve()
@@ -207,9 +208,6 @@ function runToolWithTimeout(tool, args, ctx, signal) {
   })
 }
 
-// Ask for permission with a timeout. Defaults to DENY if the user doesn't
-// respond — safer than hanging the loop. The chat.handler side also has its
-// own expiry, but this is the hard backstop inside the loop.
 function requestPermissionWithTimeout(requestPermission, payload) {
   if (!requestPermission) return Promise.resolve(false)
   return new Promise((resolve) => {
@@ -219,13 +217,10 @@ function requestPermissionWithTimeout(requestPermission, payload) {
       .catch(() => { clearTimeout(timer); resolve(false) })
   })
 }
-// non-streaming completion. Lives on the adapter so provider-specific parsing
-// stays there; here we just call through.
-async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
-  // Defer to the openai adapter's raw completer via the public dispatcher.
-  const adapter = require('./providerAdapter')
-  // providerAdapter exposes completeChat (string) and completeChatMessage (object).
-  return adapter.completeChatMessage({ provider, model, messages, signal, options })
-}
 
-module.exports = { runToolLoop }
+module.exports = {
+  runToolLoop,
+  IterationBudget,
+  isComplexRequest: planning.isComplexRequest,
+  generatePlan: planning.generatePlan,
+}
