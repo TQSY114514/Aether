@@ -54,7 +54,8 @@ const AGENT_SYSTEM_PROMPT = `You are an agent with access to tools. Work through
 2. Act: call a tool (or several) to gather information or make a change.
 3. Observe: read the tool results, then decide the next step.
 Call tools only when they help. When you have the final answer, respond in plain text with no tool calls. Prefer read-only tools (read_file, list_dir, grep_search, glob_find, web_search) before making changes. Be concise in your reasoning.
-For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along. When an execution plan is shown, call plan_progress with the task id and a brief result as you finish each step.`
+For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along. When an execution plan is shown, call plan_progress with the task id and a brief result as you finish each step.
+Parallelism: you may call multiple INDEPENDENT tools in one round (they run concurrently). For larger independent sub-tasks (e.g. researching 3 unrelated files), call delegate_task with an array of task descriptions — sub-agents run them in parallel and return combined results.`
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
@@ -143,7 +144,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           }
           if (!entry.error) {
             const t0 = Date.now()
-            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate, onAskUser }, signal)
+            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate, onAskUser, signal }, signal)
             entry.latencyMs = Date.now() - t0
             if (r.error) { entry.error = r.error } else { entry.result = r.result }
           }

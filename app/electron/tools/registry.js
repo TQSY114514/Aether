@@ -498,6 +498,43 @@ const TOOLS = [
       return results.map((m, i) => `[${i + 1}] ${m.content}`).join('\n')
     },
   },
+  {
+    name: 'delegate_task',
+    description: 'Delegate one or more independent sub-tasks to sub-agents that run in parallel, each with its own tool loop and iteration budget. Use for: researching multiple files/topics at once, or any set of independent gather/analyze steps. Each sub-task returns a concise result. Dangerous: sub-agents can run tools (read/write/command), so this is permission-gated. Provide focused, self-contained task descriptions.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        tasks: {
+          type: 'array',
+          description: 'Independent sub-task descriptions to run in parallel.',
+          items: { type: 'string' },
+          minItems: 1,
+          maxItems: 5,
+        },
+      },
+      required: ['tasks'],
+    },
+    run: async (args, ctx) => {
+      const tasks = Array.isArray(args.tasks) ? args.tasks.filter(Boolean) : []
+      if (!tasks.length) throw new Error('tasks must be a non-empty array')
+      const SubAgent = require('../llm/subAgent')
+      // Sub-agents inherit the parent's provider/model/agentMode so permission
+      // policy is consistent (in 'ask' the user already approved delegate_task;
+      // the sub-agents run in 'auto' to avoid re-prompting for every internal
+      // call — the outer gate is the trust boundary).
+      const shared = {
+        provider: ctx.provider, model: ctx.model, signal: ctx.signal,
+        options: ctx.options || {}, agentMode: 'auto',
+      }
+      const results = await SubAgent.runParallel(tasks, shared)
+      return results.map((r, i) => {
+        const head = `### Sub-task ${i + 1}: ${tasks[i].slice(0, 80)}`
+        if (r.success) return `${head}\n${r.output}`
+        return `${head}\n[failed: ${r.error || 'no output'}] (used ${r.iterations} iterations)`
+      }).join('\n\n')
+    },
+  },
 ]
 
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;
