@@ -15,6 +15,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
   const todos = useStore(s => s.todosByMessage[message.id])
+  const statusLines = useStore(s => s.statusLinesByMessage[message.id])
   const isUser = message.role === 'user'
   const isStreaming = message.id < 0
   const isError = message.status === 'error'
@@ -93,6 +94,15 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           : { backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}>
           {!isUser && todos && todos.length > 0 && (
             <TodoList todos={todos} />
+          )}
+          {!isUser && statusLines && statusLines.length > 0 && (
+            <div className="mb-2 space-y-0.5">
+              {statusLines.map((line, i) => (
+                <div key={i} className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
           )}
           {!isUser && planSteps && planSteps.length > 0 && (
             <AgentPlanTrace steps={planSteps} />

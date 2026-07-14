@@ -2,6 +2,7 @@ const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAda
 const { runToolLoop } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
+const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const skills = require('../llm/skills')
 const fs = require('fs')
@@ -138,7 +139,13 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // 400-ing on context length. Falls back to hard-truncate if summarization
     // fails. `context_window` may be null if the user didn't set it; default 32k.
     const ctxBudget = (model.context_window && Number(model.context_window) > 0) ? Number(model.context_window) : 32000
+    const beforeCompact = apiMsgs.length
     const compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget })
+    // If compaction actually shrank the message list, surface a one-line status
+    // so the user understands why older context is now summarized.
+    if (compacted.length < beforeCompact) {
+      try { getWebContents()?.send('chat:status', { messageId: 0, sessionId, text: `🗜️ 压缩 ${beforeCompact} → ${compacted.length} 条消息` }) } catch {}
+    }
 
     // Auto-title: defer to a real AI summary after the first response (see below).
     // Previously this slice()d the raw user input into the title (a copy-paste,
@@ -193,6 +200,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           maxIterations: parseInt(db.getSetting('agent_max_iterations') || '25', 10),
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
+          onStatus: (s) => wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: s.kind }),
           onTodoUpdate: (todos) => wc?.send('chat:todo-update', { messageId: msgId, sessionId, todos }),
           // AskUserQuestion: surface a structured question dialog and await the
           // user's choice. Returns a JSON string of answers so the model can read
@@ -356,9 +364,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         }
         lastError = err.message
         db.updateMessage(msgId, { content: '', status: 'error', error_message: lastError })
-        // Retry on rate-limit / server errors or transient network errors.
-        const retryStatus = [429, 500, 502, 503, 504].includes(err.status)
-        const isRetryable = retryStatus || err.message.includes('ECONNREFUSED') || err.message.includes('ECONNRESET') ||
+        // Centralized error classification (auth/rate-limit/network/content-filter etc.)
+        const eclass = classifyError(err)
+        if (eclass.recover && eclass.recover.hint) {
+          try { wc?.send('chat:status', { messageId: msgId, sessionId, text: eclass.recover.hint, kind: eclass.kind }) } catch {}
+        }
+        const isRetryable = eclass.retryable || err.message.includes('ECONNREFUSED') || err.message.includes('ECONNRESET') ||
           err.message.includes('ENOTFOUND') || err.message.includes('ETIMEDOUT')
         if (isRetryable && i < fallbackModels.length - 1) continue
         break

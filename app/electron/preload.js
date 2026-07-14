@@ -62,6 +62,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:todo-update', handler)
       return () => ipcRenderer.removeListener('chat:todo-update', handler)
     },
+    onStatus: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:status', handler)
+      return () => ipcRenderer.removeListener('chat:status', handler)
+    },
     onQuestion: (callback) => {
       const handler = (_e, payload) => callback(payload)
       ipcRenderer.on('chat:question', handler)

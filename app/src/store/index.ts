@@ -78,6 +78,8 @@ interface AppState {
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).
   todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
+  // Inline status lines per message (compaction notice, budget-exhausted, etc.).
+  statusLinesByMessage: Record<number, string[]>
   // Pending AskUserQuestion dialogs awaiting a user answer.
   pendingQuestions: { reqId: string; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
   resolveQuestion: (reqId: string, answers: { question: string; answer: string }[]) => void
@@ -207,6 +209,7 @@ export const useStore = create<AppState>((set, get) => ({
   toolCallsByMessage: {},
   planStepsByMessage: {},
   todosByMessage: {},
+  statusLinesByMessage: {},
   pendingQuestions: [],
   agentMode: 'off',
   permissionRequests: [],
@@ -781,6 +784,15 @@ function ensureToolCallListener() {
   window.electronAPI.chat.onTodoUpdate(({ messageId, todos }) => {
     if (!messageId || !Array.isArray(todos)) return
     useStore.setState((s) => ({ todosByMessage: { ...s.todosByMessage, [messageId]: todos } }))
+  })
+  // Inline status lines (compaction, budget-exhausted, interrupt) so the user
+  // sees why context shrank or the loop stopped, instead of a silent change.
+  window.electronAPI.chat.onStatus(({ messageId, text }) => {
+    if (!text) return
+    useStore.setState((s) => {
+      const prev = s.statusLinesByMessage[messageId] || []
+      return { statusLinesByMessage: { ...s.statusLinesByMessage, [messageId]: [...prev, text] } }
+    })
   })
   // AskUserQuestion — surface a structured question dialog.
   window.electronAPI.chat.onQuestion(({ reqId, questions }) => {

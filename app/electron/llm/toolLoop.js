@@ -76,7 +76,7 @@ For multi-step tasks (3+ steps), call todo_write first to lay out the checklist,
 // `options` is spread into each completion request body (used to carry reasoning params).
 // `agentMode`: 'ask' (confirm dangerous tools) | 'auto' (run everything) | 'plan' (safe tools only, block dangerous).
 // `requestPermission({ name, args, risk })`: async, resolves true to allow a dangerous tool. Only called in 'ask' mode.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations }) {
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
   let totalChars = 0
@@ -171,6 +171,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Depth exhausted — return whatever we last got.
   // Budget exhausted — return whatever we last got. Mention the configured
   // ceiling so the user knows to raise agentMaxIterations for long tasks.
+  try { onStatus && onStatus({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）`
 }
 
