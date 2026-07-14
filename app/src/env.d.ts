@@ -57,7 +57,7 @@ interface Window {
       stop: () => Promise<void>
     }
     arena: {
-      send: (params: { sessionId: number; content: string; modelIds: number[] }) => Promise<{ results: ArenaResult[] }>
+      send: (params: { sessionId: number; content: string; modelIds: number[]; aggregate?: boolean }) => Promise<{ results: ArenaResult[]; aggregate?: { content: string; model_name: string; provider_name: string } | null }>
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
       stop: () => Promise<void>

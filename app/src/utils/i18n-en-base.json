@@ -199,6 +199,7 @@
   "chat.search_no_match": "No matching messages found",
   "chat.empty.start": "Send a message to start the conversation",
   "chat.arena.voted": "Selected as best answer, score updated",
+  "chat.arena.aggregate": "Synthesized best answer",
   "chat.copied": "Copied",
   "chat.error_short": "Error",
   "chat.aborted": "Aborted",

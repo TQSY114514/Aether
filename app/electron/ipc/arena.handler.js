@@ -14,7 +14,7 @@ function computeCost(model, u) {
 }
 
 function registerArenaHandlers(ipcMain, db) {
-  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds }) => {
+  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, aggregate = true }) => {
     const allModels = db.getAllModels()
     const selected = allModels.filter(m => modelIds.includes(m.id))
     if (!selected.length) return { results: [] }
@@ -86,7 +86,34 @@ function registerArenaHandlers(ipcMain, db) {
       })
     }
     db.touchSession(sessionId)
-    return { results }
+    // MoA (Mixture of Agents): auto-synthesize a single best answer from all
+    // model outputs. Uses the first model in the list as the aggregator. Skips
+    // error outputs so a broken model doesn't pollute the synthesis.
+    let aggregateResult = null
+    const okResults = results.filter(r => !r.content.startsWith('[Error:'))
+    if (aggregate && okResults.length >= 2 && selected.length > 0) {
+      try {
+        const aggregatorModel = selected[0]
+        const answers = okResults.map((r, i) => `## 模型 ${i + 1}: ${r.model_name}\n${r.content}`).join('\n\n')
+        const aggr = await completeChatMessage({
+          provider: { api_url: aggregatorModel.api_url, api_key: aggregatorModel.api_key, api_format: 'openai' },
+          model: aggregatorModel,
+          messages: [
+            { role: 'system', content: '你是一个推理聚合器。以下是多个模型对同一个问题的回答。请综合所有回答，提炼出一个最优的、具有最终决策力的综合答案，解决冲突并保留最强论证。用与原始问题相同的语言回复，不要提及'多模型/聚合/综合'等字眼。' },
+            { role: 'user', content: `问题：${content}\n\n${answers}` },
+          ],
+          signal: controller.signal,
+          options: { max_tokens: 2048, temperature: 0.3 },
+        })
+        const u = normalizeUsage(aggr.usage)
+        if (u) {
+          db.logUsage({ session_id: sessionId, provider_id: aggregatorModel.provider_id, provider_name: aggregatorModel.provider_name, model_name: aggregatorModel.model_name, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens, total_tokens: u.total_tokens, cache_read_tokens: u.cache_read_tokens, cache_creation_tokens: u.cache_creation_tokens, cost: computeCost(aggregatorModel, u), latency_ms: 0, status: 200, source: 'moa' })
+          db.addMessage({ session_id: sessionId, role: 'assistant', content: aggr.content || '', model_used: aggregatorModel.model_name, provider_used: null, status: 'success', arena_model: 'MoA 聚合' })
+        }
+        aggregateResult = { content: aggr.content || '', model_name: aggregatorModel.model_name, provider_name: aggregatorModel.provider_name }
+      } catch { /* aggregation failed — results still returned below */ }
+    }
+    return { results, aggregate: aggregateResult }
   })
 
   ipcMain.handle('arena:stop', () => {

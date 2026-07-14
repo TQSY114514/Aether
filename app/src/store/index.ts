@@ -107,6 +107,7 @@ interface AppState {
 
   // Arena
   arenaResults: ArenaResult[]
+  arenaAggregate: { content: string; model_name: string; provider_name: string } | null
   arenaModelIds: number[]
   setArenaModelIds: (ids: number[]) => void
   arenaError: string | null
@@ -542,6 +543,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Arena
   arenaResults: [],
+  arenaAggregate: null,
   arenaModelIds: [],
   arenaError: null,
   setArenaModelIds: (ids) => set({ arenaModelIds: ids }),
@@ -551,14 +553,14 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentSessionId || arenaModelIds.length < 2) {
       set({ arenaError: '请先选择至少 2 个模型' }); return
     }
-    set({ sending: true, arenaResults: [], arenaError: null })
+    set({ sending: true, arenaResults: [], arenaAggregate: null, arenaError: null })
     try {
-      const { results } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds })
+      const { results, aggregate } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, aggregate: true })
       if (!results || results.length === 0) {
         set({ sending: false, arenaError: '没有返回结果，请检查模型/网络' })
         return
       }
-      set({ arenaResults: results, sending: false, arenaError: null })
+      set({ arenaResults: results, arenaAggregate: aggregate || null, sending: false, arenaError: null })
       // Reload messages so the persisted arena exchange (user prompt + each
       // model's answer) is in the message list too — survives a reload.
       get().loadMessages(currentSessionId)

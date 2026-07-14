@@ -21,6 +21,7 @@ export default function ChatWindow() {
   const currentSessionId = useStore((s) => s.currentSessionId)
   const loadMessages = useStore((s) => s.loadMessages)
   const arenaResults = useStore((s) => s.arenaResults)
+  const arenaAggregate = useStore((s) => s.arenaAggregate)
   const arenaError = useStore((s) => s.arenaError)
   const arenaVote = useStore((s) => s.arenaVote)
   const [searchQuery, setSearchQuery] = useState('')
@@ -128,6 +129,18 @@ export default function ChatWindow() {
           )}
           {arenaResults.length > 0 && (
             <div className="space-y-3">
+              {arenaAggregate && (
+                <div className="border-2 rounded-xl overflow-hidden" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
+                  <div className="px-3 py-2 border-b flex items-center gap-2 text-sm font-medium" style={{ borderColor: 'var(--warning)' }}>
+                    <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>MoA</span>
+                    <span style={{ color: 'var(--text-primary)' }}>{t('chat.arena.aggregate')}</span>
+                    <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>{arenaAggregate.model_name}</span>
+                  </div>
+                  <div className="p-3 text-sm leading-relaxed max-h-96 overflow-y-auto">
+                    <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(arenaAggregate.content) }} />
+                  </div>
+                </div>
+              )}
               <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
               {arenaResults.map((r) => {
                 const others = arenaResults.filter(x => x.model_id !== r.model_id)
