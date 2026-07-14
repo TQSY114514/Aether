@@ -12,9 +12,19 @@ function baseUrl(provider) {
   return (provider.api_url || '').replace(/\/+$/, '')
 }
 
+// Obtain the best API key for the provider. Tries the credential pool first
+// (multi-key rotation + backoff), falls back to the legacy provider.api_key.
+function pickKey(provider) {
+  if (provider.id != null) {
+    const credential = require('./credentialPool').pickCredential(provider.id)
+    if (credential && credential.api_key) return credential.api_key
+  }
+  return provider.api_key || ''
+}
+
 // Build the standard auth headers for an OpenAI-compatible endpoint.
 function headers(provider) {
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.api_key}` }
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${pickKey(provider)}` }
 }
 
 // Normalize messages for the wire. OpenAI accepts content as a string or as a
@@ -56,6 +66,11 @@ async function* streamChatInner({ provider, model, messages, signal, options = {
     const errBody = await res.text().catch(() => '')
     const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
     err.status = res.status
+    // On 429, mark the current credential as cooling down so the fallback
+    // loop can retry with a different key if the provider has a multi-key pool.
+    if (err.status === 429 && provider.id != null) {
+      try { require('./credentialPool').markCooldownForProvider(provider.id) } catch {}
+    }
     throw err
   }
 

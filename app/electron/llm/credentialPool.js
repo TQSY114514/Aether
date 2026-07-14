@@ -68,6 +68,18 @@ function markCooldown(credentialId) {
   db.run('UPDATE provider_credential SET cooldown_until=?, error_count=error_count+1 WHERE id=?', [until, credentialId])
 }
 
+// Mark the *most recently used* credential for a provider as cooling down.
+// Called on a 429 from the adapter when we don't know exactly which key was
+// used (the adapter called pickCredential earlier and got one).
+function markCooldownForProvider(providerId) {
+  if (!db) return
+  const stmt = db.prepare('SELECT id FROM provider_credential WHERE provider_id=? AND enabled=1 ORDER BY last_used_at DESC LIMIT 1')
+  stmt.bind([providerId])
+  let id = null
+  if (stmt.step()) id = stmt.getAsObject().id; stmt.free()
+  if (id) markCooldown(id)
+}
+
 // Mark a specific credential as invalid (401).
 function markInvalid(credentialId) {
   if (!db) return
@@ -98,4 +110,4 @@ function removeCredential(credentialId) {
   db.run('DELETE FROM provider_credential WHERE id=?', [credentialId])
 }
 
-module.exports = { init, pickCredential, markCooldown, markInvalid, listCredentials, addCredential, removeCredential }
+module.exports = { init, pickCredential, markCooldown, markCooldownForProvider, markInvalid, listCredentials, addCredential, removeCredential }
