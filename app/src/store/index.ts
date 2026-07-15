@@ -96,6 +96,10 @@ interface AppState {
   // Pending permission requests awaiting a user decision (rendered as a dialog).
   permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous' }[]
   resolvePermission: (reqId: string, allowed: boolean, remember?: boolean) => void
+  // Habit proposals awaiting user consent (promote vs dismiss). Surfaced as a
+  // small inline card in ChatWindow — never auto-applied.
+  proposedHabits: { key: string; imperative: string; reason: string }[]
+  resolveHabit: (key: string, accept: boolean) => void
   // Thinking/reasoning effort level sent to the model (real param: reasoning_effort
   // for OpenAI o-series, thinking.budget_tokens for Claude). 'off' = no param.
   effortLevel: 'off' | 'low' | 'medium' | 'high'
@@ -204,6 +208,7 @@ export const useStore = create<AppState>((set, get) => ({
   todosByMessage: {},
   statusLinesByMessage: {},
   pendingQuestions: [],
+  proposedHabits: [],
   agentMode: 'off',
   permissionRequests: [],
   effortLevel: 'off',
@@ -513,6 +518,11 @@ export const useStore = create<AppState>((set, get) => ({
   resolveQuestion: (reqId, answers) => {
     window.electronAPI.chat.replyQuestion({ reqId, answers })
     set((s) => ({ pendingQuestions: s.pendingQuestions.filter((q) => q.reqId !== reqId) }))
+  },
+  resolveHabit: (key, accept) => {
+    if (accept) window.electronAPI.chat.confirmHabit(key).catch(() => {})
+    else window.electronAPI.chat.dismissHabit(key).catch(() => {})
+    set((s) => ({ proposedHabits: s.proposedHabits.filter((h) => h.key !== key) }))
   },
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
@@ -836,5 +846,14 @@ function ensureToolCallListener() {
   })
   window.electronAPI.chat.onQuestionExpired(({ reqId }) => {
     useStore.setState((s) => ({ pendingQuestions: s.pendingQuestions.filter((q) => q.reqId !== reqId) }))
+  })
+  // A habit crossed the repeat threshold — propose it instead of silently
+  // changing future behavior. User accepts (promote) or dismisses.
+  window.electronAPI.chat.onHabitProposed((h) => {
+    if (!h || !h.key) return
+    useStore.setState((s) => {
+      if (s.proposedHabits.some((x) => x.key === h.key)) return s
+      return { proposedHabits: [...s.proposedHabits, h] }
+    })
   })
 }

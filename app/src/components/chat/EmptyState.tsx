@@ -1,15 +1,30 @@
+import { useMemo } from 'react'
 import { useStore } from '@/store'
 import { Sparkles, Keyboard, Cpu, Brain } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-// Example prompts shown on the new-chat empty state (Claude-Code-style).
-// The prompt text is sent to the model as-is; titles are i18n keys.
-const EXAMPLES = [
+// A rotating pool of example prompts — the empty state feels alive when the
+// suggestions change between visits instead of always showing the same 4.
+// Picked deterministically by (session id + day-of-year) so it's stable for a
+// given session on a given day, but rotates across sessions/days.
+const POOL = [
   { icon: '💡', titleKey: 'empty.example.explain', prompt: '用通俗的语言解释一下什么是向量数据库，以及它和传统数据库的区别' },
   { icon: '✍️', titleKey: 'empty.example.write', prompt: '帮我写一封正式的请假邮件，说明下周三到周五因病请假' },
   { icon: '💻', titleKey: 'empty.example.code', prompt: '用 Python 实现一个简单的 LRU 缓存类，带注释' },
   { icon: '🌍', titleKey: 'empty.example.translate', prompt: '把这段话翻译成英文并润色得更地道：今天天气很好，适合出去散步' },
+  { icon: '🧠', titleKey: 'empty.example.brainstorm', prompt: '帮我头脑风暴 10 个适合大学生周末做的副业点子，附简要可行性' },
+  { icon: '📚', titleKey: 'empty.example.summarize', prompt: '把下面这段长文压缩成 3 个要点，用中文：[粘贴文本]' },
+  { icon: '🐛', titleKey: 'empty.example.debug', prompt: '这段代码报错了，帮我找出原因并修复：[粘贴代码]' },
+  { icon: '🎓', titleKey: 'empty.example.teach', prompt: '用费曼学习法教我一个你假设我完全不懂的概念：区块链' },
 ]
+
+function pickFour(seed: number): typeof POOL {
+  const start = seed % POOL.length
+  // walk forward wrapping around, pick 4 distinct
+  const out = []
+  for (let i = 0; i < 4; i++) out.push(POOL[(start + i) % POOL.length])
+  return out
+}
 
 // Centered hero shown when a session has no messages yet, OR when no session is
 // selected. Clicking an example creates a session (if needed) and sends the prompt.
@@ -25,6 +40,15 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
     // Defer one tick so createSession's state update lands before sendMessage reads it.
     setTimeout(() => useStore.getState().sendMessage(prompt), 0)
   }
+
+  // Rotate the 4 example prompts by session id + day-of-year, so the empty
+  // state suggests different things across visits instead of always the same 4.
+  const examples = useMemo(() => {
+    const now = new Date()
+    const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000)
+    const sid = currentSessionId || 0
+    return pickFour(sid + dayOfYear)
+  }, [currentSessionId])
 
   // Resolve the active model name for the current session (or the default).
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
@@ -63,7 +87,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         {/* Example prompt grid */}
         {!noSession && (
           <div className="grid grid-cols-2 gap-2.5 mb-8 text-left">
-            {EXAMPLES.map((ex) => (
+            {examples.map((ex) => (
               <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}
                 className="flex items-start gap-2.5 p-3 rounded-xl border hover:shadow-soft transition-all text-left"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))' }}>

@@ -90,6 +90,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('chat:permission-expired', handler)
     },
     replyPermission: (payload) => ipcRenderer.invoke('chat:permission-reply', payload),
+    onHabitProposed: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:habit-proposed', handler)
+      return () => ipcRenderer.removeListener('chat:habit-proposed', handler)
+    },
+    confirmHabit: (key) => ipcRenderer.invoke('chat:habit-confirm', key),
+    dismissHabit: (key) => ipcRenderer.invoke('chat:habit-dismiss', key),
     stop: () => ipcRenderer.invoke('chat:stop'),
   },
   arena: {

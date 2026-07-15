@@ -55,6 +55,9 @@ interface Window {
       onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous' }) => void) => () => void
       onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean }) => Promise<boolean>
+      onHabitProposed: (callback: (payload: { key: string; imperative: string; reason: string }) => void) => () => void
+      confirmHabit: (key: string) => Promise<{ ok: boolean }>
+      dismissHabit: (key: string) => Promise<{ ok: boolean }>
       stop: () => Promise<void>
     }
     arena: {

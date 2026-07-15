@@ -110,9 +110,19 @@ export default function App() {
         e.preventDefault()
         createSession()
         setCurrentView('chat')
+        return
       }
-      if (e.key === 'Escape' && currentView !== 'chat') {
-        setCurrentView('chat')
+      // Ctrl/Cmd+R → regenerate the last assistant reply (browser-style re-roll).
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
+        const s = useStore.getState()
+        if (s.currentSessionId && s.messages.length > 0) { e.preventDefault(); s.regenerate() }
+        return
+      }
+      // Esc during streaming → stop generation (Esc elsewhere → back to chat).
+      if (e.key === 'Escape') {
+        const s = useStore.getState()
+        if (s.sending) { e.preventDefault(); s.stopGeneration() }
+        else if (currentView !== 'chat') setCurrentView('chat')
       }
     }
     window.addEventListener('keydown', handler)

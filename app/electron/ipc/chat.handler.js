@@ -286,7 +286,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent })
         // Habit learner: detect recurring preferences and promote them to a
         // user-habits skill once they repeat. Also fire-and-forget.
-        if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent })
+        if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
@@ -357,7 +357,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       }
       // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
       if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
-      if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
+      if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
       console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
@@ -395,6 +395,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     }
     abortControllers.clear()
   })
+
+  // Habit-confirmation flow: the renderer asks us to confirm (promote now) or
+  // dismiss (delete) a proposed habit. We don't need to reply with data — the
+  // skill is rewritten synchronously inside habitLearner.
+  ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db) } catch {} return { ok: true } })
+  ipcMain.handle('chat:habit-dismiss', (_e, key) => { try { habitLearner.dismissHabit(db, key) } catch {} return { ok: true } })
 
   // Renderer replies to a permission-request via this invoke. We just forward
   // the reply as an event so the waiting requestPermission closure (which uses

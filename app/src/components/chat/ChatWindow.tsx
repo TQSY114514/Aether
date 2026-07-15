@@ -6,7 +6,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
-import { Search, X } from 'lucide-react'
+import { Search, X, Brain } from 'lucide-react'
 
 export default function ChatWindow() {
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -23,6 +23,8 @@ export default function ChatWindow() {
   const arenaResults = useStore((s) => s.arenaResults)
   const arenaAggregate = useStore((s) => s.arenaAggregate)
   const arenaError = useStore((s) => s.arenaError)
+  const proposedHabits = useStore((s) => s.proposedHabits)
+  const resolveHabit = useStore((s) => s.resolveHabit)
   const arenaVote = useStore((s) => s.arenaVote)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
@@ -127,6 +129,23 @@ export default function ChatWindow() {
           {arenaError && (
             <div className="border rounded-xl p-3 text-sm" style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-secondary)' }}>⚠ {arenaError}</div>
           )}
+          {proposedHabits.map((h) => (
+            <div key={h.key} className="rounded-xl p-3 border-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+              <div className="flex items-start gap-2">
+                <Brain size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                    {t('habit.proposed.prefix')} <span className="font-medium">{h.imperative}</span>
+                  </p>
+                  {h.reason && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{h.reason}</p>}
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => resolveHabit(h.key, true)} className="px-3 py-1 text-xs rounded-lg text-white" style={{ backgroundColor: 'var(--accent)' }}>{t('habit.proposed.accept')}</button>
+                    <button onClick={() => resolveHabit(h.key, false)} className="px-3 py-1 text-xs rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('habit.proposed.dismiss')}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
           {arenaResults.length > 0 && (
             <div className="space-y-3">
               {arenaAggregate && (

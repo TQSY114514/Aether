@@ -138,6 +138,11 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
               <RefreshCw size={12} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}
+          {!isUser && isError && !isStreaming && (
+            <button className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-colors" style={{ backgroundColor: 'var(--error)', color: '#fff' }} title={t('chat.retry')} onClick={() => regenerate()}>
+              <RefreshCw size={11} />{t('chat.retry')}
+            </button>
+          )}
         </div>
       </div>
     </div>

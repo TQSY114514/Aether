@@ -47,7 +47,10 @@ NONE
 Be strict — only flag clear standing preferences.`
 
 // Detect + record. Safe to call every exchange; no-ops on NONE.
-async function detectAndLearn({ db, provider, model, userMessage, assistantReply, signal }) {
+// `onPropose({ key, imperative, reason })` — when a habit crosses the threshold,
+// we DON'T silently promote; we fire this callback so the UI can ask the user.
+// Promotion happens in confirmHabit() only after consent.
+async function detectAndLearn({ db, provider, model, userMessage, assistantReply, signal, onPropose }) {
   if (!db || !provider || !model) return
   try {
     const transcript = `User: ${String(userMessage || '').slice(0, 1500)}\n\nAssistant: ${String(assistantReply || '').slice(0, 2000)}`
@@ -68,13 +71,39 @@ async function detectAndLearn({ db, provider, model, userMessage, assistantReply
     if (!imperative) return
     const key = normalizeKey(imperative)
     const occurrences = bumpOccurrence(db, key, imperative, reason)
-    if (occurrences >= PROMOTE_THRESHOLD) {
-      promoteToSkill(db)
+    // Crossed the threshold AND we haven't asked yet → propose (don't auto-promote).
+    if (occurrences >= PROMOTE_THRESHOLD && !isProposed(db, key)) {
+      markProposed(db, key)
+      if (onPropose) { try { onPropose({ key, imperative, reason }) } catch {} }
     }
   } catch (e) {
     // never let habit-learning break a chat
     console.warn('[habitLearner] detect failed:', e && e.message)
   }
+}
+
+// Has this habit already been proposed to the user?
+function isProposed(db, key) {
+  try {
+    const stmt = db.prepare('SELECT proposed FROM user_habit WHERE key=?')
+    stmt.bind([key])
+    let v = 0
+    if (stmt.step()) v = Number(stmt.getAsObject().proposed) || 0
+    stmt.free()
+    return v === 1
+  } catch { return false }
+}
+
+function markProposed(db, key) {
+  try { db.run('UPDATE user_habit SET proposed=1 WHERE key=?', [key]) } catch {}
+}
+
+// User accepted → promote now (rewrites the user-habits skill).
+function confirmHabit(db) { promoteToSkill(db) }
+
+// User dismissed → delete the habit so it never re-proposes.
+function dismissHabit(db, key) {
+  try { db.run('DELETE FROM user_habit WHERE key=?', [key]); promoteToSkill(db) } catch {}
 }
 
 // Normalize an imperative into a stable storage key (lowercase, alnum).
@@ -86,7 +115,9 @@ function normalizeKey(s) {
 function bumpOccurrence(db, key, imperative, reason) {
   try {
     // create table lazily (idempotent) so we don't depend on database.js init order
-    db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
+    db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
+    // Add the proposed column to existing tables (migration for pre-existing rows).
+    try { db.run('ALTER TABLE user_habit ADD COLUMN proposed INTEGER NOT NULL DEFAULT 0') } catch {}
     db.run('INSERT INTO user_habit (key, imperative, reason, occurrences) VALUES (?, ?, ?, 1) ON CONFLICT(key) DO UPDATE SET occurrences=occurrences+1, last_seen=CURRENT_TIMESTAMP, imperative=excluded.imperative, reason=excluded.reason',
       [key, imperative, reason])
     const r = db.exec('SELECT occurrences FROM user_habit WHERE key=?', [key])
@@ -154,4 +185,4 @@ function deleteHabit(db, key) {
   try { db.run('DELETE FROM user_habit WHERE key=?', [key]); promoteToSkill(db) } catch {}
 }
 
-module.exports = { detectAndLearn, listHabits, deleteHabit, promoteToSkill, PROMOTE_THRESHOLD }
+module.exports = { detectAndLearn, listHabits, deleteHabit, dismissHabit, confirmHabit, promoteToSkill, PROMOTE_THRESHOLD }
