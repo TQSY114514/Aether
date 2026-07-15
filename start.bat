@@ -3,7 +3,7 @@ title AetherAI Launcher
 chcp 65001 >nul
 cd /d "%~dp0"
 echo.
-echo   AetherAI v0.1.13
+echo   AetherAI v0.1.14
 echo   =================
 echo.
 
