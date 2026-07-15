@@ -543,6 +543,14 @@ function deleteAssistantAfterLastUser(sessionId) {
   }
 }
 
+// Delete every message with id > afterId in a session (used by message-edit:
+// editing a user message discards everything after it, then the edited message
+// is re-sent). Does NOT touch the message at afterId itself.
+function deleteMessagesAfter(sessionId, afterId) {
+  db.run('DELETE FROM message WHERE session_id = ? AND id > ?', [sessionId, afterId])
+  saveDatabase()
+}
+
 // ===== MCP server CRUD =====
 // Each server: { id, name, command, args (JSON array string), env (JSON object string), enabled }.
 function getMcpServers() {
@@ -578,6 +586,7 @@ module.exports = {
   getMemories, addMemory, updateMemory, deleteMemory,
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
   deleteAssistantAfterLastUser,
+  deleteMessagesAfter,
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
   // credential pool: list/add/remove credentials per provider
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },

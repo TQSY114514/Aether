@@ -2,7 +2,7 @@ import { useState, memo } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
-import { Copy, Check, RefreshCw } from 'lucide-react'
+import { Copy, Check, RefreshCw, Pencil } from 'lucide-react'
 import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
@@ -11,6 +11,10 @@ import TodoList from './TodoList'
 
 function MessageBubble({ message, searchHighlight }: { message: Message; searchHighlight?: string }) {
   const [copied, setCopied] = useState(false); const regenerate = useStore(s => s.regenerate)
+  const editMessage = useStore(s => s.editMessage)
+  const sending = useStore(s => s.sending)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
   const bubbleWidth = useStore(s => s.bubbleWidth)
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
@@ -26,6 +30,14 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
     navigator.clipboard.writeText(message.content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const startEdit = () => { setDraft(message.content); setEditing(true) }
+  const submitEdit = async () => {
+    const c = draft.trim()
+    if (!c || c === message.content) { setEditing(false); return }
+    setEditing(false)
+    await editMessage(message.id, c)
   }
 
   // Code-block copy buttons live inside rendered markdown HTML; handle them via
@@ -115,7 +127,17 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           {isUser && message.attachment?.kind === 'image' && message.attachment.preview && (
             <img src={message.attachment.preview} alt={message.attachment.name} className="max-w-[200px] max-h-[200px] rounded-lg mb-2 object-cover" />
           )}
-          {isUser ? renderContent(message.content) : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />}
+          {isUser && editing ? (
+            <div className="space-y-2">
+              <textarea value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit() } if (e.key === 'Escape') setEditing(false) }}
+                rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg border outline-none resize-none bg-white" style={{ borderColor: 'var(--accent)' }} />
+              <div className="flex gap-2">
+                <button onClick={submitEdit} disabled={sending || !draft.trim()} className="px-3 py-1 text-xs rounded-lg text-white disabled:opacity-40" style={{ backgroundColor: 'var(--accent)' }}>{t('chat.edit.submit')}</button>
+                <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('chat.cancel')}</button>
+              </div>
+            </div>
+          ) : isUser ? renderContent(message.content) : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />}
           {isStreaming && <span className="inline-block w-1.5 h-4 bg-black/30 ml-0.5 cursor-blink" />}
           {isError && message.error_message && (
             <details className="mt-2 text-xs text-red-400">
@@ -133,6 +155,11 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           <button onClick={handleCopy} className="p-1 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.copy')}>
             {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} style={{ color: 'var(--text-muted)' }} />}
           </button>
+          {isUser && !isStreaming && !editing && (
+            <button onClick={startEdit} disabled={sending} className="p-1 rounded-md hover:bg-[var(--border)] transition-colors disabled:opacity-30" title={t('chat.edit')}>
+              <Pencil size={12} style={{ color: 'var(--text-muted)' }} />
+            </button>
+          )}
           {!isUser && !isStreaming && !isError && (
             <button className="p-1 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.regenerate')} onClick={() => regenerate()}>
               <RefreshCw size={12} style={{ color: 'var(--text-muted)' }} />

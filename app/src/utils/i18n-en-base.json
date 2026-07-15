@@ -241,6 +241,8 @@
   "chat.error_short": "Error",
   "chat.aborted": "Aborted",
   "chat.copy": "Copy",
+  "chat.edit": "Edit",
+  "chat.edit.submit": "Send",
   "chat.regenerate": "Regenerate",
   "chat.retry": "Retry",
   "sidebar.nav.tokens": "Token Usage",

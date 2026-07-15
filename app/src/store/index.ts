@@ -106,6 +106,7 @@ interface AppState {
   setEffortLevel: (v: 'off' | 'low' | 'medium' | 'high') => void
   stopGeneration: () => Promise<void>
   regenerate: () => Promise<void>
+  editMessage: (messageId: number, newContent: string) => Promise<void>
   sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[]) => Promise<void>
   loadMessages: (sessionId: number) => Promise<void>
 
@@ -565,6 +566,51 @@ export const useStore = create<AppState>((set, get) => ({
         return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
       })
       console.error('regenerate error:', err)
+    }
+  },
+
+  // Edit a past user message: overwrite its content, drop everything after it
+  // (both in DB and in-memory), then re-send as a regenerate so the model
+  // replies to the edited prompt. No branching (overwrites history) — matches
+  // ChatGPT's simple edit; a future parent_id model could add branches.
+  editMessage: async (messageId, newContent) => {
+    const { currentSessionId, messages } = get()
+    const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
+    const activeModelId = cfg?.modelId
+    if (!currentSessionId || !activeModelId) return
+    const target = messages.find(m => m.id === messageId)
+    if (!target || target.role !== 'user') return
+    const content = newContent.trim()
+    if (!content) return
+    // Persist: update the edited message + delete everything after it.
+    await window.electronAPI.message.update(messageId, { content })
+    await window.electronAPI.message.deleteAfter(currentSessionId, messageId)
+    // Truncate in-memory to the edited message (inclusive), with new content.
+    const idx = messages.findIndex(m => m.id === messageId)
+    const truncated = messages.slice(0, idx + 1).map(m => m.id === messageId ? { ...m, content } : m)
+    set((s) => ({
+      messages: truncated,
+      sending: true,
+      streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
+    }))
+    ensureChunkListener()
+    try {
+      await window.electronAPI.chat.send({
+        sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
+        personaId: cfg?.personaId ?? null,
+        useTools: get().agentMode !== 'off',
+        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
+        effortLevel: get().effortLevel,
+        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
+        systemPrefix: get().systemPrefix,
+      })
+    } catch (err) {
+      set((s) => {
+        const next = { ...s.streamingBySession }
+        delete next[currentSessionId]
+        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
+      })
+      console.error('editMessage error:', err)
     }
   },
 

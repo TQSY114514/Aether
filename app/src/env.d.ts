@@ -41,6 +41,8 @@ interface Window {
     }
     message: {
       list: (sessionId: number) => Promise<Message[]>
+      update: (id: number, data: Partial<Message>) => Promise<void>
+      deleteAfter: (sessionId: number, afterId: number) => Promise<void>
     }
     chat: {
       send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number }>

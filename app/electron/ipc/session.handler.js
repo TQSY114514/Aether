@@ -13,6 +13,8 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))
   ipcMain.handle('session:set-config', (_e, id, config) => db.setSessionConfig(id, config))
   ipcMain.handle('message:list', (_e, sessionId) => db.getMessages(sessionId))
+  ipcMain.handle('message:update', (_e, id, data) => db.updateMessage(id, data))
+  ipcMain.handle('message:delete-after', (_e, sessionId, afterId) => db.deleteMessagesAfter(sessionId, afterId))
 
   // Combined create+select: creates a session, sets its config, and returns
   // the new session row + messages + config in one IPC round-trip.
