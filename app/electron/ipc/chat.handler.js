@@ -4,6 +4,7 @@ const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
 const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
+const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
 const fs = require('fs')
 const path = require('path')
@@ -283,6 +284,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
         if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent })
+        // Habit learner: detect recurring preferences and promote them to a
+        // user-habits skill once they repeat. Also fire-and-forget.
+        if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
@@ -353,6 +357,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       }
       // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
       if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
+      if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
       console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
