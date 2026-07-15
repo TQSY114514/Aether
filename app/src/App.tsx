@@ -124,6 +124,9 @@ export default function App() {
         if (s.sending) { e.preventDefault(); s.stopGeneration() }
         else if (currentView !== 'chat') setCurrentView('chat')
       }
+      // Alt+Left / Alt+Right — browser-style session back/forward.
+      if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); useStore.getState().goBack() }
+      if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); useStore.getState().goForward() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)

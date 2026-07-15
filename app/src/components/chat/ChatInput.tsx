@@ -42,6 +42,9 @@ export default function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sendMessage = useStore((s) => s.sendMessage)
+  const enqueueMessage = useStore((s) => s.enqueueMessage)
+  const queuedMessages = useStore((s) => s.queuedMessages)
+  const removeQueued = useStore((s) => s.removeQueued)
   const stopGeneration = useStore((s) => s.stopGeneration)
   const sending = useStore((s) => s.sending)
   const currentSessionId = useStore((s) => s.currentSessionId)
@@ -66,7 +69,13 @@ export default function ChatInput() {
 
   const handleSubmit = async () => {
     const content = input.trim()
-    if ((!content && pending.length === 0 && snippets.length === 0) || sending) return
+    if (!content && pending.length === 0 && snippets.length === 0) return
+    // If a turn is streaming, queue the message instead of dropping or
+    // interrupting — it auto-sends after the current turn finishes.
+    if (sending) {
+      if (content) { enqueueMessage(content); setInput('') }
+      return
+    }
     setInput('')
 
     let sessionId = currentSessionId
@@ -147,6 +156,17 @@ export default function ChatInput() {
   return (
     <div className="border-t border-[var(--border)] bg-white px-4 py-2.5">
       <div className="max-w-3xl mx-auto">
+        {queuedMessages.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>{t('chat.queue', String(queuedMessages.length))}</span>
+            {queuedMessages.map((q) => (
+              <span key={q.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                <span className="truncate max-w-[200px]">{q.content}</span>
+                <button onClick={() => removeQueued(q.id)} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+        )}
         {pending.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {pending.map((a, i) => (

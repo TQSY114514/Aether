@@ -6,7 +6,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
-import { Search, X, Brain } from 'lucide-react'
+import { Search, X, Brain, Lightbulb } from 'lucide-react'
 
 export default function ChatWindow() {
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -25,6 +25,8 @@ export default function ChatWindow() {
   const arenaError = useStore((s) => s.arenaError)
   const proposedHabits = useStore((s) => s.proposedHabits)
   const resolveHabit = useStore((s) => s.resolveHabit)
+  const activeHints = useStore((s) => s.activeHints)
+  const dismissHint = useStore((s) => s.dismissHint)
   const arenaVote = useStore((s) => s.arenaVote)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
@@ -129,6 +131,13 @@ export default function ChatWindow() {
           {arenaError && (
             <div className="border rounded-xl p-3 text-sm" style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-secondary)' }}>⚠ {arenaError}</div>
           )}
+          {activeHints.map((h) => (
+            <div key={h.flag} className="rounded-xl p-3 border flex items-start gap-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+              <Lightbulb size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+              <span className="text-xs flex-1" style={{ color: 'var(--text-secondary)' }}>{h.text}</span>
+              <button onClick={() => dismissHint(h.flag)} className="text-[10px] shrink-0 px-2 py-0.5 rounded border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('hint.got_it')}</button>
+            </div>
+          ))}
           {proposedHabits.map((h) => (
             <div key={h.key} className="rounded-xl p-3 border-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
               <div className="flex items-start gap-2">

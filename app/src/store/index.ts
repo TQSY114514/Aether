@@ -100,6 +100,22 @@ interface AppState {
   // small inline card in ChatWindow — never auto-applied.
   proposedHabits: { key: string; imperative: string; reason: string }[]
   resolveHabit: (key: string, accept: boolean) => void
+  // Message queue: when the user sends while a turn is streaming, the message
+  // is queued (not lost, not interrupting) and auto-sent after the current turn.
+  queuedMessages: { id: number; content: string }[]
+  enqueueMessage: (content: string) => void
+  removeQueued: (id: number) => void
+  // Session navigation history (browser-style back/forward). selectSession pushes;
+  // goBack/goForward move the pointer without pushing.
+  sessionHistory: number[]
+  sessionHistoryIdx: number
+  goBack: () => void
+  goForward: () => void
+  // First-use contextual hints (show-once). Persisted in settings as seen_hints.
+  activeHints: { flag: string; text: string }[]
+  seenHints: string[]
+  dismissHint: (flag: string) => void
+  triggerHint: (flag: string, text: string) => void
   // Thinking/reasoning effort level sent to the model (real param: reasoning_effort
   // for OpenAI o-series, thinking.budget_tokens for Claude). 'off' = no param.
   effortLevel: 'off' | 'low' | 'medium' | 'high'
@@ -210,6 +226,11 @@ export const useStore = create<AppState>((set, get) => ({
   statusLinesByMessage: {},
   pendingQuestions: [],
   proposedHabits: [],
+  queuedMessages: [],
+  sessionHistory: [],
+  sessionHistoryIdx: -1,
+  activeHints: [],
+  seenHints: [],
   agentMode: 'off',
   permissionRequests: [],
   effortLevel: 'off',
@@ -251,6 +272,16 @@ export const useStore = create<AppState>((set, get) => ({
     if (cfg.providerId) get().loadModels(cfg.providerId)
   },
   selectSession: async (id) => {
+    // Push to the navigation history unless we got here via goBack/goForward
+    // (those move the pointer, they don't push a new entry).
+    if (!_navigating) {
+      const { sessionHistory, sessionHistoryIdx } = get()
+      const truncated = sessionHistory.slice(0, sessionHistoryIdx + 1)
+      if (truncated[truncated.length - 1] !== id) {
+        truncated.push(id)
+        set({ sessionHistory: truncated, sessionHistoryIdx: truncated.length - 1 })
+      }
+    }
     // Pre-load messages from DB before switching (never shows empty state)
     let msgs: Message[] = []
     try { msgs = await window.electronAPI.message.list(id) } catch (e) { console.error('[AetherAI] preload', e) }
@@ -525,6 +556,39 @@ export const useStore = create<AppState>((set, get) => ({
     else window.electronAPI.chat.dismissHabit(key).catch(() => {})
     set((s) => ({ proposedHabits: s.proposedHabits.filter((h) => h.key !== key) }))
   },
+  enqueueMessage: (content) => {
+    set((s) => ({ queuedMessages: [...s.queuedMessages, { id: Date.now() + Math.random(), content }] }))
+    get().triggerHint('first_queue', t('hint.first_queue'))
+  },
+  removeQueued: (id) => {
+    set((s) => ({ queuedMessages: s.queuedMessages.filter((m) => m.id !== id) }))
+  },
+  goBack: () => {
+    const { sessionHistory, sessionHistoryIdx } = get()
+    if (sessionHistoryIdx <= 0) return
+    const newIdx = sessionHistoryIdx - 1
+    set({ sessionHistoryIdx: newIdx })
+    _navigating = true
+    get().selectSession(sessionHistory[newIdx]).finally(() => { _navigating = false })
+  },
+  goForward: () => {
+    const { sessionHistory, sessionHistoryIdx } = get()
+    if (sessionHistoryIdx >= sessionHistory.length - 1) return
+    const newIdx = sessionHistoryIdx + 1
+    set({ sessionHistoryIdx: newIdx })
+    _navigating = true
+    get().selectSession(sessionHistory[newIdx]).finally(() => { _navigating = false })
+  },
+  triggerHint: (flag, text) => {
+    const { seenHints, activeHints } = get()
+    if (seenHints.includes(flag) || activeHints.some((h) => h.flag === flag)) return
+    set((s) => ({ activeHints: [...s.activeHints, { flag, text }] }))
+  },
+  dismissHint: (flag) => {
+    const seen = [...new Set([...get().seenHints, flag])]
+    set((s) => ({ activeHints: s.activeHints.filter((h) => h.flag !== flag), seenHints: seen }))
+    try { window.electronAPI.settings.set('seen_hints', JSON.stringify(seen)) } catch {}
+  },
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
     await window.electronAPI.chat.stop()
@@ -731,7 +795,10 @@ export const useStore = create<AppState>((set, get) => ({
       applyTheme(theme, bgImage !== null)
       applyFontScale(fontScale)
       applyLangDir(lang)
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: bgImage, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort })
+      // Load seen-hint flags so first-use hints only show once per machine.
+      let seenHints: string[] = []
+      try { seenHints = JSON.parse(s.seen_hints || '[]') } catch {}
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: bgImage, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints })
     } catch {}
   },
   setLanguage: async (lang) => {
@@ -830,6 +897,15 @@ function ensureChunkListener() {
         return patch
       })
       useStore.getState().loadSessions()
+      // Drain the message queue: if the user queued follow-ups while this turn
+      // was streaming and nothing else is still streaming, send the next one.
+      const st = useStore.getState()
+      if (st.queuedMessages.length > 0 && Object.keys(st.streamingBySession).length === 0) {
+        const next = st.queuedMessages[0]
+        useStore.setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
+        // Defer so the just-finished bubble paints before the next turn starts.
+        setTimeout(() => useStore.getState().sendMessage(next.content), 50)
+      }
     } else {
       // Accumulate delta into this session's buffer.
       useStore.setState((s) => ({
@@ -845,6 +921,9 @@ function ensureChunkListener() {
 // Tool-call events arrive for a specific assistant message; accumulate them so
 // the UI can render a tool-call block under that message. Registered once.
 let toolListenerInstalled = false
+// True while goBack/goForward drive a selectSession — prevents that call from
+// pushing a new history entry (it should only move the pointer).
+let _navigating = false
 function ensureToolCallListener() {
   if (toolListenerInstalled) return
   toolListenerInstalled = true
@@ -854,6 +933,8 @@ function ensureToolCallListener() {
       const prev = s.toolCallsByMessage[messageId] || []
       return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...prev, tool] } }
     })
+    // First-ever tool call → show a one-time hint explaining what's happening.
+    get().triggerHint('first_tool', t('hint.first_tool'))
   })
   // Dangerous-tool permission requests surface as a dialog in the renderer.
   window.electronAPI.chat.onPermissionRequest((req) => {
