@@ -18,7 +18,7 @@ export default function ModelPage() {
   const [testingId, setTestingId] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; errorMessage?: string }>>({})
   const [showAdd, setShowAdd] = useState(false)
-  const [newProvider, setNewProvider] = useState({ name: '', api_url: '', api_key: '' })
+  const [newProvider, setNewProvider] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
   const [showAddModel, setShowAddModel] = useState<number | null>(null)
   const [newModelName, setNewModelName] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null)
@@ -50,8 +50,8 @@ export default function ModelPage() {
 
   const handleAddProvider = async () => {
     if (!newProvider.name || !newProvider.api_url) return
-    await addProvider({ ...newProvider, api_format: 'openai', enabled: 1 })
-    setNewProvider({ name: '', api_url: '', api_key: '' })
+    await addProvider({ ...newProvider, api_format: newProvider.api_format || 'openai', enabled: 1 })
+    setNewProvider({ name: '', api_url: '', api_key: '', api_format: 'openai' })
     setShowAdd(false)
   }
 
@@ -84,6 +84,14 @@ export default function ModelPage() {
               placeholder={t('models.add_provider_key')} type="password"
               className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-white"
               style={{ border: '1px solid var(--border)' }} />
+            <div className="flex items-center gap-2">
+              <label className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>{t('models.api_format')}</label>
+              <select value={newProvider.api_format} onChange={(e) => setNewProvider({ ...newProvider, api_format: e.target.value })}
+                className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+                <option value="openai">OpenAI (/chat/completions)</option>
+                <option value="anthropic">Anthropic (/messages)</option>
+              </select>
+            </div>
             <div className="flex gap-2">
               <button onClick={handleAddProvider} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80">{t('models.save')}</button>
               <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-white transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>

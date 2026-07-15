@@ -62,6 +62,7 @@
   "models.fallback": "Fallback",
   "models.api_url": "API URL",
   "models.api_key": "API Key",
+  "models.api_format": "API format",
   "models.testing": "Testing...",
   "models.fetching": "Fetching...",
   "persona.title": "Persona Management",
