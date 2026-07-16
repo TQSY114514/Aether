@@ -43,8 +43,11 @@ function normalizeMessages(messages) {
 
 // Stream a completion. Yields delta strings. Throws on non-2xx so the caller
 // can decide whether to fall back to the next model.
-// Requests `stream_options:{include_usage:true}` so the final SSE chunk carries
-// real token usage; the generator exposes it as `.usage` after the loop ends.
+// NOTE: we deliberately do NOT send `stream_options:{include_usage:true}`.
+// Many OpenAI-compatible relays (hcnsec, some OpenRouter mirrors) don't
+// support it and either drop the stream or return empty — which surfaced as
+// "blank output" for the main reply while non-streaming calls (title, arena)
+// worked fine. Usage stats are collected on the non-streaming paths instead.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
   const gen = streamChatInner({ provider, model, messages, signal, options })
   const wrapper = (async function* () {
@@ -59,7 +62,7 @@ async function* streamChatInner({ provider, model, messages, signal, options = {
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
-    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, stream_options: { include_usage: true }, ...options }),
+    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
     signal,
   })
   if (!res.ok) {
