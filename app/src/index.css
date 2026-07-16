@@ -54,6 +54,12 @@ pre.code-block .code-lang { font-size: 10px; font-family: var(--font-sans); colo
 pre.code-block .code-copy { font-size: 10px; padding: 1px 8px; border-radius: 5px; color: var(--text-secondary); cursor: pointer; background: transparent; border: 1px solid transparent; transition: background .15s, border-color .15s; }
 pre.code-block .code-copy:hover { background: var(--bg-primary); border-color: var(--border); }
 pre.code-block .code-copy.copied { color: var(--success); }
+/* Fold toggle for long code blocks (≥15 lines). When .collapsed, the <code>
+   is hidden and the header shows a "… N lines" hint via the data-lines attr. */
+pre.code-block .code-fold { font-size: 10px; padding: 1px 6px; border-radius: 5px; color: var(--text-secondary); cursor: pointer; background: transparent; border: 1px solid transparent; margin-right: auto; transition: background .15s, border-color .15s; }
+pre.code-block .code-fold:hover { background: var(--bg-primary); border-color: var(--border); }
+pre.code-block.collapsed code { display: none; }
+pre.code-block.collapsed .code-fold::after { content: " … " attr(data-lines) " lines"; color: var(--text-muted); font-size: 10px; margin-left: 4px; }
 pre.code-block code { display: block; padding: 10px 12px; font-family: 'JetBrains Mono', 'Consolas', var(--font-sans); font-size: 12px; line-height: 1.5; overflow-x: auto; color: var(--text-primary); }
 .mc code:not([class*="language-"]) { background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px; font-family: 'JetBrains Mono','Consolas',monospace; font-size: 0.88em; }
 

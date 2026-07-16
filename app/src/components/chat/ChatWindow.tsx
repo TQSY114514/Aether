@@ -6,7 +6,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
-import { Search, X, Brain, Lightbulb } from 'lucide-react'
+import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
 
 export default function ChatWindow() {
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -70,15 +70,26 @@ export default function ChatWindow() {
     if (isAtBottom) scrollToBottom()
   }, [messages, streamingContent, arenaResults, isAtBottom, scrollToBottom])
 
-  const filteredMessages = useMemo(() => {
-    if (!searchQuery.trim()) return messages
+  // Search: don't filter — keep the full conversation visible and highlight
+  // matches (prev/next jumps to each). matchIds = message ids that contain the
+  // query; matchIdx is which one we've scrolled to.
+  const matchIds = useMemo(() => {
+    if (!searchQuery.trim()) return [] as number[]
     const q = searchQuery.toLowerCase()
-    return messages.filter(m => m.content.toLowerCase().includes(q))
+    return messages.filter(m => m.content.toLowerCase().includes(q)).map(m => m.id)
   }, [messages, searchQuery])
-
-  const matchCount = searchQuery.trim()
-    ? messages.filter(m => m.content.toLowerCase().includes(searchQuery.toLowerCase())).length
-    : 0
+  const [matchIdx, setMatchIdx] = useState(0)
+  const matchCount = matchIds.length
+  // Clamp the active index when the match set shrinks (query changed).
+  useEffect(() => { if (matchIdx > matchCount - 1) setMatchIdx(Math.max(0, matchCount - 1)) }, [matchCount, matchIdx])
+  const jumpTo = (delta: number) => {
+    if (matchIds.length === 0) return
+    const next = (matchIdx + delta + matchIds.length) % matchIds.length
+    setMatchIdx(next)
+    scrollToMsg(matchIds[next])
+  }
+  // When the user types, jump to the first match so the counter is live.
+  useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [searchQuery])
 
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ position: "relative" }}>
@@ -91,7 +102,17 @@ export default function ChatWindow() {
             className="w-full bg-transparent outline-none text-xs" style={{ color: 'var(--text-primary)' }} />
           {searchQuery && (
             <>
-              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{matchCount} {t('chat.search_count_unit')}</span>
+              <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
+                {matchCount > 0 ? `${matchIdx + 1}/${matchCount}` : `0/${matchCount}`}
+              </span>
+              <button onClick={() => jumpTo(-1)} disabled={matchCount === 0} title={t('chat.search_prev')}
+                className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
+                <ChevronUp size={13} className="text-gray-400" />
+              </button>
+              <button onClick={() => jumpTo(1)} disabled={matchCount === 0} title={t('chat.search_next')}
+                className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
+                <ChevronDown size={13} className="text-gray-400" />
+              </button>
               <button onClick={() => setSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
                 <X size={12} className="text-gray-400" />
               </button>
@@ -102,17 +123,11 @@ export default function ChatWindow() {
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">
-          {filteredMessages.length === 0 && !streamingContent && arenaResults.length === 0 && (
-            searchQuery ? (
-              <div className="text-center py-20">
-                <p className="text-sm shimmer-text">{searchQuery ? t('chat.search_no_match') : t('chat.empty.start')}</p>
-              </div>
-            ) : (
-              <EmptyState />
-            )
+          {messages.length === 0 && !streamingContent && arenaResults.length === 0 && (
+            <EmptyState />
           )}
 
-          {filteredMessages.map((msg) => (
+          {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} searchHighlight={searchQuery} />
           ))}
 

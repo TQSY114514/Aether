@@ -27,7 +27,13 @@ export function renderMarkdown(text: string): string {
     const trimmed = code.trim()
     const esc = trimmed.replace(/"/g, '&quot;')
     const label = lang ? lang : 'text'
-    return `<pre class="code-block"><div class="code-head"><span class="code-lang">${label}</span><button class="code-copy" data-code="${esc}">复制</button></div><code class="language-${lang}">${trimmed}</code></pre>`
+    const lineCount = trimmed.split('\n').length
+    // Collapse toggle: long blocks (>=15 lines) get a chevron that toggles a
+    // `collapsed` class on the <pre>, hiding the <code>. Short blocks have no
+    // toggle (nothing to fold). data-lines powers the "… N lines" placeholder.
+    const canFold = lineCount >= 15
+    const chevron = canFold ? `<button class="code-fold" data-lines="${lineCount}">▾</button>` : ''
+    return `<pre class="code-block${canFold ? ' foldable' : ''}"><div class="code-head"><span class="code-lang">${label}</span>${chevron}<button class="code-copy" data-code="${esc}">复制</button></div><code class="language-${lang}">${trimmed}</code></pre>`
   })
 
   // Inline code

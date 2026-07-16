@@ -40,9 +40,23 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
     await editMessage(message.id, c)
   }
 
-  // Code-block copy buttons live inside rendered markdown HTML; handle them via
-  // event delegation on the bubble root so each button needs no React wiring.
+  // Code-block copy + fold buttons live inside rendered markdown HTML; handle
+  // them via event delegation on the bubble root so each needs no React wiring.
   const onBubbleClick = (e: React.MouseEvent) => {
+    const fold = (e.target as HTMLElement).closest('.code-fold') as HTMLElement | null
+    if (fold) {
+      // Toggle collapsed state on the parent <pre>. Swap the chevron glyph and
+      // show a "… N lines" placeholder when folded.
+      const pre = fold.closest('pre.code-block')
+      if (pre) {
+        const collapsed = pre.classList.toggle('collapsed')
+        const n = fold.getAttribute('data-lines') || ''
+        fold.textContent = collapsed ? '▸' : '▾'
+        fold.setAttribute('data-folded', collapsed ? '1' : '0')
+        if (collapsed) fold.setAttribute('title', `${n} lines — click to expand`)
+      }
+      return
+    }
     const target = (e.target as HTMLElement).closest('.code-copy') as HTMLElement | null
     if (!target) return
     const raw = target.getAttribute('data-code') || ''

@@ -5,6 +5,24 @@ import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Searc
 import type { ViewType, Session } from '@/types'
 import { t } from '@/utils/i18n'
 
+// "3分钟前" / "刚刚" / "2小时前" / "昨天" — relative time for the session row.
+// Falls back to a date string for anything older than a week.
+function relativeTime(iso: string | undefined): string {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (isNaN(then)) return ''
+  const diff = Date.now() - then
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return '刚刚'
+  if (min < 60) return `${min}分钟前`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}小时前`
+  const day = Math.floor(hr / 24)
+  if (day === 1) return '昨天'
+  if (day < 7) return `${day}天前`
+  return new Date(then).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
+}
+
 function getSessionGroups(sessions: Session[]) {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -115,8 +133,13 @@ export default function Sidebar() {
                     style={{ borderColor: 'var(--accent)' }} onClick={(e) => e.stopPropagation()} />
                 ) : (
                   <div className="flex-1 min-w-0">
-                    <div className="truncate text-[13px] leading-tight" style={{ color: 'var(--text-primary)' }}>
-                      {session.title || t('chat.new')}
+                    <div className="flex items-center gap-1.5 leading-tight">
+                      <span className="truncate text-[13px]" style={{ color: 'var(--text-primary)' }}>
+                        {session.title || t('chat.new')}
+                      </span>
+                      <span className="text-[10px] shrink-0 ml-auto tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                        {relativeTime(session.updated_at || session.created_at)}
+                      </span>
                     </div>
                     {session.last_message && (
                       <div className="truncate text-[11px] leading-tight mt-0.5" style={{ color: 'var(--text-muted)' }}>

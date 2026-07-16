@@ -201,6 +201,8 @@
   "chat.select_model": "Select model",
   "chat.search_placeholder": "Search current conversation...",
   "chat.search_count_unit": "matches",
+  "chat.search_prev": "Previous match",
+  "chat.search_next": "Next match",
   "chat.search_no_match": "No matching messages found",
   "chat.empty.start": "Send a message to start the conversation",
   "chat.arena.voted": "Selected as best answer, score updated",
