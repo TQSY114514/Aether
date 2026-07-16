@@ -94,6 +94,9 @@ function setupIpcHandlers() {
 
 app.whenReady().then(async () => {
   await db.initDatabase()
+  // Prune sessions that were created but never sent a message (placeholder
+  // title, no messages) so the sidebar starts clean.
+  try { db.pruneEmptySessions() } catch {}
   // Initialize the credential pool after the DB is open so the rotation logic
   // can read/write provider_credential rows from the first request onwards.
   try { require('./llm/credentialPool').init(db) } catch {}

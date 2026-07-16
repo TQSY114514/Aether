@@ -262,6 +262,15 @@ function createSession({ title = '新会话', persona_id = null }) {
   db.run('INSERT INTO session (title, persona_id, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [title, persona_id])
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
+// Remove sessions that were created but never got a message (placeholder title,
+// no rows in message). Called on startup + before creating a new session so the
+// sidebar isn't littered with empty "新会话" entries (ChatGPT-style: an unsent
+// new chat doesn't persist).
+function pruneEmptySessions() {
+  const placeholders = ["'新会话'", "'新对话'", "'New Chat'"]
+  db.run(`DELETE FROM session WHERE title IN (${placeholders.join(',')}) AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`)
+  saveDatabase()
+}
 function renameSession(id, title) {
   db.run('UPDATE session SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [title, id]); saveDatabase()
 }
@@ -578,7 +587,7 @@ module.exports = {
   initDatabase, getProviders, getProvider, addProvider, updateProvider, deleteProvider,
   getModels, getAllModels, getModel, addModel, updateModel, deleteModel, getFallbackChain,
   getPersonas, getPersona, addPersona, updatePersona, deletePersona,
-  getSessions, getSession, createSession, renameSession, pinSession, deleteSession, touchSession,
+  getSessions, getSession, createSession, pruneEmptySessions, renameSession, pinSession, deleteSession, touchSession,
   getMessages, addMessage, updateMessage,
   getSetting, setSetting, getAllSettings,
   getModelScores, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,

@@ -344,20 +344,28 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         clearTimeout(timeout)
         abortControllers.delete(msgId)
 
-        // Log real server-reported usage (if the provider returned it) with cost.
-        const u = stream.usage ? normalizeUsage(stream.usage) : null
-        if (u) {
-          db.logUsage({
-            session_id: sessionId, provider_id: p.id, provider_name: p.name,
-            model_name: m.model_name, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens,
-            total_tokens: u.total_tokens, cache_read_tokens: u.cache_read_tokens,
-            cache_creation_tokens: u.cache_creation_tokens,
-            cost: computeCost(m, u), latency_ms: Date.now() - streamStart, status: 200, source: 'chat',
-          })
+        // Log usage. Prefer server-reported (stream.usage, when the provider
+        // returns it); fall back to a client estimate so the usage page isn't
+        // stuck at 0 for providers that don't report usage on the stream.
+        const serverU = stream.usage ? normalizeUsage(stream.usage) : null
+        const u = serverU || {
+          prompt_tokens: estimateTokens(compacted.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')).join('')),
+          completion_tokens: estimateTokens(fullContent),
+          total_tokens: 0,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
         }
+        u.total_tokens = u.total_tokens || (u.prompt_tokens + u.completion_tokens)
+        db.logUsage({
+          session_id: sessionId, provider_id: p.id, provider_name: p.name,
+          model_name: m.model_name, prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens,
+          total_tokens: u.total_tokens, cache_read_tokens: u.cache_read_tokens || 0,
+          cache_creation_tokens: u.cache_creation_tokens || 0,
+          cost: computeCost(m, u), latency_ms: Date.now() - streamStart, status: 200, source: 'chat',
+        })
 
         // Save to DB FIRST, then send done signal
-        const tokens = u ? u.total_tokens : estimateTokens(fullContent)
+        const tokens = u.total_tokens
       db.updateMessage(msgId, {
         content: fullContent,
         status: isFallback ? 'fallback' : 'success',
