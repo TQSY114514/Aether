@@ -36,7 +36,14 @@ function getSessionGroups(sessions: Session[]) {
     { label: t('sidebar.group.older'), sessions: [] },
   ]
   for (const s of sessions) {
-    const date = new Date(s.updated_at || s.created_at)
+    // DB stores updated_at/created_at as UTC (sql.js CURRENT_TIMESTAMP) but
+    // WITHOUT a trailing 'Z'. new Date('2026-07-15 03:00:00') parses as LOCAL
+    // time, which shifts the date earlier in positive-offset zones and puts a
+    // freshly-created session into "yesterday/older". Normalize: treat the
+    // stored timestamp as UTC by appending 'Z' (and tolerating the space sep).
+    const raw = s.updated_at || s.created_at || ''
+    const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
+    const date = new Date(iso)
     if (s.pinned) { groups[0].sessions.push(s); continue }
     if (date >= today) { groups[1].sessions.push(s); continue }
     if (date >= yesterday) { groups[2].sessions.push(s); continue }
