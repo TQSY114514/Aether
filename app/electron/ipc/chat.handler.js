@@ -68,6 +68,10 @@ function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
+    // Entry-point diagnostic: confirms the handler was reached at all (if this
+    // line never appears in chat-debug.log, the IPC isn't reaching here).
+    const _clog = (...a) => { try { const { app } = require('electron'); require('fs').appendFileSync(require('path').join(app.getPath('userData'), 'chat-debug.log'), a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n') } catch {} }
+    _clog('=== chat:send sid=', sessionId, 'modelId=', modelId, 'useTools=', useTools, 'agentMode=', agentMode, 'content=', JSON.stringify(content).slice(0, 60))
     // Save user message
     if (!regenerate) {
       db.addMessage({ session_id: sessionId, role: 'user', content })
@@ -145,7 +149,13 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // fails. `context_window` may be null if the user didn't set it; default 32k.
     const ctxBudget = (model.context_window && Number(model.context_window) > 0) ? Number(model.context_window) : 32000
     const beforeCompact = apiMsgs.length
-    const compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget })
+    let compacted
+    try {
+      compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget })
+    } catch (e) {
+      _clog('maybeCompact FAILED:', e.message, '— using apiMsgs')
+      compacted = apiMsgs
+    }
     // If compaction actually shrank the message list, surface a one-line status
     // so the user understands why older context is now summarized.
     if (compacted.length < beforeCompact) {
@@ -317,6 +327,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       try {
         let fullContent = ''
         const wc = getWebContents()
+        _clog('streamChat path start model=', m.model_name, 'msgs=', compacted.length)
         // mergedOpts carries reasoning params + advanced generation params (max_tokens/
         // temperature/top_p) set in Settings, spread into the request body by the adapter.
         // streamChat returns a generator that exposes .usage (server-reported tokens)
@@ -329,6 +340,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
           }
         }
+        _clog('streamChat done fullContent_len=', fullContent.length)
         clearTimeout(timeout)
         abortControllers.delete(msgId)
 
