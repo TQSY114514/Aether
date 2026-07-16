@@ -518,6 +518,7 @@ export const useStore = create<AppState>((set, get) => ({
     ensureToolCallListener()
 
     try {
+      console.log('[AetherAI] sendMessage → chat.send', { sessionId: currentSessionId, contentLen: finalContent.length, modelId, useTools: get().agentMode !== 'off' })
       await window.electronAPI.chat.send({
         sessionId: currentSessionId,
         content: finalContent,
@@ -531,7 +532,9 @@ export const useStore = create<AppState>((set, get) => ({
         genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
         systemPrefix: get().systemPrefix,
         })
+      console.log('[AetherAI] chat.send resolved OK')
     } catch (err) {
+      console.error('[AetherAI] chat.send FAILED:', err)
       // Drop this session's streaming buffer on error; keep other sessions intact.
       set((s) => {
         const next = { ...s.streamingBySession }
@@ -659,6 +662,7 @@ export const useStore = create<AppState>((set, get) => ({
     }))
     ensureChunkListener()
     try {
+      console.log('[AetherAI] sendMessage → chat.send', { sessionId: currentSessionId, contentLen: finalContent.length, modelId, useTools: get().agentMode !== 'off' })
       await window.electronAPI.chat.send({
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,

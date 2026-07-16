@@ -49,16 +49,6 @@ function normalizeMessages(messages) {
 // "blank output" for the main reply while non-streaming calls (title, arena)
 // worked fine. Usage stats are collected on the non-streaming paths instead.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
-  const gen = streamChatInner({ provider, model, messages, signal, options })
-  const wrapper = (async function* () {
-    for await (const d of gen) yield d
-    wrapper.usage = gen.usage
-  })()
-  wrapper.usage = null
-  return wrapper
-}
-
-async function* streamChatInner({ provider, model, messages, signal, options = {} }) {
   // Diagnostic log for the blank-output investigation. Records the fetch
   // status, the raw first chunk, and how many deltas were yielded — so we can
   // see whether the provider returned 200+empty, a non-SSE body, or nothing.
@@ -89,7 +79,7 @@ async function* streamChatInner({ provider, model, messages, signal, options = {
   let buffer = ''
   let deltaCount = 0
   let firstChunk = true
-  streamChatInner.usage = null
+  streamChat.usage = null
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -100,7 +90,7 @@ async function* streamChatInner({ provider, model, messages, signal, options = {
     buffer = lines.pop() || '' // keep the partial last line
     for (const line of lines) {
       const { delta, usage } = parseSSELine(line)
-      if (usage) streamChatInner.usage = usage
+      if (usage) streamChat.usage = usage
       if (delta) { deltaCount++; yield delta }
     }
   }
@@ -108,10 +98,13 @@ async function* streamChatInner({ provider, model, messages, signal, options = {
   // Flush any trailing buffered line.
   if (buffer.startsWith('data: ')) {
     const { delta, usage } = parseSSELine(buffer)
-    if (usage) streamChatInner.usage = usage
+    if (usage) streamChat.usage = usage
     if (delta) yield delta
   }
 }
+
+// (streamChatInner was merged into streamChat above — the old two-layer
+// wrapper returned an un-consumed inner generator, so the fetch never ran.)
 
 // Parse one SSE `data:` line into { delta, usage }. delta is the content
 // string (or '' / null); usage is set when the chunk carries token usage
