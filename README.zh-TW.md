@@ -68,8 +68,12 @@ app/
 │   │   ├── providerAdapter.js   # 依 api_format 分派
 │   │   ├── openaiAdapter.js     # OpenAI 相容實作
 │   │   ├── reasoning.js         # 思考強度參數建構器
-│   │   ├── toolLoop.js          # 函式呼叫迴圈
-│   │   └── toolArgs.js          # 工具參數解析
+│   │   ├── │   │   ├── planning.js          │ # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          │ # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          │ # parallel sub-agent delegation
+│   │   ├── autoMemory.js        │ # structured long-term memory (Hermes-inspired)
+│   │   ├── reasoning.js         │ # thinking-effort param builder
+│   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # 內建工具註冊表
 │   ├── mcp/               # MCP 客戶端 + 管理器
 │   ├── main.js / preload.js

@@ -68,8 +68,12 @@ app/
 │   │   ├── providerAdapter.js   # Dispatcher nach api_format
 │   │   ├── openaiAdapter.js     # OpenAI-kompatible Implementierung
 │   │   ├── reasoning.js         # Thinking-Effort-Parameter-Builder
-│   │   ├── toolLoop.js          # Function-Calling-Loop
-│   │   └── toolArgs.js          # Parsing der Werkzeug-Argumente
+│   │   ├── │   │   ├── planning.js          │ # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          │ # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          │ # parallel sub-agent delegation
+│   │   ├── autoMemory.js        │ # structured long-term memory (Hermes-inspired)
+│   │   ├── reasoning.js         │ # thinking-effort param builder
+│   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # Registry eingebauter Werkzeuge
 │   ├── mcp/               # MCP-Client + Manager
 │   ├── main.js / preload.js
