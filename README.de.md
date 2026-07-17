@@ -100,6 +100,8 @@ AetherAI steht auf den Schultern dieser Projekte — ihre Ideen haben die Archit
 - [Magic UI](https://github.com/magicuidesign/magicui) — Animationsmuster (Streaming-Text, Shimmer, Blur-Fade).
 - [new-api](https://github.com/QuantumNous/new-api) — Referenz für die Relay-Konvertierung des Reasoning-Effort.
 - [OpenClaw](https://github.com/openclaw/openclaw) — README-Aufpolitur und Onboarding-Inspiration.
+- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
+- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
 
 ## 📄 Lizenz
 

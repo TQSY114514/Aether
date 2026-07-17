@@ -100,6 +100,8 @@ AetherAI इन परियोजनाओं के कंधों पर ख
 - [Magic UI](https://github.com/magicuidesign/magicui) — एनिमेशन पैटर्न (स्ट्रीमिंग पाठ, शिमर, ब्लर-फ़ेड)।
 - [new-api](https://github.com/QuantumNous/new-api) — रीज़निंग-प्रयास रिले रूपांतरण संदर्भ।
 - [OpenClaw](https://github.com/openclaw/openclaw) — README पॉलिश + ऑनबोर्डिंग प्रेरणा।
+- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
+- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
 
 ## 📄 लाइसेंस
 

@@ -325,18 +325,27 @@ export const useStore = create<AppState>((set, get) => ({
   deleteSession: async (id) => {
     await window.electronAPI.session.delete(id)
     const { currentSessionId } = get()
-    // Clean up per-session state so deleted sessions don't leak streaming
-    // buffers / configs in memory.
     set((s) => {
       const nextStream = { ...s.streamingBySession }
       delete nextStream[id]
       const nextConfigs = { ...s.sessionConfigs }
       delete nextConfigs[id]
-      return {
+      const patch: Record<string, unknown> = {
         streamingBySession: nextStream,
         sessionConfigs: nextConfigs,
-        ...(currentSessionId === id ? { currentSessionId: null, messages: [] } : {}),
       }
+      if (id === currentSessionId) {
+        // Current session deleted: clear everything session-scoped.
+        patch.currentSessionId = null
+        patch.messages = []
+        patch.toolCallsByMessage = {}
+        patch.planStepsByMessage = {}
+        patch.todosByMessage = {}
+        patch.statusLinesByMessage = {}
+        patch.permissionRequests = []
+        patch.pendingQuestions = []
+      }
+      return patch
     })
     await get().loadSessions()
   },

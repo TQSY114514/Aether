@@ -100,6 +100,8 @@ app/
 - [Magic UI](https://github.com/magicuidesign/magicui) — أنماط الحركة (بثّ النصّ، الوميض، تلاشٍ بالضباب).
 - [new-api](https://github.com/QuantumNous/new-api) — مرجع تحويل ترحيل جهد الاستدلال.
 - [OpenClaw](https://github.com/openclaw/openclaw) — صقل الـ README وإلهام الإعداد الأوّلي.
+- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
+- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
 
 ## 📄 الترخيص
 
