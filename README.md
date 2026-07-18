@@ -124,6 +124,24 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 - [DS4](https://github.com/antirez/ds4) — hierarchical task decomposition before execution.
 - [cc-switch](https://github.com/farion1231/cc-switch) — usage-statistics dashboard layout (cost/cache/trend/provider/model breakdown).
 
+## 📋 Changelog
+
+### v0.1.18
+**Refactor & bug fixes**
+- DRY up `chat.send` params — extracted `chatSendBase()` and `clearStreamingOnError()` helpers; `sendMessage`/`regenerate`/`editMessage` now share 7 lines of config and error cleanup (net -27 lines, 3 call sites)
+- Removed duplicate session config loading in `ChatPage.tsx` — `selectSession()` already handles it; removed unused `useEffect` import
+- Cleaned up redundant `console.error` after `[AetherAI]`-prefixed logs; standardized error log prefixes across all three call sites
+
+### v0.1.17
+**Agent & UX improvements**
+- Auto long-term memory: fire-and-forget fact extraction after each turn; habit learner proposes repeatable actions
+- ChatWindow streaming perf: bypass React re-render on every chunk — direct DOM writes
+- toolLoop heartbeat + error classify improvements + parallel startup
+
+### v0.1.16
+**Bug fixes**
+- Purged diagnostic logs, fixed 12 bugs, cleaned README structure
+
 ## 📄 License
 
 MIT
