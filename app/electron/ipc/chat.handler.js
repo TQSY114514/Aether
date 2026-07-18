@@ -359,7 +359,6 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
       if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
       if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
-      console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
       return { messageId: msgId }

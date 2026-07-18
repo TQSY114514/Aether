@@ -14,6 +14,7 @@
 const { completeChatMessage } = require('./providerAdapter')
 const { safeParseToolCallArgs } = require('./toolArgs')
 const { applyMiddleware } = require('./toolResultMiddleware')
+const { classifyError } = require('./errorClassify')
 // Use the MCP-aware merged registry so the agent can call both built-in tools
 // and any connected MCP server's tools. Falls back to the plain built-in
 // registry if the manager isn't loadable for some reason.
@@ -64,128 +65,129 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   let totalChars = 0
   let lastSig = ''
   let sigRepeat = 0
-  const convo = messages.slice()
-  if (!convo.some(m => m.role === 'system')) convo.unshift({ role: 'system', content: AGENT_SYSTEM_PROMPT })
-
-  let plan = null
-  let planningMode = false
-
-  // Planning gate: if the request is complex enough, generate a plan first.
-  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
-  if (lastUserMsg && planning.isComplexRequest(lastUserMsg.content, messages.length)) {
-    try {
-      plan = await planning.generatePlan(provider, model, lastUserMsg.content, signal, options)
-      if (plan && plan.tasks.length > 1) {
-        planningMode = true
-        // Inject plan into system context
-        const planBlock = planning.planSystemBlock(plan)
-        convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
-        onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)` })
-      }
-    } catch {}
+  let beatTimer = null
+  if (onStatus) {
+    beatTimer = setInterval(() => {
+      try { onStatus({ kind: 'thinking', text: `Agent working… (round ${budget.used}/${budget.maxTotal})` }) } catch {}
+    }, 4000)
   }
+  const stopBeat = () => { if (beatTimer) { clearInterval(beatTimer); beatTimer = null } }
+  try {
+    const convo = messages.slice()
+    if (!convo.some(m => m.role === 'system')) convo.unshift({ role: 'system', content: AGENT_SYSTEM_PROMPT })
 
-  while (budget.consume()) {
-    const depth = budget.used
-    const opts = { ...options }
-    if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
-    // When planning, also inject the plan_progress tool so the model can report
-    // task completion. Inject plan_progress alongside the regular tools.
-    const effectiveTools = planningMode ? [...toolPayload, ...planning.planToolsPayload()] : toolPayload
-    if (effectiveTools.length) { opts.tools = effectiveTools; opts.tool_choice = 'auto' }
+    let plan = null
+    let planningMode = false
 
-    let msg
-    try {
-      msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
-    } catch (e) {
-      return `[agent error: ${e && e.message ? e.message : String(e)}]`
-    }
-    if (!msg) msg = { content: '', tool_calls: undefined }
-    try { if (msg.content) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content }) } catch {}
-
-    if (msg.tool_calls && msg.tool_calls.length) {
-      convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
-
-      // Per-round loop detection: identical tool-call set repeated back-to-back.
-      const roundSig = msg.tool_calls.map(tc => (tc.function||{}).name + ':' + (tc.function||{}).arguments).join('||')
-      if (roundSig === lastSig) { sigRepeat++ } else { lastSig = roundSig; sigRepeat = 1 }
-      if (sigRepeat >= LOOP_REPEAT_LIMIT) {
-        try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
-        return '（检测到工具调用循环，已停止）'
-      }
-
-      // Execute the round's tool calls CONCURRENTLY (Promise.all) so independent
-      // calls take max(latency) not sum. Results stay in tool_call_id order.
-      // plan_progress is a meta-tool handled inline (no real execution), but it
-      // rides the same parallel path so ordering is preserved.
-      const execOne = async (tc) => {
-        const fn = tc.function || {}
-        const args = safeParseToolCallArgs(fn.arguments)
-        // Plan-progress meta-tool: record + return a synthetic tool result.
-        if (fn.name === 'plan_progress' && planningMode) {
-          const handled = planning.handlePlanProgress(plan, args)
-          if (handled) {
-            return { tc, isPlan: true, entry: { name: fn.name, args, result: `progress recorded for task ${args.task_id}`, error: null, risk: null, latencyMs: null }, planStep: `📊 [${args.task_id}] ${(args.result || '').slice(0, 60)}` }
-          }
+    // Planning gate: if the request is complex enough, generate a plan first.
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
+    if (lastUserMsg && planning.isComplexRequest(lastUserMsg.content, messages.length)) {
+      try {
+        plan = await planning.generatePlan(provider, model, lastUserMsg.content, signal, options)
+        if (plan && plan.tasks.length > 1) {
+          planningMode = true
+          const planBlock = planning.planSystemBlock(plan)
+          convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
+          onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)` })
         }
-        const tool = getTool(fn.name)
-        const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null }
-        if (!tool) {
-          entry.error = `unknown tool: ${fn.name}`
-        } else {
-          if (tool.risk === 'dangerous' && agentMode !== 'auto' && agentMode !== 'yolo') {
-            if (agentMode === 'plan') {
-              entry.error = 'blocked by plan mode (read-only)'
-            } else if (agentMode === 'ask') {
-              const allowed = await requestPermissionWithTimeout(requestPermission, { name: fn.name, args, risk: tool.risk })
-              if (!allowed) { entry.error = 'denied by user' }
+      } catch (e) {
+        onStatus?.({ kind: 'plan_failed', text: 'Planning skipped — proceeding directly' })
+      }
+    }
+
+    while (budget.consume()) {
+      const depth = budget.used
+      const opts = { ...options }
+      if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
+      const effectiveTools = planningMode ? [...toolPayload, ...planning.planToolsPayload()] : toolPayload
+      if (effectiveTools.length) { opts.tools = effectiveTools; opts.tool_choice = 'auto' }
+
+      let msg
+      try {
+        msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
+      } catch (e) {
+        const c = classifyError(e)
+        return c.recover?.hint || `[agent error: ${c.kind}]`
+      }
+      if (!msg) msg = { content: '', tool_calls: undefined }
+      try { if (msg.content) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content }) } catch {}
+
+      if (msg.tool_calls && msg.tool_calls.length) {
+        convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
+
+        const roundSig = msg.tool_calls.map(tc => (tc.function||{}).name + ':' + (tc.function||{}).arguments).join('||')
+        if (roundSig === lastSig) { sigRepeat++ } else { lastSig = roundSig; sigRepeat = 1 }
+        if (sigRepeat >= LOOP_REPEAT_LIMIT) {
+          try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
+          return '（检测到工具调用循环，已停止）'
+        }
+
+        const execOne = async (tc) => {
+          const fn = tc.function || {}
+          const args = safeParseToolCallArgs(fn.arguments)
+          if (fn.name === 'plan_progress' && planningMode) {
+            const handled = planning.handlePlanProgress(plan, args)
+            if (handled) {
+              return { tc, isPlan: true, entry: { name: fn.name, args, result: `progress recorded for task ${args.task_id}`, error: null, risk: null, latencyMs: null }, planStep: `📊 [${args.task_id}] ${(args.result || '').slice(0, 60)}` }
             }
           }
-          if (!entry.error) {
-            const t0 = Date.now()
-            const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate, onAskUser, signal }, signal)
-            entry.latencyMs = Date.now() - t0
-            if (r.error) { entry.error = r.error } else { entry.result = r.result }
+          const tool = getTool(fn.name)
+          const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null }
+          if (!tool) {
+            entry.error = `unknown tool: ${fn.name}`
+          } else {
+            if (tool.risk === 'dangerous' && agentMode !== 'auto' && agentMode !== 'yolo') {
+              if (agentMode === 'plan') {
+                entry.error = 'blocked by plan mode (read-only)'
+              } else if (agentMode === 'ask') {
+                const allowed = await requestPermissionWithTimeout(requestPermission, { name: fn.name, args, risk: tool.risk })
+                if (!allowed) { entry.error = 'denied by user' }
+              }
+            }
+            if (!entry.error) {
+              const t0 = Date.now()
+              const r = await runToolWithTimeout(tool, args, { provider, model, agentMode, onTodoUpdate, onAskUser, signal }, signal)
+              entry.latencyMs = Date.now() - t0
+              if (r.error) { entry.error = r.error } else { entry.result = r.result }
+            }
           }
+          return { tc, isPlan: false, entry }
         }
-        return { tc, isPlan: false, entry }
-      }
-      const executed = await Promise.all(msg.tool_calls.map(execOne))
-      // Append results in the model's issuance order (tool_call_id pairing).
-      for (const { tc, isPlan, entry, planStep } of executed) {
-        if (isPlan && planStep) {
-          try { onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: planStep }) } catch {}
-        } else {
-          try { onToolCall?.(entry) } catch {}
+        const executed = await Promise.all(msg.tool_calls.map(execOne))
+        for (const { tc, isPlan, entry, planStep } of executed) {
+          if (isPlan && planStep) {
+            try { onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: planStep }) } catch {}
+          } else {
+            try { onToolCall?.(entry) } catch {}
+          }
+          const rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
+          const resultContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args })
+          totalChars += resultContent.length
+          convo.push({ role: 'tool', tool_call_id: tc.id, content: resultContent })
         }
-        const rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
-        const resultContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args })
-        totalChars += resultContent.length
-        convo.push({ role: 'tool', tool_call_id: tc.id, content: resultContent })
+        if (totalChars > MAX_TOTAL_CHARS) {
+          return '（工具输出超出上下文预算，已停止）'
+        }
+        if (planningMode && plan && plan.tasks.every(t => t.status === 'completed')) {
+          const summary = planning.planSummary(plan)
+          convo.push({ role: 'system', content: summary })
+          try {
+            const finalMsg = await completeChatMessage({ provider, model, messages: convo, signal, options: { max_tokens: 2048, ...options } })
+            if (finalMsg?.content) return finalMsg.content
+          } catch {}
+          return summary
+        }
+        continue
       }
-      if (totalChars > MAX_TOTAL_CHARS) {
-        return '（工具输出超出上下文预算，已停止）'
-      }
-      // If planning mode is active and all tasks are completed, break out
-      // and produce a final summary.
-      if (planningMode && plan && plan.tasks.every(t => t.status === 'completed')) {
-        const summary = planning.planSummary(plan)
-        convo.push({ role: 'system', content: summary })
-        // One more request to get the model to synthesize the final answer
-        try {
-          const finalMsg = await completeChatMessage({ provider, model, messages: convo, signal, options: { max_tokens: 2048, ...options } })
-          if (finalMsg?.content) return finalMsg.content
-        } catch {}
-        return summary
-      }
-      continue
+      // No tool calls — final answer.
+      return msg.content || ''
     }
-    // No tool calls — final answer.
-    return msg.content || ''
+    try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
+    const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
+    return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}`
+  } finally {
+    stopBeat()
   }
-  try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
-  const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
-  return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}`
 }
 
 function runToolWithTimeout(tool, args, ctx, signal) {

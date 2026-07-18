@@ -98,7 +98,8 @@ async function initDatabase() {
   db.run('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   // MCP servers: external tool servers the agent can call via stdio.
   db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-  db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  try { db.run("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
 
   // Per-provider credential pool — multiple API keys per provider with rotation
   // (least-recently-used) and backoff (cooldown on 429, disabled on 401).
@@ -435,12 +436,13 @@ function autoRoute(intent) {
 }
 
 // ===== Memory CRUD =====
-function getMemories() {
-  const stmt = db.prepare('SELECT * FROM memory ORDER BY created_at DESC')
+function getMemories(limit) {
+  const q = limit ? `LIMIT ${Math.max(1, Math.floor(limit))}` : ''
+  const stmt = db.prepare(`SELECT * FROM memory ORDER BY created_at DESC ${q}`)
   return allRows(stmt)
 }
-function addMemory({ content }) {
-  db.run('INSERT INTO memory (content) VALUES (?)', [content])
+function addMemory({ content, type }) {
+  db.run('INSERT INTO memory (content, type) VALUES (?, ?)', [content, type || 'fact'])
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 function updateMemory(id, { content }) {
