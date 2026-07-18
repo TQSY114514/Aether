@@ -671,7 +671,6 @@ export const useStore = create<AppState>((set, get) => ({
     }))
     ensureChunkListener()
     try {
-      console.log('[AetherAI] sendMessage → chat.send', { sessionId: currentSessionId, contentLen: finalContent.length, modelId, useTools: get().agentMode !== 'off' })
       await window.electronAPI.chat.send({
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
