@@ -102,8 +102,9 @@ function parseEntry(line) {
   return { type, content }
 }
 
-// Debounce timer — batches rapid messages into one sync call.
+// Debounce timer + in-flight promise — batches rapid messages into one sync call.
 let _syncTimer = null
+let _syncPromise = null
 
 async function sync({ db, provider, model, userMessage, assistantReply, signal }) {
   // Debounce: if another sync is already queued, absorb this call into it.
