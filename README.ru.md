@@ -68,8 +68,11 @@ app/
 │   │   ├── providerAdapter.js   # диспетчер по api_format
 │   │   ├── openaiAdapter.js     # реализация, совместимая с OpenAI
 │   │   ├── reasoning.js         # построитель параметра thinking-effort
-│   │   ├── toolLoop.js          # цикл вызова функций
-│   │   └── toolArgs.js          # разбор аргументов инструментов
+│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          # parallel sub-agent delegation
+│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
+│   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # реестр встроенных инструментов
 │   ├── mcp/               # MCP-клиент + менеджер
 │   ├── main.js / preload.js
@@ -100,6 +103,8 @@ AetherAI стоит на плечах этих проектов — их иде�
 - [Magic UI](https://github.com/magicuidesign/magicui) — паттерны анимации (потоковый текст, мерцание, blur-fade).
 - [new-api](https://github.com/QuantumNous/new-api) — эталон преобразования reasoning-effort при ретрансляции.
 - [OpenClaw](https://github.com/openclaw/openclaw) — доработка README и вдохновение для онбординга.
+- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
+- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
 
 ## 📄 Лицензия
 

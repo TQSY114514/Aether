@@ -68,8 +68,11 @@ app/
 │   │   ├── providerAdapter.js   # 依 api_format 分派
 │   │   ├── openaiAdapter.js     # OpenAI 相容之實
 │   │   ├── reasoning.js         # 思考之力參數構建
-│   │   ├── toolLoop.js          # 函式呼叫之環
-│   │   └── toolArgs.js          # 工具參數解析
+│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          # parallel sub-agent delegation
+│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
+│   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # 內建工具註冊
 │   ├── mcp/               # MCP 客戶端與總管
 │   ├── main.js / preload.js
@@ -100,6 +103,8 @@ AetherAI 立於諸專案之肩——其構想啟迪本器之架構與介面：
 - [Magic UI](https://github.com/magicuidesign/magicui)——動畫之範（流式文字、微光、模糊漸隱）。
 - [new-api](https://github.com/QuantumNous/new-api)——推理之力中轉換算之參。
 - [OpenClaw](https://github.com/openclaw/openclaw)——README 修飾與入門之啟。
+- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
+- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
 
 ## 📄 授權
 

@@ -68,8 +68,11 @@ app/
 │   │   ├── providerAdapter.js   # api_format द्वारा डिस्पैचर
 │   │   ├── openaiAdapter.js     # OpenAI-संगत कार्यान्वयन
 │   │   ├── reasoning.js         # थिंकिंग-प्रयास पैरामीटर बिल्डर
-│   │   ├── toolLoop.js          # फ़ंक्शन-कॉलिंग लूप
-│   │   └── toolArgs.js          # टूल-आर्ग पार्सिंग
+│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          # parallel sub-agent delegation
+│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
+│   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # अंतर्निर्मित टूल रजिस्ट्री
 │   ├── mcp/               # MCP क्लाइंट + प्रबंधक
 │   ├── main.js / preload.js
@@ -100,6 +103,8 @@ AetherAI इन परियोजनाओं के कंधों पर ख
 - [Magic UI](https://github.com/magicuidesign/magicui) — एनिमेशन पैटर्न (स्ट्रीमिंग पाठ, शिमर, ब्लर-फ़ेड)।
 - [new-api](https://github.com/QuantumNous/new-api) — रीज़निंग-प्रयास रिले रूपांतरण संदर्भ।
 - [OpenClaw](https://github.com/openclaw/openclaw) — README पॉलिश + ऑनबोर्डिंग प्रेरणा।
+- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
+- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
 
 ## 📄 लाइसेंस
 

@@ -50,7 +50,11 @@ function estimateTextTokens(text) {
   if (!text) return 0
   let tokens = 0
   for (const c of text) {
-    if (c >= '一' && c <= '鿿') tokens += 1.5
+    const code = c.codePointAt(0)
+    // CJK Unified Ideographs (Basic + Ext A/B + Ext G) + Kana + Hangul
+    if ((code >= 0x3400 && code <= 0x9fff) || (code >= 0xf900 && code <= 0xfaff) ||
+        (code >= 0x3040 && code <= 0x309f) || (code >= 0x30a0 && code <= 0x30ff) ||
+        (code >= 0xac00 && code <= 0xd7af)) tokens += 1.5
     else tokens += 0.25
   }
   return Math.max(1, Math.ceil(tokens))
@@ -96,9 +100,13 @@ async function maybeCompact({ provider, model, messages, budget, signal }) {
     summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal })
   } catch {
     // Summarization failed — hard-truncate the oldest non-system messages,
-    // keeping pairs intact (still use safeSplit on the truncated set).
-    const keep = nonSystemOlder.slice(-Math.floor(RECENT_WINDOW * 1.5))
-    const truncated = `[Earlier conversation truncated — summarization failed. ${keep.length} of ${nonSystemOlder.length} older messages retained.]`
+    // then use safeSplit to ensure no tool_call ↔ tool_result pair is broken.
+    const targetRecent = Math.floor(RECENT_WINDOW * 1.5)
+    const split = safeSplitIndex(nonSystemOlder, targetRecent)
+    const keep = nonSystemOlder.slice(split)
+    const dropped = split
+    const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
+    const truncated = `[Earlier conversation truncated — summarization failed. ${keep.length} of ${nonSystemOlder.length} older messages retained.${note}]`
     return [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
   }
   if (!summary) return messages

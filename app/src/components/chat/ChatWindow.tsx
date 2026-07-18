@@ -8,16 +8,43 @@ import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
 
+// Lightweight placeholder: rendered once, updated via direct DOM writes
+// to avoid re-rendering ChatWindow on every streaming token.
+function StreamingBubble({ sessionId }: { sessionId: number }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const msgIdRef = useRef<number>(-1)
+
+  useEffect(() => {
+    const unsub = useStore.subscribe((s) => {
+      const buf = s.streamingBySession[sessionId]
+      if (!buf && msgIdRef.current === -1) return
+      if (!ref.current) return
+      if (buf && buf.messageId && buf.messageId !== msgIdRef.current) {
+        msgIdRef.current = buf.messageId
+        ref.current.innerHTML = renderMarkdown(buf.content)
+        ref.current.style.display = ''
+        setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth' }), 0)
+      } else if (!buf && msgIdRef.current !== -1) {
+        msgIdRef.current = -1
+        ref.current.innerHTML = ''
+        ref.current.style.display = 'none'
+      } else if (buf && msgIdRef.current === buf.messageId) {
+        ref.current.innerHTML = renderMarkdown(buf.content)
+        setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth' }), 0)
+      }
+    })
+    return unsub
+  }, [sessionId])
+
+  return <div ref={ref} style={{ display: 'none' }} />
+}
+
 export default function ChatWindow() {
   const [isAtBottom, setIsAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   useOverscrollSpring(scrollRef)
   const messages = useStore((s) => s.messages)
-  const streamingContent = useStore((s) => {
-    const cur = s.currentSessionId
-    return cur ? (s.streamingBySession[cur]?.content ?? '') : ''
-  })
   const currentSessionId = useStore((s) => s.currentSessionId)
   const loadMessages = useStore((s) => s.loadMessages)
   const arenaResults = useStore((s) => s.arenaResults)
@@ -59,16 +86,16 @@ export default function ChatWindow() {
   }, [])
 
   useEffect(() => {
-    if (currentSessionId) {
+    if (currentSessionId && messages.length === 0) {
       loadMessages(currentSessionId)
-      setSearchQuery('')
-      setTimeout(scrollToBottom, 50)
     }
+    setSearchQuery('')
+    setTimeout(scrollToBottom, 50)
   }, [currentSessionId, loadMessages, scrollToBottom])
 
   useEffect(() => {
     if (isAtBottom) scrollToBottom()
-  }, [messages, streamingContent, arenaResults, isAtBottom, scrollToBottom])
+  }, [messages, arenaResults, isAtBottom, scrollToBottom])
 
   // Search: don't filter — keep the full conversation visible and highlight
   // matches (prev/next jumps to each). matchIds = message ids that contain the
@@ -123,7 +150,7 @@ export default function ChatWindow() {
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">
-          {messages.length === 0 && !streamingContent && arenaResults.length === 0 && (
+          {messages.length === 0 && !isStreaming && arenaResults.length === 0 && (
             <EmptyState />
           )}
 
@@ -131,16 +158,8 @@ export default function ChatWindow() {
             <MessageBubble key={msg.id} message={msg} searchHighlight={searchQuery} />
           ))}
 
-          {streamingContent && (
-            <MessageBubble message={{
-              id: -1, session_id: currentSessionId || 0,
-              role: 'assistant', content: streamingContent,
-              model_used: null, provider_used: null,
-              token_count: null, latency_ms: null,
-              status: 'success', error_message: null,
-              created_at: new Date().toISOString(),
-            }} />
-          )}
+          {/* Streaming bubble — rendered once, updated via DOM writes for perf */}
+          {currentSessionId && <StreamingBubble sessionId={currentSessionId} />}
 
           {/* Arena results */}
           {arenaError && (
@@ -218,7 +237,7 @@ export default function ChatWindow() {
         </div>
       </div>
 
-  <MessageNav messages={messages} activeId={activeMsgId} scrollTo={scrollToMsg} />
+      <MessageNav messages={messages} activeId={activeMsgId} scrollTo={scrollToMsg} />
     </div>
   )
 }

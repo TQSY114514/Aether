@@ -63,9 +63,10 @@ function buildReasoningParams(modelName, effort) {
   return {}
 }
 
-// Whether the model accepts reasoning params at all (drives UI: show/hide slider).
+// Whether the model accepts user-controlled reasoning params (drives UI: show/hide slider).
 function supportsReasoning(modelName = '') {
-  return reasoningFamily(modelName) !== 'none'
+  const fam = reasoningFamily(modelName)
+  return fam === 'openai' || fam === 'claude'
 }
 
 module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning, CLAUDE_BUDGETS }

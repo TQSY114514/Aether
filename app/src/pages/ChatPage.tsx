@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useStore } from '@/store'
 import ChatWindow from '@/components/chat/ChatWindow'
 import ChatInput from '@/components/chat/ChatInput'
@@ -37,21 +36,6 @@ export default function ChatPage() {
   const currentModel = models.find(m => m.id === activeModelId)
   const currentProvider = providers.find(p => p.id === activeProviderId)
   const currentPersona = personas.find(p => p.id === currentPersonaId)
-
-  // Load session config on mount
-  useEffect(() => {
-    if (currentSessionId) {
-      const load = async () => {
-        const cfg = await window.electronAPI.session.getConfig(currentSessionId)
-        if (cfg) {
-          useStore.getState().sessionConfigs[currentSessionId] = cfg
-          useStore.setState({ sessionConfigs: { ...useStore.getState().sessionConfigs } })
-          if (cfg.providerId) loadModels(cfg.providerId)
-        }
-      }
-      load()
-    }
-  }, [currentSessionId])
 
   if (!currentSessionId) {
     return (

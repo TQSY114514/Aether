@@ -49,21 +49,14 @@ function normalizeMessages(messages) {
 // "blank output" for the main reply while non-streaming calls (title, arena)
 // worked fine. Usage stats are collected on the non-streaming paths instead.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
-  // Diagnostic log for the blank-output investigation. Records the fetch
-  // status, the raw first chunk, and how many deltas were yielded — so we can
-  // see whether the provider returned 200+empty, a non-SSE body, or nothing.
-  const _log = (...a) => { try { const { app } = require('electron'); require('fs').appendFileSync(require('path').join(app.getPath('userData'), 'stream-debug.log'), a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n') } catch {} }
-  _log('=== stream start', model.model_name, baseUrl(provider), 'msgs=', messages.length)
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
     signal,
   })
-  _log('fetch status=', res.status, 'ct=', res.headers.get('content-type'))
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
-    _log('NOT OK body=', errBody.slice(0, 300))
     const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
     err.status = res.status
     // On 429, mark the current credential as cooling down so the fallback
@@ -77,24 +70,19 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  let deltaCount = 0
-  let firstChunk = true
   streamChat.usage = null
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-    const raw = decoder.decode(value, { stream: true })
-    if (firstChunk) { _log('first raw chunk=', JSON.stringify(raw.slice(0, 200))); firstChunk = false }
-    buffer += raw
+    buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
     buffer = lines.pop() || '' // keep the partial last line
     for (const line of lines) {
       const { delta, usage } = parseSSELine(line)
       if (usage) streamChat.usage = usage
-      if (delta) { deltaCount++; yield delta }
+      if (delta) yield delta
     }
   }
-  _log('stream end. deltas=', deltaCount, 'trailing buffer=', JSON.stringify(buffer.slice(0, 200)))
   // Flush any trailing buffered line.
   if (buffer.startsWith('data: ')) {
     const { delta, usage } = parseSSELine(buffer)
@@ -102,9 +90,6 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     if (delta) yield delta
   }
 }
-
-// (streamChatInner was merged into streamChat above — the old two-layer
-// wrapper returned an un-consumed inner generator, so the fetch never ran.)
 
 // Parse one SSE `data:` line into { delta, usage }. delta is the content
 // string (or '' / null); usage is set when the chunk carries token usage

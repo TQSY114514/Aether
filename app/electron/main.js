@@ -22,6 +22,7 @@ const { setWorkspaceRoot } = require('./tools/sandbox')
 let mainWindow = null
 let staticServer = null
 const DIST_PORT = 19877
+let actualDistPort = DIST_PORT
 
 function startStaticServer(distDir) {
   const mime = {
@@ -47,7 +48,16 @@ function startStaticServer(distDir) {
         res.writeHead(404); res.end('Not found')
       }
     })
-    staticServer.listen(DIST_PORT, '127.0.0.1', () => resolve())
+    staticServer.listen(actualDistPort, '127.0.0.1', () => resolve())
+    staticServer.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') {
+        actualDistPort++
+        staticServer.listen(actualDistPort, '127.0.0.1', () => resolve())
+        console.log(`[AetherAI] port ${DIST_PORT} in use, using ${actualDistPort}`)
+      } else {
+        throw e
+      }
+    })
   })
 }
 
@@ -70,7 +80,7 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadURL(`http://127.0.0.1:${DIST_PORT}`)
+    mainWindow.loadURL(`http://127.0.0.1:${actualDistPort}`)
   }
 }
 
@@ -94,21 +104,21 @@ function setupIpcHandlers() {
 
 app.whenReady().then(async () => {
   await db.initDatabase()
-  // Prune sessions that were created but never sent a message (placeholder
-  // title, no messages) so the sidebar starts clean.
-  try { db.pruneEmptySessions() } catch {}
-  // Initialize the credential pool after the DB is open so the rotation logic
-  // can read/write provider_credential rows from the first request onwards.
-  try { require('./llm/credentialPool').init(db) } catch {}
-  // Restore the agent workspace root from settings so the sandbox is active
-  // before any tool runs. Falls back to <userData>/workspace if unset.
-  try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}
-  // Discover skills (Claude-Code SKILL.md format) from workspace + userData + built-in dirs.
-  try { const { scanSkills } = require('./llm/skills'); const n = scanSkills(); console.log(`[AetherAI] loaded ${n} skills`) } catch (e) { console.warn('[AetherAI] skill scan failed:', e.message) }
+  // Independent init steps run in parallel after DB is ready.
+  await Promise.all([
+    (async () => { try { db.pruneEmptySessions() } catch {} })(),
+    (async () => { try { require('./llm/credentialPool').init(db) } catch {} })(),
+    (async () => {
+      try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}
+    })(),
+    (async () => {
+      try { const { scanSkills } = require('./llm/skills'); scanSkills() } catch (e) { console.warn('[AetherAI] skill scan failed:', e.message) }
+    })(),
+  ])
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {
     const distDir = path.join(__dirname, '..', 'dist')
     await startStaticServer(distDir)
-    console.log(`Static server on http://127.0.0.1:${DIST_PORT}`)
+    console.log(`Static server on http://127.0.0.1:${actualDistPort}`)
   }
   createWindow()
   setupIpcHandlers()

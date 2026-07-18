@@ -33,17 +33,28 @@ function classifyError(err) {
     return { kind: 'auth', retryable: false, recover: { action: 'none', hint: 'API Key 无效或无权限，请在模型管理检查配置' } }
   }
   if (status === 429) {
-    return { kind: 'rate_limit', retryable: true, recover: { action: 'retry', hint: '触发限流，已尝试回退模型' } }
+    const retryAfter = err.retryAfter || (() => {
+      const m = msg.match(/retry[- ]after[:\s]+(\d+)/i)
+      return m ? Number(m[1]) : null
+    })()
+    const hint = retryAfter
+      ? `触发限流，请等待 ${retryAfter} 秒后重试，或已尝试回退模型`
+      : '触发限流，已尝试回退模型'
+    return { kind: 'rate_limit', retryable: true, recover: { action: 'retry', hint } }
   }
   if (status >= 500 && status < 600) {
+    const overloaded = status === 503 && /overloaded|capacity|busy/i.test(msg)
+    if (overloaded) {
+      return { kind: 'server', retryable: true, recover: { action: 'retry', hint: '模型过载，已尝试回退模型' } }
+    }
     return { kind: 'server', retryable: true, recover: { action: 'retry', hint: '服务端错误，已尝试回退模型' } }
   }
   if (/ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network/i.test(msg)) {
     return { kind: 'network', retryable: true, recover: { action: 'retry', hint: '网络错误，已尝试回退模型' } }
   }
   // Context-length overruns usually come back as 400 with a token mention.
-  if (status === 400 && /context length|too many tokens|max_tokens|maximum context/i.test(msg)) {
-    return { kind: 'context_length', retryable: true, recover: { action: 'compress', hint: '上下文超长，已自动压缩历史后重试' } }
+  if (status === 400 && /context length|too many tokens|maximum context/i.test(msg)) {
+    return { kind: 'context_length', retryable: true, recover: { action: 'new_chat', hint: '上下文过长，建议开启「新对话」再试' } }
   }
   // Content-policy refusals (OpenAI: content_filter; some proxies 400 "content").
   if (/content_filter|content policy|content management policy|safety/i.test(msg)) {
