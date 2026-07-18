@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useStore } from '@/store'
 
 export default function ContextBar() {
@@ -11,7 +12,10 @@ export default function ContextBar() {
   const currentModel = models.find(m => m.id === cfg?.modelId)
   const contextWindow = currentModel?.context_window || 128000
 
-  const used = messages.reduce((sum, m) => sum + estimateTokens(m.content) + 20, 0)
+  // Memoize token estimation — only recompute when messages reference changes
+  // (not when streaming updates unrelated store keys). During streaming the
+  // messages array stays stable, so this is O(1) per tick.
+  const used = useMemo(() => messages.reduce((sum, m) => sum + estimateTokens(m.content) + 20, 0), [messages])
   const pct = Math.min(Math.round((used / contextWindow) * 100), 100)
 
   if (messages.length === 0) return null

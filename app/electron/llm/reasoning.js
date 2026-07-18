@@ -16,22 +16,19 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 // Classify a model by its id/name prefix. Returns the reasoning family.
+// Regexes are pre-compiled once (module-level) since they're called once per turn.
+const RE_OPENAI = /^o[134]|^gpt-5/
+const RE_CLAUDE = /claude/
+const RE_DEEPSEEK = /deepseek/
+const RE_QWEN = /^qwq|qwen.*-(thinking|reason)/
 function reasoningFamily(modelName = '') {
   const m = modelName.toLowerCase()
-  // OpenAI o-series & gpt-5 (reasoning models that accept reasoning_effort)
-  if (/^o1/.test(m) || /^o3/.test(m) || /^o4/.test(m) || /^gpt-5/.test(m)) return 'openai'
-  // Claude family (reasoning via thinking.budget_tokens when routed through a
-  // Claude-speaking proxy; many OpenAI-compat shims also accept this shape)
-  if (/claude/.test(m)) return 'claude'
-  // DeepSeek/Qwen reasoning models expose reasoning_content (best-effort)
-  if (/deepseek/.test(m) && /r/.test(m)) return 'deepseek'
-  if (/^qwq|qwen.*-thinking|qwen.*-reason/.test(m)) return 'qwen'
+  if (RE_OPENAI.test(m)) return 'openai'
+  if (RE_CLAUDE.test(m)) return 'claude'
+  if (RE_DEEPSEEK.test(m) && /r/.test(m)) return 'deepseek'
+  if (RE_QWEN.test(m)) return 'qwen'
   return 'none'
 }
-
-// The Claude budget ladder — exact values ported from new-api's
-// relay-channel-claude effort→budget conversion.
-const CLAUDE_BUDGETS = { low: 1280, medium: 2048, high: 4096 }
 
 // The OpenAI effort vocabulary. 'off' maps to "send nothing".
 const OPENAI_EFFORT = { low: 'low', medium: 'medium', high: 'high' }
@@ -69,4 +66,4 @@ function supportsReasoning(modelName = '') {
   return fam === 'openai' || fam === 'claude'
 }
 
-module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning, CLAUDE_BUDGETS }
+module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning }

@@ -99,6 +99,10 @@ async function initDatabase() {
   // MCP servers: external tool servers the agent can call via stdio.
   db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  // Habit learner: tracks recurring user preferences. Created here once at init
+  // instead of lazily in habitLearner.js to avoid a redundant SQL round-trip on
+  // every user turn.
+  db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
   try { db.run("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
 
   // Per-provider credential pool — multiple API keys per provider with rotation

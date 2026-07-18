@@ -453,15 +453,10 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
   try { dbHandle.renameSession(sessionId, title) } catch {}
 }
 
-function estimateTokens(text) {
-  if (!text) return 0
-  let tokens = 0
-  for (const c of text) {
-    if (c >= '一' && c <= '鿿') tokens += 1.5
-    else tokens += 0.25
-  }
-  return Math.max(1, Math.ceil(tokens))
-}
+// estimateTextTokens is imported from compaction.js (shared with the same
+// function there, so both use the same 6-range CJK coverage — no divergence).
+// The old local estimateTokens had only 1 range and under-counted CJK tokens.
+const { estimateTextTokens: estimateTokens } = require('../llm/compaction')
 
 // Per-call cost from the model's price columns (USD per 1K tokens). 0 if unpriced.
 // Cached-read tokens aren't billed at the full input rate (best-effort).

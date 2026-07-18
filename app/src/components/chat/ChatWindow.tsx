@@ -10,9 +10,13 @@ import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-reac
 
 // Lightweight placeholder: rendered once, updated via direct DOM writes
 // to avoid re-rendering ChatWindow on every streaming token.
+// Uses rAF-throttled scrollIntoView and a content-length guard to skip
+// no-op DOM writes when the delta is a streaming heartbeat (empty or same content).
 function StreamingBubble({ sessionId }: { sessionId: number }) {
   const ref = useRef<HTMLDivElement>(null)
   const msgIdRef = useRef<number>(-1)
+  const rafRef = useRef<number>(0)
+  const lastLenRef = useRef<number>(0)
 
   useEffect(() => {
     const unsub = useStore.subscribe((s) => {
@@ -21,19 +25,35 @@ function StreamingBubble({ sessionId }: { sessionId: number }) {
       if (!ref.current) return
       if (buf && buf.messageId && buf.messageId !== msgIdRef.current) {
         msgIdRef.current = buf.messageId
+        lastLenRef.current = 0
         ref.current.innerHTML = renderMarkdown(buf.content)
         ref.current.style.display = ''
-        setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth' }), 0)
+        queueScroll()
       } else if (!buf && msgIdRef.current !== -1) {
         msgIdRef.current = -1
+        lastLenRef.current = 0
         ref.current.innerHTML = ''
         ref.current.style.display = 'none'
       } else if (buf && msgIdRef.current === buf.messageId) {
+        const newLen = buf.content.length
+        if (newLen === lastLenRef.current) return
+        if (newLen - lastLenRef.current < 2 && newLen > 0) return
+        lastLenRef.current = newLen
         ref.current.innerHTML = renderMarkdown(buf.content)
-        setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth' }), 0)
+        queueScroll()
       }
     })
-    return unsub
+    function queueScroll() {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0
+        ref.current?.scrollIntoView({ behavior: 'smooth' })
+      })
+    }
+    return () => {
+      unsub()
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
   }, [sessionId])
 
   return <div ref={ref} style={{ display: 'none' }} />
@@ -93,9 +113,11 @@ export default function ChatWindow() {
     setTimeout(scrollToBottom, 50)
   }, [currentSessionId, loadMessages, scrollToBottom])
 
+  // Only auto-scroll when the user is already near the bottom (normal reading
+  // position). If they scrolled up to read history, don't yank them back down.
   useEffect(() => {
     if (isAtBottom) scrollToBottom()
-  }, [messages, arenaResults, isAtBottom, scrollToBottom])
+  }, [messages, isAtBottom, scrollToBottom])
 
   // Search: don't filter — keep the full conversation visible and highlight
   // matches (prev/next jumps to each). matchIds = message ids that contain the
@@ -150,7 +172,7 @@ export default function ChatWindow() {
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">
-          {messages.length === 0 && !isStreaming && arenaResults.length === 0 && (
+          {messages.length === 0 && !useStore.getState().sending && arenaResults.length === 0 && (
             <EmptyState />
           )}
 

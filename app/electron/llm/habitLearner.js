@@ -113,11 +113,10 @@ function normalizeKey(s) {
 }
 
 // Create/bump a habit row. Returns the new occurrence count.
+// The table is created at database.js init, but the ALTER TABLE migration for
+// the `proposed` column is idempotent and only runs on pre-existing DBs.
 function bumpOccurrence(db, key, imperative, reason) {
   try {
-    // create table lazily (idempotent) so we don't depend on database.js init order
-    db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
-    // Add the proposed column to existing tables (migration for pre-existing rows).
     try { db.run('ALTER TABLE user_habit ADD COLUMN proposed INTEGER NOT NULL DEFAULT 0') } catch {}
     db.run('INSERT INTO user_habit (key, imperative, reason, occurrences) VALUES (?, ?, ?, 1) ON CONFLICT(key) DO UPDATE SET occurrences=occurrences+1, last_seen=CURRENT_TIMESTAMP, imperative=excluded.imperative, reason=excluded.reason',
       [key, imperative, reason])

@@ -197,10 +197,9 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
   )
 }
 
-// Memoize: a committed bubble's content/status don't change during a sibling's
-// stream, so skip re-render unless one of these actually differs. The streaming
-// bubble (id<0) re-renders every token — that's expected and handled by the
-// markdown single-slot cache.
+// Memoize: a committed bubble re-renders only when its own data changes.
+// The streaming bubble (id<0) re-renders every token — that's expected and
+// handled by the markdown single-slot cache.
 export default memo(MessageBubble, (prev, next) =>
   prev.message.content === next.message.content &&
   prev.message.status === next.message.status &&

@@ -2800,7 +2800,11 @@ export function detectLang(): LangCode {
 
 export function t(key: string, ...args: (string | number)[]): string {
   const table = translations[currentLang] || translations["en"] || {}
-  let s = table[key] ?? translations["en"]?.[key] ?? key
+  // Fast path for English: skip the redundant second lookup since `table` is
+  // already the English table. This is the common case and saves one property
+  // access per call (significant — `t()` is called on every render for every
+  // text node in the app).
+  let s = currentLang === 'en' ? (table[key] ?? key) : (table[key] ?? translations["en"]?.[key] ?? key)
   if (args.length) {
     s = s.replace(/\{(\d+)\}/g, (_, i) => String(args[Number(i)] ?? ""))
   }
