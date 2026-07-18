@@ -5,6 +5,8 @@ const { app } = require('electron')
 
 let db = null
 let dbPath = null
+// Simple async mutex to serialize ELO updates and prevent lost-update races.
+let _eloMutex = Promise.resolve()
 
 function getTableColumns(table) {
   try {
@@ -58,16 +60,17 @@ function lastId() {
 }
 function allRows(stmt) {
   const rows = []
-  while (stmt.step()) {
-    const obj = stmt.getAsObject()
-    // sql.js returns BigInt for 64-bit INTEGER columns; normalize to Number so
-    // ids compare with strict-equality on the renderer side (highlight, etc.).
-    for (const k of Object.keys(obj)) {
-      if (typeof obj[k] === 'bigint') obj[k] = Number(obj[k])
+  try {
+    while (stmt.step()) {
+      const obj = stmt.getAsObject()
+      for (const k of Object.keys(obj)) {
+        if (typeof obj[k] === 'bigint') obj[k] = Number(obj[k])
+      }
+      rows.push(obj)
     }
-    rows.push(obj)
+  } finally {
+    stmt.free()
   }
-  stmt.free()
   return rows
 }
 
@@ -309,7 +312,6 @@ function updateMessage(id, data) {
   const keys = Object.keys(data).filter(k => k !== 'id')
   if (!keys.length) return
   db.run(`UPDATE message SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
-  console.log(`[AetherAI] updateMessage id=${id} modified=${db.getRowsModified()} keys=[${keys.join(',')}]`)
   saveDatabase()
 }
 
@@ -350,28 +352,29 @@ function initModelScores(modelId) {
 
 function updateElo(winnerModelId, loserModelIds, intent) {
   const K = 32
-  for (const loserId of loserModelIds) {
-    // sql.js db.exec() does not bind params; use prepare()+bind() to read scores.
-    const wStmt = db.prepare('SELECT score FROM model_score WHERE model_id=? AND intent=?'); wStmt.bind([winnerModelId, intent])
-    const wRow = wStmt.step() ? wStmt.getAsObject() : null; wStmt.free()
-    const lStmt = db.prepare('SELECT score FROM model_score WHERE model_id=? AND intent=?'); lStmt.bind([loserId, intent])
-    const lRow = lStmt.step() ? lStmt.getAsObject() : null; lStmt.free()
-    const ws = wRow?.score ?? 1000
-    const ls = lRow?.score ?? 1000
-    const expected = 1 / (1 + Math.pow(10, (ls - ws) / 400))
-    const newW = ws + K * (1 - expected)
-    const newL = ls + K * (0 - (1 - expected))
-
-    db.run(`INSERT OR REPLACE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,?,
-      COALESCE((SELECT win_count FROM model_score WHERE model_id=? AND intent=?),0)+1,
-      COALESCE((SELECT total_count FROM model_score WHERE model_id=? AND intent=?),0)+1)`,
-      [winnerModelId, intent, Math.round(newW * 10) / 10, winnerModelId, intent, winnerModelId, intent])
-    db.run(`INSERT OR REPLACE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,?,
-      COALESCE((SELECT win_count FROM model_score WHERE model_id=? AND intent=?),0),
-      COALESCE((SELECT total_count FROM model_score WHERE model_id=? AND intent=?),0)+1)`,
-      [loserId, intent, Math.round(newL * 10) / 10, loserId, intent, loserId, intent])
+  const work = async () => {
+    for (const loserId of loserModelIds) {
+      const wStmt = db.prepare('SELECT score FROM model_score WHERE model_id=? AND intent=?'); wStmt.bind([winnerModelId, intent])
+      const wRow = wStmt.step() ? wStmt.getAsObject() : null; wStmt.free()
+      const lStmt = db.prepare('SELECT score FROM model_score WHERE model_id=? AND intent=?'); lStmt.bind([loserId, intent])
+      const lRow = lStmt.step() ? lStmt.getAsObject() : null; lStmt.free()
+      const ws = wRow?.score ?? 1000
+      const ls = lRow?.score ?? 1000
+      const expected = 1 / (1 + Math.pow(10, (ls - ws) / 400))
+      const newW = ws + K * (1 - expected)
+      const newL = ls + K * (0 - (1 - expected))
+      db.run(`INSERT OR REPLACE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,?,
+        COALESCE((SELECT win_count FROM model_score WHERE model_id=? AND intent=?),0)+1,
+        COALESCE((SELECT total_count FROM model_score WHERE model_id=? AND intent=?),0)+1)`,
+        [winnerModelId, intent, Math.round(newW * 10) / 10, winnerModelId, intent, winnerModelId, intent])
+      db.run(`INSERT OR REPLACE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,?,
+        COALESCE((SELECT win_count FROM model_score WHERE model_id=? AND intent=?),0),
+        COALESCE((SELECT total_count FROM model_score WHERE model_id=? AND intent=?),0)+1)`,
+        [loserId, intent, Math.round(newL * 10) / 10, loserId, intent, loserId, intent])
+    }
+    saveDatabase()
   }
-  saveDatabase()
+  _eloMutex = _eloMutex.catch(() => {}).then(work)
 }
 
 // Persist an arena vote (prompt + winner/losers + detected intent) and update ELO.

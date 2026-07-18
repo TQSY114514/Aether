@@ -68,11 +68,10 @@ app/
 │   │   ├── providerAdapter.js   # api_format 기반 디스패처
 │   │   ├── openaiAdapter.js     # OpenAI 호환 구현
 │   │   ├── reasoning.js         # 사고 강도 파라미터 빌더
-│   │   ├── │   │   ├── planning.js          │ # hierarchical task decomposition (DS4-inspired)
-│   │   ├── toolLoop.js          │ # Plan→Act→Observe function-calling loop
-│   │   ├── subAgent.js          │ # parallel sub-agent delegation
-│   │   ├── autoMemory.js        │ # structured long-term memory (Hermes-inspired)
-│   │   ├── reasoning.js         │ # thinking-effort param builder
+│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          # parallel sub-agent delegation
+│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
 │   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # 내장 도구 레지스트리
 │   ├── mcp/               # MCP 클라이언트 + 매니저

@@ -103,7 +103,8 @@ function confirmHabit(db) { promoteToSkill(db) }
 
 // User dismissed → delete the habit so it never re-proposes.
 function dismissHabit(db, key) {
-  try { db.run('DELETE FROM user_habit WHERE key=?', [key]); promoteToSkill(db) } catch {}
+  try { db.run('DELETE FROM user_habit WHERE key=?', [key]) } catch {}
+  try { promoteToSkill(db) } catch {}
 }
 
 // Normalize an imperative into a stable storage key (lowercase, alnum).
@@ -120,8 +121,6 @@ function bumpOccurrence(db, key, imperative, reason) {
     try { db.run('ALTER TABLE user_habit ADD COLUMN proposed INTEGER NOT NULL DEFAULT 0') } catch {}
     db.run('INSERT INTO user_habit (key, imperative, reason, occurrences) VALUES (?, ?, ?, 1) ON CONFLICT(key) DO UPDATE SET occurrences=occurrences+1, last_seen=CURRENT_TIMESTAMP, imperative=excluded.imperative, reason=excluded.reason',
       [key, imperative, reason])
-    const r = db.exec('SELECT occurrences FROM user_habit WHERE key=?', [key])
-    // db.exec with params isn't supported by sql.js; use prepare via the proxy.
   } catch {}
   let occ = 0
   try {

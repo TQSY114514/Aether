@@ -68,11 +68,10 @@ app/
 │   │   ├── providerAdapter.js   # api_format द्वारा डिस्पैचर
 │   │   ├── openaiAdapter.js     # OpenAI-संगत कार्यान्वयन
 │   │   ├── reasoning.js         # थिंकिंग-प्रयास पैरामीटर बिल्डर
-│   │   ├── │   │   ├── planning.js          │ # hierarchical task decomposition (DS4-inspired)
-│   │   ├── toolLoop.js          │ # Plan→Act→Observe function-calling loop
-│   │   ├── subAgent.js          │ # parallel sub-agent delegation
-│   │   ├── autoMemory.js        │ # structured long-term memory (Hermes-inspired)
-│   │   ├── reasoning.js         │ # thinking-effort param builder
+│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          # parallel sub-agent delegation
+│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
 │   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # अंतर्निर्मित टूल रजिस्ट्री
 │   ├── mcp/               # MCP क्लाइंट + प्रबंधक

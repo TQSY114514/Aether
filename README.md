@@ -115,6 +115,9 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 - [Model Context Protocol](https://modelcontextprotocol.io) — the MCP spec AetherAI's agent speaks.
 - [shadcn/ui](https://github.com/shadcn-ui/ui) — the `cn()` / `cva` copy-paste component methodology.
 - [Magic UI](https://github.com/magicuidesign/magicui) — animation patterns (streaming text, shimmer, blur-fade).
+- [OpenHands](https://github.com/All-Hands-AI/OpenHands) — multi-turn agent execution, sandboxed tool execution, and the Plan→Act→Observe loop.
+- [Aider](https://github.com/Aider-AI/aider) — pioneered the LLM coding-assistant tool loop and git integration patterns.
+- [Cline](https://github.com/cline/cline) — IDE-embedded agent patterns, MCP tool integration, permission dialog UX.
 - [new-api](https://github.com/QuantumNous/new-api) — reasoning-effort relay conversion reference, usage/cost tracking.
 - [OpenClaw](https://github.com/openclaw/openclaw) — context compaction (pair-preserving split, identifier retention), before-tool-call loop detection, README polish.
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent) — iteration budget pattern, structured long-term memory.

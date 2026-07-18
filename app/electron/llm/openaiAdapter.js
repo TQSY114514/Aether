@@ -9,7 +9,9 @@
 
 // Strip trailing slashes so `${base}/chat/completions` never doubles up.
 function baseUrl(provider) {
-  return (provider.api_url || '').replace(/\/+$/, '')
+  const u = (provider.api_url || '').replace(/\/+$/, '')
+  if (!u) throw new Error(`Provider "${provider.name || provider.id}" is missing api_url`)
+  return u
 }
 
 // Obtain the best API key for the provider. Tries the credential pool first
@@ -49,21 +51,14 @@ function normalizeMessages(messages) {
 // "blank output" for the main reply while non-streaming calls (title, arena)
 // worked fine. Usage stats are collected on the non-streaming paths instead.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
-  // Diagnostic log for the blank-output investigation. Records the fetch
-  // status, the raw first chunk, and how many deltas were yielded — so we can
-  // see whether the provider returned 200+empty, a non-SSE body, or nothing.
-  const _log = (...a) => { try { const { app } = require('electron'); require('fs').appendFileSync(require('path').join(app.getPath('userData'), 'stream-debug.log'), a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n') } catch {} }
-  _log('=== stream start', model.model_name, baseUrl(provider), 'msgs=', messages.length)
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
     signal,
   })
-  _log('fetch status=', res.status, 'ct=', res.headers.get('content-type'))
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
-    _log('NOT OK body=', errBody.slice(0, 300))
     const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
     err.status = res.status
     // On 429, mark the current credential as cooling down so the fallback
@@ -77,34 +72,36 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  let deltaCount = 0
-  let firstChunk = true
-  streamChat.usage = null
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const raw = decoder.decode(value, { stream: true })
-    if (firstChunk) { _log('first raw chunk=', JSON.stringify(raw.slice(0, 200))); firstChunk = false }
-    buffer += raw
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || '' // keep the partial last line
-    for (const line of lines) {
-      const { delta, usage } = parseSSELine(line)
-      if (usage) streamChat.usage = usage
-      if (delta) { deltaCount++; yield delta }
+  const MAX_BUFFER = 512 * 1024 // 512 KB cap — abort if server never sends \n
+  this.usage = null
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const raw = decoder.decode(value, { stream: true })
+      buffer += raw
+      if (buffer.length > MAX_BUFFER) {
+        reader.cancel()
+        throw new Error(`SSE stream exceeded ${MAX_BUFFER} bytes without a newline`)
+      }
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const { delta, usage } = parseSSELine(line)
+        if (usage) this.usage = usage
+        if (delta) yield delta
+      }
     }
+  } finally {
+    reader.cancel().catch(() => {})
   }
-  _log('stream end. deltas=', deltaCount, 'trailing buffer=', JSON.stringify(buffer.slice(0, 200)))
   // Flush any trailing buffered line.
   if (buffer.startsWith('data: ')) {
     const { delta, usage } = parseSSELine(buffer)
-    if (usage) streamChat.usage = usage
+    if (usage) this.usage = usage
     if (delta) yield delta
   }
 }
-
-// (streamChatInner was merged into streamChat above — the old two-layer
-// wrapper returned an un-consumed inner generator, so the fetch never ran.)
 
 // Parse one SSE `data:` line into { delta, usage }. delta is the content
 // string (or '' / null); usage is set when the chunk carries token usage
@@ -195,30 +192,30 @@ async function listModels({ provider, signal }) {
 // back to a 1-token chat ping. Reports auth errors specifically.
 async function testConnection({ provider }) {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10000)
+  const timeout = setTimeout(() => controller.abort(), 15000)
   const start = Date.now()
   try {
     const res = await fetch(`${baseUrl(provider)}/models`, { headers: headers(provider), signal: controller.signal })
-    clearTimeout(timeout)
-    if (res.ok) return { success: true, latencyMs: Date.now() - start }
+    if (res.ok) { clearTimeout(timeout); return { success: true, latencyMs: Date.now() - start } }
     if (res.status === 404) {
-      // Some proxies only implement /chat/completions. Ping with a 1-token request.
       const res2 = await fetch(`${baseUrl(provider)}/chat/completions`, {
         method: 'POST', headers: headers(provider),
         body: JSON.stringify({ model: 'gpt-3.5-turbo', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
         signal: controller.signal,
       })
+      clearTimeout(timeout)
       if (res2.ok) return { success: true, latencyMs: Date.now() - start }
       const e2 = await res2.text().catch(() => '')
       if (res2.status === 401 || res2.status === 403) return { success: false, errorMessage: 'API Key 无效' }
       return { success: false, errorMessage: `HTTP ${res2.status}: ${e2.slice(0, 200)}` }
     }
+    clearTimeout(timeout)
     const e1 = await res.text().catch(() => '')
     if (res.status === 401 || res.status === 403) return { success: false, errorMessage: 'API Key 无效' }
     return { success: false, errorMessage: `HTTP ${res.status}: ${e1.slice(0, 200)}` }
   } catch (err) {
     clearTimeout(timeout)
-    if (err.name === 'AbortError') return { success: false, errorMessage: '连接超时（10秒）' }
+    if (err.name === 'AbortError') return { success: false, errorMessage: '连接超时（15秒）' }
     return { success: false, errorMessage: `网络错误: ${err.message}` }
   }
 }

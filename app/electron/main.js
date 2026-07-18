@@ -22,6 +22,7 @@ const { setWorkspaceRoot } = require('./tools/sandbox')
 let mainWindow = null
 let staticServer = null
 const DIST_PORT = 19877
+let actualDistPort = DIST_PORT
 
 function startStaticServer(distDir) {
   const mime = {
@@ -47,7 +48,16 @@ function startStaticServer(distDir) {
         res.writeHead(404); res.end('Not found')
       }
     })
-    staticServer.listen(DIST_PORT, '127.0.0.1', () => resolve())
+    staticServer.listen(actualDistPort, '127.0.0.1', () => resolve())
+    staticServer.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') {
+        actualDistPort++
+        staticServer.listen(actualDistPort, '127.0.0.1', () => resolve())
+        console.log(`[AetherAI] port ${DIST_PORT} in use, using ${actualDistPort}`)
+      } else {
+        throw e
+      }
+    })
   })
 }
 
@@ -104,7 +114,7 @@ app.whenReady().then(async () => {
   // before any tool runs. Falls back to <userData>/workspace if unset.
   try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}
   // Discover skills (Claude-Code SKILL.md format) from workspace + userData + built-in dirs.
-  try { const { scanSkills } = require('./llm/skills'); const n = scanSkills(); console.log(`[AetherAI] loaded ${n} skills`) } catch (e) { console.warn('[AetherAI] skill scan failed:', e.message) }
+  try { const { scanSkills } = require('./llm/skills'); scanSkills() } catch (e) { console.warn('[AetherAI] skill scan failed:', e.message) }
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {
     const distDir = path.join(__dirname, '..', 'dist')
     await startStaticServer(distDir)

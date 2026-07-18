@@ -42,7 +42,6 @@ class IterationBudget {
     this._used = 0
   }
   consume() { if (this._used >= this.maxTotal) return false; this._used++; return true }
-  refund() { if (this._used > 0) this._used-- }
   get used() { return this._used }
   get remaining() { return Math.max(0, this.maxTotal - this._used) }
 }
@@ -60,8 +59,6 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
 async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations }) {
-  const _tlog = (...a) => { try { const { app } = require('electron'); require('fs').appendFileSync(require('path').join(app.getPath('userData'), 'toolloop-debug.log'), a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n') } catch {} }
-  _tlog('=== toolLoop start model=', model.model_name, 'agentMode=', agentMode, 'msgs=', messages.length, 'tools=', tools)
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
   let totalChars = 0
@@ -100,9 +97,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     let msg
     try {
       msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
-      _tlog('round', budget.used, 'content_len=', (msg?.content||'').length, 'tool_calls=', (msg?.tool_calls||[]).length, 'usage=', msg?.usage ? 'yes' : 'no')
     } catch (e) {
-      _tlog('completeChatMessage FAILED:', e.message)
       return `[agent error: ${e && e.message ? e.message : String(e)}]`
     }
     if (!msg) msg = { content: '', tool_calls: undefined }
@@ -186,7 +181,6 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       continue
     }
     // No tool calls — final answer.
-    _tlog('FINAL answer len=', (msg.content||'').length, 'preview=', (msg.content||'').slice(0,80))
     return msg.content || ''
   }
   try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}

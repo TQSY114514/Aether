@@ -68,11 +68,10 @@ app/
 │   │   ├── providerAdapter.js   # المُوزّع حسب api_format
 │   │   ├── openaiAdapter.js     # تطبيق متوافق مع OpenAI
 │   │   ├── reasoning.js         # باني وسيط جهد التفكير
-│   │   ├── │   │   ├── planning.js          │ # hierarchical task decomposition (DS4-inspired)
-│   │   ├── toolLoop.js          │ # Plan→Act→Observe function-calling loop
-│   │   ├── subAgent.js          │ # parallel sub-agent delegation
-│   │   ├── autoMemory.js        │ # structured long-term memory (Hermes-inspired)
-│   │   ├── reasoning.js         │ # thinking-effort param builder
+│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
+│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
+│   │   ├── subAgent.js          # parallel sub-agent delegation
+│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
 │   │   └── toolArgs.js          │ # tool-arg parsing
 │   ├── tools/             # سجلّ الأدوات المدمجة
 │   ├── mcp/               # عميل MCP + المدير

@@ -6,22 +6,11 @@ const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
-const fs = require('fs')
 const path = require('path')
 
 // dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
 // scope (so it can be unit-tested) but needs DB access to persist the title.
 let dbHandle = null
-
-// Append-only diagnostic log for the title-summary path, so we can see why a
-// session keeps the placeholder title without needing the dev console.
-function logTitle(...args) {
-  try {
-    const { app } = require('electron')
-    fs.appendFileSync(path.join(app.getPath('userData'), 'title-debug.log'),
-      args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ') + '\n')
-  } catch {}
-}
 
 // Placeholder titles (in any language) that indicate a session hasn't been
 // named yet. When auto-title is on and the session has one of these, we
@@ -68,10 +57,6 @@ function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
-    // Entry-point diagnostic: confirms the handler was reached at all (if this
-    // line never appears in chat-debug.log, the IPC isn't reaching here).
-    const _clog = (...a) => { try { const { app } = require('electron'); require('fs').appendFileSync(require('path').join(app.getPath('userData'), 'chat-debug.log'), a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n') } catch {} }
-    _clog('=== chat:send sid=', sessionId, 'modelId=', modelId, 'useTools=', useTools, 'agentMode=', agentMode, 'content=', JSON.stringify(content).slice(0, 60))
     // Save user message
     if (!regenerate) {
       db.addMessage({ session_id: sessionId, role: 'user', content })
@@ -113,7 +98,6 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
     const titleLanguage = db.getSetting('titleLanguage') || 'auto'
     const needsTitle = autoTitleOn && session0 && PLACEHOLDER_TITLES.has((session0.title || '').trim()) && msgs.length === 1
-    logTitle('session', sessionId, 'needsTitle=', needsTitle, 'autoTitle=', autoTitleOn, 'title=', session0?.title, 'msgs=', msgs.length)
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
     if (attachments.length > 0) {
@@ -153,7 +137,6 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     try {
       compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget })
     } catch (e) {
-      _clog('maybeCompact FAILED:', e.message, '— using apiMsgs')
       compacted = apiMsgs
     }
     // If compaction actually shrank the message list, surface a one-line status
@@ -327,7 +310,6 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       try {
         let fullContent = ''
         const wc = getWebContents()
-        _clog('streamChat path start model=', m.model_name, 'msgs=', compacted.length)
         // mergedOpts carries reasoning params + advanced generation params (max_tokens/
         // temperature/top_p) set in Settings, spread into the request body by the adapter.
         // streamChat returns a generator that exposes .usage (server-reported tokens)
@@ -340,7 +322,6 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
           }
         }
-        _clog('streamChat done fullContent_len=', fullContent.length)
         clearTimeout(timeout)
         abortControllers.delete(msgId)
 
@@ -391,15 +372,16 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           getWebContents()?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
           return { messageId: msgId }
         }
-        lastError = err.message
-        db.updateMessage(msgId, { content: '', status: 'error', error_message: lastError })
+        const errMsg = err.message || String(err)
+        lastError = errMsg
+        db.updateMessage(msgId, { content: '', status: 'error', error_message: errMsg })
         // Centralized error classification (auth/rate-limit/network/content-filter etc.)
         const eclass = classifyError(err)
         if (eclass.recover && eclass.recover.hint) {
           try { wc?.send('chat:status', { messageId: msgId, sessionId, text: eclass.recover.hint, kind: eclass.kind }) } catch {}
         }
-        const isRetryable = eclass.retryable || err.message.includes('ECONNREFUSED') || err.message.includes('ECONNRESET') ||
-          err.message.includes('ENOTFOUND') || err.message.includes('ETIMEDOUT')
+        const isRetryable = eclass.retryable || errMsg.includes('ECONNREFUSED') || errMsg.includes('ECONNRESET') ||
+          errMsg.includes('ENOTFOUND') || errMsg.includes('ETIMEDOUT')
         if (isRetryable && i < fallbackModels.length - 1) continue
         break
       }
@@ -452,7 +434,6 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
     ja: 'セッションの主題を短いフレーズ（4-12字）で要約し、小見出しのように出力せよ。句読点・引用符・接頭辞・説明は不要。',
   }
   const sysPrompt = prompts[lang] || prompts.zh
-  logTitle('generateSummaryTitle start sid=', sessionId, 'model=', model?.model_name, 'provider=', provider?.api_url, 'lang=', lang)
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15000)
@@ -468,12 +449,10 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
     clearTimeout(timeout)
     const cleaned = (text || '').trim().replace(/^["“『]|["”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
     if (cleaned) title = cleaned.slice(0, 20)
-    logTitle('summary raw=', JSON.stringify(text).slice(0, 80), '→ title=', title)
   } catch (e) {
-    logTitle('summary FAILED:', e.message)
     console.warn('[AetherAI] title summary failed:', e.message)
   }
-  try { dbHandle.renameSession(sessionId, title); logTitle('renamed sid=', sessionId, 'to=', title) } catch (e) { logTitle('rename FAILED:', e.message) }
+  try { dbHandle.renameSession(sessionId, title) } catch (e) { console.warn('[AetherAI] title rename failed:', e.message) }
 }
 
 function estimateTokens(text) {
