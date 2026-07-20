@@ -59,8 +59,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
   // Cache rarely-changing settings at handler registration time. Invalidation
   // happens on the `settings-changed` IPC (broadcast from settings.handler).
-  const _s: Record<string, string> = {}
-  const getCached = (k: string, fallback: string) => {
+  const _s = {}
+  const getCached = (k, fallback) => {
     if (!(k in _s)) _s[k] = db.getSetting(k) ?? fallback
     return _s[k]
   }

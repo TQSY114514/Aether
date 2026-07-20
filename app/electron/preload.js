@@ -1,6 +1,8 @@
+const { app } = require('electron')
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  sys: { locale: app.getLocale() },
   provider: {
     list: () => ipcRenderer.invoke('provider:list'),
     get: (id) => ipcRenderer.invoke('provider:get', id),

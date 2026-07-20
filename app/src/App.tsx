@@ -32,12 +32,17 @@ export default function App() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const mainRef = useRef<HTMLDivElement>(null)
+  const shortcutsOpenRef = useRef(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const backgroundOpacity = useStore((s) => s.backgroundOpacity)
   const backgroundBlur = useStore((s) => s.backgroundBlur)
   const hasBg = backgroundImage !== null
+
+  // Keep shortcutsOpenRef in sync with state so the keyboard handler (empty dep
+  // array) can read the current value without re-binding on every toggle.
+  useEffect(() => { shortcutsOpenRef.current = shortcutsOpen }, [shortcutsOpen])
 
   // Window-level overscroll spring bounce: F = -k*off - b*vel
   useEffect(() => {
@@ -129,6 +134,7 @@ export default function App() {
         return
       }
       if (e.key === 'Escape') {
+        if (shortcutsOpenRef.current) return // ShortcutOverlay handles its own ESC
         const s = useStore.getState()
         if (s.sending) { e.preventDefault(); s.stopGeneration() }
         else if (s.currentView !== 'chat') s.setCurrentView('chat')

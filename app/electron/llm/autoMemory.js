@@ -59,7 +59,7 @@ function score(memoryText, qkw) {
 // Retrieve top-K relevant memories for a user message.
 // In-memory cache avoids repeated full-table scans across consecutive turns.
 
-let _memCache: { data: any[]; v: number } | null = null
+let _memCache = null
 let _memV = 0
 
 function prefetch(db, userMessage) {

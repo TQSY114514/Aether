@@ -24,14 +24,17 @@ function KeyBadge({ label }: { label: string }) {
   )
 }
 
-export default function ShortcutOverlay({ onClose }: { onClose: () => void }) {
+export default function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => {
+    if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [open, onClose])
+
+  if (!open) return null
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={onClose}>

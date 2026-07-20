@@ -2792,8 +2792,11 @@ export function setLang(code: LangCode) { currentLang = code }
 export function getLang(): LangCode { return currentLang }
 
 // Detect the user's system language and map to a supported code. Falls back to en.
+// In Electron, navigator.language may not reflect the real OS locale, so we
+// first try app.getLocale() exposed via the preload bridge.
 export function detectLang(): LangCode {
-  const n = (navigator.language || "en").toLowerCase()
+  const raw = (typeof window !== 'undefined' && window.electronAPI?.sys?.locale) || navigator.language || "en"
+  const n = raw.toLowerCase()
   if (n.startsWith("zh")) {
     if (n.includes("tw") || n.includes("hant") || n.includes("hk")) return "zh-TW"
     return "zh-CN"
