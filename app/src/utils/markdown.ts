@@ -1,11 +1,9 @@
-// Single-slot memoization: during streaming, renderMarkdown is called once per
-// token on the SAME growing string — but each call has a different (longer) input,
-// so a keyed cache wouldn't help. The single-slot cache only wins when the EXACT
-// same text is re-rendered (e.g. a committed bubble re-rendered because a sibling
-// updated). That case is common (zustand re-renders the whole list) and was the
-// O(N²) jank source. Cost: one string comparison per call.
-let _cacheText: string | null = null
-let _cacheHtml: string | null = null
+// Multi-slot LRU cache (8 slots): during streaming the same text can re-render
+// when sibling bubbles update (zustand re-renders the whole list). With 8 slots
+// the cost is 8 string comparisons per call — cheap vs re-parsing markdown.
+// Entries are keyed by text length + first 64 chars to quickly skip non-matches.
+const CACHE_SIZE = 8
+let _cache: { text: string; html: string }[] = []
 
 export function renderMarkdown(text: string): string {
   if (!text) return ''
@@ -128,7 +126,12 @@ export function renderMarkdown(text: string): string {
   // block-level regex replacements could theoretically leave vectors open.
   t = t.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[^>]*>/gi, '')
 
-  _cacheText = text
-  _cacheHtml = t
+  // Store in LRU cache. Fast-path: skip entries whose text length differs.
+  const textLen = text.length
+  for (let i = 0; i < _cache.length; i++) {
+    if (_cache[i].text.length === textLen && _cache[i].text === text) return _cache[i].html
+  }
+  _cache.push({ text, html: t })
+  if (_cache.length > CACHE_SIZE) _cache.shift()
   return t
 }

@@ -5,7 +5,7 @@ import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
-import { MessageSquare, PanelLeft, Cpu, FlaskConical } from 'lucide-react'
+import { PanelLeft, Cpu, FlaskConical } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 export default function ChatPage() {
@@ -13,7 +13,6 @@ export default function ChatPage() {
   const personas = useStore((s) => s.personas)
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
-  const messages = useStore((s) => s.messages)
   const createSession = useStore((s) => s.createSession)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
@@ -37,6 +36,14 @@ export default function ChatPage() {
   const currentProvider = providers.find(p => p.id === activeProviderId)
   const currentPersona = personas.find(p => p.id === currentPersonaId)
 
+  const allModelOptions = useMemo(() => providers.map(p => {
+    const ms = allModels.filter(m => m.provider_id === p.id)
+    if (ms.length === 0) return null
+    return { providerId: p.id, providerName: p.name, models: ms.map(m => ({ id: m.id, name: m.display_name || m.model_name })) }
+  }).filter(Boolean), [providers, allModels])
+
+  const allArenaModels = useMemo(() => allModelOptions.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName }))), [allModelOptions])
+
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -45,20 +52,8 @@ export default function ChatPage() {
     )
   }
 
-  // Build model options grouped by provider — memoized; only recomputes when
-  // providers or allModels change (avoids O(P×M) filtering on every render).
-  const allModelOptions = useMemo(() => providers.map(p => {
-    const ms = allModels.filter(m => m.provider_id === p.id)
-    if (ms.length === 0) return null
-    return { providerId: p.id, providerName: p.name, models: ms.map(m => ({ id: m.id, name: m.display_name || m.model_name })) }
-  }).filter(Boolean), [providers, allModels])
-
-  // Build arena model checkboxes — memoized alongside the grouped options.
-  const allArenaModels = useMemo(() => allModelOptions.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName }))), [allModelOptions])
-
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }}>
-      {/* Top bar */}
       <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-white/95 backdrop-blur-sm" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2">
           {!sidebarOpen && (
@@ -90,13 +85,11 @@ export default function ChatPage() {
             </Tooltip>
           </div>
           </Tooltip>
-          {/* Agent mode (risk-ascending): off → plan (read-only) → ask (confirm) → auto (sandboxed) → yolo (full). */}
           <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
             {([['off', t('agent.mode.off')], ['plan', t('agent.mode.plan')], ['ask', t('agent.mode.ask')], ['auto', t('agent.mode.auto')], ['yolo', t('agent.mode.yolo')]] as const).map(([k,label]) => (
               <Tooltip key={k} text={t(`agent.mode.${k}.desc`)}>
                 <button onClick={() => {
                   if (k === 'yolo') {
-                    // High-risk mode: warn before enabling.
                     if (!window.confirm(t('agent.mode.yolo_warn'))) return
                   }
                   setAgentMode(k)
@@ -106,7 +99,6 @@ export default function ChatPage() {
               </Tooltip>
             ))}
           </div>
-          {/* Persona selector */}
           <Tooltip text={t('tooltip.persona')}>
             <select value={currentPersonaId ?? ''} onChange={(e) => {
               const v = e.target.value ? Number(e.target.value) : null
@@ -119,7 +111,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Arena model selector: checkbox grid — no Ctrl+click needed */}
       {chatMode === 'arena' && (
         <div className="px-4 py-1.5 border-b text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center gap-1 flex-wrap">
@@ -143,9 +134,6 @@ export default function ChatPage() {
           )}
         </div>
       )}
-
-      {/* Model selector now lives under the input bar (ChatInput) next to the
-          thinking-effort slider — Claude-Code-style. */}
 
       <ContextBar />
       <ChatWindow />

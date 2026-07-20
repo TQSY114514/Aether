@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
@@ -97,10 +97,9 @@ export default function App() {
     init()
   }, [])
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — use getState() to avoid re-binding on every store change.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Ctrl/Cmd+K toggles the command palette.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen(o => !o)
@@ -108,29 +107,26 @@ export default function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
-        createSession()
-        setCurrentView('chat')
+        useStore.getState().createSession()
+        useStore.getState().setCurrentView('chat')
         return
       }
-      // Ctrl/Cmd+R → regenerate the last assistant reply (browser-style re-roll).
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
         const s = useStore.getState()
         if (s.currentSessionId && s.messages.length > 0) { e.preventDefault(); s.regenerate() }
         return
       }
-      // Esc during streaming → stop generation (Esc elsewhere → back to chat).
       if (e.key === 'Escape') {
         const s = useStore.getState()
         if (s.sending) { e.preventDefault(); s.stopGeneration() }
-        else if (currentView !== 'chat') setCurrentView('chat')
+        else { const cv = s.currentView; if (cv !== 'chat') s.setCurrentView('chat') }
       }
-      // Alt+Left / Alt+Right — browser-style session back/forward.
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); useStore.getState().goBack() }
       if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); useStore.getState().goForward() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [currentView, createSession, setCurrentView])
+  }, [createSession, setCurrentView])
 
   const renderPage = () => {
     switch (currentView) {

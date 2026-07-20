@@ -4,6 +4,15 @@ All notable changes to AetherAI are documented here.
 
 ## [0.1.24] — 2026-07-20
 
+### Performance
+- ChatPage/App: `renderPage` and key handler removed stale closure on `currentView`; keyboard shortcuts use `useStore.getState()` to avoid re-binding on store changes
+- ChatPage: `allModelOptions`/`allArenaModels` memoized with correct dependencies (eliminates O(P×M) filtering on every render)
+- MessageBubble: handler callbacks (`handleCopy`, `startEdit`, `submitEdit`, `onBubbleClick`, `renderContent`) wrapped in `useCallback` to keep memo comparison stable
+- MessageBubble: memo comparison now includes `message.id` so search-highlight changes on an unchanged bubble still re-render correctly
+- Markdown renderer: upgraded from single-slot to 8-slot LRU cache — committed bubbles that re-render after sibling updates hit cache instead of re-parsing
+- StreamingBubble: raised micro-delta skip threshold from 2 to 4 chars, reducing DOM writes during fast streaming
+- store/index.ts: added missing `let _navigating = false` declaration (fixed ReferenceError on goBack/goForward)
+
 ### Performance & Maintenance
 - Centralized logging: all `console.log/warn/error` in `electron/` replaced with `electron/logger.js` ring-buffer logger (500-entry in-memory history, structured levels, dev/prod gating)
 - Vitest test infrastructure: 9 passing tests for logger ring buffer and memory keyword extraction

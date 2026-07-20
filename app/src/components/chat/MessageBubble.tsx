@@ -1,4 +1,4 @@
-import { useState, memo, useMemo } from 'react'
+import { useState, memo, useMemo, useCallback } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
@@ -12,16 +12,22 @@ import TodoList from './TodoList'
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
 function MessageBubble({ message, searchHighlight }: { message: Message; searchHighlight?: string }) {
-  const [copied, setCopied] = useState(false); const regenerate = useStore(s => s.regenerate)
-  const editMessage = useStore(s => s.editMessage)
-  const sending = useStore(s => s.sending)
+  const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+
+  // Per-message data from the store — each selector triggers re-render only
+  // when its slice changes, keeping the memo comparison effective.
+  const sending = useStore(s => s.sending)
   const bubbleWidth = useStore(s => s.bubbleWidth)
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
   const todos = useStore(s => s.todosByMessage[message.id])
   const statusLines = useStore(s => s.statusLinesByMessage[message.id])
+
+  const regenerate = useStore(s => s.regenerate)
+  const editMessage = useStore(s => s.editMessage)
+
   const isUser = message.role === 'user'
   const isStreaming = message.id < 0
   const isError = message.status === 'error'
@@ -32,27 +38,25 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
   // changes, not on every render for every visible bubble.
   const hlRe = useMemo(() => searchHighlight ? new RegExp(`(${escapeRegex(searchHighlight)})`, 'gi') : null, [searchHighlight])
 
-  const handleCopy = () => {
+  const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
+  }, [message.content])
 
-  const startEdit = () => { setDraft(message.content); setEditing(true) }
-  const submitEdit = async () => {
+  const startEdit = useCallback(() => { setDraft(message.content); setEditing(true) }, [message.content])
+  const submitEdit = useCallback(async () => {
     const c = draft.trim()
     if (!c || c === message.content) { setEditing(false); return }
     setEditing(false)
     await editMessage(message.id, c)
-  }
+  }, [draft, message.id, message.content, editMessage])
 
   // Code-block copy + fold buttons live inside rendered markdown HTML; handle
   // them via event delegation on the bubble root so each needs no React wiring.
-  const onBubbleClick = (e: React.MouseEvent) => {
+  const onBubbleClick = useCallback((e: React.MouseEvent) => {
     const fold = (e.target as HTMLElement).closest('.code-fold') as HTMLElement | null
     if (fold) {
-      // Toggle collapsed state on the parent <pre>. Swap the chevron glyph and
-      // show a "… N lines" placeholder when folded.
       const pre = fold.closest('pre.code-block')
       if (pre) {
         const collapsed = pre.classList.toggle('collapsed')
@@ -71,12 +75,9 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
     target.textContent = t('chat.copied')
     target.classList.add('copied')
     setTimeout(() => { target.textContent = prev; target.classList.remove('copied') }, 1200)
-  }
+  }, [])
 
-  // Render message content with optional search highlighting. Handles both
-  // user text (plain with <mark>) and assistant markdown (rendered HTML with
-  // injected <mark> tags after markdown conversion).
-  const renderContent = (text: string) => {
+  const renderContent = useCallback((text: string) => {
     if (!searchHighlight) {
       return isUser ? text : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
     }
@@ -98,7 +99,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
       return <div className="mc" dangerouslySetInnerHTML={{ __html: highlighted }} />
     }
     return <div className="mc" dangerouslySetInnerHTML={{ __html: html }} />
-  }
+  }, [searchHighlight, isUser, hlRe])
 
   return (
     <div id={`msg-${message.id}`} className={`flex animate-blur-fade ${isUser ? 'justify-end' : 'justify-start'} message-enter group`}>
@@ -154,9 +155,6 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
               {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
             </div>
           )}
-          {isUser && message.attachment?.kind === 'image' && message.attachment.preview && (
-            <img src={message.attachment.preview} alt={message.attachment.name} className="max-w-[200px] max-h-[200px] rounded-lg mb-2 object-cover" />
-          )}
           {isUser && editing ? (
             <div className="space-y-2">
               <textarea value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus
@@ -207,9 +205,11 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
 }
 
 // Memoize: a committed bubble re-renders only when its own data changes.
-// The streaming bubble (id<0) re-renders every token — that's expected and
-// handled by the markdown single-slot cache.
+// message.id is included so search-highlight changes on an unchanged bubble
+// still trigger re-render; the streaming bubble (id<0) re-renders every token
+// and is handled by the markdown single-slot cache.
 export default memo(MessageBubble, (prev, next) =>
+  prev.message.id === next.message.id &&
   prev.message.content === next.message.content &&
   prev.message.status === next.message.status &&
   prev.searchHighlight === next.searchHighlight

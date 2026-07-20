@@ -860,6 +860,9 @@ export const useStore = create<AppState>((set, get) => ({
 // work per delta. We now batch deltas into a rAF frame so the renderer fires
 // at most 60Hz regardless of token rate.
 // ───────────────────────────────────────────────────────────────────────────
+// Session back/forward nav guard: set true during goBack/goForward so
+// selectSession doesn't push a duplicate entry into history.
+let _navigating = false
 let chunkListenerInstalled = false
 let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}

@@ -37,7 +37,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       } else if (buf && msgIdRef.current === buf.messageId) {
         const newLen = buf.content.length
         if (newLen === lastLenRef.current) return
-        if (newLen - lastLenRef.current < 2 && newLen > 0) return
+        if (newLen - lastLenRef.current < 4 && newLen > 0) return // skip micro-deltas
         lastLenRef.current = newLen
         ref.current.innerHTML = renderMarkdown(buf.content)
         queueScroll()
