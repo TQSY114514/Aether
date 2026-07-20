@@ -157,6 +157,8 @@ app.on('window-all-closed', () => {
 
 // Ensure debounced DB writes are flushed before the process exits, otherwise
 // the last ~200ms of changes (a streaming chunk, a vote) would be lost.
-app.on('before-quit', () => {
-  if (typeof db.flushDatabase === 'function') db.flushDatabase()
+app.on('before-quit', async () => {
+  if (typeof db.flushDatabase === 'function') {
+    try { await db.flushDatabase() } catch {}
+  }
 })

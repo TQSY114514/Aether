@@ -21,31 +21,32 @@ function getTableColumns(table) {
 // updateMessage on every chunk, so we debounce the save — coalesce rapid writes
 // into a single flush 200ms after the last one. `flushNow` forces an immediate
 // write for moments that must be durable before returning (e.g. before quit).
+// Uses async writeFile so the main process is never blocked.
 let saveTimer = null
+let savePromise = null // tracks the in-flight async write so flushDatabase can await it
 const SAVE_DEBOUNCE_MS = 200
+function _writeDb(data) {
+  return fs.promises.writeFile(dbPath, Buffer.from(data)).catch(e => {
+    console.error('[AetherAI] _writeDb failed:', e)
+  })
+}
 function saveDatabase() {
   if (!db || !dbPath) return
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     saveTimer = null
-    try {
-      const data = db.export()
-      fs.writeFileSync(dbPath, Buffer.from(data))
-    } catch (e) {
-      console.error('[AetherAI] saveDatabase failed:', e)
-    }
+    const data = db.export()
+    savePromise = _writeDb(data).finally(() => { savePromise = null })
   }, SAVE_DEBOUNCE_MS)
 }
-// Force an immediate, non-debounced write. Use sparingly.
-function flushDatabase() {
+// Async flush — used by config.handler.js and the before-quit path (awaited there).
+// The debounce in saveDatabase means an in-flight write may need to be awaited.
+async function flushDatabase() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  if (savePromise) await savePromise
   if (db && dbPath) {
-    try {
-      const data = db.export()
-      fs.writeFileSync(dbPath, Buffer.from(data))
-    } catch (e) {
-      console.error('[AetherAI] flushDatabase failed:', e)
-    }
+    const data = db.export()
+    await _writeDb(data)
   }
 }
 

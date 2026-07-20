@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useStore } from '@/store'
+import { estimateTextTokens } from '@/utils/tokenEstimate'
 
 export default function ContextBar() {
   const messages = useStore((s) => s.messages)
@@ -15,7 +16,7 @@ export default function ContextBar() {
   // Memoize token estimation — only recompute when messages reference changes
   // (not when streaming updates unrelated store keys). During streaming the
   // messages array stays stable, so this is O(1) per tick.
-  const used = useMemo(() => messages.reduce((sum, m) => sum + estimateTokens(m.content) + 20, 0), [messages])
+  const used = useMemo(() => messages.reduce((sum, m) => sum + estimateTextTokens(m.content) + 20, 0), [messages])
   const pct = Math.min(Math.round((used / contextWindow) * 100), 100)
 
   if (messages.length === 0) return null
@@ -31,16 +32,6 @@ export default function ContextBar() {
       </span>
     </div>
   )
-}
-
-function estimateTokens(text: string): number {
-  if (!text) return 0
-  let tokens = 0
-  for (const c of text) {
-    if (c >= '一' && c <= '鿿') tokens += 1.5
-    else tokens += 0.25
-  }
-  return Math.max(1, Math.ceil(tokens))
 }
 
 function formatTokens(n: number): string {
