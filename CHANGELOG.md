@@ -2,6 +2,16 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.1.24] — 2026-07-20
+
+### Performance & Maintenance
+- Centralized logging: all `console.log/warn/error` in `electron/` replaced with `electron/logger.js` ring-buffer logger (500-entry in-memory history, structured levels, dev/prod gating)
+- Vitest test infrastructure: 9 passing tests for logger ring buffer and memory keyword extraction
+- Re-enabled npm postinstall scripts in `start.bat` (was `--ignore-scripts`, broke `sharp` native module)
+
+### Reliability
+- Fixed stale version string in `start.bat` (was v0.1.15, now reads package.json)
+
 ## [0.1.23] — 2026-07-20
 
 ### Performance

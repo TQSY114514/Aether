@@ -6,6 +6,7 @@ const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
+const log = require('../logger')
 
 // dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
 // scope (so it can be unit-tested) but needs DB access to persist the title.
@@ -368,7 +369,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
       if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
       if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
-      console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
+      log.info('DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
       return { messageId: msgId }
@@ -458,7 +459,7 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
     const cleaned = (text || '').trim().replace(/^["“『]|["”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
     if (cleaned) title = cleaned.slice(0, 20)
   } catch (e) {
-    console.warn('[AetherAI] title summary failed:', e.message)
+    log.warn('title summary failed:', e.message)
   }
   try { dbHandle.renameSession(sessionId, title) } catch {}
 }

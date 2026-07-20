@@ -3,6 +3,7 @@ const path = require('path')
 const http = require('http')
 const fs = require('fs')
 const db = require('./database')
+const log = require('./logger')
 const { registerProviderHandlers } = require('./ipc/provider.handler')
 const { registerModelHandlers } = require('./ipc/model.handler')
 const { registerPersonaHandlers } = require('./ipc/persona.handler')
@@ -53,7 +54,7 @@ function startStaticServer(distDir) {
       if (e.code === 'EADDRINUSE') {
         actualDistPort++
         staticServer.listen(actualDistPort, '127.0.0.1', () => resolve())
-        console.log(`[AetherAI] port ${DIST_PORT} in use, using ${actualDistPort}`)
+        log.info(`port ${DIST_PORT} in use, using ${actualDistPort}`)
       } else {
         throw e
       }
@@ -112,13 +113,13 @@ app.whenReady().then(async () => {
       try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}
     })(),
     (async () => {
-      try { const { scanSkills } = require('./llm/skills'); scanSkills() } catch (e) { console.warn('[AetherAI] skill scan failed:', e.message) }
+      try { const { scanSkills } = require('./llm/skills'); scanSkills() } catch (e) { log.warn('skill scan failed:', e.message) }
     })(),
   ])
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {
     const distDir = path.join(__dirname, '..', 'dist')
     await startStaticServer(distDir)
-    console.log(`Static server on http://127.0.0.1:${actualDistPort}`)
+    log.info(`Static server on http://127.0.0.1:${actualDistPort}`)
   }
   createWindow()
   setupIpcHandlers()
@@ -142,7 +143,7 @@ app.whenReady().then(async () => {
     // checkForUpdatesAndNotifications call doesn't exist here and threw on startup.
     updater.check().catch(() => {})
   } catch (e) {
-    console.warn('[AetherAI] updater init failed:', e.message)
+    log.warn('updater init failed:', e.message)
   }
 
   app.on('activate', () => {

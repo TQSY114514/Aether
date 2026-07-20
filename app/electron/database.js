@@ -2,6 +2,7 @@ const initSqlJs = require('sql.js')
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
+const log = require('./logger')
 
 let db = null
 let dbPath = null
@@ -27,7 +28,7 @@ let savePromise = null // tracks the in-flight async write so flushDatabase can 
 const SAVE_DEBOUNCE_MS = 200
 function _writeDb(data) {
   return fs.promises.writeFile(dbPath, Buffer.from(data)).catch(e => {
-    console.error('[AetherAI] _writeDb failed:', e)
+    log.error('_writeDb failed:', e.message || e)
   })
 }
 function saveDatabase() {

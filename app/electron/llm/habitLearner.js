@@ -23,6 +23,7 @@
 const fs = require('fs')
 const path = require('path')
 const { completeChat } = require('./providerAdapter')
+const log = require('../logger')
 
 const PROMOTE_THRESHOLD = 2   // seen twice → promote to a skill
 const HABIT_DIRNAME = 'user-habits'
@@ -78,7 +79,7 @@ async function detectAndLearn({ db, provider, model, userMessage, assistantReply
     }
   } catch (e) {
     // never let habit-learning break a chat
-    console.warn('[habitLearner] detect failed:', e && e.message)
+    log.warn('detect failed:', e && e.message)
   }
 }
 
@@ -159,7 +160,7 @@ ${body}
     // re-scanning all skill dirs from disk (which is O(skills) stat calls).
     try { require('./skills').upsertSkill('user-habits', { name: 'user-habits', description: 'Updated user habits', filePath: path.join(skillsDir, 'SKILL.md'), baseDir: skillsDir, body: md }) } catch {}
   } catch (e) {
-    console.warn('[habitLearner] promote failed:', e && e.message)
+    log.warn('promote failed:', e && e.message)
   }
 }
 

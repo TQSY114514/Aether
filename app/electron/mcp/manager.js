@@ -12,6 +12,7 @@
 
 const { McpClient } = require('./client')
 const builtin = require('../tools/registry')
+const log = require('../logger')
 
 const clients = new Map() // name -> McpClient
 const mergedTools = new Map() // tool name -> tool object (built-ins + MCP)
@@ -36,7 +37,7 @@ async function connectServer(cfg) {
     clients.set(cfg.name, client)
     return tools
   } catch (e) {
-    console.warn(`[MCP] ${cfg.name} connect failed:`, e.message)
+    log.warn(`${cfg.name} connect failed:`, e.message)
     return []
   }
 }
