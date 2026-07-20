@@ -126,6 +126,13 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 
 ## 📋 Changelog
 
+### v0.1.19
+**Bug fixes & refactor**
+- **Critical**: MessageBubble search highlight now works for assistant messages (rendered markdown HTML)
+- ChatWindow search input: 200ms debounce to avoid filter+scroll on every keystroke
+- DRY up `chat.send` params — re-applied `chatSendBase()` + `clearStreamingOnError()` after merge dropped them
+- Standardized error log prefix to `[AetherAI]` across all send paths
+
 ### v0.1.18
 **Refactor & bug fixes**
 - DRY up `chat.send` params — extracted `chatSendBase()` and `clearStreamingOnError()` helpers; `sendMessage`/`regenerate`/`editMessage` now share 7 lines of config and error cleanup (net -27 lines, 3 call sites)
