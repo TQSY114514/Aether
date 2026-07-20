@@ -3,7 +3,7 @@ title AetherAI Launcher
 chcp 65001 >nul
 cd /d "%~dp0"
 echo.
-echo   AetherAI v0.1.15
+echo   AetherAI v0.1.24
 echo   =================
 echo.
 
@@ -23,7 +23,7 @@ cd /d "%~dp0app"
 if not exist "node_modules" (
     echo.
     echo [1/2] Installing dependencies...
-    call npm install --ignore-scripts --no-audit --no-fund
+    call npm install --no-audit --no-fund
     if %ERRORLEVEL% neq 0 (
         echo [!] npm install failed
         pause & exit /b 1

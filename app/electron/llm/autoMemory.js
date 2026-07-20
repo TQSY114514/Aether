@@ -18,6 +18,7 @@
 // → we store both entities and can later answer "who works on Project X?"
 
 const { completeChat } = require('./providerAdapter')
+const log = require('../logger')
 
 const PREFETCH_TOP_K = 5
 const CHUNK_CHARS = 240
@@ -167,7 +168,7 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     }
     _memV++ // invalidate prefetch cache — new memories won't show stale results
   } catch (e) {
-    console.warn('[autoMemory] sync failed:', e && e.message)
+    log.warn('sync failed:', e && e.message)
   }
 }
 
