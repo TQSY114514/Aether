@@ -23,11 +23,12 @@ function relativeTime(iso: string | undefined): string {
   return new Date(then).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
 }
 
+// Pre-computed group labels (translated once per render, not per-session).
 function getSessionGroups(sessions: Session[]) {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1)
-  const thisWeek = new Date(today); thisWeek.setDate(thisWeek.getDate() - 7)
+  const now = Date.now()
+  const todayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime()
+  const yesterdayStart = todayStart - 86400000
+  const weekStart = todayStart - 7 * 86400000
   const groups: { label: string; sessions: Session[] }[] = [
     { label: t('sidebar.group.pinned'), sessions: [] },
     { label: t('sidebar.group.today'), sessions: [] },
@@ -36,18 +37,13 @@ function getSessionGroups(sessions: Session[]) {
     { label: t('sidebar.group.older'), sessions: [] },
   ]
   for (const s of sessions) {
-    // DB stores updated_at/created_at as UTC (sql.js CURRENT_TIMESTAMP) but
-    // WITHOUT a trailing 'Z'. new Date('2026-07-15 03:00:00') parses as LOCAL
-    // time, which shifts the date earlier in positive-offset zones and puts a
-    // freshly-created session into "yesterday/older". Normalize: treat the
-    // stored timestamp as UTC by appending 'Z' (and tolerating the space sep).
     const raw = s.updated_at || s.created_at || ''
     const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
-    const date = new Date(iso)
+    const date = new Date(iso).getTime()
     if (s.pinned) { groups[0].sessions.push(s); continue }
-    if (date >= today) { groups[1].sessions.push(s); continue }
-    if (date >= yesterday) { groups[2].sessions.push(s); continue }
-    if (date >= thisWeek) { groups[3].sessions.push(s); continue }
+    if (date >= todayStart) { groups[1].sessions.push(s); continue }
+    if (date >= yesterdayStart) { groups[2].sessions.push(s); continue }
+    if (date >= weekStart) { groups[3].sessions.push(s); continue }
     groups[4].sessions.push(s)
   }
   return groups.filter(g => g.sessions.length > 0)

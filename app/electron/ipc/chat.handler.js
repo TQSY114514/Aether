@@ -55,6 +55,16 @@ function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
 
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
+  // Cache rarely-changing settings at handler registration time. Invalidation
+  // happens on the `settings-changed` IPC (broadcast from settings.handler).
+  const _s: Record<string, string> = {}
+  const getCached = (k: string, fallback: string) => {
+    if (!(k in _s)) _s[k] = db.getSetting(k) ?? fallback
+    return _s[k]
+  }
+  // Re-populate cache from DB (covers app restart where the handler is re-registered).
+  ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? '' })
+
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
     // Save user message
     if (!regenerate) {
@@ -94,8 +104,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // Used for both the placeholder-title check and the persona_id fallback below.
     const session0 = db.getSession(sessionId)
     // Respect the autoTitle setting (default on) and only summarize the first exchange.
-    const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
-    const titleLanguage = db.getSetting('titleLanguage') || 'auto'
+    const autoTitleOn = (getCached('autoTitle', '1') ?? '1') === '1'
+    const titleLanguage = getCached('titleLanguage') || 'auto'
     const needsTitle = autoTitleOn && session0 && PLACEHOLDER_TITLES.has((session0.title || '').trim()) && msgs.length === 1
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
@@ -164,11 +174,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // system message so the model can recall context from earlier sessions.
     // Done once here so BOTH the tool path and the plain streaming path inherit it.
     // Gateable via the auto_memory_enabled setting (default on).
-    const autoMemoryOn = db.getSetting('auto_memory_enabled') !== '0'
+    const autoMemoryOn = getCached('auto_memory_enabled', '1') !== '0'
     const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
 
-    const timeoutMs = parseInt(db.getSetting('fallback_timeout_ms') || '30000', 10)
+    const timeoutMs = parseInt(getCached('fallback_timeout_ms', '30000'), 10)
     let lastError = null
 
     // Tool-calling path: when the session has tools enabled, run a non-streaming
@@ -194,7 +204,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
-          maxIterations: parseInt(db.getSetting('agent_max_iterations') || '25', 10),
+          maxIterations: parseInt(getCached('agent_max_iterations', '25'), 10),
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
           onStatus: (s) => wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: s.kind }),
@@ -453,15 +463,10 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
   try { dbHandle.renameSession(sessionId, title) } catch {}
 }
 
-function estimateTokens(text) {
-  if (!text) return 0
-  let tokens = 0
-  for (const c of text) {
-    if (c >= '一' && c <= '鿿') tokens += 1.5
-    else tokens += 0.25
-  }
-  return Math.max(1, Math.ceil(tokens))
-}
+// estimateTextTokens is imported from compaction.js (shared with the same
+// function there, so both use the same 6-range CJK coverage — no divergence).
+// The old local estimateTokens had only 1 range and under-counted CJK tokens.
+const { estimateTextTokens: estimateTokens } = require('../llm/compaction')
 
 // Per-call cost from the model's price columns (USD per 1K tokens). 0 if unpriced.
 // Cached-read tokens aren't billed at the full input rate (best-effort).

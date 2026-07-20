@@ -70,6 +70,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
 
   let plan = null
   let planningMode = false
+  let planToolsPayload = []
 
   // Planning gate: if the request is complex enough, generate a plan first.
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
@@ -78,6 +79,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       plan = await planning.generatePlan(provider, model, lastUserMsg.content, signal, options)
       if (plan && plan.tasks.length > 1) {
         planningMode = true
+        planToolsPayload = planning.planToolsPayload()
         // Inject plan into system context
         const planBlock = planning.planSystemBlock(plan)
         convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
@@ -92,8 +94,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
     // When planning, also inject the plan_progress tool so the model can report
     // task completion. Inject plan_progress alongside the regular tools.
-    const effectiveTools = planningMode ? [...toolPayload, ...planning.planToolsPayload()] : toolPayload
-    if (effectiveTools.length) { opts.tools = effectiveTools; opts.tool_choice = 'auto' }
+    if (planToolsPayload.length) { opts.tools = [...toolPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
 
     let msg
     try {

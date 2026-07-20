@@ -93,7 +93,7 @@ function registerConfigHandlers(ipcMain, db) {
         created.personas++
       }
 
-      db.flushDatabase ? db.flushDatabase() : db.saveDatabase()
+      db.flushDatabase ? db.flushDatabase().catch(() => {}) : db.saveDatabase()
       return { success: true, created, skipped }
     } catch (e) {
       return { success: false, error: String(e.message || e) }

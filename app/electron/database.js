@@ -21,31 +21,32 @@ function getTableColumns(table) {
 // updateMessage on every chunk, so we debounce the save — coalesce rapid writes
 // into a single flush 200ms after the last one. `flushNow` forces an immediate
 // write for moments that must be durable before returning (e.g. before quit).
+// Uses async writeFile so the main process is never blocked.
 let saveTimer = null
+let savePromise = null // tracks the in-flight async write so flushDatabase can await it
 const SAVE_DEBOUNCE_MS = 200
+function _writeDb(data) {
+  return fs.promises.writeFile(dbPath, Buffer.from(data)).catch(e => {
+    console.error('[AetherAI] _writeDb failed:', e)
+  })
+}
 function saveDatabase() {
   if (!db || !dbPath) return
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     saveTimer = null
-    try {
-      const data = db.export()
-      fs.writeFileSync(dbPath, Buffer.from(data))
-    } catch (e) {
-      console.error('[AetherAI] saveDatabase failed:', e)
-    }
+    const data = db.export()
+    savePromise = _writeDb(data).finally(() => { savePromise = null })
   }, SAVE_DEBOUNCE_MS)
 }
-// Force an immediate, non-debounced write. Use sparingly.
-function flushDatabase() {
+// Async flush — used by config.handler.js and the before-quit path (awaited there).
+// The debounce in saveDatabase means an in-flight write may need to be awaited.
+async function flushDatabase() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  if (savePromise) await savePromise
   if (db && dbPath) {
-    try {
-      const data = db.export()
-      fs.writeFileSync(dbPath, Buffer.from(data))
-    } catch (e) {
-      console.error('[AetherAI] flushDatabase failed:', e)
-    }
+    const data = db.export()
+    await _writeDb(data)
   }
 }
 
@@ -99,6 +100,10 @@ async function initDatabase() {
   // MCP servers: external tool servers the agent can call via stdio.
   db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  // Habit learner: tracks recurring user preferences. Created here once at init
+  // instead of lazily in habitLearner.js to avoid a redundant SQL round-trip on
+  // every user turn.
+  db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
   try { db.run("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
 
   // Per-provider credential pool — multiple API keys per provider with rotation

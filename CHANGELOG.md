@@ -2,16 +2,37 @@
 
 All notable changes to AetherAI are documented here.
 
-## [0.1.19] — 2026-07-20
+## [0.1.21] — 2026-07-20
+
+### Performance
+- chat.handler.js: cache 5 rarely-changing settings at handler registration — eliminates repeated synchronous sql.js reads on every message send
+- store/index.ts: collapse 8+ scattered get() calls in sendMessage/regenerate/editMessage into a single destructuring — reduces redundant store reads
+- ChatWindow.tsx: StreamingBubble receives isAtBottom prop, skips scrollIntoView when user has scrolled up to read history
+
+## [0.1.20] — 2026-07-20
+
+### Performance
+- database.js: saveDatabase/flushDatabase now use async writeFile (was writeFileSync blocking main process during streaming)
+- autoMemory.js: prefetch uses in-memory cache with version invalidation — avoids repeated full-table scans on consecutive turns
+- ContextBar: import shared estimateTextTokens from tokenEstimate.ts (unified 6-range CJK coverage vs local single-range copy)
+- chat.handler.js: config.handler.js: await flushDatabase (was fire-and-forget, could lose data on crash)
 
 ### Refactor
-- DRY up `chat.send` params — re-applied `chatSendBase()` + `clearStreamingOnError()` after merge dropped them
-- ChatWindow search input: 200ms debounce to avoid filter+scroll on every keystroke
-- Removed unused `loadModels` import from ChatPage.tsx
+- database.js: move user_habit CREATE TABLE to init (was re-issued every turn in habitLearner.js)
+- reasoning.js: remove dead CLAUDE_BUDGETS constant (exported but never consumed)
 
-### Bug Fixes
-- **Critical**: MessageBubble `renderContent` was only called for user messages; assistant messages bypassed search highlight — now ALL messages go through `renderContent`
-- Standardized error log prefix to `[AetherAI]` across `sendMessage`/`regenerate`/`editMessage`
+## [0.1.19] — 2026-07-18
+
+### Performance
+- StreamingBubble: rAF-throttled scrollIntoView + content-length guard (skip <2 char deltas)
+- ContextBar: memoize token estimation (O(1) when messages array is stable during streaming)
+- ChatPage/ChatInput: useMemo for model-group computation (O(P*M) only recomputes on providers/allModels change)
+- Sidebar: date boundaries as timestamps (no new Date() allocation per group)
+- i18n `t()`: fast path for English — skip redundant fallback lookup
+- reasoning.js: pre-compile regexes at module level (was re-compiled per call)
+- toolLoop.js: pre-compute planToolsPayload outside the while loop
+- chat.handler.js: import estimateTokens from compaction.js (unified 6-range CJK coverage)
+- database.js + habitLearner.js: CREATE TABLE user_habit at init (was called every turn)
 
 ## [0.1.18] — 2026-07-18
 

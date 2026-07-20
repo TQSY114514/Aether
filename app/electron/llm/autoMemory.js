@@ -56,10 +56,18 @@ function score(memoryText, qkw) {
 
 // ─── Prefetch ──────────────────────────────────────────────────────────────
 // Retrieve top-K relevant memories for a user message.
+// In-memory cache avoids repeated full-table scans across consecutive turns.
+
+let _memCache: { data: any[]; v: number } | null = null
+let _memV = 0
 
 function prefetch(db, userMessage) {
-  let memories
-  try { memories = db.getMemories(200) } catch { return '' }
+  const memories = _memCache && _memCache.v === _memV ? _memCache.data : (() => {
+    let m
+    try { m = db.getMemories(200) } catch { return [] }
+    _memCache = { data: m, v: _memV }
+    return m
+  })()
   if (!memories || memories.length === 0) return ''
   const qkw = keywords(userMessage)
   if (qkw.size === 0) return ''
@@ -138,7 +146,8 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
       .map(parseEntry)
       .filter(Boolean)
 
-    // De-dup against recent memories using the content store (prefix + type-aware).
+    // De-dup against recent memories (separate direct DB read — this runs once
+    // per sync, not per turn, so the overhead is negligible).
     let recent
     try { recent = db.getMemories(50) } catch { recent = [] }
     const recentKeys = new Set(recent.map(m => `${m.type || 'fact'}:${String(m.content).slice(0, 50).toLowerCase()}`))
@@ -148,6 +157,7 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
       if (recentKeys.has(key)) continue
       try { db.addMemory({ content: entry.content, type: entry.type }) } catch {}
     }
+    _memV++ // invalidate prefetch cache — new memories won't show stale results
   } catch (e) {
     console.warn('[autoMemory] sync failed:', e && e.message)
   }

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu } from 'lucide-react'
@@ -278,11 +278,12 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
   activeModelId: number | null
   onSelect: (modelId: number, providerId: number) => void
 }) {
-  // Build provider→models groups, skipping empty providers.
-  const groups = providers.map(p => {
+  // Build provider→models groups, memoized — only recomputes when
+  // providers or allModels change.
+  const groups = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
     return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null
-  }).filter(Boolean) as { providerId: number; providerName: string; models: typeof allModels }[]
+  }).filter(Boolean) as { providerId: number; providerName: string; models: typeof allModels }[], [providers, allModels])
 
   if (groups.length === 0) return null
   return (

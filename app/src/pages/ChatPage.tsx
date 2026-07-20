@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useStore } from '@/store'
 import ChatWindow from '@/components/chat/ChatWindow'
 import ChatInput from '@/components/chat/ChatInput'
@@ -44,15 +45,16 @@ export default function ChatPage() {
     )
   }
 
-  // Build model options grouped by provider for the single select
-  const allModelOptions: { providerId: number; providerName: string; models: { id: number; name: string }[] }[] = providers.map(p => {
+  // Build model options grouped by provider — memoized; only recomputes when
+  // providers or allModels change (avoids O(P×M) filtering on every render).
+  const allModelOptions = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
     if (ms.length === 0) return null
     return { providerId: p.id, providerName: p.name, models: ms.map(m => ({ id: m.id, name: m.display_name || m.model_name })) }
-  }).filter(Boolean) as any
+  }).filter(Boolean), [providers, allModels])
 
-  // Build arena model checkboxes
-  const allArenaModels = allModelOptions.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName })))
+  // Build arena model checkboxes — memoized alongside the grouped options.
+  const allArenaModels = useMemo(() => allModelOptions.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName }))), [allModelOptions])
 
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }}>
