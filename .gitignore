@@ -46,3 +46,7 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+# electron-builder extracted temp files
+app/dist-out/
+app/.electron-builder-cache/
