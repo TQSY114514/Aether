@@ -146,29 +146,29 @@ export default function App() {
   }
 
   return (
-    <div ref={mainRef} className="flex h-full w-full" style={{ backgroundColor: hasBg ? 'transparent' : 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-      {hasBg && (
-        <div aria-hidden className="fixed inset-0 pointer-events-none"
-          style={{
-            zIndex: 0,
-            backgroundImage: `url("${backgroundImage}")`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : undefined,
-            opacity: backgroundOpacity / 100,
-            transform: backgroundBlur > 0 ? 'scale(1.05)' : undefined, // avoid blurred edge gaps
-          }} />
-      )}
-      {sidebarOpen && <Sidebar />}
-      <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
-        <ErrorBoundary>
+    <ErrorBoundary>
+      <div ref={mainRef} className="flex h-full w-full" style={{ backgroundColor: hasBg ? 'transparent' : 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+        {hasBg && (
+          <div aria-hidden className="fixed inset-0 pointer-events-none"
+            style={{
+              zIndex: 0,
+              backgroundImage: `url("${backgroundImage}")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : undefined,
+              opacity: backgroundOpacity / 100,
+              transform: backgroundBlur > 0 ? 'scale(1.05)' : undefined,
+            }} />
+        )}
+        {sidebarOpen && <Sidebar />}
+        <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
           {renderPage()}
-        </ErrorBoundary>
-      </main>
-      <PermissionDialog />
-      <QuestionDialog />
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-    </div>
+        </main>
+        <PermissionDialog />
+        <QuestionDialog />
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      </div>
+    </ErrorBoundary>
   )
 }

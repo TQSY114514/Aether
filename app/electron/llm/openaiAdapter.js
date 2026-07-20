@@ -7,6 +7,10 @@
 // extracts that logic out of the handlers so it lives in one place.
 // ───────────────────────────────────────────────────────────────────────────
 
+// Credential pool: multi-key rotation with rate-limit backoff per provider.
+// Cached at module level — the require lookup happens once, not per request.
+const _credentialPool = require('./credentialPool')
+
 // Strip trailing slashes so `${base}/chat/completions` never doubles up.
 function baseUrl(provider) {
   return (provider.api_url || '').replace(/\/+$/, '')
@@ -16,7 +20,7 @@ function baseUrl(provider) {
 // (multi-key rotation + backoff), falls back to the legacy provider.api_key.
 function pickKey(provider) {
   if (provider.id != null) {
-    const credential = require('./credentialPool').pickCredential(provider.id)
+    const credential = _credentialPool.pickCredential(provider.id)
     if (credential && credential.api_key) return credential.api_key
   }
   return provider.api_key || ''
@@ -62,7 +66,7 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     // On 429, mark the current credential as cooling down so the fallback
     // loop can retry with a different key if the provider has a multi-key pool.
     if (err.status === 429 && provider.id != null) {
-      try { require('./credentialPool').markCooldownForProvider(provider.id) } catch {}
+      try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
     }
     throw err
   }
@@ -208,4 +212,84 @@ async function testConnection({ provider }) {
   }
 }
 
-module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage }
+module.exports = {
+  streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage,
+  streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
+}
+
+// ─── Credential-rotation retry ───────────────────────────────────────────────
+// Wraps the streaming and non-streaming calls so that 429 / 5xx / network errors
+// automatically try a different API key before giving up. Each provider key
+// gets one shot; a 429 puts it on cooldown so subsequent rotations skip it.
+//
+// Callers use the `*WithRetry` variants. The fallback-model switching in
+// chat.handler.js is the second line of defense (switches to a different model
+// entirely after credential rotation is exhausted).
+// ───────────────────────────────────────────────────────────────────────────
+
+const MAX_CRED_RETRIES = 3
+
+async function streamChatWithRetry({ provider, model, messages, signal, options = {} }) {
+  let lastErr
+  for (let attempt = 0; attempt < MAX_CRED_RETRIES; attempt++) {
+    try {
+      yield* streamChat({ provider, model, messages, signal, options })
+      return
+    } catch (err) {
+      lastErr = err
+      if (!_isRetryable(err)) break
+      const rotated = _rotateAndMark(provider, err)
+      if (!rotated) break
+    }
+  }
+  throw lastErr
+}
+
+async function completeChatWithRetry({ provider, model, messages, signal, options = {} }) {
+  let lastErr
+  for (let attempt = 0; attempt < MAX_CRED_RETRIES; attempt++) {
+    try {
+      return await completeChat({ provider, model, messages, signal, options })
+    } catch (err) {
+      lastErr = err
+      if (!_isRetryable(err)) break
+      const rotated = _rotateAndMark(provider, err)
+      if (!rotated) break
+    }
+  }
+  throw lastErr
+}
+
+async function completeChatMessageWithRetry({ provider, model, messages, signal, options = {} }) {
+  let lastErr
+  for (let attempt = 0; attempt < MAX_CRED_RETRIES; attempt++) {
+    try {
+      return await completeChatMessage({ provider, model, messages, signal, options })
+    } catch (err) {
+      lastErr = err
+      if (!_isRetryable(err)) break
+      const rotated = _rotateAndMark(provider, err)
+      if (!rotated) break
+    }
+  }
+  throw lastErr
+}
+
+function _isRetryable(err) {
+  const status = Number(err?.status) || 0
+  return status === 429 || (status >= 500 && status < 600) || /ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network/i.test(String(err?.message || ''))
+}
+
+function _rotateAndMark(provider, err) {
+  const status = Number(err?.status) || 0
+  if (status === 429 && provider.id != null) {
+    try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+  }
+  // pickCredential already skips cooldown/disabled keys — calling it again
+  // gives us the next available key.
+  if (provider.id != null) {
+    const c = _credentialPool.pickCredential(provider.id)
+    if (c) return true
+  }
+  return false
+}

@@ -139,6 +139,7 @@ async function initDatabase() {
     persona: getTableColumns('persona'),
     session: getTableColumns('session'),
     message: getTableColumns('message'),
+    user_habit: getTableColumns('user_habit'),
   }
   const addCol = (table, col, def) => {
     if (!cols[table].includes(col)) {
@@ -166,6 +167,7 @@ async function initDatabase() {
   addCol('message', 'status', "TEXT NOT NULL DEFAULT 'success'")
   addCol('message', 'error_message', 'TEXT')
   addCol('message', 'arena_model', 'TEXT')
+  addCol('user_habit', 'proposed', "INTEGER NOT NULL DEFAULT 0")
 
   // Seed defaults
   const existingKeys = (db.exec('SELECT key FROM settings')[0]?.values || []).map(r => r[0])

@@ -26,7 +26,6 @@ const anthropicAdapter = require('./anthropicAdapter')
 const DISPATCH = {
   openai: openaiAdapter,
   anthropic: anthropicAdapter,
-  // ollama: ollamaAdapter,          // future
 }
 
 function adapterFor(provider) {
@@ -36,29 +35,29 @@ function adapterFor(provider) {
 // Stream a chat completion. Yields content deltas (strings) as they arrive.
 // The caller is responsible for AbortController lifecycle; pass its signal.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
-  yield* adapterFor(provider).streamChat({ provider, model, messages, signal, options })
+  yield* (adapterFor(provider).streamChatWithRetry || adapterFor(provider).streamChat)({ provider, model, messages, signal, options })
 }
 
 // Non-streaming completion. Returns the full content string.
-// Used by arena (parallel single-shot) and one-off calls (title generation).
 async function completeChat({ provider, model, messages, signal, options = {} }) {
-  return adapterFor(provider).completeChat({ provider, model, messages, signal, options })
+  return adapterFor(provider).completeChatWithRetry
+    ? adapterFor(provider).completeChatWithRetry({ provider, model, messages, signal, options })
+    : adapterFor(provider).completeChat({ provider, model, messages, signal, options })
 }
 
-// Non-streaming completion returning the full assistant message object
-// ({ content, tool_calls }) — used by the tool-call loop to inspect tool_calls.
+// Non-streaming completion returning the full assistant message object.
 async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
-  return adapterFor(provider).completeChatMessage({ provider, model, messages, signal, options })
+  return adapterFor(provider).completeChatMessageWithRetry
+    ? adapterFor(provider).completeChatMessageWithRetry({ provider, model, messages, signal, options })
+    : adapterFor(provider).completeChatMessage({ provider, model, messages, signal, options })
 }
 
-// List model ids available at the provider. Returns [] on any failure.
 async function listModels({ provider, signal }) {
   return adapterFor(provider).listModels({ provider, signal })
 }
 
-// Connectivity probe. Tries /models first, falls back to a 1-token ping.
 async function testConnection({ provider }) {
   return adapterFor(provider).testConnection({ provider })
 }
 
-module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage: require('./openaiAdapter').normalizeUsage }
+module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage: openaiAdapter.normalizeUsage }

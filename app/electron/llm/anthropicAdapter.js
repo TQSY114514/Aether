@@ -11,6 +11,9 @@
 
 const ANTHROPIC_VERSION = '2023-06-01'
 
+// Credential pool: cached at module level (single require lookup).
+const _credentialPool = require('./credentialPool')
+
 function baseUrl(provider) {
   return (provider.api_url || '').replace(/\/+$/, '')
 }
@@ -19,20 +22,9 @@ function headers(provider) {
   // Anthropic uses x-api-key + anthropic-version, NOT Bearer.
   return {
     'Content-Type': 'application/json',
-    'x-api-key': pickKey(provider),
+    'x-api-key': _credentialPool.pickCredential(provider.id)?.api_key || provider.api_key || '',
     'anthropic-version': ANTHROPIC_VERSION,
   }
-}
-
-// Obtain the best API key (credential pool first, then legacy api_key).
-function pickKey(provider) {
-  if (provider.id != null) {
-    try {
-      const credential = require('./credentialPool').pickCredential(provider.id)
-      if (credential && credential.api_key) return credential.api_key
-    } catch {}
-  }
-  return provider.api_key || ''
 }
 
 // Convert OpenAI-style messages → Anthropic shape.
@@ -143,7 +135,7 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     const errBody = await res.text().catch(() => '')
     const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
     err.status = res.status
-    if (res.status === 429 && provider.id != null) { try { require('./credentialPool').markCooldownForProvider(provider.id) } catch {} }
+    if (res.status === 429 && provider.id != null) { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
     throw err
   }
 
@@ -264,4 +256,53 @@ async function testConnection({ provider }) {
   }
 }
 
-module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection }
+// ─── Credential-rotation retry wrappers ──────────────────────────────────────
+const MAX_CRED_RETRIES = 3
+
+function _aRotate(provider, err) {
+  if (Number(err?.status) === 429 && provider.id != null) {
+    try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+  }
+  if (provider.id != null) {
+    const c = _credentialPool.pickCredential(provider.id)
+    if (c) return true
+  }
+  return false
+}
+function _aRetryable(err) {
+  const status = Number(err?.status) || 0
+  return status === 429 || (status >= 500 && status < 600) || /ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network/i.test(String(err?.message || ''))
+}
+
+// Wrapper around Anthropic streamChat with credential rotation on 429/5xx/network.
+async function* streamChatWithRetry({ provider, model, messages, signal, options = {} }) {
+  let lastErr
+  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
+    try { yield* streamChat({ provider, model, messages, signal, options }); return }
+    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
+  }
+  throw lastErr
+}
+
+async function completeChatWithRetry({ provider, model, messages, signal, options = {} }) {
+  let lastErr
+  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
+    try { return await completeChat({ provider, model, messages, signal, options }) }
+    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
+  }
+  throw lastErr
+}
+
+async function completeChatMessageWithRetry({ provider, model, messages, signal, options = {} }) {
+  let lastErr
+  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
+    try { return await completeChatMessage({ provider, model, messages, signal, options }) }
+    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
+  }
+  throw lastErr
+}
+
+module.exports = {
+  streamChat, completeChat, completeChatMessage, listModels, testConnection,
+  streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
+}

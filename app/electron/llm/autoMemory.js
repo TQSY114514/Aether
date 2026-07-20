@@ -111,21 +111,29 @@ function parseEntry(line) {
 }
 
 // Debounce timer + in-flight promise — batches rapid messages into one sync call.
+// Uses a pending-call queue to avoid a race where multiple rapid messages each
+// schedule a debounced timer that can fire with stale data (the "last caller wins"
+// problem of naive debounce+chain).
 let _syncTimer = null
 let _syncPromise = null
+let _pendingSyncArgs = null // the most recent args; used when timer fires
 
 async function sync({ db, provider, model, userMessage, assistantReply, signal }) {
-  // Debounce: if another sync is already queued, absorb this call into it.
-  if (_syncTimer) clearTimeout(_syncTimer)
-  _syncTimer = setTimeout(() => { _syncTimer = null }, SYNC_DEBOUNCE_MS)
+  // Always keep the latest args; the debounced call picks them up when it fires.
+  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal }
 
-  // If a sync is already in flight, chain onto it (dedup + debounce).
-  if (_syncPromise) {
-    _syncPromise = _syncPromise.catch(() => {}).then(() => _doSync({ db, provider, model, userMessage, assistantReply, signal }))
-  } else {
-    _syncPromise = _doSync({ db, provider, model, userMessage, assistantReply, signal })
-  }
-  return _syncPromise.catch(() => {})
+  if (_syncTimer) clearTimeout(_syncTimer)
+  _syncTimer = setTimeout(() => {
+    _syncTimer = null
+    const args = _pendingSyncArgs
+    _pendingSyncArgs = null
+    // If a sync is already in flight, chain onto it so we never run two concurrently.
+    if (_syncPromise) {
+      _syncPromise = _syncPromise.catch(() => {}).then(() => _doSync(args))
+    } else {
+      _syncPromise = _doSync(args)
+    }
+  }, SYNC_DEBOUNCE_MS)
 }
 
 async function _doSync({ db, provider, model, userMessage, assistantReply, signal }) {

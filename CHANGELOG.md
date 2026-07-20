@@ -2,6 +2,17 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.1.22] — 2026-07-20
+
+### Reliability & UX
+- **Credential rotation retry**: 429 / 5xx / network errors automatically retry with the next available API key before falling back to the next model. Up to 3 credential retries per request.
+- **Full-app ErrorBoundary**: wraps the entire App (sidebar, dialogs, all pages) so a crash in any section doesn't blank the entire UI.
+- **autoMemory sync race fix**: debounced sync now uses a last-args-wins pattern — rapid consecutive messages no longer lose the latest exchange's facts.
+
+### Performance
+- CredentialPool module reference cached in openaiAdapter.js and anthropicAdapter.js (eliminates per-request require() lookups)
+- user_habit ALTER TABLE migration moved to database.js init (eliminates redundant SQL on every user turn)
+
 ## [0.1.21] — 2026-07-20
 
 ### Performance

@@ -126,6 +126,14 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 
 ## 📋 Changelog
 
+### v0.1.22
+**Reliability & UX**
+- Credential rotation retry: 429 / 5xx / network → auto retry with next API key (up to 3 attempts) before falling back to another model
+- Full-app ErrorBoundary: sidebar/dialogs/crashes don't blank the entire UI
+- autoMemory sync race fix: debounced sync uses last-args-wins pattern
+- CredentialPool require cached in both adapters (one lookup per process instead of per-request)
+- user_habit ALTER TABLE moved to database.js init (runs once at startup, not on every turn)
+
 ### v0.1.21
 **Performance**
 - Store: collapse 8+ scattered `get()` calls into a single destructuring
