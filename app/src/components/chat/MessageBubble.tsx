@@ -69,22 +69,24 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
     setTimeout(() => { target.textContent = prev; target.classList.remove('copied') }, 1200)
   }
 
-  // Highlight search matches in both user text and rendered markdown HTML.
+  // Render message content with optional search highlighting. Handles both
+  // user text (plain with <mark>) and assistant markdown (rendered HTML with
+  // injected <mark> tags after markdown conversion).
   const renderContent = (text: string) => {
-    if (!searchHighlight || !text.toLowerCase().includes(searchHighlight.toLowerCase())) {
+    if (!searchHighlight) {
       return isUser ? text : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
     }
     const q = searchHighlight.toLowerCase()
     const idx = text.toLowerCase().indexOf(q)
-    if (idx === -1) return isUser ? text : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+    if (idx === -1) {
+      return isUser ? text : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+    }
     const before = text.slice(0, idx)
     const match = text.slice(idx, idx + q.length)
     const after = text.slice(idx + q.length)
     if (isUser) {
       return <>{before}<mark className="px-0.5 rounded" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>{match}</mark>{after}</>
     }
-    // For assistant messages, highlight in the rendered HTML by wrapping matches
-    // in <mark> tags after markdown rendering.
     const html = renderMarkdown(text)
     const highlighted = html.replace(new RegExp(`(${escapeRegex(searchHighlight)})`, 'gi'),
       '<mark class="search-hl" style="background:var(--accent);color:#fff;border-radius:2px;padding:0 1px">$1</mark>')
@@ -158,7 +160,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
                 <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('chat.cancel')}</button>
               </div>
             </div>
-          ) : isUser ? renderContent(message.content) : <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />}
+          ) : renderContent(message.content)}
           {isStreaming && <span className="inline-block w-1.5 h-4 bg-black/30 ml-0.5 cursor-blink" />}
           {isError && message.error_message && (
             <details className="mt-2 text-xs text-red-400">

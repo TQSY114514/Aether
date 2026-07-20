@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
 import { useStore } from '@/store'
 import MessageBubble from './MessageBubble'
 import EmptyState from './EmptyState'
@@ -97,14 +97,27 @@ export default function ChatWindow() {
     if (isAtBottom) scrollToBottom()
   }, [messages, arenaResults, isAtBottom, scrollToBottom])
 
+  // Search: debounce the query used for filtering so typing doesn't trigger
+  // a filter + scrollIntoView on every keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const debounceTimer = useRef<ReturnType<typeof setTimeout>>()
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const q = e.target.value
+    setSearchQuery(q)
+    clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => setDebouncedQuery(q), 200)
+  }
+  // Cleanup timer on unmount.
+  useEffect(() => () => clearTimeout(debounceTimer.current), [])
+
   // Search: don't filter — keep the full conversation visible and highlight
-  // matches (prev/next jumps to each). matchIds = message ids that contain the
-  // query; matchIdx is which one we've scrolled to.
+  // matches (prev/next jumps to each). Uses debouncedQuery so filtering only
+  // runs 200ms after the user stops typing.
   const matchIds = useMemo(() => {
-    if (!searchQuery.trim()) return [] as number[]
-    const q = searchQuery.toLowerCase()
+    if (!debouncedQuery.trim()) return [] as number[]
+    const q = debouncedQuery.toLowerCase()
     return messages.filter(m => m.content.toLowerCase().includes(q)).map(m => m.id)
-  }, [messages, searchQuery])
+  }, [messages, debouncedQuery])
   const [matchIdx, setMatchIdx] = useState(0)
   const matchCount = matchIds.length
   // Clamp the active index when the match set shrinks (query changed).
@@ -115,8 +128,9 @@ export default function ChatWindow() {
     setMatchIdx(next)
     scrollToMsg(matchIds[next])
   }
-  // When the user types, jump to the first match so the counter is live.
-  useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [searchQuery])
+  // When the debounced query changes, jump to the first match so the counter
+  // is live (only fires after the 200ms debounce).
+  useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
 
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ position: "relative" }}>
@@ -124,7 +138,7 @@ export default function ChatWindow() {
       <div className="px-4 py-1.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+          <input value={searchQuery} onChange={handleSearchChange}
             placeholder={t('chat.search_placeholder')} autoComplete="off"
             className="w-full bg-transparent outline-none text-xs" style={{ color: 'var(--text-primary)' }} />
           {searchQuery && (

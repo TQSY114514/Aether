@@ -208,6 +208,32 @@ function decodeDataUrlText(dataUrl: string): string {
 // main-process serializer). The `buildConfigBundle` in `src/types/config.ts`
 // produces the same structure for the renderer-side export path.
 
+// ── Shared chat helpers ─────────────────────────────────────────────────────
+// Build the common chat.send payload fields (everything except sessionId,
+// content, modelId, regenerate — those vary per call site).
+function chatSendBase(get: () => AppState) {
+  const cfg = get().currentSessionId ? get().sessionConfigs[get().currentSessionId] : null
+  return {
+    personaId: cfg?.personaId ?? null,
+    useTools: get().agentMode !== 'off',
+    agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
+    effortLevel: get().effortLevel,
+    genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
+    systemPrefix: get().systemPrefix,
+  }
+}
+// Drop streaming buffer for a failed session; clear sending if it was the
+// current one.
+function clearStreamingOnError(sessionId: number) {
+  const st = useStore.getState()
+  const next = { ...st.streamingBySession }
+  delete next[sessionId]
+  useStore.setState({
+    streamingBySession: next,
+    sending: !!(st.currentSessionId && st.currentSessionId !== sessionId && next[st.currentSessionId]),
+  })
+}
+
 export const useStore = create<AppState>((set, get) => ({
   // Navigation
   currentView: 'chat',
@@ -523,23 +549,12 @@ export const useStore = create<AppState>((set, get) => ({
         content: finalContent,
         modelId,
         mode: chatMode,
-        personaId: cfg?.personaId ?? null,
         attachments: imageAttachments,
-        useTools: get().agentMode !== 'off',
-        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
-        effortLevel: get().effortLevel,
-        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
-        systemPrefix: get().systemPrefix,
-        })
+        ...chatSendBase(get),
+      })
     } catch (err) {
       console.error('[AetherAI] chat.send FAILED:', err)
-      // Drop this session's streaming buffer on error; keep other sessions intact.
-      set((s) => {
-        const next = { ...s.streamingBySession }
-        delete next[currentSessionId]
-        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
-      })
-      console.error('chat error', err)
+      clearStreamingOnError(currentSessionId)
     }
   },
 
@@ -613,24 +628,13 @@ export const useStore = create<AppState>((set, get) => ({
     }))
     ensureChunkListener()
     try {
-      // Reuse sendMessage's full param set so regenerate respects agent mode,
-      // effort, generation params, system prefix, and persona.
       await window.electronAPI.chat.send({
         sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
-        personaId: cfg?.personaId ?? null,
-        useTools: get().agentMode !== 'off',
-        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
-        effortLevel: get().effortLevel,
-        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
-        systemPrefix: get().systemPrefix,
+        ...chatSendBase(get),
       })
     } catch (err) {
-      set((s) => {
-        const next = { ...s.streamingBySession }
-        delete next[currentSessionId]
-        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
-      })
-      console.error('regenerate error:', err)
+      console.error('[AetherAI] regenerate FAILED:', err)
+      clearStreamingOnError(currentSessionId)
     }
   },
 
@@ -662,20 +666,11 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       await window.electronAPI.chat.send({
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
-        personaId: cfg?.personaId ?? null,
-        useTools: get().agentMode !== 'off',
-        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
-        effortLevel: get().effortLevel,
-        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
-        systemPrefix: get().systemPrefix,
+        ...chatSendBase(get),
       })
     } catch (err) {
-      set((s) => {
-        const next = { ...s.streamingBySession }
-        delete next[currentSessionId]
-        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
-      })
-      console.error('editMessage error:', err)
+      console.error('[AetherAI] editMessage FAILED:', err)
+      clearStreamingOnError(currentSessionId)
     }
   },
 

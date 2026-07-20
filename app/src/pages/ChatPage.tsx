@@ -22,7 +22,6 @@ export default function ChatPage() {
   const setArenaModelIds = useStore((s) => s.setArenaModelIds)
   const sessionConfigs = useStore((s) => s.sessionConfigs)
   const saveSessionConfig = useStore((s) => s.saveSessionConfig)
-  const loadModels = useStore((s) => s.loadModels)
   const allModels = useStore((s) => s.allModels)
   const agentMode = useStore((s) => s.agentMode)
   const setAgentMode = useStore((s) => s.setAgentMode)
