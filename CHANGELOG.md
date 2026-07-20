@@ -2,6 +2,13 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.1.21] — 2026-07-20
+
+### Performance
+- chat.handler.js: cache 5 rarely-changing settings at handler registration — eliminates repeated synchronous sql.js reads on every message send
+- store/index.ts: collapse 8+ scattered get() calls in sendMessage/regenerate/editMessage into a single destructuring — reduces redundant store reads
+- ChatWindow.tsx: StreamingBubble receives isAtBottom prop, skips scrollIntoView when user has scrolled up to read history
+
 ## [0.1.20] — 2026-07-20
 
 ### Performance

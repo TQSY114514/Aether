@@ -10,9 +10,9 @@ import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-reac
 
 // Lightweight placeholder: rendered once, updated via direct DOM writes
 // to avoid re-rendering ChatWindow on every streaming token.
-// Uses rAF-throttled scrollIntoView and a content-length guard to skip
-// no-op DOM writes when the delta is a streaming heartbeat (empty or same content).
-function StreamingBubble({ sessionId }: { sessionId: number }) {
+// Uses rAF-throttled scrollIntoView with an isAtBottom guard — skips scroll
+// when the user has scrolled up to read history (no more jarring yanks).
+function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBottom: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const msgIdRef = useRef<number>(-1)
   const rafRef = useRef<number>(0)
@@ -47,6 +47,7 @@ function StreamingBubble({ sessionId }: { sessionId: number }) {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0
+        if (!isAtBottom) return
         ref.current?.scrollIntoView({ behavior: 'smooth' })
       })
     }
@@ -54,7 +55,7 @@ function StreamingBubble({ sessionId }: { sessionId: number }) {
       unsub()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [sessionId])
+  }, [sessionId, isAtBottom])
 
   return <div ref={ref} style={{ display: 'none' }} />
 }
@@ -181,7 +182,7 @@ export default function ChatWindow() {
           ))}
 
           {/* Streaming bubble — rendered once, updated via DOM writes for perf */}
-          {currentSessionId && <StreamingBubble sessionId={currentSessionId} />}
+          {currentSessionId && <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />}
 
           {/* Arena results */}
           {arenaError && (

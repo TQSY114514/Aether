@@ -456,7 +456,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Chat
   sendMessage: async (content, attachments) => {
-    const { currentSessionId, chatMode, allModels } = get()
+    const { currentSessionId, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix, chatMode, allModels } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     let modelId = cfg?.modelId
     // Auto-resolve missing model: try allModels (already loaded globally)
@@ -525,11 +525,11 @@ export const useStore = create<AppState>((set, get) => ({
         mode: chatMode,
         personaId: cfg?.personaId ?? null,
         attachments: imageAttachments,
-        useTools: get().agentMode !== 'off',
-        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
-        effortLevel: get().effortLevel,
-        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
-        systemPrefix: get().systemPrefix,
+        useTools: agentMode !== 'off',
+        agentMode: agentMode === 'off' ? 'ask' : agentMode,
+        effortLevel,
+        genParams: { maxTokens, temperature, topP },
+        systemPrefix,
         })
     } catch (err) {
       console.error('[AetherAI] chat.send FAILED:', err)
@@ -599,7 +599,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   regenerate: async () => {
-    const { currentSessionId, messages } = get()
+    const { currentSessionId, messages, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     const activeModelId = cfg?.modelId
     if (!currentSessionId || !activeModelId || messages.length < 2) return
@@ -613,16 +613,14 @@ export const useStore = create<AppState>((set, get) => ({
     }))
     ensureChunkListener()
     try {
-      // Reuse sendMessage's full param set so regenerate respects agent mode,
-      // effort, generation params, system prefix, and persona.
       await window.electronAPI.chat.send({
         sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
-        useTools: get().agentMode !== 'off',
-        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
-        effortLevel: get().effortLevel,
-        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
-        systemPrefix: get().systemPrefix,
+        useTools: agentMode !== 'off',
+        agentMode: agentMode === 'off' ? 'ask' : agentMode,
+        effortLevel,
+        genParams: { maxTokens, temperature, topP },
+        systemPrefix,
       })
     } catch (err) {
       set((s) => {
@@ -639,7 +637,7 @@ export const useStore = create<AppState>((set, get) => ({
   // replies to the edited prompt. No branching (overwrites history) — matches
   // ChatGPT's simple edit; a future parent_id model could add branches.
   editMessage: async (messageId, newContent) => {
-    const { currentSessionId, messages } = get()
+    const { currentSessionId, messages, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     const activeModelId = cfg?.modelId
     if (!currentSessionId || !activeModelId) return
@@ -663,11 +661,11 @@ export const useStore = create<AppState>((set, get) => ({
       await window.electronAPI.chat.send({
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
-        useTools: get().agentMode !== 'off',
-        agentMode: get().agentMode === 'off' ? 'ask' : get().agentMode,
-        effortLevel: get().effortLevel,
-        genParams: { maxTokens: get().maxTokens, temperature: get().temperature, topP: get().topP },
-        systemPrefix: get().systemPrefix,
+        useTools: agentMode !== 'off',
+        agentMode: agentMode === 'off' ? 'ask' : agentMode,
+        effortLevel,
+        genParams: { maxTokens, temperature, topP },
+        systemPrefix,
       })
     } catch (err) {
       set((s) => {
