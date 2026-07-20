@@ -1,3 +1,6 @@
+import hljs from 'highlight.js'
+import 'highlight.js/styles/atom-one-dark.css'
+
 // Single-slot memoization: during streaming, renderMarkdown is called once per
 // token on the SAME growing string — but each call has a different (longer) input,
 // so a keyed cache wouldn't help. The single-slot cache only wins when the EXACT
@@ -17,27 +20,57 @@ export function renderMarkdown(text: string): string {
   return t
 }
 
+// Strip event handler attributes from HTML to prevent XSS via malicious markdown.
+const EVENT_HANDLER_RE = /\s(on[a-z]\s*=\s*["'][^"']*["']|on[a-z]\s*=\s*[^\s>]+)/gi
+
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(EVENT_HANDLER_RE, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<script[^>]*>/gi, '')
+}
+
+// Map common shorthand language names to hljs language IDs.
+const HL_LANGS: Record<string, string> = {
+  js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+  py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java',
+  cpp: 'cpp', c: 'c', cs: 'csharp', php: 'php', swift: 'swift',
+  kt: 'kotlin', sh: 'bash', shell: 'bash', bash: 'bash', zsh: 'bash',
+  yaml: 'yaml', yml: 'yaml', json: 'json', xml: 'xml', html: 'xml',
+  css: 'css', scss: 'scss', sql: 'sql', lua: 'lua', r: 'r',
+  dockerfile: 'dockerfile', md: 'markdown', git: 'git', diff: 'diff',
+  ini: 'ini', toml: 'toml', env: 'bash', proto: 'protobuf',
+  graphql: 'graphql', wasm: 'wasm', shellscript: 'bash',
+}
+
 function renderInner(raw: string): string {
   let t = raw
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   const safeUrl = (u: string) => {
     const s = u.trim()
-    // Allow: http(s) URLs, data: images, relative paths, anchors, empty.
-    // Block: javascript:, vbscript:, data: with non-image types.
     if (/^(https?:\/\/|data:image\/|\/|\.\/|\.\.\/|#)/i.test(s)) return s
     if (/^(javascript:|vbscript:)/i.test(s)) return ''
     return ''
   }
 
+  // Code blocks with syntax highlighting via hljs.
   t = t.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const trimmed = code.trim()
     const esc = trimmed.replace(/"/g, '&quot;')
-    const label = lang ? lang : 'text'
+    const label = lang || 'text'
     const lineCount = trimmed.split('\n').length
     const canFold = lineCount >= 15
     const chevron = canFold ? `<button class="code-fold" data-lines="${lineCount}">▾</button>` : ''
-    return `<pre class="code-block${canFold ? ' foldable' : ''}"><div class="code-head"><span class="code-lang">${label}</span>${chevron}<button class="code-copy" data-code="${esc}">复制</button></div><code class="language-${lang}">${trimmed}</code></pre>`
+    let highlighted = trimmed
+    const hlLang = HL_LANGS[lang.toLowerCase()] || lang
+    try {
+      const result = hljs.highlight(trimmed, { language: hlLang, ignoreIllegals: true })
+      highlighted = result.value
+    } catch {
+      try { highlighted = hljs.highlightAuto(trimmed).value } catch { /* plain */ }
+    }
+    return `<pre class="code-block${canFold ? ' foldable' : ''}"><div class="code-head"><span class="code-lang">${label}</span>${chevron}<button class="code-copy" data-code="${esc}">Copy</button></div><code class="language-${lang} hljs">${highlighted}</code></pre>`
   })
 
   t = t.replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -75,7 +108,6 @@ function renderInner(raw: string): string {
 
   // Regular unordered lists (non-task)
   t = t.replace(/^- (.+)$/gm, (match, text) => {
-    // Skip already-converted task items
     if (match.includes('[x]') || match.includes('[ ]')) return match
     return `<li>${text}</li>`
   })
@@ -84,12 +116,9 @@ function renderInner(raw: string): string {
   // Wrap consecutive <li> elements in <ul>
   t = t.replace(/(<li[^>]*>[\s\S]*?<\/li>)(\s*<li[^>]*>)/g, '$1</li>$2')
   t = t.replace(/(<li[^>]*>[\s\S]*?<\/li>)(?=[^<]|$)/g, (match) => {
-    if (match.startsWith('<li') && !match.startsWith('<ul')) {
-      return '<ul>' + match + '</ul>'
-    }
+    if (match.startsWith('<li') && !match.startsWith('<ul')) return '<ul>' + match + '</ul>'
     return match
   })
-  // Merge adjacent <ul> blocks separated only by whitespace
   t = t.replace(/<\/ul>\s+<ul>/g, '')
 
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => `<div class="math">${math.trim()}</div>`)
@@ -97,7 +126,6 @@ function renderInner(raw: string): string {
 
   t = t.replace(/\*\*\*(.+?)\*\*\*/g, '<b><i>$1</i></b>')
   t = t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-  // Strikethrough
   t = t.replace(/~~(.+?)~~/g, '<del>$1</del>')
   t = t.replace(/\*(.+?)\*/g, '<i>$1</i>')
 
@@ -126,7 +154,5 @@ function renderInner(raw: string): string {
   t = blocks.length > 0 ? t : '<p>' + t + '</p>'
   blocks.forEach(({ ph, orig }) => { t = t.replace(ph, orig) })
 
-  t = t.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[^>]*>/gi, '')
-
-  return t
+  return sanitizeHtml(t)
 }

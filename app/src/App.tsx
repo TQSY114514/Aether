@@ -12,6 +12,7 @@ import LearningGraphPage from '@/pages/LearningGraphPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
+import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { t } from '@/utils/i18n'
 
@@ -32,6 +33,7 @@ export default function App() {
   const currentSessionId = useStore((s) => s.currentSessionId)
   const mainRef = useRef<HTMLDivElement>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const backgroundOpacity = useStore((s) => s.backgroundOpacity)
   const backgroundBlur = useStore((s) => s.backgroundBlur)
@@ -105,6 +107,16 @@ export default function App() {
         setPaletteOpen(o => !o)
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === '?') {
+        e.preventDefault()
+        setShortcutsOpen(o => !o)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault()
+        setShortcutsOpen(o => !o)
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
         useStore.getState().createSession()
@@ -164,6 +176,7 @@ export default function App() {
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       </div>
     </ErrorBoundary>
   )

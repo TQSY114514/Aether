@@ -2,6 +2,26 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.3.0] — 2026-07-20
+
+### Security
+- **XSS fix**: markdown renderer now strips `on*` event handler attributes from rendered HTML — blocks injected JS via malicious markdown content (defense-in-depth beyond the existing `<script>` tag stripping)
+
+### Syntax Highlighting
+- Code blocks now render with syntax highlighting via highlight.js — supports 40+ languages with the atom-one-dark theme
+- Language aliases (js→javascript, ts→typescript, py→python, etc.) for common shorthand
+- Auto-detection fallback when the language isn't explicitly named
+
+### UX Polish
+- **Streaming indicator**: replaced the single blinking cursor with a 3-dot bounce animation during streaming
+- **Empty state**: hero icon now has a pulsing glow animation; example cards lift on hover with icon scale; staggered entrance animations
+- **Message bubbles**: added `hover:shadow-lg` (user) and `hover:shadow-soft` (AI) for depth on hover; copy feedback now shows "Copied!" instead of localized text; timestamp and action buttons fade in together on hover
+- **Keyboard shortcuts overlay**: press `?` or `Shift+/` to see all shortcuts; also accessible via the command palette
+- **Sidebar**: session count badge on the header; search result count badge; improved hover states with subtle border transitions; group count labels
+
+### Performance
+- highlight.js code-split into its own chunk (code-split at ~940KB gzipped to ~312KB — loaded only when markdown is rendered)
+
 ## [0.2.0] — 2026-07-20
 
 ### Markdown Rendering

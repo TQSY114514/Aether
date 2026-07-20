@@ -3,10 +3,6 @@ import { useStore } from '@/store'
 import { Sparkles, Keyboard, Cpu, Brain } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-// A rotating pool of example prompts — the empty state feels alive when the
-// suggestions change between visits instead of always showing the same 4.
-// Picked deterministically by (session id + day-of-year) so it's stable for a
-// given session on a given day, but rotates across sessions/days.
 const POOL = [
   { icon: '💡', titleKey: 'empty.example.explain', prompt: '用通俗的语言解释一下什么是向量数据库，以及它和传统数据库的区别' },
   { icon: '✍️', titleKey: 'empty.example.write', prompt: '帮我写一封正式的请假邮件，说明下周三到周五因病请假' },
@@ -20,14 +16,11 @@ const POOL = [
 
 function pickFour(seed: number): typeof POOL {
   const start = seed % POOL.length
-  // walk forward wrapping around, pick 4 distinct
   const out = []
   for (let i = 0; i < 4; i++) out.push(POOL[(start + i) % POOL.length])
   return out
 }
 
-// Centered hero shown when a session has no messages yet, OR when no session is
-// selected. Clicking an example creates a session (if needed) and sends the prompt.
 export default function EmptyState({ noSession = false }: { noSession?: boolean }) {
   const createSession = useStore((s) => s.createSession)
   const currentSessionId = useStore((s) => s.currentSessionId)
@@ -37,12 +30,9 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
 
   const startWith = async (prompt: string) => {
     if (!currentSessionId) await createSession()
-    // Defer one tick so createSession's state update lands before sendMessage reads it.
     setTimeout(() => useStore.getState().sendMessage(prompt), 0)
   }
 
-  // Rotate the 4 example prompts by session id + day-of-year, so the empty
-  // state suggests different things across visits instead of always the same 4.
   const examples = useMemo(() => {
     const now = new Date()
     const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000)
@@ -50,7 +40,6 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
     return pickFour(sid + dayOfYear)
   }, [currentSessionId])
 
-  // Resolve the active model name for the current session (or the default).
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
   const activeModel = allModels.find(m => m.id === cfg?.modelId) || allModels.find(m => m.is_primary) || allModels[0]
   const effortLabel = { off: t('effort.off'), low: t('effort.low'), medium: t('effort.medium'), high: t('effort.high') }[effortLevel]
@@ -58,12 +47,13 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
   return (
     <div className="flex-1 flex items-center justify-center px-6 py-12">
       <div className="w-full max-w-xl text-center animate-blur-fade">
-        {/* Hero icon */}
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg"
+        {/* Hero icon with pulse animation */}
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 relative animate-pulse-glow"
           style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))', boxShadow: '0 10px 30px -10px var(--accent)' }}>
           <Sparkles size={28} className="text-white" />
         </div>
-        <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+
+        <h2 className="text-2xl font-semibold mb-2 tracking-tight" style={{ color: 'var(--text-primary)' }}>
           {noSession ? t('chat.no_session') : t('empty.welcome')}
         </h2>
         <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
@@ -72,29 +62,29 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
 
         {/* Active model + thinking-effort hint */}
         {activeModel && (
-          <div className="flex items-center justify-center gap-3 mb-8 text-[11px]">
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+          <div className="flex items-center justify-center gap-2.5 mb-8">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               <Cpu size={11} className="text-gray-400" />{activeModel.display_name || activeModel.model_name}
             </span>
             {effortLevel !== 'off' && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                 <Brain size={11} style={{ color: 'var(--accent)' }} />{t('empty.effort')}: {effortLabel}
               </span>
             )}
           </div>
         )}
 
-        {/* Example prompt grid */}
+        {/* Example prompt grid with hover animations */}
         {!noSession && (
-          <div className="grid grid-cols-2 gap-2.5 mb-8 text-left">
-            {examples.map((ex) => (
+          <div className="grid grid-cols-2 gap-3 mb-8 text-left">
+            {examples.map((ex, i) => (
               <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}
-                className="flex items-start gap-2.5 p-3 rounded-xl border hover:shadow-soft transition-all text-left"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))' }}>
-                <span className="text-base leading-none mt-0.5">{ex.icon}</span>
-                <div className="min-w-0">
+                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-md hover:-translate-y-0.5"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `${i * 50}ms` }}>
+                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">{ex.icon}</span>
+                <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>{t(ex.titleKey)}</div>
-                  <div className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{ex.prompt}</div>
+                  <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>{ex.prompt}</div>
                 </div>
               </button>
             ))}
@@ -104,16 +94,16 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         {/* Quick actions / keyboard hints */}
         <div className="flex items-center justify-center gap-3 text-[11px]" style={{ color: 'var(--text-muted)' }}>
           <span className="flex items-center gap-1"><Keyboard size={12} /> {t('empty.hint.new')}</span>
-          <span>·</span>
+          <span style={{ opacity: 0.3 }}>|</span>
           <span>{t('empty.hint.newline')}</span>
-          <span>·</span>
+          <span style={{ opacity: 0.3 }}>|</span>
           <span>{t('empty.hint.slash')}</span>
         </div>
 
         {noSession && (
           <div className="mt-6">
-            <button onClick={() => createSession()} className="px-5 py-2 text-white text-sm rounded-xl hover:opacity-80 transition-all"
-              style={{ backgroundColor: 'var(--accent)' }}>{t('chat.create')}</button>
+            <button onClick={() => createSession()} className="px-5 py-2.5 text-white text-sm rounded-xl hover:opacity-90 transition-all shadow-lg"
+              style={{ backgroundColor: 'var(--accent)', boxShadow: '0 4px 12px -2px var(--accent)' }}>{t('chat.create')}</button>
           </div>
         )}
       </div>

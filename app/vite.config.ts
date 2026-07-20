@@ -8,15 +8,16 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },
-  test: {
-    environment: 'node',
-    include: ['test/**/*.test.js'],
-    exclude: ['**/node_modules/**', '**/dist/**'],
-    globals: true,
-  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'highlight': ['highlight.js'],
+        }
+      }
+    }
   },
   server: {
     port: 5173,

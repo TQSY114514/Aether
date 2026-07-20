@@ -1,12 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu } from 'lucide-react'
-import type { ViewType, Session } from '@/types'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash } from 'lucide-react'
+import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 
-// "3分钟前" / "刚刚" / "2小时前" / "昨天" — relative time for the session row.
-// Falls back to a date string for anything older than a week.
 function relativeTime(iso: string | undefined): string {
   if (!iso) return ''
   const then = new Date(iso).getTime()
@@ -23,28 +21,27 @@ function relativeTime(iso: string | undefined): string {
   return new Date(then).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
 }
 
-// Pre-computed group labels (translated once per render, not per-session).
 function getSessionGroups(sessions: Session[]) {
   const now = Date.now()
   const todayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime()
   const yesterdayStart = todayStart - 86400000
   const weekStart = todayStart - 7 * 86400000
-  const groups: { label: string; sessions: Session[] }[] = [
-    { label: t('sidebar.group.pinned'), sessions: [] },
-    { label: t('sidebar.group.today'), sessions: [] },
-    { label: t('sidebar.group.yesterday'), sessions: [] },
-    { label: t('sidebar.group.week'), sessions: [] },
-    { label: t('sidebar.group.older'), sessions: [] },
+  const groups: { label: string; sessions: Session[]; count: number }[] = [
+    { label: t('sidebar.group.pinned'), sessions: [], count: 0 },
+    { label: t('sidebar.group.today'), sessions: [], count: 0 },
+    { label: t('sidebar.group.yesterday'), sessions: [], count: 0 },
+    { label: t('sidebar.group.week'), sessions: [], count: 0 },
+    { label: t('sidebar.group.older'), sessions: [], count: 0 },
   ]
   for (const s of sessions) {
     const raw = s.updated_at || s.created_at || ''
     const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
     const date = new Date(iso).getTime()
-    if (s.pinned) { groups[0].sessions.push(s); continue }
-    if (date >= todayStart) { groups[1].sessions.push(s); continue }
-    if (date >= yesterdayStart) { groups[2].sessions.push(s); continue }
-    if (date >= weekStart) { groups[3].sessions.push(s); continue }
-    groups[4].sessions.push(s)
+    if (s.pinned) { groups[0].sessions.push(s); groups[0].count++; continue }
+    if (date >= todayStart) { groups[1].sessions.push(s); groups[1].count++; continue }
+    if (date >= yesterdayStart) { groups[2].sessions.push(s); groups[2].count++; continue }
+    if (date >= weekStart) { groups[3].sessions.push(s); groups[3].count++; continue }
+    groups[4].sessions.push(s); groups[4].count++
   }
   return groups.filter(g => g.sessions.length > 0)
 }
@@ -71,6 +68,7 @@ export default function Sidebar() {
     [sessions, lowerQuery]
   )
   const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions])
+  const totalSessions = sessions.length
 
   const handleDoubleClick = (session: Session) => {
     setRenamingId(session.id); setRenameValue(session.title || '')
@@ -83,8 +81,6 @@ export default function Sidebar() {
     setRenamingId(null)
   }, [renamingId, renameValue, loadSessions])
 
-  // A session keeps the default placeholder title ("新会话"/"新对话") until the
-  // AI summary is generated. Until then, show a preview of the first message.
   const isPlaceholderTitle = (title: string | null) => {
     if (!title) return true
     return title === '新会话' || title === '新对话' || title === 'New Chat'
@@ -95,38 +91,53 @@ export default function Sidebar() {
 
   return (
     <div className="w-[260px] h-full flex flex-col shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
-      <div className="h-12 flex items-center justify-between px-4" style={{ borderBottom: '1px solid var(--border)' }}>
-        <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>AetherAI</span>
+      <div className="h-12 flex items-center justify-between px-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>AetherAI</span>
+          {totalSessions > 0 && (
+            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+              <Hash size={8} />{totalSessions}
+            </span>
+          )}
+        </div>
         <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
       </div>
-      <div className="p-2">
-        <button onClick={() => { createSession(); setCurrentView('chat') }} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
+      <div className="p-2 shrink-0">
+        <button onClick={() => { createSession(); setCurrentView('chat') }} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
           <Plus size={16} className="text-gray-500" />{t('chat.new')}
         </button>
       </div>
-      <div className="px-2 pb-2">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border text-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-2 pb-2 shrink-0">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white text-sm transition-colors" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-gray-400 shrink-0" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('sidebar.search')} className="w-full bg-transparent outline-none text-sm" />
+          {searchQuery && (
+            <span className="text-[10px] shrink-0 px-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+              {filteredSessions.length}
+            </span>
+          )}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-2 scroll-bounce">
+      <div className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
         {groups.length === 0 && (
           <div className="text-center py-8 text-xs" style={{ color: 'var(--text-muted)' }}>
             {searchQuery ? t('sidebar.no_match') : t('sidebar.no_sessions')}
           </div>
         )}
         {groups.map((group) => (
-          <div key={group.label}>
-            <div className="session-date">{group.label}</div>
+          <div key={group.label} className="mb-1">
+            <div className="session-date flex items-center justify-between">
+              <span>{group.label}</span>
+              <span className="text-[10px] font-normal" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>{group.count}</span>
+            </div>
             {group.sessions.map((session) => (
               <div key={session.id} onClick={() => { selectSession(session.id); setCurrentView('chat') }}
                 onDoubleClick={() => handleDoubleClick(session)}
-                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'bg-white border shadow-soft relative' : 'hover:bg-white/50'}`}
-                style={{ borderColor: 'var(--border)' }}>
+                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'bg-white border shadow-soft' : 'border border-transparent hover:bg-white/70 hover:border-[var(--border)]'}`}
+                style={currentSessionId === session.id ? { borderColor: 'var(--border)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
                   : <MessageSquare size={14} className="text-gray-400 shrink-0" />}
                 {renamingId === session.id ? (
@@ -163,11 +174,11 @@ export default function Sidebar() {
             ))}
           </div>
         ))}
-        {!searchQuery && (
+        {!searchQuery && totalSessions > 0 && (
           <div className="text-[10px] text-center py-2" style={{ color: 'var(--text-muted)' }}>{t('sidebar.new_chat_tip')}</div>
         )}
       </div>
-      <div className="p-2 space-y-0.5" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="p-2 space-y-0.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
@@ -180,10 +191,11 @@ export default function Sidebar() {
   )
 }
 
-function NavItem({ icon: Icon, label, active, onClick }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; active: boolean; onClick: () => void }) {
+function NavItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${active ? 'bg-white border shadow-soft' : 'hover:bg-white/50'}`} style={{ borderColor: 'var(--border)' }}>
-      <Icon size={16} className="text-gray-500" />{label}
+    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'bg-white border shadow-soft' : 'border border-transparent hover:bg-white/70 hover:border-[var(--border)]'}`}
+      style={active ? { borderColor: 'var(--border)' } : {}}>
+      <Icon size={16} className={active ? 'text-gray-700' : 'text-gray-500'} />{label}
     </button>
   )
 }
