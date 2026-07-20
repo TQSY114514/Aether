@@ -1,0 +1,50 @@
+# This file ensures ONLY source code is tracked — never runtime data, secrets, or builds.
+
+# Build output
+dist/
+dist-electron/
+out/
+release/
+release*/
+
+# Dependencies
+node_modules/
+
+# Runtime data (contains your API keys, chat history, background image — MUST NOT be uploaded)
+# This is the Electron userData dir on Windows; mirror for mac/Linux paths just in case.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+background.img
+background.img.meta
+
+# Env / secrets
+.env
+.env.*
+*.local
+secrets.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Pre-fetched reference docs (dev-only, not part of the project)
+.tmp_fetch/
+_ref/
+
+# Claude Code session artifacts (local dev memory — not for public)
+.claude/

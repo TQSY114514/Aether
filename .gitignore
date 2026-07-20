@@ -1,0 +1,45 @@
+# Root-level .gitignore for the AetherAI workspace.
+# Runtime data, secrets, and dev-only reference material must never be pushed.
+
+# ── Secrets & runtime data ──
+# Electron userData lives elsewhere (%APPDATA%/aetherai), but be paranoid:
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+background.img
+background.img.meta
+.env
+.env.*
+*.local
+secrets.json
+
+# ── Dev-only reference material (prefetched docs / cloned repos) ──
+.tmp_fetch/
+_ref/
+
+# ── Claude Code local session artifacts ──
+.claude/
+
+# ── Build output & deps ──
+**/dist/
+**/dist-electron/
+**/out/
+**/node_modules/
+
+# ── Logs ──
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
