@@ -29,6 +29,9 @@ _ref/
 **/out/
 **/node_modules/
 
+# ── Electron builder cache ──
+**/.electron-builder-cache/
+
 # ── Logs ──
 *.log
 npm-debug.log*

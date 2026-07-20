@@ -70,6 +70,9 @@ export default function ChatWindow() {
   const messages = useStore((s) => s.messages)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const loadMessages = useStore((s) => s.loadMessages)
+  const sending = useStore((s) => s.sending)
+  const streamingBySession = useStore((s) => s.streamingBySession)
+  const toolCallsByMessage = useStore((s) => s.toolCallsByMessage)
   const arenaResults = useStore((s) => s.arenaResults)
   const arenaAggregate = useStore((s) => s.arenaAggregate)
   const arenaError = useStore((s) => s.arenaError)
@@ -83,6 +86,19 @@ export default function ChatWindow() {
   const scrollToMsg = useCallback((id: number) => {
     document.getElementById('msg-' + id)?.scrollIntoView({ behavior: 'smooth' })
   }, [])
+
+  // Compute streaming status for the header bar
+  const streamingStatus = useMemo(() => {
+    if (!currentSessionId) return ''
+    const buf = streamingBySession[currentSessionId]
+    if (!buf) return ''
+    // If there are tool calls for any message being streamed, show tool status
+    const hasToolCalls = Object.values(toolCallsByMessage).some(tcs =>
+      tcs.some(tc => tc.result === null && tc.error === null)
+    )
+    if (hasToolCalls) return t('status.using_tools')
+    return t('status.thinking')
+  }, [currentSessionId, streamingBySession, toolCallsByMessage])
 
   // Reload messages when window regains focus (fix: text disappearing on alt-tab).
   // Skipped while a stream is active for this session — reloading mid-stream
@@ -186,6 +202,16 @@ export default function ChatWindow() {
           )}
         </div>
       </div>
+
+      {/* Streaming status bar */}
+      {sending && streamingStatus && (
+        <div className="px-4 py-1 shrink-0 animate-blur-fade" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="max-w-3xl mx-auto flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+            <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{streamingStatus}</span>
+          </div>
+        </div>
+      )}
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">

@@ -141,6 +141,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
   },
+  protocol: {
+    onOpen: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('protocol:open', handler)
+      return () => ipcRenderer.removeListener('protocol:open', handler)
+    },
+  },
   agent: {
     getWorkspace: () => ipcRenderer.invoke('agent:workspace:get'),
     setWorkspace: (dir) => ipcRenderer.invoke('agent:workspace:set', dir),

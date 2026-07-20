@@ -104,6 +104,19 @@ export default function App() {
     init()
   }, [])
 
+  // Protocol handler: respond to aetherai:// links
+  useEffect(() => {
+    // @ts-ignore protocol handler added to preload (not yet in generated types)
+    const off = window.electronAPI?.protocol?.onOpen?.(({ action }: { action: string }) => {
+      if (action === 'new' || action === 'chat') {
+        useStore.getState().createSession().then(() => {
+          useStore.getState().setCurrentView('chat')
+        })
+      }
+    })
+    return () => off?.()
+  }, [])
+
   // Keyboard shortcuts — use getState() to avoid re-binding on every store change.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

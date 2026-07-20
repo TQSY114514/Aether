@@ -1,9 +1,49 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, protocol } = require('electron')
 const path = require('path')
 const http = require('http')
 const fs = require('fs')
 const db = require('./database')
 const log = require('./logger')
+
+// ── GPU acceleration flags ────────────────────────────────────────────────
+// Enable GPU rasterization and bypass the hardware acceleration blocklist
+// for smoother rendering on machines with older/additional GPUs.
+if (!app.isPackaged) {
+  app.commandLine.appendSwitch('enable-gpu-rasterization')
+  app.commandLine.appendSwitch('ignore-gpu-blocklist')
+  app.commandLine.appendSwitch('enable-zero-copy')
+}
+
+// ── Native spellchecker ───────────────────────────────────────────────────
+// Electron's built-in spellchecker uses Hunspull dictionaries (downloaded at
+// runtime). No extra npm dependencies needed.
+try {
+  session.defaultSession.setSpellCheckLanguages(['en-US', 'zh-CN'])
+} catch (e) {
+  log.warn('spellcheck init failed:', e.message)
+}
+
+// ── aetherai:// protocol handler ─────────────────────────────────────────
+// Allows "open in AetherAI" from browser links and other apps.
+// Must be registered before app.whenReady().
+if (!app.isPackaged) {
+  protocol.handle('aetherai', (req) => {
+    const url = new URL(req.url)
+    const action = url.hostname
+    if (action === 'new' || action === 'chat') {
+      app.whenReady().then(() => {
+        const wc = mainWindow?.webContents
+        if (wc && !wc.isDestroyed()) {
+          wc.send('protocol:open', { action })
+        }
+      })
+    }
+    return new Response('AetherAI protocol handler', { status: 200 })
+  })
+} else {
+  app.setAsDefaultProtocolClient('aetherai')
+}
+
 const { registerProviderHandlers } = require('./ipc/provider.handler')
 const { registerModelHandlers } = require('./ipc/model.handler')
 const { registerPersonaHandlers } = require('./ipc/persona.handler')
@@ -22,6 +62,7 @@ const { setWorkspaceRoot } = require('./tools/sandbox')
 
 let mainWindow = null
 let staticServer = null
+let tray = null
 const DIST_PORT = 19877
 let actualDistPort = DIST_PORT
 
@@ -85,6 +126,43 @@ function createWindow() {
   }
 }
 
+function createTray() {
+  if (tray) return
+  try {
+    const iconPath = path.join(__dirname, '..', 'resources', 'icon.png')
+    let trayImg = null
+    if (fs.existsSync(iconPath)) {
+      try { trayImg = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 }) } catch {}
+    }
+    if (!trayImg || trayImg.isEmpty()) {
+      // Minimal 16x16 tray icon: blue circle with white "A".
+      trayImg = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANklEQVQ4T2nk5uamgAH8wMwMDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8YGD4A4QBUOQ4m6p7/AAAAABJRU5ErkJggg==')
+    }
+    tray = new Tray(trayImg)
+    tray.setToolTip('AetherAI')
+    updateTrayMenu()
+    tray.on('click', () => {
+      if (!mainWindow) return
+      mainWindow.isVisible() ? mainWindow.hide() : (mainWindow.show(), mainWindow.focus())
+    })
+  } catch (e) {
+    log.warn('Tray init failed:', e.message)
+  }
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+  const ctx = { show: 'Show AetherAI', hide: 'Hide', newChat: 'New Chat', quit: 'Quit AetherAI' }
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: ctx.show, click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus() } } },
+    { label: ctx.hide, click: () => { if (mainWindow) mainWindow.hide() } },
+    { type: 'separator' },
+    { label: ctx.newChat, click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus() } } },
+    { type: 'separator' },
+    { label: ctx.quit, click: () => { app.quit() } },
+  ]))
+}
+
 function setupIpcHandlers() {
   registerProviderHandlers(ipcMain, db)
   registerModelHandlers(ipcMain, db)
@@ -122,6 +200,7 @@ app.whenReady().then(async () => {
     log.info(`Static server on http://127.0.0.1:${actualDistPort}`)
   }
   createWindow()
+  createTray()
   setupIpcHandlers()
   // Connect to all enabled MCP servers so their tools are available before any
   // chat uses the agent. Failures are logged inside the manager, never thrown.
@@ -153,7 +232,18 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (staticServer) staticServer.close()
-  if (process.platform !== 'darwin') app.quit()
+  // On macOS, keep the app running (standard behavior). On other platforms,
+  // if a tray icon exists, minimize to tray instead of quitting. Otherwise quit.
+  if (process.platform !== 'darwin') {
+    if (tray) {
+      // Minimize to tray — the user can quit from the tray menu.
+      if (mainWindow && mainWindow.isVisible()) {
+        mainWindow.hide()
+      }
+    } else {
+      app.quit()
+    }
+  }
 })
 
 // Ensure debounced DB writes are flushed before the process exits, otherwise

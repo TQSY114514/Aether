@@ -1,9 +1,10 @@
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
+import { estimateTextTokens } from '@/utils/tokenEstimate'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
@@ -31,14 +32,17 @@ export default function ChatInput() {
   const [pending, setPending] = useState<PendingAttachment[]>([])
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
   const sendMessage = useStore((s) => s.sendMessage)
   const enqueueMessage = useStore((s) => s.enqueueMessage)
   const queuedMessages = useStore((s) => s.queuedMessages)
   const removeQueued = useStore((s) => s.removeQueued)
   const stopGeneration = useStore((s) => s.stopGeneration)
   const sending = useStore((s) => s.sending)
+  const streamingBySession = useStore((s) => s.streamingBySession)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const createSession = useStore((s) => s.createSession)
   const chatMode = useStore((s) => s.chatMode)
@@ -50,18 +54,56 @@ export default function ChatInput() {
   const allModels = useStore((s) => s.allModels)
   const saveSessionConfig = useStore((s) => s.saveSessionConfig)
 
+  // Is the current session actively streaming?
+  const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
+
   // Active model for the current session.
   const cfg = currentSessionId ? useStore.getState().sessionConfigs[currentSessionId] : null
   const activeModelId = cfg?.modelId ?? null
 
+  // Token estimation for the current input.
+  const inputTokens = useMemo(() => estimateTextTokens(input), [input])
+  const snippetText = useMemo(() => snippets.map(s => s.content).join('\n'), [snippets])
+  const snippetTokens = useMemo(() => estimateTextTokens(snippetText), [snippetText])
+  const totalInputTokens = inputTokens + snippetTokens
+
   // Slash-command lookup: memoize to avoid calling t() on every keystroke.
-  // IDs are matched case-insensitively; labels are rendered lazily only when shown.
   const slashResults = useMemo(() => {
     if (!showSlash) return []
     const q = slashQuery.toLowerCase()
     if (!q) return SLASH_COMMANDS
     return SLASH_COMMANDS.filter(cmd => cmd.id.includes(q))
   }, [showSlash, slashQuery])
+
+  // Drag-and-drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer.types.includes('Files')) setDragOver(true)
+  }, [])
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only clear if leaving the outermost container
+    if (e.currentTarget === e.target) setDragOver(false)
+  }, [])
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+    const files = Array.from(e.dataTransfer.files || [])
+    setFileError(null)
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_BYTES) { setFileError(t('chat.file_too_large', file.name)); continue }
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        setPending(prev => [...prev, { name: file.name, mime: file.type || (classifyFile(file) === 'image' ? 'image/png' : 'text/plain'), kind: classifyFile(file), dataUrl }])
+      }
+      reader.onerror = () => setFileError(t('chat.file_read_failed', file.name))
+      reader.readAsDataURL(file)
+    }
+  }, [])
 
   const handleSubmit = async () => {
     const content = input.trim()
@@ -152,8 +194,20 @@ export default function ChatInput() {
   }, [input, sending, showSlash, pending.length, snippets.length])
 
   return (
-    <div className="border-t border-[var(--border)] bg-white px-4 py-2.5">
+    <div className="border-t border-[var(--border)] bg-white px-4 py-2.5"
+      ref={dropZoneRef}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}>
       <div className="max-w-3xl mx-auto">
+        {dragOver && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 animate-blur-fade pointer-events-none">
+            <div className="rounded-2xl border-2 border-dashed border-white/50 bg-white/10 backdrop-blur-md px-8 py-6 text-center">
+              <Paperclip size={32} className="text-white/80 mx-auto mb-2" />
+              <p className="text-white text-sm font-medium">{t('chat.drag_drop_hint')}</p>
+            </div>
+          </div>
+        )}
         {queuedMessages.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 mb-2">
             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>{t('chat.queue', String(queuedMessages.length))}</span>
@@ -188,8 +242,8 @@ export default function ChatInput() {
             ))}
           </div>
         )}
-        <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring')}
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20')}
+          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
             <div className="slash-menu">
               {slashResults.map((cmd) => (
@@ -235,9 +289,17 @@ export default function ChatInput() {
                 }} className="qaction">{cmd.label()}</button>
               ))}
             </div>
+            {/* Token counter — shows ~tokens for input + snippets */}
+            {totalInputTokens > 0 && (
+              <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                {t('chat.tokens_estimate', String(totalInputTokens))}
+              </span>
+            )}
             <span className="text-[10px] text-[var(--text-muted)] ml-auto">{t('empty.hint.slash')}</span>
           </div>
         )}
+        {/* Streaming status indicator — shown only while a turn is generating */}
+        {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
       </div>
     </div>
   )
@@ -264,6 +326,39 @@ function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 
         onChange={(e) => onChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
         className="effort-slider w-20" style={{ ['--fill' as string]: `${fill}%` }} />
       <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{t(EFFORT_LEVELS[idx].labelKey)}</span>
+    </div>
+  )
+}
+
+// ── Streaming status bar ──────────────────────────────────────────────────
+// Shows a subtle status line ("Thinking…", "Using tools…") while the assistant
+// is generating. Listens to the store's statusLinesByMessage for the current
+// session's active message.
+function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
+  const statusLines = useStore((s) => s.statusLinesByMessage)
+  const [status, setStatus] = useState('')
+  const latestRef = useRef('')
+
+  useEffect(() => {
+    if (!sessionId) return
+    // Find the most recent status line for any message in this session.
+    let latest = ''
+    for (const [, lines] of Object.entries(statusLines)) {
+      if (lines.length > 0 && lines[lines.length - 1].length > latest.length) {
+        latest = lines[lines.length - 1]
+      }
+    }
+    latestRef.current = latest
+    setStatus(latest)
+  }, [statusLines, sessionId])
+
+  if (!status) return null
+  return (
+    <div className="px-0.5 mt-1.5 animate-blur-fade">
+      <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+        <span>{status}</span>
+      </div>
     </div>
   )
 }

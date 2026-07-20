@@ -81,43 +81,46 @@ interface Window {
       set: (key: string, value: string) => Promise<void>
       getAll: () => Promise<Record<string, string>>
     }
-  }
-  memory: {
-    list: () => Promise<{ id: number; content: string; created_at: string }[]>
-    create: (data: { content: string }) => Promise<{ lastInsertRowid: number }>
-    update: (id: number, data: { content: string }) => Promise<void>
-    delete: (id: number) => Promise<void>
-  }
-  background: {
-    set: (dataUrl: string | null) => Promise<{ success: boolean; hasImage?: boolean; error?: string }>
-    get: () => Promise<string | null>
-  }
-  config: {
-    export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
-    import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
-  }
-  agent: {
-    getWorkspace: () => Promise<string>
-    setWorkspace: (dir: string | null) => Promise<{ success: boolean; root: string }>
-  }
-  skills: {
-    list: () => Promise<{ name: string; description: string; filePath: string }[]>
-    rescan: () => Promise<{ success: boolean; count: number }>
-  }
-  updater: {
-    check: () => Promise<{ currentVersion?: string; updateInfo?: { version?: string } | null; downloaded?: boolean; error?: string }>
-    install: () => Promise<boolean>
-    status: () => Promise<{ currentVersion?: string; updateInfo?: { version?: string } | null; downloaded?: boolean }>
-    onUpdateAvailable: (cb: (p: { version: string }) => void) => () => void
-    onUpdateDownloaded: (cb: (p: { version: string }) => void) => () => void
-    onProgress: (cb: (p: { percent: number }) => void) => () => void
-    onUpToDate: (cb: (p: { version: string }) => void) => () => void
-  }
-  usage: {
-    stats: (range?: { since?: string; until?: string }) => Promise<{ requests: number; prompt_tokens: number; completion_tokens: number; total_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost: number; latency_avg: number }>
-    byProvider: (range?: { since?: string; until?: string }) => Promise<{ provider_name: string; requests: number; total_tokens: number; cost: number }[]>
-    byModel: (range?: { since?: string; until?: string }) => Promise<{ model_name: string; requests: number; total_tokens: number; cost: number }[]>
-    daily: (range?: { since?: string; until?: string }) => Promise<{ day: string; requests: number; total_tokens: number; cost: number }[]>
-    log: (range?: { since?: string; until?: string; limit?: number }) => Promise<any[]>
+    memory: {
+      list: () => Promise<{ id: number; content: string; created_at: string }[]>
+      create: (data: { content: string }) => Promise<{ lastInsertRowid: number }>
+      update: (id: number, data: { content: string }) => Promise<void>
+      delete: (id: number) => Promise<void>
+    }
+    background: {
+      set: (dataUrl: string | null) => Promise<{ success: boolean; hasImage?: boolean; error?: string }>
+      get: () => Promise<string | null>
+    }
+    config: {
+      export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
+      import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
+    }
+    protocol: {
+      onOpen: (callback: (payload: { action: string }) => void) => () => void
+    }
+    agent: {
+      getWorkspace: () => Promise<string>
+      setWorkspace: (dir: string | null) => Promise<{ success: boolean; root: string }>
+    }
+    skills: {
+      list: () => Promise<{ name: string; description: string; filePath: string }[]>
+      rescan: () => Promise<{ success: boolean; count: number }>
+    }
+    updater: {
+      check: () => Promise<{ currentVersion?: string; updateInfo?: { version?: string } | null; downloaded?: boolean; error?: string }>
+      install: () => Promise<boolean>
+      status: () => Promise<{ currentVersion?: string; updateInfo?: { version?: string } | null; downloaded?: boolean }>
+      onUpdateAvailable: (cb: (p: { version: string }) => void) => () => void
+      onUpdateDownloaded: (cb: (p: { version: string }) => void) => () => void
+      onProgress: (cb: (p: { percent: number }) => void) => () => void
+      onUpToDate: (cb: (p: { version: string }) => void) => () => void
+    }
+    usage: {
+      stats: (range?: { since?: string; until?: string }) => Promise<{ requests: number; prompt_tokens: number; completion_tokens: number; total_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost: number; latency_avg: number }>
+      byProvider: (range?: { since?: string; until?: string }) => Promise<{ provider_name: string; requests: number; total_tokens: number; cost: number }[]>
+      byModel: (range?: { since?: string; until?: string }) => Promise<{ model_name: string; requests: number; total_tokens: number; cost: number }[]>
+      daily: (range?: { since?: string; until?: string }) => Promise<{ day: string; requests: number; total_tokens: number; cost: number }[]>
+      log: (range?: { since?: string; until?: string; limit?: number }) => Promise<any[]>
+    }
   }
 }

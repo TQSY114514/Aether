@@ -17,8 +17,8 @@ publish:
   provider: github
   owner: TQSY114514
   repo: AetherAI
-  releaseType: release        # publish as a live release (not draft) so updater sees it
-  vPrefixedTagName: true      # v0.2.x tags match the workflow's v* trigger
+  releaseType: release
+  vPrefixedTagName: true
 
 win:
   target:

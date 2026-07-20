@@ -443,7 +443,13 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.hint": "Scan dirs (precedence): <workspace>/.claude/skills, <workspace>/.aetherai/skills, <userData>/skills, built-in. Only name+description enter the prompt; the body loads via use_skill.",
     "error.title": "Something went wrong",
     "error.unknown": "An unexpected error occurred",
-    "error.retry": "Try again"
+    "error.retry": "Try again",
+    "chat.drag_drop_hint": "Drop files here",
+    "chat.tokens": "tokens",
+    "chat.tokens_estimate": "~{0} tokens",
+    "status.thinking": "Thinking…",
+    "status.using_tools": "Using tools…",
+    "status.compacting": "Compressing context…"
   },
   "en-upside": {
     "app.name": "ᴉɐɹǝɥʇǝɐ",
@@ -791,7 +797,13 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.hint": ".llᴉʞs_ǝsn ɐᴉʌ spɐol ʎpoq ǝɥʇ ;ʇdɯoɹd ǝɥʇ ɹǝʇuǝ uoᴉʇdᴉɹɔsǝp+ǝɯɐu ʎluo .uᴉ-ʇlᴉnq ,sllᴉʞs/>ɐʇɐpɹǝsn< ,sllᴉʞs/ᴉɐɹǝɥʇǝɐ./>ǝɔɐdsʞɹoʍ< ,sllᴉʞs/ǝpnɐlɔ./>ǝɔɐdsʞɹoʍ< :)ǝɔuǝpǝɔǝɹd( sɹᴉp uɐɔs",
     "error.title": "ƃuoɹʍ ʇuǝʍ ƃuᴉɥʇǝɯos",
     "error.unknown": "pǝɹɹnɔɔo ɹoɹɹǝ pǝʇɔǝdxǝun uɐ",
-    "error.retry": "uᴉɐƃɐ ʎɹʇ"
+    "error.retry": "uᴉɐƃɐ ʎɹʇ",
+    "chat.drag_drop_hint": "ǝɹǝɥ sǝlᴉɟ doɹp",
+    "chat.tokens": "suǝʞoʇ",
+    "chat.tokens_estimate": "suǝʞoʇ }0{~",
+    "status.thinking": "…ƃuᴉʞuᴉɥʇ",
+    "status.using_tools": "…slooʇ ƃuᴉsn",
+    "status.compacting": "…ʇxǝʇuoɔ ƃuᴉssǝɹdɯoɔ"
   },
   "zh-CN": {
     "app.name": "AetherAI",
@@ -2792,11 +2804,8 @@ export function setLang(code: LangCode) { currentLang = code }
 export function getLang(): LangCode { return currentLang }
 
 // Detect the user's system language and map to a supported code. Falls back to en.
-// In Electron, navigator.language may not reflect the real OS locale, so we
-// first try app.getLocale() exposed via the preload bridge.
 export function detectLang(): LangCode {
-  const raw = (typeof window !== 'undefined' && window.electronAPI?.sys?.locale) || navigator.language || "en"
-  const n = raw.toLowerCase()
+  const n = (navigator.language || "en").toLowerCase()
   if (n.startsWith("zh")) {
     if (n.includes("tw") || n.includes("hant") || n.includes("hk")) return "zh-TW"
     return "zh-CN"

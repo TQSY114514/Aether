@@ -344,5 +344,11 @@
   "settings.skills.hint": "Scan dirs (precedence): <workspace>/.claude/skills, <workspace>/.aetherai/skills, <userData>/skills, built-in. Only name+description enter the prompt; the body loads via use_skill.",
   "error.title": "Something went wrong",
   "error.unknown": "An unexpected error occurred",
-  "error.retry": "Try again"
+  "error.retry": "Try again",
+  "chat.drag_drop_hint": "Drop files here",
+  "chat.tokens": "tokens",
+  "chat.tokens_estimate": "~{0} tokens",
+  "status.thinking": "Thinking…",
+  "status.using_tools": "Using tools…",
+  "status.compacting": "Compressing context…"
 }
