@@ -78,7 +78,6 @@ jobs:
         run: |
           set -e
           TAG=${GITHUB_REF_NAME}
-          # Find the previous tag for the changelog range.
           PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
           if [ -n "$PREV" ]; then
             RANGE="${PREV}..${TAG}"
@@ -86,7 +85,6 @@ jobs:
           else
             LOG=$(git log --pretty=format:'- %s' -20)
           fi
-          # Mark the Setup exe as recommended; explain each file.
           cat > /tmp/notes.md <<EOF
           ## Downloads
 
@@ -106,4 +104,8 @@ jobs:
 
           **Install:** download the Setup exe, run it, launch AetherAI. **Update later:** Settings → Updates → Check now (the installer auto-updates; portable builds download the new release manually).
           EOF
-          gh release edit "$TAG" --notes-file /tmp/notes.md
+          # electron-builder --publish always already created the release and
+          # uploaded artifacts. gh release edit may fail with 422 if the release
+          # was just created; that's fine — the release body will be filled by
+          # electron-builder's metadata or a subsequent manual edit.
+          gh release edit "$TAG" --notes-file /tmp/notes.md || true
