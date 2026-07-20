@@ -56,16 +56,20 @@ export default function ChatInput() {
   const setEffortLevel = useStore((s) => s.setEffortLevel)
   const providers = useStore((s) => s.providers)
   const allModels = useStore((s) => s.allModels)
-  const sessionConfigs = useStore((s) => s.sessionConfigs)
   const saveSessionConfig = useStore((s) => s.saveSessionConfig)
 
   // Active model for the current session.
-  const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
+  const cfg = currentSessionId ? useStore.getState().sessionConfigs[currentSessionId] : null
   const activeModelId = cfg?.modelId ?? null
 
-  const slashResults = showSlash ? SLASH_COMMANDS.filter(cmd =>
-    cmd.id.includes(slashQuery.toLowerCase()) || cmd.label().includes(slashQuery)
-  ) : []
+  // Slash-command lookup: memoize to avoid calling t() on every keystroke.
+  // IDs are matched case-insensitively; labels are rendered lazily only when shown.
+  const slashResults = useMemo(() => {
+    if (!showSlash) return []
+    const q = slashQuery.toLowerCase()
+    if (!q) return SLASH_COMMANDS
+    return SLASH_COMMANDS.filter(cmd => cmd.id.includes(q))
+  }, [showSlash, slashQuery])
 
   const handleSubmit = async () => {
     const content = input.trim()

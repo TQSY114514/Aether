@@ -64,10 +64,11 @@ export default function Sidebar() {
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const lowerQuery = searchQuery.toLowerCase()
 
   const filteredSessions = useMemo(() =>
-    searchQuery ? sessions.filter(s => (s.title || '').toLowerCase().includes(searchQuery.toLowerCase())) : sessions,
-    [sessions, searchQuery]
+    lowerQuery ? sessions.filter(s => (s.title || '').toLowerCase().includes(lowerQuery)) : sessions,
+    [sessions, lowerQuery]
   )
   const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions])
 

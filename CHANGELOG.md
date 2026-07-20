@@ -2,6 +2,18 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.1.26] — 2026-07-20
+
+### Performance & Refactor
+- Store: extracted `resolveModelId()` helper — DRY's up the 3-step model fallback (allModels → primary → listAll) that was copy-pasted in `createSession`, `selectSession`, and `sendMessage`
+- Store: replaced all inline `console.error/warn` with the centralized `@/utils/logger` ring-buffer logger for consistent log formatting
+- ChatInput: memoized slash-command filtering with `useMemo` — stops calling `t()` on every keystroke when the menu is hidden; ID-only filter when querying
+- Sidebar: pre-computed `lowerQuery` once outside the `useMemo` dependency chain — avoids calling `.toLowerCase()` per-session per-filter evaluation
+- ChatWindow: streaming scroll switched to `behavior: 'auto'` — eliminates animation-frame queue buildup during rapid token streaming (was `smooth`, which queued overlapping scroll animations)
+
+### Maintenance
+- Updated `electron-builder.yml` copyright year to 2026
+
 ## [0.1.25] — 2026-07-20
 
 ### Performance & Fixes

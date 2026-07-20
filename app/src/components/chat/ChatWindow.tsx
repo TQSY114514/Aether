@@ -48,7 +48,9 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0
         if (!isAtBottom) return
-        ref.current?.scrollIntoView({ behavior: 'smooth' })
+        // Instant scroll during streaming — smooth scroll queues animation frames
+        // and lags behind rapid token updates. Instant feels more responsive.
+        ref.current?.scrollIntoView({ behavior: 'auto' })
       })
     }
     return () => {

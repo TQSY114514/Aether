@@ -1,6 +1,6 @@
 appId: com.aetherai.app
 productName: AetherAI
-copyright: Copyright © 2024
+copyright: Copyright © 2026
 directories:
   output: release
   buildResources: resources

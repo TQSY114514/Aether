@@ -2,13 +2,14 @@ import { create } from 'zustand'
 import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
 import { setLang, detectLang, t, type LangCode, LANGS } from '@/utils/i18n'
 import { getLangDir } from '@/utils/i18n'
+import { applyTheme } from '@/utils/theme'
+import log from '@/utils/logger'
 
 // Set <html dir> for RTL languages (Arabic).
 function applyLangDir(code: LangCode) {
   document.documentElement.dir = getLangDir(code)
 }
 const LANGS_CODES = LANGS.map(l => l.code)
-import { applyTheme } from '@/utils/theme'
 
 interface SessionConfig {
   providerId: number | null
@@ -208,6 +209,26 @@ function decodeDataUrlText(dataUrl: string): string {
 // main-process serializer). The `buildConfigBundle` in `src/types/config.ts`
 // produces the same structure for the renderer-side export path.
 
+// Shared model-resolution helper: try allModels (cached), then primary API,
+// then listAll API. Returns { providerId, modelId } or null. Also optionally
+// persists to session config if sessionId is given.
+async function resolveModelId(sessionId?: number): Promise<{ providerId: number | null; modelId: number | null }> {
+  const { allModels, sessionConfigs } = get()
+  if (allModels.length > 0) {
+    const primary = allModels.find(m => m.is_primary) || allModels[0]
+    return { providerId: primary.provider_id, modelId: primary.id }
+  }
+  try {
+    const primary = await window.electronAPI.model.primary()
+    if (primary) return { providerId: primary.provider_id, modelId: primary.id }
+  } catch {}
+  try {
+    const all = await window.electronAPI.model.listAll()
+    if (all.length > 0) return { providerId: all[0].provider_id, modelId: all[0].id }
+  } catch {}
+  return { providerId: null, modelId: null }
+}
+
 export const useStore = create<AppState>((set, get) => ({
   // Navigation
   currentView: 'chat',
@@ -240,25 +261,8 @@ export const useStore = create<AppState>((set, get) => ({
     set({ sessions })
   },
   createSession: async () => {
-    const allModels = get().allModels
-    let providerId = null, modelId = null
-    if (allModels.length > 0) {
-      const primary = allModels.find(m => m.is_primary) || allModels[0]
-      providerId = primary.provider_id; modelId = primary.id
-    }
-    if (!modelId) {
-      try {
-        const primary = await window.electronAPI.model.primary()
-        if (primary) { providerId = primary.provider_id; modelId = primary.id }
-      } catch {}
-    }
-    if (!modelId) {
-      try {
-        const all = await window.electronAPI.model.listAll()
-        if (all.length > 0) { providerId = all[0].provider_id; modelId = all[0].id }
-      } catch {}
-    }
-    // Use the combined create-and-select IPC (1 round-trip instead of 7+).
+    const { providerId, modelId } = await resolveModelId()
+    if (!modelId) return
     const result = await window.electronAPI.session.createAndSelect({ providerId, modelId, personaId: null })
     const sid = result.session.id
     const cfg = result.config
@@ -284,20 +288,15 @@ export const useStore = create<AppState>((set, get) => ({
     }
     // Pre-load messages from DB before switching (never shows empty state)
     let msgs: Message[] = []
-    try { msgs = await window.electronAPI.message.list(id) } catch (e) { console.error('[AetherAI] preload', e) }
+    try { msgs = await window.electronAPI.message.list(id) } catch (e) { log.error('preload', e) }
     set({ currentSessionId: id, messages: msgs, arenaResults: [] })
     window.electronAPI.session.touch(id).catch(() => {})
-    // Load per-session config from DB. If missing/incomplete, rebuild from allModels.
+    // Load per-session config from DB. If missing/incomplete, resolve from allModels.
     try {
       let cfg = await window.electronAPI.session.getConfig(id)
       if (!cfg || !cfg.modelId) {
-        let providerId = null, modelId = null
-        const allModels = get().allModels
-        if (allModels.length > 0) {
-          const primary = allModels.find(m => m.is_primary) || allModels[0]
-          providerId = primary.provider_id; modelId = primary.id
-        }
-        cfg = { providerId, modelId, personaId: null }
+        const { providerId } = await resolveModelId()
+        cfg = { providerId, modelId: null, personaId: null }
         window.electronAPI.session.setConfig(id, cfg).catch(() => {})
       }
       set((s) => ({
@@ -456,22 +455,22 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Chat
   sendMessage: async (content, attachments) => {
-    const { currentSessionId, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix, chatMode, allModels } = get()
+    const { currentSessionId, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     let modelId = cfg?.modelId
     // Auto-resolve missing model: try allModels (already loaded globally)
-    if (!modelId && allModels.length > 0) {
-      const primary = allModels.find(m => m.is_primary) || allModels[0]
-      modelId = primary.id
-      if (currentSessionId) {
-        const newCfg = { providerId: primary.provider_id, modelId: primary.id, personaId: cfg?.personaId || null }
+    if (!modelId) {
+      const { providerId } = await resolveModelId()
+      modelId = providerId
+      if (currentSessionId && modelId) {
+        const newCfg = { providerId, modelId, personaId: cfg?.personaId || null }
         await window.electronAPI.session.setConfig(currentSessionId, newCfg)
         set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [currentSessionId]: newCfg } }))
-        get().loadModels(primary.provider_id)
+        get().loadModels(providerId)
       }
     }
     if (!currentSessionId || !modelId) {
-      console.warn('sendMessage: no session or model configured')
+      log.warn('sendMessage: no session or model configured')
       return
     }
 
@@ -532,14 +531,14 @@ export const useStore = create<AppState>((set, get) => ({
         systemPrefix,
         })
     } catch (err) {
-      console.error('[AetherAI] chat.send FAILED:', err)
+      log.error('[AetherAI] chat.send FAILED:', err)
       // Drop this session's streaming buffer on error; keep other sessions intact.
       set((s) => {
         const next = { ...s.streamingBySession }
         delete next[currentSessionId]
         return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
       })
-      console.error('chat error', err)
+      log.error('chat error', err)
     }
   },
 
@@ -628,7 +627,7 @@ export const useStore = create<AppState>((set, get) => ({
         delete next[currentSessionId]
         return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
       })
-      console.error('regenerate error:', err)
+      log.error('regenerate error:', err)
     }
   },
 
@@ -673,7 +672,7 @@ export const useStore = create<AppState>((set, get) => ({
         delete next[currentSessionId]
         return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
       })
-      console.error('editMessage error:', err)
+      log.error('editMessage error:', err)
     }
   },
 
@@ -682,7 +681,7 @@ export const useStore = create<AppState>((set, get) => ({
       const messages = await window.electronAPI.message.list(sessionId)
       set({ messages })
     } catch (err) {
-      console.error('[AetherAI] loadMessages error:', err)
+      log.error('[AetherAI] loadMessages error:', err)
     }
   },
 
