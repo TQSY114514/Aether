@@ -2,6 +2,17 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.1.19] — 2026-07-20
+
+### Refactor
+- DRY up `chat.send` params — re-applied `chatSendBase()` + `clearStreamingOnError()` after merge dropped them
+- ChatWindow search input: 200ms debounce to avoid filter+scroll on every keystroke
+- Removed unused `loadModels` import from ChatPage.tsx
+
+### Bug Fixes
+- **Critical**: MessageBubble `renderContent` was only called for user messages; assistant messages bypassed search highlight — now ALL messages go through `renderContent`
+- Standardized error log prefix to `[AetherAI]` across `sendMessage`/`regenerate`/`editMessage`
+
 ## [0.1.18] — 2026-07-18
 
 ### Refactor
