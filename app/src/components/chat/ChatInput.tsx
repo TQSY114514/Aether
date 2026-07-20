@@ -146,8 +146,10 @@ export default function ChatInput() {
 
   useEffect(() => {
     const el = textareaRef.current
-    if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 200) + 'px' }
-  }, [input])
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+  }, [input, sending, showSlash, pending.length, snippets.length])
 
   return (
     <div className="border-t border-[var(--border)] bg-white px-4 py-2.5">

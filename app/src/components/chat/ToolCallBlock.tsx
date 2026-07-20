@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
@@ -46,6 +46,8 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const StatusIcon = status.icon
   const dangerous = tool.risk === 'dangerous'
   const label = toolLabel(tool)
+  // Auto-expand when there's an error so the user can see what went wrong.
+  useEffect(() => { if (tool.error) setOpen(true) }, [tool.error])
 
   return (
     <div className="rounded-lg border mb-2 overflow-hidden" style={{ borderColor: dangerous ? 'var(--warning)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>

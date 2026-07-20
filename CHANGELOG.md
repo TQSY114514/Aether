@@ -2,6 +2,28 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.2.0] — 2026-07-20
+
+### Markdown Rendering
+- Task lists: `- [ ]` and `- [x]` render as interactive checkboxes with strikethrough for completed items
+- Strikethrough: `~~text~~` now renders as `<del>`
+- Lists: consecutive `<li>` elements are wrapped in `<ul>` with proper bullet/numbered styling
+- Links: styled with accent color + underline offset for better readability
+- Headings: added proper font-weight and margin hierarchy for h2–h5
+- Blockquotes: refined border-left accent color
+- Code spans: consistent sizing and background
+- Images: border-radius and margin for visual breathing room
+
+### UX Improvements
+- ToolCallBlock: auto-expands when a tool errors, so the user sees the failure without manual clicking
+- ChatInput textarea: auto-resize now reacts to sending state, slash menu visibility, attachments, and snippets (was only on `input` changes)
+- ContextBar: uses shared `DEFAULT_CONTEXT_WINDOW` constant instead of magic `128000`
+
+### Maintenance
+- Bumped version to 0.2.0 across package.json, electron-builder.yml, and start.bat
+- Cleaned up 7 stale local branches and 4 worktrees
+- Removed stale `_ref/` directory
+
 ## [0.1.27] — 2026-07-20
 
 ### DRY & Refactor

@@ -233,8 +233,23 @@ pre.code-block code { display: block; padding: 10px 12px; font-family: 'JetBrain
 .mc img { max-width: 100%; border-radius: 6px; margin: 8px 0; }
 .mc .math { padding: 8px 12px; margin: 6px 0; background: var(--bg-secondary); border-radius: 6px; font-family: 'Times New Roman', serif; font-style: italic; text-align: center; }
 .mc .math-inline { font-family: 'Times New Roman', serif; font-style: italic; padding: 0 2px; }
-/* Duplicate table rules from above for specificity */
-.mc table, .mc td, .mc th { border-collapse: collapse; }
+.mc ul { list-style: disc; }
+.mc ol { list-style: decimal; }
+.mc li { margin: 2px 0; }
+.mc li.task-item { list-style: none; margin-left: -18px; }
+.mc li.task-item input[type="checkbox"] { margin-right: 4px; accent-color: var(--accent); }
+.mc li.task-item.completed { opacity: 0.6; }
+.mc li.task-item.completed input[type="checkbox"]:checked + * { text-decoration: line-through; }
+.mc del { opacity: 0.6; }
+.mc a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.mc a:hover { color: var(--accent-hover); }
+.mc strong { font-weight: 600; }
+.mc em { font-style: italic; }
+.mc h2 { font-size: 1.2em; font-weight: 700; margin: 12px 0 6px; color: var(--text-primary); }
+.mc h3 { font-size: 1.1em; font-weight: 600; margin: 10px 0 4px; color: var(--text-primary); }
+.mc h4 { font-size: 1em; font-weight: 600; margin: 8px 0 4px; color: var(--text-primary); }
+.mc h5 { font-size: 0.95em; font-weight: 600; margin: 6px 0 2px; color: var(--text-secondary); }
+.mc blockquote { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--text-secondary); margin: 6px 0; }
 
 /* Hide scrollbar for model selector */
 .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }

@@ -66,14 +66,39 @@ function renderInner(raw: string): string {
   t = t.replace(/^# (.+)$/gm, '<h2>$1</h2>')
 
   t = t.replace(/^>\s?(.+)$/gm, '<blockquote>$1</blockquote>')
-  t = t.replace(/^- (.+)$/gm, '<li>$1</li>')
+
+  // Task lists: - [ ] and - [x] → checkboxes (must run before generic li rule)
+  t = t.replace(/^(\s*)-\s\[x\]\s(.+)$/gm, (_, indent, text) =>
+    `${indent}<li class="task-item completed"><input type="checkbox" checked disabled>${text}</li>`)
+  t = t.replace(/^(\s*)-\s\[\s\]\s(.+)$/gm, (_, indent, text) =>
+    `${indent}<li class="task-item"><input type="checkbox" disabled>${text}</li>`)
+
+  // Regular unordered lists (non-task)
+  t = t.replace(/^- (.+)$/gm, (match, text) => {
+    // Skip already-converted task items
+    if (match.includes('[x]') || match.includes('[ ]')) return match
+    return `<li>${text}</li>`
+  })
   t = t.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+
+  // Wrap consecutive <li> elements in <ul>
+  t = t.replace(/(<li[^>]*>[\s\S]*?<\/li>)(\s*<li[^>]*>)/g, '$1</li>$2')
+  t = t.replace(/(<li[^>]*>[\s\S]*?<\/li>)(?=[^<]|$)/g, (match) => {
+    if (match.startsWith('<li') && !match.startsWith('<ul')) {
+      return '<ul>' + match + '</ul>'
+    }
+    return match
+  })
+  // Merge adjacent <ul> blocks separated only by whitespace
+  t = t.replace(/<\/ul>\s+<ul>/g, '')
 
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => `<div class="math">${math.trim()}</div>`)
   t = t.replace(/\$([^\s$][^$]*[^\s$])\$/g, '<span class="math-inline">$1</span>')
 
   t = t.replace(/\*\*\*(.+?)\*\*\*/g, '<b><i>$1</i></b>')
   t = t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  // Strikethrough
+  t = t.replace(/~~(.+?)~~/g, '<del>$1</del>')
   t = t.replace(/\*(.+?)\*/g, '<i>$1</i>')
 
   const linkTokens: string[] = []
@@ -91,7 +116,7 @@ function renderInner(raw: string): string {
 
   const blocks: { ph: string; orig: string }[] = []
   let bidx = 0
-  t = t.replace(/<(table|pre|blockquote|hr|h[2-5])[^>]*>[\s\S]*?<\/(table|pre|blockquote|hr|h[2-5])>/g, (m) => {
+  t = t.replace(/<(table|pre|blockquote|hr|h[2-5]|ul|ol)[^>]*>[\s\S]*?<\/(table|pre|blockquote|hr|h[2-5]|ul|ol)>/g, (m) => {
     const ph = `\x00B${bidx}\x00`
     blocks.push({ ph, orig: m }); bidx++
     return ph
