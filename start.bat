@@ -7,7 +7,7 @@ cd /d "%~dp0"
 for /f "tokens=2 delims=:," %%v in ('findstr /c:"\"version\"" app\package.json 2^>nul') do set VERSION=%%v
 set VERSION=%VERSION:"=%
 set VERSION=%VERSION: =%
-if "%VERSION%"=="" set VERSION=0.2.0
+if "%VERSION%"=="" set VERSION=0.3.1
 
 echo.
 echo   AetherAI v%VERSION%

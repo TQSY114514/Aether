@@ -61,7 +61,7 @@ function renderInner(raw: string): string {
     const label = lang || 'text'
     const lineCount = trimmed.split('\n').length
     const canFold = lineCount >= 15
-    const chevron = canFold ? `<button class="code-fold" data-lines="${lineCount}">▾</button>` : ''
+    const chevron = canFold ? `<button class="code-fold" data-lines="${lineCount}">&#9662;</button>` : ''
     let highlighted = trimmed
     const hlLang = HL_LANGS[lang.toLowerCase()] || lang
     try {
@@ -70,7 +70,14 @@ function renderInner(raw: string): string {
     } catch {
       try { highlighted = hljs.highlightAuto(trimmed).value } catch { /* plain */ }
     }
-    return `<pre class="code-block${canFold ? ' foldable' : ''}"><div class="code-head"><span class="code-lang">${label}</span>${chevron}<button class="code-copy" data-code="${esc}">Copy</button></div><code class="language-${lang} hljs">${highlighted}</code></pre>`
+    // Add line-number spans for every line (shown only when the parent
+    // <pre> has the .lines class, toggled by MessageBubble for >1-line blocks).
+    const lines = highlighted.split('\n')
+    const numbered = lines.map((line, i) =>
+      `<span class="ln"><span class="ln-i" data-l="${i + 1}"></span></span>${line}`
+    ).join('\n')
+    const lineClass = lineCount > 1 ? ' lines' : ''
+    return `<pre class="code-block${lineClass}"><div class="code-head"><span class="code-lang">${label}</span>${chevron}<button class="code-copy" data-code="${esc}">Copy</button></div><code class="language-${lang} hljs">${numbered}</code></pre>`
   })
 
   t = t.replace(/`([^`]+)`/g, '<code>$1</code>')

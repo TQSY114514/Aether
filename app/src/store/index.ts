@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
 import { setLang, detectLang, t, type LangCode, LANGS } from '@/utils/i18n'
 import { getLangDir } from '@/utils/i18n'
-import { applyTheme } from '@/utils/theme'
+import { applyTheme, getThemes } from '@/utils/theme'
 import log from '@/utils/logger'
 
 // Set <html dir> for RTL languages (Arabic).
@@ -811,7 +811,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setTheme: async (theme) => {
     await window.electronAPI.settings.set('theme', theme)
-    applyTheme(theme, get().backgroundImage !== null)
+    if (_autoThemeCleanup) { _autoThemeCleanup(); _autoThemeCleanup = null }
+    applyTheme(theme, get().backgroundImage !== null, (fn) => { _autoThemeCleanup = fn })
     set({ theme })
   },
   setFallbackTimeout: async (ms) => {
@@ -861,10 +862,12 @@ export const useStore = create<AppState>((set, get) => ({
 // ───────────────────────────────────────────────────────────────────────────
 // Session back/forward nav guard: set true during goBack/goForward so
 // selectSession doesn't push a duplicate entry into history.
+// Auto-theme listener cleanup: torn down when switching away from 'auto'.
 let _navigating = false
 let chunkListenerInstalled = false
 let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
+let _autoThemeCleanup: (() => void) | null = null
 
 function flushStreamUpdates() {
   const deltas = _pendingDeltas

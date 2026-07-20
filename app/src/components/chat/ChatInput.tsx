@@ -182,6 +182,41 @@ export default function ChatInput() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    const el = textareaRef.current
+    if (e.ctrlKey || e.metaKey) {
+      const key = e.key.toLowerCase()
+      if (key === 'u' && el) {
+        e.preventDefault()
+        const v = el.value
+        const pos = el.selectionStart
+        // Delete from line start to cursor
+        const lineStart = v.lastIndexOf('\n', pos - 1) + 1
+        el.value = v.slice(0, lineStart) + v.slice(pos)
+        el.selectionStart = el.selectionEnd = lineStart
+        setInput(el.value)
+        return
+      }
+      if (key === 'k' && el) {
+        e.preventDefault()
+        const v = el.value
+        const pos = el.selectionStart
+        // Cut from cursor to end of line (or end of text if last line)
+        const lineEnd = v.indexOf('\n', pos)
+        const cutEnd = lineEnd === -1 ? v.length : lineEnd
+        const cut = v.slice(pos, cutEnd)
+        try { navigator.clipboard?.writeText(cut) } catch {}
+        const next = v.slice(0, pos) + v.slice(cutEnd)
+        el.value = next
+        el.selectionStart = el.selectionEnd = pos
+        setInput(next)
+        return
+      }
+      if (key === 'a' && el) {
+        // Only select-all if no selection exists (let the browser handle it
+        // if already selecting, or if it's a normal select-all)
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
     if (e.key === 'Escape') setShowSlash(false)
   }

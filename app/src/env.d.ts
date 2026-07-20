@@ -82,8 +82,8 @@ interface Window {
       getAll: () => Promise<Record<string, string>>
     }
     memory: {
-      list: () => Promise<{ id: number; content: string; created_at: string }[]>
-      create: (data: { content: string }) => Promise<{ lastInsertRowid: number }>
+      list: () => Promise<{ id: number; content: string; type: string; created_at: string }[]>
+      create: (data: { content: string; type?: string }) => Promise<{ lastInsertRowid: number }>
       update: (id: number, data: { content: string }) => Promise<void>
       delete: (id: number) => Promise<void>
     }

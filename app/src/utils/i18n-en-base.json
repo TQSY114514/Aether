@@ -96,6 +96,7 @@
   "settings.language": "Language",
   "settings.theme": "Theme",
   "settings.theme.light": "Light",
+  "settings.theme.auto": "Auto (system)",
   "settings.theme.dark": "Dark",
   "settings.theme.blue": "Blue",
   "settings.theme.glass": "Glass",

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash, Download, FolderOpen } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 
@@ -61,6 +61,7 @@ export default function Sidebar() {
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; session: Session } | null>(null)
   const lowerQuery = searchQuery.toLowerCase()
 
   const filteredSessions = useMemo(() =>
@@ -88,6 +89,23 @@ export default function Sidebar() {
   const previewOf = (text: string) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
 
   useEffect(() => { loadSessions() }, [loadSessions])
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('contextmenu', close)
+    return () => { window.removeEventListener('click', close); window.removeEventListener('contextmenu', close) }
+  }, [ctxMenu])
+
+  const exportSession = async (session: Session) => {
+    const msgs = await window.electronAPI.message.list(session.id)
+    const data = { session, messages: msgs }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `aetherai-session-${session.id}-${(session.title || 'chat').slice(0, 20)}.json`
+    a.click(); URL.revokeObjectURL(a.href)
+  }
 
   return (
     <div className="w-[260px] h-full flex flex-col shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
@@ -134,8 +152,10 @@ export default function Sidebar() {
               <span className="text-[10px] font-normal" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>{group.count}</span>
             </div>
             {group.sessions.map((session) => (
-              <div key={session.id} onClick={() => { selectSession(session.id); setCurrentView('chat') }}
+              <div key={session.id}
+                onClick={() => { selectSession(session.id); setCurrentView('chat') }}
                 onDoubleClick={() => handleDoubleClick(session)}
+                onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
                 className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'bg-white border shadow-soft' : 'border border-transparent hover:bg-white/70 hover:border-[var(--border)]'}`}
                 style={currentSessionId === session.id ? { borderColor: 'var(--border)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
@@ -176,6 +196,34 @@ export default function Sidebar() {
         ))}
         {!searchQuery && totalSessions > 0 && (
           <div className="text-[10px] text-center py-2" style={{ color: 'var(--text-muted)' }}>{t('sidebar.new_chat_tip')}</div>
+        )}
+        {/* Context menu */}
+        {ctxMenu && (
+          <div className="fixed z-50 rounded-xl border shadow-lg py-1 min-w-[180px]"
+            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 200), backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+            onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { setCtxMenu(null); handleDoubleClick(ctxMenu.session) }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              Rename
+            </button>
+            <button onClick={() => { setCtxMenu(null); window.electronAPI?.session?.pin?.(ctxMenu.session.id, ctxMenu.session.pinned ? 0 : 1); loadSessions() }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Pin size={11} /> {ctxMenu.session.pinned ? 'Unpin' : 'Pin'}
+            </button>
+            <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
+            <button onClick={() => { setCtxMenu(null); exportSession(ctxMenu.session) }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Download size={11} /> Export conversation
+            </button>
+            <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
+            <button onClick={async () => {
+              setCtxMenu(null)
+              const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
+              if (ok) deleteSession(ctxMenu.session.id)
+            }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 transition-colors flex items-center gap-2" style={{ color: 'var(--error)' }}>
+              <Trash2 size={11} /> {t('chat.delete')}
+            </button>
+          </div>
         )}
       </div>
       <div className="p-2 space-y-0.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>

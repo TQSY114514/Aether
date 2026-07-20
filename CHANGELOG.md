@@ -2,6 +2,29 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.4.0] — 2026-07-20
+
+### Features
+- **Auto-detect theme**: new "Auto (system)" option follows OS dark/light preference via `prefers-color-scheme`. Set in Settings → Theme or from the theme switcher.
+- **Session context menu**: right-click any session in the sidebar for Rename, Pin/Unpin, Export conversation (JSON), and Delete. No more hunting for the small trash icon.
+- **MemoryPage upgrades**: search/filter memories, import from JSON, type badges (entity / fact / context) with color coding, type selector when adding new memories.
+- **Vim-style editing shortcuts** in ChatInput: Ctrl+U deletes from cursor to line start, Ctrl+K cuts from cursor to line end (to clipboard).
+- **Code block line numbers**: every multi-line code block now shows line numbers via numbered spans — no toggle needed.
+
+### UX Polish
+- Session context menu uses fixed positioning with viewport clamping so it never renders off-screen.
+- MemoryPage type summary badges with per-type color coding and counts.
+- MemoryPage now supports import in addition to export.
+
+### Tests
+- **19 new tests** for `compaction.js`: estimateTextTokens (English, CJK, mixed), estimateMessageTokens (string, multimodal, null), estimateMessagesTokens (safety margin), safeSplitIndex (boundary logic), maybeCompact (under-budget pass-through, budget-0 pass-through, system-message preservation, tool-pair integrity on hard-truncate).
+- Total test count: 24 (5 existing + 19 new). All passing.
+
+### Maintenance
+- Fixed `start.bat` version fallback (was 0.2.0, now correctly reads 0.3.1+).
+- Bumped version to 0.4.0 across package.json and electron-builder.yml.
+- Vite production build verified (14.7s, 36KB CSS + 450KB JS gzip 134KB).
+
 ## [0.3.0] — 2026-07-20
 
 ### Security

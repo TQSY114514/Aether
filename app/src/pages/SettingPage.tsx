@@ -146,7 +146,7 @@ export default function SettingPage() {
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>{t('settings.theme')}</h2>
             <div className="flex gap-2 flex-wrap">
-              {(['light', 'dark', 'blue', 'glass', 'retro'] as const).map((tKey) => (
+              {(['light', 'auto', 'dark', 'blue', 'glass', 'retro'] as const).map((tKey) => (
                 <button key={tKey} onClick={() => setTheme(tKey)}
                   className={`px-4 py-2 text-sm rounded-lg border transition-colors ${theme === tKey ? 'bg-black text-white border-black' : ''}`}
                   style={theme !== tKey ? { borderColor: 'var(--border)', color: 'var(--text-secondary)' } : {}}>
