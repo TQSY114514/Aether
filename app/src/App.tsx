@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@/store'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
@@ -119,14 +119,14 @@ export default function App() {
       if (e.key === 'Escape') {
         const s = useStore.getState()
         if (s.sending) { e.preventDefault(); s.stopGeneration() }
-        else { const cv = s.currentView; if (cv !== 'chat') s.setCurrentView('chat') }
+        else if (s.currentView !== 'chat') s.setCurrentView('chat')
       }
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); useStore.getState().goBack() }
       if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); useStore.getState().goForward() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createSession, setCurrentView])
+  }, [])
 
   const renderPage = () => {
     switch (currentView) {

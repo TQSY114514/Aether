@@ -2,16 +2,14 @@
 
 All notable changes to AetherAI are documented here.
 
-## [0.1.24] — 2026-07-20
+## [0.1.25] — 2026-07-20
 
-### Performance
-- ChatPage/App: `renderPage` and key handler removed stale closure on `currentView`; keyboard shortcuts use `useStore.getState()` to avoid re-binding on store changes
-- ChatPage: `allModelOptions`/`allArenaModels` memoized with correct dependencies (eliminates O(P×M) filtering on every render)
-- MessageBubble: handler callbacks (`handleCopy`, `startEdit`, `submitEdit`, `onBubbleClick`, `renderContent`) wrapped in `useCallback` to keep memo comparison stable
-- MessageBubble: memo comparison now includes `message.id` so search-highlight changes on an unchanged bubble still re-render correctly
-- Markdown renderer: upgraded from single-slot to 8-slot LRU cache — committed bubbles that re-render after sibling updates hit cache instead of re-parsing
-- StreamingBubble: raised micro-delta skip threshold from 2 to 4 chars, reducing DOM writes during fast streaming
-- store/index.ts: added missing `let _navigating = false` declaration (fixed ReferenceError on goBack/goForward)
+### Performance & Fixes
+- Markdown renderer: single-slot memoization wrapped in `renderInner()` — avoids redundant re-parses when the same committed bubble re-renders after a sibling update
+- App.tsx: keyboard shortcuts effect dependency array corrected to `[]` — eliminates unnecessary re-binding on every store change
+- Removed dead LRU cache array (`_cache[]`) and unused `CACHE_SIZE` constant from markdown.ts
+
+## [0.1.24] — 2026-07-20
 
 ### Performance & Maintenance
 - Centralized logging: all `console.log/warn/error` in `electron/` replaced with `electron/logger.js` ring-buffer logger (500-entry in-memory history, structured levels, dev/prod gating)
@@ -45,10 +43,6 @@ All notable changes to AetherAI are documented here.
 - chat.handler.js: cache 5 rarely-changing settings at handler registration — eliminates repeated synchronous sql.js reads on every message send
 - store/index.ts: collapse 8+ scattered get() calls in sendMessage/regenerate/editMessage into a single destructuring — reduces redundant store reads
 - ChatWindow.tsx: StreamingBubble receives isAtBottom prop, skips scrollIntoView when user has scrolled up to read history
-
-## [0.1.20] — 2026-07-20
-
-### Performance
 - database.js: saveDatabase/flushDatabase now use async writeFile (was writeFileSync blocking main process during streaming)
 - autoMemory.js: prefetch uses in-memory cache with version invalidation — avoids repeated full-table scans on consecutive turns
 - ContextBar: import shared estimateTextTokens from tokenEstimate.ts (unified 6-range CJK coverage vs local single-range copy)
