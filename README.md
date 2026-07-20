@@ -126,28 +126,44 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 
 ## 📋 Changelog
 
+### v0.1.21
+**Performance**
+- Store: collapse 8+ scattered `get()` calls into a single destructuring
+- chat.handler.js: cache 5 rarely-changing settings — eliminates repeated sql.js reads
+- ChatWindow: StreamingBubble receives isAtBottom prop, skips scroll when reading history
+- database.js: async writeFile (was writeFileSync blocking during streaming)
+
+### v0.1.20
+**Performance & fixes**
+- autoMemory.js: in-memory cache with version invalidation
+- database.js: await flushDatabase (was fire-and-forget, could lose data on crash)
+- Move user_habit CREATE TABLE to init (was re-issued every turn)
+- Remove dead CLAUDE_BUDGETS constant
+
 ### v0.1.19
 **Bug fixes & refactor**
-- **Critical**: MessageBubble search highlight now works for assistant messages (rendered markdown HTML)
-- ChatWindow search input: 200ms debounce to avoid filter+scroll on every keystroke
-- DRY up `chat.send` params — re-applied `chatSendBase()` + `clearStreamingOnError()` after merge dropped them
-- Standardized error log prefix to `[AetherAI]` across all send paths
+- **Critical**: MessageBubble search highlight now works for assistant messages
+- ChatWindow search: 200ms debounce
+- DRY up chat.send params (chatSendBase + clearStreamingOnError helpers)
+- Removed duplicate config loading in ChatPage.tsx
 
 ### v0.1.18
-**Refactor & bug fixes**
-- DRY up `chat.send` params — extracted `chatSendBase()` and `clearStreamingOnError()` helpers; `sendMessage`/`regenerate`/`editMessage` now share 7 lines of config and error cleanup (net -27 lines, 3 call sites)
-- Removed duplicate session config loading in `ChatPage.tsx` — `selectSession()` already handles it; removed unused `useEffect` import
-- Cleaned up redundant `console.error` after `[AetherAI]`-prefixed logs; standardized error log prefixes across all three call sites
+**Performance**
+- StreamingBubble: rAF-throttled scroll + content-length guard
+- ContextBar: memoized token estimation
+- ChatPage/ChatInput: useMemo for model-group computation
+- Sidebar: date boundaries as timestamps
+- i18n `t()`: fast path for English
 
 ### v0.1.17
-**Agent & UX improvements**
-- Auto long-term memory: fire-and-forget fact extraction after each turn; habit learner proposes repeatable actions
-- ChatWindow streaming perf: bypass React re-render on every chunk — direct DOM writes
-- toolLoop heartbeat + error classify improvements + parallel startup
+**Agent & UX**
+- Auto long-term memory + habit learner
+- ChatWindow streaming perf: direct DOM writes
+- toolLoop heartbeat + error classify improvements
 
 ### v0.1.16
-**Bug fixes**
-- Purged diagnostic logs, fixed 12 bugs, cleaned README structure
+**Fixes**
+- Purged diagnostic logs, fixed 12 bugs
 
 ## 📄 License
 
