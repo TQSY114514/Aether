@@ -1,25 +1,17 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
-// A long pasted block collapsed into a chip (ChatGPT-style). Kept separate from
-// `pending` file attachments because it has no filename and edits inline.
 type Snippet = { id: number; content: string; preview: string }
-
-const PASTE_COLLAPSE_LINES = 15   // paste ≥ this many lines → collapse
-const PASTE_COLLAPSE_CHARS = 600  // …or ≥ this many chars
-
-const TEXT_EXTS = ['txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'py', 'js', 'ts', 'tsx', 'jsx', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'html', 'css', 'xml', 'yaml', 'yml', 'log', 'sh', 'sql', 'ini', 'toml', 'env']
-const MAX_BYTES = 10 * 1024 * 1024 // 10MB
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
   const ext = file.name.split('.').pop()?.toLowerCase() || ''
-  if (TEXT_EXTS.includes(ext)) return 'text'
-  // unknown → treat as text by default (best effort)
+  if (TEXT_EXTS.has(ext)) return 'text'
   return 'text'
 }
 
@@ -106,7 +98,7 @@ export default function ChatInput() {
     const files = Array.from(e.target.files || [])
     setFileError(null)
     for (const file of files) {
-      if (file.size > MAX_BYTES) { setFileError(t('chat.file_too_large', file.name)); continue }
+      if (file.size > MAX_ATTACHMENT_BYTES) { setFileError(t('chat.file_too_large', file.name)); continue }
       const reader = new FileReader()
       reader.onload = () => {
         const dataUrl = reader.result as string

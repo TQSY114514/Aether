@@ -6,6 +6,7 @@ const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
+const { computeCost } = require('../utils/cost')
 const log = require('../logger')
 
 // dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
@@ -410,8 +411,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   // Habit-confirmation flow: the renderer asks us to confirm (promote now) or
   // dismiss (delete) a proposed habit. We don't need to reply with data — the
   // skill is rewritten synchronously inside habitLearner.
-  ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db) } catch {} return { ok: true } })
-  ipcMain.handle('chat:habit-dismiss', (_e, key) => { try { habitLearner.dismissHabit(db, key) } catch {} return { ok: true } })
+  ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db) } catch (e) { log.warn('habit confirm failed:', e) } return { ok: true } })
+  ipcMain.handle('chat:habit-dismiss', (_e, key) => { try { habitLearner.dismissHabit(db, key) } catch (e) { log.warn('habit dismiss failed:', e) } return { ok: true } })
 
   // Renderer replies to a permission-request via this invoke. We just forward
   // the reply as an event so the waiting requestPermission closure (which uses
@@ -469,14 +470,7 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
 // The old local estimateTokens had only 1 range and under-counted CJK tokens.
 const { estimateTextTokens: estimateTokens } = require('../llm/compaction')
 
-// Per-call cost from the model's price columns (USD per 1K tokens). 0 if unpriced.
-// Cached-read tokens aren't billed at the full input rate (best-effort).
-function computeCost(model, u) {
-  const inPrice = Number(model.input_price_per_1k) || 0
-  const outPrice = Number(model.output_price_per_1k) || 0
-  if (!inPrice && !outPrice) return 0
-  const billableInput = Math.max(0, (u.prompt_tokens || 0) - (u.cache_read_tokens || 0))
-  return (billableInput / 1000) * inPrice + ((u.completion_tokens || 0) / 1000) * outPrice
-}
+// Per-call cost uses the shared computeCost from utils/cost.js
+
 
 module.exports = { registerChatHandlers, clearAllowRules }

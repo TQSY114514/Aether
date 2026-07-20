@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useStore } from '@/store'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
+import { DEFAULT_CONTEXT_WINDOW } from '@/utils/constants'
 
 export default function ContextBar() {
   const messages = useStore((s) => s.messages)

@@ -7,17 +7,10 @@
 // extracts that logic out of the handlers so it lives in one place.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Credential pool: multi-key rotation with rate-limit backoff per provider.
-// Cached at module level — the require lookup happens once, not per request.
+const { baseUrl, normalizeUsage, computeCost } = require('../utils/llmShared')
+const { retryPromise, retryStream } = require('../utils/retry')
 const _credentialPool = require('./credentialPool')
 
-// Strip trailing slashes so `${base}/chat/completions` never doubles up.
-function baseUrl(provider) {
-  return (provider.api_url || '').replace(/\/+$/, '')
-}
-
-// Obtain the best API key for the provider. Tries the credential pool first
-// (multi-key rotation + backoff), falls back to the legacy provider.api_key.
 function pickKey(provider) {
   if (provider.id != null) {
     const credential = _credentialPool.pickCredential(provider.id)
@@ -26,7 +19,6 @@ function pickKey(provider) {
   return provider.api_key || ''
 }
 
-// Build the standard auth headers for an OpenAI-compatible endpoint.
 function headers(provider) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${pickKey(provider)}` }
 }
@@ -154,21 +146,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   return { content: msg.content || '', tool_calls: msg.tool_calls, usage: data.usage }
 }
 
-// Extract a normalized usage shape from a provider response `usage` object.
-// Returns null if none. Captures prompt/completion/total tokens + cache stats
-// (OpenAI: prompt_tokens_details.cached_tokens; Anthropic: cache_read_input_tokens
-// / cache_creation_input_tokens — some relays surface these in usage too).
-function normalizeUsage(u) {
-  if (!u || typeof u !== 'object') return null
-  const num = (v) => (typeof v === 'number' ? v : 0)
-  return {
-    prompt_tokens: num(u.prompt_tokens),
-    completion_tokens: num(u.completion_tokens),
-    total_tokens: num(u.total_tokens),
-    cache_read_tokens: num(u.cache_read_input_tokens) || num(u.prompt_tokens_details?.cached_tokens) || 0,
-    cache_creation_tokens: num(u.cache_creation_input_tokens) || num(u.cache_creation_tokens) || 0,
-  }
-}
+// normalizeUsage is imported from ../utils/llmShared
 
 
 // List model ids via GET /models. Returns [] on any failure (handlers treat
@@ -212,84 +190,31 @@ async function testConnection({ provider }) {
   }
 }
 
-module.exports = {
-  streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage,
-  streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
-}
-
 // ─── Credential-rotation retry ───────────────────────────────────────────────
 // Wraps the streaming and non-streaming calls so that 429 / 5xx / network errors
-// automatically try a different API key before giving up. Each provider key
-// gets one shot; a 429 puts it on cooldown so subsequent rotations skip it.
-//
-// Callers use the `*WithRetry` variants. The fallback-model switching in
-// chat.handler.js is the second line of defense (switches to a different model
-// entirely after credential rotation is exhausted).
+// automatically try a different API key before giving up. Uses shared helpers
+// from utils/retry.js for the retry loop logic.
 // ───────────────────────────────────────────────────────────────────────────
 
-const MAX_CRED_RETRIES = 3
+const _markCooldown = () => { try { _credentialPool.markCooldownForProvider(_credentialPool.providerId) } catch {} }
 
-async function streamChatWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let attempt = 0; attempt < MAX_CRED_RETRIES; attempt++) {
-    try {
-      yield* streamChat({ provider, model, messages, signal, options })
-      return
-    } catch (err) {
-      lastErr = err
-      if (!_isRetryable(err)) break
-      const rotated = _rotateAndMark(provider, err)
-      if (!rotated) break
-    }
-  }
-  throw lastErr
+async function* streamChatWithRetry({ provider, model, messages, signal, options = {} }) {
+  yield* retryStream(
+    () => streamChat({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 async function completeChatWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let attempt = 0; attempt < MAX_CRED_RETRIES; attempt++) {
-    try {
-      return await completeChat({ provider, model, messages, signal, options })
-    } catch (err) {
-      lastErr = err
-      if (!_isRetryable(err)) break
-      const rotated = _rotateAndMark(provider, err)
-      if (!rotated) break
-    }
-  }
-  throw lastErr
+  return retryPromise(
+    () => completeChat({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 async function completeChatMessageWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let attempt = 0; attempt < MAX_CRED_RETRIES; attempt++) {
-    try {
-      return await completeChatMessage({ provider, model, messages, signal, options })
-    } catch (err) {
-      lastErr = err
-      if (!_isRetryable(err)) break
-      const rotated = _rotateAndMark(provider, err)
-      if (!rotated) break
-    }
-  }
-  throw lastErr
-}
-
-function _isRetryable(err) {
-  const status = Number(err?.status) || 0
-  return status === 429 || (status >= 500 && status < 600) || /ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network/i.test(String(err?.message || ''))
-}
-
-function _rotateAndMark(provider, err) {
-  const status = Number(err?.status) || 0
-  if (status === 429 && provider.id != null) {
-    try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
-  }
-  // pickCredential already skips cooldown/disabled keys — calling it again
-  // gives us the next available key.
-  if (provider.id != null) {
-    const c = _credentialPool.pickCredential(provider.id)
-    if (c) return true
-  }
-  return false
+  return retryPromise(
+    () => completeChatMessage({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }

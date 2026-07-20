@@ -212,8 +212,8 @@ function decodeDataUrlText(dataUrl: string): string {
 // Shared model-resolution helper: try allModels (cached), then primary API,
 // then listAll API. Returns { providerId, modelId } or null. Also optionally
 // persists to session config if sessionId is given.
-async function resolveModelId(sessionId?: number): Promise<{ providerId: number | null; modelId: number | null }> {
-  const { allModels, sessionConfigs } = get()
+async function resolveModelId(): Promise<{ providerId: number | null; modelId: number | null }> {
+  const { allModels } = get()
   if (allModels.length > 0) {
     const primary = allModels.find(m => m.is_primary) || allModels[0]
     return { providerId: primary.provider_id, modelId: primary.id }
@@ -221,12 +221,18 @@ async function resolveModelId(sessionId?: number): Promise<{ providerId: number 
   try {
     const primary = await window.electronAPI.model.primary()
     if (primary) return { providerId: primary.provider_id, modelId: primary.id }
-  } catch {}
+  } catch (e) { log.warn('resolveModelId: primary() failed:', e) }
   try {
     const all = await window.electronAPI.model.listAll()
     if (all.length > 0) return { providerId: all[0].provider_id, modelId: all[0].id }
-  } catch {}
+  } catch (e) { log.warn('resolveModelId: listAll() failed:', e) }
   return { providerId: null, modelId: null }
+}
+
+// Generic setter: persist to DB then update Zustand state.
+async function setSetting(key: string, value: string, patch: Record<string, unknown>) {
+  await window.electronAPI.settings.set(key, value)
+  set(patch)
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -587,7 +593,7 @@ export const useStore = create<AppState>((set, get) => ({
   dismissHint: (flag) => {
     const seen = [...new Set([...get().seenHints, flag])]
     set((s) => ({ activeHints: s.activeHints.filter((h) => h.flag !== flag), seenHints: seen }))
-    try { window.electronAPI.settings.set('seen_hints', JSON.stringify(seen)) } catch {}
+    try { window.electronAPI.settings.set('seen_hints', JSON.stringify(seen)) } catch (e) { log.warn('dismissHint persist failed:', e) }
   },
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
@@ -766,13 +772,12 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const entries = await window.electronAPI.memory.list()
       set({ memories: entries })
-    } catch {}
+    } catch (e) { log.warn('loadMemories failed:', e) }
   },
 
   loadSettings: async () => {
     try {
       const s = await window.electronAPI.settings.getAll()
-      // Resolve language: saved pref > system detection > en.
       const saved = s.language as LangCode | undefined
       const lang: LangCode = saved && LANGS_CODES.includes(saved) ? saved : detectLang()
       const theme = s.theme || 'light'
@@ -793,11 +798,10 @@ export const useStore = create<AppState>((set, get) => ({
       applyTheme(theme, bgImage !== null)
       applyFontScale(fontScale)
       applyLangDir(lang)
-      // Load seen-hint flags so first-use hints only show once per machine.
       let seenHints: string[] = []
-      try { seenHints = JSON.parse(s.seen_hints || '[]') } catch {}
+      try { seenHints = JSON.parse(s.seen_hints || '[]') } catch (e) { log.warn('parse seen_hints failed:', e) }
       set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: bgImage, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints })
-    } catch {}
+    } catch (e) { log.warn('loadSettings failed:', e) }
   },
   setLanguage: async (lang) => {
     await window.electronAPI.settings.set('language', lang)
@@ -827,24 +831,20 @@ export const useStore = create<AppState>((set, get) => ({
     await window.electronAPI.settings.set('defaultEffort', v)
     set({ defaultEffort: v, effortLevel: v })
   },
-  setMaxTokens: async (v) => { await window.electronAPI.settings.set('maxTokens', String(v)); set({ maxTokens: v }) },
-  setTemperature: async (v) => { await window.electronAPI.settings.set('temperature', String(v)); set({ temperature: v }) },
-  setTopP: async (v) => { await window.electronAPI.settings.set('topP', String(v)); set({ topP: v }) },
-  setSystemPrefix: async (v) => { await window.electronAPI.settings.set('systemPrefix', v); set({ systemPrefix: v }) },
+  // Settings — simple numeric/string setters generated from a config map.
+  setMaxTokens:   async (v) => setSetting('maxTokens', String(v), { maxTokens: v }),
+  setTemperature: async (v) => setSetting('temperature', String(v), { temperature: v }),
+  setTopP:        async (v) => setSetting('topP', String(v), { topP: v }),
+  setSystemPrefix:async (v) => setSetting('systemPrefix', v, { systemPrefix: v }),
+  setTitleLanguage:async (v) => setSetting('titleLanguage', v, { titleLanguage: v }),
+  setBackgroundOpacity: async (v) => setSetting('backgroundOpacity', String(v), { backgroundOpacity: v }),
+  setBackgroundBlur: async (v) => setSetting('backgroundBlur', String(v), { backgroundBlur: v }),
+  // Special-case setters that need extra logic.
   setAutoTitle: async (v) => { await window.electronAPI.settings.set('autoTitle', v ? '1' : '0'); set({ autoTitle: v }) },
-  setTitleLanguage: async (v) => { await window.electronAPI.settings.set('titleLanguage', v); set({ titleLanguage: v }) },
   setBackgroundImage: async (dataUrl) => {
     await window.electronAPI.background.set(dataUrl)
     applyTheme(get().theme, dataUrl !== null)
     set({ backgroundImage: dataUrl })
-  },
-  setBackgroundOpacity: async (v) => {
-    await window.electronAPI.settings.set('backgroundOpacity', String(v))
-    set({ backgroundOpacity: v })
-  },
-  setBackgroundBlur: async (v) => {
-    await window.electronAPI.settings.set('backgroundBlur', String(v))
-    set({ backgroundBlur: v })
   },
 
   // UI

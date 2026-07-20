@@ -2,6 +2,29 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.1.27] — 2026-07-20
+
+### DRY & Refactor
+- Extracted `computeCost` to shared `electron/utils/cost.js` — eliminates copy-paste between `chat.handler.js` and `arena.handler.js`
+- Extracted credential-rotation retry to shared `electron/utils/retry.js` — `retryStream`/`retryPromise` used by both `openaiAdapter.js` and `anthropicAdapter.js`
+- Extracted shared LLM utilities (`baseUrl`, `normalizeUsage`) to `electron/utils/llmShared.js` — single source of truth for usage normalization
+- Store: DRY'd `setXxx` setters — `setMaxTokens`, `setTemperature`, `setTopP`, `setSystemPrefix`, `setTitleLanguage`, `setBackgroundOpacity`, `setBackgroundBlur` now use a shared `setSetting` helper
+- ChatInput: removed hardcoded `TEXT_EXTS` array and `MAX_BYTES`/`PASTE_COLLAPSE_*` constants — imported from shared `src/utils/constants.ts`
+- ContextBar: uses shared `DEFAULT_CONTEXT_WINDOW` constant instead of magic `128000`
+
+### Error Handling
+- Store: `loadMemories`, `loadSettings`, `resolveModelId`, `dismissHint` catch blocks now log warnings instead of silently swallowing errors
+- ChatInput: `handleFileSelect` FileReader errors properly reported via state
+
+### Security
+- Markdown `safeUrl`: now explicitly blocks `javascript:` and `vbscript:` URLs — closes a potential XSS vector
+
+### Performance
+- ScoresPage: `byIntent` grouping wrapped in `useMemo` — eliminates recompute on every render
+
+### Maintenance
+- Updated `electron-builder.yml` copyright year to 2026
+
 ## [0.1.26] — 2026-07-20
 
 ### Performance & Refactor

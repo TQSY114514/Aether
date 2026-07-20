@@ -10,13 +10,9 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const ANTHROPIC_VERSION = '2023-06-01'
-
-// Credential pool: cached at module level (single require lookup).
 const _credentialPool = require('./credentialPool')
-
-function baseUrl(provider) {
-  return (provider.api_url || '').replace(/\/+$/, '')
-}
+const { baseUrl, normalizeUsage: _nu } = require('../utils/llmShared')
+const { retryPromise, retryStream } = require('../utils/retry')
 
 function headers(provider) {
   // Anthropic uses x-api-key + anthropic-version, NOT Bearer.
@@ -220,13 +216,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
   const data = await res.json()
   const { text, tool_calls } = parseToolUses(data.content)
-  const usage = data.usage ? {
-    prompt_tokens: data.usage.input_tokens || 0,
-    completion_tokens: data.usage.output_tokens || 0,
-    total_tokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
-    cache_read_tokens: data.usage.cache_read_input_tokens || 0,
-    cache_creation_tokens: data.usage.cache_creation_input_tokens || 0,
-  } : null
+  const usage = data.usage ? _nu(data.usage) : null
   return { content: text, tool_calls, usage }
 }
 
@@ -257,49 +247,30 @@ async function testConnection({ provider }) {
 }
 
 // ─── Credential-rotation retry wrappers ──────────────────────────────────────
-const MAX_CRED_RETRIES = 3
+// Uses shared retryStream / retryPromise from utils/retry.js. The retry loop
+// logic (MAX_CRED_RETRIES, retryable error detection, cooldown on 429) is
+// centralized there.
+// ───────────────────────────────────────────────────────────────────────────
 
-function _aRotate(provider, err) {
-  if (Number(err?.status) === 429 && provider.id != null) {
-    try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
-  }
-  if (provider.id != null) {
-    const c = _credentialPool.pickCredential(provider.id)
-    if (c) return true
-  }
-  return false
-}
-function _aRetryable(err) {
-  const status = Number(err?.status) || 0
-  return status === 429 || (status >= 500 && status < 600) || /ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network/i.test(String(err?.message || ''))
-}
-
-// Wrapper around Anthropic streamChat with credential rotation on 429/5xx/network.
 async function* streamChatWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
-    try { yield* streamChat({ provider, model, messages, signal, options }); return }
-    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
-  }
-  throw lastErr
+  yield* retryStream(
+    () => streamChat({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 async function completeChatWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
-    try { return await completeChat({ provider, model, messages, signal, options }) }
-    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
-  }
-  throw lastErr
+  return retryPromise(
+    () => completeChat({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 async function completeChatMessageWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
-    try { return await completeChatMessage({ provider, model, messages, signal, options }) }
-    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
-  }
-  throw lastErr
+  return retryPromise(
+    () => completeChatMessage({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 module.exports = {

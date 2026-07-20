@@ -1,17 +1,6 @@
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
+const { computeCost } = require('../utils/cost')
 const abortControllers = new Map()
-
-// Per-call cost from the model's price columns (USD per 1K tokens).
-// Returns 0 if pricing is unset (unpriced models show as $0, like cc-switch's
-// "未定价"). Cost = (prompt/1000)*in + (completion/1000)*out, minus cached-read
-// tokens which providers don't bill at the full input rate (best-effort).
-function computeCost(model, u) {
-  const inPrice = Number(model.input_price_per_1k) || 0
-  const outPrice = Number(model.output_price_per_1k) || 0
-  if (!inPrice && !outPrice) return 0
-  const billableInput = Math.max(0, u.prompt_tokens - u.cache_read_tokens)
-  return (billableInput / 1000) * inPrice + (u.completion_tokens / 1000) * outPrice
-}
 
 function registerArenaHandlers(ipcMain, db) {
   ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, aggregate = true }) => {

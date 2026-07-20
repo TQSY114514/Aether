@@ -23,7 +23,10 @@ function renderInner(raw: string): string {
 
   const safeUrl = (u: string) => {
     const s = u.trim()
+    // Allow: http(s) URLs, data: images, relative paths, anchors, empty.
+    // Block: javascript:, vbscript:, data: with non-image types.
     if (/^(https?:\/\/|data:image\/|\/|\.\/|\.\.\/|#)/i.test(s)) return s
+    if (/^(javascript:|vbscript:)/i.test(s)) return ''
     return ''
   }
 
