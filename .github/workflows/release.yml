@@ -32,17 +32,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies
         working-directory: app
         env:
-          # Skip the electron binary download; electron-builder pulls its own
-          # packaged binary for the target platform during the build step.
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-        run: npm ci
+        run: npm install
 
       - name: Build renderer (Vite)
         working-directory: app
