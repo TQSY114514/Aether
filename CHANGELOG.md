@@ -2,6 +2,21 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.4.2] — 2026-07-21
+
+### Bug Fixes
+- **Critical: Fixed modelId assignment bug** in `sendMessage` — `resolveModelId()` returned `{providerId, modelId}` but the destructuring assigned `providerId` to the local `modelId` variable, causing the model to be `null` in API requests when auto-resolving
+- **Critical: Implemented `ensureToolCallListener`** — tool-call events from the main process were never consumed by the store, so `toolCallsByMessage` was always empty and tool-call blocks never rendered in the UI
+- **Fixed logger `isDev` logic** — the double-negation was correct but had been accidentally reverted in a prior edit
+- **Fixed `lastId()` crash** — added optional chaining to prevent `TypeError` when `last_insert_rowid()` returns an empty result set
+
+### Maintenance
+- Removed dead code: `llmShared.js` duplicated `computeCost` and `withRetry` (already in `utils/cost.js` and `utils/retry.js`)
+- Removed unused `fallbackModels` variable in chat handler
+- Cleaned 500+ MB of cache/build artifacts (`.tmp_fetch`, `release/`, `.electron-builder-cache/`, `dist-out/`)
+- Fixed TS errors: added missing `ruby` language import, removed stale `@ts-expect-error`
+- Restored empty CI workflow files from git history
+
 ## [0.4.0] — 2026-07-20
 
 ### Features
