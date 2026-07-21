@@ -25,6 +25,7 @@ import graphql from 'highlight.js/lib/languages/graphql'
 import ini from 'highlight.js/lib/languages/ini'
 import proto from 'highlight.js/lib/languages/protobuf'
 import lua from 'highlight.js/lib/languages/lua'
+import ruby from 'highlight.js/lib/languages/ruby'
 
 // Register ~25 languages so Rollup includes only those + core.
 hljsCore.registerLanguage('javascript', js)

@@ -7,7 +7,7 @@
 // extracts that logic out of the handlers so it lives in one place.
 // ───────────────────────────────────────────────────────────────────────────
 
-const { baseUrl, normalizeUsage, computeCost } = require('../utils/llmShared')
+const { baseUrl, normalizeUsage } = require('../utils/llmShared')
 const { retryPromise, retryStream } = require('../utils/retry')
 const _credentialPool = require('./credentialPool')
 

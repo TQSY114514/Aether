@@ -293,7 +293,7 @@ export default function ChatWindow() {
                     </div>
                     {!voted && (
                       <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                        <button onClick={() => arenaVote({ model_id: r.model_id, model_name: r.model_name, content: r.content, provider_name: r.provider_name }, others.map(x => ({ model_id: x.model_id, model_name: x.model_name })))}
+                        <button onClick={() => arenaVote({ model_id: r.model_id, model_name: r.model_name }, others.map(x => ({ model_id: x.model_id, model_name: x.model_name })))}
                           className="text-xs px-3 py-1 rounded-lg border bg-white hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
                           ⭐ {t('chat.arena.vote')}
                         </button>

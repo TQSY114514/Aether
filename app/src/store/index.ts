@@ -466,13 +466,13 @@ export const useStore = create<AppState>((set, get) => ({
     let modelId = cfg?.modelId
     // Auto-resolve missing model: try allModels (already loaded globally)
     if (!modelId) {
-      const { providerId } = await resolveModelId()
-      modelId = providerId
-      if (currentSessionId && modelId) {
-        const newCfg = { providerId, modelId, personaId: cfg?.personaId || null }
+      const resolved = await resolveModelId()
+      modelId = resolved.modelId
+      if (currentSessionId && resolved.providerId) {
+        const newCfg = { providerId: resolved.providerId, modelId: resolved.modelId, personaId: cfg?.personaId || null }
         await window.electronAPI.session.setConfig(currentSessionId, newCfg)
         set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [currentSessionId]: newCfg } }))
-        get().loadModels(providerId)
+        get().loadModels(resolved.providerId)
       }
     }
     if (!currentSessionId || !modelId) {
@@ -865,9 +865,26 @@ export const useStore = create<AppState>((set, get) => ({
 // Auto-theme listener cleanup: torn down when switching away from 'auto'.
 let _navigating = false
 let chunkListenerInstalled = false
+let _toolCallListenerInstalled = false
 let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
 let _autoThemeCleanup: (() => void) | null = null
+
+function ensureToolCallListener() {
+  if (_toolCallListenerInstalled) return
+  _toolCallListenerInstalled = true
+  window.electronAPI.chat.onToolCall(({ messageId, sessionId, tool }) => {
+    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, risk: tool.risk, latencyMs: tool.latencyMs }
+    useStore.setState((s) => {
+      const existing = s.toolCallsByMessage[messageId] || []
+      // Append if new, replace if result changed (for live streaming)
+      if (existing.length > 0 && existing[existing.length - 1].name === entry.name && entry.result == null && entry.error == null) {
+        return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing.slice(0, -1), entry] } }
+      }
+      return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing, entry] } }
+    })
+  })
+}
 
 function flushStreamUpdates() {
   const deltas = _pendingDeltas

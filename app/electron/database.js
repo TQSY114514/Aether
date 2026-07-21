@@ -53,12 +53,12 @@ async function flushDatabase() {
 
 function lastId() {
   const r = db.exec('SELECT last_insert_rowid()')
-  let id = r[0].values[0][0]
-  if (!id) { const m = db.exec('SELECT MAX(id) FROM message'); id = m[0].values[0][0] || 0 }
+  let id = r[0]?.values?.[0]?.[0]
+  if (!id) { const m = db.exec('SELECT MAX(id) FROM message'); id = m[0]?.values?.[0]?.[0] }
   // sql.js may return BigInt for INTEGER columns; coerce to Number so JS
   // strict-equality (currentSessionId === session.id) works across the app.
   if (typeof id === 'bigint') id = Number(id)
-  return id
+  return id || 0
 }
 function allRows(stmt) {
   const rows = []

@@ -44,7 +44,6 @@ export default function AgentSettings() {
       // folder picker available in Electron without a native dialog module.
       const input = document.createElement('input')
       input.type = 'file'
-      // @ts-expect-error non-standard but supported in chromium/Electron
       input.webkitdirectory = true
       input.onchange = () => {
         const f = input.files?.[0]
