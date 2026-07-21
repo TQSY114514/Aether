@@ -13,10 +13,13 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'highlight': ['highlight.js'],
-        }
-      }
+        manualChunks(id) {
+          // Always split sql.js into its own chunk (WASM + JS).
+          if (id.includes('node_modules/sql.js')) return 'sqljs'
+          // highlight.js is large (~900 KB); extract it from the main bundle.
+          if (id.includes('node_modules/highlight.js')) return 'highlight'
+        },
+      },
     }
   },
   server: {

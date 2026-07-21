@@ -7,6 +7,7 @@ import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
+import { shallow } from 'zustand/shallow'
 
 // Lightweight placeholder: rendered once, updated via direct DOM writes
 // to avoid re-rendering ChatWindow on every streaming token.
@@ -48,8 +49,6 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0
         if (!isAtBottom) return
-        // Instant scroll during streaming — smooth scroll queues animation frames
-        // and lags behind rapid token updates. Instant feels more responsive.
         ref.current?.scrollIntoView({ behavior: 'auto' })
       })
     }
@@ -67,38 +66,49 @@ export default function ChatWindow() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   useOverscrollSpring(scrollRef)
-  const messages = useStore((s) => s.messages)
-  const currentSessionId = useStore((s) => s.currentSessionId)
-  const loadMessages = useStore((s) => s.loadMessages)
-  const sending = useStore((s) => s.sending)
-  const streamingBySession = useStore((s) => s.streamingBySession)
-  const toolCallsByMessage = useStore((s) => s.toolCallsByMessage)
-  const arenaResults = useStore((s) => s.arenaResults)
-  const arenaAggregate = useStore((s) => s.arenaAggregate)
-  const arenaError = useStore((s) => s.arenaError)
-  const proposedHabits = useStore((s) => s.proposedHabits)
-  const resolveHabit = useStore((s) => s.resolveHabit)
-  const activeHints = useStore((s) => s.activeHints)
-  const dismissHint = useStore((s) => s.dismissHint)
-  const arenaVote = useStore((s) => s.arenaVote)
+
+  // Batch selectors with shallow comparison: only re-renders when selected
+  // values actually change, not on every store update.
+  const {
+    messages, currentSessionId, sending, streamingBySession,
+    toolCallsByMessage, arenaResults, arenaAggregate, arenaError,
+    proposedHabits, activeHints, loadMessages,
+    resolveHabit, dismissHint, arenaVote,
+  } = useStore((s) => ({
+    messages: s.messages,
+    currentSessionId: s.currentSessionId,
+    sending: s.sending,
+    streamingBySession: s.streamingBySession,
+    toolCallsByMessage: s.toolCallsByMessage,
+    arenaResults: s.arenaResults,
+    arenaAggregate: s.arenaAggregate,
+    arenaError: s.arenaError,
+    proposedHabits: s.proposedHabits,
+    activeHints: s.activeHints,
+    loadMessages: s.loadMessages,
+    resolveHabit: s.resolveHabit,
+    dismissHint: s.dismissHint,
+    arenaVote: s.arenaVote,
+  }), shallow)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
   const scrollToMsg = useCallback((id: number) => {
     document.getElementById('msg-' + id)?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
-  // Compute streaming status for the header bar
+  // Compute streaming status for the header bar — derive from specific keys
+  // so the memo only invalidates when tool-call state actually changes.
   const streamingStatus = useMemo(() => {
     if (!currentSessionId) return ''
     const buf = streamingBySession[currentSessionId]
     if (!buf) return ''
-    // If there are tool calls for any message being streamed, show tool status
     const hasToolCalls = Object.values(toolCallsByMessage).some(tcs =>
       tcs.some(tc => tc.result === null && tc.error === null)
     )
     if (hasToolCalls) return t('status.using_tools')
     return t('status.thinking')
-  }, [currentSessionId, streamingBySession, toolCallsByMessage])
+  }, [currentSessionId, toolCallsByMessage])
 
   // Reload messages when window regains focus (fix: text disappearing on alt-tab).
   // Skipped while a stream is active for this session — reloading mid-stream

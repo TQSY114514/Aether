@@ -5,6 +5,7 @@ import { Send, Square, Paperclip, X, FileText, Brain, Cpu } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
+import { shallow } from 'zustand/shallow'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
@@ -36,23 +37,24 @@ export default function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
-  const sendMessage = useStore((s) => s.sendMessage)
-  const enqueueMessage = useStore((s) => s.enqueueMessage)
-  const queuedMessages = useStore((s) => s.queuedMessages)
-  const removeQueued = useStore((s) => s.removeQueued)
-  const stopGeneration = useStore((s) => s.stopGeneration)
-  const sending = useStore((s) => s.sending)
-  const streamingBySession = useStore((s) => s.streamingBySession)
-  const currentSessionId = useStore((s) => s.currentSessionId)
-  const createSession = useStore((s) => s.createSession)
-  const chatMode = useStore((s) => s.chatMode)
-  const arenaModelIds = useStore((s) => s.arenaModelIds)
-  const runArena = useStore((s) => s.runArena)
-  const effortLevel = useStore((s) => s.effortLevel)
-  const setEffortLevel = useStore((s) => s.setEffortLevel)
-  const providers = useStore((s) => s.providers)
-  const allModels = useStore((s) => s.allModels)
-  const saveSessionConfig = useStore((s) => s.saveSessionConfig)
+
+  // Batch store selectors with shallow comparison to reduce re-render triggers.
+  const {
+    sendMessage, enqueueMessage, removeQueued, stopGeneration,
+    sending, streamingBySession, currentSessionId, createSession,
+    chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
+    providers, allModels, saveSessionConfig, queuedMessages,
+  } = useStore((s) => ({
+    sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
+    removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
+    sending: s.sending, streamingBySession: s.streamingBySession,
+    currentSessionId: s.currentSessionId, createSession: s.createSession,
+    chatMode: s.chatMode, arenaModelIds: s.arenaModelIds,
+    runArena: s.runArena, effortLevel: s.effortLevel,
+    setEffortLevel: s.setEffortLevel, providers: s.providers,
+    allModels: s.allModels, saveSessionConfig: s.saveSessionConfig,
+    queuedMessages: s.queuedMessages,
+  }), shallow)
 
   // Is the current session actively streaming?
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
@@ -189,7 +191,6 @@ export default function ChatInput() {
         e.preventDefault()
         const v = el.value
         const pos = el.selectionStart
-        // Delete from line start to cursor
         const lineStart = v.lastIndexOf('\n', pos - 1) + 1
         el.value = v.slice(0, lineStart) + v.slice(pos)
         el.selectionStart = el.selectionEnd = lineStart
@@ -200,7 +201,6 @@ export default function ChatInput() {
         e.preventDefault()
         const v = el.value
         const pos = el.selectionStart
-        // Cut from cursor to end of line (or end of text if last line)
         const lineEnd = v.indexOf('\n', pos)
         const cutEnd = lineEnd === -1 ? v.length : lineEnd
         const cut = v.slice(pos, cutEnd)
@@ -211,11 +211,8 @@ export default function ChatInput() {
         setInput(next)
         return
       }
-      if (key === 'a' && el) {
-        // Only select-all if no selection exists (let the browser handle it
-        // if already selecting, or if it's a normal select-all)
-        return
-      }
+      if (key === 'enter') { e.preventDefault(); handleSubmit(); return }
+      if (key === 'a') return
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
     if (e.key === 'Escape') setShowSlash(false)

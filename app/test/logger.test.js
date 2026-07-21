@@ -1,5 +1,5 @@
 // ─── Logger ring buffer unit tests ────────────────────────────────────────
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 
 // Pure-JS ring buffer matching the logic in electron/logger.js.
 
