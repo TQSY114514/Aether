@@ -2,6 +2,26 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.4.3] — 2026-07-22
+
+### Bug Fixes
+- **Fixed new chat creation** — `createSession` no longer requires a pre-configured model; sessions can now be created even when no provider is set up
+- **Fixed JS syntax error in `database.js`** — TypeScript annotation `(s: any)` was present in a `.js` file, crashing the main process on startup
+- **Fixed `ErrorBoundary` crash on startup** — `EffortControl`, `StreamingStatusBar`, and `ModelSelector` components were accidentally deleted from `ChatInput.tsx` but still referenced in JSX, causing a runtime `ReferenceError`
+
+### Features
+- **Auto-pin on send** — when the user sends a message, the session is automatically pinned to the top of the sidebar during the active exchange
+- **Auto-unpin on completion** — when streaming finishes, the session is unpinned so it returns to its time-sorted position (not permanently pinned)
+- **Completion toast notification** — a clickable toast appears when the assistant finishes responding; clicking it navigates to that session
+- **Sidebar streaming indicator** — a spinning icon appears next to sessions that are currently generating a response
+
+### Improvements
+- **Smooth streaming display** — removed the `< 4` character skip threshold that caused laggy CJK text rendering; content now updates on every animation frame for true character-by-character display
+- **Fixed streaming bubble rendering** — the chunk listener now stores the real `messageId` in the buffer on the first chunk, so the streaming placeholder renders from the first token (previously only appeared after completion)
+- **Sidebar sorting** — removed the separate "Pinned" group; pinned sessions now sort to the top within their date group (today/yesterday/week/older) via `pinned DESC, updated_at DESC`
+- **Streamlined session creation** — consolidated `session:create-and-select` into a single IPC handler replacing 7+ sequential calls
+- **Cross-session streaming** — messages completed while viewing another session now appear correctly when switching back
+
 ## [0.4.2] — 2026-07-21
 
 ### Bug Fixes
