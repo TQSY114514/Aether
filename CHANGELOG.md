@@ -2,6 +2,19 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.4.4] — 2026-07-22
+
+### Bug Fixes
+- **Fixed streaming display** — output now appears in a proper message bubble that grows with content, instead of only showing after completion
+- **Fixed background streaming** — switching to another chat no longer shows "aborted"; the stream continues in the background
+- **Fixed sidebar pinned group** — pinned sessions now appear in their own group at the very top (above all date groups), sorted by most recently updated
+- **Removed auto-pin on send** — sessions are only pinned when the user manually clicks the Pin button
+
+### Features
+- **Visible Pin/Unpin button** — each sidebar session item now has a Pin icon button (amber when pinned, appears on hover)
+- **Streaming indicator** — spinning icon on sidebar sessions that are actively generating
+- **Completion toast** — clickable notification appears when assistant finishes responding
+
 ## [0.4.3] — 2026-07-22
 
 ### Bug Fixes
