@@ -931,7 +931,14 @@ function ensureChunkListener() {
     if (!sessionId) return
     const state = useStore.getState()
     const buf = state.streamingBySession[sessionId]
-    if (!buf && !done) return
+    // Lazy-init: first chunk creates the buffer with the real messageId so the
+    // StreamingBubble can render and track updates from this point forward.
+    if (!buf && !done) {
+      useStore.setState((s) => ({
+        streamingBySession: { ...s.streamingBySession, [sessionId]: { content: delta, messageId } },
+      }))
+      return
+    }
     if (done) {
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
       _pendingDeltas = {}
@@ -950,10 +957,7 @@ function ensureChunkListener() {
           }
         }).catch(() => {})
       }
-      // Unpin after the stream completes — the pin only lasted during the active
-      // exchange so the session returns to its time-sorted position.
       get().pinSession(sessionId, 0).then(() => {
-        // Unpin done — show a brief toast on the completed session.
         const s = useStore.getState().sessions.find(x => x.id === sessionId)
         const title = s?.title || 'Chat'
         get().notifyComplete(sessionId, title)

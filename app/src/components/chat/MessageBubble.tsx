@@ -27,7 +27,10 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
   const editMessage = useStore(s => s.editMessage)
 
   const isUser = message.role === 'user'
-  const isStreaming = message.id < 0
+  // A message is "streaming" when it's the last message (assistant, empty content)
+  // and the session has an active stream buffer.
+  const streamingBySession = useStore(s => s.streamingBySession)
+  const isStreaming = !isUser && message.content === '' && streamingBySession[message.session_id]
   const isError = message.status === 'error'
   const isFallback = message.status === 'fallback'
   const isAborted = message.status === 'aborted'
@@ -204,9 +207,4 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
   )
 }
 
-export default memo(MessageBubble, (prev, next) =>
-  prev.message.id === next.message.id &&
-  prev.message.content === next.message.content &&
-  prev.message.status === next.message.status &&
-  prev.searchHighlight === next.searchHighlight
-)
+export default memo(MessageBubble)

@@ -52,11 +52,12 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         queueScroll()
         return
       }
-      // Same message, content growing — update DOM if enough new chars.
+      // Same message, content growing — update DOM on every rAF for smooth
+      // character-by-character rendering. The rAF throttle in flushStreamUpdates
+      // already prevents excessive repaints.
       if (buf && msgIdRef.current === 0) {
         const newLen = buf.content.length
         if (newLen === lastLenRef.current) return
-        if (newLen - lastLenRef.current < 4 && newLen > 0) return // skip micro-deltas
         lastLenRef.current = newLen
         ref.current.innerHTML = renderMarkdown(buf.content)
         queueScroll()

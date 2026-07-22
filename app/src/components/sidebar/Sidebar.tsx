@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash, Download, FolderOpen } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash, Download, FolderOpen, Loader2 } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 
@@ -27,7 +27,6 @@ function getSessionGroups(sessions: Session[]) {
   const yesterdayStart = todayStart - 86400000
   const weekStart = todayStart - 7 * 86400000
   const groups: { label: string; sessions: Session[]; count: number }[] = [
-    { label: t('sidebar.group.pinned'), sessions: [], count: 0 },
     { label: t('sidebar.group.today'), sessions: [], count: 0 },
     { label: t('sidebar.group.yesterday'), sessions: [], count: 0 },
     { label: t('sidebar.group.week'), sessions: [], count: 0 },
@@ -37,11 +36,18 @@ function getSessionGroups(sessions: Session[]) {
     const raw = s.updated_at || s.created_at || ''
     const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
     const date = new Date(iso).getTime()
-    if (s.pinned) { groups[0].sessions.push(s); groups[0].count++; continue }
-    if (date >= todayStart) { groups[1].sessions.push(s); groups[1].count++; continue }
-    if (date >= yesterdayStart) { groups[2].sessions.push(s); groups[2].count++; continue }
-    if (date >= weekStart) { groups[3].sessions.push(s); groups[3].count++; continue }
-    groups[4].sessions.push(s); groups[4].count++
+    if (date >= todayStart) { groups[0].sessions.push(s); groups[0].count++; continue }
+    if (date >= yesterdayStart) { groups[1].sessions.push(s); groups[1].count++; continue }
+    if (date >= weekStart) { groups[2].sessions.push(s); groups[2].count++; continue }
+    groups[3].sessions.push(s); groups[3].count++
+  }
+  // Within each group, pinned sessions sort first, then by updated_at DESC.
+  for (const g of groups) {
+    g.sessions.sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1
+      if (!a.pinned && b.pinned) return 1
+      return (b.updated_at || '').localeCompare(a.updated_at || '')
+    })
   }
   return groups.filter(g => g.sessions.length > 0)
 }
@@ -49,6 +55,7 @@ function getSessionGroups(sessions: Session[]) {
 export default function Sidebar() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const streamingBySession = useStore((s) => s.streamingBySession)
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
   const selectSession = useStore((s) => s.selectSession)
@@ -160,6 +167,9 @@ export default function Sidebar() {
                 style={currentSessionId === session.id ? { borderColor: 'var(--border)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
                   : <MessageSquare size={14} className="text-gray-400 shrink-0" />}
+                {streamingBySession[session.id] && (
+                  <Loader2 size={11} className="shrink-0 animate-spin" style={{ color: 'var(--accent)' }} />
+                )}
                 {renamingId === session.id ? (
                   <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenamingId(null) }}
