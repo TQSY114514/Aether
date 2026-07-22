@@ -14,8 +14,7 @@ import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
 import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { t } from '@/utils/i18n'
-
+import CompletionToasts from '@/components/chat/CompletionToasts'
 export default function App() {
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
@@ -192,6 +191,7 @@ export default function App() {
         <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
           {renderPage()}
         </main>
+        <CompletionToasts />
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

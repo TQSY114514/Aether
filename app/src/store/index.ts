@@ -261,25 +261,33 @@ export const useStore = create<AppState>((set, get) => ({
   agentMode: 'off',
   permissionRequests: [],
   effortLevel: 'off',
+  completionToasts: [] as any[],
+  pinSession: async (id: number) => Promise<void>,
+  notifyComplete: async (sessionId: number, sessionTitle: string) => {},
+  dismissToast: async (id: number) => {},
 
   loadSessions: async () => {
     const sessions = await window.electronAPI.session.list()
     set({ sessions })
   },
   createSession: async () => {
-    const { providerId, modelId } = await resolveModelId()
-    if (!modelId) return
-    const result = await window.electronAPI.session.createAndSelect({ providerId, modelId, personaId: null })
+    let cfg = { providerId: null as number | null, modelId: null as number | null, personaId: null as number | null }
+    try { const r = await resolveModelId(); if (r) cfg = r } catch {}
+    const result = await window.electronAPI.session.createAndSelect(cfg)
     const sid = result.session.id
-    const cfg = result.config
+    const sessionCfg = result.config
     set((s) => ({
       currentView: 'chat',
       currentSessionId: sid,
-      sessionConfigs: { ...s.sessionConfigs, [sid]: cfg },
+      sessionConfigs: { ...s.sessionConfigs, [sid]: sessionCfg },
       messages: result.messages || [],
       sessions: [...s.sessions, result.session],
     }))
-    if (cfg.providerId) get().loadModels(cfg.providerId)
+    if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
+  },
+  pinSession: async (id: number, pinned: number = 1) => {
+    try { await window.electronAPI.session.pin(id, pinned) } catch {}
+    await get().loadSessions()
   },
   selectSession: async (id) => {
     // Push to the navigation history unless we got here via goBack/goForward
@@ -292,11 +300,12 @@ export const useStore = create<AppState>((set, get) => ({
         set({ sessionHistory: truncated, sessionHistoryIdx: truncated.length - 1 })
       }
     }
-    // Pre-load messages from DB before switching (never shows empty state)
+    // Always reload messages from DB when switching sessions. This ensures
+    // messages completed while the user was viewing another session are
+    // visible on switch-back (cross-session streaming fix).
     let msgs: Message[] = []
     try { msgs = await window.electronAPI.message.list(id) } catch (e) { log.error('preload', e) }
     set({ currentSessionId: id, messages: msgs, arenaResults: [] })
-    window.electronAPI.session.touch(id).catch(() => {})
     // Load per-session config from DB. If missing/incomplete, resolve from allModels.
     try {
       let cfg = await window.electronAPI.session.getConfig(id)
@@ -516,6 +525,9 @@ export const useStore = create<AppState>((set, get) => ({
       streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
       messages: [...s.messages, tempUserMsg],
     }))
+
+    // Pin the session so the active conversation moves to the top.
+    get().pinSession(currentSessionId)
 
     // Ensure the global chunk listener is registered exactly once; it routes every
     // chunk to whichever session it belongs to, so background streams keep flowing.
@@ -851,6 +863,17 @@ export const useStore = create<AppState>((set, get) => ({
   // UI
   sidebarOpen: true,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+
+  pinSession: async (id: number, pinned: number = 1) => {
+    try { await window.electronAPI.session.pin(id, pinned) } catch {}
+    await get().loadSessions()
+  },
+  notifyComplete: (sessionId: number, sessionTitle: string) => {
+    const id = Date.now() + Math.random()
+    set((s) => ({ completionToasts: [...s.completionToasts, { id, sessionId, sessionTitle }] }))
+    setTimeout(() => set((s) => ({ completionToasts: s.completionToasts.filter(t => t.id !== id) })), 3000)
+  },
+  dismissToast: (id: number) => set((s) => ({ completionToasts: s.completionToasts.filter(t => t.id !== id) })),
 }))
 
 // Streaming chunk listener
@@ -912,29 +935,29 @@ function ensureChunkListener() {
     if (done) {
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
       _pendingDeltas = {}
-      const finalContent = state.streamingBySession[sessionId]?.content ?? ''
-      const isCurrent = state.currentSessionId === sessionId
       useStore.setState((s) => {
         const next = { ...s.streamingBySession }
         delete next[sessionId]
         const cur = s.currentSessionId
         const sending = !!(cur && next[cur])
-        const patch: Partial<AppState> = { streamingBySession: next, sending }
-        if (isCurrent) {
-          const newMsg: Message = {
-            id: messageId || Date.now() + 1,
-            session_id: sessionId,
-            role: 'assistant',
-            content: finalContent,
-            model_used: null, provider_used: null,
-            token_count: null, latency_ms: null,
-            status: 'success', error_message: null,
-            created_at: new Date().toISOString(),
-          }
-          patch.messages = [...s.messages, newMsg]
-        }
-        return patch
+        return { streamingBySession: next, sending }
       })
+      const currentNow = useStore.getState().currentSessionId
+      if (currentNow === sessionId) {
+        window.electronAPI.message.list(sessionId).then(msgs => {
+          if (useStore.getState().currentSessionId === sessionId) {
+            useStore.setState({ messages: msgs })
+          }
+        }).catch(() => {})
+      }
+      // Unpin after the stream completes — the pin only lasted during the active
+      // exchange so the session returns to its time-sorted position.
+      get().pinSession(sessionId, 0).then(() => {
+        // Unpin done — show a brief toast on the completed session.
+        const s = useStore.getState().sessions.find(x => x.id === sessionId)
+        const title = s?.title || 'Chat'
+        get().notifyComplete(sessionId, title)
+      }).catch(() => {})
       useStore.getState().loadSessions()
       const st = useStore.getState()
       if (st.queuedMessages.length > 0 && Object.keys(st.streamingBySession).length === 0) {

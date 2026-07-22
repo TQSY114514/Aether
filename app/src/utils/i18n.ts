@@ -102,6 +102,7 @@ const translations: Record<string, Record<string, string>> = {
     "chat.new": "New Chat",
     "chat.placeholder": "Type a message... (Shift+Enter for newline)",
     "chat.arena.placeholder": "Enter a question, multiple models answer at once...",
+    "chat.toast_reply": "Reply complete",
     "chat.empty": "Send a message to start",
     "chat.no_session": "Select or create a conversation to start",
     "empty.welcome": "How can I help you?",
