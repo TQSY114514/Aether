@@ -26,6 +26,7 @@ function getSessionGroups(sessions: Session[]) {
   const todayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime()
   const yesterdayStart = todayStart - 86400000
   const weekStart = todayStart - 7 * 86400000
+  const pinned: Session[] = []
   const groups: { label: string; sessions: Session[]; count: number }[] = [
     { label: t('sidebar.group.today'), sessions: [], count: 0 },
     { label: t('sidebar.group.yesterday'), sessions: [], count: 0 },
@@ -33,6 +34,7 @@ function getSessionGroups(sessions: Session[]) {
     { label: t('sidebar.group.older'), sessions: [], count: 0 },
   ]
   for (const s of sessions) {
+    if (s.pinned) { pinned.push(s); continue }
     const raw = s.updated_at || s.created_at || ''
     const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
     const date = new Date(iso).getTime()
@@ -41,15 +43,16 @@ function getSessionGroups(sessions: Session[]) {
     if (date >= weekStart) { groups[2].sessions.push(s); groups[2].count++; continue }
     groups[3].sessions.push(s); groups[3].count++
   }
-  // Within each group, pinned sessions sort first, then by updated_at DESC.
-  for (const g of groups) {
-    g.sessions.sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1
-      if (!a.pinned && b.pinned) return 1
-      return (b.updated_at || '').localeCompare(a.updated_at || '')
-    })
+  // Pinned group first, then date groups (sorted by updated_at DESC within each).
+  const result: { label: string; sessions: Session[]; count: number }[] = []
+  if (pinned.length > 0) {
+    pinned.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+    result.push({ label: t('sidebar.group.pinned'), sessions: pinned, count: pinned.length })
   }
-  return groups.filter(g => g.sessions.length > 0)
+  for (const g of groups) {
+    if (g.sessions.length > 0) result.push(g)
+  }
+  return result
 }
 
 export default function Sidebar() {
@@ -193,10 +196,21 @@ export default function Sidebar() {
                     )}
                   </div>
                 )}
-                <button onClick={async (e) => { e.stopPropagation()
-                    const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
-                    if (ok) deleteSession(session.id)
-                  }}
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  const pinned = session.pinned ? 0 : 1
+                  await window.electronAPI?.session?.pin?.(session.id, pinned)
+                  loadSessions()
+                }}
+                  className={`opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all shrink-0 ${session.pinned ? 'opacity-100 text-amber-500' : ''}`}
+                  title={session.pinned ? 'Unpin' : 'Pin'}>
+                  <Pin size={11} />
+                </button>
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
+                  if (ok) deleteSession(session.id)
+                }}
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all">
                   <Trash2 size={12} className="text-gray-400" />
                 </button>
@@ -204,10 +218,6 @@ export default function Sidebar() {
             ))}
           </div>
         ))}
-        {!searchQuery && totalSessions > 0 && (
-          <div className="text-[10px] text-center py-2" style={{ color: 'var(--text-muted)' }}>{t('sidebar.new_chat_tip')}</div>
-        )}
-        {/* Context menu */}
         {ctxMenu && (
           <div className="fixed z-50 rounded-xl border shadow-lg py-1 min-w-[180px]"
             style={{ left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 200), backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}

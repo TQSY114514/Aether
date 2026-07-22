@@ -9,76 +9,67 @@ import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 
-// Lightweight placeholder: rendered once, updated via direct DOM writes
-// to avoid re-rendering ChatWindow on every streaming token.
-// Uses rAF-throttled scrollIntoView with an isAtBottom guard — skips scroll
-// when the user has scrolled up to read history (no more jarring yanks).
+// Lightweight streaming bubble: rendered inside the message flow, updated via
+// direct DOM writes to avoid re-rendering ChatWindow on every streaming token.
+// Styled as a proper assistant message bubble with AI avatar, border, and
+// auto-growing height. Uses rAF-throttled scrollIntoView with an isAtBottom
+// guard — skips scroll when the user has scrolled up to read history.
 function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBottom: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const msgIdRef = useRef<number>(-1)
+  const bubbleRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
 
   useEffect(() => {
     const unsub = useStore.subscribe((s) => {
       const buf = s.streamingBySession[sessionId]
-      // No buffer and nothing initialized — skip entirely.
-      if (!buf && msgIdRef.current === -1) return
-      if (!ref.current) return
-      // New message ID assigned — re-render from scratch.
-      if (buf && buf.messageId && buf.messageId !== msgIdRef.current) {
-        msgIdRef.current = buf.messageId
-        lastLenRef.current = 0
-        ref.current.innerHTML = renderMarkdown(buf.content)
-        ref.current.style.display = ''
-        queueScroll()
-        return
+      if (!buf || !ref.current) return
+      const newLen = buf.content.length
+      if (newLen === lastLenRef.current) return
+      lastLenRef.current = newLen
+      // Render markdown into the bubble content area.
+      ref.current.innerHTML = renderMarkdown(buf.content)
+      // Auto-grow the bubble height based on content.
+      if (bubbleRef.current) {
+        bubbleRef.current.style.minHeight = ''
+        bubbleRef.current.style.minHeight = bubbleRef.current.scrollHeight + 'px'
       }
-      // Buffer cleared (stream finished) — hide the placeholder.
-      if (!buf && msgIdRef.current !== -1) {
-        msgIdRef.current = -1
-        lastLenRef.current = 0
-        ref.current.innerHTML = ''
-        ref.current.style.display = 'none'
-        return
-      }
-      // Buffer exists but we haven't initialized yet (messageId is null
-      // during streaming — we render directly from the buffer content).
-      if (buf && msgIdRef.current === -1) {
-        msgIdRef.current = 0
-        lastLenRef.current = 0
-        ref.current.innerHTML = renderMarkdown(buf.content)
-        ref.current.style.display = ''
-        queueScroll()
-        return
-      }
-      // Same message, content growing — update DOM on every rAF for smooth
-      // character-by-character rendering. The rAF throttle in flushStreamUpdates
-      // already prevents excessive repaints.
-      if (buf && msgIdRef.current === 0) {
-        const newLen = buf.content.length
-        if (newLen === lastLenRef.current) return
-        lastLenRef.current = newLen
-        ref.current.innerHTML = renderMarkdown(buf.content)
-        queueScroll()
-        return
+      // Auto-scroll only if user is at the bottom.
+      if (isAtBottom) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = 0
+          ref.current?.scrollIntoView({ behavior: 'auto' })
+        })
       }
     })
-    function queueScroll() {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0
-        if (!isAtBottom) return
-        ref.current?.scrollIntoView({ behavior: 'auto' })
-      })
-    }
     return () => {
       unsub()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [sessionId, isAtBottom])
 
-  return <div ref={ref} style={{ display: 'none' }} />
+  return (
+    <div id={`msg-streaming-${sessionId}`} className="flex justify-start message-enter">
+      <div className="w-full" style={{ maxWidth: '85%' }}>
+        <div className="flex items-center gap-2 mb-1.5 px-1">
+          <div className="w-6 h-6 rounded-full bg-black flex items-center justify-center shrink-0">
+            <span className="text-white text-[10px] font-medium">AI</span>
+          </div>
+          <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Assistant</span>
+          <span className="flex items-center gap-0.5 ml-1">
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '300ms' }} />
+          </span>
+        </div>
+        <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
+          style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
+          <div ref={ref} className="mc" />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function ChatWindow() {

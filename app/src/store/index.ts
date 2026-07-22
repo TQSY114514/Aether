@@ -521,13 +521,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     set((s) => ({
       sending: true,
-      // Initialize this session's streaming buffer (replacing any prior completed one).
       streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
       messages: [...s.messages, tempUserMsg],
     }))
-
-    // Pin the session so the active conversation moves to the top.
-    get().pinSession(currentSessionId)
 
     // Ensure the global chunk listener is registered exactly once; it routes every
     // chunk to whichever session it belongs to, so background streams keep flowing.
