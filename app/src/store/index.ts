@@ -269,6 +269,13 @@ export const useStore = create<AppState>((set, get) => ({
   loadSessions: async () => {
     const sessions = await window.electronAPI.session.list()
     set({ sessions })
+    // If the currently-selected session was pruned (empty placeholder),
+    // clear the selection so the UI shows EmptyState instead of a ghost
+    // chat window with a dangling currentSessionId.
+    const { currentSessionId } = get()
+    if (currentSessionId && !sessions.some(s => s.id === currentSessionId)) {
+      set({ currentSessionId: null, messages: [], arenaResults: [] })
+    }
   },
   createSession: async () => {
     let cfg = { providerId: null as number | null, modelId: null as number | null, personaId: null as number | null }
