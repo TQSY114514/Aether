@@ -132,16 +132,25 @@ async function summarizeHistory({ provider, model, history, signal }) {
     if (m.tool_calls) return `[${m.role}] ${c || ''}\n[tool calls: ${JSON.stringify(m.tool_calls.map(t => t.function?.name))}]`
     return `[${m.role}] ${c}`
   }).join('\n')
-  const text = await completeChat({
-    provider, model,
-    messages: [
-      { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
-      { role: 'user', content: transcript.slice(0, 24000) }, // cap the summarizer input
-    ],
-    signal,
-    options: { max_tokens: 600, temperature: 0.2 },
-  })
-  return (text || '').trim()
+  // Guard against hanging forever when the provider is unreachable (e.g. tests).
+  const ctrl = new AbortController()
+  const guard = setTimeout(() => ctrl.abort(), 3000)
+  try {
+    const text = await completeChat({
+      provider, model,
+      messages: [
+        { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
+        { role: 'user', content: transcript.slice(0, 24000) }, // cap the summarizer input
+      ],
+      signal: ctrl.signal,
+      options: { max_tokens: 600, temperature: 0.2 },
+    })
+    clearTimeout(guard)
+    return (text || '').trim()
+  } catch (e) {
+    clearTimeout(guard)
+    throw e
+  }
 }
 
 module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex }
