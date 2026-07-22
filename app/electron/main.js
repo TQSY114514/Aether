@@ -14,34 +14,38 @@ if (!app.isPackaged) {
   app.commandLine.appendSwitch('enable-zero-copy')
 }
 
-// ── Native spellchecker ───────────────────────────────────────────────────
-// Electron's built-in spellchecker uses Hunspull dictionaries (downloaded at
-// runtime). No extra npm dependencies needed.
-try {
-  session.defaultSession.setSpellCheckLanguages(['en-US', 'zh-CN'])
-} catch (e) {
-  log.warn('spellcheck init failed:', e.message)
-}
+// ── Native spellchecker & protocol handler ────────────────────────────────
+// session.defaultSession and protocol.handle require the app to be ready in
+// Electron v31+. Moved into app.whenReady() so they don't crash on load.
+function initAppReady() {
+  // Native spellchecker — available only in some Electron builds; guard the
+  // method existence so we don't log a noisy warning on every launch.
+  try {
+    const ss = session.defaultSession
+    if (typeof ss.setSpellCheckLanguages === 'function') {
+      ss.setSpellCheckLanguages(['en-US', 'zh-CN'])
+    }
+  } catch (e) {
+    log.warn('spellcheck init failed:', e.message)
+  }
 
-// ── aetherai:// protocol handler ─────────────────────────────────────────
-// Allows "open in AetherAI" from browser links and other apps.
-// Must be registered before app.whenReady().
-if (!app.isPackaged) {
-  protocol.handle('aetherai', (req) => {
-    const url = new URL(req.url)
-    const action = url.hostname
-    if (action === 'new' || action === 'chat') {
-      app.whenReady().then(() => {
-        const wc = mainWindow?.webContents
+  // ── aetherai:// protocol handler ─────────────────────────────────────────
+  // Allows "open in AetherAI" from browser links and other apps.
+  if (!app.isPackaged) {
+    protocol.handle('aetherai', (req) => {
+      const url = new URL(req.url)
+      const action = url.hostname
+      if (action === 'new' || action === 'chat') {
+        const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
         if (wc && !wc.isDestroyed()) {
           wc.send('protocol:open', { action })
         }
-      })
-    }
-    return new Response('AetherAI protocol handler', { status: 200 })
-  })
-} else {
-  app.setAsDefaultProtocolClient('aetherai')
+      }
+      return new Response('AetherAI protocol handler', { status: 200 })
+    })
+  } else {
+    app.setAsDefaultProtocolClient('aetherai')
+  }
 }
 
 const { registerProviderHandlers } = require('./ipc/provider.handler')
@@ -182,6 +186,7 @@ function setupIpcHandlers() {
 }
 
 app.whenReady().then(async () => {
+  initAppReady()
   await db.initDatabase()
   // Independent init steps run in parallel after DB is ready.
   await Promise.all([
@@ -237,7 +242,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     if (tray) {
       // Minimize to tray — the user can quit from the tray menu.
-      if (mainWindow && mainWindow.isVisible()) {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
         mainWindow.hide()
       }
     } else {

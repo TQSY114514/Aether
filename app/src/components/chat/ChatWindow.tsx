@@ -22,26 +22,45 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   useEffect(() => {
     const unsub = useStore.subscribe((s) => {
       const buf = s.streamingBySession[sessionId]
+      // No buffer and nothing initialized — skip entirely.
       if (!buf && msgIdRef.current === -1) return
       if (!ref.current) return
+      // New message ID assigned — re-render from scratch.
       if (buf && buf.messageId && buf.messageId !== msgIdRef.current) {
         msgIdRef.current = buf.messageId
         lastLenRef.current = 0
         ref.current.innerHTML = renderMarkdown(buf.content)
         ref.current.style.display = ''
         queueScroll()
-      } else if (!buf && msgIdRef.current !== -1) {
+        return
+      }
+      // Buffer cleared (stream finished) — hide the placeholder.
+      if (!buf && msgIdRef.current !== -1) {
         msgIdRef.current = -1
         lastLenRef.current = 0
         ref.current.innerHTML = ''
         ref.current.style.display = 'none'
-      } else if (buf && msgIdRef.current === buf.messageId) {
+        return
+      }
+      // Buffer exists but we haven't initialized yet (messageId is null
+      // during streaming — we render directly from the buffer content).
+      if (buf && msgIdRef.current === -1) {
+        msgIdRef.current = 0
+        lastLenRef.current = 0
+        ref.current.innerHTML = renderMarkdown(buf.content)
+        ref.current.style.display = ''
+        queueScroll()
+        return
+      }
+      // Same message, content growing — update DOM if enough new chars.
+      if (buf && msgIdRef.current === 0) {
         const newLen = buf.content.length
         if (newLen === lastLenRef.current) return
         if (newLen - lastLenRef.current < 4 && newLen > 0) return // skip micro-deltas
         lastLenRef.current = newLen
         ref.current.innerHTML = renderMarkdown(buf.content)
         queueScroll()
+        return
       }
     })
     function queueScroll() {
@@ -134,8 +153,11 @@ export default function ChatWindow() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
+  // Always reload messages when switching sessions. The messages array belongs
+  // to whichever session was active when it was last set; switching back needs
+  // a fresh load so cross-session streaming completion doesn't leave stale data.
   useEffect(() => {
-    if (currentSessionId && messages.length === 0) {
+    if (currentSessionId) {
       loadMessages(currentSessionId)
     }
     setSearchQuery('')
@@ -225,7 +247,7 @@ export default function ChatWindow() {
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">
-          {messages.length === 0 && !useStore.getState().sending && arenaResults.length === 0 && (
+          {messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0 && (
             <EmptyState />
           )}
 

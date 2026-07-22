@@ -110,9 +110,10 @@ export default function ChatInput() {
   const handleSubmit = async () => {
     const content = input.trim()
     if (!content && pending.length === 0 && snippets.length === 0) return
-    // If a turn is streaming, queue the message instead of dropping or
-    // interrupting — it auto-sends after the current turn finishes.
-    if (sending) {
+    // If a turn is streaming in THIS session, queue the message instead of
+    // dropping or interrupting — it auto-sends after the current turn.
+    // Per-session lock: other sessions can still accept input.
+    if (isStreaming) {
       if (content) { enqueueMessage(content); setInput('') }
       return
     }
@@ -223,7 +224,7 @@ export default function ChatInput() {
     if (!el) return
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
-  }, [input, sending, showSlash, pending.length, snippets.length])
+  }, [input, isStreaming, showSlash, pending.length, snippets.length])
 
   return (
     <div className="border-t border-[var(--border)] bg-white px-4 py-2.5"
@@ -269,7 +270,7 @@ export default function ChatInput() {
               <span key={s.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
                 <FileText size={11} className="text-gray-400" />
                 {t('paste.snippet_n', i + 1)} · {s.preview}
-                <button onClick={() => setSnippets(prev => prev.filter(x => x.id !== s.id))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
+                <button onClick={() => setSnippets(prev => prev.filter((_, j) => j !== i))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
               </span>
             ))}
           </div>
@@ -287,14 +288,14 @@ export default function ChatInput() {
             </div>
           )}
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={sending} title={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
+          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
             <Paperclip size={16} className="text-gray-400" />
           </button>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
             placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : t('chat.placeholder')}
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
-            disabled={sending} />
-          {sending ? (
+            disabled={isStreaming} />
+          {isStreaming ? (
             <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')}>
               <Square size={14} />
             </button>
@@ -306,7 +307,7 @@ export default function ChatInput() {
           )}
         </div>
 
-        {!sending && (
+        {!isStreaming && (
           <div className="flex items-center gap-2 px-0.5 mt-1.5 flex-wrap">
             <EffortControl level={effortLevel} onChange={setEffortLevel} />
             <ModelSelector providers={providers} allModels={allModels}
@@ -321,7 +322,6 @@ export default function ChatInput() {
                 }} className="qaction">{cmd.label()}</button>
               ))}
             </div>
-            {/* Token counter — shows ~tokens for input + snippets */}
             {totalInputTokens > 0 && (
               <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
                 {t('chat.tokens_estimate', String(totalInputTokens))}
@@ -330,7 +330,6 @@ export default function ChatInput() {
             <span className="text-[10px] text-[var(--text-muted)] ml-auto">{t('empty.hint.slash')}</span>
           </div>
         )}
-        {/* Streaming status indicator — shown only while a turn is generating */}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
       </div>
     </div>
@@ -348,8 +347,7 @@ const EFFORT_LEVELS = [
 ]
 function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 'high'; onChange: (v: 'off' | 'low' | 'medium' | 'high') => void }) {
   let idx = EFFORT_LEVELS.findIndex(l => l.value === level)
-  if (idx < 0) idx = 0 // guard against corrupt/unknown stored values
-  // Track fill: 0/33/66/100% for off/low/medium/high.
+  if (idx < 0) idx = 0
   const fill = idx <= 0 ? 0 : (idx / (EFFORT_LEVELS.length - 1)) * 100
   return (
     <div className="flex items-center gap-1.5" title={t('effort.tooltip')}>
@@ -362,25 +360,18 @@ function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 
   )
 }
 
-// ── Streaming status bar ──────────────────────────────────────────────────
-// Shows a subtle status line ("Thinking…", "Using tools…") while the assistant
-// is generating. Listens to the store's statusLinesByMessage for the current
-// session's active message.
 function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   const statusLines = useStore((s) => s.statusLinesByMessage)
   const [status, setStatus] = useState('')
-  const latestRef = useRef('')
 
   useEffect(() => {
     if (!sessionId) return
-    // Find the most recent status line for any message in this session.
     let latest = ''
     for (const [, lines] of Object.entries(statusLines)) {
       if (lines.length > 0 && lines[lines.length - 1].length > latest.length) {
         latest = lines[lines.length - 1]
       }
     }
-    latestRef.current = latest
     setStatus(latest)
   }, [statusLines, sessionId])
 
@@ -395,16 +386,12 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   )
 }
 
-// Inline model selector — lives under the input bar next to the thinking slider
-// (Claude-Code-style). A compact <select> grouped by provider.
 function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
   providers: { id: number; name: string }[]
   allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]
   activeModelId: number | null
   onSelect: (modelId: number, providerId: number) => void
 }) {
-  // Build provider→models groups, memoized — only recomputes when
-  // providers or allModels change.
   const groups = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
     return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null

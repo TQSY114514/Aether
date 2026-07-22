@@ -20,6 +20,9 @@ function registerSessionHandlers(ipcMain, db) {
   // the new session row + messages + config in one IPC round-trip.
   // This replaces the old 7+ sequential calls in the renderer.
   ipcMain.handle('session:create-and-select', async (_e, { providerId, modelId, personaId } = {}) => {
+    // Prune empty placeholder sessions before creating a new one so the sidebar
+    // doesn't accumulate "新会话" entries (ChatGPT-style: unsent new chats don't persist).
+    db.pruneEmptySessions()
     const sessionRow = db.createSession({ persona_id: personaId || null })
     const sid = sessionRow.lastInsertRowid || sessionRow.id
     const cfg = { providerId: providerId || null, modelId: modelId || null, personaId: personaId || null }

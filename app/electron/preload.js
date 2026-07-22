@@ -1,8 +1,17 @@
-const { app } = require('electron')
 const { contextBridge, ipcRenderer } = require('electron')
 
+// app.getLocale() requires the app to be ready. Lazily resolve it on first
+// access so the preload doesn't crash during module load in sandbox mode.
+let _locale = null
+function getLocale() {
+  if (_locale === null) {
+    try { _locale = require('electron').app.getLocale() } catch { _locale = 'en-US' }
+  }
+  return _locale
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
-  sys: { locale: app.getLocale() },
+  sys: { locale: getLocale() },
   provider: {
     list: () => ipcRenderer.invoke('provider:list'),
     get: (id) => ipcRenderer.invoke('provider:get', id),

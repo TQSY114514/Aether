@@ -218,3 +218,8 @@ async function completeChatMessageWithRetry({ provider, model, messages, signal,
     () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
   )
 }
+
+module.exports = {
+  streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage,
+  streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
+}

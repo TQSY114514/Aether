@@ -261,7 +261,14 @@ function deletePersona(id) {
 // ===== Session CRUD =====
 function getSessions() {
   const stmt = db.prepare("SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s ORDER BY s.pinned DESC, s.updated_at DESC")
-  return allRows(stmt)
+  const rows = allRows(stmt)
+  // Filter out empty sessions so they don't clutter the sidebar. A session is
+  // "empty" when it has no messages AND has a placeholder title.
+  return rows.filter((s) => {
+    if (s.last_message != null) return true
+    const t = (s.title || '').trim()
+    return t !== '新会话' && t !== '新对话' && t !== 'New Chat'
+  })
 }
 // Fetch a single session by id — a direct indexed lookup, far cheaper than
 // getSessions() (which runs a correlated subquery per session row + sorts all).
