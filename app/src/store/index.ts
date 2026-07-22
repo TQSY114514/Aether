@@ -286,15 +286,11 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({
       currentView: 'chat',
       currentSessionId: sid,
+      sessions: [...s.sessions, result.session],
       sessionConfigs: { ...s.sessionConfigs, [sid]: sessionCfg },
       messages: result.messages || [],
-      // Don't add the session to the list yet — it's empty (no messages).
-      // loadSessions() below will fetch the pruned + filtered list from DB.
     }))
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
-    // Reload sessions from DB so the list is consistent (empty placeholders
-    // filtered out, sorted correctly).
-    await get().loadSessions()
   },
   pinSession: async (id: number, pinned: number = 1) => {
     try { await window.electronAPI.session.pin(id, pinned) } catch {}

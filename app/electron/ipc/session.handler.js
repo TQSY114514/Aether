@@ -1,12 +1,7 @@
 const { clearAllowRules } = require('./chat.handler')
 
 function registerSessionHandlers(ipcMain, db) {
-  ipcMain.handle('session:list', () => {
-    // Prune before returning so the sidebar never sees empty sessions,
-    // regardless of startup race between pruneEmptySessions and loadSessions.
-    try { db.pruneEmptySessions() } catch {}
-    return db.getSessions()
-  })
+  ipcMain.handle('session:list', () => db.getSessions())
   ipcMain.handle('session:create', (_e, data) => db.createSession(data))
   ipcMain.handle('session:rename', (_e, id, title) => db.renameSession(id, title))
   ipcMain.handle('session:pin', (_e, id, pinned) => db.pinSession(id, pinned))
