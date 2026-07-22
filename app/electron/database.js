@@ -277,8 +277,14 @@ function getSession(id) {
   const stmt = db.prepare('SELECT * FROM session WHERE id = ?'); stmt.bind([id])
   return allRows(stmt)[0] || null
 }
+function localNow() {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 function createSession({ title = '新会话', persona_id = null }) {
-  db.run('INSERT INTO session (title, persona_id, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [title, persona_id])
+  db.run('INSERT INTO session (title, persona_id, updated_at) VALUES (?, ?, ?)', [title, persona_id, localNow()])
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 // Remove sessions that were created but never got a message (placeholder title,
@@ -291,16 +297,16 @@ function pruneEmptySessions() {
   saveDatabase()
 }
 function renameSession(id, title) {
-  db.run('UPDATE session SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [title, id]); saveDatabase()
+  db.run('UPDATE session SET title = ?, updated_at = ? WHERE id = ?', [title, localNow(), id]); saveDatabase()
 }
 function pinSession(id, pinned = 1) {
-  db.run('UPDATE session SET pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [pinned, id]); saveDatabase()
+  db.run('UPDATE session SET pinned = ?, updated_at = ? WHERE id = ?', [pinned, localNow(), id]); saveDatabase()
 }
 function deleteSession(id) {
   db.run('DELETE FROM session WHERE id = ?', [id]); saveDatabase()
 }
 function touchSession(id) {
-  db.run('UPDATE session SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id]); saveDatabase()
+  db.run('UPDATE session SET updated_at = ? WHERE id = ?', [localNow(), id]); saveDatabase()
 }
 function getSessionConfig(id) {
   const stmt = db.prepare('SELECT config, persona_id FROM session WHERE id = ?')
