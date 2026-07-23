@@ -9,17 +9,11 @@ export default function PersonaPage() {
   const addPersona = useStore((s) => s.addPersona)
   const updatePersona = useStore((s) => s.updatePersona)
   const deletePersona = useStore((s) => s.deletePersona)
-  const sessionConfigs = useStore((s) => s.sessionConfigs)
-  const currentSessionId = useStore((s) => s.currentSessionId)
-  const saveSessionConfig = useStore((s) => s.saveSessionConfig)
 
-  const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
-  const currentPersonaId = cfg?.personaId ?? null
-
+  const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editPrompt, setEditPrompt] = useState('')
-  const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newPrompt, setNewPrompt] = useState('')
   const { toast } = useUI()
@@ -111,11 +105,6 @@ export default function PersonaPage() {
                   <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
                     <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{persona.name}</span>
                     <div className="flex gap-1">
-                      <button onClick={() => { if (currentSessionId) { saveSessionConfig(currentSessionId, { personaId: persona.id }) } }}
-                        className={`px-2 py-1 text-xs rounded-lg border transition-colors ${currentPersonaId === persona.id ? 'bg-black text-white border-black' : ''}`}
-                        style={currentPersonaId !== persona.id ? { borderColor: 'var(--border)' } : {}}>
-                        {currentPersonaId === persona.id ? t('persona.selected') : t('persona.use')}
-                      </button>
                       <button onClick={() => { setEditingId(persona.id); setEditName(persona.name); setEditPrompt(persona.prompt) }}
                         className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
