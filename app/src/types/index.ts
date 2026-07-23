@@ -25,6 +25,17 @@ export interface Model {
   api_key?: string
 }
 
+export interface PartialModel {
+  provider_id: number
+  model_name: string
+  is_primary?: number
+  display_name?: string | null
+  fallback_order?: number | null
+  context_window?: number | null
+  input_price_per_1k?: number | null
+  output_price_per_1k?: number | null
+}
+
 export interface Persona {
   id: number
   name: string

@@ -264,6 +264,8 @@ const TOOLS = [
         command: { type: 'string', description: 'The shell command to execute.' },
         description: { type: 'string', description: 'A short, active-voice summary of what this command does and why (shown to the user). Required.' },
         cwd: { type: 'string', description: 'Working directory (optional, defaults to user home).' },
+        timeout: { type: 'number', description: 'Timeout in milliseconds (optional, default 30000).' },
+        env: { type: 'object', description: 'Extra environment variables (optional).' },
       },
       required: ['command', 'description'],
     },
@@ -277,11 +279,21 @@ const TOOLS = [
         if (!guard.ok) throw new Error(guard.reason)
       }
       const cwd = args.cwd ? String(args.cwd) : undefined
+      const timeoutMs = Number(args.timeout) || 30000
+      const extraEnv = args.env && typeof args.env === 'object' ? args.env : undefined
       return new Promise((resolve, reject) => {
-        exec(cmd, { cwd, maxBuffer: 16 * 1024, timeout: 30000 }, (err, stdout, stderr) => {
-          const out = ((stdout || '') + (stderr ? '\n[stderr]\n' + stderr : '')).slice(0, 8192)
-          if (err && !stdout && !stderr) return reject(new Error(err.message))
-          resolve(out || '(no output)')
+        const mergedEnv = extraEnv ? { ...process.env, ...extraEnv } : process.env
+        exec(cmd, { cwd, env: mergedEnv, maxBuffer: 32 * 1024, timeout: Math.min(timeoutMs, 120000) }, (err, stdout, stderr) => {
+          const out = (stdout || '').trim()
+          const errOut = (stderr || '').trim()
+          const parts = []
+          if (out) parts.push('[stdout]\n' + out.slice(0, 4096))
+          if (errOut) parts.push('[stderr]\n' + errOut.slice(0, 4096))
+          if (err && !out && !errOut) return reject(new Error(err.message))
+          const exitCode = err && err.code ? err.code : 0
+          const result = parts.join('\n\n') || '(no output)'
+          if (exitCode !== 0) resolve(`[exit code: ${exitCode}]\n${result}`)
+          else resolve(result)
         })
       })
     },

@@ -40,9 +40,9 @@ export default function ChatPage() {
     const ms = allModels.filter(m => m.provider_id === p.id)
     if (ms.length === 0) return null
     return { providerId: p.id, providerName: p.name, models: ms.map(m => ({ id: m.id, name: m.display_name || m.model_name })) }
-  }).filter(Boolean), [providers, allModels])
+  }).filter(Boolean) as { providerId: number; providerName: string; models: { id: number; name: string }[] }[], [providers, allModels])
 
-  const allArenaModels = useMemo(() => allModelOptions.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName }))), [allModelOptions])
+  const allArenaModels = useMemo(() => allModelOptions?.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName }))) || [], [allModelOptions])
 
   if (!currentSessionId) {
     return (

@@ -107,14 +107,16 @@ export default function ChatInput() {
     }
   }, [])
 
+  const _submitting = useRef(false)
+
   const handleSubmit = async () => {
+    if (_submitting.current) return
+    _submitting.current = true
     const content = input.trim()
-    if (!content && pending.length === 0 && snippets.length === 0) return
-    // If a turn is streaming in THIS session, queue the message instead of
-    // dropping or interrupting — it auto-sends after the current turn.
-    // Per-session lock: other sessions can still accept input.
+    if (!content && pending.length === 0 && snippets.length === 0) { _submitting.current = false; return }
     if (isStreaming) {
       if (content) { enqueueMessage(content); setInput('') }
+      _submitting.current = false
       return
     }
     setInput('')
@@ -127,7 +129,6 @@ export default function ChatInput() {
 
     const atts = pending
     setPending([])
-    // Fold collapsed long-paste snippets into the prompt as fenced blocks.
     const snippetBlocks = snippets.map((s, i) => `\n📎 粘贴片段 ${i + 1}:\n\`\`\`\n${s.content}\n\`\`\``).join('\n')
     setSnippets([])
     const finalContent = snippetBlocks ? (content ? content + '\n' + snippetBlocks : snippetBlocks) : content
@@ -135,8 +136,9 @@ export default function ChatInput() {
     if (chatMode === 'arena') {
       await runArena(finalContent)
     } else if (sessionId) {
-      sendMessage(finalContent, atts.length > 0 ? atts : undefined)
+      await sendMessage(finalContent, atts.length > 0 ? atts : undefined)
     }
+    _submitting.current = false
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,7 +217,7 @@ export default function ChatInput() {
       if (key === 'enter') { e.preventDefault(); handleSubmit(); return }
       if (key === 'a') return
     }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleSubmit() }
     if (e.key === 'Escape') setShowSlash(false)
   }
 

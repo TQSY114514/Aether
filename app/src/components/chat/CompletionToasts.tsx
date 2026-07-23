@@ -10,7 +10,7 @@ export default function CompletionToasts() {
 
   if (toasts.length === 0) return null
 
-  const handleClick = (toast: { sessionId: number; sessionTitle: string }) => {
+  const handleClick = (toast: { id: number; sessionId: number; sessionTitle: string }) => {
     selectSession(toast.sessionId)
     setCurrentView('chat')
     dismiss(toast.id)

@@ -14,6 +14,7 @@
 const { completeChatMessage } = require('./providerAdapter')
 const { safeParseToolCallArgs } = require('./toolArgs')
 const { applyMiddleware } = require('./toolResultMiddleware')
+const { classifyError } = require('./errorClassify')
 // Use the MCP-aware merged registry so the agent can call both built-in tools
 // and any connected MCP server's tools. Falls back to the plain built-in
 // registry if the manager isn't loadable for some reason.
@@ -34,6 +35,8 @@ const DEFAULT_MAX_ITERATIONS = 25
 const MAX_TOTAL_CHARS = 200000
 const LOOP_REPEAT_LIMIT = 3
 const TOOL_TIMEOUT_MS = 30000
+const TOOL_RETRY_MAX = 2
+const TOOL_RETRY_BASE_MS = 1000
 const PERMISSION_TIMEOUT_MS = 120000
 
 class IterationBudget {
@@ -190,24 +193,45 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}`
 }
 
-function runToolWithTimeout(tool, args, ctx, signal) {
-  return new Promise((resolve) => {
-    let done = false
-    const finish = (val) => {
-      if (done) return
-      done = true
-      clearTimeout(timer)
-      if (signal) signal.removeEventListener('abort', onAbort)
-      resolve(val)
+// Execute a tool with timeout, retry on transient errors (Claude Code-style
+// resilient tool execution). Transient failures (rate_limit, 5xx, network)
+// are retried with exponential backoff up to TOOL_RETRY_MAX attempts.
+// Permanent failures (auth, content_filter, abort) are returned immediately.
+async function runToolWithTimeout(tool, args, ctx, signal) {
+  let lastResult
+  for (let attempt = 0; attempt <= TOOL_RETRY_MAX; attempt++) {
+    const result = await new Promise((resolve) => {
+      let done = false
+      const finish = (val) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        if (signal) signal.removeEventListener('abort', onAbort)
+        resolve(val)
+      }
+      const timer = setTimeout(() => finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` }), TOOL_TIMEOUT_MS)
+      const onAbort = () => finish({ error: 'aborted' })
+      if (signal) signal.addEventListener('abort', onAbort, { once: true })
+      Promise.resolve()
+        .then(() => tool.run(args, ctx))
+        .then((result) => finish({ result }))
+        .catch((e) => finish({ error: e && e.message ? e.message : String(e) }))
+    })
+    lastResult = result
+    if (!result.error) return result // success
+    // Classify and decide whether to retry.
+    const verdict = classifyError(new Error(result.error))
+    if (!verdict.retryable || verdict.kind === 'abort' || verdict.kind === 'auth') return result
+    if (attempt < TOOL_RETRY_MAX) {
+      const backoff = TOOL_RETRY_BASE_MS * Math.pow(2, attempt)
+      await sleep(backoff)
     }
-    const timer = setTimeout(() => finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` }), TOOL_TIMEOUT_MS)
-    const onAbort = () => finish({ error: 'aborted' })
-    if (signal) signal.addEventListener('abort', onAbort, { once: true })
-    Promise.resolve()
-      .then(() => tool.run(args, ctx))
-      .then((result) => finish({ result }))
-      .catch((e) => finish({ error: e && e.message ? e.message : String(e) }))
-  })
+  }
+  return lastResult
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function requestPermissionWithTimeout(requestPermission, payload) {

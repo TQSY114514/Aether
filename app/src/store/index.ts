@@ -209,32 +209,6 @@ function decodeDataUrlText(dataUrl: string): string {
 // main-process serializer). The `buildConfigBundle` in `src/types/config.ts`
 // produces the same structure for the renderer-side export path.
 
-// Shared model-resolution helper: try allModels (cached), then primary API,
-// then listAll API. Returns { providerId, modelId } or null. Also optionally
-// persists to session config if sessionId is given.
-async function resolveModelId(): Promise<{ providerId: number | null; modelId: number | null }> {
-  const { allModels } = get()
-  if (allModels.length > 0) {
-    const primary = allModels.find(m => m.is_primary) || allModels[0]
-    return { providerId: primary.provider_id, modelId: primary.id }
-  }
-  try {
-    const primary = await window.electronAPI.model.primary()
-    if (primary) return { providerId: primary.provider_id, modelId: primary.id }
-  } catch (e) { log.warn('resolveModelId: primary() failed:', e) }
-  try {
-    const all = await window.electronAPI.model.listAll()
-    if (all.length > 0) return { providerId: all[0].provider_id, modelId: all[0].id }
-  } catch (e) { log.warn('resolveModelId: listAll() failed:', e) }
-  return { providerId: null, modelId: null }
-}
-
-// Generic setter: persist to DB then update Zustand state.
-async function setSetting(key: string, value: string, patch: Record<string, unknown>) {
-  await window.electronAPI.settings.set(key, value)
-  set(patch)
-}
-
 export const useStore = create<AppState>((set, get) => ({
   // Navigation
   currentView: 'chat',
@@ -262,16 +236,10 @@ export const useStore = create<AppState>((set, get) => ({
   permissionRequests: [],
   effortLevel: 'off',
   completionToasts: [] as any[],
-  pinSession: async (id: number) => Promise<void>,
-  notifyComplete: async (sessionId: number, sessionTitle: string) => {},
-  dismissToast: async (id: number) => {},
 
   loadSessions: async () => {
     const sessions = await window.electronAPI.session.list()
     set({ sessions })
-    // If the currently-selected session was pruned (empty placeholder),
-    // clear the selection so the UI shows EmptyState instead of a ghost
-    // chat window with a dangling currentSessionId.
     const { currentSessionId } = get()
     if (currentSessionId && !sessions.some(s => s.id === currentSessionId)) {
       set({ currentSessionId: null, messages: [], arenaResults: [] })
@@ -279,7 +247,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   createSession: async () => {
     let cfg = { providerId: null as number | null, modelId: null as number | null, personaId: null as number | null }
-    try { const r = await resolveModelId(); if (r) cfg = r } catch {}
+    try { const r = await resolveModelId(); if (r.providerId) cfg = r } catch {}
     const result = await window.electronAPI.session.createAndSelect(cfg)
     const sid = result.session.id
     const sessionCfg = result.config

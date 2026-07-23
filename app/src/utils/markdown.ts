@@ -180,7 +180,7 @@ function renderInner(raw: string, hljs: typeof hljsCore | null): string {
       }
     }
     const lines = highlighted.split('\n')
-    const numbered = lines.map((line, i) =>
+    const numbered = lines.map((line: string, i: number) =>
       `<span class="ln"><span class="ln-i" data-l="${i + 1}"></span></span>${line}`
     ).join('\n')
     const lineClass = lineCount > 1 ? ' lines' : ''
@@ -189,14 +189,14 @@ function renderInner(raw: string, hljs: typeof hljsCore | null): string {
 
   t = t.replace(RE_INLINE_CODE, '<code>$1</code>')
   t = t.replace(RE_TABLE, (match, headerLine, bodyLines) => {
-    const headers = headerLine.split('|').map(s => s.trim()).filter(Boolean)
-    const rows = bodyLines.trim().split('\n').map(line =>
-      line.split('|').map(s => s.trim()).filter(Boolean)
+    const headers = headerLine.split('|').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+    const rows = bodyLines.trim().split('\n').map((line: string) =>
+      line.split('|').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
     )
     let html = '<table><thead><tr>'
     headers.forEach(h => { html += `<th>${h}</th>` })
     html += '</tr></thead><tbody>'
-    rows.forEach(row => { html += '<tr>' + row.map(c => `<td>${c}</td>`).join('') + '</tr>' })
+    rows.forEach((row: string[]) => { html += '<tr>' + row.map((c: string) => `<td>${c}</td>`).join('') + '</tr>' })
     html += '</tbody></table>'
     return html
   })

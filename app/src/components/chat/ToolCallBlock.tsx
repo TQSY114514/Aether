@@ -69,7 +69,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
       </button>
       {open && (
         <div className="px-3 pb-2.5 space-y-1.5">
-          {tool.args && Object.keys(tool.args as object).length > 0 && (
+          {tool.args && Object.keys(tool.args as Record<string, unknown>).length > 0 && (
             <div>
               <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.args')}</div>
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-all" style={{ color: 'var(--text-secondary)' }}>{JSON.stringify(tool.args, null, 2)}</pre>
