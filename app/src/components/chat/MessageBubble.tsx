@@ -157,6 +157,13 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
               {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
             </div>
           )}
+          {/* Image attachments shown inline (multimodal support) */}
+          {message.attachment && message.attachment.kind === 'image' && (
+            <div className="mb-2 rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
+              <img src={message.attachment.preview || message.attachment.mime} alt={message.attachment.name}
+                className="max-w-full max-h-[300px] object-contain bg-black/5" />
+            </div>
+          )}
           {isUser && editing ? (
             <div className="space-y-2">
               <textarea value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus

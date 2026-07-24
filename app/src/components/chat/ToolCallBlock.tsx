@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null }
+type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null; diff?: string | null; afterSnapshot?: { path: string; content: string; truncated: boolean } | null }
 
 const FAILURE_LABELS: Record<string, string> = {
   timeout: 'tool.failure.timeout',
@@ -109,6 +109,14 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto" style={{ color: 'var(--text-secondary)' }}>{tool.result}</pre>
             </div>
           )}
+          {/* Diff preview — shown for write_file / edit_file / apply_patch (Claude Code-style) */}
+          {tool.diff && !tool.error && (
+            <DiffPreview diff={tool.diff} toolName={tool.name} />
+          )}
+          {/* After-snapshot — shows the file's current content after the tool ran */}
+          {tool.afterSnapshot && !tool.error && (
+            <AfterSnapshotView snapshot={tool.afterSnapshot} />
+          )}
           {tool.checkpointId && (
             <button
               type="button"
@@ -134,6 +142,78 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             </div>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Diff Preview (Claude Code-style) ───────────────────────────────────────
+// Shows a unified diff for write_file / edit_file / apply_patch results.
+// Green (+) for additions, red (-) for deletions, gray for context.
+
+function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
+  const [showFull, setShowFull] = useState(false)
+  const lines = diff.split('\n')
+  const maxShow = 60
+  const isTruncated = lines.length > maxShow
+  const displayLines = showFull || !isTruncated ? lines : lines.slice(0, maxShow)
+
+  return (
+    <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+        <FileDiff size={11} style={{ color: 'var(--accent)' }} />
+        <span className="text-[10px] font-medium" style={{ color: 'var(--text-primary)' }}>
+          {toolName === 'write_file' ? '新建文件预览' : toolName === 'apply_patch' ? '补丁预览' : '编辑差异'}
+        </span>
+        <span className="text-[10px] ml-auto" style={{ color: 'var(--text-muted)' }}>
+          +{lines.filter(l => l.startsWith('+')).length} -{lines.filter(l => l.startsWith('-')).length}
+        </span>
+      </div>
+      <pre className="text-[10px] font-mono whitespace-pre overflow-x-auto max-h-56 overflow-y-auto p-2 leading-relaxed"
+        style={{ color: 'var(--text-secondary)' }}>
+        {displayLines.map((line, i) => {
+          let color = 'var(--text-muted)'
+          if (line.startsWith('+') && !line.startsWith('+++')) color = 'var(--success)'
+          else if (line.startsWith('-') && !line.startsWith('---')) color = 'var(--error)'
+          else if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')) color = 'var(--accent)'
+          return <span key={i} style={{ color }}>{line || '\n'}</span>
+        })}
+      </pre>
+      {isTruncated && (
+        <button onClick={() => setShowFull(true)}
+          className="w-full text-[10px] py-1 hover:bg-[var(--border)] transition-colors"
+          style={{ color: 'var(--text-muted)' }}>
+          展开全部 {lines.length} 行
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── After Snapshot ─────────────────────────────────────────────────────────
+// Shows the file's content after the tool ran (for verification).
+
+function AfterSnapshotView({ snapshot }: { snapshot: { path: string; content: string; truncated: boolean } }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
+      <button onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-[var(--border)] transition-colors"
+        style={{ backgroundColor: 'var(--bg-secondary)' }}>
+        <FileText size={11} style={{ color: 'var(--text-muted)' }} />
+        <span className="text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+          执行后快照: {snapshot.path.split('/').pop()?.split('\\').pop()}
+        </span>
+        <span className="text-[10px] ml-auto" style={{ color: 'var(--text-muted)' }}>
+          {snapshot.content.length.toLocaleString()} chars {snapshot.truncated && '…'}
+        </span>
+        {open ? <ChevronDown size={10} style={{ color: 'var(--text-muted)' }} /> : <ChevronRight size={10} style={{ color: 'var(--text-muted)' }} />}
+      </button>
+      {open && (
+        <pre className="text-[10px] font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto p-2.5 leading-relaxed"
+          style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-primary)' }}>
+          {snapshot.content.slice(0, 4000)}{snapshot.truncated ? '\n\n[… content truncated …]' : ''}
+        </pre>
       )}
     </div>
   )

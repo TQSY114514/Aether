@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -9,7 +9,7 @@ import { shallow } from 'zustand/shallow'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
-type SlashCommand = { id: string; name: string; description: string; prompt: string }
+type SlashCommand = { id: string; name: string; description: string; prompt?: string; action?: () => void }
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
@@ -19,6 +19,7 @@ function classifyFile(file: File): 'text' | 'image' {
 }
 
 // Default commands — used when no custom CMD.md files are discovered.
+// Commands with `action` execute directly (no prompt insertion).
 const DEFAULT_COMMANDS: SlashCommand[] = [
   { id: 'summarize', name: '总结对话', description: '详细总结以上对话的要点', prompt: '请详细总结以上对话的要点，用中文回复。' },
   { id: 'translate', name: '翻译', description: '将以上内容翻译成中文', prompt: '请将以上内容翻译成中文。' },
@@ -26,6 +27,9 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   { id: 'explain', name: '解释', description: '用简单语言解释内容', prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
   { id: 'continue', name: '续写', description: '基于内容自然续写', prompt: '请基于以上内容自然地继续写作。' },
   { id: 'code', name: '生成代码', description: '根据需求生成实现代码', prompt: '请生成实现以上需求的代码。' },
+  { id: 'clear', name: '清空对话', description: '清空当前对话历史', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
+  { id: 'regenerate', name: '重新生成', description: '撤销最后一条回复并重新生成', action: () => { useStore.getState().regenerate() } },
+  { id: 'compact', name: '压缩上下文', description: '智能压缩对话历史节省 token', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
 ]
 
 export default function ChatInput() {
@@ -56,6 +60,7 @@ export default function ChatInput() {
     sending, streamingBySession, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     providers, allModels, saveSessionConfig, queuedMessages,
+    modelSuggestion,
   } = useStore((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -66,6 +71,7 @@ export default function ChatInput() {
     setEffortLevel: s.setEffortLevel, providers: s.providers,
     allModels: s.allModels, saveSessionConfig: s.saveSessionConfig,
     queuedMessages: s.queuedMessages,
+    modelSuggestion: s.modelSuggestion,
   }), shallow)
 
   // Is the current session actively streaming?
@@ -207,8 +213,14 @@ export default function ChatInput() {
   }
 
   const handleSlashSelect = (cmd: SlashCommand) => {
+    // Action commands execute directly without inserting a prompt.
+    if (cmd.action) {
+      setShowSlash(false)
+      cmd.action()
+      return
+    }
     const lines = input.split('\n')
-    lines[lines.length - 1] = cmd.prompt
+    lines[lines.length - 1] = cmd.prompt!
     setInput(lines.join('\n'))
     setShowSlash(false)
     textareaRef.current?.focus()
@@ -302,9 +314,11 @@ export default function ChatInput() {
         {pending.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {pending.map((a, i) => (
-              <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-                {a.kind === 'image' && <img src={a.dataUrl} alt="" className="w-4 h-4 rounded object-cover" />}
-                📎 {a.name}
+              <span key={i} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                {a.kind === 'image' && a.dataUrl
+                  ? <img src={a.dataUrl} alt="" className="w-6 h-6 rounded object-cover border" style={{ borderColor: 'var(--border)' }} />
+                  : <FileText size={12} className="text-gray-400 shrink-0" />}
+                <span className="truncate max-w-[160px]">{a.name}</span>
                 <button onClick={() => setPending(prev => prev.filter((_, j) => j !== i))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
               </span>
             ))}
@@ -367,12 +381,13 @@ export default function ChatInput() {
             <EffortControl level={effortLevel} onChange={setEffortLevel} />
             <ModelSelector providers={providers} allModels={allModels}
               activeModelId={activeModelId}
+              modelSuggestion={modelSuggestion}
               onSelect={(mid, pid) => currentSessionId && saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })} />
             <div className="flex items-center gap-1.5">
               {slashCommands.slice(0, 3).map((cmd) => (
                 <button key={cmd.id} onClick={() => {
                   const prompt = cmd.prompt
-                  setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
+                  if (prompt) setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
                   textareaRef.current?.focus()
                 }} className="qaction">{cmd.name}</button>
               ))}
@@ -441,11 +456,12 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   )
 }
 
-function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
+function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion }: {
   providers: { id: number; name: string }[]
   allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]
   activeModelId: number | null
   onSelect: (modelId: number, providerId: number) => void
+  modelSuggestion: { suggestedModelId: number | null; reason: string; confidence: number } | null
 }) {
   const groups = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
@@ -453,6 +469,11 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
   }).filter(Boolean) as { providerId: number; providerName: string; models: typeof allModels }[], [providers, allModels])
 
   if (groups.length === 0) return null
+
+  const activeModel = allModels.find(m => m.id === activeModelId)
+  const isAutoSuggested = modelSuggestion && modelSuggestion.suggestedModelId === activeModelId && activeModelId != null
+  const suggestedModel = modelSuggestion && modelSuggestion.suggestedModelId ? allModels.find(m => m.id === modelSuggestion!.suggestedModelId) : null
+
   return (
     <div className="flex items-center gap-1.5" title={t('chat.model_switch')}>
       <Cpu size={13} className="text-gray-400 shrink-0" />
@@ -463,7 +484,8 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
           if (model) onSelect(mid, model.provider_id)
         }}
         className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-white"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+        style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+        title={modelSuggestion ? modelSuggestion.reason : t('chat.model_switch')}>
         <option value="" disabled>{t('chat.select_model')}</option>
         {groups.map(g => (
           <optgroup key={g.providerId} label={g.providerName}>
@@ -473,6 +495,23 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect }: {
           </optgroup>
         ))}
       </select>
+      {!isAutoSuggested && suggestedModel && (
+        <button onClick={() => {
+          if (suggestedModel) onSelect(suggestedModel.id, suggestedModel.provider_id)
+        }}
+          className="shrink-0 rounded-full hover:opacity-80 transition-opacity"
+          style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+          title={modelSuggestion!.reason}>
+          <Wand2 size={10} className="px-1 py-0.5" />
+        </button>
+      )}
+      {isAutoSuggested && (
+        <span className="shrink-0 rounded-full"
+          style={{ backgroundColor: 'rgba(99,102,241,0.12)', color: 'var(--accent)' }}
+          title={modelSuggestion!.reason}>
+          <Check size={10} className="px-0.5 py-0.5" />
+        </span>
+      )}
     </div>
   )
 }

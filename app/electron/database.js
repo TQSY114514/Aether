@@ -147,7 +147,7 @@ async function initDatabase() {
     snapshot TEXT NOT NULL,
     rolled_back_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  `)
+  )`)
 
   // Agent checkpoints — save/restore snapshots of long agent tasks.
   try { require('./llm/checkpointManager').createTable(db) } catch {}
