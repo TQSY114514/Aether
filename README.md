@@ -20,6 +20,28 @@
 
 Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — into one desktop app. An agent that reads/writes files and runs commands, a workspace sandbox, multi-model arena with ELO voting, skills, and 15 UI languages. Everything stored locally: API keys and conversations never leave your machine except to the providers you configure.
 
+## ⚡ Why AetherAI?
+
+| Feature | AetherAI | ChatGPT Desktop | Claude Code | Continue |
+|---------|----------|-----------------|-------------|----------|
+| **Local-first** | Full local SQLite, no cloud sync | Minimal local data | CLI, config local | Config local |
+| **Multi-provider in one chat** | ✅ Switch providers mid-conversation | ❌ OpenAI only | ❌ Anthropic only | ✅ Multi-provider |
+| **Built-in Agent (tool loop)** | ✅ 16 tools + sandbox + permissions | ❌ | ✅ (limited tools) | ✅ |
+| **Multi-model Arena + ELO** | ✅ Vote & rank models | ❌ | ❌ | ❌ |
+| **Skills system** | ✅ SKILL.md format | ❌ | ✅ SKILL.md | ✅ |
+| **Hooks (10 points)** | ✅ Pre/post tool, compact, etc. | ❌ | ✅ | ✅ |
+| **Context compaction** | ✅ Pair-preserving | ❌ | ❌ | ❌ |
+| **MCP support** | ✅ stdio JSON-RPC 2.0 | ❌ | ❌ | ❌ |
+| **Sub-agent delegation** | ✅ Parallel | ❌ | ❌ | ❌ |
+| **Auto long-term memory** | ✅ Structured, decay-aware | ❌ | ❌ | ❌ |
+| **Planning** | ✅ Hierarchical (DS4) | ❌ | ❌ | ❌ |
+| **Permission modes** | ✅ 5 modes (off/plan/ask/auto/yolo) | ❌ | ✅ | ✅ |
+| **15 UI languages** | ✅ incl.文言, RTL Arabic | Limited | English | Limited |
+| **Platform** | Windows (macOS/Linux planned) | Win/Mac | CLI (cross) | VS Code/IDE |
+| **Open source** | ✅ MIT | ❌ | ❌ | ✅ MIT |
+
+> AetherAI combines the agent power of Claude Code, the multi-provider flexibility of Continue, and adds a unique local-first desktop experience with arena voting, structured memory, and deep customization — all in one app.
+
 ---
 
 ## 📑 Table of Contents
@@ -32,15 +54,14 @@ Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any
   - [🛠️ Skills & Extensibility](#️-skills--extensibility)
   - [⚙️ Customization](#️-customization)
   - [🔒 Privacy](#-privacy)
+- [⚡ Why AetherAI?](#-why-aetherai)
 - [🚀 Quick Start](#-quick-start)
   - [Windows — prebuilt (recommended)](#windows--prebuilt-recommended)
   - [Build from source](#build-from-source)
   - [Configure your first provider](#configure-your-first-provider)
 - [📁 Project Structure](#-project-structure)
 - [🔑 Tech Stack](#-tech-stack)
-- [🗺️ Roadmap](#️-roadmap)
 - [🤝 Acknowledgements](#-acknowledgements)
-- [📋 Changelog](#-changelog)
 - [📄 License](#-license)
 
 ---
@@ -202,21 +223,6 @@ app/
 
 ---
 
-## 🗺️ Roadmap
-
-| Milestone | Status | Description |
-|-----------|--------|-------------|
-| v0.5 — Agent foundation | ✅ Done | Tool loop, planning, sandbox, permissions, hooks |
-| v0.6 — Memory & Skills | ✅ Done | Auto memory, habit learner, slash commands, tool repair |
-| v0.7 — Quality & Polish | 🔄 Next | Error boundaries, perf profiling, test coverage |
-| v0.8 — Multi-model polish | ⬜ Planned | Arena UX, ELO calibration, intent-based routing |
-| v0.9 — Plugins & Extensibility | ⬜ Planned | Skill marketplace, hook sharing, plugin SDK |
-| v1.0 — Stable release | ⬜ Planned | Signed installer, auto-update, changelog generation |
-
-> See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to help shape the roadmap.
-
----
-
 ## 🤝 Acknowledgements
 
 AetherAI stands on the shoulders of these projects — their ideas shaped the architecture and UX:
@@ -244,79 +250,6 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 - [Model Context Protocol](https://modelcontextprotocol.io) — the MCP spec AetherAI's agent speaks.
 - [cc-switch](https://github.com/farion1231/cc-switch) — usage-statistics dashboard layout (cost/cache/trend/provider/model breakdown).
 - [new-api](https://github.com/QuantumNous/new-api) — reasoning-effort relay conversion reference, usage/cost tracking.
-
----
-
-## 📋 Changelog
-
-### v0.5.1
-
-**Agent system upgrade**
-- Tool execution modes: `parallel` vs `sequential` per-tool (OpenClaw pattern)
-- Tool lifecycle hooks: `prepareArguments` → `beforeToolCall` → execute → `afterToolCall`
-- Tool call repair: auto-fix malformed JSON / missing args / truncated calls
-- Hook system extended: `SessionStart`, `SessionEnd`, `SubagentStop`
-- Context compaction: pair-preserving split (tool-call/result pairs kept intact)
-- Slash commands: 6 built-in commands (`/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate`)
-- Lazy-loaded i18n: 13 language files loaded on demand
-
-### v0.1.23
-
-**Performance & reliability**
-- rAF-batched streaming: chunk updates accumulate and flush at most 60Hz (was per-token setState ~100+Hz)
-- Habit promotion O(1) in-memory index update (was O(skills) disk rescan)
-- Memoized search-highlight RegExp in MessageBubble
-- Strip `<script>` tags in markdown renderer (XSS defense)
-- Localized ErrorBoundary with dev-mode stack trace
-
-### v0.1.22
-
-**Reliability & UX**
-- Credential rotation retry: 429 / 5xx / network → auto retry with next API key (up to 3 attempts) before falling back to another model
-- Full-app ErrorBoundary: sidebar/dialogs/crashes don't blank the entire UI
-- autoMemory sync race fix: debounced sync uses last-args-wins pattern
-- CredentialPool require cached in both adapters (one lookup per process instead of per-request)
-- user_habit ALTER TABLE moved to database.js init (runs once at startup, not on every turn)
-
-### v0.1.21
-
-**Performance**
-- Store: collapse 8+ scattered `get()` calls into a single destructuring
-- chat.handler.js: cache 5 rarely-changing settings — eliminates repeated sql.js reads
-- ChatWindow: StreamingBubble receives isAtBottom prop, skips scroll when reading history
-- database.js: async writeFile (was writeFileSync blocking during streaming)
-
-### v0.1.20
-
-**Performance & fixes**
-- autoMemory.js: in-memory cache with version invalidation
-- database.js: await flushDatabase (was fire-and-forget, could lose data on crash)
-- Move user_habit CREATE TABLE to init (was re-issued every turn)
-- Remove dead CLAUDE_BUDGETS constant
-
-### v0.1.19
-
-**Bug fixes & refactor**
-- **Critical**: MessageBubble search highlight now works for assistant messages
-- ChatWindow search: 200ms debounce
-- DRY up chat.send params (chatSendBase + clearStreamingOnError helpers)
-- Removed duplicate config loading in ChatPage.tsx
-
-### v0.1.18
-
-**Performance**
-- StreamingBubble: rAF-throttled scroll + content-length guard
-- ContextBar: memoized token estimation
-- ChatPage/ChatInput: useMemo for model-group computation
-- Sidebar: date boundaries as timestamps
-- i18n `t()`: fast path for English
-
-### v0.1.17
-
-**Agent & UX**
-- Auto long-term memory + habit learner
-- ChatWindow streaming perf: direct DOM writes
-- toolLoop heartbeat + error classify improvements
 
 ---
 

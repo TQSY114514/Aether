@@ -10,6 +10,12 @@
 
 </div>
 
+<div align="center">
+
+[![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing) [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]() [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)]() [![electron](https://img.shields.io/badge/electron-31-4781ff.svg)]() [![i18n](https://img.shields.io/badge/i18n-15%20languages-blue.svg)]() [![tools](https://img.shields.io/badge/agent-16%20tools-green.svg)]() [![mcp](https://img.shields.io/badge/MCP-supported-purple.svg)]()
+
+</div>
+
 ---
 
 > **状态：测试版（beta）。** AetherAI 是个人/业余项目,能用,但会有粗糙之处。欢迎提 bug——见 [CONTRIBUTING.md](./CONTRIBUTING.md) 和 [SECURITY.md](./SECURITY.md)。
@@ -17,17 +23,40 @@
 
 AetherAI 将多个 LLM 提供商（OpenAI / Claude / DeepSeek / 本地模型 / 任何 OpenAI 兼容端点）统一到一个桌面应用中。所有数据均存储在本地——你的 API 密钥和对话除了发往你所配置的提供商外,绝不会离开你的电脑。
 
+## ⚡ 为什么选择 AetherAI？
+
+| 特性 | AetherAI | ChatGPT Desktop | Claude Code | Continue |
+|------|----------|-----------------|-------------|----------|
+| **本地优先** | 完整本地 SQLite，无云同步 | 少量本地数据 | CLI，配置本地 | 配置本地 |
+| **多提供商切换** | ✅ 对话中切换提供商 | ❌ 仅 OpenAI | ❌ 仅 Anthropic | ✅ 多提供商 |
+| **内置 Agent（工具循环）** | ✅ 16 工具 + 沙箱 + 权限 | ❌ | ✅（工具有限） | ✅ |
+| **多模型竞技场 + ELO** | ✅ 投票排行 | ❌ | ❌ | ❌ |
+| **Skills 系统** | ✅ SKILL.md 格式 | ❌ | ✅ SKILL.md | ✅ |
+| **Hooks（10 个扩展点）** | ✅ 工具前后/压缩/会话等 | ❌ | ✅ | ✅ |
+| **上下文压缩** | ✅ 保留 tool-call/result 对 | ❌ | ❌ | ❌ |
+| **MCP 支持** | ✅ stdio JSON-RPC 2.0 | ❌ | ❌ | ❌ |
+| **Sub-agent 委派** | ✅ 并行 | ❌ | ❌ | ❌ |
+| **自动长期记忆** | ✅ 结构化，时间衰减 | ❌ | ❌ | ❌ |
+| **规划系统** | ✅ 分层任务分解（DS4） | ❌ | ❌ | ❌ |
+| **权限模式** | ✅ 5 档（关闭/只读/询问/自动/Yolo） | ❌ | ✅ | ✅ |
+| **界面语言** | ✅ 15 种含文言文、RTL 阿拉伯语 | 有限 | 英语 | 有限 |
+| **平台** | Windows（macOS/Linux 计划中） | Win/Mac | CLI（跨平台） | VS Code/IDE |
+| **开源** | ✅ MIT | ❌ | ❌ | ✅ MIT |
+
+> AetherAI 集 Claude Code 的 Agent 能力、Continue 的多提供商灵活性于一身，并增加了独特的本地优先桌面体验、竞技场投票、结构化记忆和深度定制——全在一个应用中。
+
+---
+
 ## 📑 Table of Contents
 
 - [✨ 功能特性](#-功能特性)
   - [🖥️ 聊天](#️-chat)
   - [🤖 Agent (函数调用)](#-agent-函数调用)
   - [🔒 隐私](#-privacy)
+- [⚡ 为什么选择 AetherAI](#-为什么选择-aetherai)
 - [🚀 快速开始](#-快速开始)
 - [📁 项目结构](#-项目结构)
-- [🗺️ 路线图](#️-路线图)
 - [🤝 致谢](#-致谢)
-- [📋 Changelog](#-changelog)
 - [📄 许可证](#-许可证)
 
 ---
@@ -125,7 +154,7 @@ app/
 
 ---
 
-## 🗺️ 路线图
+## 🗺️ 
 
 | Milestone | Status | Description |
 |-----------|--------|-------------|
@@ -140,33 +169,31 @@ app/
 
 ## 🤝 致谢
 
-AetherAI 站在这些项目的肩膀上——它们的理念塑造了本项目的架构与交互体验:
+AetherAI 站在这些项目的肩膀上——它们的理念塑造了本项目的架构与交互体验：
 
-- [Claude Code](https://github.com/anthropics/claude-code) — Agent 权限模型、思考强度滑块、工具调用可视化、新会话空状态。
+### Agent 框架（工具循环与 Agent 系统）
+
+- [Claude Code](https://github.com/anthropics/claude-code) — Agent 权限模型、思考强度滑块、工具调用可视化、sub-agent 委派、Hook 系统。
+- [OpenClaw](https://github.com/openclaw/openclaw) — 上下文压缩（保留 tool-call/result 对、保持标识符不变）、循环检测、工具执行模式。
 - [Continue](https://github.com/continuedev/continue) — 以声明式配置作为唯一事实来源、提供商抽象层、函数调用协议。
-- [Dify](https://github.com/langgen/dify) — 多格式提供商归一化范式。
-- [Model Context Protocol](https://modelcontextprotocol.io) — AetherAI 的 Agent 所使用的 MCP 规范。
-- [shadcn/ui](https://github.com/shadcn-ui/ui) — cn() / cva 复制粘贴式组件方法论。
-- [Magic UI](https://github.com/magicuidesign/magicui) — 动画范式(流式文本、微光、模糊渐隐)。
-- [new-api](https://github.com/QuantumNous/new-api) — reasoning-effort 中继转换参考。
-- [OpenClaw](https://github.com/openclaw/openclaw) — README 润色与上手引导灵感。
-- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
-- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent) — 迭代预算模式、结构化长期记忆、自主技能创建。
+- [OpenAI Codex](https://github.com/openai/codex) — 沙箱架构、上下文压缩、工具调用修复、验证停止。
+- [OpenHands](https://github.com/All-Hands-AI/OpenHands) — 多轮 Agent 执行、沙箱化工具执行、Plan→Act→Observe 循环。
+- [Aider](https://github.com/Aider-AI/aider) — 开创了 LLM 编程助手工具循环和 Git 集成模式。
+- [Cline](https://github.com/cline/cline) — IDE 嵌入式 Agent 模式、MCP 工具集成、权限对话框 UX。
+- [DS4](https://github.com/antirez/ds4) — 执行前的分层任务分解。
 
----
+### UI & UX 灵感
 
-## 📋 Changelog
+- [shadcn/ui](https://github.com/shadcn-ui/ui) — `cn()` / `cva` 复制粘贴式组件方法论。
+- [Magic UI](https://github.com/magicuidesign/magicui) — 动画范式（流式文本、微光、模糊渐隐）。
 
-### v0.5.1
+### 基础设施与数据
 
-**Agent system upgrade**
-- Tool execution modes: `parallel` vs `sequential` per-tool (OpenClaw pattern)
-- Tool lifecycle hooks: `prepareArguments` → `beforeToolCall` → execute → `afterToolCall`
-- Tool call repair: auto-fix malformed JSON / missing args / truncated calls
-- Hook system extended: `SessionStart`, `SessionEnd`, `SubagentStop`
-- Context compaction: pair-preserving split (tool-call/result pairs kept intact)
-- Slash commands: 6 built-in commands (`/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate`)
-- Lazy-loaded i18n: 13 language files loaded on demand
+- [Dify](https://github.com/langgenius/dify) — 多格式提供商归一化范式。
+- [Model Context Protocol](https://modelcontextprotocol.io) — AetherAI Agent 所使用的 MCP 规范。
+- [cc-switch](https://github.com/farion1231/cc-switch) — 使用统计仪表盘布局（成本/缓存/趋势/提供商/模型）。
+- [new-api](https://github.com/QuantumNous/new-api) — 思考强度中继转换参考、使用/成本追踪。
 
 ---
 

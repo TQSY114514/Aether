@@ -10,6 +10,12 @@
 
 </div>
 
+<div align="center">
+
+[![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing) [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]() [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)]() [![electron](https://img.shields.io/badge/electron-31-4781ff.svg)]() [![i18n](https://img.shields.io/badge/i18n-15%20languages-blue.svg)]() [![tools](https://img.shields.io/badge/agent-16%20tools-green.svg)]() [![mcp](https://img.shields.io/badge/MCP-supported-purple.svg)]()
+
+</div>
+
 ---
 
 > **Статус: бета.** AetherAI — личный/хобби-проект. Работает, но возможны шероховатости. О багах сообщайте — см. [CONTRIBUTING.md](./CONTRIBUTING.md) и [SECURITY.md](./SECURITY.md).
@@ -25,9 +31,7 @@ AetherAI объединяет несколько провайдеров LLM (Ope
   - [🔒 Конфиденциальность](#-конфиденциальность)
 - [🚀 Быстрый старт](#-быстрый-старт)
 - [📁 Структура проекта](#-структура-проекта)
-- [🗺️ Roadmap](#️-roadmap)
 - [🤝 Благодарности](#-благодарности)
-- [📋 Changelog](#-changelog)
 - [📄 Лицензия](#-лицензия)
 
 ---
@@ -126,19 +130,6 @@ app/
 
 ---
 
-## 🗺️ Roadmap
-
-| Milestone | Status | Description |
-|-----------|--------|-------------|
-| v0.5 — Agent foundation | ✅ | Tool loop, planning, sandbox, permissions, hooks |
-| v0.6 — Memory & Skills | ✅ | Auto memory, habit learner, slash commands, tool repair |
-| v0.7 — Quality & Polish | 🔄 | Error boundaries, perf profiling, test coverage |
-| v0.8 — Multi-model polish | ⬜ | Arena UX, ELO calibration, intent-based routing |
-| v0.9 — Plugins & Extensibility | ⬜ | Skill marketplace, hook sharing, plugin SDK |
-| v1.0 — Stable release | ⬜ | Signed installer, auto-update, changelog generation |
-
----
-
 ## 🤝 Благодарности
 
 AetherAI стоит на плечах этих проектов — их идеи сформировали архитектуру и UX:
@@ -153,21 +144,6 @@ AetherAI стоит на плечах этих проектов — их иде�
 - [OpenClaw](https://github.com/openclaw/openclaw) — доработка README и вдохновение для онбординга.
 - [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
 - [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
-
----
-
-## 📋 Changelog
-
-### v0.5.1
-
-**Agent system upgrade**
-- Tool execution modes: `parallel` vs `sequential` per-tool (OpenClaw pattern)
-- Tool lifecycle hooks: `prepareArguments` → `beforeToolCall` → execute → `afterToolCall`
-- Tool call repair: auto-fix malformed JSON / missing args / truncated calls
-- Hook system extended: `SessionStart`, `SessionEnd`, `SubagentStop`
-- Context compaction: pair-preserving split (tool-call/result pairs kept intact)
-- Slash commands: 6 built-in commands (`/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate`)
-- Lazy-loaded i18n: 13 language files loaded on demand
 
 ---
 
