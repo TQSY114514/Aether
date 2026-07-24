@@ -669,7 +669,6 @@ function listAgentCheckpoints(sessionId, messageId = null) {
   }
   return rows
 }
-}
 function getAuditLog(sessionId, limit = 50) {
   const stmt = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?')
   stmt.bind([sessionId, limit])
