@@ -186,7 +186,7 @@ function setupIpcHandlers() {
   registerConfigHandlers(ipcMain, db)
   registerMcpHandlers(ipcMain, db)
   registerAgentHandlers(ipcMain, db)
-  registerSkillsHandlers(ipcMain)
+  registerSkillsHandlers(ipcMain, db)
   const { registerUsageHandlers } = require('./ipc/usage.handler')
   registerUsageHandlers(ipcMain, db)
 }

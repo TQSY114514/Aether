@@ -143,6 +143,100 @@ class ModelRouter {
   }
 }
 
+// ─── Explainable Routing ──────────────────────────────────────────────────
+
+const TASK_TO_INTENT = {
+  coding: 'coding', debug: 'coding', reasoning: 'general',
+  summarization: 'summary', creative: 'general',
+  vision: 'general', translation: 'translation', math: 'math',
+  chitchat: 'general',
+}
+
+/**
+ * Route with explanation — returns the winning model plus a human-readable
+ * rationale that combines heuristic fit + Arena ELO data when available.
+ *
+ * @param {{ allModels, userMessage, useTools, intent, eloData }} opts
+ *   eloData: optional Map/obj keyed by model_id → { score, win_count, total_count }
+ * @returns {{ model, reason, heuristicScores, eloScore, rank, confidence } | null}
+ */
+function routeWithExplanation({ allModels, userMessage, useTools, intent, eloData }) {
+  if (!allModels || !allModels.length) return null
+
+  try {
+    const task = classifyTask(userMessage)
+    const taskType = intent || task.primary
+    const confidence = task.confidence
+
+    // Score every model on heuristic (family × task-type table)
+    const ranked = allModels
+      .map(m => {
+        const hScore = scoreModel(m, taskType)
+        const elo = eloData?.[m.id]
+        // Blend: heuristic is primary signal; ELO acts as a tiebreaker / confidence boost
+        // When ELO data is available and substantial (≥5 matches), weight it at 30%
+        const eloWeight = (elo && elo.total_count >= 5) ? 0.3 : 0
+        const blended = hScore * (1 - eloWeight) + Math.min(100, (elo?.score ?? 1000) / 20) * eloWeight
+        return {
+          model: m, hScore, eloScore: elo?.score ?? null,
+          eloWins: elo?.win_count ?? 0, eloTotal: elo?.total_count ?? 0,
+          blended, family: detectFamily(m.model_name || m.id || ''),
+        }
+      })
+      .filter(s => s.hScore > 0)
+      .sort((a, b) => b.blended - a.blended)
+
+    if (!ranked.length) return null
+
+    // When tools are on, prefer reasoning-capable family among top scorers
+    let winner = ranked[0]
+    if (useTools) {
+      const reasoningPick = ranked.find(s =>
+        REASONING_FAMILIES.has(s.family) && s.hScore >= ranked[0].hScore * 0.8
+      )
+      if (reasoningPick) winner = reasoningPick
+    }
+
+    // Build human-readable rationale
+    const parts = []
+    const taskLabel = { coding: 'Coding', debug: 'Debug', reasoning: 'Reasoning',
+      summarization: 'Summarization', creative: 'Creative', vision: 'Vision',
+      translation: 'Translation', math: 'Math', chitchat: 'Chat', general: 'General' }[taskType] || taskType
+
+    parts.push(`Task: ${taskLabel}${confidence < 0.5 ? ' (low confidence)' : ''}`)
+    parts.push(`Heuristic: ${winner.hScore}/100 as ${winner.family}`)
+
+    if (winner.eloScore !== null) {
+      if (winner.eloTotal >= 5) {
+        parts.push(`Arena ELO: ${winner.eloScore.toFixed(1)} (${winner.eloWins}/${winner.eloTotal})`)
+      } else {
+        parts.push(`Arena ELO: ${winner.eloScore.toFixed(1)} (insufficient data)`)
+      }
+    }
+
+    if (useTools) parts.push('Tools active: reasoning-capable family preferred')
+    if (ranked.length > 1) {
+      const second = ranked[1]
+      const gap = winner.blended - second.blended
+      if (gap < 5) parts.push(`Close race: +${gap.toFixed(1)} over ${second.model.model_name}`)
+    }
+
+    const secondary = task.secondary.filter(t => t !== taskType).slice(0, 2)
+    if (secondary.length) parts.push(`Also: ${secondary.join(', ')}`)
+
+    return {
+      model: winner.model,
+      reason: parts.join(' · '),
+      heuristicScores: ranked.map(r => ({ modelId: r.model.id, modelName: r.model.model_name,
+        family: r.family, heuristic: r.hScore, eloScore: r.eloScore, blended: r.blended })),
+      eloScore: winner.eloScore,
+      confidence,
+    }
+  } catch {
+    return null
+  }
+}
+
 // ─── Public API (backward-compatible) ────────────────────────────────────
 
 /**
@@ -158,4 +252,27 @@ function suggestModel({ allModels, userMessage, useTools, intent }) {
   }
 }
 
-module.exports = { suggestModel, classifyTask, detectFamily, ModelRouter }
+/**
+ * Enhanced suggest with ELO data and explainable rationale.
+ * @param {{ allModels, userMessage, useTools, intent, eloData }}
+ * @returns {{ suggestedModelId, reason, heuristicScores, confidence } | null}
+ */
+function suggestModelExplained({ allModels, userMessage, useTools, intent, eloData }) {
+  try {
+    const result = routeWithExplanation({ allModels, userMessage, useTools, intent, eloData })
+    if (!result) return null
+    return {
+      suggestedModelId: result.model.id,
+      reason: result.reason,
+      heuristicScores: result.heuristicScores,
+      confidence: result.confidence,
+    }
+  } catch {
+    return null
+  }
+}
+
+module.exports = {
+  suggestModel, suggestModelExplained, routeWithExplanation,
+  classifyTask, detectFamily, ModelRouter, scoreModel, FAMILY_SCORES,
+}

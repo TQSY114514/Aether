@@ -897,7 +897,7 @@ function ensureToolCallListener() {
   if (_toolCallListenerInstalled) return
   _toolCallListenerInstalled = true
   window.electronAPI.chat.onToolCall(({ messageId, sessionId, tool }) => {
-    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, risk: tool.risk, latencyMs: tool.latencyMs, checkpointId: tool.checkpointId }
+    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, failureKind: (tool as any).failure_kind ?? null, recoveryHint: (tool as any).recovery_hint ?? null, risk: tool.risk, latencyMs: tool.latencyMs, checkpointId: (tool as any).checkpointId ?? null }
     useStore.setState((s) => {
       const existing = s.toolCallsByMessage[messageId] || []
       // Append if new, replace if result changed (for live streaming)

@@ -481,7 +481,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 
   // Model suggestion (Claude Code-style): given a user message and the full model
   // list, return the best model id for the task. Falls back to the user's current
-  // model if no better match is found.
+  // model if no better match is found. Includes explainable rationale combining
+  // heuristic family fit with Arena ELO data when available.
   ipcMain.handle('model:suggest', (_e, { sessionId, userMessage }) => {
     try {
       const session = db.getSession(sessionId)
@@ -491,10 +492,20 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         return p && p.enabled
       })
       const intent = db.classifyIntent(userMessage)
-      const suggested = modelAdvisor.suggestModel({ allModels, userMessage, useTools: true, intent })
-      return { suggestedModelId: suggested?.id || currentModelId, reason: suggested ? suggested.model_name : 'current' }
+      // Fetch ELO data for all models — keyed by model_id for the explainable router
+      const scores = db.getModelScores()
+      const eloData = {}
+      for (const s of scores) {
+        if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 }
+      }
+      const result = modelAdvisor.suggestModelExplained({ allModels, userMessage, useTools: true, intent, eloData })
+      if (result) {
+        return { suggestedModelId: result.suggestedModelId, reason: result.reason,
+          heuristicScores: result.heuristicScores, confidence: result.confidence }
+      }
+      return { suggestedModelId: currentModelId, reason: 'current', confidence: 0 }
     } catch {
-      return { suggestedModelId: null, reason: 'error' }
+      return { suggestedModelId: null, reason: 'error', confidence: 0 }
     }
   })
 

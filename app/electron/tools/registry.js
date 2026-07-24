@@ -556,11 +556,14 @@ const TOOLS = [
       },
       required: ['content'],
     },
-    run: (args) => {
+    run: (args, ctx) => {
       const content = String(args.content || '')
       if (!content) throw new Error('content is required')
       const db = require('../database')
-      db.addMemory({ content })
+      const sourceSessionId = ctx?.sessionId || null
+      db.addMemoryWithProvenance(content, 'fact', sourceSessionId)
+      // Record skill usage if this was triggered via a skill
+      try { if (ctx?.skillName) require('../llm/skills').recordSkillUse(ctx.skillName) } catch {}
       return `saved to memory (${content.length} chars)`
     },
   },

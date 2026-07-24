@@ -6,7 +6,7 @@
 
 **A local-first, multi-model desktop AI workbench · Electron + React + TypeScript**
 
-[![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing) [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square)](https://github.com/TQSY114514/AetherAI/issues) [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]() [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)]() [![electron](https://img.shields.io/badge/electron-31-4781ff.svg)]() [![i18n](https://img.shields.io/badge/i18n-15%20languages-blue.svg)]() [![tools](https://img.shields.io/badge/agent-16%20tools-green.svg)]() [![mcp](https://img.shields.io/badge/MCP-supported-purple.svg)]()
+[![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI/network/members)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing) [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](#install) [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](#install) [![electron](https://img.shields.io/badge/electron-31-4781ff.svg)](#install) [![version](https://img.shields.io/badge/version-v0.5.0-blue.svg)](./CHANGELOG.md) [![i18n](https://img.shields.io/badge/i18n-15%20languages-blue.svg)](#customization) [![agent tools](https://img.shields.io/badge/agent-16%20tools-green.svg)](#agent-function-calling) [![mcp](https://img.shields.io/badge/MCP-supported-purple.svg)](#skills--extensibility)
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
 
@@ -128,14 +128,14 @@ AetherAI combines several capabilities that are typically spread across multiple
 
 ## 🖼️ Screenshots / GIFs
 
-> Media placeholders use repo-relative paths. Add captures under `assets/screenshots/` when available.
+> Placeholder table. Capture screenshots under `assets/screenshots/` and update the paths.
 
 | Flow | Preview |
 |------|---------|
-| Chat streaming | `assets/screenshots/chat-streaming.gif` — TODO: capture concurrent token streaming in a chat session. |
-| Agent tool execution | `assets/screenshots/agent-tool-execution.gif` — TODO: capture Plan→Act→Observe with tool confirmations/results. |
-| Arena voting | `assets/screenshots/arena-voting.gif` — TODO: capture multi-model responses, voting, and ELO update. |
-| Provider settings | `assets/screenshots/provider-settings.png` — TODO: capture provider creation, model fetch, and API format selection. |
+| Chat streaming | `assets/screenshots/chat-streaming.gif` — TODO |
+| Agent tool execution | `assets/screenshots/agent-tool-execution.gif` — TODO |
+| Arena voting | `assets/screenshots/arena-voting.gif` — TODO |
+| Provider settings | `assets/screenshots/provider-settings.png` — TODO |
 
 ---
 

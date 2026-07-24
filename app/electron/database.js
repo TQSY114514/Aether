@@ -151,9 +151,19 @@ async function initDatabase() {
 
   // Agent checkpoints — save/restore snapshots of long agent tasks.
   try { require('./llm/checkpointManager').createTable(db) } catch {}
+  initSkillSuccessTable()
 
   // Habit learner: tracks recurring user preferences.
   db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
+
+  // Skill success tracking: records how often each skill succeeds or fails.
+  db.run(`CREATE TABLE IF NOT EXISTS skill_success (
+    name TEXT PRIMARY KEY,
+    total_uses INTEGER NOT NULL DEFAULT 0,
+    successes INTEGER NOT NULL DEFAULT 0,
+    last_result INTEGER DEFAULT 1,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`)
 
   // Per-provider credential pool — multiple API keys per provider with rotation
   // (least-recently-used) and backoff (cooldown on 429, disabled on 401).
@@ -535,6 +545,65 @@ function incrementMemoryAccess(id) {
   try { db.run('UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?', [localNow(), id]) } catch {}
 }
 
+// Memory conflicts: return pairs of conflicting memories for the UI.
+function getMemoryConflicts() {
+  try {
+    const stmt = db.prepare('SELECT m.*, c.content as conflicting_content, c.type as conflicting_type FROM memory m JOIN memory c ON c.id = m.conflicts_with WHERE m.conflicts_with IS NOT NULL ORDER BY m.created_at DESC')
+    const rows = allRows(stmt)
+    return rows.map(r => ({ memoryId: r.id, content: r.content, type: r.type, conflictingId: r.conflicts_with, conflictingContent: r.conflicting_content, conflictingType: r.conflicting_type }))
+  } catch { return [] }
+}
+// Resolve a conflict by keeping the newer entry and removing the older.
+function resolveMemoryConflict(keepId, removeId) {
+  try { db.run('DELETE FROM memory WHERE id = ?', [removeId]) } catch {}
+  try { db.run('UPDATE memory SET conflicts_with = NULL WHERE id = ?', [keepId]) } catch {}
+  saveDatabase()
+}
+
+// ===== Skill Usage & Success Rate =====
+function recordSkillResult(name, success) {
+  try {
+    // skill_success table: name | total_uses | successes | last_result (1/0)
+    db.run('INSERT INTO skill_success (name, total_uses, successes, last_result) VALUES (?, 1, ?, ?) ON CONFLICT(name) DO UPDATE SET total_uses=total_uses+1, successes=successes+?, last_result=?, updated_at=CURRENT_TIMESTAMP',
+      [name, success ? 1 : 0, success ? 1 : 0, success ? 1 : 0])
+  } catch {}
+}
+function getSkillStats() {
+  try {
+    const stmt = db.prepare('SELECT name, total_uses, successes, last_result, updated_at FROM skill_success ORDER BY total_uses DESC')
+    const rows = allRows(stmt)
+    return rows.map(r => ({ name: r.name, totalUses: r.total_uses || 0, successes: r.successes || 0, lastResult: !!r.last_result, successRate: r.total_uses > 0 ? ((r.successes || 0) / r.total_uses) : 0, updatedAt: r.updated_at }))
+  } catch { return [] }
+}
+
+// ===== Skill Success Table Init =====
+// Called from database init (guarded — idempotent).
+function initSkillSuccessTable() {
+  try { db.run(`CREATE TABLE IF NOT EXISTS skill_success (
+    name TEXT PRIMARY KEY,
+    total_uses INTEGER NOT NULL DEFAULT 0,
+    successes INTEGER NOT NULL DEFAULT 0,
+    last_result INTEGER DEFAULT 1,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`) } catch {}
+}
+
+// ===== Auto-draft skill from recurring patterns =====
+// When a skill succeeds multiple times for similar tasks, generate a draft
+// SKILL.md for the user to review.
+function autoDraftSkill(name, body, description) {
+  try {
+    const { app } = require('electron')
+    const dir = path.join(app.getPath('userData'), 'skills', 'drafts')
+    fs.mkdirSync(dir, { recursive: true })
+    const fp = path.join(dir, `${name}.md`)
+    if (!fs.existsSync(fp)) {
+      const md = `---\nname: ${name}\ndescription: ${description || 'Auto-drafted skill'}\nauto_draft: true\n---\n\n${body}\n\n(This skill was auto-drafted from successful usage. Edit or delete it via Settings → Skills.)`
+      fs.writeFileSync(fp, md, 'utf8')
+    }
+  } catch {}
+}
+
 // ===== Agent Audit Log =====
 function addAuditLog({ sessionId, turnId, payload }) {
   db.run('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)',
@@ -755,7 +824,9 @@ module.exports = {
   getSetting, setSetting, getAllSettings,
   getModelScores, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
-  getMemories, addMemory, updateMemory, deleteMemory,
+  getMemories, addMemory, addMemoryWithProvenance, updateMemory, deleteMemory, incrementMemoryAccess,
+  getMemoryConflicts, resolveMemoryConflict,
+  recordSkillResult, getSkillStats,
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
   deleteAssistantAfterLastUser,
   deleteMessagesAfter,
