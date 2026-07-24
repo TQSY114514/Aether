@@ -29,6 +29,7 @@ const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of bu
 const RECENT_WINDOW = 8           // messages always kept verbatim at the tail
 const SUMMARIZATION_OVERHEAD = 2048 // reserve for the summary prompt + system + reply
 const SUMMARIZATION_TIMEOUT_MS = 15000 // guard timeout for the summarization HTTP call
+const FETCH_CONNECT_TIMEOUT_MS = 3000   // short guard: reject before the test framework times out
 
 // Estimate token count for a single message. Content may be a string or a
 // multimodal parts array (OpenAI shape). Image parts cost nothing here — we
@@ -146,22 +147,30 @@ async function summarizeHistory({ provider, model, history, signal }) {
   // Guard against hanging forever when the provider is unreachable (e.g. tests).
   const ctrl = new AbortController()
   const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
+  // Promise.race safety net: AbortController does not abort DNS resolution in
+  // Node.js fetch, so a short Promise.race ensures the call fails fast even
+  // when the signal is ignored at the transport layer.
+  const fetchPromise = completeChat({
+    provider, model,
+    messages: [
+      { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
+      { role: 'user', content: transcript.slice(0, 24000) }, // cap the summarizer input
+    ],
+    signal: ctrl.signal,
+    options: { max_tokens: 600, temperature: 0.2 },
+  })
+  let text
   try {
-    const text = await completeChat({
-      provider, model,
-      messages: [
-        { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
-        { role: 'user', content: transcript.slice(0, 24000) }, // cap the summarizer input
-      ],
-      signal: ctrl.signal,
-      options: { max_tokens: 600, temperature: 0.2 },
-    })
+    text = await Promise.race([
+      fetchPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('summarize fetch timeout')), FETCH_CONNECT_TIMEOUT_MS)),
+    ])
     clearTimeout(guard)
-    return (text || '').trim()
   } catch (e) {
     clearTimeout(guard)
     throw e
   }
+  return (text || '').trim()
 }
 
 module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex }
