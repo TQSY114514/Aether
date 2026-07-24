@@ -192,13 +192,18 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     for (const entry of entries.slice(0, 5)) {
       const key = `${entry.type}:${entry.content.toLowerCase()}`
       if (recentKeys.has(key)) continue
+      // Conflict detection: if a similar fact already exists in the opposite
+      // direction, the older entry is marked as conflicting.
+      if (entry.type === 'fact') {
+        try { detectConflict(db, entry.content, 'fact') } catch {}
+      }
       if (entry.type === 'relation') {
         try {
-          db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target) VALUES (?, ?, ?, ?, ?)',
-            [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2])
+          db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, source_turn_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, provider?.id || null, null])
         } catch {}
       } else {
-        try { db.addMemory({ content: entry.content, type: entry.type }) } catch {}
+        try { db.addMemoryWithProvenance(entry.content, entry.type, provider?.id || null) } catch {}
       }
     }
     _memV++ // invalidate prefetch cache
@@ -222,6 +227,30 @@ function search(db, query, limit = 20) {
     .slice(0, limit)
 }
 
+// ─── Conflict Detection ─────────────────────────────────────────────────────
+// Detect potential conflicts: if we already have a similar memory in the
+// opposite direction (e.g. "Alice prefers Python" vs "Alice prefers JavaScript"),
+// mark the older one as conflicting.
+
+function detectConflict(db, newContent, newType) {
+  try {
+    if (!db.allRows) return null
+    const existing = db.allRows('SELECT id, content, type FROM memory WHERE type = ? ORDER BY created_at ASC LIMIT 20', [newType]) || []
+    if (existing.length === 0) return null
+    const nkw = new Set(keywords(newContent))
+    for (const row of existing) {
+      const ekw = new Set(keywords(row.content))
+      let overlap = 0
+      for (const k of nkw) if (ekw.has(k)) overlap++
+      if (overlap >= 2 && row.content !== newContent) {
+        try { db.run('UPDATE memory SET conflicts_with = ? WHERE id = ?', [row.id, row.id]) } catch {}
+        return { olderId: row.id, olderContent: row.content, reason: `相同主题但不同内容: "${row.content}" vs "${newContent}"` }
+      }
+    }
+  } catch {}
+  return null
+}
+
 // ─── Memory Pruning ─────────────────────────────────────────────────────────
 // Remove stale memories (old, low-relevance) to keep the store lean.
 // Called occasionally; not on every sync (too expensive).
@@ -237,4 +266,4 @@ function prune(db, maxAgeDays = 90) {
   } catch {}
 }
 
-module.exports = { prefetch, sync, search, prune, keywords, EXTRACTION_PROMPT }
+module.exports = { prefetch, sync, search, prune, keywords, EXTRACTION_PROMPT, detectConflict }
