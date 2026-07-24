@@ -77,12 +77,18 @@ function prefetch(db, userMessage) {
     .map(m => {
       const kwScore = score(m.content, qkw)
       // Weighted score: base keyword hits + recency bonus + access_count bonus
+      // + time-decay factor (memories not accessed recently fade in priority).
       let w = kwScore
       if (kwScore > 0) {
         const ageDays = (Date.now() - new Date(m.created_at || Date.now()).getTime()) / 86400000
         const recencyBonus = Math.max(0, 1 - ageDays / 90) * 0.5
         const accessBonus = Math.log(1 + (m.access_count || 0)) * 0.3
-        w = kwScore + recencyBonus + accessBonus
+        // Time-decay: memories not accessed in 30+ days lose priority.
+        // last_accessed_at defaults to created_at if never fetched.
+        const lastAccess = m.last_accessed_at ? new Date(m.last_accessed_at).getTime() : new Date(m.created_at || Date.now()).getTime()
+        const daysSinceAccess = (Date.now() - lastAccess) / 86400000
+        const decayFactor = Math.max(0.1, 1 - daysSinceAccess / 180) // half-life ~180 days
+        w = (kwScore + recencyBonus + accessBonus) * decayFactor
         // Record access for decay tracking.
         try { db.incrementMemoryAccess(m.id) } catch {}
       }
@@ -222,8 +228,12 @@ function search(db, query, limit = 20) {
 
 function prune(db, maxAgeDays = 90) {
   try {
-    const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString()
-    db.run('DELETE FROM memory WHERE created_at < ?', [cutoff])
+    // Two-pronged prune:
+    // 1. Never-accessed memories older than maxAgeDays are safe to drop.
+    // 2. All memories older than 365 days are pruned regardless of access
+    //    (prevents unbounded growth from very old, irrelevant entries).
+    db.run('DELETE FROM memory WHERE access_count = 0 AND created_at < ?', [new Date(Date.now() - maxAgeDays * 86400000).toISOString()])
+    db.run('DELETE FROM memory WHERE created_at < ?', [new Date(Date.now() - 365 * 86400000).toISOString()])
   } catch {}
 }
 

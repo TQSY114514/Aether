@@ -28,8 +28,8 @@ function registerAgentHandlers(ipcMain, db) {
       return { success: true, root: v || getWorkspaceRoot() }
     }
     // Global workspace.
-    if (v) db.setSetting('agent_workspace_root', v)
-    else db.setSetting('agent_workspace_root', '')
+    if (v) await db.setSetting('agent_workspace_root', v)
+    else await db.setSetting('agent_workspace_root', '')
     setWorkspaceRoot(v || null)
     return { success: true, root: getWorkspaceRoot() }
   })

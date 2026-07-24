@@ -15,6 +15,7 @@ const { completeChatMessage } = require('./providerAdapter')
 const { safeParseToolCallArgs } = require('./toolArgs')
 const { applyMiddleware, enrichWithSummary } = require('./toolResultMiddleware')
 const { classifyError } = require('./errorClassify')
+const toolCache = require('./toolCache')
 // Use the MCP-aware merged registry so the agent can call both built-in tools
 // and any connected MCP server's tools. Falls back to the plain built-in
 // registry if the manager isn't loadable for some reason.
@@ -55,17 +56,31 @@ class IterationBudget {
 
 // System prompt: Plan→Act→Observe rhythm (coding-agent style).
 // References `plan_progress` when the model has an active plan.
-const AGENT_SYSTEM_PROMPT = `You are an agent with access to tools. Work through the user's request step by step:
+const AGENT_SYSTEM_PROMPT = `You are an autonomous coding agent. Work through the user's request systematically:
 1. Plan: briefly reason about what to do next.
 2. Act: call a tool (or several) to gather information or make a change.
 3. Observe: read the tool results, then decide the next step.
-Call tools only when they help. When you have the final answer, respond in plain text with no tool calls. Prefer read-only tools (read_file, list_dir, grep_search, glob_find, web_search) before making changes. Be concise in your reasoning.
+
+EFFICIENCY RULES:
+- Do NOT repeat a tool call with identical arguments — if it failed once, try a different approach or ask the user.
+- Combine independent read operations into parallel calls (read_file, glob_find, grep_search, web_search, web_fetch).
+- Prefer narrow, focused reads over dumping large files. Use offset/limit on read_file.
+- If a tool result is truncated, decide whether you have enough or need a more targeted query.
+- After 3 consecutive tool errors, summarize what you've learned and ask the user for guidance — don't loop forever.
+- Keep tool arguments concise. Large data goes in files, not in tool calls.
+
+OUTPUT FORMAT:
+- Final answers: use clear sections with headings, bullet points, and code blocks.
+- When showing code, use proper language tags.
+- If you couldn't complete something, say so explicitly and explain what's blocking you.
+
 For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along. When an execution plan is shown, call plan_progress with the task id and a brief result as you finish each step.
 Parallelism: you may call multiple INDEPENDENT tools in one round (they run concurrently). For larger independent sub-tasks (e.g. researching 3 unrelated files), call delegate_task with an array of task descriptions — sub-agents run them in parallel and return combined results.`
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, onBudgetUpdate, onAudit }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, onBudgetUpdate, onAudit, onVerification }) {
+  toolCache.clear()
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
   let totalChars = 0
@@ -79,6 +94,36 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   let planToolsPayload = []
   // Collect all tool calls for the audit log.
   const auditTrail = []
+
+  // Verification stop: after the agent loop finishes, optionally ask the model
+  // to review its own tool-call trace for correctness (Codex-inspired).
+  // Catches subtle errors: wrong file edited, missed requirement, incomplete task.
+  async function runVerification() {
+    if (!onVerification || auditTrail.length === 0) return null
+    try {
+      const toolTrace = auditTrail.map((tc, i) =>
+        `${i + 1}. ${tc.name}(${JSON.stringify(tc.args).slice(0, 200)}) → ${tc.error ? 'ERROR: ' + tc.error.slice(0, 100) : 'OK'}`).join('\n')
+      const verifyPrompt = `You just completed a task using tools. Review your tool-call trace below and answer: did you successfully complete ALL requirements? Are there any errors, missed steps, or incomplete results?
+
+Tool calls:
+${toolTrace}
+
+Reply in this format:
+- STATUS: COMPLETE or INCOMPLETE
+- ISSUES: list any problems found, or "none"
+- SUMMARY: brief summary of what was accomplished`
+
+      const result = await completeChatMessage({
+        provider, model,
+        messages: [...convo.filter(m => m.role !== 'system'), { role: 'user', content: verifyPrompt }],
+        signal,
+        options: { max_tokens: 512, ...options },
+      })
+      return result?.content || null
+    } catch {
+      return null // verification is best-effort, never block the reply
+    }
+  }
 
   // Planning gate: if the request is complex enough, generate a plan first.
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
@@ -188,8 +233,17 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           }
           if (!entry.error) {
             const t0 = Date.now()
-            const r = await runToolWithTimeout(tool, args, { ...toolCtx, agentMode: effectiveMode }, signal)
-            entry.latencyMs = Date.now() - t0
+            // Tool cache: skip execution if we already have a result for this
+            // exact call in this turn (idempotent read-only tools only).
+            let r
+            const cached = toolCache.get(fn.name, args)
+            if (cached.hit) {
+              r = { result: cached.result }
+            } else {
+              r = await runToolWithTimeout(tool, args, { ...toolCtx, agentMode: effectiveMode }, signal)
+              if (!r.error) toolCache.set(fn.name, args, r.result)
+            }
+            entry.latencyMs = cached.hit ? 0 : Date.now() - t0
             if (r.error) {
               entry.error = r.error
               try { await hooks.runHooks('ToolError', { toolName: fn.name, args, error: r.error, sessionId, messageId: tc.id }) } catch {}
@@ -269,12 +323,27 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     if (onAudit) {
       try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus, planId: plan?.id, planStatus: plan?.tasks?.map(t => t.status) }) } catch {}
     }
+    // Verification stop: after a successful loop exit, review tool calls.
+    if (finalStatus === 'success' && auditTrail.length > 0) {
+      const verification = await runVerification()
+      if (verification && !verification.includes('STATUS: COMPLETE')) {
+        return `${msg.content || ''}\n\n${verification}`
+      }
+    }
     return msg.content || ''
   }
   try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
   // Audit log: record the complete agent turn.
   if (onAudit) {
     try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'budget_exhausted', planId: plan?.id, planStatus: plan?.tasks.map(t => t.status) }) } catch {}
+  }
+  // Verification stop: also run on budget exhaustion if any tools were called.
+  if (auditTrail.length > 0) {
+    const verification = await runVerification()
+    if (verification) {
+      const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
+      return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}\n\n${verification}`
+    }
   }
   const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}`

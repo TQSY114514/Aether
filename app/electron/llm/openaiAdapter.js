@@ -45,6 +45,7 @@ function normalizeMessages(messages) {
 // "blank output" for the main reply while non-streaming calls (title, arena)
 // worked fine. Usage stats are collected on the non-streaming paths instead.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
+  const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
@@ -55,8 +56,6 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     const errBody = await res.text().catch(() => '')
     const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
     err.status = res.status
-    // On 429, mark the current credential as cooling down so the fallback
-    // loop can retry with a different key if the provider has a multi-key pool.
     if (err.status === 429 && provider.id != null) {
       try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
     }
@@ -67,6 +66,7 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
   const decoder = new TextDecoder()
   let buffer = ''
   streamChat.usage = null
+  let _thinkingText = ''
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -74,16 +74,24 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     const lines = buffer.split('\n')
     buffer = lines.pop() || '' // keep the partial last line
     for (const line of lines) {
-      const { delta, usage } = parseSSELine(line)
+      const { delta, reasoning, usage } = parseSSELine(line)
       if (usage) streamChat.usage = usage
-      if (delta) yield delta
+      if (delta) { yield delta }
+      if (reasoning) {
+        _thinkingText += reasoning
+        try { onThinking?.(_thinkingText) } catch {}
+      }
     }
   }
   // Flush any trailing buffered line.
   if (buffer.startsWith('data: ')) {
-    const { delta, usage } = parseSSELine(buffer)
+    const { delta, reasoning, usage } = parseSSELine(buffer)
     if (usage) streamChat.usage = usage
-    if (delta) yield delta
+    if (delta) { yield delta }
+    if (reasoning) {
+      _thinkingText += reasoning
+      try { onThinking?.(_thinkingText) } catch {}
+    }
   }
 }
 
@@ -96,8 +104,12 @@ function parseSSELine(line) {
   if (data === '[DONE]' || data === '') return {}
   try {
     const parsed = JSON.parse(data)
+    const delta = parsed.choices?.[0]?.delta || {}
+    const reasoning = delta.reasoning_content || delta.reasoning || ''
+    const content = delta.content || ''
     return {
-      delta: parsed.choices?.[0]?.delta?.content || '',
+      delta: content,
+      reasoning: reasoning || undefined,
       usage: parsed.usage ? normalizeUsage(parsed.usage) : null,
     }
   } catch {

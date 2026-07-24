@@ -80,6 +80,10 @@ interface AppState {
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).
   todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
+  // Per-message thinking/reasoning blocks from extended-thinking models (Claude
+  // extended thinking, OpenAI o-series reasoning_content). Accumulated as
+  // deltas arrive during streaming; cleared when the stream ends.
+  thinkingBlocksByMessage: Record<number, string>
   // Inline status lines per message (compaction notice, budget-exhausted, etc.).
   statusLinesByMessage: Record<number, string[]>
   // Context budget indicator text (shown in status bar).
@@ -231,6 +235,7 @@ export const useStore = create<AppState>((set, get) => ({
   toolCallsByMessage: {},
   planStepsByMessage: {},
   todosByMessage: {},
+  thinkingBlocksByMessage: {},
   statusLinesByMessage: {},
   contextBudgetText: null,
   pendingQuestions: [],
@@ -876,6 +881,7 @@ export function ensureAllListeners() {
   ensureToolCallListener()
   ensureStatusListener()
   ensureHabitSuggestionListener()
+  ensureThinkingListener()
 }
 // Session back/forward nav guard: set true during goBack/goForward so
 // selectSession doesn't push a duplicate entry into history.
@@ -1002,6 +1008,23 @@ function ensureHabitSuggestionListener() {
   window.electronAPI.chat.onHabitSuggestion?.((habits) => {
     useStore.setState((s) => ({
       proposedHabits: [...s.proposedHabits, ...habits.filter(h => !s.proposedHabits.some(ph => ph.key === h.key))],
+    }))
+  })
+}
+
+// Global thinking chunk listener: accumulates extended-thinking / reasoning
+// content per message so MessageBubble can render it as a collapsible block.
+let _thinkingListenerInstalled = false
+function ensureThinkingListener() {
+  if (_thinkingListenerInstalled) return
+  _thinkingListenerInstalled = true
+  window.electronAPI.chat.onThinkingChunk?.(({ messageId, delta }) => {
+    if (!messageId || !delta) return
+    useStore.setState((s) => ({
+      thinkingBlocksByMessage: {
+        ...s.thinkingBlocksByMessage,
+        [messageId]: (s.thinkingBlocksByMessage[messageId] || '') + delta,
+      },
     }))
   })
 }

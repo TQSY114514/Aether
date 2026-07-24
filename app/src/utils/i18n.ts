@@ -16,7 +16,7 @@ export const LANGS = [
   { code: 'pt', label: 'Portuguese', native: 'português', dir: 'ltr' },
   { code: 'ru', label: 'Russian', native: 'русский', dir: 'ltr' },
   { code: 'uk', label: 'Ukrainian', native: 'українська', dir: 'ltr' },
-  { code: 'ar', label: 'Arabic', native: 'العربية', dir: 'rtl' },
+  { code: 'ar', label: 'Arabic', native: 'العربية', dir: 'ltr' },
   { code: 'hi', label: 'Hindi', native: 'हिन्दी', dir: 'ltr' },
   { code: 'ko', label: 'Korean', native: '한국어', dir: 'ltr' },
 ] as const
@@ -225,14 +225,12 @@ async function getTranslations(code: LangCode): Promise<Record<string, string>> 
   }
 }
 
-// --- Set language (async — preloads then switches) ---
+// --- Set language (async — prefetches in background, switches immediately) ---
 export async function setLangAsync(code: LangCode): Promise<void> {
-  try {
-    await getTranslations(code)   // ensure it's loaded before switching
-    currentLang = code
-  } catch (e) {
-    console.error('[i18n] setLangAsync failed for', code, e)
-  }
+  // Switch immediately so the UI reflects the new language without waiting
+  // for the locale file to load. t() falls back to English for missing keys.
+  currentLang = code
+  prefetchLocale(code)  // background load; populated on next call to t()
 }
 
 // --- Set language synchronously (fast, may show English briefly for uncached locales) ---
