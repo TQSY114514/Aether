@@ -20,27 +20,20 @@
 
 Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — into one desktop app. An agent that reads/writes files and runs commands, a workspace sandbox, multi-model arena with ELO voting, skills, and 15 UI languages. Everything stored locally: API keys and conversations never leave your machine except to the providers you configure.
 
-## ⚡ Why AetherAI?
+## ⚡ What makes AetherAI different
 
-| Feature | AetherAI | ChatGPT Desktop | Claude Code | Continue |
-|---------|----------|-----------------|-------------|----------|
-| **Local-first** | Full local SQLite, no cloud sync | Minimal local data | CLI, config local | Config local |
-| **Multi-provider in one chat** | ✅ Switch providers mid-conversation | ❌ OpenAI only | ❌ Anthropic only | ✅ Multi-provider |
-| **Built-in Agent (tool loop)** | ✅ 16 tools + sandbox + permissions | ❌ | ✅ (limited tools) | ✅ |
-| **Multi-model Arena + ELO** | ✅ Vote & rank models | ❌ | ❌ | ❌ |
-| **Skills system** | ✅ SKILL.md format | ❌ | ✅ SKILL.md | ✅ |
-| **Hooks (10 points)** | ✅ Pre/post tool, compact, etc. | ❌ | ✅ | ✅ |
-| **Context compaction** | ✅ Pair-preserving | ❌ | ❌ | ❌ |
-| **MCP support** | ✅ stdio JSON-RPC 2.0 | ❌ | ❌ | ❌ |
-| **Sub-agent delegation** | ✅ Parallel | ❌ | ❌ | ❌ |
-| **Auto long-term memory** | ✅ Structured, decay-aware | ❌ | ❌ | ❌ |
-| **Planning** | ✅ Hierarchical (DS4) | ❌ | ❌ | ❌ |
-| **Permission modes** | ✅ 5 modes (off/plan/ask/auto/yolo) | ❌ | ✅ | ✅ |
-| **15 UI languages** | ✅ incl.文言, RTL Arabic | Limited | English | Limited |
-| **Platform** | Windows (macOS/Linux planned) | Win/Mac | CLI (cross) | VS Code/IDE |
-| **Open source** | ✅ MIT | ❌ | ❌ | ✅ MIT |
+AetherAI combines several capabilities that are typically spread across multiple tools into one local desktop app:
 
-> AetherAI combines the agent power of Claude Code, the multi-provider flexibility of Continue, and adds a unique local-first desktop experience with arena voting, structured memory, and deep customization — all in one app.
+- **Multi-provider in one chat** — switch between OpenAI, Claude, DeepSeek, and any OpenAI-compatible endpoint mid-conversation. No context lost between providers.
+- **Agent with a real tool loop** — 16 built-in tools (file I/O, search, shell, git, web, memory, skills, MCP) with a Plan→Act→Observe loop, live reasoning trace, per-tool sandboxing, and a configurable permission ladder.
+- **Multi-model Arena** — send one prompt to multiple models at once, vote on the best response, and track rankings with an ELO leaderboard.
+- **Skills & extensibility** — drop in `SKILL.md` files (Claude Code format), connect MCP servers, or write hooks at 10 lifecycle points.
+- **Structured long-term memory** — the agent recalls your preferences and past decisions across sessions without manual note-taking.
+- **Hierarchical planning** — complex requests get auto-decomposed into sub-tasks that run in parallel.
+- **Context compaction** — long conversations auto-summarize without losing tool-call/result pairs.
+- **Everything local** — conversations, API keys, and personas live in a local SQLite database. Nothing is uploaded anywhere except to the providers you configure.
+- **15 UI languages** — including Classical Chinese (文言) and RTL Arabic.
+- **MIT licensed** — fully open source.
 
 ---
 
@@ -54,7 +47,7 @@ Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any
   - [🛠️ Skills & Extensibility](#️-skills--extensibility)
   - [⚙️ Customization](#️-customization)
   - [🔒 Privacy](#-privacy)
-- [⚡ Why AetherAI?](#-why-aetherai)
+- [⚡ What makes AetherAI different](#-what-makes-aetherai-different)
 - [🚀 Quick Start](#-quick-start)
   - [Windows — prebuilt (recommended)](#windows--prebuilt-recommended)
   - [Build from source](#build-from-source)
