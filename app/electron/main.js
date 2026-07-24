@@ -146,7 +146,8 @@ function createTray() {
     }
     if (!trayImg || trayImg.isEmpty()) {
       // Minimal 16x16 tray icon: blue circle with white "A".
-      trayImg = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANklEQVQ4T2nk5uamgAH8wMwMDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8YGD4A4QBUOQ4m6p7/AAAAABJRU5ErkJggg==')
+      const b64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANklEQVQ4T2nk5uamgAH8wMwMDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8MDO8YGD4A4QBUOQ4m6p7/AAAAABJRU5ErkJggg=='
+      trayImg = nativeImage.createFromBuffer(Buffer.from(b64, 'base64'))
     }
     tray = new Tray(trayImg)
     tray.setToolTip('AetherAI')
