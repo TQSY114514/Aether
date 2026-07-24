@@ -3,9 +3,29 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 
+// Expose locale JSON files at /locales/<code>.json in dev mode
+function serveLocalesPlugin() {
+  return {
+    name: 'serve-locales',
+    configureServer(server) {
+      server.middlewares.use('/locales', (req, res, next) => {
+        const fp = path.resolve(__dirname, 'locales', req.url?.replace(/^\//, '') || '')
+        if (fs.existsSync(fp) && fs.statSync(fp).isFile()) {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(fs.readFileSync(fp))
+        } else {
+          res.statusCode = 404
+          res.end('Not found')
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     react(),
+    serveLocalesPlugin(),
     {
       name: 'copy-locales',
       closeBundle() {

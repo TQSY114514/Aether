@@ -29,6 +29,7 @@ const SAVE_DEBOUNCE_MS = 200
 function _writeDb(data) {
   return fs.promises.writeFile(dbPath, Buffer.from(data)).catch(e => {
     log.error('_writeDb failed:', e.message || e)
+    throw e
   })
 }
 function saveDatabase() {
@@ -91,7 +92,7 @@ async function initDatabase() {
   db.run("CREATE TABLE IF NOT EXISTS provider (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_url TEXT NOT NULL, api_key TEXT, api_format TEXT NOT NULL DEFAULT 'openai', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
   db.run("CREATE TABLE IF NOT EXISTS model (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, model_name TEXT NOT NULL, display_name TEXT, is_primary INTEGER NOT NULL DEFAULT 0, fallback_order INTEGER, context_window INTEGER, input_price_per_1k REAL, output_price_per_1k REAL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
   db.run("CREATE TABLE IF NOT EXISTS persona (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prompt TEXT NOT NULL, avatar TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.run("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  db.run("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)")
   db.run("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
   // Phase 2 tables
@@ -176,6 +177,7 @@ async function initDatabase() {
   addCol('session', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
   addCol('session', 'config', 'TEXT')
   addCol('session', 'updated_at', "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+  addCol('session', 'is_placeholder', 'INTEGER NOT NULL DEFAULT 0')
   addCol('message', 'model_used', 'TEXT')
   addCol('message', 'provider_used', 'INTEGER')
   addCol('message', 'token_count', 'INTEGER')
@@ -292,7 +294,7 @@ function localNow() {
 }
 
 function createSession({ title = '新会话', persona_id = null }) {
-  db.run('INSERT INTO session (title, persona_id, updated_at) VALUES (?, ?, ?)', [title, persona_id, localNow()])
+  db.run('INSERT INTO session (title, persona_id, updated_at, is_placeholder) VALUES (?, ?, ?, 1)', [title, persona_id, localNow()])
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 // Remove sessions that were created but never got a message (placeholder title,
@@ -300,8 +302,7 @@ function createSession({ title = '新会话', persona_id = null }) {
 // sidebar isn't littered with empty "新会话" entries (ChatGPT-style: an unsent
 // new chat doesn't persist).
 function pruneEmptySessions() {
-  const placeholders = ["'新会话'", "'新对话'", "'New Chat'"]
-  db.run(`DELETE FROM session WHERE title IN (${placeholders.join(',')}) AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`)
+  db.run(`DELETE FROM session WHERE is_placeholder = 1 AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`)
   saveDatabase()
 }
 function renameSession(id, title) {
@@ -359,8 +360,9 @@ function setSetting(key, value) {
   // a fast app close (the 200 ms debounce in saveDatabase is optimized for
   // high-frequency writes like streaming chunks, not user settings).
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
-  const data = db.export()
-  savePromise = _writeDb(data).finally(() => { savePromise = null })
+  // Use synchronous write for settings so they are durable before the call
+  // returns — no risk of losing data to a fast app shutdown.
+  fs.writeFileSync(dbPath, Buffer.from(db.export()))
 }
 function getAllSettings() {
   const stmt = db.prepare('SELECT key, value FROM settings')

@@ -333,7 +333,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
-        try { window.electronAPI.session.setConfig(sessionId, { agentMode }).catch(() => {}) } catch {}
+        try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
         return { messageId: msgId }
       } catch (err) {
         abortControllers.delete(msgId)

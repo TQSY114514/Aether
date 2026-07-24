@@ -107,7 +107,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:permission-expired', handler)
       return () => ipcRenderer.removeListener('chat:permission-expired', handler)
     },
-    replyPermission: (payload) => ipcRenderer.send('chat:permission-reply', payload),
+    replyPermission: (payload) => ipcRenderer.invoke('chat:permission-reply', payload),
     onToolStream: (callback) => {
       const handler = (_e, payload) => callback(payload)
       ipcRenderer.on('chat:tool-stream', handler)

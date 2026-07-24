@@ -223,7 +223,7 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 
 ### Agent frameworks that inspired the tool loop
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) — agent permission model, thinking-effort slider, tool-call visualization, sub-agent delegation, hook system.
+- [Claude Code](https://github.com/anthropics/claude-code) — agent permission model, thinking-effort slider, tool-call visualization, sub-agent delegation, hook system.
 - [Continue](https://github.com/continuedev/continue) — declarative config-as-source-of-truth, provider abstraction, function-calling protocol.
 - [OpenClaw](https://github.com/openclaw/openclaw) — context compaction (pair-preserving split, identifier retention), tool-call loop detection, event-stream architecture.
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent) — iteration budget pattern, structured long-term memory, autonomous skill creation.

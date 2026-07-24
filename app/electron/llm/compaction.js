@@ -28,6 +28,7 @@ const SAFETY_MARGIN = 1.2          // estimateTokens is rough; pad it
 const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of budget
 const RECENT_WINDOW = 8           // messages always kept verbatim at the tail
 const SUMMARIZATION_OVERHEAD = 2048 // reserve for the summary prompt + system + reply
+const SUMMARIZATION_TIMEOUT_MS = 15000 // guard timeout for the summarization HTTP call
 
 // Estimate token count for a single message. Content may be a string or a
 // multimodal parts array (OpenAI shape). Image parts cost nothing here — we
@@ -144,7 +145,7 @@ async function summarizeHistory({ provider, model, history, signal }) {
   }).join('\n')
   // Guard against hanging forever when the provider is unreachable (e.g. tests).
   const ctrl = new AbortController()
-  const guard = setTimeout(() => ctrl.abort(), 3000)
+  const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
   try {
     const text = await completeChat({
       provider, model,
