@@ -2,7 +2,16 @@ import { useState, useEffect } from 'react'
 import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null }
+type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null }
+
+const FAILURE_LABELS: Record<string, string> = {
+  timeout: 'tool.failure.timeout',
+  permission_denied: 'tool.failure.permission_denied',
+  env_missing_dependency: 'tool.failure.env_missing_dependency',
+  test_failure: 'tool.failure.test_failure',
+  model_invalid_args: 'tool.failure.model_invalid_args',
+  unknown: 'tool.failure.unknown',
+}
 
 // Human-phrased status label for a tool call: "Reading api.md", "Searching the
 // web for …", "Running git status", etc. Falls back to the raw tool name when

@@ -47,14 +47,14 @@ interface Window {
     chat: {
       send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
-      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null } }) => void) => () => void
+      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null } }) => void) => () => void
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string } }) => void) => () => void
       onTodoUpdate: (callback: (payload: { messageId: number; sessionId: number; todos: { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[] }) => void) => () => void
       onStatus: (callback: (payload: { messageId: number; sessionId: number; text: string; kind?: string }) => void) => () => void
       onQuestion: (callback: (payload: { reqId: string; sessionId: number; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }) => void) => () => void
       onQuestionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyQuestion: (payload: { reqId: string; answers: { question: string; answer: string }[] }) => Promise<boolean>
-      onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous' }) => void) => () => void
+      onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous'; impact?: { summary?: string; severity?: string; affectedFiles?: string[]; command?: string; riskTags?: string[]; rollback?: string; alternatives?: string } | null }) => void) => () => void
       onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean; remember?: boolean }) => Promise<boolean>
       onToolStream: (callback: (payload: { messageId: number; sessionId: number; text: string; done: boolean }) => void) => () => void
@@ -107,6 +107,11 @@ interface Window {
     agent: {
       getWorkspace: (sessionId?: number) => Promise<string>
       setWorkspace: (opts: { dir?: string | null; sessionId?: number }) => Promise<{ success: boolean; root: string }>
+      reindexProject: () => Promise<{ ok: boolean; stats?: { totalFiles: number; totalEdges: number; languages: string[] }; error?: string }>
+      listCheckpoints: (sessionId: number) => Promise<{ id: number; sessionId: number; turnId: number; stepIndex: number; meta: Record<string, unknown>; createdAt: string }[]>
+      getCheckpoint: (id: number) => Promise<{ id: number; sessionId: number; turnId: number; stepIndex: number; messages: unknown[]; toolTrace: unknown[]; meta: Record<string, unknown>; createdAt: string } | null>
+      deleteCheckpoint: (id: number) => Promise<{ ok: boolean }>
+      cleanupCheckpoints: (sessionId: number) => Promise<{ ok: boolean }>
     }
     skills: {
       list: () => Promise<{ name: string; description: string; filePath: string }[]>

@@ -22,9 +22,13 @@ const path = require('path')
 const { app } = require('electron')
 const { getWorkspaceRoot } = require('../tools/sandbox')
 
-// In-memory index: name → skill metadata. Refreshed on demand (no file watcher
-// — desktop app reloads on session start or explicit rescan IPC).
+// In-memory index: name → skill metadata. Refreshed on demand.
 let _skills = new Map()
+
+// Usage tracking: skill name → { count, lastUsedAt }.
+// Persisted to disk via the database on each invocation.
+let _usage = {}
+let _usageTimer = null
 
 // Minimal YAML frontmatter parser — we only need name / description / disabled,
 // so no js-yaml dependency. Handles `---\nkey: value\n---` blocks.
@@ -54,12 +58,20 @@ function loadSkillsFromDir(dir) {
     // (Claude-Code convention; we warn but don't hard-fail on mismatch).
     if (!meta.name || !meta.description) continue
     if (meta.disabled === 'true' || meta.disabled === true) continue
+    // Collect optional metadata fields from frontmatter — unrecognized keys
+    // are silently dropped so users can add tags/category/version etc.
+    const extra = {}
+    const KNOWN_KEYS = new Set(['name', 'description', 'disabled'])
+    for (const [k, v] of Object.entries(meta)) {
+      if (!KNOWN_KEYS.has(k)) extra[k] = v
+    }
     found.push({
       name: meta.name,
       description: meta.description,
       filePath: skillPath,
       baseDir: path.join(dir, ent.name),
       body,
+      metadata: Object.keys(extra).length > 0 ? extra : undefined,
     })
   }
   return found
@@ -85,6 +97,7 @@ function scanSkills() {
     }
   }
   _skills = byName
+  loadSkillUsage()
   return _skills.size
 }
 
@@ -95,6 +108,47 @@ function getSkill(name) { return _skills.get(name) || null }
 // Add or replace a single skill in the in-memory index without a disk rescan.
 // Used by habitLearner.promoteToSkill to refresh the user-habits entry in O(1).
 function upsertSkill(name, skill) { _skills.set(name, skill) }
+
+// ─── Usage Tracking ─────────────────────────────────────────────────────────
+// Track when each skill is invoked so the UI can show usage counts and
+// last-used timestamps. Debounced disk write to avoid I/O on every call.
+
+function recordSkillUse(name) {
+  _usage[name] = { count: (_usage[name]?.count || 0) + 1, lastUsedAt: new Date().toISOString() }
+  if (!_usageTimer) {
+    _usageTimer = setTimeout(() => {
+      _usageTimer = null
+      try {
+        const { getDbHandle } = require('../database')
+        const db = getDbHandle()
+        if (!db) return
+        for (const [name, u] of Object.entries(_usage)) {
+          try {
+            db.run('INSERT OR REPLACE INTO skill_usage (name, use_count, last_used_at) VALUES (?, ?, ?)',
+              [name, u.count, u.lastUsedAt])
+          } catch {}
+        }
+        try { db.saveDatabase && db.saveDatabase() } catch {}
+      } catch {}
+    }, 2000)
+  }
+}
+
+function getSkillUsage() { return _usage }
+function resetSkillUsage() { _usage = {} }
+
+// Load usage data from the database (called on startup).
+function loadSkillUsage() {
+  try {
+    const { getDbHandle } = require('../database')
+    const db = getDbHandle()
+    if (!db) return
+    const rows = db.allRows('SELECT name, use_count, last_used_at FROM skill_usage') || []
+    for (const row of rows) {
+      _usage[row.name] = { count: row.use_count || 0, lastUsedAt: row.last_used_at || null }
+    }
+  } catch {}
+}
 
 // Build the <available_skills> system-prompt block. Only name + description
 // appear (progressive-disclosure level 1). The use_skill tool loads the body.
@@ -176,4 +230,5 @@ function rescan() { scanSkills(); scanCommands() }
 module.exports = {
   scanSkills, getSkills, getSkill, getSkillBody, formatSkillsForPrompt, parseFrontmatter, upsertSkill,
   scanCommands, getCommands, getCommand, rescan,
+  recordSkillUse, getSkillUsage, resetSkillUsage, loadSkillUsage,
 }

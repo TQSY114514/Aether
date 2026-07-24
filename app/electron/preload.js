@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   agent: {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
     setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', opts),
+    reindexProject: () => ipcRenderer.invoke('agent:project:reindex'),
+    listCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:list', sessionId),
+    getCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:get', id),
+    deleteCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:delete', id),
+    cleanupCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:cleanup', sessionId),
   },
   model: {
     list: (providerId) => ipcRenderer.invoke('model:list', providerId),

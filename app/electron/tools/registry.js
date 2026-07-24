@@ -347,6 +347,8 @@ const TOOLS = [
       const skills = require('../llm/skills')
       const body = skills.getSkillBody(name)
       if (body == null) throw new Error(`unknown skill: ${name} (call only skills listed in <available_skills>)`)
+      // Track usage for the skills management UI.
+      try { skills.recordSkillUse(name) } catch {}
       return body
     },
   },
@@ -598,6 +600,53 @@ const TOOLS = [
     },
   },
   {
+    // ─── Project Context Graph ───────────────────────────────────────────────
+    // Returns the project-level code map: file listing, import/export
+    // relationships, and symbol index. Use this before modifying large projects
+    // to avoid re-searching files on every step. Safe because it's read-only.
+    // ──────────────────────────────────────────────────────────────────────────
+    name: 'get_project_context',
+    description: 'Get a project-level code map for the current workspace. Returns the dependency graph, file listing, and symbol index. Use this to understand project structure before making changes. Call with query="symbol_name" to find references to a specific function/class, or query="" for the full overview.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Optional: a symbol name, file path, or keyword to find related code. Leave empty for full project overview.' },
+        maxFiles: { type: 'number', description: 'Max files to include in the response (default 50).' },
+      },
+      required: [],
+    },
+    run: async (args, ctx) => {
+      const { projectIndexer, dependencyGraph } = require('../../electron/context')
+      const { getWorkspaceRoot } = require('../sandbox')
+      const root = getWorkspaceRoot(ctx?.sessionId)
+      if (!root) return 'no workspace configured'
+      const graph = await projectIndexer.indexWorkspace(root)
+      const query = String(args.query || '').trim()
+      const maxFiles = Number(args.maxFiles) || 50
+
+      if (query) {
+        const related = dependencyGraph.query(graph, query)
+        if (!related.length) return `no files reference "${query}"`
+        return related.slice(0, maxFiles).map(r => `[${r.relation}] ${r.path}`).join('\n')
+      }
+
+      const stats = dependencyGraph.getStats(graph)
+      const files = Array.from(graph.files.values()).slice(0, maxFiles)
+      const lines = [
+        `Project: ${stats.totalFiles} files, ${stats.totalEdges} dependencies`,
+        `Languages: ${stats.languages.join(', ')}`,
+        '',
+        ...files.map(f => {
+          const imp = f.imports.length ? ` → ${f.imports.slice(0, 5).join(', ')}` : ''
+          const sym = f.symbols.length ? ` {${f.symbols.slice(0, 8).join(', ')}}` : ''
+          return `${f.path}${imp}${sym}`
+        }),
+      ]
+      return lines.join('\n')
+    },
+  },
+  {
     name: 'delegate_task',
     description: 'Delegate one or more independent sub-tasks to sub-agents that run in parallel, each with its own tool loop and iteration budget. Use for: researching multiple files/topics at once, or any set of independent gather/analyze steps. Each sub-task returns a concise result. Dangerous: sub-agents can run tools (read/write/command), so this is permission-gated. Provide focused, self-contained task descriptions.',
     risk: 'dangerous',
@@ -632,6 +681,49 @@ const TOOLS = [
         if (r.success) return `${head}\n${r.output}`
         return `${head}\n[failed: ${r.error || 'no output'}] (used ${r.iterations} iterations)`
       }).join('\n\n')
+    },
+  },
+  {
+    // Automated code review (Claude Code / Aider / Copilot-inspired). Reviews
+    // the provided files for bugs, security issues, performance problems, and
+    // style violations. Safe — read-only, no side effects.
+    name: 'review_code',
+    description: 'Review code for bugs, security issues, performance problems, and style violations. Call this after writing or editing files to get feedback. Returns a structured review with severity levels and fix suggestions.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          description: 'Optional: specific file paths to review. If empty, reviews recent git changes.',
+          items: { type: 'string' },
+        },
+      },
+      required: [],
+    },
+    run: async (args, ctx) => {
+      const { reviewFiles } = require('../../electron/llm/reviewer')
+      const requestedFiles = Array.isArray(args.files) ? args.files : []
+      const fs = require('fs')
+
+      let filesToReview = []
+      if (requestedFiles.length > 0) {
+        for (const f of requestedFiles.slice(0, 5)) {
+          try {
+            const content = fs.readFileSync(f, 'utf-8')
+            filesToReview.push({ path: f, content })
+          } catch {}
+        }
+      }
+
+      const result = await reviewFiles({
+        provider: ctx.provider,
+        model: ctx.model,
+        files: filesToReview,
+        signal: ctx.signal,
+      })
+
+      return result.summary
     },
   },
   {
@@ -670,6 +762,55 @@ const TOOLS = [
       }
       fs.writeFileSync(p, result.content, 'utf-8')
       return `patch applied: ${result.applied} hunk(s), ${result.content.length} chars written to ${p}`
+    },
+  },
+  {
+    // Debug-fix cycle (Claude-Code-inspired). Automatically runs the project's test
+    // command, captures errors, asks the model to analyze them, and surfaces a fix
+    // suggestion. The tool loop can then apply the fix and re-test in the next cycle.
+    name: 'debug_loop',
+    description: 'Run an automatic debug-fix cycle for the current workspace. Runs the project\'s test command, captures errors, analyzes them, and suggests fixes. Use this after writing/modifying code to verify it works. Max 5 cycles. Dangerous: executes test commands in the workspace.',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        testCommand: { type: 'string', description: 'Override the auto-detected test command (e.g. "npm run test", "pytest").' },
+        maxCycles: { type: 'number', description: 'Max debug-fix cycles (default 5, max 10).' },
+      },
+      required: [],
+    },
+    run: async (args, ctx) => {
+      const { runDebugLoop, MAX_CYCLES } = require('../../electron/llm/debugAgent')
+      const maxCycles = Math.min(Number(args.maxCycles) || MAX_CYCLES, 10)
+      const result = await runDebugLoop({
+        provider: ctx.provider,
+        model: ctx.model,
+        signal: ctx.signal,
+        sessionId: ctx.sessionId,
+        onStatus: ctx.onStatus,
+        onFix: ctx.onStatus,
+      })
+      if (result.success) {
+        return `✅ 调试完成: ${result.summary} (${result.cycles} 轮)`
+      }
+      const lines = [`❌ 调试未完全成功 (${result.cycles}/${maxCycles} 轮)`]
+      if (result.cycleResults) {
+        for (const r of result.cycleResults) {
+          lines.push(`  轮 ${r.cycle}: 退出码 ${r.exitCode}`)
+          lines.push(`  ${r.errorSnippet.slice(0, 200)}`)
+        }
+      }
+      if (result.analysis) {
+        lines.push(`\n分析: ${result.analysis.description}`)
+        lines.push(`根因: ${result.analysis.rootCause}`)
+        lines.push(`修复: ${result.analysis.fix}`)
+        lines.push(`文件: ${(result.analysis.files || []).join(', ')}`)
+      }
+      if (result.error) {
+        lines.unshift(`错误: ${result.error}`)
+      }
+      return lines.join('\n')
     },
   },
 ]
