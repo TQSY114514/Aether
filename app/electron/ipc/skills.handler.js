@@ -3,9 +3,19 @@ const hooks = require('../llm/hooks')
 const habitLearner = require('../llm/habitLearner')
 
 function registerSkillsHandlers(ipcMain) {
-  // List discovered skills (name + description + path).
+  // List discovered skills — includes usage stats and metadata from frontmatter.
   ipcMain.handle('skills:list', () => {
-    return skills.getSkills().map(s => ({ name: s.name, description: s.description, filePath: s.filePath }))
+    const usage = skills.getSkillUsage()
+    return skills.getSkills().map(s => {
+      const u = usage[s.name]
+      return {
+        name: s.name,
+        description: s.description,
+        filePath: s.filePath,
+        metadata: s.metadata,          // optional extra frontmatter (tags, category, etc.)
+        usage: u ? { count: u.count, lastUsedAt: u.lastUsedAt } : { count: 0, lastUsedAt: null },
+      }
+    })
   })
 
   // Rescan the skill roots and return the new count.
