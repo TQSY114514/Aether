@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null }
+type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null }
 
 // Human-phrased status label for a tool call: "Reading api.md", "Searching the
 // web for …", "Running git status", etc. Falls back to the raw tool name when
@@ -40,6 +40,7 @@ function toolLabel(tool: ToolCall): string {
 // Shows a risk badge (dangerous vs safe) and the elapsed time when available.
 export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const [open, setOpen] = useState(false)
+  const [rollbackState, setRollbackState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const status = tool.error
     ? { icon: AlertCircle, color: 'var(--error)', label: t('tool.status.failed') }
     : tool.result != null
@@ -50,6 +51,13 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const label = toolLabel(tool)
   // Auto-expand when there's an error so the user can see what went wrong.
   useEffect(() => { if (tool.error) setOpen(true) }, [tool.error])
+  const rollback = async () => {
+    if (!tool.checkpointId || rollbackState === 'running') return
+    setRollbackState('running')
+    const res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId })
+    setRollbackState(res.success ? 'done' : 'error')
+    if (!res.success) setOpen(true)
+  }
 
   return (
     <div className="rounded-lg border mb-2 overflow-hidden" style={{ borderColor: dangerous ? 'var(--warning)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -82,6 +90,18 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
               <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.result')}</div>
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto" style={{ color: 'var(--text-secondary)' }}>{tool.result}</pre>
             </div>
+          )}
+          {tool.checkpointId && (
+            <button
+              type="button"
+              onClick={rollback}
+              disabled={rollbackState === 'running' || rollbackState === 'done'}
+              className="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] disabled:opacity-60"
+              style={{ borderColor: 'var(--border)', color: rollbackState === 'error' ? 'var(--error)' : 'var(--text-secondary)' }}
+            >
+              <RotateCcw size={12} />
+              {rollbackState === 'running' ? t('tool.rollback.running') : rollbackState === 'done' ? t('tool.rollback.done') : rollbackState === 'error' ? t('tool.rollback.error') : t('tool.rollback')}
+            </button>
           )}
           {tool.error && (
             <div>

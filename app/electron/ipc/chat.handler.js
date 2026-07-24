@@ -12,6 +12,7 @@ const auditLog = require('../llm/auditLog')
 const modelAdvisor = require('../llm/modelAdvisor')
 const log = require('../logger')
 const providerHealth = require('../llm/providerHealth')
+const checkpoints = require('../llm/checkpoints')
 
 // dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
 // scope (so it can be unit-tested) but needs DB access to persist the title.
@@ -62,6 +63,7 @@ function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
   auditLog.setDb(db)
+  checkpoints.setDb(db)
   // Cache rarely-changing settings at handler registration time. Invalidation
   // happens on the `settings-changed` IPC (broadcast from settings.handler).
   const _s = {}
@@ -233,7 +235,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           options: mergedOpts,
           agentMode: agentMode || 'ask',
           maxIterations: parseInt(getCached('agent_max_iterations', '25'), 10),
-          sessionId,
+          sessionId, messageId: msgId,
           onThinkingStart: thinkingSupported ? () => wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) : undefined,
           onThinkingEnd: thinkingSupported ? () => wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) : undefined,
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
@@ -253,7 +255,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           },
           // Audit log callback: persists the agent turn trace.
           onAudit: (trace) => {
-            try { db.addAuditLog({ sessionId, turnId: msgId, ...trace }) } catch {}
+            try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
           },
           // AskUserQuestion: surface a structured question dialog and await the
           // user's choice. Returns a JSON string of answers so the model can read
@@ -508,6 +510,10 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('audit:log', (_e, { sessionId, limit = 50 }) => {
     return db.getAuditLog(sessionId, limit)
   })
+  ipcMain.handle('agent-checkpoint:list', (_e, { sessionId, messageId = null } = {}) => {
+    return db.listAgentCheckpoints(sessionId, messageId)
+  })
+  ipcMain.handle('agent-checkpoint:rollback', (_e, { id }) => checkpoints.rollbackCheckpoint(id))
 }
 
 // Generate a concise, summarized title for a session's first exchange.

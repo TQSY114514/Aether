@@ -75,7 +75,7 @@ interface AppState {
   sending: boolean
   // Per-message tool-call invocations, keyed by the assistant messageId the
   // tool belongs to. Each entry is the list of tool calls for that message.
-  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null }[]>
+  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null }[]>
   // Per-message agent plan steps (the assistant's reasoning each round).
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).
@@ -897,7 +897,7 @@ function ensureToolCallListener() {
   if (_toolCallListenerInstalled) return
   _toolCallListenerInstalled = true
   window.electronAPI.chat.onToolCall(({ messageId, sessionId, tool }) => {
-    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, risk: tool.risk, latencyMs: tool.latencyMs }
+    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, risk: tool.risk, latencyMs: tool.latencyMs, checkpointId: tool.checkpointId }
     useStore.setState((s) => {
       const existing = s.toolCallsByMessage[messageId] || []
       // Append if new, replace if result changed (for live streaming)

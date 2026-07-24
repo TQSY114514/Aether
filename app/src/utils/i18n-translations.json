@@ -350,7 +350,11 @@
       "settings.skills.rescan": "重新扫描",
       "settings.skills.rescanned": "已扫描 — 找到 {0} 个技能",
       "settings.skills.empty": "未找到技能。把 <skill>/SKILL.md 放进工作区的 .claude/skills/ 即可。",
-      "settings.skills.hint": "扫描目录（优先级）：<workspace>/.claude/skills、<workspace>/.aetherai/skills、<userData>/skills、内置。仅名称+描述进入提示词；匹配时由 use_skill 工具按需加载。"
+      "settings.skills.hint": "扫描目录（优先级）：<workspace>/.claude/skills、<workspace>/.aetherai/skills、<userData>/skills、内置。仅名称+描述进入提示词；匹配时由 use_skill 工具按需加载。",
+      "tool.rollback": "回滚本次 Agent 改动",
+      "tool.rollback.running": "正在回滚...",
+      "tool.rollback.done": "已回滚",
+      "tool.rollback.error": "回滚失败"
     }
   },
   {
@@ -491,7 +495,11 @@
       "effort.low": "bajo",
       "effort.medium": "medio",
       "effort.high": "alto",
-      "paste.snippet": "Fragmento"
+      "paste.snippet": "Fragmento",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -632,7 +640,11 @@
       "effort.low": "低",
       "effort.medium": "中",
       "effort.high": "高",
-      "paste.snippet": "スニペット"
+      "paste.snippet": "スニペット",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -773,7 +785,11 @@
       "effort.low": "浅",
       "effort.medium": "中",
       "effort.high": "深",
-      "paste.snippet": "片段"
+      "paste.snippet": "片段",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -914,7 +930,11 @@
       "effort.low": "bas",
       "effort.medium": "moyen",
       "effort.high": "élevé",
-      "paste.snippet": "Extrait"
+      "paste.snippet": "Extrait",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -1055,7 +1075,11 @@
       "effort.low": "niedrig",
       "effort.medium": "mittel",
       "effort.high": "hoch",
-      "paste.snippet": "Snippet"
+      "paste.snippet": "Snippet",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -1196,7 +1220,11 @@
       "effort.low": "baixo",
       "effort.medium": "méd.",
       "effort.high": "alto",
-      "paste.snippet": "Snippet"
+      "paste.snippet": "Snippet",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -1337,7 +1365,11 @@
       "effort.low": "низк",
       "effort.medium": "сред",
       "effort.high": "выс",
-      "paste.snippet": "Сниппет"
+      "paste.snippet": "Сниппет",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -1478,7 +1510,11 @@
       "effort.low": "低",
       "effort.medium": "中",
       "effort.high": "高",
-      "paste.snippet": "程式碼片段"
+      "paste.snippet": "程式碼片段",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -1619,7 +1655,11 @@
       "effort.low": "منخفض",
       "effort.medium": "متوسط",
       "effort.high": "عالٍ",
-      "paste.snippet": "مقتطف"
+      "paste.snippet": "مقتطف",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -1760,7 +1800,11 @@
       "effort.low": "низьк",
       "effort.medium": "сер",
       "effort.high": "висок",
-      "paste.snippet": "Фрагмент"
+      "paste.snippet": "Фрагмент",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -1901,7 +1945,11 @@
       "effort.low": "낮음",
       "effort.medium": "중간",
       "effort.high": "높음",
-      "paste.snippet": "스니펫"
+      "paste.snippet": "스니펫",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   },
   {
@@ -2042,7 +2090,11 @@
       "effort.low": "कम",
       "effort.medium": "मध्यम",
       "effort.high": "अधिक",
-      "paste.snippet": "स्निपेट"
+      "paste.snippet": "स्निपेट",
+      "tool.rollback": "Rollback this Agent change",
+      "tool.rollback.running": "Rolling back...",
+      "tool.rollback.done": "Rolled back",
+      "tool.rollback.error": "Rollback failed"
     }
   }
 ]

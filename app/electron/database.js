@@ -122,6 +122,20 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
+  // Agent filesystem checkpoints. One row is recorded immediately before each
+  // dangerous tool runs so the renderer can restore this tool's file changes.
+  db.run(`CREATE TABLE IF NOT EXISTS agent_checkpoint (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    tool_name TEXT NOT NULL,
+    args TEXT NOT NULL,
+    affected_paths TEXT NOT NULL,
+    snapshot TEXT NOT NULL,
+    rolled_back_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`)
+
   // Habit learner: tracks recurring user preferences.
   db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
 
@@ -159,6 +173,7 @@ async function initDatabase() {
     session: getTableColumns('session'),
     message: getTableColumns('message'),
     user_habit: getTableColumns('user_habit'),
+    agent_checkpoint: getTableColumns('agent_checkpoint'),
   }
   const addCol = (table, col, def) => {
     if (!cols[table].includes(col)) {
@@ -188,6 +203,7 @@ async function initDatabase() {
   addCol('message', 'error_message', 'TEXT')
   addCol('message', 'arena_model', 'TEXT')
   addCol('user_habit', 'proposed', "INTEGER NOT NULL DEFAULT 0")
+  addCol('agent_checkpoint', 'rolled_back_at', 'DATETIME')
 
   // Seed defaults
   const existingKeys = (db.exec('SELECT key FROM settings')[0]?.values || []).map(r => r[0])
@@ -505,6 +521,36 @@ function addAuditLog({ sessionId, turnId, payload }) {
     [sessionId, turnId, JSON.stringify(payload)])
   saveDatabase()
 }
+function addAgentCheckpoint({ sessionId, messageId, toolName, args, affectedPaths, snapshot }) {
+  db.run('INSERT INTO agent_checkpoint (session_id, message_id, tool_name, args, affected_paths, snapshot) VALUES (?, ?, ?, ?, ?, ?)',
+    [sessionId, messageId, toolName, JSON.stringify(args || {}), JSON.stringify(affectedPaths || []), JSON.stringify(snapshot || {})])
+  saveDatabase(); return { lastInsertRowid: lastId() }
+}
+function getAgentCheckpoint(id) {
+  const stmt = db.prepare('SELECT * FROM agent_checkpoint WHERE id = ?')
+  stmt.bind([id])
+  const row = allRows(stmt)[0]
+  if (!row) return null
+  try { row.args = JSON.parse(row.args || '{}') } catch { row.args = {} }
+  try { row.affected_paths = JSON.parse(row.affected_paths || '[]') } catch { row.affected_paths = [] }
+  try { row.snapshot = JSON.parse(row.snapshot || '{}') } catch { row.snapshot = {} }
+  return row
+}
+function markAgentCheckpointRolledBack(id) {
+  db.run('UPDATE agent_checkpoint SET rolled_back_at = ? WHERE id = ?', [localNow(), id])
+  saveDatabase()
+}
+function listAgentCheckpoints(sessionId, messageId = null) {
+  const where = messageId ? 'session_id = ? AND message_id = ?' : 'session_id = ?'
+  const stmt = db.prepare(`SELECT id, session_id, message_id, tool_name, args, affected_paths, rolled_back_at, created_at FROM agent_checkpoint WHERE ${where} ORDER BY id DESC`)
+  stmt.bind(messageId ? [sessionId, messageId] : [sessionId])
+  const rows = allRows(stmt)
+  for (const row of rows) {
+    try { row.args = JSON.parse(row.args || '{}') } catch { row.args = {} }
+    try { row.affected_paths = JSON.parse(row.affected_paths || '[]') } catch { row.affected_paths = [] }
+  }
+  return rows
+}
 function getAuditLog(sessionId, limit = 50) {
   const stmt = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?')
   stmt.bind([sessionId, limit])
@@ -666,6 +712,7 @@ module.exports = {
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
   // agent audit log
   addAuditLog, getAuditLog,
+  addAgentCheckpoint, getAgentCheckpoint, markAgentCheckpointRolledBack, listAgentCheckpoints,
   // credential pool: list/add/remove credentials per provider
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },
