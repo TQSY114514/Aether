@@ -138,7 +138,7 @@ export default function SettingPage() {
             <select value={language} onChange={(e) => setLanguage(e.target.value as any)}
               className="w-full max-w-xs px-3 py-2 text-sm rounded-lg border outline-none bg-white"
               style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-              {LANGS.map((l) => <option key={l.code} value={l.code}>{l.native} — {l.label}</option>)}
+              {LANGS.map((l) => <option key={l.code} value={l.code}>{l.native}{l.dir === 'rtl' ? ' (RTL)' : ''} — {l.label}</option>)}
             </select>
           </div>
 
