@@ -488,7 +488,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   // Habit-confirmation flow: the renderer asks us to confirm (promote now) or
   // dismiss (delete) a proposed habit. We don't need to reply with data — the
   // skill is rewritten synchronously inside habitLearner.
-  ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db) } catch (e) { log.warn('habit confirm failed:', e) } return { ok: true } })
+  ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db, key) } catch (e) { log.warn('habit confirm failed:', e) } return { ok: true } })
   ipcMain.handle('chat:habit-dismiss', (_e, key) => { try { habitLearner.dismissHabit(db, key) } catch (e) { log.warn('habit dismiss failed:', e) } return { ok: true } })
 
   // Model suggestion (Claude Code-style): given a user message and the full model
@@ -518,6 +518,22 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { suggestedModelId: currentModelId, reason: 'current', confidence: 0 }
     } catch {
       return { suggestedModelId: null, reason: 'error', confidence: 0 }
+    }
+  })
+
+  // Model router (Claude Code-style): pick a model tier for a task type.
+  // Returns { tier, suggestedModelName, rationale } for cost-optimized routing.
+  ipcMain.handle('model:route-tier', (_e, { taskType, userMessage }) => {
+    try {
+      const allModels = db.getAllModels().filter(m => {
+        const p = db.getProvider(m.provider_id)
+        return p && p.enabled
+      })
+      const tier = modelRouter.routeTask(taskType, userMessage || '', 0)
+      const suggestion = modelRouter.suggestModelForTier(tier, allModels)
+      return { tier, modelName: suggestion?.modelName || null, modelId: suggestion?.modelId || null, rationale: suggestion?.rationale || '' }
+    } catch {
+      return { tier: 'standard', modelName: null, rationale: 'error' }
     }
   })
 

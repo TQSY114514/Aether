@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
-import { setLang, detectLang, t, type LangCode, LANGS } from '@/utils/i18n'
-import { getLangDir } from '@/utils/i18n'
+import { setLang, setLangAsync, detectLang, t, type LangCode, LANGS, getLangDir } from '@/utils/i18n'
 import { applyTheme, getThemes } from '@/utils/theme'
 import log from '@/utils/logger'
 
@@ -189,6 +188,10 @@ interface AppState {
   // UI
   sidebarOpen: boolean
   toggleSidebar: () => void
+  completionToasts: { id: number; sessionId: number; sessionTitle: string }[]
+  dismissToast: (id: number) => void
+  pinSession: (id: number, pinned?: number) => Promise<void>
+  notifyComplete: (sessionId: number, sessionTitle: string) => void
   // Agent workspace root (global, set from settings).
   agentWorkspace: string
   setAgentWorkspace: (dir: string) => Promise<void>
@@ -249,8 +252,8 @@ export const useStore = create<AppState>((set, get) => ({
   seenHints: [],
   agentMode: 'off',
   permissionRequests: [],
+  completionToasts: [],
   effortLevel: 'off',
-  completionToasts: [] as any[],
   agentWorkspace: '', // current session's workspace path (or global)
   modelSuggestion: null as { suggestedModelId: number | null; reason: string; confidence: number } | null,
 
@@ -264,7 +267,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
   createSession: async () => {
     let cfg = { providerId: null as number | null, modelId: null as number | null, personaId: null as number | null }
-    try { const r = await resolveModelId(); if (r.providerId) cfg = r } catch {}
+    const enabledProviders = (await window.electronAPI.provider.list()).filter(p => p.enabled)
+    if (enabledProviders.length > 0) {
+      cfg.providerId = enabledProviders[0].id as number
+      const models = await window.electronAPI.model.list(cfg.providerId)
+      const primary = models.find(m => m.is_primary) || models[0]
+      if (primary) cfg.modelId = primary.id
+    }
     const result = await window.electronAPI.session.createAndSelect(cfg)
     const sid = result.session.id
     const sessionCfg = result.config
@@ -298,7 +307,8 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       let cfg = await window.electronAPI.session.getConfig(id)
       if (!cfg || !cfg.modelId) {
-        const { providerId } = await resolveModelId()
+        const enabledProviders = (await window.electronAPI.provider.list()).filter(p => p.enabled)
+        const providerId = enabledProviders.length > 0 ? enabledProviders[0].id : null
         cfg = { providerId, modelId: null, personaId: null }
         window.electronAPI.session.setConfig(id, cfg).catch(() => {})
       }
@@ -307,8 +317,9 @@ export const useStore = create<AppState>((set, get) => ({
         sessionConfigs: { ...s.sessionConfigs, [id]: cfg },
       }))
       // Restore per-session workspace if configured.
-      if (cfg?.workspace) {
-        try { await window.electronAPI.agent.setWorkspace({ dir: cfg.workspace, sessionId: id }) } catch {}
+      const savedCfg = get().sessionConfigs[id]
+      if (savedCfg?.workspace) {
+        try { await window.electronAPI.agent.setWorkspace({ dir: savedCfg.workspace, sessionId: id }) } catch {}
       }
       if (cfg.providerId) get().loadModels(cfg.providerId)
     } catch {
@@ -471,13 +482,18 @@ export const useStore = create<AppState>((set, get) => ({
     let modelId = cfg?.modelId
     // Auto-resolve missing model: try allModels (already loaded globally)
     if (!modelId) {
-      const resolved = await resolveModelId()
-      modelId = resolved.modelId
-      if (currentSessionId && resolved.providerId) {
-        const newCfg = { providerId: resolved.providerId, modelId: resolved.modelId, personaId: cfg?.personaId || null }
-        await window.electronAPI.session.setConfig(currentSessionId, newCfg)
-        set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [currentSessionId]: newCfg } }))
-        get().loadModels(resolved.providerId)
+      const enabledProviders = (await window.electronAPI.provider.list()).filter(p => p.enabled)
+      if (enabledProviders.length > 0 && currentSessionId) {
+        const providerId = enabledProviders[0].id
+        const models = await window.electronAPI.model.list(providerId)
+        const primary = models.find(m => m.is_primary) || models[0]
+        modelId = primary?.id
+        if (modelId) {
+          const newCfg = { providerId, modelId, personaId: cfg?.personaId || null }
+          await window.electronAPI.session.setConfig(currentSessionId, newCfg)
+          set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [currentSessionId]: newCfg } }))
+          get().loadModels(providerId)
+        }
       }
     }
     if (!currentSessionId || !modelId) {
@@ -555,7 +571,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   setAgentMode: (v) => set({ agentMode: v }),
   setAgentWorkspace: async (dir: string) => {
-    try { await window.electronAPI.agent.setWorkspace(dir) } catch {}
+    try { await window.electronAPI.agent.setWorkspace({ dir }) } catch {}
     set({ agentWorkspace: dir })
   },
   resolvePermission: (reqId, allowed, remember = false) => {
@@ -724,8 +740,8 @@ export const useStore = create<AppState>((set, get) => ({
       // model's answer) is in the message list too — survives a reload.
       get().loadMessages(currentSessionId)
       get().loadSessions()
-    } catch (err) {
-      set({ sending: false, arenaError: '竞技场请求失败: ' + (err?.message || String(err)) })
+    } catch (err: unknown) {
+      set({ sending: false, arenaError: '竞技场请求失败: ' + (err instanceof Error ? err.message : String(err)) })
     }
   },
 
@@ -743,13 +759,12 @@ export const useStore = create<AppState>((set, get) => ({
       })
       if (result?.success) {
         await get().loadScores()
-        // Collapse arena results to just the winner; clear the vote buttons.
-        set({ arenaResults: [winner] })
+        set({ arenaResults: [winner as ArenaResult] })
       } else {
         set({ arenaError: '投票失败，请重试' })
       }
-    } catch (err) {
-      set({ arenaError: '投票失败: ' + (err?.message || String(err)) })
+    } catch (err: unknown) {
+      set({ arenaError: '投票失败: ' + (err instanceof Error ? err.message : String(err)) })
     }
   },
 
@@ -872,10 +887,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
   notifyComplete: (sessionId: number, sessionTitle: string) => {
     const id = Date.now() + Math.random()
-    set((s) => ({ completionToasts: [...s.completionToasts, { id, sessionId, sessionTitle }] }))
-    setTimeout(() => set((s) => ({ completionToasts: s.completionToasts.filter(t => t.id !== id) })), 3000)
+    set((s: AppState) => ({ completionToasts: [...s.completionToasts, { id, sessionId, sessionTitle }] }))
+    setTimeout(() => set((s: AppState) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })), 3000)
   },
-  dismissToast: (id: number) => set((s) => ({ completionToasts: s.completionToasts.filter(t => t.id !== id) })),
+  dismissToast: (id: number) => set((s: AppState) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })),
 }))
 
 // Ensure all global listeners are registered (idempotent).
@@ -983,10 +998,10 @@ function ensureChunkListener() {
           }
         }).catch(() => {})
       }
-      get().pinSession(sessionId, 0).then(() => {
+      useStore.getState().pinSession(sessionId, 0).then(() => {
         const s = useStore.getState().sessions.find(x => x.id === sessionId)
         const title = s?.title || 'Chat'
-        get().notifyComplete(sessionId, title)
+        useStore.getState().notifyComplete(sessionId, title)
       }).catch(() => {})
       useStore.getState().loadSessions()
       const st = useStore.getState()

@@ -196,7 +196,7 @@ function renderInner(raw: string, hljs: typeof hljsCore | null): string {
       line.split('|').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
     )
     let html = '<table><thead><tr>'
-    headers.forEach(h => { html += `<th>${h}</th>` })
+    headers.forEach((h: string) => { html += `<th>${h}</th>` })
     html += '</tr></thead><tbody>'
     rows.forEach((row: string[]) => { html += '<tr>' + row.map((c: string) => `<td>${c}</td>`).join('') + '</tr>' })
     html += '</tbody></table>'

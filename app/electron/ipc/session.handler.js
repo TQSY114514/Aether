@@ -10,7 +10,7 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:rename', (_e, id, title) => db.renameSession(id, title))
   ipcMain.handle('session:pin', (_e, id, pinned) => db.pinSession(id, pinned))
   ipcMain.handle('session:delete', (_e, id) => {
-    db.deleteSession(id)
+    try { db.deleteSession(id) } catch (e) { log.warn('session:delete db error:', e) }
     try { clearAllowRules(id) } catch {}
   })
   ipcMain.handle('session:touch', (_e, id) => db.touchSession(id))

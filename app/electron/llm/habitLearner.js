@@ -100,7 +100,11 @@ function markProposed(db, key) {
 }
 
 // User accepted → promote now (rewrites the user-habits skill).
-function confirmHabit(db) { promoteToSkill(db) }
+function confirmHabit(db, key) {
+  // Promote only the confirmed habit; leave others pending for future review.
+  try { db.run('UPDATE user_habit SET proposed=2 WHERE key=?', [key]) } catch {}
+  promoteToSkill(db)
+}
 
 // User dismissed → delete the habit so it never re-proposes.
 function dismissHabit(db, key) {

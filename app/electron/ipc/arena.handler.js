@@ -117,7 +117,9 @@ function registerArenaHandlers(ipcMain, db) {
     return { success: true }
   })
 
-  ipcMain.handle('arena:scores', () => db.getModelScores())
+  ipcMain.handle('arena:scores', () => {
+    try { return db.getModelScores() } catch (e) { log.warn('arena:scores error:', e); return [] }
+  })
   ipcMain.handle('arena:auto-route', (_e, query) => {
     const intent = db.classifyIntent(query)
     return { intent, route: db.autoRoute(intent) }
