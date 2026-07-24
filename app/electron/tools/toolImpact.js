@@ -131,7 +131,7 @@ function toolImpact(name, args) {
 // ───────────────────────────────────────────────────────────────────────────
 
 const MAX_DIFF_CHARS = 8000
-const readFileSync = require('fs').readFileSync
+const { readFileSync } = require('fs')
 
 function truncate(s, max) {
   if (s.length <= max) return s
@@ -164,7 +164,7 @@ function buildUnifiedDiff(oldLines, newLines) {
   return parts.join('\n')
 }
 
-export function generateDiff(name, args) {
+function generateDiff(name, args) {
   if (name === 'write_file') {
     const filePath = String(args?.path || '')
     const content = String(args?.content ?? '')
@@ -190,7 +190,7 @@ export function generateDiff(name, args) {
 // Generate a "before vs after" snapshot for any file-touching tool by reading
 // the current file state after execution. Returns null if the file doesn't
 // exist (new file) or can't be read.
-export function generateAfterSnapshot(name, args) {
+function generateAfterSnapshot(name, args) {
   if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return null
   const filePath = String(args?.path || '')
   if (!filePath) return null
@@ -205,4 +205,4 @@ export function generateAfterSnapshot(name, args) {
   }
 }
 
-module.exports = { toolImpact, generateDiff, generateAfterSnapshot, TOOL_LABELS }
+module.exports = { toolImpact, generateDiff, generateAfterSnapshot }
