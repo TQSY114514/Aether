@@ -351,5 +351,9 @@
   "chat.tokens_estimate": "~{0} tokens",
   "status.thinking": "Thinking…",
   "status.using_tools": "Using tools…",
-  "status.compacting": "Compressing context…"
+  "status.compacting": "Compressing context…",
+  "tool.rollback": "Rollback this Agent change",
+  "tool.rollback.running": "Rolling back...",
+  "tool.rollback.done": "Rolled back",
+  "tool.rollback.error": "Rollback failed"
 }
