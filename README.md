@@ -24,16 +24,16 @@ Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any
 
 AetherAI combines several capabilities that are typically spread across multiple tools into one local desktop app:
 
-- **Multi-provider in one chat** — switch between OpenAI, Claude, DeepSeek, and any OpenAI-compatible endpoint mid-conversation. No context lost between providers.
-- **Agent with a real tool loop** — 16 built-in tools (file I/O, search, shell, git, web, memory, skills, MCP) with a Plan→Act→Observe loop, live reasoning trace, per-tool sandboxing, and a configurable permission ladder.
-- **Multi-model Arena** — send one prompt to multiple models at once, vote on the best response, and track rankings with an ELO leaderboard.
-- **Skills & extensibility** — drop in `SKILL.md` files (Claude Code format), connect MCP servers, or write hooks at 10 lifecycle points.
-- **Structured long-term memory** — the agent recalls your preferences and past decisions across sessions without manual note-taking.
-- **Hierarchical planning** — complex requests get auto-decomposed into sub-tasks that run in parallel.
-- **Context compaction** — long conversations auto-summarize without losing tool-call/result pairs.
-- **Everything local** — conversations, API keys, and personas live in a local SQLite database. Nothing is uploaded anywhere except to the providers you configure.
-- **15 UI languages** — including Classical Chinese (文言) and RTL Arabic.
-- **MIT licensed** — fully open source.
+- `Stable` **Multi-provider in one chat** — switch between OpenAI, Claude, DeepSeek, and any OpenAI-compatible endpoint mid-conversation. No context lost between providers.
+- `Beta` **Agent with a real tool loop** — 16 built-in tools (file I/O, search, shell, git, web, memory, skills, MCP) with a Plan→Act→Observe loop, live reasoning trace, per-tool sandboxing, and a configurable permission ladder.
+- `Beta` **Multi-model Arena** — send one prompt to multiple models at once, vote on the best response, and track rankings with an ELO leaderboard.
+- `Experimental` **Skills & extensibility** — drop in `SKILL.md` files (Claude Code format), connect MCP servers, or write hooks at 10 lifecycle points.
+- `Beta` **Structured long-term memory** — the agent recalls your preferences and past decisions across sessions without manual note-taking.
+- `Experimental` **Hierarchical planning** — complex requests get auto-decomposed into sub-tasks that run in parallel.
+- `Beta` **Context compaction** — long conversations auto-summarize without losing tool-call/result pairs.
+- `Stable` **Everything local** — conversations, API keys, and personas live in a local SQLite database. Nothing is uploaded anywhere except to the providers you configure.
+- `Beta` **15 UI languages** — including Classical Chinese (文言) and RTL Arabic.
+- `Stable` **MIT licensed** — fully open source.
 
 ---
 
@@ -48,10 +48,13 @@ AetherAI combines several capabilities that are typically spread across multiple
   - [⚙️ Customization](#️-customization)
   - [🔒 Privacy](#-privacy)
 - [⚡ What makes AetherAI different](#-what-makes-aetherai-different)
-- [🚀 Quick Start](#-quick-start)
+- [🖼️ Screenshots / GIFs](#️-screenshots--gifs)
+- [⏱️ 5-minute setup](#️-5-minute-setup)
   - [Windows — prebuilt (recommended)](#windows--prebuilt-recommended)
-  - [Build from source](#build-from-source)
-  - [Configure your first provider](#configure-your-first-provider)
+  - [Install from source](#install-from-source)
+  - [Configure provider](#configure-provider)
+  - [Enable Ask mode](#enable-ask-mode)
+  - [Run your first agent task](#run-your-first-agent-task)
 - [📁 Project Structure](#-project-structure)
 - [🔑 Tech Stack](#-tech-stack)
 - [🤝 Acknowledgements](#-acknowledgements)
@@ -61,58 +64,61 @@ AetherAI combines several capabilities that are typically spread across multiple
 
 ## ✨ Features
 
+**Status labels:** `Stable` = daily-use ready, `Beta` = usable with known rough edges, `Experimental` = new/advanced behavior may change, `Planned` = documented roadmap item.
+
 ### 🖥️ Chat
 
-- **Multi-provider abstraction** — a single adapter layer; adding a provider format means one file. Currently OpenAI-compatible (covers OpenRouter, Together, DeepSeek, Ollama's OpenAI shim, LM Studio, …).
-- **Concurrent multi-session streaming** — one chat can stream while you keep talking in another.
-- **Thinking-effort slider** — real params: OpenAI o-series / gpt-5 / Claude (via relay) → `reasoning_effort`. Only effective on reasoning models (o1/o3/o4/gpt-5/claude/deepseek-r/qwQ); other models ignore it.
-- **Attachments** — text files are injected as context; images go multimodal (needs a vision model).
-- **Long-paste collapse** — pasting hundreds of lines auto-collapses into an expandable snippet (ChatGPT-style).
-- **Message editing** — overwrite + regenerate from any point.
-- **Message search** — with highlighting across all messages.
-- **Sidebar summaries** — titles are model-generated topic phrases (e.g. "New Eiyuu Angel pull advice"), not copied text.
+- `Stable` **Multi-provider abstraction** — a single adapter layer; adding a provider format means one file. Currently OpenAI-compatible (covers OpenRouter, Together, DeepSeek, Ollama's OpenAI shim, LM Studio, …).
+- `Stable` **Concurrent multi-session streaming** — one chat can stream while you keep talking in another.
+- `Beta` **Thinking-effort slider** — real params: OpenAI o-series / gpt-5 / Claude (via relay) → `reasoning_effort`. Only effective on reasoning models (o1/o3/o4/gpt-5/claude/deepseek-r/qwQ); other models ignore it.
+- `Beta` **Attachments** — text files are injected as context; images go multimodal (needs a vision model).
+- `Stable` **Long-paste collapse** — pasting hundreds of lines auto-collapses into an expandable snippet (ChatGPT-style).
+- `Stable` **Message editing** — overwrite + regenerate from any point.
+- `Stable` **Message search** — with highlighting across all messages.
+- `Beta` **Sidebar summaries** — titles are model-generated topic phrases (e.g. "New Eiyuu Angel pull advice"), not copied text.
 
 ### 🤖 Agent (Function Calling)
 
-- **16 built-in tools** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) with a Plan→Act→Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, a configurable iteration budget (default 25 rounds), and context compaction.
-- **Hierarchical planning** — auto-generates task breakdown for complex requests (DS4-inspired).
-- **Sub-agent delegation** — independent sub-tasks run in parallel via `delegate_task`.
-- **Permission modes** — a clear risk-ascending ladder:
+- `Beta` **16 built-in tools** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) with a Plan→Act→Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, a configurable iteration budget (default 25 rounds), and context compaction.
+- `Experimental` **Hierarchical planning** — auto-generates task breakdown for complex requests (DS4-inspired).
+- `Experimental` **Sub-agent delegation** — independent sub-tasks run in parallel via `delegate_task`.
+- `Stable` **Permission modes** — a clear risk-ascending ladder:
   - **Off** — plain chat, no tools.
   - **Plan** — read-only tools (investigate without changes).
   - **Ask** — confirm each risky action (recommended).
   - **Auto** — run everything, no confirms, but **inside the workspace sandbox**.
   - **Yolo** — FULL permission, NO sandbox (writes any path, runs any command). Warned on enable.
-- **Workspace sandbox** — `write_file`/`edit_file` are refused outside the configured workspace root; `run_command` blocks destructive patterns (format, `rm -rf /`, shutdown, download-and-execute). Configurable in Settings → Agent & Safety. Yolo mode bypasses it.
-- **Context compaction** — long conversations auto-summarize older history (tool-call/result pairs kept intact; identifiers like UUIDs/paths/IPs preserved verbatim) so chats don't 400 on context length.
-- **Tool call repair** — LLMs occasionally produce malformed JSON; the agent loop auto-repairs missing args, unquoted keys, and truncated calls before execution.
+- `Stable` **Workspace sandbox** — `write_file`/`edit_file` are refused outside the configured workspace root; `run_command` blocks destructive patterns (format, `rm -rf /`, shutdown, download-and-execute). Configurable in Settings → Agent & Safety. Yolo mode bypasses it.
+- `Beta` **Context compaction** — long conversations auto-summarize older history (tool-call/result pairs kept intact; identifiers like UUIDs/paths/IPs preserved verbatim) so chats don't 400 on context length.
+- `Beta` **Tool call repair** — LLMs occasionally produce malformed JSON; the agent loop auto-repairs missing args, unquoted keys, and truncated calls before execution.
 
 ### 🧠 Memory & Learning
 
-- **Auto long-term memory** — before each turn, relevant memories from past chats are injected as context; after the turn, key facts are extracted and saved automatically. The agent recalls your preferences/decisions across sessions without manual note-taking. Toggleable in Settings → Agent.
-- **Habit learner** — detects recurring preferences (e.g. "always use Claude") and proposes auto-applied skills.
-- **Audit log** — per-turn agent execution trace for debugging.
+- `Beta` **Auto long-term memory** — before each turn, relevant memories from past chats are injected as context; after the turn, key facts are extracted and saved automatically. The agent recalls your preferences/decisions across sessions without manual note-taking. Toggleable in Settings → Agent.
+- `Experimental` **Habit learner** — detects recurring preferences (e.g. "always use Claude") and proposes auto-applied skills.
+- `Beta` **Audit log** — per-turn agent execution trace for debugging.
 
 ### 🏟️ Arena
 
-- **Multi-model arena** — one prompt, multiple models answer **concurrently**; vote for the best and an **ELO leaderboard** updates automatically. Models are scored **per intent** (coding / math / translation / summary / general) and the best model for each task type is auto-routed. *No other local-first desktop chat app ships a built-in multi-model arena with ELO.*
+- `Beta` **Multi-model arena** — one prompt, multiple models answer **concurrently**; vote for the best and an **ELO leaderboard** updates automatically. Models are scored **per intent** (coding / math / translation / summary / general) and the best model for each task type is auto-routed. *No other local-first desktop chat app ships a built-in multi-model arena with ELO.*
 
 ### 🛠️ Skills & Extensibility
 
-- **Skills** (Claude-Code `SKILL.md` format) — drop a folder into `<workspace>/.claude/skills/` and the model loads it on demand via the `use_skill` tool. Ships with `release-checklist` and `git-commit` built-in examples.
-- **Slash commands** — 6 built-in commands (`/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate`) in `CMD.md` format.
-- **Hooks** — extend the agent lifecycle with custom scripts at 10 points: `PreToolUse`, `PostToolUse`, `ToolError`, `PreCompact`, `PostCompact`, `PreSend`, `PostResponse`, `SessionStart`, `SessionEnd`, `SubagentStop`.
-- **MCP support** — connect external stdio MCP servers; their tools merge with the built-ins automatically.
+- `Experimental` **Skills** (Claude-Code `SKILL.md` format) — drop a folder into `<workspace>/.claude/skills/` and the model loads it on demand via the `use_skill` tool. Ships with `release-checklist` and `git-commit` built-in examples.
+- `Stable` **Slash commands** — 6 built-in commands (`/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate`) in `CMD.md` format.
+- `Experimental` **Hooks** — extend the agent lifecycle with custom scripts at 10 points: `PreToolUse`, `PostToolUse`, `ToolError`, `PreCompact`, `PostCompact`, `PreSend`, `PostResponse`, `SessionStart`, `SessionEnd`, `SubagentStop`.
+- `Beta` **MCP support** — connect external stdio MCP servers; their tools merge with the built-ins automatically.
 
 ### ⚙️ Customization
 
-- **Advanced settings** — max tokens, temperature, top_p, custom system prefix, per-language auto-titles, default thinking effort.
-- **Custom background** — upload an image with opacity / blur controls.
-- **Personas** — system-prompt presets, switchable per session.
-- **Themes** — Light / Dark / Blue / Glass / Retro.
-- **15 UI languages** — English (standard + upside-down), 中文 (简体/繁體/文言), 日本語, español, français, Deutsch, português, русский, українська, العربية (RTL), हिन्दी, 한국어.
-- **Auto-update** — the NSIS installer checks for new releases on launch and updates in-app (Settings → Updates). Portable builds check too but install manually.
-- **Usage tracking** — per-API-call log with token count, cost, latency, cache hit rate breakdown.
+- `Stable` **Advanced settings** — max tokens, temperature, top_p, custom system prefix, per-language auto-titles, default thinking effort.
+- `Stable` **Custom background** — upload an image with opacity / blur controls.
+- `Stable` **Personas** — system-prompt presets, switchable per session.
+- `Stable` **Themes** — Light / Dark / Blue / Glass / Retro.
+- `Beta` **15 UI languages** — English (standard + upside-down), 中文 (简体/繁體/文言), 日本語, español, français, Deutsch, português, русский, українська, العربية (RTL), हिन्दी, 한국어.
+- `Beta` **Auto-update** — the NSIS installer checks for new releases on launch and updates in-app (Settings → Updates). Portable builds check too but install manually.
+- `Beta` **Usage tracking** — per-API-call log with token count, cost, latency, cache hit rate breakdown.
+- `Planned` **Screenshot/GIF gallery** — media slots are documented below; final captures will be added as release assets once the UI flows are captured.
 
 ### 🔒 Privacy
 
@@ -120,7 +126,20 @@ AetherAI combines several capabilities that are typically spread across multiple
 
 ---
 
-## 🚀 Quick Start
+## 🖼️ Screenshots / GIFs
+
+> Media placeholders use repo-relative paths. Add captures under `assets/screenshots/` when available.
+
+| Flow | Preview |
+|------|---------|
+| Chat streaming | `assets/screenshots/chat-streaming.gif` — TODO: capture concurrent token streaming in a chat session. |
+| Agent tool execution | `assets/screenshots/agent-tool-execution.gif` — TODO: capture Plan→Act→Observe with tool confirmations/results. |
+| Arena voting | `assets/screenshots/arena-voting.gif` — TODO: capture multi-model responses, voting, and ELO update. |
+| Provider settings | `assets/screenshots/provider-settings.png` — TODO: capture provider creation, model fetch, and API format selection. |
+
+---
+
+## ⏱️ 5-minute setup
 
 ### Windows — prebuilt (recommended)
 
@@ -131,7 +150,7 @@ Download the latest [Release](https://github.com/TQSY114514/AetherAI/releases):
 
 > The installer shows a SmartScreen "unknown publisher" warning on first launch — expected for an unsigned solo app. The app itself is safe; all data stays local.
 
-### Build from source
+### Install from source
 
 - Node.js 18+, npm 9+
 
@@ -145,12 +164,31 @@ npm start        # launch Electron
 
 Or run `start.bat` at the repo root on Windows.
 
-### Configure your first provider
+### Configure provider
 
 1. After launch, click **Models** in the sidebar.
 2. Add a provider (name / API URL / API Key).
 3. Click **Fetch models** to pull the available model list.
 4. Go back to chat and start talking.
+
+### Enable Ask mode
+
+1. Open **Settings → Agent & Safety**.
+2. Set the agent permission mode to **Ask**.
+3. Confirm the workspace root is the folder you want the agent to read/write.
+4. Keep **Yolo** disabled unless you intentionally want unrestricted access.
+
+### Run your first agent task
+
+1. Open a new chat.
+2. Ask a small workspace-scoped task, for example: `List the files in this project and summarize what the app does.`
+3. Review each proposed tool call. Approve safe reads; deny anything unexpected.
+4. Check the live reasoning trace and final answer.
+
+### Notes
+
+- Documentation avoids absolute local machine paths; examples use repo-relative paths such as `app/electron/main.js`.
+- This README and `README.zh-CN.md` are updated with the new setup, status labels, and media placeholders. Other localized READMEs may lag behind until full translation is available.
 
 ---
 
