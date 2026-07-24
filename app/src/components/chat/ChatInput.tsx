@@ -41,6 +41,7 @@ export default function ChatInput() {
   const [input, setInput] = useState('')
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
+  const [slashIndex, setSlashIndex] = useState(0)
   const [pending, setPending] = useState<PendingAttachment[]>([])
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
@@ -83,10 +84,26 @@ export default function ChatInput() {
   // Slash-command lookup: memoize to avoid re-filtering on every keystroke.
   const slashResults = useMemo(() => {
     if (!showSlash) return []
-    const q = slashQuery.toLowerCase()
+    const q = slashQuery.trim().toLowerCase()
     if (!q) return slashCommands
-    return slashCommands.filter(cmd => cmd.id.toLowerCase().includes(q) || cmd.name.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q))
+    return slashCommands
+      .map((cmd) => {
+        const haystack = `${cmd.id} ${cmd.name} ${cmd.description}`.toLowerCase()
+        const score = cmd.id.toLowerCase().startsWith(q) ? 0 : cmd.name.toLowerCase().startsWith(q) ? 1 : haystack.includes(q) ? 2 : 3
+        return { cmd, score }
+      })
+      .filter((item) => item.score < 3)
+      .sort((a, b) => a.score - b.score || a.cmd.id.localeCompare(b.cmd.id))
+      .map((item) => item.cmd)
   }, [showSlash, slashQuery, slashCommands])
+
+  useEffect(() => {
+    setSlashIndex(0)
+  }, [slashQuery, showSlash])
+
+  useEffect(() => {
+    if (slashIndex >= slashResults.length) setSlashIndex(Math.max(0, slashResults.length - 1))
+  }, [slashIndex, slashResults.length])
 
   // Drag-and-drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -199,6 +216,23 @@ export default function ChatInput() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const el = textareaRef.current
+    if (showSlash && slashResults.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSlashIndex((i) => (i + 1) % slashResults.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length)
+        return
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault()
+        handleSlashSelect(slashResults[slashIndex] || slashResults[0])
+        return
+      }
+    }
     if (e.ctrlKey || e.metaKey) {
       const key = e.key.toLowerCase()
       if (key === 'u' && el) {
@@ -276,7 +310,7 @@ export default function ChatInput() {
             ))}
           </div>
         )}
-        {fileError && <p className="text-xs mb-2" style={{ color: 'var(--error)' }}>⚠ {fileError}</p>}
+        {fileError && <p className="text-xs mb-2" role="alert" style={{ color: 'var(--error)' }}>⚠ {fileError}</p>}
         {snippets.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {snippets.map((s, i) => (
@@ -291,13 +325,21 @@ export default function ChatInput() {
         <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
-            <div className="slash-menu">
-              {slashResults.map((cmd) => (
-                <div key={cmd.id} className="slash-item" onClick={() => handleSlashSelect(cmd)}>
-                  <div className="text-sm font-medium">{cmd.name}</div>
-                  <div className="text-[11px] text-[var(--text-muted)] truncate">{cmd.description}</div>
-                </div>
-              ))}
+            <div className="slash-menu" role="listbox" aria-label="Slash commands">
+              {slashResults.map((cmd, idx) => {
+                const active = idx === slashIndex
+                return (
+                  <div key={cmd.id} role="option" aria-selected={active}
+                    className={cn('slash-item', active && 'bg-[var(--bg-secondary)]')}
+                    onMouseEnter={() => setSlashIndex(idx)} onClick={() => handleSlashSelect(cmd)}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium">{cmd.name}</div>
+                      <kbd className="text-[10px] rounded border px-1.5 py-0.5 font-mono" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>/{cmd.id}</kbd>
+                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)] truncate">{cmd.description}</div>
+                  </div>
+                )
+              })}
             </div>
           )}
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
