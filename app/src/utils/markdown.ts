@@ -118,6 +118,8 @@ function sanitizeHtml(html: string): string {
     .replace(EVENT_HANDLER_RE, '')
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<script[^>]*>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<style[^>]*>/gi, '')
 }
 
 // Pre-compiled regexes (created once, reused on every call).

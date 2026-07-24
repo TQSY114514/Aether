@@ -83,8 +83,12 @@ function startStaticServer(distDir) {
   }
   return new Promise((resolve) => {
     staticServer = http.createServer((req, res) => {
-      let fp = path.join(distDir, req.url === '/' ? 'index.html' : req.url)
-      if (!fs.existsSync(fp)) fp = path.join(distDir, 'index.html')
+      const reqPath = req.url === '/' ? '/index.html' : req.url
+      const resolved = path.resolve(distDir, reqPath)
+      if (!resolved.startsWith(path.resolve(distDir) + path.sep) && resolved !== path.resolve(distDir)) {
+        res.writeHead(403); res.end('Forbidden'); return
+      }
+      const fp = fs.existsSync(resolved) ? resolved : path.join(distDir, 'index.html')
       try {
         const c = fs.readFileSync(fp)
         const ext = path.extname(fp)
