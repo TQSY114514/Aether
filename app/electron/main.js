@@ -85,7 +85,9 @@ function startStaticServer(distDir) {
     staticServer = http.createServer((req, res) => {
       const reqPath = req.url === '/' ? '/index.html' : req.url
       const resolved = path.resolve(distDir, reqPath)
-      if (!resolved.startsWith(path.resolve(distDir) + path.sep) && resolved !== path.resolve(distDir)) {
+      const base = path.resolve(distDir)
+      log.info('[static] req:', req.url, 'resolved:', resolved, 'base:', base, 'ok:', resolved === base || resolved.startsWith(base + path.sep))
+      if (!resolved.startsWith(base + path.sep) && resolved !== base) {
         res.writeHead(403); res.end('Forbidden'); return
       }
       const fp = fs.existsSync(resolved) ? resolved : path.join(distDir, 'index.html')
