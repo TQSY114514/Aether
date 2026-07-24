@@ -7,7 +7,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 function toolImpact(name, args) {
-  const a = (args && typeof args === 'object' ? args : {}) as Record<string, unknown>
+  const a = (args && typeof args === 'object' ? args : {})
 
   switch (name) {
     case 'write_file': {
