@@ -8,6 +8,7 @@ import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
 import TodoList from './TodoList'
+import ThinkingBlock from './ThinkingBlock'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
@@ -21,6 +22,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
   const todos = useStore(s => s.todosByMessage[message.id])
+  const thinkingBlocks = useStore(s => s.thinkingBlocksByMessage[message.id])
   const statusLines = useStore(s => s.statusLinesByMessage[message.id])
 
   const regenerate = useStore(s => s.regenerate)
@@ -146,6 +148,9 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           )}
           {!isUser && planSteps && planSteps.length > 0 && (
             <AgentPlanTrace steps={planSteps} />
+          )}
+          {!isUser && thinkingBlocks && (
+            <ThinkingBlock text={thinkingBlocks} />
           )}
           {!isUser && toolCalls && toolCalls.length > 0 && (
             <div className="mb-2">

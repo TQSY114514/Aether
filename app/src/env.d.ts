@@ -66,6 +66,7 @@ interface Window {
       stop: () => Promise<void>
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
+      onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; aggregate?: boolean }) => Promise<{ results: ArenaResult[]; aggregate?: { content: string; model_name: string; provider_name: string } | null }>

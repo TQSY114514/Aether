@@ -102,7 +102,10 @@ function parseToolUses(content) {
   return { text, tool_calls: tool_calls.length ? tool_calls : undefined }
 }
 
-// Stream. Yields text deltas. Throws on non-2xx.
+// Stream. Yields delta strings (text_delta) and thinking block objects
+// ({ type: 'thinking', text } for thinking_delta). On content_block_start for
+// a thinking block, yields a sentinel { type: 'thinking_start' } so the caller
+// can surface a "thinking…" indicator. Throws on non-2xx.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
   const { system, messages: aMsgs } = toAnthropicMessages(messages)
   const body = {
@@ -138,6 +141,8 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  streamChat.thinkingBlocks = null // collected thinking blocks for this stream
+  let _thinkingText = ''
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -146,21 +151,61 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     buffer = lines.pop() || ''
     for (const line of lines) {
       const delta = parseSSELine(line)
-      if (delta) yield delta
+      if (!delta) continue
+      // Store thinking blocks on the stream object for the consumer to read;
+      // only yield content strings so the plain-chat streaming path (which
+      // concatenates deltas) doesn't get "[object Object]".
+      if (typeof delta === 'string') yield delta
+      else if (delta.type === 'thinking' && delta.text) {
+        _thinkingText += delta.text
+        streamChat.thinkingBlocks = [{ text: _thinkingText, ts: Date.now() }]
+      }
+      // Skip thinking_start/thinking_stop/tool_use_args — control signals only.
     }
   }
 }
 
-// Anthropic SSE: `event: <type>` then `data: {json}`. We only care about
-// content_block_delta (text deltas) and ignore the rest.
+// Anthropic SSE: `event: <type>` then `data: {json}`.
+// Handles:
+//   - content_block_start: yields `{ type: 'thinking_start' }` for thinking blocks
+//   - content_block_delta: yields text strings for text_delta, structured objects
+//     for thinking_delta
+//   - content_block_stop: yields `{ type: 'thinking_stop' }` for thinking blocks
 function parseSSELine(line) {
   if (!line.startsWith('data: ')) return null
   const data = line.slice(6).trim()
   if (!data || data === '[DONE]') return null
   try {
     const parsed = JSON.parse(data)
-    if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
-      return parsed.delta.text || ''
+    if (parsed.type === 'content_block_start') {
+      const block = parsed.content_block || {}
+      const idx = parsed.index != null ? parsed.index : -1
+      if (block.type === 'thinking') {
+        _thinkingIndex = idx
+        return { type: 'thinking_start' }
+      }
+      if (block.type === 'tool_use') return { type: 'tool_use_start', id: block.id, name: block.name }
+    }
+    if (parsed.type === 'content_block_stop') {
+      if (parsed.index != null && _thinkingIndex === parsed.index) {
+        _thinkingIndex = -1
+        return { type: 'thinking_stop' }
+      }
+    }
+    if (parsed.type === 'content_block_delta') {
+      const d = parsed.delta || {}
+      if (d.type === 'thinking_delta') {
+        return { type: 'thinking', text: d.thinking || '' }
+      }
+      if (d.type === 'text_delta') {
+        return d.text || ''
+      }
+      if (d.type === 'input_json_delta') {
+        return { type: 'tool_use_args', id: parsed.id, delta: d.partial_json || '' }
+      }
+    }
+    if (parsed.type === 'message_start') {
+      return { type: 'message_start', usage: parsed.usage }
     }
   } catch {}
   return null
@@ -220,7 +265,8 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   return { content: text, tool_calls, usage }
 }
 
-// Anthropic has no /models endpoint; return [] (the user configures model names).
+// Tracks which content block index is the current thinking block (for stop detection).
+let _thinkingIndex = -1
 async function listModels() { return [] }
 
 // Connectivity probe: a minimal /messages request with max_tokens:1.

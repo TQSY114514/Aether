@@ -109,6 +109,8 @@ async function initDatabase() {
   try { db.run("ALTER TABLE memory ADD COLUMN relation_target TEXT") } catch {}
   // Access count for memory decay (how often a memory was prefetched).
   try { db.run("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0") } catch {}
+  // Last-accessed timestamp for time-decay scoring.
+  try { db.run("ALTER TABLE memory ADD COLUMN last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
 
   // Agent execution audit log (Codex-style). One row per agent turn, full trace
   // as JSON payload for debugging and analysis.
@@ -337,6 +339,8 @@ function getMessages(sessionId) {
 function addMessage({ session_id, role, content, model_used = null, provider_used = null, token_count = null, latency_ms = null, status = 'success', error_message = null, arena_model = null }) {
   db.run('INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model])
+  // Clear placeholder flag so pruneEmptySessions no longer targets this session.
+  try { db.run('UPDATE session SET is_placeholder = 0 WHERE id = ? AND is_placeholder = 1', [session_id]) } catch {}
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 function updateMessage(id, data) {
@@ -353,15 +357,16 @@ function getSetting(key) {
   const rows = allRows(stmt)
   return rows[0]?.value || null
 }
-function setSetting(key, value) {
+async function setSetting(key, value) {
   db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value])
-  saveDatabase()
-  // Settings are small but important — flush immediately so they survive
-  // a fast app close (the 200 ms debounce in saveDatabase is optimized for
-  // high-frequency writes like streaming chunks, not user settings).
+  // Drain any in-flight async save so it can't race past this sync write
+  // and overwrite the DB with stale data. Critical ordering:
+  //   1. Await any prior _writeDb to complete (it has old data — fine, we
+  //      overwrite with our own write next)
+  //   2. Cancel the debounced timer (prevents another future write)
+  //   3. Sync write the current DB (includes the new setting)
+  if (savePromise) await savePromise.catch(() => {})
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
-  // Use synchronous write for settings so they are durable before the call
-  // returns — no risk of losing data to a fast app shutdown.
   fs.writeFileSync(dbPath, Buffer.from(db.export()))
 }
 function getAllSettings() {
@@ -491,7 +496,7 @@ function deleteMemory(id) {
   db.run('DELETE FROM memory WHERE id = ?', [id]); saveDatabase()
 }
 function incrementMemoryAccess(id) {
-  try { db.run('UPDATE memory SET access_count = access_count + 1 WHERE id = ?', [id]) } catch {}
+  try { db.run('UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?', [localNow(), id]) } catch {}
 }
 
 // ===== Agent Audit Log =====

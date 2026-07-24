@@ -482,6 +482,68 @@ const TOOLS = [
     },
   },
   {
+    name: 'git_log',
+    description: 'Show recent git commit history. Returns one line per commit. Read-only.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        count: { type: 'number', description: 'Number of commits to show (default 10, max 50).' },
+        format: { type: 'string', description: 'Format style: "oneline" (default), "detailed", or "short".' },
+      },
+      required: ['cwd'],
+    },
+    run: (args) => {
+      const cwd = String(args.cwd || '')
+      const count = Math.min(Number(args.count) || 10, 50)
+      const fmt = args.format === 'detailed' ? 'full' : args.format === 'short' ? 'short' : 'oneline'
+      return new Promise((resolve, reject) => {
+        exec(`git log --${fmt} -n ${count} --no-decorate`, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
+          if (err) return reject(new Error(stderr || err.message))
+          resolve(stdout || '(no commits)')
+        })
+      })
+    },
+  },
+  {
+    // Git commit — reads the diff, lets the model (optionally) generate a message,
+    // then commits. Inspired by Aider's /commit and Claude Code's git integration.
+    name: 'git_commit',
+    description: 'Stage all changes and create a git commit. If no message is provided, the model should first read the diff with git_diff and compose a concise commit message following conventional commits style (feat/fix/docs/refactor/chore). DANGEROUS — creates a commit.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        message: { type: 'string', description: 'Commit message. If empty, the model should call git_diff first to compose one.' },
+        all: { type: 'boolean', description: 'If true, stage all changes including deletions (git add -A). Default true.' },
+      },
+      required: ['cwd'],
+    },
+    run: (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      const msg = String(args.message || '').trim()
+      if (!msg) throw new Error('commit message is required — read the diff first and compose one')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      const allFlag = args.all !== false ? ' -A' : ''
+      return new Promise((resolve, reject) => {
+        exec(`git add${allFlag} && git commit -m ${JSON.stringify(msg)}`, { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000 }, (err, stdout, stderr) => {
+          if (err) {
+            const out = (stdout || '') + (stderr || '')
+            // Detect "nothing to commit" as a non-error.
+            if (/nothing (to commit|added)/i.test(out)) return resolve('nothing to commit (working tree clean)')
+            return reject(new Error(stderr || err.message))
+          }
+          resolve(stdout || stderr || 'committed')
+        })
+      })
+    },
+  },
+  {
     name: 'memory_save',
     description: 'Save a note to the app\'s persistent memory store. Use for facts the user wants remembered across conversations.',
     risk: 'safe',
@@ -572,6 +634,44 @@ const TOOLS = [
       }).join('\n\n')
     },
   },
+  {
+    // Unified diff patch application (Codex/OpenClaw-inspired). More precise than
+    // edit_file for multi-line changes: the model generates a proper unified diff
+    // and this tool applies it with conflict detection. Falls back to the full
+    // file content on failure so the model can retry.
+    name: 'apply_patch',
+    description: 'Apply a unified diff patch to a file. Use this instead of edit_file when making multiple or complex edits — a patch preserves context across lines and detects conflicts. Provide the file path and the full unified diff. DANGEROUS — writes to the filesystem.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the file to patch.' },
+        patch: { type: 'string', description: 'A unified diff (--- a/+++ b/ format) to apply.' },
+      },
+      required: ['path', 'patch'],
+    },
+    run: (args, ctx) => {
+      const p = String(args.path || '')
+      const patchText = String(args.patch || '')
+      if (!p) throw new Error('path is required')
+      if (!patchText) throw new Error('patch is required')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(p, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      if (!fs.existsSync(p)) throw new Error(`file not found: ${p}`)
+      const original = fs.readFileSync(p, 'utf-8')
+      const lines = original.split('\n')
+      const hunks = parseUnifiedDiff(patchText, lines.length)
+      if (!hunks.length) return 'patch had no valid hunks — file unchanged'
+      const result = applyHunks(lines, hunks)
+      if (result.conflicts.length > 0) {
+        return `patch conflicts detected:\n${result.conflicts.map(c => `  - ${c}`).join('\n')}\nFile NOT modified. Retry with a corrected patch.`
+      }
+      fs.writeFileSync(p, result.content, 'utf-8')
+      return `patch applied: ${result.applied} hunk(s), ${result.content.length} chars written to ${p}`
+    },
+  },
 ]
 
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;
@@ -601,4 +701,76 @@ function toolsPayload(mode) {
   return list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
 }
 
-module.exports = { TOOLS, getTool, toolsPayload }
+// ─── apply_patch helpers ───────────────────────────────────────────────────────
+// Parse a unified diff into hunk descriptors. Each hunk has:
+//   { oldStart, oldCount, newStart, newCount, lines: [{type, content}] }
+// where type is 'context', 'add', or 'remove'.
+// Returns [] on parse failure (caller should treat as "no valid hunks").
+function parseUnifiedDiff(diffText) {
+  const hunks = []
+  const lines = diffText.split('\n')
+  let i = 0
+  while (i < lines.length) {
+    // Look for a hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+    const m = lines[i].match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+    if (!m) { i++; continue }
+    const oldStart = parseInt(m[1])
+    const oldCount = parseInt(m[2] || '1')
+    const newStart = parseInt(m[3])
+    const newCount = parseInt(m[4] || '1')
+    i++
+    const hunkLines = []
+    while (i < lines.length && !lines[i].startsWith('@@')) {
+      const line = lines[i]
+      if (line.startsWith(' ') || line.startsWith('+') || line.startsWith('-')) {
+        hunkLines.push({ type: line[0] === '+' ? 'add' : line[0] === '-' ? 'remove' : 'context', content: line.slice(1) })
+      } else if (line.startsWith('\\') && line.includes('No newline')) {
+        // \ No newline at end of file marker — record and skip
+        hunkLines.push({ type: 'noeol', content: '' })
+      }
+      i++
+    }
+    if (hunkLines.length > 0) hunks.push({ oldStart, oldCount, newStart, newCount, lines: hunkLines })
+  }
+  return hunks
+}
+
+// Apply parsed hunks to an array of file lines. Returns { content, applied, conflicts }.
+// Each hunk's oldStart references the ORIGINAL file line numbers. We accumulate
+// line-offset deltas so later hunks account for earlier insertions/deletions.
+function applyHunks(fileLines, hunks) {
+  const conflicts = []
+  let result = [...fileLines]
+  let applied = 0
+  let lineDelta = 0 // cumulative shift from prior hunk applications
+
+  for (const hunk of hunks) {
+    const idx = hunk.oldStart - 1 + lineDelta // adjusted for prior shifts
+    // Validate context lines match at the expected position.
+    const ctxLines = hunk.lines.filter(l => l.type === 'context')
+    let matchOffset = -1
+    // Search for the context block in result starting from idx.
+    const searchStart = Math.max(0, idx - 2)
+    for (let start = searchStart; start <= Math.max(searchStart, result.length - ctxLines.length); start++) {
+      let ok = true
+      for (let ci = 0; ci < ctxLines.length; ci++) {
+        if (start + ci >= result.length || result[start + ci] !== ctxLines[ci].content) { ok = false; break }
+      }
+      if (ok) { matchOffset = start; break }
+    }
+    if (matchOffset < 0) {
+      conflicts.push(`hunk at line ${hunk.oldStart}: context did not match (file may have changed)`)
+      continue
+    }
+    // Build replacement: context lines + added lines (skip removed lines).
+    const adds = hunk.lines.filter(l => l.type === 'add')
+    const oldSpan = hunk.oldCount
+    const replacement = adds.map(l => l.content)
+    result = [...result.slice(0, matchOffset), ...replacement, ...result.slice(matchOffset + oldSpan)]
+    lineDelta += replacement.length - oldSpan
+    applied++
+  }
+  return { content: result.join('\n'), applied, conflicts }
+}
+
+module.exports = { TOOLS, getTool, toolsPayload, parseUnifiedDiff, applyHunks }

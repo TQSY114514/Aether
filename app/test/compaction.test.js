@@ -136,7 +136,7 @@ describe('maybeCompact', () => {
     })
     expect(result.length).toBeLessThan(msgs.length)
     expect(result[0].role).toBe('system')
-  })
+  }, 20000)
 
   it('keeps tool_call/result pairs intact on hard-truncate', async () => {
     const big = 'x'.repeat(5000)

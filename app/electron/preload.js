@@ -130,6 +130,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:context-budget', handler)
       return () => ipcRenderer.removeListener('chat:context-budget', handler)
     },
+    onThinkingChunk: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:thinking-chunk', handler)
+      return () => ipcRenderer.removeListener('chat:thinking-chunk', handler)
+    },
     stop: () => ipcRenderer.invoke('chat:stop'),
   },
   arena: {

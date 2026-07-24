@@ -11,6 +11,7 @@ const { estimateMessagesTokens, estimateTextTokens } = require('../llm/compactio
 const auditLog = require('../llm/auditLog')
 const modelAdvisor = require('../llm/modelAdvisor')
 const log = require('../logger')
+const providerHealth = require('../llm/providerHealth')
 
 // dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
 // scope (so it can be unit-tested) but needs DB access to persist the title.
@@ -96,11 +97,14 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { messageId: 0 }
     }
 
-    // Build fallback chain
+    // Build fallback chain — skip providers that are in cooldown or have a
+    // poor success rate (provider health tracking).
     const fallbackModels = [{ model, provider }]
     const chain = db.getFallbackChain(model.provider_id)
     for (const m of chain) {
-      if (m.id !== modelId) fallbackModels.push({ model: m, provider })
+      if (m.id !== modelId && providerHealth.isHealthy(m.provider_id)) {
+        fallbackModels.push({ model: m, provider: m.provider || provider })
+      }
     }
 
     // Get conversation history
@@ -361,16 +365,25 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       try {
         let fullContent = ''
         const wc = getWebContents()
-        // mergedOpts carries reasoning params + advanced generation params (max_tokens/
-        // temperature/top_p) set in Settings, spread into the request body by the adapter.
-        // streamChat returns a generator that exposes .usage (server-reported tokens)
-        // once the stream ends — captured here for the usage log.
-        const stream = streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: mergedOpts })
+        const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test((m?.model_name || '').toLowerCase())
+        let lastThinkingLen = 0
+        const stream = streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: { ...mergedOpts, onThinkingDelta: thinkingSupported ? (text) => {
+          if (text.length > lastThinkingLen) {
+            const newLen = text.length - lastThinkingLen
+            wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text.slice(lastThinkingLen, text.length), done: false })
+            lastThinkingLen = text.length
+          }
+        } : undefined } })
         const streamStart = Date.now()
         for await (const delta of stream) {
           if (delta) {
             fullContent += delta
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
+          }
+          // Surface completed thinking block to the UI.
+          if (thinkingSupported && stream.thinkingBlocks && stream.thinkingBlocks.length > 0 && lastThinkingLen > 0 && stream.thinkingBlocks[0].text.length === lastThinkingLen) {
+            wc?.send('chat:thinking-end', { messageId: msgId, sessionId })
+            lastThinkingLen = -1 // don't re-send
           }
         }
         clearTimeout(timeout)
@@ -411,6 +424,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
       if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
       log.info('DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
+      providerHealth.recordResult(p.id, true)
+      providerHealth.recordError(p.id, null)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
       return { messageId: msgId }
@@ -418,6 +433,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       } catch (err) {
         clearTimeout(timeout)
         abortControllers.delete(msgId)
+        providerHealth.recordResult(p.id, false)
+        if (err.status === 429) providerHealth.setCooldown(p.id)
+        providerHealth.recordError(p.id, err.message)
         if (err.name === 'AbortError') {
           db.updateMessage(msgId, { content: '', status: 'aborted', error_message: '已中止' })
           getWebContents()?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })

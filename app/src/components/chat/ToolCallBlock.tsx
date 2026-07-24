@@ -24,6 +24,8 @@ function toolLabel(tool: ToolCall): string {
     case 'run_command': return a.command ? `运行 ${first((a.command + '').split(' ').slice(0, 3).join(' '), 30)}` : '运行命令'
     case 'git_status': return '查看 git 状态'
     case 'git_diff': return '查看 git 差异'
+    case 'git_log': return a.count ? `查看 git 日志 (${a.count} 条)` : '查看 git 日志'
+    case 'git_commit': return a.message ? `提交: ${first(a.message, 30)}` : 'git 提交'
     case 'memory_save': return '保存记忆'
     case 'memory_list': return '列出记忆'
     case 'use_skill': return a.name ? `使用技能 ${first(a.name, 30)}` : '使用技能'

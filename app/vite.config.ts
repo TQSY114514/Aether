@@ -8,8 +8,9 @@ function serveLocalesPlugin() {
   return {
     name: 'serve-locales',
     configureServer(server) {
-      server.middlewares.use('/locales', (req, res, next) => {
-        const fp = path.resolve(__dirname, 'locales', req.url?.replace(/^\//, '') || '')
+      server.middlewares.use('/locales', (req, res) => {
+        const name = req.url?.replace(/^\/locales\//, '') || ''
+        const fp = path.resolve(__dirname, 'locales', name)
         if (fs.existsSync(fp) && fs.statSync(fp).isFile()) {
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.end(fs.readFileSync(fp))
