@@ -44,7 +44,25 @@ function initAppReady() {
       return new Response('AetherAI protocol handler', { status: 200 })
     })
   } else {
+    // Production: register OS protocol association AND listen for incoming URLs.
     app.setAsDefaultProtocolClient('aetherai')
+    app.on('second-instance', (_e, argv) => {
+      const url = argv.find(a => a.startsWith('aetherai://'))
+      if (url && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('protocol:open', { action: new URL(url).hostname })
+        mainWindow.show(); mainWindow.focus()
+      }
+    })
+    app.on('open-url', (e, url) => {
+      if (url.startsWith('aetherai://')) {
+        e.preventDefault()
+        const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+        if (wc && !wc.isDestroyed()) {
+          wc.send('protocol:open', { action: new URL(url).hostname })
+          mainWindow.show(); mainWindow.focus()
+        }
+      }
+    })
   }
 }
 
@@ -83,9 +101,8 @@ function startStaticServer(distDir) {
   }
   return new Promise((resolve) => {
     staticServer = http.createServer((req, res) => {
-      const reqPath = req.url === '/' ? '/index.html' : req.url
-      // path.resolve() treats a leading-slash second arg as absolute, so strip
-      // it to keep resolution rooted at distDir.
+      const rawUrl = req.url.split('?')[0]   // strip query string (e.g. HMR hash)
+      const reqPath = rawUrl === '/' ? '/index.html' : rawUrl
       const relative = reqPath.startsWith('/') ? reqPath.slice(1) : reqPath
       const resolved = path.resolve(distDir, relative)
       const base = path.resolve(distDir)
@@ -201,16 +218,19 @@ app.whenReady().then(async () => {
   await db.initDatabase()
   // Independent init steps run in parallel after DB is ready.
   await Promise.all([
-    (async () => { try { db.pruneEmptySessions() } catch {} })(),
-    (async () => { try { require('./llm/credentialPool').init(db) } catch {} })(),
+    (async () => { try { await db.pruneEmptySessions() } catch (e) { log.warn('pruneEmptySessions failed:', e.message) } })(),
+    (async () => { try { require('./llm/credentialPool').init(db) } catch (e) { log.warn('credentialPool init failed:', e.message) } })(),
     (async () => {
-      try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) } catch {}
+      try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) }
+      catch (e) { log.warn('workspace root init failed:', e.message) }
     })(),
     (async () => {
-      try { const { scanSkills } = require('./llm/skills'); scanSkills() } catch (e) { log.warn('skill scan failed:', e.message) }
+      try { const { scanSkills } = require('./llm/skills'); scanSkills() }
+      catch (e) { log.warn('skill scan failed:', e.message) }
     })(),
     (async () => {
-      try { require('./llm/hooks').scanHooks() } catch (e) { log.warn('hooks scan failed:', e.message) }
+      try { require('./llm/hooks').scanHooks() }
+      catch (e) { log.warn('hooks scan failed:', e.message) }
     })(),
   ])
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {

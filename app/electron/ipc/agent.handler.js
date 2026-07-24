@@ -1,5 +1,6 @@
 const { setWorkspaceRoot, setWorkspaceRootForSession, getWorkspaceRoot } = require('../tools/sandbox')
 const checkpointMgr = require('../llm/checkpointManager')
+const { invalidateCache, hasProjectInstructions, loadProjectInstructions } = require('../llm/projectInstructions')
 
 function registerAgentHandlers(ipcMain, db) {
   // Get the current agent workspace root.
@@ -25,14 +26,23 @@ function registerAgentHandlers(ipcMain, db) {
       cfg.workspace = v
       db.setSessionConfig(sessionId, cfg)
       setWorkspaceRootForSession(sessionId, v || null)
+      invalidateCache()
       return { success: true, root: v || getWorkspaceRoot() }
     }
     if (v) await db.setSetting('agent_workspace_root', v)
     else await db.setSetting('agent_workspace_root', '')
     setWorkspaceRoot(v || null)
+    invalidateCache()
     // Invalidate the project context graph cache for the new workspace.
     try { require('../context').projectIndexer.invalidateCache(v || null) } catch {}
     return { success: true, root: getWorkspaceRoot() }
+  })
+
+  // Check whether the current workspace has project instructions (CLAUDE.md etc.).
+  ipcMain.handle('agent:has-project-instructions', () => {
+    const has = hasProjectInstructions()
+    const info = loadProjectInstructions()
+    return { has, fileName: info?.fileName || null }
   })
 
   // Manually re-index the project context graph.

@@ -67,7 +67,7 @@ interface Window {
       onHabitProposed: (callback: (payload: { key: string; imperative: string; reason: string }) => void) => () => void
       confirmHabit: (key: string) => Promise<{ ok: boolean }>
       dismissHabit: (key: string) => Promise<{ ok: boolean }>
-      onHabitSuggestion: (callback: (payload: { key: string; imperative: string; reason?: string }[]) => void) => () => void
+      onHabitSuggestion: (callback: (payload: { key: string; imperative: string; reason: string }[]) => void) => () => void
       onContextBudget: (callback: (payload: { text: string }) => void) => () => void
       stop: () => Promise<void>
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
@@ -116,11 +116,15 @@ interface Window {
     agent: {
       getWorkspace: (sessionId?: number) => Promise<string>
       setWorkspace: (opts: { dir?: string | null; sessionId?: number }) => Promise<{ success: boolean; root: string }>
+      hasProjectInstructions: () => Promise<{ has: boolean; fileName: string | null }>
       reindexProject: () => Promise<{ ok: boolean; stats?: { totalFiles: number; totalEdges: number; languages: string[] }; error?: string }>
       listCheckpoints: (sessionId: number) => Promise<{ id: number; sessionId: number; turnId: number; stepIndex: number; meta: Record<string, unknown>; createdAt: string }[]>
       getCheckpoint: (id: number) => Promise<{ id: number; sessionId: number; turnId: number; stepIndex: number; messages: unknown[]; toolTrace: unknown[]; meta: Record<string, unknown>; createdAt: string } | null>
       deleteCheckpoint: (id: number) => Promise<{ ok: boolean }>
       cleanupCheckpoints: (sessionId: number) => Promise<{ ok: boolean }>
+    }
+    model: {
+      routeTier: (params: { taskType: string; userMessage: string }) => Promise<{ tier: string; modelName: string | null; modelId: number | null; rationale: string }>
     }
     skills: {
       list: () => Promise<{ name: string; description: string; filePath: string; metadata?: Record<string, string>; usage?: { count: number; lastUsedAt: string | null } }[]>

@@ -23,8 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   agent: {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
-    setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', opts),
+    setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', typeof opts === 'string' ? { dir: opts } : opts),
     reindexProject: () => ipcRenderer.invoke('agent:project:reindex'),
+    hasProjectInstructions: () => ipcRenderer.invoke('agent:has-project-instructions'),
     listCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:list', sessionId),
     getCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:get', id),
     deleteCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:delete', id),
@@ -39,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listAll: () => ipcRenderer.invoke('model:list-all'),
     primary: () => ipcRenderer.invoke('model:primary'),
     suggest: (params) => ipcRenderer.invoke('model:suggest', params),
+    routeTier: (params) => ipcRenderer.invoke('model:route-tier', params),
   },
   persona: {
     list: () => ipcRenderer.invoke('persona:list'),

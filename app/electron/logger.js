@@ -6,7 +6,7 @@
 // In prod : debug is silenced (still stored), warn/error also print.
 // ───────────────────────────────────────────────────────────────────────────
 
-const isDev = !(process.env.NODE_ENV === 'production' || process.env.VITE_DEV_SERVER_URL === undefined)
+const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || process.env.NODE_ENV !== 'production'
 
 const PREFIX = '[AetherAI]'
 

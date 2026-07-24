@@ -18,6 +18,8 @@ const { classifyError } = require('./errorClassify')
 const toolCache = require('./toolCache')
 const checkpointMgr = require('./checkpointManager')
 const { generateDiff, generateAfterSnapshot } = require('../tools/toolImpact')
+const { buildProjectContextMessage, invalidateCache } = require('./projectInstructions')
+const modelRouter = require('./modelRouter')
 
 // Classify tool-execution errors (distinct from LLM API errors).
 // These are errors thrown by tool.run() — e.g. file not found, command
@@ -105,6 +107,15 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   let sigRepeat = 0
   const convo = messages.slice()
   if (!convo.some(m => m.role === 'system')) convo.unshift({ role: 'system', content: AGENT_SYSTEM_PROMPT })
+
+  // Inject project instructions (CLAUDE.md / .aetherai.md) as an early system
+  // message so the agent knows project conventions from the first turn.
+  const projectCtx = buildProjectContextMessage()
+  if (projectCtx) {
+    // Insert after the main system prompt if present, otherwise at the top.
+    const sysIdx = convo.findIndex(m => m.role === 'system')
+    convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, projectCtx)
+  }
 
   let plan = null
   let planningMode = false
