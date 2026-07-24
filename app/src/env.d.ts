@@ -19,6 +19,12 @@ interface Window {
       fallbackChain: (providerId: number) => Promise<Model[]>
       listAll: () => Promise<Model[]>
       primary: () => Promise<{ id: number; provider_id: number } | null>
+      suggest: (params: { sessionId: number; userMessage: string }) => Promise<{
+        suggestedModelId: number | null
+        reason: string
+        heuristicScores?: { modelId: number; modelName: string; family: string; heuristic: number; eloScore: number | null; blended: number }[]
+        confidence: number
+      }>
     }
     persona: {
       list: () => Promise<Persona[]>
@@ -88,10 +94,13 @@ interface Window {
       getAll: () => Promise<Record<string, string>>
     }
     memory: {
-      list: () => Promise<{ id: number; content: string; type: string; created_at: string }[]>
-      create: (data: { content: string; type?: string }) => Promise<{ lastInsertRowid: number }>
+      list: () => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null }[]>
+      create: (data: { content: string; type?: string; source_session_id?: number | null }) => Promise<{ lastInsertRowid: number }>
       update: (id: number, data: { content: string }) => Promise<void>
       delete: (id: number) => Promise<void>
+      conflicts: () => Promise<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>
+      conflictResolve: (keepId: number, removeId: number) => Promise<{ ok: boolean }>
+      access: (id: number) => Promise<void>
     }
     background: {
       set: (dataUrl: string | null) => Promise<{ success: boolean; hasImage?: boolean; error?: string }>
@@ -114,8 +123,11 @@ interface Window {
       cleanupCheckpoints: (sessionId: number) => Promise<{ ok: boolean }>
     }
     skills: {
-      list: () => Promise<{ name: string; description: string; filePath: string }[]>
+      list: () => Promise<{ name: string; description: string; filePath: string; metadata?: Record<string, string>; usage?: { count: number; lastUsedAt: string | null } }[]>
       rescan: () => Promise<{ success: boolean; count: number }>
+      stats: () => Promise<{ name: string; totalUses: number; successes: number; successRate: number; lastResult: boolean }[]>
+      record: (name: string, success: boolean) => Promise<{ ok: boolean }>
+      autoDraft: (name: string, description?: string) => Promise<{ ok: boolean; error?: string }>
     }
     commands: {
       list: () => Promise<{ id: string; name: string; description: string; prompt: string }[]>

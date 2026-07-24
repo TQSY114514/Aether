@@ -1,30 +1,38 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { Plus, Trash2, Download, Upload, Search, Tag } from 'lucide-react'
+import { useUI } from '@/components/ui/feedback'
+import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 const TYPE_COLORS: Record<string, string> = {
-  entity: '#2563EB', fact: '#16A34A', context: '#D97706',
+  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#9333EA',
 }
 
 export default function MemoryPage() {
-  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string }[]>([])
+  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null }[]>([])
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState('fact')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [conflicts, setConflicts] = useState<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>([])
+  const [showConflicts, setShowConflicts] = useState(false)
+  const [resolving, setResolving] = useState<number | null>(null)
+  const { toast } = useUI()
 
   const loadEntries = async () => {
     const memories = await window.electronAPI.memory.list()
     setEntries(memories || [])
+    const conf = await window.electronAPI.memory.conflicts()
+    setConflicts(conf)
   }
 
   useEffect(() => { loadEntries() }, [])
 
   const handleAdd = async () => {
     if (!newContent.trim()) return
-    await window.electronAPI.memory.create({ content: newContent.trim(), type: newType })
+    const currentSessionId = useStore.getState().currentSessionId
+    await window.electronAPI.memory.create({ content: newContent.trim(), type: newType, source_session_id: currentSessionId || null })
     setNewContent('')
     setNewType('fact')
     loadEntries()
@@ -39,6 +47,14 @@ export default function MemoryPage() {
 
   const handleDelete = async (id: number) => {
     await window.electronAPI.memory.delete(id)
+    loadEntries()
+  }
+
+  const handleResolveConflict = async (keepId: number, removeId: number) => {
+    setResolving(removeId)
+    await window.electronAPI.memory.conflictResolve(keepId, removeId)
+    setResolving(null)
+    toast('冲突已解决')
     loadEntries()
   }
 
@@ -83,7 +99,7 @@ export default function MemoryPage() {
         <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>🧠 {t('sidebar.nav.memory')}</h1>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>AI 会记住这些信息并在对话中参考</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>AI 会记住这些信息并在对话中参考 · 来源追踪 · 冲突检测</p>
           </div>
           <div className="flex gap-2">
             <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)]" style={{ borderColor: 'var(--border)' }}>
@@ -94,6 +110,43 @@ export default function MemoryPage() {
             </button>
           </div>
         </div>
+
+        {/* Conflict banner */}
+        {conflicts.length > 0 && (
+          <button onClick={() => setShowConflicts(!showConflicts)}
+            className="w-full mb-4 rounded-xl border-2 p-3 flex items-center gap-2 text-sm transition-colors"
+            style={{ borderColor: 'var(--warning)', backgroundColor: 'rgba(234,179,8,0.05)' }}>
+            <AlertTriangle size={16} style={{ color: 'var(--warning)' }} />
+            <span style={{ color: 'var(--warning)' }}>{conflicts.length} 个记忆冲突需要解决</span>
+            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{showConflicts ? '▲' : '▼'}</span>
+          </button>
+        )}
+
+        {showConflicts && conflicts.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {conflicts.map((c) => (
+              <div key={c.memoryId} className="rounded-xl border p-3" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
+                <div className="text-[10px] font-medium mb-1.5" style={{ color: 'var(--warning)' }}>冲突记忆</div>
+                <div className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>较新: "{c.content}"</div>
+                <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>旧: "{c.conflictingContent}"</div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleResolveConflict(c.memoryId, c.conflictingId)}
+                    disabled={resolving === c.conflictingId}
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors hover:bg-[var(--bg-primary)]"
+                    style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
+                    <Check size={10} /> 保留较新
+                  </button>
+                  <button onClick={() => handleResolveConflict(c.conflictingId, c.memoryId)}
+                    disabled={resolving === c.conflictingId}
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors hover:bg-[var(--bg-primary)]"
+                    style={{ borderColor: 'var(--text-muted)', color: 'var(--text-secondary)' }}>
+                    <X size={10} /> 保留较旧
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Type badges summary */}
         <div className="flex items-center gap-2 mb-4">
@@ -110,10 +163,10 @@ export default function MemoryPage() {
         {/* Search */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border text-sm mb-4" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-gray-400 shrink-0" />
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search memories..." className="w-full bg-transparent outline-none text-sm" />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索记忆..." className="w-full bg-transparent outline-none text-sm" />
           {searchQuery && (
             <span className="text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
-              {filtered.length} {filtered.length === 1 ? 'match' : 'matches'}
+              {filtered.length} {filtered.length === 1 ? '条结果' : '条结果'}
             </span>
           )}
         </div>
@@ -125,6 +178,7 @@ export default function MemoryPage() {
             <option value="entity">Entity</option>
             <option value="fact">Fact</option>
             <option value="context">Context</option>
+            <option value="relation">Relation</option>
           </select>
           <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)}
             placeholder={t('memory.add_placeholder')}
@@ -139,11 +193,11 @@ export default function MemoryPage() {
         <div className="space-y-2">
           {filtered.length === 0 && (
             <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>
-              {searchQuery ? 'No matching memories' : '还没有记忆，添加一条试试'}
+              {searchQuery ? '没有匹配的记忆' : '还没有记忆，添加一条试试'}
             </div>
           )}
           {filtered.map((entry) => (
-            <div key={entry.id} className="rounded-xl p-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div key={entry.id} className="rounded-xl p-3" style={{ border: entry.conflicts_with ? '2px solid var(--warning)' : '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
               {editingId === entry.id ? (
                 <div className="space-y-2">
                   <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
@@ -161,7 +215,24 @@ export default function MemoryPage() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{entry.content}</p>
-                    <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{entry.created_at?.slice(0, 16) || ''}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{entry.created_at?.slice(0, 16) || ''}</p>
+                      {entry.source_session_id && (
+                        <span className="text-[9px] px-1 rounded" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}>
+                          会话 #{entry.source_session_id}
+                        </span>
+                      )}
+                      {entry.access_count > 0 && (
+                        <span className="text-[9px] px-1 rounded" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}>
+                          {entry.access_count} 次引用
+                        </span>
+                      )}
+                      {entry.conflicts_with && (
+                        <span className="text-[9px] px-1 rounded" style={{ backgroundColor: 'rgba(234,179,8,0.15)', color: 'var(--warning)' }}>
+                          冲突
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button onClick={() => { setEditingId(entry.id); setEditContent(entry.content) }}

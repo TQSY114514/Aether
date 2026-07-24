@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null }
@@ -44,9 +44,13 @@ function toolLabel(tool: ToolCall): string {
   }
 }
 
+function argsCount(args: unknown): number {
+  return (args && typeof args === 'object' && !Array.isArray(args) ? Object.keys(args as Record<string, unknown>).length : 0)
+}
+
 // Renders one tool invocation as a collapsible block: a human status label,
 // expandable to show the arguments the model supplied and the result we got back.
-// Shows a risk badge (dangerous vs safe) and the elapsed time when available.
+// Shows a risk badge (dangerous vs safe), failure type, recovery hint, and the elapsed time when available.
 export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const [open, setOpen] = useState(false)
   const [rollbackState, setRollbackState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
@@ -67,6 +71,8 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
     setRollbackState(res.success ? 'done' : 'error')
     if (!res.success) setOpen(true)
   }
+  const hasArgs = argsCount(tool.args) > 0
+  const failureKey = tool.failureKind && FAILURE_LABELS[tool.failureKind] ? FAILURE_LABELS[tool.failureKind] : null
 
   return (
     <div className="rounded-lg border mb-2 overflow-hidden" style={{ borderColor: dangerous ? 'var(--warning)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -76,6 +82,9 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
         <span className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{label}</span>
         {dangerous && (
           <span className="text-[9px] px-1 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>{t('tool.risk.dangerous')}</span>
+        )}
+        {failureKey && tool.error && (
+          <span className="text-[9px] px-1 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: 'rgba(234,179,8,0.15)', color: 'var(--warning)' }}>{t(failureKey)}</span>
         )}
         <span className="ml-auto flex items-center gap-2">
           {tool.latencyMs != null && tool.result != null && (
@@ -88,12 +97,12 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
       </button>
       {open && (
         <div className="px-3 pb-2.5 space-y-1.5">
-          {tool.args && Object.keys(tool.args as Record<string, unknown>).length > 0 && (
+          {hasArgs ? (
             <div>
               <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.args')}</div>
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-all" style={{ color: 'var(--text-secondary)' }}>{JSON.stringify(tool.args, null, 2)}</pre>
             </div>
-          )}
+          ) : null}
           {tool.result != null && (
             <div>
               <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.result')}</div>
@@ -116,6 +125,12 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             <div>
               <div className="text-[10px] mb-0.5" style={{ color: 'var(--error)' }}>{t('tool.error')}</div>
               <pre className="text-[11px] font-mono whitespace-pre-wrap break-all" style={{ color: 'var(--error)' }}>{tool.error}</pre>
+            </div>
+          )}
+          {tool.recoveryHint && tool.recoveryHint.hint && (
+            <div className="flex items-start gap-1.5 rounded border p-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
+              <Info size={11} className="mt-0.5 shrink-0" style={{ color: 'var(--text-muted)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{tool.recoveryHint.hint}</span>
             </div>
           )}
         </div>
