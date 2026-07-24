@@ -84,9 +84,11 @@ function startStaticServer(distDir) {
   return new Promise((resolve) => {
     staticServer = http.createServer((req, res) => {
       const reqPath = req.url === '/' ? '/index.html' : req.url
-      const resolved = path.resolve(distDir, reqPath)
+      // path.resolve() treats a leading-slash second arg as absolute, so strip
+      // it to keep resolution rooted at distDir.
+      const relative = reqPath.startsWith('/') ? reqPath.slice(1) : reqPath
+      const resolved = path.resolve(distDir, relative)
       const base = path.resolve(distDir)
-      log.info('[static] req:', req.url, 'resolved:', resolved, 'base:', base, 'ok:', resolved === base || resolved.startsWith(base + path.sep))
       if (!resolved.startsWith(base + path.sep) && resolved !== base) {
         res.writeHead(403); res.end('Forbidden'); return
       }
