@@ -221,4 +221,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   audit: {
     log: (params) => ipcRenderer.invoke('audit:log', params),
   },
+  agentCheckpoint: {
+    list: (params) => ipcRenderer.invoke('agent-checkpoint:list', params),
+    rollback: (params) => ipcRenderer.invoke('agent-checkpoint:rollback', params),
+  },
 })

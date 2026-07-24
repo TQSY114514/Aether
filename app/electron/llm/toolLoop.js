@@ -33,6 +33,7 @@ try {
 const planning = require('./planning')
 const { reasoningFamily } = require('./reasoning')
 const hooks = require('./hooks')
+const checkpoints = require('./checkpoints')
 
 const DEFAULT_MAX_ITERATIONS = 25
 const MAX_TOTAL_CHARS = 200000
@@ -79,7 +80,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, onBudgetUpdate, onAudit, onVerification }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, onBudgetUpdate, onAudit, onVerification, messageId }) {
   toolCache.clear()
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
@@ -188,7 +189,7 @@ Reply in this format:
           }
         }
         const tool = getTool(fn.name)
-        const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null }
+        const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null, checkpointId: null }
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
         } else {
@@ -217,11 +218,11 @@ Reply in this format:
               entry.error = `blocked by hook: ${e.message}`
             }
           }
+          let effectiveMode = agentMode === 'auto_confirm'
+            ? (tool.risk === 'safe' ? 'auto' : 'ask')
+            : agentMode
           // Permission gate
           if (!entry.error) {
-            const effectiveMode = agentMode === 'auto_confirm'
-              ? (tool.risk === 'safe' ? 'auto' : 'ask')
-              : agentMode
             if (tool.risk === 'dangerous' && effectiveMode !== 'auto' && effectiveMode !== 'yolo') {
               if (effectiveMode === 'plan') {
                 entry.error = 'blocked by plan mode (read-only)'
@@ -232,6 +233,9 @@ Reply in this format:
             }
           }
           if (!entry.error) {
+            if (tool.risk === 'dangerous') {
+              try { entry.checkpointId = checkpoints.createCheckpoint({ sessionId, messageId: messageId || tc.id, toolName: fn.name, args }) } catch {}
+            }
             const t0 = Date.now()
             // Tool cache: skip execution if we already have a result for this
             // exact call in this turn (idempotent read-only tools only).
