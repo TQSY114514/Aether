@@ -2,6 +2,34 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.5.0] — 2026-07-23
+
+### Agent
+- **Parallel tool execution** — each tool call can run in parallel or sequentially (configurable per-tool, OpenClaw pattern)
+- **Tool lifecycle hooks** — `prepareArguments` → `beforeToolCall` → execute → `afterToolCall`
+- **Tool call repair** — auto-fix malformed JSON, missing args, and truncated calls before execution
+- **Extended hook system** — added `SessionStart`, `SessionEnd`, `SubagentStop` hooks
+- **Context compaction** — pair-preserving split keeps tool-call/result pairs intact; UUIDs/paths/IPs preserved verbatim
+
+### Bug Fixes
+- **Double-submit prevention** — disabled the Send button during streaming so rapid clicks don't queue duplicate requests
+- **New chat not disappearing** — fixed race condition where `createSession` re-fetched the session list before the new session was persisted, causing it to be pruned immediately
+- **Missing pinSession on session:list** — pin status was lost when the renderer received the session list
+- **Prune races** — moved empty-session pruning into the `session:list` IPC handler so the renderer never sees placeholder sessions, eliminating startup race conditions
+- **Current session dangles after prune** — if the active session was pruned as empty, the selection now clears instead of showing a ghost chat window
+- **Timezone-correct timestamps** — replaced `CURRENT_TIMESTAMP` (UTC) with local time so new chats don't appear in the wrong date group
+- **Removed TypeScript type annotation** from `localNow()` pad function in a `.js` file
+- **Removed useless persona 'use' button** — was wired to a no-op that never applied the persona
+
+### Chore
+- README optimization: table of contents, badges, roadmap, categorized acknowledgements, beautified all 13 translated READMEs
+
+## [0.4.5] — 2026-07-23
+
+### Bug Fixes
+- **Session timestamps use local time** — replaced UTC `CURRENT_TIMESTAMP` with local-time strings so new sessions appear in the correct date group regardless of timezone
+- **Prevent blank chat entries** — `createSession` no longer adds an empty placeholder to the local sessions list; `loadSessions()` fetches the clean pruned list from DB instead
+
 ## [0.4.4] — 2026-07-22
 
 ### Bug Fixes
