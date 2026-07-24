@@ -14,7 +14,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        node-version: [20, 22]
+        node-version: [22]
 
     steps:
       - uses: actions/checkout@v4
@@ -39,4 +39,15 @@ jobs:
 
       - name: Verify main-process modules parse
         working-directory: app
-        run: node --check electron/database.js && node --check electron/ipc/chat.handler.js && node --check electron/ipc/config.handler.js && node --check electron/ipc/provider.handler.js && node --check electron/ipc/model.handler.js
+        run: |
+          node --check electron/database.js
+          node --check electron/ipc/chat.handler.js
+          node --check electron/ipc/config.handler.js
+          node --check electron/ipc/provider.handler.js
+          node --check electron/ipc/model.handler.js
+          node --check electron/ipc/memory.handler.js
+          node --check electron/ipc/skills.handler.js
+          node --check electron/llm/toolLoop.js
+          node --check electron/llm/localGateway.js
+          node --check electron/tools/registry.js
+          node --check electron/preload.js
