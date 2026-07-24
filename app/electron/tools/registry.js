@@ -196,7 +196,7 @@ const TOOLS = [
         if (!res.ok) return `[fetch failed: HTTP ${res.status}]`
         const ct = res.headers.get('content-type') || ''
         const raw = await res.text()
-        const text = ct.includes('html') ? raw.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
+        const text = ct.includes('html') ? raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[^>]*>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<style[^>]*>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
         return text.slice(0, 16384) + (text.length > 16384 ? '\n[truncated]' : '')
       } catch (e) {
         return `[fetch error: ${e.message}]`
