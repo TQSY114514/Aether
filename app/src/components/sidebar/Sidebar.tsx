@@ -98,7 +98,6 @@ export default function Sidebar() {
   }
   const previewOf = (text: string) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
 
-  useEffect(() => { loadSessions() }, [loadSessions])
 
   // Close context menu on outside click
   useEffect(() => {

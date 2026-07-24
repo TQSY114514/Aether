@@ -86,7 +86,7 @@ export default function ChatPage() {
           </div>
           </Tooltip>
           <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
-            {([['off', t('agent.mode.off')], ['plan', t('agent.mode.plan')], ['ask', t('agent.mode.ask')], ['auto', t('agent.mode.auto')], ['yolo', t('agent.mode.yolo')]] as const).map(([k,label]) => (
+            {([['off', t('agent.mode.off')], ['plan', t('agent.mode.plan')], ['ask', t('agent.mode.ask')], ['auto_confirm', t('agent.mode.auto_confirm')], ['auto', t('agent.mode.auto')], ['yolo', t('agent.mode.yolo')]] as const).map(([k,label]) => (
               <Tooltip key={k} text={t(`agent.mode.${k}.desc`)}>
                 <button onClick={() => {
                   if (k === 'yolo') {

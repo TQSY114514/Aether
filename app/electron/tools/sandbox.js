@@ -10,6 +10,7 @@
 //   1. Workspace root — an optional path the user designates as the agent's
 //      play area. Writes inside it are allowed; writes OUTSIDE it are blocked
 //      unless explicitly approved. Defaults to the app's userData dir.
+//      Supports per-session overrides: each session can have its own workspace.
 //
 //   2. Path traversal guard — resolves the target path and checks it stays
 //      within the workspace root. Catches ../ tricks, symlinks resolved via
@@ -32,20 +33,23 @@ const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
 
-// The workspace root. Lazily resolved: prefers a user-configured setting, falls
-// back to a `workspace` folder under userData (created on demand).
-function getWorkspaceRoot() {
-  try {
-    // settings are read via the db module when available; but this module is
-    // imported by tools/registry which has no db handle, so we read the setting
-    // file the settings handler writes. Simpler: store workspace root in a
-    // module-level setter the IPC layer configures on startup.
-  } catch {}
+// The workspace root. Supports per-session overrides.
+let _workspaceRoot = null
+let _sessionWorkspaces = new Map() // sessionId -> resolved path
+
+function setWorkspaceRoot(p) { _workspaceRoot = p ? path.resolve(p) : null }
+function setWorkspaceRootForSession(sessionId, p) {
+  if (p && String(p).trim()) { _sessionWorkspaces.set(sessionId, path.resolve(p)) }
+  else { _sessionWorkspaces.delete(sessionId) }
+}
+function clearSessionWorkspaces() { _sessionWorkspaces.clear() }
+
+// Resolve which workspace applies: per-session override first, then global.
+function getWorkspaceRoot(sessionId) {
+  if (sessionId && _sessionWorkspaces.has(sessionId)) return _sessionWorkspaces.get(sessionId)
   return _workspaceRoot || defaultWorkspace()
 }
 
-let _workspaceRoot = null
-function setWorkspaceRoot(p) { _workspaceRoot = p ? path.resolve(p) : null }
 function defaultWorkspace() {
   const dir = path.join(app.getPath('userData'), 'workspace')
   try { fs.mkdirSync(dir, { recursive: true }) } catch {}
@@ -53,18 +57,10 @@ function defaultWorkspace() {
 }
 
 // Resolve `target` to an absolute path (relative to workspace root if not abs)
-// and return its realpath. Returns null if the path can't be resolved (e.g.
-// parent doesn't exist yet for a write — in that case we normalize without
-// realpath and check the lexical prefix).
-function resolveInside(target, { mustExist = false } = {}) {
-  const root = getWorkspaceRoot()
+// and return its realpath. Returns null if the path can't be resolved.
+function resolveInside(target, { mustExist = false } = {}, sessionId) {
+  const root = getWorkspaceRoot(sessionId)
   let abs = path.isAbsolute(target) ? target : path.join(root, target)
-  // Try realpath to collapse symlinks/traversals. If the leaf file doesn't
-  // exist yet (write case), realpath of the LEAF throws — so realpath the
-  // existing PARENT instead and re-append the basename. This catches a symlink
-  // (or Windows junction) inside the workspace whose target points outside it:
-  // without resolving the parent, /workspace/evil_symlink/newfile would pass
-  // the lexical check but write outside the sandbox.
   let resolved
   try { resolved = fs.realpathSync(abs) }
   catch {
@@ -73,56 +69,42 @@ function resolveInside(target, { mustExist = false } = {}) {
       const parentReal = fs.realpathSync(path.dirname(abs))
       resolved = path.join(parentReal, path.basename(abs))
     } catch {
-      // Parent doesn't exist either — pure lexical fallback (least safe, but
-      // the write itself will fail with ENOENT anyway).
       resolved = path.normalize(abs)
     }
   }
   const rootResolved = path.normalize(root)
-  // Inside check: resolved must equal rootResolved or be under it (with sep).
   const inside = resolved === rootResolved || resolved.startsWith(rootResolved + path.sep)
   return { ok: inside, resolved, root: rootResolved, abs }
 }
 
 // True if `target` path is inside the workspace root.
-function isInsideWorkspace(target) {
-  const r = resolveInside(target)
+function isInsideWorkspace(target, sessionId) {
+  const r = resolveInside(target, {}, sessionId)
   return r.ok === true
 }
 
 // Check a write/edit target. Returns { ok, reason } — ok=false means refuse.
-function checkWritePath(target) {
-  const r = resolveInside(target, { mustExist: false })
+function checkWritePath(target, sessionId) {
+  const r = resolveInside(target, { mustExist: false }, sessionId)
   if (r.ok === true) return { ok: true }
-  // Outside workspace — refuse by default. The caller (in 'ask' mode) can
-  // surface this to the user; 'plan'/'auto' refuse outright.
   return { ok: false, reason: `path is outside the agent workspace (${r.root}). Use 'ask' mode to approve, or set the workspace root to include this path.`, abs: r.abs }
 }
 
-// Patterns that are almost always destructive. Matched case-insensitively
-// against the raw command string. This is a coarse backstop — not exhaustive.
 const BLOCKED_COMMAND_PATTERNS = [
-  // disk format / raw disk
   /\bformat\b\s+[a-z]:/i,
   /\/dev\/(?:sd|nvme|hd)/i,
   /\bdiskpart\b/i,
-  // recursive force-delete of root or system dirs
   /\brm\s+-rf\s+(?:\/|\/[a-z]+\s|~|C:\\windows|C:\\users\\[^/\\]+\\desktop)/i,
   /\brmdir\s+\/s\b/i,
   /\bdel\s+\/[fs]/i,
-  // shutdown / reboot
   /\bshutdown\b/i,
   /\breboot\b/i,
   /\bhalt\b/i,
-  // download-and-execute in one pipe (common malware vector)
   /\b(?:curl|wget|iwr|invoke-webrequest)\b[^|]*\|\s*(?:sh|bash|powershell|cmd|pwsh)\b/i,
-  // registry wipe
   /\breg\s+delete\s+.*\/f\b/i,
-  // chmod -R 777 on root
   /\bchmod\s+-R\s+777\s+\//i,
 ]
 
-// Check a shell command. Returns { ok, reason }.
 function checkCommand(cmd) {
   const c = String(cmd || '')
   if (!c.trim()) return { ok: false, reason: 'empty command' }
@@ -135,9 +117,6 @@ function checkCommand(cmd) {
 }
 
 module.exports = {
-  getWorkspaceRoot,
-  setWorkspaceRoot,
-  isInsideWorkspace,
-  checkWritePath,
-  checkCommand,
+  getWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, clearSessionWorkspaces,
+  isInsideWorkspace, checkWritePath, checkCommand,
 }

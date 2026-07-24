@@ -111,4 +111,69 @@ function formatSkillsForPrompt() {
   return `<available_skills>\nThe following skills are available. When the user's request matches a skill's description, call the use_skill tool with the skill name to load its full instructions, then follow them. Only load a skill when it is relevant to the task.\n${items}\n</available_skills>`
 }
 
-module.exports = { scanSkills, getSkills, getSkill, getSkillBody, formatSkillsForPrompt, parseFrontmatter, upsertSkill }
+// ───────────────────────────────────────────────────────────────────────────
+// Slash command loader (Claude-Code-compatible .claude/commands/ format).
+//
+// A command is a directory under a `commands/` folder containing a CMD.md with
+// YAML frontmatter (required: name, description, prompt; optional: disabled).
+// Scan roots mirror the skills scan roots but under `commands/` sub-dirs:
+//   <workspace>/.claude/commands   ← Claude-Code compat
+//   <workspace>/.aetherai/commands ← app-native
+//   <userData>/commands            ← user-global
+//   <app>/commands                 ← built-in (lowest precedence)
+// ───────────────────────────────────────────────────────────────────────────
+
+let _commands = new Map()
+
+function loadCommandsFromDir(dir) {
+  const found = []
+  if (!dir) return found
+  let entries
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return found }
+  for (const ent of entries) {
+    if (!ent.isDirectory() || ent.name.startsWith('.') || ent.name === 'node_modules') continue
+    const cmdFile = path.join(dir, ent.name, 'CMD.md')
+    let text
+    try { text = fs.readFileSync(cmdFile, 'utf-8') } catch { continue }
+    const { meta, body } = parseFrontmatter(text)
+    if (!meta.name || !meta.prompt) continue
+    if (meta.disabled === 'true' || meta.disabled === true) continue
+    found.push({
+      id: ent.name,
+      name: meta.name,
+      description: meta.description || '',
+      prompt: meta.prompt,
+    })
+  }
+  return found
+}
+
+function scanCommands() {
+  const roots = []
+  const ws = getWorkspaceRoot()
+  if (ws) {
+    roots.push(path.join(ws, '.claude', 'commands'))
+    roots.push(path.join(ws, '.aetherai', 'commands'))
+  }
+  roots.push(path.join(app.getPath('userData'), 'commands'))
+  roots.push(path.join(__dirname, '..', '..', 'commands'))
+  const byId = new Map()
+  for (const root of roots) {
+    for (const c of loadCommandsFromDir(root)) {
+      if (!byId.has(c.id)) byId.set(c.id, c)
+    }
+  }
+  _commands = byId
+  return _commands.size
+}
+
+function getCommands() { return Array.from(_commands.values()) }
+function getCommand(id) { return _commands.get(id) || null }
+
+// Re-scan skills AND commands together (convenience for callers).
+function rescan() { scanSkills(); scanCommands() }
+
+module.exports = {
+  scanSkills, getSkills, getSkill, getSkillBody, formatSkillsForPrompt, parseFrontmatter, upsertSkill,
+  scanCommands, getCommands, getCommand, rescan,
+}

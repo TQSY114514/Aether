@@ -9,6 +9,7 @@ import { shallow } from 'zustand/shallow'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
+type SlashCommand = { id: string; name: string; description: string; prompt: string }
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
@@ -17,16 +18,26 @@ function classifyFile(file: File): 'text' | 'image' {
   return 'text'
 }
 
-const SLASH_COMMANDS = [
-  { id: 'summarize', label: () => t('slash.summarize'), prompt: '请详细总结以上对话的要点，用中文回复。' },
-  { id: 'translate', label: () => t('slash.translate'), prompt: '请将以上内容翻译成中文。' },
-  { id: 'polish', label: () => t('slash.polish'), prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
-  { id: 'explain', label: () => t('slash.explain'), prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
-  { id: 'continue', label: () => t('slash.continue'), prompt: '请基于以上内容自然地继续写作。' },
-  { id: 'code', label: () => t('slash.code'), prompt: '请生成实现以上需求的代码。' },
-] as const
+// Default commands — used when no custom CMD.md files are discovered.
+const DEFAULT_COMMANDS: SlashCommand[] = [
+  { id: 'summarize', name: '总结对话', description: '详细总结以上对话的要点', prompt: '请详细总结以上对话的要点，用中文回复。' },
+  { id: 'translate', name: '翻译', description: '将以上内容翻译成中文', prompt: '请将以上内容翻译成中文。' },
+  { id: 'polish', name: '润色', description: '润色文字，使其更流畅专业', prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
+  { id: 'explain', name: '解释', description: '用简单语言解释内容', prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
+  { id: 'continue', name: '续写', description: '基于内容自然续写', prompt: '请基于以上内容自然地继续写作。' },
+  { id: 'code', name: '生成代码', description: '根据需求生成实现代码', prompt: '请生成实现以上需求的代码。' },
+]
 
 export default function ChatInput() {
+  // Slash commands loaded from IPC (scan CMD.md files). Falls back to defaults.
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(DEFAULT_COMMANDS)
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI.commands?.list?.().then((cmds: SlashCommand[]) => {
+      if (!cancelled && cmds && cmds.length > 0) setSlashCommands(cmds)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
   const [input, setInput] = useState('')
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
@@ -69,13 +80,13 @@ export default function ChatInput() {
   const snippetTokens = useMemo(() => estimateTextTokens(snippetText), [snippetText])
   const totalInputTokens = inputTokens + snippetTokens
 
-  // Slash-command lookup: memoize to avoid calling t() on every keystroke.
+  // Slash-command lookup: memoize to avoid re-filtering on every keystroke.
   const slashResults = useMemo(() => {
     if (!showSlash) return []
     const q = slashQuery.toLowerCase()
-    if (!q) return SLASH_COMMANDS
-    return SLASH_COMMANDS.filter(cmd => cmd.id.includes(q))
-  }, [showSlash, slashQuery])
+    if (!q) return slashCommands
+    return slashCommands.filter(cmd => cmd.id.toLowerCase().includes(q) || cmd.name.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q))
+  }, [showSlash, slashQuery, slashCommands])
 
   // Drag-and-drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -178,7 +189,7 @@ export default function ChatInput() {
     else setShowSlash(false)
   }
 
-  const handleSlashSelect = (cmd: typeof SLASH_COMMANDS[number]) => {
+  const handleSlashSelect = (cmd: SlashCommand) => {
     const lines = input.split('\n')
     lines[lines.length - 1] = cmd.prompt
     setInput(lines.join('\n'))
@@ -283,8 +294,8 @@ export default function ChatInput() {
             <div className="slash-menu">
               {slashResults.map((cmd) => (
                 <div key={cmd.id} className="slash-item" onClick={() => handleSlashSelect(cmd)}>
-                  <div className="text-sm font-medium">{cmd.label()}</div>
-                  <div className="text-[11px] text-[var(--text-muted)] truncate">{cmd.prompt}</div>
+                  <div className="text-sm font-medium">{cmd.name}</div>
+                  <div className="text-[11px] text-[var(--text-muted)] truncate">{cmd.description}</div>
                 </div>
               ))}
             </div>
@@ -316,12 +327,12 @@ export default function ChatInput() {
               activeModelId={activeModelId}
               onSelect={(mid, pid) => currentSessionId && saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })} />
             <div className="flex items-center gap-1.5">
-              {SLASH_COMMANDS.slice(0, 3).map((cmd) => (
+              {slashCommands.slice(0, 3).map((cmd) => (
                 <button key={cmd.id} onClick={() => {
                   const prompt = cmd.prompt
                   setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
                   textareaRef.current?.focus()
-                }} className="qaction">{cmd.label()}</button>
+                }} className="qaction">{cmd.name}</button>
               ))}
             </div>
             {totalInputTokens > 0 && (

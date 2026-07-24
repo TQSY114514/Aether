@@ -124,7 +124,9 @@ function createWindow() {
 
   if (process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL('http://localhost:5173')
-    mainWindow.webContents.openDevTools()
+    // DevTools are available via Ctrl+Shift+I / Cmd+Option+I but not opened
+    // automatically — opening on startup adds 1-3s of latency on low-end machines.
+    // mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadURL(`http://127.0.0.1:${actualDistPort}`)
   }
@@ -197,6 +199,9 @@ app.whenReady().then(async () => {
     })(),
     (async () => {
       try { const { scanSkills } = require('./llm/skills'); scanSkills() } catch (e) { log.warn('skill scan failed:', e.message) }
+    })(),
+    (async () => {
+      try { require('./llm/hooks').scanHooks() } catch (e) { log.warn('hooks scan failed:', e.message) }
     })(),
   ])
   if (!process.env.VITE_DEV_SERVER_URL && !process.env.NODE_ENV) {

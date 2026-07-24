@@ -248,7 +248,9 @@ export default function ChatWindow() {
           ))}
 
           {/* Streaming bubble — rendered once, updated via DOM writes for perf */}
-          {currentSessionId && <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />}
+          {currentSessionId && streamingBySession[currentSessionId] && (
+            <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />
+          )}
 
           {/* Arena results */}
           {arenaError && (

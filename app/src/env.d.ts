@@ -45,7 +45,7 @@ interface Window {
       deleteAfter: (sessionId: number, afterId: number) => Promise<void>
     }
     chat: {
-      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number }>
+      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
       onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null } }) => void) => () => void
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string } }) => void) => () => void
@@ -57,10 +57,15 @@ interface Window {
       onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous' }) => void) => () => void
       onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean; remember?: boolean }) => Promise<boolean>
+      onToolStream: (callback: (payload: { messageId: number; sessionId: number; text: string; done: boolean }) => void) => () => void
       onHabitProposed: (callback: (payload: { key: string; imperative: string; reason: string }) => void) => () => void
       confirmHabit: (key: string) => Promise<{ ok: boolean }>
       dismissHabit: (key: string) => Promise<{ ok: boolean }>
+      onHabitSuggestion: (callback: (payload: { key: string; imperative: string; reason?: string }[]) => void) => () => void
+      onContextBudget: (callback: (payload: { text: string }) => void) => () => void
       stop: () => Promise<void>
+      onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
+      onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; aggregate?: boolean }) => Promise<{ results: ArenaResult[]; aggregate?: { content: string; model_name: string; provider_name: string } | null }>
@@ -99,11 +104,15 @@ interface Window {
       onOpen: (callback: (payload: { action: string }) => void) => () => void
     }
     agent: {
-      getWorkspace: () => Promise<string>
-      setWorkspace: (dir: string | null) => Promise<{ success: boolean; root: string }>
+      getWorkspace: (sessionId?: number) => Promise<string>
+      setWorkspace: (opts: { dir?: string | null; sessionId?: number }) => Promise<{ success: boolean; root: string }>
     }
     skills: {
       list: () => Promise<{ name: string; description: string; filePath: string }[]>
+      rescan: () => Promise<{ success: boolean; count: number }>
+    }
+    commands: {
+      list: () => Promise<{ id: string; name: string; description: string; prompt: string }[]>
       rescan: () => Promise<{ success: boolean; count: number }>
     }
     updater: {
@@ -121,6 +130,9 @@ interface Window {
       byModel: (range?: { since?: string; until?: string }) => Promise<{ model_name: string; requests: number; total_tokens: number; cost: number }[]>
       daily: (range?: { since?: string; until?: string }) => Promise<{ day: string; requests: number; total_tokens: number; cost: number }[]>
       log: (range?: { since?: string; until?: string; limit?: number }) => Promise<any[]>
+    }
+    audit: {
+      log: (params: { sessionId: number; limit?: number }) => Promise<any[]>
     }
   }
 }

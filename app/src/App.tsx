@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@/store'
+import { ensureAllListeners } from '@/store'
+import { applyTheme } from '@/utils/theme'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
 import ModelPage from '@/pages/ModelPage'
@@ -43,6 +45,9 @@ export default function App() {
   // array) can read the current value without re-binding on every toggle.
   useEffect(() => { shortcutsOpenRef.current = shortcutsOpen }, [shortcutsOpen])
 
+  // Ensure global IPC listeners are registered (idempotent).
+  useEffect(() => { ensureAllListeners() }, [])
+
   // Window-level overscroll spring bounce: F = -k*off - b*vel
   useEffect(() => {
     const root = document.getElementById('root')
@@ -76,10 +81,13 @@ export default function App() {
     return () => window.removeEventListener('wheel', onWheel)
   }, [])
 
+  const bgLoadedRef = useRef(false)
+  const sessionAutoSelectedRef = useRef(false)
+
   useEffect(() => {
     const init = async () => {
       // These 6 loads are independent IPC round-trips — run them in parallel
-      // instead of serially to cut cold-start latency (was 6+N serial awaits).
+      // instead of serially to cut cold-start latency.
       await Promise.all([
         loadSettings(),
         loadProviders(),
@@ -88,16 +96,32 @@ export default function App() {
         loadScores(),
         loadAllModels(),
       ])
-      // Per-provider model loads depend on loadAllModels resolving, but are
-      // themselves independent — parallelize too.
       const providers = useStore.getState().providers
       if (providers.length) {
         await Promise.all(providers.map(p => loadModels(p.id)))
       }
-      // Auto-select first session if none selected
-      const s = useStore.getState().sessions
-      if (s.length > 0 && !useStore.getState().currentSessionId) {
-        await selectSession(s[0].id)
+      // Defer session auto-select and background-image load to next frame so
+      // the EmptyState UI can paint first. This cuts perceived startup time.
+      if (!sessionAutoSelectedRef.current) {
+        sessionAutoSelectedRef.current = true
+        requestAnimationFrame(async () => {
+          const s = useStore.getState()
+          if (s.sessions.length > 0 && !s.currentSessionId) {
+            await s.selectSession(s.sessions[0].id)
+          }
+        })
+      }
+      if (!bgLoadedRef.current) {
+        bgLoadedRef.current = true
+        requestAnimationFrame(async () => {
+          try {
+            const dataUrl = await window.electronAPI.background.get()
+            if (dataUrl) {
+              applyTheme(useStore.getState().theme, true)
+              useStore.setState({ backgroundImage: dataUrl })
+            }
+          } catch {}
+        })
       }
     }
     init()

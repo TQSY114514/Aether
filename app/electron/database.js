@@ -101,11 +101,26 @@ async function initDatabase() {
   // MCP servers: external tool servers the agent can call via stdio.
   db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  // Habit learner: tracks recurring user preferences. Created here once at init
-  // instead of lazily in habitLearner.js to avoid a redundant SQL round-trip on
-  // every user turn.
-  db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
   try { db.run("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
+  // Relation fields for memory relationship inference (Hermes-style).
+  try { db.run("ALTER TABLE memory ADD COLUMN relation_entity TEXT") } catch {}
+  try { db.run("ALTER TABLE memory ADD COLUMN relation_type TEXT") } catch {}
+  try { db.run("ALTER TABLE memory ADD COLUMN relation_target TEXT") } catch {}
+  // Access count for memory decay (how often a memory was prefetched).
+  try { db.run("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0") } catch {}
+
+  // Agent execution audit log (Codex-style). One row per agent turn, full trace
+  // as JSON payload for debugging and analysis.
+  db.run(`CREATE TABLE IF NOT EXISTS agent_execution_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    turn_id INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`)
+
+  // Habit learner: tracks recurring user preferences.
+  db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
 
   // Per-provider credential pool — multiple API keys per provider with rotation
   // (least-recently-used) and backoff (cooldown on 429, disabled on 401).
@@ -340,6 +355,12 @@ function getSetting(key) {
 function setSetting(key, value) {
   db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value])
   saveDatabase()
+  // Settings are small but important — flush immediately so they survive
+  // a fast app close (the 200 ms debounce in saveDatabase is optimized for
+  // high-frequency writes like streaming chunks, not user settings).
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  const data = db.export()
+  savePromise = _writeDb(data).finally(() => { savePromise = null })
 }
 function getAllSettings() {
   const stmt = db.prepare('SELECT key, value FROM settings')
@@ -467,8 +488,28 @@ function updateMemory(id, { content }) {
 function deleteMemory(id) {
   db.run('DELETE FROM memory WHERE id = ?', [id]); saveDatabase()
 }
+function incrementMemoryAccess(id) {
+  try { db.run('UPDATE memory SET access_count = access_count + 1 WHERE id = ?', [id]) } catch {}
+}
 
-// ===== Usage log CRUD =====
+// ===== Agent Audit Log =====
+function addAuditLog({ sessionId, turnId, payload }) {
+  db.run('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)',
+    [sessionId, turnId, JSON.stringify(payload)])
+  saveDatabase()
+}
+function getAuditLog(sessionId, limit = 50) {
+  const stmt = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?')
+  stmt.bind([sessionId, limit])
+  const rows = []
+  while (stmt.step()) {
+    const row = stmt.getAsObject()
+    try { row.payload = JSON.parse(row.payload || '{}') } catch { row.payload = {} }
+    rows.push(row)
+  }
+  stmt.free()
+  return rows
+}
 // One row per real API call. `source` tags the call site: 'chat' | 'arena' |
 // 'title' | 'memory' | 'compaction' | 'tool'. cost is computed by the caller
 // from the model's price columns; if unknown, 0.
@@ -616,6 +657,8 @@ module.exports = {
   deleteAssistantAfterLastUser,
   deleteMessagesAfter,
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
+  // agent audit log
+  addAuditLog, getAuditLog,
   // credential pool: list/add/remove credentials per provider
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },

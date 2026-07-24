@@ -10,8 +10,17 @@
 //
 // `parameters` is the OpenAI function-call JSON Schema for arguments.
 //
-// Tool surface mirrors a coding agent (read/search/edit/git/web/memory) so the
-// model can do real work — every mutating tool is gated by the permission model.
+// Tool execution modes (OpenClaw-inspired):
+//   executionMode: 'parallel' (default) — safe to run concurrently with others
+//   executionMode: 'sequential'    — must run alone (e.g. commands that mutate
+//                                     shared state). When any tool in a round
+//                                     declares sequential, the whole round falls
+//                                     back to sequential execution.
+//
+// Tool lifecycle hooks (per-tool):
+//   beforeToolCall(ctx) — runs before the tool; can throw to block
+//   afterToolCall(ctx)  — runs after success; can modify the result
+//   prepareArguments(args) — can rewrite arguments before execution
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
@@ -19,6 +28,7 @@ const path = require('path')
 const { exec } = require('child_process')
 const { glob } = require('glob')
 const { checkWritePath, checkCommand } = require('./sandbox')
+const { streamCommand, formatStreamResult } = require('../llm/toolStream')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 const MAX_GREP_BYTES = 32 * 1024
@@ -214,7 +224,7 @@ const TOOLS = [
       // Sandbox: refuse writes outside the workspace root — unless 'yolo' mode
       // (full permission, user explicitly accepted the risk).
       if (ctx?.agentMode !== 'yolo') {
-        const guard = checkWritePath(p)
+        const guard = checkWritePath(p, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
       fs.mkdirSync(path.dirname(p), { recursive: true })
@@ -242,7 +252,7 @@ const TOOLS = [
       if (!p || !oldS) throw new Error('path and old_string are required')
       // Sandbox: refuse edits outside the workspace root — unless 'yolo' mode.
       if (ctx?.agentMode !== 'yolo') {
-        const guard = checkWritePath(p)
+        const guard = checkWritePath(p, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
       const orig = fs.readFileSync(p, 'utf-8')
@@ -258,6 +268,7 @@ const TOOLS = [
     name: 'run_command',
     description: 'Run a shell command and return its stdout+stderr (up to 8KB). DANGEROUS — executes arbitrary code. Use only when the user explicitly asks for it. ALWAYS supply a `description` in active voice explaining the intent (e.g. "List files in the project root") so the user sees what the command claims to do, not just raw shell.',
     risk: 'dangerous',
+    executionMode: 'sequential', // commands may mutate shared state
     parameters: {
       type: 'object',
       properties: {
@@ -281,6 +292,20 @@ const TOOLS = [
       const cwd = args.cwd ? String(args.cwd) : undefined
       const timeoutMs = Number(args.timeout) || 30000
       const extraEnv = args.env && typeof args.env === 'object' ? args.env : undefined
+
+      // If the caller provides onStream, use the streaming path for real-time
+      // output (like Claude Code's live command output).
+      if (ctx?.onStream) {
+        return streamCommand(cmd, {
+          cwd, timeoutMs, env: extraEnv, sessionId: ctx?.sessionId,
+        }).then((result) => {
+          const text = formatStreamResult(result)
+          ctx.onStream({ type: 'done', text, exitCode: result.exitCode })
+          return text
+        })
+      }
+
+      // Standard non-streaming path.
       return new Promise((resolve, reject) => {
         const mergedEnv = extraEnv ? { ...process.env, ...extraEnv } : process.env
         exec(cmd, { cwd, env: mergedEnv, maxBuffer: 32 * 1024, timeout: Math.min(timeoutMs, 120000) }, (err, stdout, stderr) => {

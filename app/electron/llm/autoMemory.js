@@ -58,6 +58,7 @@ function score(memoryText, qkw) {
 // ─── Prefetch ──────────────────────────────────────────────────────────────
 // Retrieve top-K relevant memories for a user message.
 // In-memory cache avoids repeated full-table scans across consecutive turns.
+// Each prefetch hit increments access_count (for weighted decay).
 
 let _memCache = null
 let _memV = 0
@@ -73,7 +74,20 @@ function prefetch(db, userMessage) {
   const qkw = keywords(userMessage)
   if (qkw.size === 0) return ''
   const scored = memories
-    .map(m => ({ m, s: score(m.content, qkw) }))
+    .map(m => {
+      const kwScore = score(m.content, qkw)
+      // Weighted score: base keyword hits + recency bonus + access_count bonus
+      let w = kwScore
+      if (kwScore > 0) {
+        const ageDays = (Date.now() - new Date(m.created_at || Date.now()).getTime()) / 86400000
+        const recencyBonus = Math.max(0, 1 - ageDays / 90) * 0.5
+        const accessBonus = Math.log(1 + (m.access_count || 0)) * 0.3
+        w = kwScore + recencyBonus + accessBonus
+        // Record access for decay tracking.
+        try { db.incrementMemoryAccess(m.id) } catch {}
+      }
+      return { m, s: w }
+    })
     .filter(x => x.s >= MIN_HITS)
     .sort((a, b) => b.s - a.s)
     .slice(0, PREFETCH_TOP_K)
@@ -90,11 +104,13 @@ const EXTRACTION_PROMPT = `Extract 0-5 structured memory entries from this conve
 
 Output one entry per line in this EXACT format:
   [ENTITY] name|description
+  [RELATION] entity1|relation_type|entity2
   [FACT] concise statement
   [CONTEXT] brief summary of the conversation topic
 
 Rules:
 - ENTITY: names of people, projects, tools, preferences, skills mentioned
+- RELATION: a connection between two entities (e.g. "Alice|works_on|ProjectX", "Bob|prefers|Python")
 - FACT: specific decisions, preferences, corrections, or learned facts
 - CONTEXT: only if the conversation covers a distinct topic worth recalling later
 - Skip trivial greetings, chit-chat, and information already in the conversation
@@ -103,11 +119,17 @@ Rules:
 
 // Parse a single extraction line into { type, content }.
 function parseEntry(line) {
-  const m = line.match(/^\[(ENTITY|FACT|CONTEXT)\]\s*(.+)/)
+  const m = line.match(/^\[(ENTITY|RELATION|FACT|CONTEXT)\]\s*(.+)/)
   if (!m) return null
   const type = m[1].toLowerCase()
   const content = m[2].trim()
   if (!content || content.length > 300) return null
+  // RELATION format: entity1|relation_type|entity2
+  if (type === 'relation') {
+    const parts = content.split('|')
+    if (parts.length < 3) return null
+    return { type: 'relation', content: content, entity1: parts[0].trim(), relation: parts[1].trim(), entity2: parts.slice(2).join('|').trim() }
+  }
   return { type, content }
 }
 
@@ -164,9 +186,16 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     for (const entry of entries.slice(0, 5)) {
       const key = `${entry.type}:${entry.content.toLowerCase()}`
       if (recentKeys.has(key)) continue
-      try { db.addMemory({ content: entry.content, type: entry.type }) } catch {}
+      if (entry.type === 'relation') {
+        try {
+          db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target) VALUES (?, ?, ?, ?, ?)',
+            [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2])
+        } catch {}
+      } else {
+        try { db.addMemory({ content: entry.content, type: entry.type }) } catch {}
+      }
     }
-    _memV++ // invalidate prefetch cache — new memories won't show stale results
+    _memV++ // invalidate prefetch cache
   } catch (e) {
     log.warn('sync failed:', e && e.message)
   }

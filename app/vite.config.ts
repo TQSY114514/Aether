@@ -1,9 +1,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import fs from 'fs'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'copy-locales',
+      closeBundle() {
+        const srcDir = path.resolve(__dirname, 'locales')
+        const dstDir = path.resolve(__dirname, 'dist/locales')
+        if (!fs.existsSync(srcDir)) return
+        if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true })
+        for (const f of fs.readdirSync(srcDir)) {
+          fs.copyFileSync(path.join(srcDir, f), path.join(dstDir, f))
+        }
+      }
+    }
+  ],
   base: './',
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
@@ -14,13 +29,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // Always split sql.js into its own chunk (WASM + JS).
           if (id.includes('node_modules/sql.js')) return 'sqljs'
-          // highlight.js is large (~900 KB); extract it from the main bundle.
           if (id.includes('node_modules/highlight.js')) return 'highlight'
         },
       },
-    }
+    },
   },
   server: {
     port: 5173,

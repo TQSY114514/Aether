@@ -15,6 +15,7 @@ interface SessionConfig {
   providerId: number | null
   modelId: number | null
   personaId: number | null
+  workspace?: string | null
 }
 
 interface AppState {
@@ -81,19 +82,22 @@ interface AppState {
   todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
   // Inline status lines per message (compaction notice, budget-exhausted, etc.).
   statusLinesByMessage: Record<number, string[]>
+  // Context budget indicator text (shown in status bar).
+  contextBudgetText: string | null
   // Pending AskUserQuestion dialogs awaiting a user answer.
   pendingQuestions: { reqId: string; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
   resolveQuestion: (reqId: string, answers: { question: string; answer: string }[]) => void
   // Agent permission mode, in increasing order of risk:
-  //   'off'   — no tools at all (plain chat)
-  //   'plan'  — read-only tools only (read_file/list_dir/grep/web_search…); no writes/commands
-  //   'ask'   — dangerous tools require a confirm dialog (recommended)
-  //   'auto'  — run everything, no confirms (still inside the workspace sandbox)
-  //   'yolo'  — FULL permission: skip the workspace path guard AND the command blocklist.
-  //             DANGER: the model can write any file and run any command. Only for
-  //             trusted models + throwaway VMs. Warned on enable.
-  agentMode: 'off' | 'plan' | 'ask' | 'auto' | 'yolo'
-  setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto' | 'yolo') => void
+  //   'off'          — no tools at all (plain chat)
+  //   'plan'         — read-only tools only (read_file/list_dir/grep/web_search…); no writes/commands
+  //   'ask'          — dangerous tools require a confirm dialog (recommended)
+  //   'auto_confirm' — safe tools auto-allowed, dangerous tools still need confirm
+  //   'auto'         — run everything, no confirms (still inside the workspace sandbox)
+  //   'yolo'         — FULL permission: skip the workspace path guard AND the command blocklist.
+  //                    DANGER: the model can write any file and run any command. Only for
+  //                    trusted models + throwaway VMs. Warned on enable.
+  agentMode: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'
+  setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).
   permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous' }[]
   resolvePermission: (reqId: string, allowed: boolean, remember?: boolean) => void
@@ -179,6 +183,9 @@ interface AppState {
   // UI
   sidebarOpen: boolean
   toggleSidebar: () => void
+  // Agent workspace root (global, set from settings).
+  agentWorkspace: string
+  setAgentWorkspace: (dir: string) => Promise<void>
 }
 
 // Apply the font-scale multiplier as a root CSS var; index.css uses it on html.
@@ -225,6 +232,7 @@ export const useStore = create<AppState>((set, get) => ({
   planStepsByMessage: {},
   todosByMessage: {},
   statusLinesByMessage: {},
+  contextBudgetText: null,
   pendingQuestions: [],
   proposedHabits: [],
   queuedMessages: [],
@@ -236,6 +244,7 @@ export const useStore = create<AppState>((set, get) => ({
   permissionRequests: [],
   effortLevel: 'off',
   completionToasts: [] as any[],
+  agentWorkspace: '', // current session's workspace path (or global)
 
   loadSessions: async () => {
     const sessions = await window.electronAPI.session.list()
@@ -259,10 +268,6 @@ export const useStore = create<AppState>((set, get) => ({
       messages: result.messages || [],
     }))
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
-  },
-  pinSession: async (id: number, pinned: number = 1) => {
-    try { await window.electronAPI.session.pin(id, pinned) } catch {}
-    await get().loadSessions()
   },
   selectSession: async (id) => {
     // Push to the navigation history unless we got here via goBack/goForward
@@ -293,6 +298,10 @@ export const useStore = create<AppState>((set, get) => ({
         currentSessionId: id,
         sessionConfigs: { ...s.sessionConfigs, [id]: cfg },
       }))
+      // Restore per-session workspace if configured.
+      if (cfg?.workspace) {
+        try { await window.electronAPI.agent.setWorkspace({ dir: cfg.workspace, sessionId: id }) } catch {}
+      }
       if (cfg.providerId) get().loadModels(cfg.providerId)
     } catch {
       set({ currentSessionId: id })
@@ -305,9 +314,13 @@ export const useStore = create<AppState>((set, get) => ({
     return get().sessionConfigs[id] || { providerId: null, modelId: null, personaId: null }
   },
   saveSessionConfig: async (id, partial) => {
-    const existing = get().sessionConfigs[id] || { providerId: null, modelId: null, personaId: null }
+    const existing = get().sessionConfigs[id] || { providerId: null, modelId: null, personaId: null, workspace: null }
     const updated = { ...existing, ...partial }
     await window.electronAPI.session.setConfig(id, updated)
+    // If workspace changed, also update the sandbox.
+    if (partial.workspace !== undefined) {
+      try { await window.electronAPI.agent.setWorkspace({ dir: partial.workspace, sessionId: id }) } catch {}
+    }
     set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [id]: updated } }))
   },
 
@@ -532,6 +545,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setAgentMode: (v) => set({ agentMode: v }),
+  setAgentWorkspace: async (dir: string) => {
+    try { await window.electronAPI.agent.setWorkspace(dir) } catch {}
+    set({ agentWorkspace: dir })
+  },
   resolvePermission: (reqId, allowed, remember = false) => {
     window.electronAPI.chat.replyPermission({ reqId, allowed, remember })
     set((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
@@ -776,19 +793,24 @@ export const useStore = create<AppState>((set, get) => ({
       const systemPrefix = s.systemPrefix ?? ''
       const autoTitle = (s.autoTitle ?? '1') === '1'
       const titleLanguage = s.titleLanguage ?? 'auto'
-      const bgImage = await window.electronAPI.background.get()
-      setLang(lang)
-      applyTheme(theme, bgImage !== null)
+      await setLangAsync(lang)
+      applyTheme(theme)
       applyFontScale(fontScale)
       applyLangDir(lang)
       let seenHints: string[] = []
       try { seenHints = JSON.parse(s.seen_hints || '[]') } catch (e) { log.warn('parse seen_hints failed:', e) }
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: bgImage, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints })
+      // Background image is loaded asynchronously by App.tsx (deferred to next
+      // frame) — no need to load it here.
     } catch (e) { log.warn('loadSettings failed:', e) }
   },
   setLanguage: async (lang) => {
-    await window.electronAPI.settings.set('language', lang)
-    setLang(lang)
+    try {
+      await window.electronAPI.settings.set('language', lang)
+      await setLangAsync(lang)
+    } catch (e) {
+      log.warn('setLanguage failed:', e)
+    }
     applyLangDir(lang)
     set({ language: lang })
   },
@@ -815,14 +837,14 @@ export const useStore = create<AppState>((set, get) => ({
     await window.electronAPI.settings.set('defaultEffort', v)
     set({ defaultEffort: v, effortLevel: v })
   },
-  // Settings — simple numeric/string setters generated from a config map.
-  setMaxTokens:   async (v) => setSetting('maxTokens', String(v), { maxTokens: v }),
-  setTemperature: async (v) => setSetting('temperature', String(v), { temperature: v }),
-  setTopP:        async (v) => setSetting('topP', String(v), { topP: v }),
-  setSystemPrefix:async (v) => setSetting('systemPrefix', v, { systemPrefix: v }),
-  setTitleLanguage:async (v) => setSetting('titleLanguage', v, { titleLanguage: v }),
-  setBackgroundOpacity: async (v) => setSetting('backgroundOpacity', String(v), { backgroundOpacity: v }),
-  setBackgroundBlur: async (v) => setSetting('backgroundBlur', String(v), { backgroundBlur: v }),
+  // Settings — simple numeric/string setters.
+  setMaxTokens:   async (v) => { await window.electronAPI.settings.set('maxTokens', String(v)); set({ maxTokens: v }) },
+  setTemperature: async (v) => { await window.electronAPI.settings.set('temperature', String(v)); set({ temperature: v }) },
+  setTopP:        async (v) => { await window.electronAPI.settings.set('topP', String(v)); set({ topP: v }) },
+  setSystemPrefix:async (v) => { await window.electronAPI.settings.set('systemPrefix', v); set({ systemPrefix: v }) },
+  setTitleLanguage:async (v) => { await window.electronAPI.settings.set('titleLanguage', v); set({ titleLanguage: v }) },
+  setBackgroundOpacity: async (v) => { await window.electronAPI.settings.set('backgroundOpacity', String(v)); set({ backgroundOpacity: v }) },
+  setBackgroundBlur: async (v) => { await window.electronAPI.settings.set('backgroundBlur', String(v)); set({ backgroundBlur: v }) },
   // Special-case setters that need extra logic.
   setAutoTitle: async (v) => { await window.electronAPI.settings.set('autoTitle', v ? '1' : '0'); set({ autoTitle: v }) },
   setBackgroundImage: async (dataUrl) => {
@@ -847,13 +869,14 @@ export const useStore = create<AppState>((set, get) => ({
   dismissToast: (id: number) => set((s) => ({ completionToasts: s.completionToasts.filter(t => t.id !== id) })),
 }))
 
-// Streaming chunk listener
-// Registered once globally; routes each chunk to its owning session so multiple
-// sessions can stream concurrently. The main process pushes one delta per token
-// (~20-50/sec) — each setState fan-out used to trigger O(subs) React reconciler
-// work per delta. We now batch deltas into a rAF frame so the renderer fires
-// at most 60Hz regardless of token rate.
-// ───────────────────────────────────────────────────────────────────────────
+// Ensure all global listeners are registered (idempotent).
+// Global listeners (called from App.tsx on mount).
+export function ensureAllListeners() {
+  ensureChunkListener()
+  ensureToolCallListener()
+  ensureStatusListener()
+  ensureHabitSuggestionListener()
+}
 // Session back/forward nav guard: set true during goBack/goForward so
 // selectSession doesn't push a duplicate entry into history.
 // Auto-theme listener cleanup: torn down when switching away from 'auto'.
@@ -946,5 +969,39 @@ function ensureChunkListener() {
         _streamRaf = requestAnimationFrame(() => { _streamRaf = 0; flushStreamUpdates() })
       }
     }
+  })
+}
+
+// Global onStatus listener: routes status lines to the owning message.
+// Installed once alongside the chunk listener.
+let _statusListenerInstalled = false
+function ensureStatusListener() {
+  if (_statusListenerInstalled) return
+  _statusListenerInstalled = true
+  window.electronAPI.chat.onStatus(({ messageId, text, kind }) => {
+    if (!messageId || !text) return
+    useStore.setState((s) => {
+      const existing = s.statusLinesByMessage[messageId] || []
+      // Avoid duplicates; cap at 5 status lines.
+      if (existing.some(l => l === text || (l.includes(text.slice(0, 30)) && kind === 'context_budget'))) return s
+      const next = [...existing.slice(-4), text]
+      return { statusLinesByMessage: { ...s.statusLinesByMessage, [messageId]: next } }
+    })
+    // Context budget: also store as a global indicator.
+    if (kind === 'context_budget') {
+      useStore.setState({ contextBudgetText: text })
+    }
+  })
+}
+
+// Global habit suggestion listener.
+let _habitSuggestionInstalled = false
+function ensureHabitSuggestionListener() {
+  if (_habitSuggestionInstalled) return
+  _habitSuggestionInstalled = true
+  window.electronAPI.chat.onHabitSuggestion?.((habits) => {
+    useStore.setState((s) => ({
+      proposedHabits: [...s.proposedHabits, ...habits.filter(h => !s.proposedHabits.some(ph => ph.key === h.key))],
+    }))
   })
 }

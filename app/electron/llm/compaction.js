@@ -22,6 +22,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const { completeChat } = require('./providerAdapter')
+const hooks = require('./hooks')
 
 const SAFETY_MARGIN = 1.2          // estimateTokens is rough; pad it
 const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of budget
@@ -82,14 +83,20 @@ function safeSplitIndex(messages, recentCount) {
 
 // Core entry point. Returns the (possibly compacted) message array.
 // `budget` is the model's context window in tokens (approx). 0 = no compaction.
-async function maybeCompact({ provider, model, messages, budget, signal }) {
+async function maybeCompact({ provider, model, messages, budget, signal, sessionId }) {
   if (!budget) return messages
   const threshold = Math.floor(budget * COMPACT_AT_RATIO)
   const est = estimateMessagesTokens(messages)
   if (est < threshold) return messages
 
+  // Hooks: PreCompact — allow blocking or modification.
+  let ctx = { provider, model, messages, budget, est, threshold, sessionId }
+  try { await hooks.runHooks('PreCompact', ctx) } catch (e) {
+    return messages // hook blocked compaction
+  }
+
   const split = safeSplitIndex(messages, RECENT_WINDOW)
-  if (split <= 0) return messages // everything is "recent" already
+  if (split <= 0) return messages
   const older = messages.slice(0, split)
   const recent = messages.slice(split)
   const systemMsgs = older.filter(m => m.role === 'system')
@@ -99,8 +106,6 @@ async function maybeCompact({ provider, model, messages, budget, signal }) {
   try {
     summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal })
   } catch {
-    // Summarization failed — hard-truncate the oldest non-system messages,
-    // then use safeSplit to ensure no tool_call ↔ tool_result pair is broken.
     const targetRecent = Math.floor(RECENT_WINDOW * 1.5)
     const split = safeSplitIndex(nonSystemOlder, targetRecent)
     const keep = nonSystemOlder.slice(split)
@@ -111,7 +116,12 @@ async function maybeCompact({ provider, model, messages, budget, signal }) {
   }
   if (!summary) return messages
   const summaryMsg = { role: 'system', content: `Summary of earlier conversation:\n${summary}` }
-  return [...systemMsgs, summaryMsg, ...recent]
+  const result = [...systemMsgs, summaryMsg, ...recent]
+
+  // Hooks: PostCompact
+  try { await hooks.runHooks('PostCompact', { ...ctx, summary, olderCount: older.length, recentCount: recent.length }) } catch {}
+
+  return result
 }
 
 // Ask the model to summarize a block of older messages into a compact paragraph.

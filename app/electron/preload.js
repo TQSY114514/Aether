@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     testConnection: (id) => ipcRenderer.invoke('provider:test-connection', id),
     fetchModels: (id) => ipcRenderer.invoke('provider:fetch-models', id),
   },
+  agent: {
+    getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
+    setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', opts),
+  },
   model: {
     list: (providerId) => ipcRenderer.invoke('model:list', providerId),
     create: (data) => ipcRenderer.invoke('model:create', data),
@@ -29,6 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fallbackChain: (providerId) => ipcRenderer.invoke('model:fallback-chain', providerId),
     listAll: () => ipcRenderer.invoke('model:list-all'),
     primary: () => ipcRenderer.invoke('model:primary'),
+    suggest: (params) => ipcRenderer.invoke('model:suggest', params),
   },
   persona: {
     list: () => ipcRenderer.invoke('persona:list'),
@@ -103,6 +108,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('chat:permission-expired', handler)
     },
     replyPermission: (payload) => ipcRenderer.send('chat:permission-reply', payload),
+    onToolStream: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:tool-stream', handler)
+      return () => ipcRenderer.removeListener('chat:tool-stream', handler)
+    },
     onHabitProposed: (callback) => {
       const handler = (_e, payload) => callback(payload)
       ipcRenderer.on('chat:habit-proposed', handler)
@@ -110,6 +120,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     confirmHabit: (key) => ipcRenderer.invoke('chat:habit-confirm', key),
     dismissHabit: (key) => ipcRenderer.invoke('chat:habit-dismiss', key),
+    onHabitSuggestion: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:habit-suggestion', handler)
+      return () => ipcRenderer.removeListener('chat:habit-suggestion', handler)
+    },
+    onContextBudget: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:context-budget', handler)
+      return () => ipcRenderer.removeListener('chat:context-budget', handler)
+    },
     stop: () => ipcRenderer.invoke('chat:stop'),
   },
   arena: {
@@ -157,13 +177,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('protocol:open', handler)
     },
   },
-  agent: {
-    getWorkspace: () => ipcRenderer.invoke('agent:workspace:get'),
-    setWorkspace: (dir) => ipcRenderer.invoke('agent:workspace:set', dir),
-  },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     rescan: () => ipcRenderer.invoke('skills:rescan'),
+  },
+  commands: {
+    list: () => ipcRenderer.invoke('commands:list'),
+    rescan: () => ipcRenderer.invoke('commands:rescan'),
   },
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),
@@ -192,5 +212,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     byModel: (range) => ipcRenderer.invoke('usage:by-model', range),
     daily: (range) => ipcRenderer.invoke('usage:daily', range),
     log: (range) => ipcRenderer.invoke('usage:log', range),
+  },
+  audit: {
+    log: (params) => ipcRenderer.invoke('audit:log', params),
   },
 })

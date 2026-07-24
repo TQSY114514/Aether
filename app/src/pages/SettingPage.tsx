@@ -182,30 +182,26 @@ export default function SettingPage() {
                 )}
               </div>
             </div>
-            {backgroundImage ? (
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.opacity')}</span>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundOpacity}%</span>
-                  </div>
-                  <input type="range" min={10} max={100} value={backgroundOpacity}
-                    onChange={(e) => setBackgroundOpacity(parseInt(e.target.value, 10))}
-                    className="w-full accent-black" />
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.opacity')}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundOpacity}%</span>
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.blur')}</span>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundBlur}px</span>
-                  </div>
-                  <input type="range" min={0} max={20} value={backgroundBlur}
-                    onChange={(e) => setBackgroundBlur(parseInt(e.target.value, 10))}
-                    className="w-full accent-black" />
-                </div>
+                <input type="range" min={10} max={100} value={backgroundOpacity}
+                  onChange={(e) => setBackgroundOpacity(parseInt(e.target.value, 10))}
+                  className="w-full accent-black" />
               </div>
-            ) : (
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.background.none')}</p>
-            )}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.blur')}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundBlur}px</span>
+                </div>
+                <input type="range" min={0} max={20} value={backgroundBlur}
+                  onChange={(e) => setBackgroundBlur(parseInt(e.target.value, 10))}
+                  className="w-full accent-black" />
+              </div>
+            </div>
           </div>
 
           {/* Display customization */}

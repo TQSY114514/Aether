@@ -1,5 +1,5 @@
 const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
-const { runToolLoop } = require('../llm/toolLoop')
+const { runToolLoop, MAX_CONCURRENT_TOOLS } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
 const { classifyError } = require('../llm/errorClassify')
@@ -7,6 +7,9 @@ const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
 const { computeCost } = require('../utils/cost')
+const { estimateMessagesTokens, estimateTextTokens } = require('../llm/compaction')
+const auditLog = require('../llm/auditLog')
+const modelAdvisor = require('../llm/modelAdvisor')
 const log = require('../logger')
 
 // dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
@@ -57,6 +60,7 @@ function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
 
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
+  auditLog.setDb(db)
   // Cache rarely-changing settings at handler registration time. Invalidation
   // happens on the `settings-changed` IPC (broadcast from settings.handler).
   const _s = {}
@@ -146,7 +150,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     const beforeCompact = apiMsgs.length
     let compacted
     try {
-      compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget })
+      compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget, sessionId })
     } catch (e) {
       compacted = apiMsgs
     }
@@ -180,8 +184,24 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
 
+    // Proactive habit suggestions (Hermes-style): fire-and-forget match.
+    if (autoMemoryOn) {
+      try { habitLearner.proactiveSuggest({ db, provider, model, userMessage: content, signal: controller?.signal, onSuggest: (h) => { try { getWebContents()?.send('chat:habit-suggestion', h) } catch {} } }) } catch {}
+    }
+
     const timeoutMs = parseInt(getCached('fallback_timeout_ms', '30000'), 10)
     let lastError = null
+
+    // Set workspace root for this session (from session config or global default).
+    // This lets the sandbox resolve per-session workspaces.
+    try { const { setWorkspaceRootForSession } = require('../tools/sandbox'); setWorkspaceRootForSession(sessionId, (session0?.config && JSON.parse(session0.config)?.workspace) || null) } catch {}
+
+    // Context budget: compute usage before the request so we can report it.
+    const budgetBefore = estimateMessagesTokens(compacted)
+    const budgetPct = Math.min(100, Math.round((budgetBefore / ctxBudget) * 100))
+    if (budgetPct >= 70) {
+      try { getWebContents()?.send('chat:status', { messageId: 0, sessionId, text: `⚠️ 上下文使用 ${budgetPct}% (${budgetBefore} / ${ctxBudget} tokens)`, kind: 'context_budget' }) } catch {}
+    }
 
     // Tool-calling path: when the session has tools enabled, run a non-streaming
     // tool loop (detect tool_calls → run built-in tools → re-request). Each tool
@@ -202,15 +222,35 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       abortControllers.set(msgId, controller)
       const wc = getWebContents()
       try {
-        const finalContent = await runToolLoop({
+        const modelName = (model?.model_name || '').toLowerCase()
+      const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test(modelName)
+      const finalContent = await runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
           maxIterations: parseInt(getCached('agent_max_iterations', '25'), 10),
+          sessionId,
+          onThinkingStart: thinkingSupported ? () => wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) : undefined,
+          onThinkingEnd: thinkingSupported ? () => wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) : undefined,
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
-          onStatus: (s) => wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: s.kind }),
+          onStatus: (s) => {
+            // Context budget update on each step.
+            if (s.kind === 'budget_exhausted') {
+              wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: 'budget_exhausted' })
+            } else {
+              wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: s.kind || 'step' })
+            }
+          },
           onTodoUpdate: (todos) => wc?.send('chat:todo-update', { messageId: msgId, sessionId, todos }),
+          // Stream tool output (e.g. run_command stdout) in real-time to the UI.
+          onStream: (chunk) => {
+            if (chunk?.text) wc?.send('chat:tool-stream', { messageId: msgId, sessionId, text: chunk.text, done: chunk.type === 'done' })
+          },
+          // Audit log callback: persists the agent turn trace.
+          onAudit: (trace) => {
+            try { db.addAuditLog({ sessionId, turnId: msgId, ...trace }) } catch {}
+          },
           // AskUserQuestion: surface a structured question dialog and await the
           // user's choice. Returns a JSON string of answers so the model can read
           // them as a tool result.
@@ -238,14 +278,6 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           // Session-scoped permission allow-rules: when the user picks "allow +
           // remember" in the dialog, we store a prefix rule and skip the dialog
           // for matching subsequent calls. Cleared when the session is deleted.
-          //   run_command  → prefix = first 2 space-tokens of the command
-          //                  (e.g. "git status" matches "git diff" via prefix "git")
-          //                  Actually we key on the first token (the binary) to be
-          //                  useful but not over-broad. Edit below.
-          //   write/edit   → prefix = the directory of the path
-          // For run_command we match by the first whitespace token (the binary),
-          // so "npm test" and "npm run build" both match a remembered "npm" rule.
-          // That's the useful granularity Claude Code uses.
           requestPermission: ({ name, args, risk }) => {
             // Check session allow-rules first.
             const rule = matchAllowRule(sessionId, name, args)
@@ -282,6 +314,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             })
           },
         })
+        // Report final context budget.
+        const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)
+        const pctAfter = Math.min(100, Math.round((budgetAfter / ctxBudget) * 100))
+        if (pctAfter >= 70) {
+          try { wc?.send('chat:status', { messageId: msgId, sessionId, text: `⚠️ 上下文使用 ${pctAfter}% (≈${budgetAfter} / ${ctxBudget} tokens)`, kind: 'context_budget' }) } catch {}
+        }
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
         if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage })
@@ -294,6 +332,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
+        // Persist agentMode to session config for next time.
+        try { window.electronAPI.session.setConfig(sessionId, { agentMode }).catch(() => {}) } catch {}
         return { messageId: msgId }
       } catch (err) {
         abortControllers.delete(msgId)
@@ -414,6 +454,25 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db) } catch (e) { log.warn('habit confirm failed:', e) } return { ok: true } })
   ipcMain.handle('chat:habit-dismiss', (_e, key) => { try { habitLearner.dismissHabit(db, key) } catch (e) { log.warn('habit dismiss failed:', e) } return { ok: true } })
 
+  // Model suggestion (Claude Code-style): given a user message and the full model
+  // list, return the best model id for the task. Falls back to the user's current
+  // model if no better match is found.
+  ipcMain.handle('model:suggest', (_e, { sessionId, userMessage }) => {
+    try {
+      const session = db.getSession(sessionId)
+      const currentModelId = session?.config ? JSON.parse(session.config)?.modelId : null
+      const allModels = db.getAllModels().filter(m => {
+        const p = db.getProvider(m.provider_id)
+        return p && p.enabled
+      })
+      const intent = db.classifyIntent(userMessage)
+      const suggested = modelAdvisor.suggestModel({ allModels, userMessage, useTools: true, intent })
+      return { suggestedModelId: suggested?.id || currentModelId, reason: suggested ? suggested.model_name : 'current' }
+    } catch {
+      return { suggestedModelId: null, reason: 'error' }
+    }
+  })
+
   // Renderer replies to a permission-request via this invoke. We just forward
   // the reply as an event so the waiting requestPermission closure (which uses
   // wc.on('chat:permission-reply')) picks it up.
@@ -425,6 +484,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('chat:question-reply', (event, payload) => {
     event.sender.send('chat:question-reply', payload)
     return true
+  })
+
+  // ─── Audit log ───────────────────────────────────────────────────────────
+  ipcMain.handle('audit:log', (_e, { sessionId, limit = 50 }) => {
+    return db.getAuditLog(sessionId, limit)
   })
 }
 
