@@ -235,7 +235,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           options: mergedOpts,
           agentMode: agentMode || 'ask',
           maxIterations: parseInt(getCached('agent_max_iterations', '25'), 10),
-          sessionId, messageId: msgId,
+          sessionId, messageId: msgId, db,
           onThinkingStart: thinkingSupported ? () => wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) : undefined,
           onThinkingEnd: thinkingSupported ? () => wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) : undefined,
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
@@ -288,6 +288,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             // Check session allow-rules first.
             const rule = matchAllowRule(sessionId, name, args)
             if (rule) return Promise.resolve(true)
+            // Build impact preview for the permission dialog.
+            let impactPreview = null
+            try {
+              impactPreview = require('../../tools/toolImpact').toolImpact(name, args)
+            } catch {}
             return new Promise((resolve) => {
             const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
             const safeWc = wc && !wc.isDestroyed() ? wc : null
@@ -316,7 +321,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             controller.signal.addEventListener('abort', onAbort)
             if (!safeWc) { finish(false); return }
             safeWc.on('chat:permission-reply', onReply)
-            safeWc.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk })
+            safeWc.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk, impact: impactPreview })
             })
           },
         })

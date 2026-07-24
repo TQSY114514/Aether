@@ -75,7 +75,7 @@ interface AppState {
   sending: boolean
   // Per-message tool-call invocations, keyed by the assistant messageId the
   // tool belongs to. Each entry is the list of tool calls for that message.
-  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null }[]>
+  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null }[]>
   // Per-message agent plan steps (the assistant's reasoning each round).
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).
@@ -103,7 +103,7 @@ interface AppState {
   agentMode: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'
   setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).
-  permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous' }[]
+  permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous'; impact?: { summary: string; severity: string; affectedFiles: string[]; command?: string } | null }[]
   resolvePermission: (reqId: string, allowed: boolean, remember?: boolean) => void
   // Habit proposals awaiting user consent (promote vs dismiss). Surfaced as a
   // small inline card in ChatWindow — never auto-applied.

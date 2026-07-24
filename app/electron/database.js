@@ -111,6 +111,19 @@ async function initDatabase() {
   try { db.run("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0") } catch {}
   // Last-accessed timestamp for time-decay scoring.
   try { db.run("ALTER TABLE memory ADD COLUMN last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
+  // Provenance: source session + turn + message for traceability.
+  try { db.run("ALTER TABLE memory ADD COLUMN source_session_id INTEGER") } catch {}
+  try { db.run("ALTER TABLE memory ADD COLUMN source_turn_id INTEGER") } catch {}
+  try { db.run("ALTER TABLE memory ADD COLUMN confidence REAL DEFAULT 1.0") } catch {}
+  // Conflict tracking: when a similar fact already exists, link them.
+  try { db.run("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
+
+  // Skill usage tracking: how often each skill is invoked.
+  db.run(`CREATE TABLE IF NOT EXISTS skill_usage (
+    name TEXT PRIMARY KEY,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`)
 
   // Agent execution audit log (Codex-style). One row per agent turn, full trace
   // as JSON payload for debugging and analysis.
@@ -134,7 +147,10 @@ async function initDatabase() {
     snapshot TEXT NOT NULL,
     rolled_back_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`)
+  `)
+
+  // Agent checkpoints — save/restore snapshots of long agent tasks.
+  try { require('./llm/checkpointManager').createTable(db) } catch {}
 
   // Habit learner: tracks recurring user preferences.
   db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
@@ -503,6 +519,10 @@ function addMemory({ content, type }) {
   db.run('INSERT INTO memory (content, type) VALUES (?, ?)', [content, type || 'fact'])
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
+function addMemoryWithProvenance(content, type, sourceSessionId) {
+  db.run('INSERT INTO memory (content, type, source_session_id, confidence) VALUES (?, ?, ?, 1.0)', [content, type || 'fact', sourceSessionId])
+  saveDatabase(); return { lastInsertRowid: lastId() }
+}
 function updateMemory(id, { content }) {
   if (!content) return
   db.run('UPDATE memory SET content = ? WHERE id = ?', [content, id])
@@ -521,11 +541,38 @@ function addAuditLog({ sessionId, turnId, payload }) {
     [sessionId, turnId, JSON.stringify(payload)])
   saveDatabase()
 }
+// ===== Agent Checkpoints =====
+// Dual interface: checkpointManager (agent-turn-level) + direct agent checkpoint
+// (per-tool-level with snapshot/rollback for dangerous tools).
+
+function addCheckpoint({ sessionId, turnId, stepIndex, messages, toolTrace = [], meta = {} }) {
+  const cm = require('../llm/checkpointManager')
+  return cm.save(db, sessionId, turnId, stepIndex, messages, toolTrace, meta)
+}
+
+function getCheckpoints(sessionId, limit = 20) {
+  const cm = require('../llm/checkpointManager')
+  return cm.listForSession(db, sessionId, limit)
+}
+
+function deleteCheckpoints(sessionId) {
+  const cm = require('../llm/checkpointManager')
+  cm.deleteForSession(db, sessionId)
+}
+
+function deleteCheckpoint(id) {
+  const cm = require('../llm/checkpointManager')
+  cm.deleteOne(db, id)
+}
+
+// Direct agent-checkpoint: record a snapshot before a dangerous tool runs so the
+// renderer can restore the tool's file changes.
 function addAgentCheckpoint({ sessionId, messageId, toolName, args, affectedPaths, snapshot }) {
   db.run('INSERT INTO agent_checkpoint (session_id, message_id, tool_name, args, affected_paths, snapshot) VALUES (?, ?, ?, ?, ?, ?)',
     [sessionId, messageId, toolName, JSON.stringify(args || {}), JSON.stringify(affectedPaths || []), JSON.stringify(snapshot || {})])
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
+
 function getAgentCheckpoint(id) {
   const stmt = db.prepare('SELECT * FROM agent_checkpoint WHERE id = ?')
   stmt.bind([id])
@@ -536,10 +583,12 @@ function getAgentCheckpoint(id) {
   try { row.snapshot = JSON.parse(row.snapshot || '{}') } catch { row.snapshot = {} }
   return row
 }
+
 function markAgentCheckpointRolledBack(id) {
   db.run('UPDATE agent_checkpoint SET rolled_back_at = ? WHERE id = ?', [localNow(), id])
   saveDatabase()
 }
+
 function listAgentCheckpoints(sessionId, messageId = null) {
   const where = messageId ? 'session_id = ? AND message_id = ?' : 'session_id = ?'
   const stmt = db.prepare(`SELECT id, session_id, message_id, tool_name, args, affected_paths, rolled_back_at, created_at FROM agent_checkpoint WHERE ${where} ORDER BY id DESC`)
@@ -550,6 +599,7 @@ function listAgentCheckpoints(sessionId, messageId = null) {
     try { row.affected_paths = JSON.parse(row.affected_paths || '[]') } catch { row.affected_paths = [] }
   }
   return rows
+}
 }
 function getAuditLog(sessionId, limit = 50) {
   const stmt = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?')
@@ -712,6 +762,8 @@ module.exports = {
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
   // agent audit log
   addAuditLog, getAuditLog,
+  // agent checkpoints (agent-turn-level + per-tool snapshot/rollback)
+  addCheckpoint, getCheckpoints, deleteCheckpoints, deleteCheckpoint,
   addAgentCheckpoint, getAgentCheckpoint, markAgentCheckpointRolledBack, listAgentCheckpoints,
   // credential pool: list/add/remove credentials per provider
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },

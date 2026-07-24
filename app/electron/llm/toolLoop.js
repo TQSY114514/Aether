@@ -16,6 +16,21 @@ const { safeParseToolCallArgs } = require('./toolArgs')
 const { applyMiddleware, enrichWithSummary } = require('./toolResultMiddleware')
 const { classifyError } = require('./errorClassify')
 const toolCache = require('./toolCache')
+const checkpointMgr = require('./checkpointManager')
+
+// Classify tool-execution errors (distinct from LLM API errors).
+// These are errors thrown by tool.run() — e.g. file not found, command
+// timeout, permission denied by sandbox, missing dependency.
+function classifyToolError(errMsg) {
+  const m = String(errMsg || '')
+  if (/timed?\s*out|timeout/i.test(m)) return { kind: 'timeout', recover: { action: 'retry', hint: '工具执行超时，可重试或增大超时时间' } }
+  if (/permission|denied|forbidden|EACCES/i.test(m)) return { kind: 'permission_denied', recover: { action: 'ask', hint: '权限不足，请在设置中检查 workspace 权限' } }
+  if (/not\s*found|ENOENT|no\s*such/i.test(m)) return { kind: 'env_missing_dependency', recover: { action: 'none', hint: '文件或命令不存在，请检查路径或安装依赖' } }
+  if (/MODULE_NOT_FOUND|Cannot find module/i.test(m)) return { kind: 'env_missing_dependency', recover: { action: 'none', hint: '缺少依赖模块，请运行 npm install' } }
+  if (/test\s*(fail|error)|assert/i.test(m)) return { kind: 'test_failure', recover: { action: 'none', hint: '测试失败，请查看错误详情' } }
+  if (/invalid\s*arg|TypeError|required\s*param|missing\s*field/i.test(m)) return { kind: 'model_invalid_args', recover: { action: 'retry', hint: '参数无效，模型可能误解了指令' } }
+  return { kind: 'unknown', recover: { action: 'retry', hint: m.slice(0, 120) } }
+}
 // Use the MCP-aware merged registry so the agent can call both built-in tools
 // and any connected MCP server's tools. Falls back to the plain built-in
 // registry if the manager isn't loadable for some reason.
@@ -80,7 +95,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, onBudgetUpdate, onAudit, onVerification, messageId }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db }) {
   toolCache.clear()
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
@@ -192,6 +207,7 @@ Reply in this format:
         const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null, checkpointId: null }
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
+          entry.failure_kind = 'model_invalid_args'
         } else {
           // Tool lifecycle: prepareArguments rewrites args, then beforeToolCall
           // can block by throwing (OpenClaw pattern).
@@ -202,6 +218,7 @@ Reply in this format:
             }
           } catch (e) {
             entry.error = `blocked by prepareArguments: ${e.message}`
+            entry.failure_kind = 'model_invalid_args'
           }
           if (!entry.error) {
             try {
@@ -210,12 +227,14 @@ Reply in this format:
               }
             } catch (e) {
               entry.error = `blocked by tool hook: ${e.message}`
+              entry.failure_kind = 'permission_denied'
             }
           }
           // Hooks: PreToolUse — user-defined scripts can block or modify.
           if (!entry.error) {
             try { await hooks.runHooks('PreToolUse', { toolName: fn.name, args, sessionId, messageId: tc.id }) } catch (e) {
               entry.error = `blocked by hook: ${e.message}`
+              entry.failure_kind = 'permission_denied'
             }
           }
           let effectiveMode = agentMode === 'auto_confirm'
@@ -226,9 +245,13 @@ Reply in this format:
             if (tool.risk === 'dangerous' && effectiveMode !== 'auto' && effectiveMode !== 'yolo') {
               if (effectiveMode === 'plan') {
                 entry.error = 'blocked by plan mode (read-only)'
+                entry.failure_kind = 'permission_denied'
               } else if (effectiveMode === 'ask') {
                 const allowed = await requestPermissionWithTimeout(requestPermission, { name: fn.name, args, risk: tool.risk, sessionId })
-                if (!allowed) { entry.error = 'denied by user' }
+                if (!allowed) {
+                  entry.error = 'denied by user'
+                  entry.failure_kind = 'permission_denied'
+                }
               }
             }
           }
@@ -250,6 +273,8 @@ Reply in this format:
             entry.latencyMs = cached.hit ? 0 : Date.now() - t0
             if (r.error) {
               entry.error = r.error
+              entry.failure_kind = classifyToolError(r.error).kind
+              entry.recovery_hint = classifyToolError(r.error).recover
               try { await hooks.runHooks('ToolError', { toolName: fn.name, args, error: r.error, sessionId, messageId: tc.id }) } catch {}
             } else {
               entry.result = r.result
@@ -297,7 +322,7 @@ Reply in this format:
           try { onToolCall?.(entry) } catch {}
           // Audit log: record each tool call.
           if (onAudit && !isPlan) {
-            auditTrail.push({ name: entry.name, args: entry.args, result: entry.result, error: entry.error, latencyMs: entry.latencyMs, depth })
+            auditTrail.push({ name: entry.name, args: entry.args, result: entry.result, error: entry.error, failure_kind: entry.failure_kind, recovery_hint: entry.recovery_hint, latencyMs: entry.latencyMs, depth })
           }
         }
         let rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
@@ -308,6 +333,18 @@ Reply in this format:
         totalChars += rawContent.length
         convo.push({ role: 'tool', tool_call_id: tc.id, content: rawContent })
       }
+
+      // Auto-checkpoint: snapshot after this round so the user can roll back
+      // to this point if a later step fails.
+      if (sessionId) {
+        try {
+          const stepIndex = depth
+          if (checkpointMgr.shouldAutoCheckpoint(stepIndex, convo)) {
+            checkpointMgr.save(db, sessionId, 0, stepIndex, convo, auditTrail, { totalChars, planId: plan?.id })
+          }
+        } catch {}
+      }
+
       if (totalChars > MAX_TOTAL_CHARS) {
         return '（工具输出超出上下文预算，已停止）'
       }
