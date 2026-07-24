@@ -99,6 +99,18 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { messageId: 0 }
     }
 
+    // Model suggestion (auto-routing rationale for the renderer).
+    let modelSuggestion = null
+    try {
+      const allModelsForSuggest = db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
+      const intent = db.classifyIntent(content)
+      const scores = db.getModelScores()
+      const eloData = {}
+      for (const s of scores) { if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 } }
+      const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData })
+      if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, confidence: result.confidence }
+    } catch {}
+
     // Build fallback chain — skip providers that are in cooldown or have a
     // poor success rate (provider health tracking).
     const fallbackModels = [{ model, provider }]
@@ -345,13 +357,13 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
-        return { messageId: msgId }
+        return { messageId: msgId, modelSuggestion }
       } catch (err) {
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
         db.updateMessage(msgId, { content: '', status: 'aborted', error_message: errMsg })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
-        return { messageId: msgId }
+        return { messageId: msgId, modelSuggestion }
       }
     }
 
@@ -463,7 +475,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     }
 
     if (lastError) getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-    return { messageId: 0 }
+    return { messageId: 0, modelSuggestion }
   })
 
   ipcMain.handle('chat:stop', () => {

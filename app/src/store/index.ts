@@ -77,7 +77,7 @@ interface AppState {
   // tool belongs to. Each entry is the list of tool calls for that message.
   toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null }[]>
   // Per-message agent plan steps (the assistant's reasoning each round).
-  planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string }[]>
+  planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string; kind?: 'plan' | 'act' | 'observe' }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).
   todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
   // Per-message thinking/reasoning blocks from extended-thinking models (Claude
@@ -129,6 +129,8 @@ interface AppState {
   // for OpenAI o-series, thinking.budget_tokens for Claude). 'off' = no param.
   effortLevel: 'off' | 'low' | 'medium' | 'high'
   setEffortLevel: (v: 'off' | 'low' | 'medium' | 'high') => void
+  // Last model-suggestion rationale from modelAdvisor (shown in ModelSelector).
+  modelSuggestion: { suggestedModelId: number | null; reason: string; confidence: number } | null
   stopGeneration: () => Promise<void>
   regenerate: () => Promise<void>
   editMessage: (messageId: number, newContent: string) => Promise<void>
@@ -250,6 +252,7 @@ export const useStore = create<AppState>((set, get) => ({
   effortLevel: 'off',
   completionToasts: [] as any[],
   agentWorkspace: '', // current session's workspace path (or global)
+  modelSuggestion: null as { suggestedModelId: number | null; reason: string; confidence: number } | null,
 
   loadSessions: async () => {
     const sessions = await window.electronAPI.session.list()
@@ -524,7 +527,7 @@ export const useStore = create<AppState>((set, get) => ({
     ensureToolCallListener()
 
     try {
-      await window.electronAPI.chat.send({
+      const result = await window.electronAPI.chat.send({
         sessionId: currentSessionId,
         content: finalContent,
         modelId,
@@ -537,6 +540,7 @@ export const useStore = create<AppState>((set, get) => ({
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
         })
+      if (result?.modelSuggestion) set({ modelSuggestion: result.modelSuggestion })
     } catch (err) {
       log.error('[AetherAI] chat.send FAILED:', err)
       // Drop this session's streaming buffer on error; keep other sessions intact.
@@ -879,6 +883,7 @@ export const useStore = create<AppState>((set, get) => ({
 export function ensureAllListeners() {
   ensureChunkListener()
   ensureToolCallListener()
+  ensurePlanStepListener()
   ensureStatusListener()
   ensureHabitSuggestionListener()
   ensureThinkingListener()
@@ -897,7 +902,7 @@ function ensureToolCallListener() {
   if (_toolCallListenerInstalled) return
   _toolCallListenerInstalled = true
   window.electronAPI.chat.onToolCall(({ messageId, sessionId, tool }) => {
-    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, failureKind: (tool as any).failure_kind ?? null, recoveryHint: (tool as any).recovery_hint ?? null, risk: tool.risk, latencyMs: tool.latencyMs, checkpointId: (tool as any).checkpointId ?? null }
+    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, failureKind: (tool as any).failure_kind ?? null, recoveryHint: (tool as any).recovery_hint ?? null, risk: tool.risk, latencyMs: (tool as any).latencyMs ?? null, checkpointId: (tool as any).checkpointId ?? null, diff: (tool as any).diff ?? null, afterSnapshot: (tool as any).after_snapshot ?? null }
     useStore.setState((s) => {
       const existing = s.toolCallsByMessage[messageId] || []
       // Append if new, replace if result changed (for live streaming)
@@ -905,6 +910,27 @@ function ensureToolCallListener() {
         return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing.slice(0, -1), entry] } }
       }
       return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing, entry] } }
+    })
+  })
+}
+
+let _planStepListenerInstalled = false
+function ensurePlanStepListener() {
+  if (_planStepListenerInstalled) return
+  _planStepListenerInstalled = true
+  window.electronAPI.chat.onPlanStep?.(({ messageId, sessionId, step }) => {
+    if (!messageId) return
+    useStore.setState((s) => {
+      const existing = s.planStepsByMessage[messageId] || []
+      // Append each plan step; replace if step number matches (live update)
+      const idx = existing.findIndex(e => e.step === step.step && e.depth === step.depth)
+      const entry = { step: step.step, depth: step.depth, assistantText: step.assistantText, kind: step.kind }
+      if (idx >= 0) {
+        const next = [...existing]
+        next[idx] = entry
+        return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: next } }
+      }
+      return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: [...existing, entry] } }
     })
   })
 }

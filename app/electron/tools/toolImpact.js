@@ -124,4 +124,85 @@ function toolImpact(name, args) {
   }
 }
 
-module.exports = { toolImpact }
+// ───────────────────────────────────────────────────────────────────────────
+// Diff Preview — generates unified diffs for write_file and edit_file so
+// the user can review exact file changes in the ToolCallBlock before
+// confirming (Claude Code-style diff blocks).
+// ───────────────────────────────────────────────────────────────────────────
+
+const MAX_DIFF_CHARS = 8000
+const { readFileSync } = require('fs')
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s
+  return s.slice(0, max) + '\n\n[… diff truncated …]'
+}
+
+// Build a simple line-by-line unified diff.
+function buildUnifiedDiff(oldLines: string[], newLines: string[]): string {
+  const parts: string[] = []
+  const maxLen = Math.max(oldLines.length, newLines.length)
+  let oi = 0, ni = 0
+  while (oi < oldLines.length || ni < newLines.length) {
+    const ol = oi < oldLines.length ? oldLines[oi] : null
+    const nl = ni < newLines.length ? newLines[ni] : null
+    if (ol === null) { parts.push(`+${nl}`); ni++ }
+    else if (nl === null) { parts.push(`-${ol}`); oi++ }
+    else if (ol === nl) { parts.push(` ${ol}`); oi++; ni++ }
+    else {
+      const newIdx = nl !== null ? newLines.slice(ni).indexOf(ol) : -1
+      const oldIdx = ol !== null ? oldLines.slice(oi).indexOf(nl) : -1
+      if (newIdx >= 0 && (oldIdx < 0 || newIdx <= oldIdx)) {
+        for (let k = 0; k < newIdx; k++) { parts.push(`+${newLines[ni + k]}`); ni++ }
+      } else if (oldIdx >= 0) {
+        for (let k = 0; k < oldIdx; k++) { parts.push(`-${oldLines[oi + k]}`); oi++ }
+      } else {
+        parts.push(`-${ol}`); parts.push(`+${nl}`); oi++; ni++
+      }
+    }
+  }
+  return parts.join('\n')
+}
+
+export function generateDiff(name: string, args: any): { diff: string; oldPath: string; newPath: string } | null {
+  if (name === 'write_file') {
+    const filePath = String(args?.path || '')
+    const content = String(args?.content ?? '')
+    if (!filePath || !content) return null
+    const lines = content.split('\n')
+    const body = lines.map(l => `+${l}`).join('\n')
+    return { diff: truncate(body, MAX_DIFF_CHARS), oldPath: '/dev/null', newPath: filePath }
+  }
+  if (name === 'edit_file') {
+    const filePath = String(args?.path || '')
+    const oldS = String(args?.old_string ?? '')
+    const newS = String(args?.new_string ?? '')
+    if (!filePath || !oldS) return null
+    const oldLines = oldS.split('\n')
+    const newLines = newS.split('\n')
+    const body = buildUnifiedDiff(oldLines, newLines)
+    const diff = `--- ${filePath}\n+++ ${filePath}\n${body}`
+    return { diff: truncate(diff, MAX_DIFF_CHARS), oldPath: filePath, newPath: filePath }
+  }
+  return null
+}
+
+// Generate a "before vs after" snapshot for any file-touching tool by reading
+// the current file state after execution. Returns null if the file doesn't
+// exist (new file) or can't be read.
+export function generateAfterSnapshot(name: string, args: any): { path: string; content: string; truncated: boolean } | null {
+  if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return null
+  const filePath = String(args?.path || '')
+  if (!filePath) return null
+  try {
+    const stat = require('fs').statSync(filePath)
+    if (!stat.isFile()) return null
+    const buf = readFileSync(filePath)
+    const content = buf.toString('utf-8')
+    return { path: filePath, content, truncated: content.length > 4000 }
+  } catch {
+    return null // file may not exist yet (write_file creates it)
+  }
+}
+
+module.exports = { toolImpact, generateDiff, generateAfterSnapshot, TOOL_LABELS }

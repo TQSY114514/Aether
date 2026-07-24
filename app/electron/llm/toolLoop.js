@@ -17,6 +17,7 @@ const { applyMiddleware, enrichWithSummary } = require('./toolResultMiddleware')
 const { classifyError } = require('./errorClassify')
 const toolCache = require('./toolCache')
 const checkpointMgr = require('./checkpointManager')
+const { generateDiff, generateAfterSnapshot } = require('../tools/toolImpact')
 
 // Classify tool-execution errors (distinct from LLM API errors).
 // These are errors thrown by tool.run() — e.g. file not found, command
@@ -152,7 +153,7 @@ Reply in this format:
         // Inject plan into system context
         const planBlock = planning.planSystemBlock(plan)
         convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
-        onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)` })
+        onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)`, kind: 'plan' })
       }
     } catch {}
   }
@@ -177,7 +178,9 @@ Reply in this format:
       return `[agent error: ${e && e.message ? e.message : String(e)}]`
     }
     if (!msg) msg = { content: '', tool_calls: undefined }
-    try { if (msg.content) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content }) } catch {}
+    const hasToolCalls = !!(msg.tool_calls && msg.tool_calls.length)
+    const kind = hasToolCalls ? 'act' : 'plan'
+    try { if (msg.content) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
 
     if (msg.tool_calls && msg.tool_calls.length) {
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
@@ -286,6 +289,13 @@ Reply in this format:
                 }
               } catch {}
               try { await hooks.runHooks('PostToolUse', { toolName: fn.name, args, result: r.result, sessionId, messageId: tc.id }) } catch {}
+              // Diff preview: generate unified diff for file-touching tools.
+              try {
+                const diffResult = generateDiff(fn.name, args)
+                if (diffResult) entry.diff = diffResult.diff
+                const snapshot = generateAfterSnapshot(fn.name, args)
+                if (snapshot) entry.afterSnapshot = snapshot
+              } catch {}
             }
           }
         }
@@ -317,7 +327,7 @@ Reply in this format:
       // Append results in order.
       for (const { tc, isPlan, entry, planStep } of allExecuted) {
         if (isPlan && planStep) {
-          try { onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: planStep }) } catch {}
+          try { onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: planStep, kind: 'observe' }) } catch {}
         } else {
           try { onToolCall?.(entry) } catch {}
           // Audit log: record each tool call.
