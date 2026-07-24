@@ -13,7 +13,7 @@ function toolImpact(name, args) {
     case 'write_file': {
       const p = String(a.path || '')
       const len = String(a.content ?? '').length
-      const riskTags: string[] = len > 0 ? ['writes_files'] : []
+      const riskTags = len > 0 ? ['writes_files'] : []
       return {
         summary: `写入文件: ${p}\n大小: ${len} 字符`,
         severity: len > 100000 ? 'high' : 'medium',
@@ -27,7 +27,7 @@ function toolImpact(name, args) {
       const p = String(a.path || '')
       const oldLen = String(a.old_string ?? '').length
       const newLen = String(a.new_string ?? '').length
-      const riskTags: string[] = ['writes_files']
+      const riskTags = ['writes_files']
       return {
         summary: `编辑: ${p}\n替换 ${oldLen} → ${newLen} 字符`,
         severity: 'medium',
@@ -41,7 +41,7 @@ function toolImpact(name, args) {
       const cmd = String(a.command || '')
       const desc = String(a.description || '')
       const cwd = a.cwd ? String(a.cwd) : ''
-      const riskTags: string[] = []
+      const riskTags = []
       if (/write|>|\/c\s+echo\s|tee\b|cat\s*>/i.test(cmd)) riskTags.push('writes_files')
       if (/curl\b|wget\b|http|https|fetch\b|npm\s+install|pip\s+install|go\s+get|cargo\s+add/i.test(cmd)) riskTags.push('network_or_install')
       if (/npm\s+install|pip\s+install|pnpm\s+add|yarn\s+add|go\s+get|cargo\s+add|apt\s+install|brew\s+install/i.test(cmd)) riskTags.push('installs_deps')
@@ -131,46 +131,46 @@ function toolImpact(name, args) {
 // ───────────────────────────────────────────────────────────────────────────
 
 const MAX_DIFF_CHARS = 8000
-const { readFileSync } = require('fs')
+const readFileSync = require('fs').readFileSync
 
-function truncate(s: string, max: number): string {
+function truncate(s, max) {
   if (s.length <= max) return s
   return s.slice(0, max) + '\n\n[… diff truncated …]'
 }
 
 // Build a simple line-by-line unified diff.
-function buildUnifiedDiff(oldLines: string[], newLines: string[]): string {
-  const parts: string[] = []
+function buildUnifiedDiff(oldLines, newLines) {
+  const parts = []
   const maxLen = Math.max(oldLines.length, newLines.length)
   let oi = 0, ni = 0
   while (oi < oldLines.length || ni < newLines.length) {
     const ol = oi < oldLines.length ? oldLines[oi] : null
     const nl = ni < newLines.length ? newLines[ni] : null
-    if (ol === null) { parts.push(`+${nl}`); ni++ }
-    else if (nl === null) { parts.push(`-${ol}`); oi++ }
-    else if (ol === nl) { parts.push(` ${ol}`); oi++; ni++ }
+    if (ol === null) { parts.push('+' + nl); ni++ }
+    else if (nl === null) { parts.push('-' + ol); oi++ }
+    else if (ol === nl) { parts.push(' ' + ol); oi++; ni++ }
     else {
       const newIdx = nl !== null ? newLines.slice(ni).indexOf(ol) : -1
       const oldIdx = ol !== null ? oldLines.slice(oi).indexOf(nl) : -1
       if (newIdx >= 0 && (oldIdx < 0 || newIdx <= oldIdx)) {
-        for (let k = 0; k < newIdx; k++) { parts.push(`+${newLines[ni + k]}`); ni++ }
+        for (let k = 0; k < newIdx; k++) { parts.push('+' + newLines[ni + k]); ni++ }
       } else if (oldIdx >= 0) {
-        for (let k = 0; k < oldIdx; k++) { parts.push(`-${oldLines[oi + k]}`); oi++ }
+        for (let k = 0; k < oldIdx; k++) { parts.push('-' + oldLines[oi + k]); oi++ }
       } else {
-        parts.push(`-${ol}`); parts.push(`+${nl}`); oi++; ni++
+        parts.push('-' + ol); parts.push('+' + nl); oi++; ni++
       }
     }
   }
   return parts.join('\n')
 }
 
-export function generateDiff(name: string, args: any): { diff: string; oldPath: string; newPath: string } | null {
+export function generateDiff(name, args) {
   if (name === 'write_file') {
     const filePath = String(args?.path || '')
     const content = String(args?.content ?? '')
     if (!filePath || !content) return null
     const lines = content.split('\n')
-    const body = lines.map(l => `+${l}`).join('\n')
+    const body = lines.map(l => '+' + l).join('\n')
     return { diff: truncate(body, MAX_DIFF_CHARS), oldPath: '/dev/null', newPath: filePath }
   }
   if (name === 'edit_file') {
@@ -181,7 +181,7 @@ export function generateDiff(name: string, args: any): { diff: string; oldPath: 
     const oldLines = oldS.split('\n')
     const newLines = newS.split('\n')
     const body = buildUnifiedDiff(oldLines, newLines)
-    const diff = `--- ${filePath}\n+++ ${filePath}\n${body}`
+    const diff = '--- ' + filePath + '\n+++ ' + filePath + '\n' + body
     return { diff: truncate(diff, MAX_DIFF_CHARS), oldPath: filePath, newPath: filePath }
   }
   return null
@@ -190,7 +190,7 @@ export function generateDiff(name: string, args: any): { diff: string; oldPath: 
 // Generate a "before vs after" snapshot for any file-touching tool by reading
 // the current file state after execution. Returns null if the file doesn't
 // exist (new file) or can't be read.
-export function generateAfterSnapshot(name: string, args: any): { path: string; content: string; truncated: boolean } | null {
+export function generateAfterSnapshot(name, args) {
   if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return null
   const filePath = String(args?.path || '')
   if (!filePath) return null
