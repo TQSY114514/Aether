@@ -47,7 +47,7 @@ interface Window {
     chat: {
       send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
-      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null } }) => void) => () => void
+      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null } }) => void) => () => void
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string } }) => void) => () => void
       onTodoUpdate: (callback: (payload: { messageId: number; sessionId: number; todos: { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[] }) => void) => () => void
       onStatus: (callback: (payload: { messageId: number; sessionId: number; text: string; kind?: string }) => void) => () => void
@@ -134,6 +134,10 @@ interface Window {
     }
     audit: {
       log: (params: { sessionId: number; limit?: number }) => Promise<any[]>
+    }
+    agentCheckpoint: {
+      list: (params: { sessionId: number; messageId?: number | null }) => Promise<any[]>
+      rollback: (params: { id: number }) => Promise<{ success: boolean; restored?: string[]; error?: string }>
     }
   }
 }
