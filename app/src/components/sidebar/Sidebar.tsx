@@ -133,7 +133,7 @@ export default function Sidebar() {
         </button>
       </div>
       <div className="p-2 shrink-0">
-        <button onClick={() => setCurrentView('chat')} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
+        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
           <Plus size={16} className="text-gray-500" />{t('chat.new')}
         </button>
       </div>

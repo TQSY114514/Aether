@@ -132,7 +132,7 @@ export default function App() {
     // @ts-ignore protocol handler added to preload (not yet in generated types)
     const off = window.electronAPI?.protocol?.onOpen?.(({ action }: { action: string }) => {
       if (action === 'new' || action === 'chat') {
-        useStore.getState().setCurrentView('chat')
+        useStore.getState().newChat()
       }
     })
     return () => off?.()
@@ -158,7 +158,7 @@ export default function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
-        useStore.getState().setCurrentView('chat')
+        useStore.getState().newChat()
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
