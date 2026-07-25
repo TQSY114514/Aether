@@ -577,7 +577,7 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15000)
-    const text = await completeChatWithRetry({
+    const text = await completeChat({
       provider, model,
       messages: [
         { role: 'system', content: sysPrompt },
