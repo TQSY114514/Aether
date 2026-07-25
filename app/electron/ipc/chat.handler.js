@@ -246,6 +246,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           agentMode: agentMode || 'ask',
           maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
           sessionId, messageId: msgId, db,
+          autoCommit: true,
           onThinkingStart: thinkingSupported ? () => wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) : undefined,
           onThinkingEnd: thinkingSupported ? () => wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) : undefined,
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),

@@ -19,7 +19,9 @@ const toolCache = require('./toolCache')
 const checkpointMgr = require('./checkpointManager')
 const { generateDiff, generateAfterSnapshot } = require('../tools/toolImpact')
 const { buildProjectContextMessage, invalidateCache } = require('./projectInstructions')
+const { getWorkspaceRoot } = require('../tools/sandbox')
 const modelRouter = require('./modelRouter')
+const path = require('path')
 
 // Classify tool-execution errors (distinct from LLM API errors).
 // These are errors thrown by tool.run() — e.g. file not found, command
@@ -98,7 +100,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false }) {
   toolCache.clear()
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
@@ -125,13 +127,15 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
 
   // Verification stop: after the agent loop finishes, optionally ask the model
   // to review its own tool-call trace for correctness (Codex-inspired).
-  // Catches subtle errors: wrong file edited, missed requirement, incomplete task.
+  // Also triggers an automatic git commit when file changes were made (Aider/
+  // Claude Code-inspired): stages and commits with a conventional message so
+  // the user has a clean rollback point without manual intervention.
   async function runVerification() {
-    if (!onVerification || auditTrail.length === 0) return null
+    if (!onVerification && !autoCommit) return null
     try {
       const toolTrace = auditTrail.map((tc, i) =>
         `${i + 1}. ${tc.name}(${JSON.stringify(tc.args).slice(0, 200)}) → ${tc.error ? 'ERROR: ' + tc.error.slice(0, 100) : 'OK'}`).join('\n')
-      const verifyPrompt = `You just completed a task using tools. Review your tool-call trace below and answer: did you successfully complete ALL requirements? Are there any errors, missed steps, or incomplete results?
+      let verifyPrompt = `You just completed a task using tools. Review your tool-call trace below and answer: did you successfully complete ALL requirements? Are there any errors, missed steps, or incomplete results?
 
 Tool calls:
 ${toolTrace}
@@ -141,13 +145,42 @@ Reply in this format:
 - ISSUES: list any problems found, or "none"
 - SUMMARY: brief summary of what was accomplished`
 
+      if (autoCommit) {
+        verifyPrompt += `
+
+AUTOMATIC COMMIT:
+If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_patch) were used, you should also compose a conventional commit message. After your review, output a line: COMMIT_MSG: <message>` }
       const result = await completeChatMessage({
         provider, model,
         messages: [...convo.filter(m => m.role !== 'system'), { role: 'user', content: verifyPrompt }],
         signal,
         options: { max_tokens: 512, ...options },
       })
-      return result?.content || null
+      const text = result?.content || null
+
+      // Auto-commit: if verification says complete and there were file changes,
+      // stage + commit them with the model-composed message.
+      if (autoCommit && text && text.includes('STATUS: COMPLETE') && auditTrail.some(tc => ['write_file', 'edit_file', 'apply_patch'].includes(tc.name))) {
+        try {
+          const commitMatch = text.match(/COMMIT_MSG:\s*(.+)/i)
+          const commitMsg = commitMatch ? commitMatch[1].trim().slice(0, 200) : 'chore: agent changes'
+          // Find a cwd from the first file-touching tool call.
+          const fileTool = auditTrail.find(tc => ['write_file', 'edit_file', 'apply_patch'].includes(tc.name))
+          const repoCwd = fileTool?.args?.path ? path.dirname(fileTool.args.path) : (sessionId ? getWorkspaceRoot(sessionId) : null)
+          if (repoCwd) {
+            try {
+              const { execSync } = require('child_process')
+              execSync('git add -A', { cwd: repoCwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+              execSync('git commit -m ' + JSON.stringify(commitMsg), { cwd: repoCwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+              onStatus?.({ text: `✓ 自动提交: ${commitMsg.slice(0, 60)}`, kind: 'auto_commit' })
+            } catch (gitErr) {
+              // Silently ignore commit failures (no repo, nothing to commit, etc.)
+            }
+          }
+        } catch {}
+      }
+
+      return text
     } catch {
       return null // verification is best-effort, never block the reply
     }
