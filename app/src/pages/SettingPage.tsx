@@ -8,6 +8,7 @@ import McpSettings from '@/components/settings/McpSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 import AgentSettings from '@/components/settings/AgentSettings'
 import SkillsSettings from '@/components/settings/SkillsSettings'
+import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
 
 // "Check for updates" card — wraps electron-updater. In dev this is a no-op
 // (the updater logs "application is not packed"); in a packaged build it hits
@@ -243,6 +244,9 @@ export default function SettingPage() {
               </div>
             </div>
           </div>
+
+          {/* Default chat settings */}
+          <DefaultChatSettings />
 
           {/* Advanced */}
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>

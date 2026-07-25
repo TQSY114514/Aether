@@ -65,14 +65,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   auditLog.setDb(db)
   checkpoints.setDb(db)
   // Cache rarely-changing settings at handler registration time. Invalidation
-  // happens on the `settings-changed` IPC (broadcast from settings.handler).
+  // happens via the settings:changed event emitted by the settings handler.
   const _s = {}
-  const getCached = (k, fallback) => {
-    if (!(k in _s)) _s[k] = db.getSetting(k) ?? fallback
-    return _s[k]
-  }
-  // Re-populate cache from DB (covers app restart where the handler is re-registered).
-  ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? '' })
+  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: '30000', agent_max_iterations: '25' }
+  ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? SETTING_DEFAULTS[k] })
+
+  ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })
 
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
     // Save user message
@@ -128,8 +126,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // Used for both the placeholder-title check and the persona_id fallback below.
     const session0 = db.getSession(sessionId)
     // Respect the autoTitle setting (default on) and only summarize the first exchange.
-    const autoTitleOn = (getCached('autoTitle', '1') ?? '1') === '1'
-    const titleLanguage = getCached('titleLanguage') || 'auto'
+    const autoTitleOn = (_s['autoTitle'] ?? '1') === '1'
+    const titleLanguage = _s['titleLanguage'] || 'auto'
     const needsTitle = autoTitleOn && session0 && PLACEHOLDER_TITLES.has((session0.title || '').trim()) && msgs.length === 1
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
@@ -198,7 +196,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // system message so the model can recall context from earlier sessions.
     // Done once here so BOTH the tool path and the plain streaming path inherit it.
     // Gateable via the auto_memory_enabled setting (default on).
-    const autoMemoryOn = getCached('auto_memory_enabled', '1') !== '0'
+    const autoMemoryOn = _s['auto_memory_enabled'] !== '0'
     const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
 
@@ -207,7 +205,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       try { habitLearner.proactiveSuggest({ db, provider, model, userMessage: content, signal: controller?.signal, onSuggest: (h) => { try { getWebContents()?.send('chat:habit-suggestion', h) } catch {} } }) } catch {}
     }
 
-    const timeoutMs = parseInt(getCached('fallback_timeout_ms', '30000'), 10)
+    const timeoutMs = parseInt(_s['fallback_timeout_ms'] ?? '30000', 10)
     let lastError = null
 
     // Set workspace root for this session (from session config or global default).
@@ -246,7 +244,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
-          maxIterations: parseInt(getCached('agent_max_iterations', '25'), 10),
+          maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
           sessionId, messageId: msgId, db,
           onThinkingStart: thinkingSupported ? () => wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) : undefined,
           onThinkingEnd: thinkingSupported ? () => wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) : undefined,
@@ -579,7 +577,7 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15000)
-    const text = await completeChat({
+    const text = await completeChatWithRetry({
       provider, model,
       messages: [
         { role: 'system', content: sysPrompt },
@@ -589,12 +587,12 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
       options: { max_tokens: 30, temperature: 0.2 },
     })
     clearTimeout(timeout)
-    const cleaned = (text || '').trim().replace(/^["“『]|["”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
+    const cleaned = (text || '').trim().replace(/^[“”『]|[“”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
     if (cleaned) title = cleaned.slice(0, 20)
   } catch (e) {
     log.warn('title summary failed:', e.message)
   }
-  try { dbHandle.renameSession(sessionId, title) } catch {}
+  try { dbHandle.renameSession(sessionId, title) } catch (e) { log.warn('renameSession failed:', e.message) }
 }
 
 // estimateTextTokens is imported from compaction.js (shared with the same

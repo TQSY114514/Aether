@@ -11,13 +11,13 @@ function relativeTime(iso: string | undefined): string {
   if (isNaN(then)) return ''
   const diff = Date.now() - then
   const min = Math.floor(diff / 60000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min}分钟前`
+  if (min < 1) return t('time.just_now', '刚刚')
+  if (min < 60) return t('time.minutes_ago', `${min}分钟前`)
   const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}小时前`
+  if (hr < 24) return t('time.hours_ago', `${hr}小时前`)
   const day = Math.floor(hr / 24)
-  if (day === 1) return '昨天'
-  if (day < 7) return `${day}天前`
+  if (day === 1) return t('time.yesterday', '昨天')
+  if (day < 7) return t('time.days_ago', `${day}天前`)
   return new Date(then).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
 }
 
@@ -58,6 +58,7 @@ function getSessionGroups(sessions: Session[]) {
 export default function Sidebar() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const language = useStore((s) => s.language)
   const streamingBySession = useStore((s) => s.streamingBySession)
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
@@ -78,7 +79,7 @@ export default function Sidebar() {
     lowerQuery ? sessions.filter(s => (s.title || '').toLowerCase().includes(lowerQuery)) : sessions,
     [sessions, lowerQuery]
   )
-  const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions])
+  const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
   const totalSessions = sessions.length
 
   const handleDoubleClick = (session: Session) => {
@@ -132,7 +133,7 @@ export default function Sidebar() {
         </button>
       </div>
       <div className="p-2 shrink-0">
-        <button onClick={() => { createSession(); setCurrentView('chat') }} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
+        <button onClick={() => setCurrentView('chat')} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
           <Plus size={16} className="text-gray-500" />{t('chat.new')}
         </button>
       </div>
