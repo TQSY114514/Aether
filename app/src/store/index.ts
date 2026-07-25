@@ -570,6 +570,9 @@ export const useStore = create<AppState>((set, get) => ({
       streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
       messages: [...s.messages, tempUserMsg],
     }))
+    // Refresh sidebar immediately so the new session (or updated session) appears
+    // right after the user sends a message — not after the AI finishes responding.
+    get().loadSessions()
 
     // Ensure the global chunk listener is registered exactly once; it routes every
     // chunk to whichever session it belongs to, so background streams keep flowing.
@@ -1048,13 +1051,14 @@ function ensureChunkListener() {
         return { streamingBySession: next, sending }
       })
       const currentNow = useStore.getState().currentSessionId
-      if (currentNow === sessionId) {
-        window.electronAPI.message.list(sessionId).then(msgs => {
-          if (useStore.getState().currentSessionId === sessionId) {
-            useStore.setState({ messages: msgs })
-          }
-        }).catch(() => {})
-      }
+      // Always reload messages from DB on stream completion — the assistant's
+      // reply is now persisted. Skip updating the in-memory array only if the
+      // user has already navigated away (avoids flicker on another session).
+      window.electronAPI.message.list(sessionId).then(msgs => {
+        if (useStore.getState().currentSessionId === sessionId) {
+          useStore.setState({ messages: msgs })
+        }
+      }).catch(() => {})
       useStore.getState().pinSession(sessionId, 0).then(() => {
         const s = useStore.getState().sessions.find(x => x.id === sessionId)
         const title = s?.title || 'Chat'
