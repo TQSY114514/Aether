@@ -742,11 +742,17 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   loadMessages: async (sessionId) => {
-    // Skip DB reload if this session is actively streaming. The backend saves
-    // messages synchronously before streaming, but a loadMessages call that
-    // was triggered by the currentSessionId change (via ChatWindow's useEffect)
-    // can still race with the optimistic add in sendMessage and overwrite it.
+    // Skip if this session is actively streaming — optimistic user messages
+    // and live chunk updates would be overwritten by a stale DB snapshot.
     if (get().streamingBySession[sessionId]) return
+    // Also skip if a user message was optimistically added within the last 3s
+    // (IPC hasn't reached the DB yet — this prevents the blank-screen bug).
+    const now = Date.now()
+    const hasRecentOptimistic = get().messages.some(m =>
+      m.session_id === sessionId && m.role === 'user' &&
+      (now - new Date(m.created_at).getTime()) < 3000 && m.status === 'success'
+    )
+    if (hasRecentOptimistic) return
     try {
       const messages = await window.electronAPI.message.list(sessionId)
       set({ messages })
