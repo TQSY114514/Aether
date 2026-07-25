@@ -200,7 +200,7 @@ function setupIpcHandlers() {
   registerModelHandlers(ipcMain, db)
   registerPersonaHandlers(ipcMain, db)
   registerSessionHandlers(ipcMain, db)
-  registerChatHandlers(ipcMain, db)
+  registerChatHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerSettingsHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerArenaHandlers(ipcMain, db)
   registerMemoryHandlers(ipcMain, db)
