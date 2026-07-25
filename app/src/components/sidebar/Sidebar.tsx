@@ -78,8 +78,11 @@ export default function Sidebar() {
   const lowerQuery = searchQuery.toLowerCase()
 
   const filteredSessions = useMemo(() => {
-    // Only show sessions that have had at least one message (hide empty "new chat" sessions).
-    const withMessages = sessions.filter(s => s.title && !PLACEHOLDER_TITLES.has(s.title))
+    // Show sessions that have had at least one message.
+    // Sessions with placeholder titles are kept visible if they have messages —
+    // the auto-title generation happens asynchronously after the first response,
+    // so hiding them would make the chat disappear mid-conversation.
+    const withMessages = sessions.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)))
     if (!lowerQuery) return withMessages
     return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
   }, [sessions, lowerQuery])

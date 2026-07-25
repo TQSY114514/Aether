@@ -27,6 +27,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
   const allModels = useStore((s) => s.allModels)
   const sessionConfigs = useStore((s) => s.sessionConfigs)
   const effortLevel = useStore((s) => s.effortLevel)
+  const defaultModelId = useStore((s) => s.defaultModelId)
 
   const startWith = async (prompt: string) => {
     if (!currentSessionId) await createSession()
@@ -40,8 +41,15 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
     return pickFour(sid + dayOfYear)
   }, [currentSessionId])
 
-  const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
-  const activeModel = allModels.find(m => m.id === cfg?.modelId) || allModels.find(m => m.is_primary) || allModels[0]
+  // Show user's default model on the blank chat screen (no session selected yet).
+  // Falls back to primary model only if no default is set.
+  const activeModel = useMemo(() => {
+    if (defaultModelId) {
+      const found = allModels.find(m => m.id === defaultModelId)
+      if (found) return found
+    }
+    return allModels.find(m => m.is_primary) || allModels[0]
+  }, [defaultModelId, allModels])
   const effortLabel = { off: t('effort.off'), low: t('effort.low'), medium: t('effort.medium'), high: t('effort.high') }[effortLevel]
 
   return (
