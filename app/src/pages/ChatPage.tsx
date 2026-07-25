@@ -4,11 +4,19 @@ import ChatWindow from '@/components/chat/ChatWindow'
 import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import Tooltip from '@/components/Tooltip'
-import { PanelLeft, Cpu, FlaskConical, Sparkles } from 'lucide-react'
+import { PanelLeft, Cpu, FlaskConical, Plus } from 'lucide-react'
 import { t } from '@/utils/i18n'
+
+// Three views when viewing chat:
+// 1. Welcome page    — shown once when no sessions exist at all.
+//    Clicking "New Chat" transitions to blank chat (View 2).
+// 2. Blank new chat  — a fresh session area (no session selected yet).
+//    The first message auto-creates the session here.
+// 3. Active chat     — a session is selected, full interface.
 
 export default function ChatPage() {
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const sessions = useStore((s) => s.sessions)
   const personas = useStore((s) => s.personas)
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
@@ -24,6 +32,9 @@ export default function ChatPage() {
   const agentMode = useStore((s) => s.agentMode)
   const setAgentMode = useStore((s) => s.setAgentMode)
   const effortLevel = useStore((s) => s.effortLevel)
+  const createSession = useStore((s) => s.createSession)
+  const newChat = () => useStore.getState().newChat()
+  const welcomeDismissed = useStore((s) => s.welcomeDismissed)
 
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
   const activeProviderId = cfg?.providerId ?? null
@@ -43,10 +54,35 @@ export default function ChatPage() {
 
   const allArenaModels = useMemo(() => allModelOptions?.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName }))) || [], [allModelOptions])
 
+  const hasSessions = sessions.length > 0
+
+  // ── View 1: Welcome page (no sessions at all) ──────────────────────
+  if (!hasSessions && !currentSessionId && !welcomeDismissed) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))', boxShadow: '0 10px 30px -10px var(--accent)' }}>
+              <Cpu size={28} className="text-white" />
+            </div>
+            <h2 className="text-2xl font-semibold mb-2 tracking-tight" style={{ color: 'var(--text-primary)' }}>{t('empty.welcome')}</h2>
+            <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>{t('empty.subtitle')}</p>
+            <button onClick={newChat}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-white text-sm rounded-xl hover:opacity-90 transition-all shadow-lg"
+              style={{ backgroundColor: 'var(--accent)', boxShadow: '0 4px 12px -2px var(--accent)' }}>
+              <Plus size={16} />{t('chat.create')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── View 2: Blank new chat (sessions exist, none selected) ──────────
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        {/* Minimal top bar */}
         <div className="h-12 border-b flex items-center justify-between px-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
             {!sidebarOpen && (
@@ -57,18 +93,13 @@ export default function ChatPage() {
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
         </div>
-        {/* Blank area — just the input at bottom */}
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <Sparkles size={32} className="mx-auto mb-3" style={{ color: 'var(--text-muted)', opacity: 0.3 }} />
-            <p className="text-xs" style={{ color: 'var(--text-muted)', opacity: 0.5 }}>{t('chat.placeholder')}</p>
-          </div>
-        </div>
+        <div className="flex-1" />
         <ChatInput />
       </div>
     )
   }
 
+  // ── View 3: Active chat ─────────────────────────────────────────────
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }}>
       <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-white/95 backdrop-blur-sm" style={{ borderColor: 'var(--border)' }}>

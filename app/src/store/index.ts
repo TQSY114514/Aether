@@ -22,6 +22,8 @@ interface AppState {
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
   newChat: () => void
+  welcomeDismissed: boolean
+  setWelcomeDismissed: (v: boolean) => void
 
   // Sessions
   sessions: Session[]
@@ -234,6 +236,8 @@ export const useStore = create<AppState>((set, get) => ({
   // Navigation
   currentView: 'chat',
   setCurrentView: (view) => set({ currentView: view }),
+  welcomeDismissed: false,
+  setWelcomeDismissed: (v) => set({ welcomeDismissed: v }),
 
   // Sessions
   sessions: [],
@@ -312,9 +316,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
     return sid
   },
-  // Navigate to the chat view without selecting a session (shows EmptyState).
+  // Navigate to the chat view without selecting a session.
   // Session is only created when the user sends their first message.
-  newChat: () => set({ currentView: 'chat', currentSessionId: null, messages: [], arenaResults: [] }),
+  // Also dismisses the welcome page so the blank chat view (View 2) shows.
+  newChat: () => set({ currentView: 'chat', currentSessionId: null, messages: [], arenaResults: [], welcomeDismissed: true }),
   selectSession: async (id) => {
     // Push to the navigation history unless we got here via goBack/goForward
     // (those move the pointer, they don't push a new entry).
@@ -737,6 +742,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   loadMessages: async (sessionId) => {
+    // Skip DB reload if this session is actively streaming. The backend saves
+    // messages synchronously before streaming, but a loadMessages call that
+    // was triggered by the currentSessionId change (via ChatWindow's useEffect)
+    // can still race with the optimistic add in sendMessage and overwrite it.
+    if (get().streamingBySession[sessionId]) return
     try {
       const messages = await window.electronAPI.message.list(sessionId)
       set({ messages })
