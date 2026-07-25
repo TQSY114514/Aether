@@ -132,9 +132,7 @@ export default function App() {
     // @ts-ignore protocol handler added to preload (not yet in generated types)
     const off = window.electronAPI?.protocol?.onOpen?.(({ action }: { action: string }) => {
       if (action === 'new' || action === 'chat') {
-        useStore.getState().createSession().then(() => {
-          useStore.getState().setCurrentView('chat')
-        })
+        useStore.getState().setCurrentView('chat')
       }
     })
     return () => off?.()
@@ -160,7 +158,6 @@ export default function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
-        useStore.getState().createSession()
         useStore.getState().setCurrentView('chat')
         return
       }

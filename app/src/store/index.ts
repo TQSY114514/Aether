@@ -27,7 +27,7 @@ interface AppState {
   currentSessionId: number | null
   messages: Message[]
   loadSessions: () => Promise<void>
-  createSession: () => Promise<void>
+  createSession: () => Promise<number | null>
   selectSession: (id: number) => Promise<void>
   deleteSession: (id: number) => Promise<void>
 
@@ -156,6 +156,8 @@ interface AppState {
   fontScale: number            // 0.85–1.25, base font-size multiplier
   bubbleWidth: number          // 60–100 (%), max width of message bubbles
   defaultEffort: 'off' | 'low' | 'medium' | 'high'  // default thinking effort for new sessions
+  defaultModelId: number | null   // default model for new sessions (null = first enabled)
+  defaultPersonaId: number | null // default persona for new sessions (null = none)
   // Advanced generation params (advanced users). Empty/0 means "let the provider default".
   maxTokens: number            // 0 = unset (use provider default); else cap output tokens
   temperature: number          // 0 = unset; 0.0–2.0 sampling temperature
@@ -181,6 +183,8 @@ interface AppState {
   setAutoTitle: (v: boolean) => Promise<void>
   setTitleLanguage: (v: string) => Promise<void>
   setDefaultEffort: (v: 'off' | 'low' | 'medium' | 'high') => Promise<void>
+  setDefaultModel: (id: number | null) => Promise<void>
+  setDefaultPersona: (id: number | null) => Promise<void>
   setBackgroundImage: (dataUrl: string | null) => Promise<void>
   setBackgroundOpacity: (v: number) => Promise<void>
   setBackgroundBlur: (v: number) => Promise<void>
@@ -266,10 +270,30 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   createSession: async () => {
+    const s = get()
+    const allProviders = await window.electronAPI.provider.list()
+    const enabledProviders = allProviders.filter(p => p.enabled)
     let cfg = { providerId: null as number | null, modelId: null as number | null, personaId: null as number | null }
-    const enabledProviders = (await window.electronAPI.provider.list()).filter(p => p.enabled)
-    if (enabledProviders.length > 0) {
+
+    // Prefer user-set defaults; fall back to first enabled provider's primary model.
+    if (s.defaultModelId) {
+      const defModel = (s.allModels.find(m => m.id === s.defaultModelId) ||
+        (await window.electronAPI.model.listAll()).find(m => m.id === s.defaultModelId))
+      if (defModel) {
+        cfg.providerId = defModel.provider_id
+        cfg.modelId = defModel.id
+      }
+    }
+    if (s.defaultPersonaId) {
+      cfg.personaId = s.defaultPersonaId
+    }
+    if (!cfg.providerId && enabledProviders.length > 0) {
       cfg.providerId = enabledProviders[0].id as number
+      const models = await window.electronAPI.model.list(cfg.providerId)
+      const primary = models.find(m => m.is_primary) || models[0]
+      if (primary) cfg.modelId = primary.id
+    }
+    if (cfg.providerId && !cfg.modelId) {
       const models = await window.electronAPI.model.list(cfg.providerId)
       const primary = models.find(m => m.is_primary) || models[0]
       if (primary) cfg.modelId = primary.id
@@ -285,6 +309,7 @@ export const useStore = create<AppState>((set, get) => ({
       messages: result.messages || [],
     }))
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
+    return sid
   },
   selectSession: async (id) => {
     // Push to the navigation history unless we got here via goBack/goForward
@@ -782,6 +807,8 @@ export const useStore = create<AppState>((set, get) => ({
   fontScale: 1,
   bubbleWidth: 85,
   defaultEffort: 'off',
+  defaultModelId: null,
+  defaultPersonaId: null,
   maxTokens: 0,
   temperature: 0,
   topP: 0,
@@ -811,6 +838,8 @@ export const useStore = create<AppState>((set, get) => ({
       const fontScale = parseFloat(s.fontScale ?? '1')
       const bubbleWidth = parseInt(s.bubbleWidth ?? '85', 10)
       const defaultEffort = (s.defaultEffort ?? 'off') as 'off' | 'low' | 'medium' | 'high'
+      const defaultModelId = parseInt(s.defaultModelId ?? '0', 10) || null
+      const defaultPersonaId = parseInt(s.defaultPersonaId ?? '0', 10) || null
       const maxTokens = parseInt(s.maxTokens ?? '0', 10)
       const temperature = parseFloat(s.temperature ?? '0')
       const topP = parseFloat(s.topP ?? '0')
@@ -823,7 +852,7 @@ export const useStore = create<AppState>((set, get) => ({
       applyLangDir(lang)
       let seenHints: string[] = []
       try { seenHints = JSON.parse(s.seen_hints || '[]') } catch (e) { log.warn('parse seen_hints failed:', e) }
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints })
       // Background image is loaded asynchronously by App.tsx (deferred to next
       // frame) — no need to load it here.
     } catch (e) { log.warn('loadSettings failed:', e) }
@@ -860,6 +889,14 @@ export const useStore = create<AppState>((set, get) => ({
   setDefaultEffort: async (v) => {
     await window.electronAPI.settings.set('defaultEffort', v)
     set({ defaultEffort: v, effortLevel: v })
+  },
+  setDefaultModel: async (v) => {
+    await window.electronAPI.settings.set('defaultModelId', String(v ?? ''))
+    set({ defaultModelId: v })
+  },
+  setDefaultPersona: async (v) => {
+    await window.electronAPI.settings.set('defaultPersonaId', String(v ?? ''))
+    set({ defaultPersonaId: v })
   },
   // Settings — simple numeric/string setters.
   setMaxTokens:   async (v) => { await window.electronAPI.settings.set('maxTokens', String(v)); set({ maxTokens: v }) },

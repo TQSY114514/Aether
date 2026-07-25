@@ -13,7 +13,6 @@ export default function ChatPage() {
   const personas = useStore((s) => s.personas)
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
-  const createSession = useStore((s) => s.createSession)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const chatMode = useStore((s) => s.chatMode)

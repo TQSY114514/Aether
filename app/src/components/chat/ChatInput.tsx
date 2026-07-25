@@ -141,24 +141,19 @@ export default function ChatInput() {
     }
   }, [])
 
-  const _submitting = useRef(false)
-
   const handleSubmit = async () => {
-    if (_submitting.current) return
-    _submitting.current = true
     const content = input.trim()
-    if (!content && pending.length === 0 && snippets.length === 0) { _submitting.current = false; return }
+    if (!content && pending.length === 0 && snippets.length === 0) return
     if (isStreaming) {
       if (content) { enqueueMessage(content); setInput('') }
-      _submitting.current = false
       return
     }
     setInput('')
 
     let sessionId = currentSessionId
     if (!sessionId) {
-      await createSession()
-      sessionId = useStore.getState().currentSessionId
+      sessionId = await createSession()
+      if (!sessionId) return
     }
 
     const atts = pending
@@ -172,7 +167,6 @@ export default function ChatInput() {
     } else if (sessionId) {
       await sendMessage(finalContent, atts.length > 0 ? atts : undefined)
     }
-    _submitting.current = false
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
