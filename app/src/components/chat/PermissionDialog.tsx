@@ -1,5 +1,5 @@
 import { useStore } from '@/store'
-import { ShieldAlert, FileText, Globe, FileEdit, Terminal, ShieldCheck, RotateCcw } from 'lucide-react'
+import { ShieldAlert, FileText, Globe, FileEdit, Terminal, ShieldCheck, RotateCcw, FileDiff } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -141,6 +141,42 @@ export default function PermissionDialog() {
 
         <pre className="text-xs font-mono whitespace-pre-wrap break-all rounded-lg p-2.5 mb-3 max-h-24 overflow-y-auto"
           style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{summarizeArgs(req.name, req.args)}</pre>
+
+        {/* Diff preview for file-touching tools (Claude Code / Cline pattern) */}
+        {['write_file', 'edit_file', 'apply_patch'].includes(req.name) && (() => {
+          const args = (req as any).args as Record<string, string> | undefined
+          if (!args) return null
+          const oldLines = req.name === 'write_file' ? [] : (args.old_string || '').split('\n')
+          const newLines = req.name === 'apply_patch'
+            ? (args.patch || '').split('\n').filter(l => l.startsWith('+') || l.startsWith(' ') || l.startsWith('-')).map(l => l.slice(1))
+            : (args.content || args.new_string || '').split('\n')
+          const total = oldLines.length + newLines.length
+          if (total === 0) return null
+          const maxShow = 60
+          const showOld = oldLines.slice(0, maxShow)
+          const showNew = newLines.slice(0, maxShow)
+          return (
+            <div className="rounded-lg border mb-3 overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-medium" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                <FileDiff size={11} /> Diff Preview {total > maxShow ? `(showing ${maxShow} of ${total} lines)` : `(${total} lines)`}
+              </div>
+              <div className="flex text-[11px] font-mono">
+                {showOld.map((line, i) => (
+                  <div key={`old-${i}`} className="flex w-full" style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span className="shrink-0 px-2 text-right select-none" style={{ color: 'var(--error)', backgroundColor: 'rgba(239,68,68,0.06)', width: '2.5rem' }}>{i + 1}</span>
+                    <span className="px-2 truncate" style={{ color: 'var(--text-secondary)' }}>-{line}</span>
+                  </div>
+                ))}
+                {showNew.map((line, i) => (
+                  <div key={`new-${i}`} className="flex w-full" style={{ borderBottom: '1px solid var(--border)' }}>
+                    <span className="shrink-0 px-2 text-right select-none" style={{ color: 'var(--success)', backgroundColor: 'rgba(34,197,94,0.06)', width: '2.5rem' }}>{i + 1}</span>
+                    <span className="px-2 truncate" style={{ color: 'var(--text-secondary)' }}>+{line}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
         <p className="text-[11px] mb-4" style={{ color: 'var(--text-muted)' }}>
           {t('agent.permission.desc')}
         </p>

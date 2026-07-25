@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -60,7 +60,7 @@ export default function ChatInput() {
     sending, streamingBySession, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     providers, allModels, saveSessionConfig, queuedMessages,
-    modelSuggestion,
+    modelSuggestion, agentMode, setAgentMode,
   } = useStore((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -71,7 +71,7 @@ export default function ChatInput() {
     setEffortLevel: s.setEffortLevel, providers: s.providers,
     allModels: s.allModels, saveSessionConfig: s.saveSessionConfig,
     queuedMessages: s.queuedMessages,
-    modelSuggestion: s.modelSuggestion,
+    modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
   }), shallow)
 
   // Is the current session actively streaming?
@@ -372,6 +372,7 @@ export default function ChatInput() {
 
         {!isStreaming && (
           <div className="flex items-center gap-2 px-0.5 mt-1.5 flex-wrap">
+            <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
             <EffortControl level={effortLevel} onChange={setEffortLevel} />
             <ModelSelector providers={providers} allModels={allModels}
               activeModelId={activeModelId}
@@ -420,6 +421,35 @@ function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 
         onChange={(e) => onChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
         className="effort-slider w-20" style={{ ['--fill' as string]: `${fill}%` }} />
       <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{t(EFFORT_LEVELS[idx].labelKey)}</span>
+    </div>
+  )
+}
+
+// Agent mode selector (Claude Code / Cline-style): a compact toggle group in
+// the input bar showing the current permission level. Each mode has a distinct
+// color so the user always knows how much freedom the agent has.
+const AGENT_MODES: { value: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; label: string; color: string }[] = [
+  { value: 'off', label: 'Off', color: 'var(--text-muted)' },
+  { value: 'plan', label: 'Plan', color: '#3b82f6' },
+  { value: 'ask', label: 'Ask', color: 'var(--accent)' },
+  { value: 'auto_confirm', label: 'Auto', color: '#f59e0b' },
+  { value: 'auto', label: 'Auto+', color: '#f97316' },
+  { value: 'yolo', label: 'Yolo', color: 'var(--error)' },
+]
+function AgentModeSelector({ mode, onChange }: { mode: string; onChange: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void }) {
+  const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[2]
+  return (
+    <div className="flex items-center gap-0.5" title={t('agent.tooltip')}>
+      <Shield size={13} className="text-gray-400 shrink-0" />
+      {AGENT_MODES.map(m => (
+        <button key={m.value} onClick={() => onChange(m.value)}
+          className="text-[10px] font-medium px-1.5 py-0.5 rounded-md transition-all duration-150"
+          style={m.value === active.value
+            ? { backgroundColor: m.color + '20', color: m.color, boxShadow: `0 0 0 1px ${m.color}40` }
+            : { color: 'var(--text-muted)', opacity: 0.6 }}>
+          {m.label}
+        </button>
+      ))}
     </div>
   )
 }

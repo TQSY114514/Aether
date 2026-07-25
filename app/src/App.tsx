@@ -11,6 +11,7 @@ import ScoresPage from '@/pages/ScoresPage'
 import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
 import LearningGraphPage from '@/pages/LearningGraphPage'
+import SkillsPage from '@/pages/SkillsPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
@@ -189,6 +190,7 @@ export default function App() {
       case 'tokens': return <TokenPage />
       case 'memory': return <MemoryPage />
       case 'learning': return <LearningGraphPage />
+      case 'skills': return <SkillsPage />
     }
   }
 
