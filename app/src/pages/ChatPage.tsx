@@ -3,9 +3,8 @@ import { useStore } from '@/store'
 import ChatWindow from '@/components/chat/ChatWindow'
 import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
-import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
-import { PanelLeft, Cpu, FlaskConical } from 'lucide-react'
+import { PanelLeft, Cpu, FlaskConical, Sparkles } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 export default function ChatPage() {
@@ -24,6 +23,7 @@ export default function ChatPage() {
   const allModels = useStore((s) => s.allModels)
   const agentMode = useStore((s) => s.agentMode)
   const setAgentMode = useStore((s) => s.setAgentMode)
+  const effortLevel = useStore((s) => s.effortLevel)
 
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
   const activeProviderId = cfg?.providerId ?? null
@@ -46,7 +46,25 @@ export default function ChatPage() {
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <EmptyState noSession />
+        {/* Minimal top bar */}
+        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2">
+            {!sidebarOpen && (
+              <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
+                <PanelLeft size={16} className="text-gray-400" />
+              </button>
+            )}
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
+          </div>
+        </div>
+        {/* Blank area — just the input at bottom */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Sparkles size={32} className="mx-auto mb-3" style={{ color: 'var(--text-muted)', opacity: 0.3 }} />
+            <p className="text-xs" style={{ color: 'var(--text-muted)', opacity: 0.5 }}>{t('chat.placeholder')}</p>
+          </div>
+        </div>
+        <ChatInput />
       </div>
     )
   }

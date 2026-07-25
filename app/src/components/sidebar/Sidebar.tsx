@@ -5,6 +5,8 @@ import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Searc
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 
+const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
+
 function relativeTime(iso: string | undefined): string {
   if (!iso) return ''
   const then = new Date(iso).getTime()
@@ -75,10 +77,12 @@ export default function Sidebar() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; session: Session } | null>(null)
   const lowerQuery = searchQuery.toLowerCase()
 
-  const filteredSessions = useMemo(() =>
-    lowerQuery ? sessions.filter(s => (s.title || '').toLowerCase().includes(lowerQuery)) : sessions,
-    [sessions, lowerQuery]
-  )
+  const filteredSessions = useMemo(() => {
+    // Only show sessions that have had at least one message (hide empty "new chat" sessions).
+    const withMessages = sessions.filter(s => s.title && !PLACEHOLDER_TITLES.has(s.title))
+    if (!lowerQuery) return withMessages
+    return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
+  }, [sessions, lowerQuery])
   const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
   const totalSessions = sessions.length
 
