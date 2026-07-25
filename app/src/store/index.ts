@@ -21,6 +21,7 @@ interface AppState {
   // Navigation
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
+  newChat: () => void
 
   // Sessions
   sessions: Session[]
@@ -311,6 +312,9 @@ export const useStore = create<AppState>((set, get) => ({
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
     return sid
   },
+  // Navigate to the chat view without selecting a session (shows EmptyState).
+  // Session is only created when the user sends their first message.
+  newChat: () => set({ currentView: 'chat', currentSessionId: null, messages: [], arenaResults: [] }),
   selectSession: async (id) => {
     // Push to the navigation history unless we got here via goBack/goForward
     // (those move the pointer, they don't push a new entry).
