@@ -7,7 +7,8 @@
 // The old pattern was an infinite loop. This module provides bounded processing
 // with explicit start/stop, so the process CAN terminate cleanly.
 
-const { eventBus } = require('./events')
+const EventEmitter = require('events')
+const eventBus = new EventEmitter()
 
 let _running = false
 let _timers = []

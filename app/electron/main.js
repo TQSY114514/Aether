@@ -168,6 +168,7 @@ function createWindow() {
   }
 }
 
+
 function createTray() {
   if (tray) return
   try {

@@ -10,6 +10,7 @@ const { computeCost } = require('../utils/cost')
 const { estimateMessagesTokens, estimateTextTokens } = require('../llm/compaction')
 const auditLog = require('../llm/auditLog')
 const modelAdvisor = require('../llm/modelAdvisor')
+const modelRouter = require('../llm/modelRouter')
 const log = require('../logger')
 const providerHealth = require('../llm/providerHealth')
 const checkpoints = require('../llm/checkpoints')
@@ -302,7 +303,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             // Build impact preview for the permission dialog.
             let impactPreview = null
             try {
-              impactPreview = require('../../tools/toolImpact').toolImpact(name, args)
+              impactPreview = require('../tools/toolImpact').toolImpact(name, args)
             } catch {}
             return new Promise((resolve) => {
             const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`

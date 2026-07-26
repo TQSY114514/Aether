@@ -27,8 +27,8 @@ win:
   icon: resources/icon.png
 
 nsis:
-  oneClick: false                          # assisted installer (wizard) — friendlier with SmartScreen
-  perMachine: false                        # per-user install → no UAC on install/update (unsigned-app friendly)
+  oneClick: false
+  perMachine: false
   allowToChangeInstallationDirectory: true
   allowElevation: false
   createDesktopShortcut: true
