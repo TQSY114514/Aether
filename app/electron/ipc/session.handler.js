@@ -1,4 +1,5 @@
 const { clearAllowRules } = require('./chat.handler')
+const log = require('../logger')
 
 function registerSessionHandlers(ipcMain, db) {
   // Simple mutex to serialize prune+create and prevent a concurrent

@@ -354,6 +354,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.tokens": "Token Usage",
     "sidebar.nav.learning": "Learning graph",
     "sidebar.nav.memory": "Memory",
+    "sidebar.nav.skills": "Skills",
     "learning_graph.desc": "Knowledge graph — memories, skills, and sessions linked by keyword overlap",
     "learning_graph.empty": "No nodes found — add memories or load skills to populate the graph.",
     "learning_graph.filter": "Filter nodes…",
@@ -422,12 +423,6 @@ const translations: Record<string, Record<string, string>> = {
     "settings.display": "Display",
     "settings.default_effort": "Default thinking effort",
     "settings.default_effort_desc": "Used for new sessions (slider in the chat bar can override).",
-    "settings.default_chat": "Default chat settings",
-    "settings.default_chat.desc": "Defaults for newly created conversations.",
-    "settings.default_model": "Default model for new chats",
-    "settings.default_model_desc": "Automatically selected when starting a new conversation.",
-    "settings.default_persona": "Default persona for new chats",
-    "settings.default_persona_desc": "Automatically applied when starting a new conversation.",
     "settings.agent.title": "Agent & Safety",
     "settings.agent.desc": "Contain the agent's file operations to a workspace, and review the command safety backstop.",
     "settings.agent.workspace": "Workspace root",
@@ -448,19 +443,6 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.rescanned": "Scanned — {0} skills loaded",
     "settings.skills.empty": "No skills found. Drop a folder named <skill>/SKILL.md into .claude/skills/ in your workspace.",
     "settings.skills.hint": "Scan dirs (precedence): <workspace>/.claude/skills, <workspace>/.aetherai/skills, <userData>/skills, built-in. Only name+description enter the prompt; the body loads via use_skill.",
-    "settings.skills.never_used": "Never used",
-    "settings.skills.minutes_ago": "min ago",
-    "settings.skills.hours_ago": "h ago",
-    "settings.skills.days_ago": "d ago",
-    "settings.skills.months_ago": "mo ago",
-    "settings.skills.tab_discover": "Discover",
-    "settings.skills.tab_performance": "Performance",
-    "settings.skills.total_used": "{0} total uses",
-    "settings.skills.no_stats": "No usage data yet",
-    "settings.skills.auto_draft_title": "Auto-draft suggestions",
-    "settings.skills.auto_draft_desc": "These skills have been used successfully but don't have a SKILL.md yet. Auto-generate one?",
-    "settings.skills.auto_draft": "Draft skill",
-    "settings.skills.drafted": "Drafted skill: {0}",
     "error.title": "Something went wrong",
     "error.unknown": "An unexpected error occurred",
     "error.retry": "Try again",
@@ -732,6 +714,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.tokens": "ǝƃɐsn uǝʞoʇ",
     "sidebar.nav.learning": "ɥdɐɹƃ ƃuᴉuɹɐǝl",
     "sidebar.nav.memory": "ʎɹoɯǝɯ",
+    "sidebar.nav.skills": "sllᴉʞs",
     "learning_graph.desc": "dɐlɹǝʌo pɹoʍʎǝʞ ʎq pǝʞuᴉl suoᴉssǝs puɐ ,sllᴉʞs ,sǝᴉɹoɯǝɯ — ɥdɐɹƃ ǝƃpǝlʍouʞ",
     "learning_graph.empty": ".ɥdɐɹƃ ǝɥʇ ǝʇɐlndod oʇ sllᴉʞs pɐol ɹo sǝᴉɹoɯǝɯ ppɐ — punoɟ sǝpou ou",
     "learning_graph.filter": "…sǝpou ɹǝʇlᴉɟ",
@@ -1072,12 +1055,6 @@ const translations: Record<string, Record<string, string>> = {
     "settings.display": "显示",
     "settings.default_effort": "默认思考等级",
     "settings.default_effort_desc": "用于新会话（聊天栏的滑块可覆盖）。",
-    "settings.default_chat": "默认对话设置",
-    "settings.default_chat.desc": "新对话创建时的默认模型和人设。",
-    "settings.default_model": "新对话默认模型",
-    "settings.default_model_desc": "开始新对话时自动选用。",
-    "settings.default_persona": "新对话默认人设",
-    "settings.default_persona_desc": "开始新对话时自动应用。",
     "empty.effort": "思考等级",
     "empty.example.brainstorm": "头脑风暴",
     "empty.example.summarize": "总结长文",
@@ -1190,23 +1167,11 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.rescanned": "已扫描 — 找到 {0} 个技能",
     "settings.skills.empty": "未找到技能。把 <skill>/SKILL.md 放进工作区的 .claude/skills/ 即可。",
     "settings.skills.hint": "扫描目录（优先级）：<workspace>/.claude/skills、<workspace>/.aetherai/skills、<userData>/skills、内置。仅名称+描述进入提示词；匹配时由 use_skill 工具按需加载。",
-    "settings.skills.never_used": "从未使用",
-    "settings.skills.minutes_ago": "分钟前",
-    "settings.skills.hours_ago": "小时前",
-    "settings.skills.days_ago": "天前",
-    "settings.skills.months_ago": "个月前",
-    "settings.skills.tab_discover": "发现",
-    "settings.skills.tab_performance": "成功率",
-    "settings.skills.total_used": "共使用 {0} 次",
-    "settings.skills.no_stats": "暂无使用数据",
-    "settings.skills.auto_draft_title": "建议自动生成",
-    "settings.skills.auto_draft_desc": "以下技能已被多次成功使用但尚未创建 SKILL.md，可自动生成技能文件",
-    "settings.skills.auto_draft": "生成技能",
-    "settings.skills.drafted": "已生成技能: {0}",
     "tool.rollback": "回滚本次 Agent 改动",
     "tool.rollback.running": "正在回滚...",
     "tool.rollback.done": "已回滚",
-    "tool.rollback.error": "回滚失败"
+    "tool.rollback.error": "回滚失败",
+    "sidebar.nav.skills": "技能"
   },
   "es": {
     "app.name": "AetherAI",
@@ -1348,7 +1313,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Habilidades"
   },
   "ja": {
     "app.name": "AetherAI",
@@ -1490,7 +1456,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "スキル"
   },
   "zh-WEN": {
     "app.name": "AetherAI",
@@ -1774,7 +1741,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Compétences"
   },
   "de": {
     "app.name": "AetherAI",
@@ -1916,7 +1884,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Fähigkeiten"
   },
   "pt": {
     "app.name": "AetherAI",
@@ -2058,7 +2027,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Habilidades"
   },
   "ru": {
     "app.name": "AetherAI",
@@ -2200,7 +2170,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Навыки"
   },
   "zh-TW": {
     "app.name": "AetherAI",
@@ -2342,7 +2313,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "技能"
   },
   "ar": {
     "app.name": "AetherAI",
@@ -2484,7 +2456,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "المهارات"
   },
   "uk": {
     "app.name": "AetherAI",
@@ -2626,7 +2599,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Навички"
   },
   "ko": {
     "app.name": "AetherAI",
@@ -2768,7 +2742,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "스킬"
   },
   "hi": {
     "app.name": "AetherAI",
@@ -2910,7 +2885,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "स्किल्स"
   }
 }
 
@@ -2918,7 +2894,6 @@ const translations: Record<string, Record<string, string>> = {
 // without importing the store (avoids a circular dep: store imports `t`).
 let currentLang: LangCode = 'en'
 export function setLang(code: LangCode) { currentLang = code }
-export function setLangAsync(code: LangCode): Promise<void> { return Promise.resolve(setLang(code)) }
 export function getLang(): LangCode { return currentLang }
 
 // Detect the user's system language and map to a supported code. Falls back to en.

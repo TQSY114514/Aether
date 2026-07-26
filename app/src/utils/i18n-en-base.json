@@ -255,6 +255,7 @@
   "sidebar.nav.tokens": "Token Usage",
   "sidebar.nav.learning": "Learning graph",
   "sidebar.nav.memory": "Memory",
+  "sidebar.nav.skills": "Skills",
   "learning_graph.desc": "Knowledge graph — memories, skills, and sessions linked by keyword overlap",
   "learning_graph.empty": "No nodes found — add memories or load skills to populate the graph.",
   "learning_graph.filter": "Filter nodes…",

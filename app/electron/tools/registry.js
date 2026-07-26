@@ -621,7 +621,7 @@ const TOOLS = [
     },
     run: async (args, ctx) => {
       const { projectIndexer, dependencyGraph } = require('../context')
-      const { getWorkspaceRoot } = require('../sandbox')
+      const { getWorkspaceRoot } = require('./sandbox')
       const root = getWorkspaceRoot(ctx?.sessionId)
       if (!root) return 'no workspace configured'
       const graph = await projectIndexer.indexWorkspace(root)

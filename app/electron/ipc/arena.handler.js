@@ -1,5 +1,6 @@
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
 const { computeCost } = require('../utils/cost')
+const log = require('../logger')
 const abortControllers = new Map()
 
 function registerArenaHandlers(ipcMain, db) {
