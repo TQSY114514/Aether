@@ -87,8 +87,6 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      // These 6 loads are independent IPC round-trips — run them in parallel
-      // instead of serially to cut cold-start latency.
       await Promise.all([
         loadSettings(),
         loadProviders(),
@@ -97,10 +95,16 @@ export default function App() {
         loadScores(),
         loadAllModels(),
       ])
-      const providers = useStore.getState().providers
-      if (providers.length) {
-        await Promise.all(providers.map(p => loadModels(p.id)))
+      // Build modelsByProvider from the already-loaded allModels — avoids N
+      // extra IPC round-trips (one per provider). This cuts startup time
+      // significantly when multiple providers are configured.
+      const allModels = useStore.getState().allModels
+      const byProvider: Record<number, typeof allModels> = {}
+      for (const m of allModels) {
+        if (!byProvider[m.provider_id]) byProvider[m.provider_id] = []
+        byProvider[m.provider_id].push(m)
       }
+      useStore.setState({ modelsByProvider: byProvider })
       // Defer session auto-select and background-image load to next frame so
       // the EmptyState UI can paint first. This cuts perceived startup time.
       if (!sessionAutoSelectedRef.current) {

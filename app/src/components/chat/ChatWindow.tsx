@@ -247,11 +247,10 @@ export default function ChatWindow() {
             <MessageBubble key={msg.id} message={msg} searchHighlight={searchQuery} />
           ))}
 
-          {/* Streaming bubble — render for ANY actively-streaming session, not just
-              the currently-viewed one. Background streams stay visible when the
-              user switches to another chat. */}
+          {/* Streaming bubble — render for ANY actively-streaming session. The
+              bubble subscribes to store updates and renders content as it arrives. */}
           {Object.entries(streamingBySession).map(([sid, buf]) => {
-            if (!buf || !buf.content) return null
+            if (!buf) return null
             return <StreamingBubble key={sid} sessionId={Number(sid)} isAtBottom={isAtBottom} />
           })}
 

@@ -60,7 +60,7 @@ export default function ChatInput() {
     sending, streamingBySession, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     providers, allModels, saveSessionConfig, queuedMessages,
-    modelSuggestion, agentMode, setAgentMode,
+    modelSuggestion, agentMode, setAgentMode, sessionConfigs,
   } = useStore((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -72,14 +72,19 @@ export default function ChatInput() {
     allModels: s.allModels, saveSessionConfig: s.saveSessionConfig,
     queuedMessages: s.queuedMessages,
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
+    sessionConfigs: s.sessionConfigs,
   }), shallow)
 
   // Is the current session actively streaming?
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
 
   // Active model for the current session.
-  const cfg = currentSessionId ? useStore.getState().sessionConfigs[currentSessionId] : null
-  const activeModelId = cfg?.modelId ?? null
+  // Active model for the current session — derived from selector data so it
+  // re-computes when sessionConfigs updates (model switch in another tab, etc.)
+  const activeModelId = useMemo(() => {
+    if (!currentSessionId) return null
+    return sessionConfigs[currentSessionId]?.modelId ?? null
+  }, [currentSessionId, sessionConfigs])
 
   // Token estimation for the current input.
   const inputTokens = useMemo(() => estimateTextTokens(input), [input])

@@ -1041,36 +1041,40 @@ function ensureChunkListener() {
       return
     }
     if (done) {
+      // Flush any pending deltas so the StreamingBubble can render the final
+      // content. Then schedule buffer cleanup after the next paint so React
+      // has a chance to commit the intermediate state (otherwise both setState
+      // calls batch together and the buffer is never visible).
+      flushStreamUpdates()
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
       _pendingDeltas = {}
-      useStore.setState((s) => {
-        const next = { ...s.streamingBySession }
-        delete next[sessionId]
-        const cur = s.currentSessionId
-        const sending = !!(cur && next[cur])
-        return { streamingBySession: next, sending }
-      })
-      const currentNow = useStore.getState().currentSessionId
-      // Always reload messages from DB on stream completion — the assistant's
-      // reply is now persisted. Skip updating the in-memory array only if the
-      // user has already navigated away (avoids flicker on another session).
-      window.electronAPI.message.list(sessionId).then(msgs => {
-        if (useStore.getState().currentSessionId === sessionId) {
-          useStore.setState({ messages: msgs })
+      const sid = sessionId
+      requestAnimationFrame(() => {
+        useStore.setState((s) => {
+          const next = { ...s.streamingBySession }
+          delete next[sid]
+          const cur = useStore.getState().currentSessionId
+          return { streamingBySession: next, sending: !!(cur && next[cur]) }
+        })
+        // Reload messages from DB — the assistant's reply is now persisted.
+        window.electronAPI.message.list(sid).then(msgs => {
+          if (useStore.getState().currentSessionId === sid) {
+            useStore.setState({ messages: msgs })
+          }
+        }).catch(() => {})
+        useStore.getState().pinSession(sid, 0).then(() => {
+          const s = useStore.getState().sessions.find(x => x.id === sid)
+          const title = s?.title || 'Chat'
+          useStore.getState().notifyComplete(sid, title)
+        }).catch(() => {})
+        useStore.getState().loadSessions()
+        const st = useStore.getState()
+        if (st.queuedMessages.length > 0 && Object.keys(st.streamingBySession).length === 0) {
+          const q = st.queuedMessages[0]
+          useStore.setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
+          setTimeout(() => useStore.getState().sendMessage(q.content), 50)
         }
-      }).catch(() => {})
-      useStore.getState().pinSession(sessionId, 0).then(() => {
-        const s = useStore.getState().sessions.find(x => x.id === sessionId)
-        const title = s?.title || 'Chat'
-        useStore.getState().notifyComplete(sessionId, title)
-      }).catch(() => {})
-      useStore.getState().loadSessions()
-      const st = useStore.getState()
-      if (st.queuedMessages.length > 0 && Object.keys(st.streamingBySession).length === 0) {
-        const q = st.queuedMessages[0]
-        useStore.setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
-        setTimeout(() => useStore.getState().sendMessage(q.content), 50)
-      }
+      })
     } else {
       _pendingDeltas[sessionId] = (_pendingDeltas[sessionId] || '') + delta
       if (!_streamRaf) {
