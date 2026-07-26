@@ -59,7 +59,7 @@ function runCommand(cmd, cwd, timeoutMs) {
   const { exec } = require('child_process')
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve({ exitCode: -1, stdout: '', stderr: 'timeout', timedOut: true }), timeoutMs)
-    exec(cmd, { cwd, maxBuffer: 64 * 1024, timeout: timeoutMs }, (err, stdout, stderr) => {
+    exec(cmd, { cwd, maxBuffer: 64 * 1024, timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
       clearTimeout(timer)
       resolve({
         exitCode: err?.code ? err.code : 0,

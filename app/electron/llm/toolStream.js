@@ -13,9 +13,9 @@ function streamCommand(cmd, opts = {}) {
   const { cwd, timeoutMs = 120000, env, sessionId } = opts
   return new Promise((resolve, reject) => {
     // Apply session workspace as cwd if not specified.
-    const effectiveCwd = cwd || (sessionId ? getWorkspaceRootForSession(sessionId) : undefined)
+    const effectiveCwd = cwd || (sessionId ? getWorkspaceRoot(sessionId) : undefined)
     const mergedEnv = env ? { ...process.env, ...env } : process.env
-    const child = exec(cmd, { cwd: effectiveCwd, env: mergedEnv, maxBuffer: 1024 * 1024, timeout: Math.min(timeoutMs, 120000) })
+    const child = exec(cmd, { cwd: effectiveCwd, env: mergedEnv, maxBuffer: 1024 * 1024, timeout: Math.min(timeoutMs, 120000), windowsHide: true })
 
     const chunks = []
     child.stdout.on('data', (d) => chunks.push({ type: 'stdout', data: d.toString() }))

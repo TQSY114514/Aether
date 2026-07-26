@@ -308,7 +308,7 @@ const TOOLS = [
       // Standard non-streaming path.
       return new Promise((resolve, reject) => {
         const mergedEnv = extraEnv ? { ...process.env, ...extraEnv } : process.env
-        exec(cmd, { cwd, env: mergedEnv, maxBuffer: 32 * 1024, timeout: Math.min(timeoutMs, 120000) }, (err, stdout, stderr) => {
+        exec(cmd, { cwd, env: mergedEnv, maxBuffer: 32 * 1024, timeout: Math.min(timeoutMs, 120000), windowsHide: true }, (err, stdout, stderr) => {
           const out = (stdout || '').trim()
           const errOut = (stderr || '').trim()
           const parts = []
@@ -453,7 +453,7 @@ const TOOLS = [
     run: (args) => {
       const cwd = String(args.cwd || '')
       return new Promise((resolve, reject) => {
-        exec('git status --short', { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
+        exec('git status --short', { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
           if (err) return reject(new Error(stderr || err.message))
           resolve(stdout || '(clean)')
         })
@@ -476,7 +476,7 @@ const TOOLS = [
       const cwd = String(args.cwd || '')
       const flag = args.staged ? ' --cached' : ''
       return new Promise((resolve, reject) => {
-        exec('git diff' + flag, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
+        exec('git diff' + flag, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
           if (err) return reject(new Error(stderr || err.message))
           resolve((stdout || '(no changes)').slice(0, 16384))
         })
@@ -501,7 +501,7 @@ const TOOLS = [
       const count = Math.min(Number(args.count) || 10, 50)
       const fmt = args.format === 'detailed' ? 'full' : args.format === 'short' ? 'short' : 'oneline'
       return new Promise((resolve, reject) => {
-        exec(`git log --${fmt} -n ${count} --no-decorate`, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
+        exec(`git log --${fmt} -n ${count} --no-decorate`, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
           if (err) return reject(new Error(stderr || err.message))
           resolve(stdout || '(no commits)')
         })
@@ -533,7 +533,7 @@ const TOOLS = [
       }
       const allFlag = args.all !== false ? ' -A' : ''
       return new Promise((resolve, reject) => {
-        exec(`git add${allFlag} && git commit -m ${JSON.stringify(msg)}`, { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000 }, (err, stdout, stderr) => {
+        exec(`git add${allFlag} && git commit -m ${JSON.stringify(msg)}`, { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000, windowsHide: true }, (err, stdout, stderr) => {
           if (err) {
             const out = (stdout || '') + (stderr || '')
             // Detect "nothing to commit" as a non-error.
@@ -620,7 +620,7 @@ const TOOLS = [
       required: [],
     },
     run: async (args, ctx) => {
-      const { projectIndexer, dependencyGraph } = require('../../electron/context')
+      const { projectIndexer, dependencyGraph } = require('../context')
       const { getWorkspaceRoot } = require('../sandbox')
       const root = getWorkspaceRoot(ctx?.sessionId)
       if (!root) return 'no workspace configured'

@@ -17,7 +17,7 @@ function extractAffectedPaths(toolName, args) {
 function nearestGitRoot(start) {
   try {
     const cwd = fs.existsSync(start) && fs.statSync(start).isDirectory() ? start : path.dirname(start)
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim()
   } catch { return null }
 }
 
@@ -26,7 +26,7 @@ function captureGitDiff(paths) {
   const out = {}
   for (const root of roots) {
     try {
-      out[root] = execFileSync('git', ['diff', '--', '.'], { cwd: root, encoding: 'utf-8', maxBuffer: 1024 * 1024, timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] })
+      out[root] = execFileSync('git', ['diff', '--', '.'], { cwd: root, encoding: 'utf-8', maxBuffer: 1024 * 1024, timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     } catch (e) {
       out[root] = `[git diff failed: ${e.message}]`
     }

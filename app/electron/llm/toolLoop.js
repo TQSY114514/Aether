@@ -100,7 +100,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false }) {
   toolCache.clear()
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
@@ -170,8 +170,8 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
           if (repoCwd) {
             try {
               const { execSync } = require('child_process')
-              execSync('git add -A', { cwd: repoCwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
-              execSync('git commit -m ' + JSON.stringify(commitMsg), { cwd: repoCwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+              execSync('git add -A', { cwd: repoCwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+              execSync('git commit -m ' + JSON.stringify(commitMsg), { cwd: repoCwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
               onStatus?.({ text: `✓ 自动提交: ${commitMsg.slice(0, 60)}`, kind: 'auto_commit' })
             } catch (gitErr) {
               // Silently ignore commit failures (no repo, nothing to commit, etc.)
@@ -203,7 +203,7 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
   }
 
   // Build tool context with sessionId for sandbox checks.
-  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream }
+  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined }
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
 
   while (budget.consume()) {
