@@ -82,7 +82,7 @@ export default function Sidebar() {
     // Sessions with placeholder titles are kept visible if they have messages —
     // the auto-title generation happens asynchronously after the first response,
     // so hiding them would make the chat disappear mid-conversation.
-    const withMessages = sessions.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)))
+    const withMessages = sessions.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingBySession[s.id])
     if (!lowerQuery) return withMessages
     return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
   }, [sessions, lowerQuery])

@@ -80,12 +80,13 @@ export default function ChatInput() {
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
 
   // Active model for the current session. When switching chats, useMemo re-derives
-  // from sessionConfigs. For a brand-new session (null modelId), falls back to
-  // the global default model so the selector always shows something sensible.
+  // from sessionConfigs. For the blank chat page (no session yet), falls back to
+  // the global default model so the selector always shows a pre-selected model name.
   const activeModelId = useMemo(() => {
-    if (!currentSessionId) return null
-    const cfgModelId = sessionConfigs[currentSessionId]?.modelId
-    if (cfgModelId) return cfgModelId
+    if (currentSessionId) {
+      const cfgModelId = sessionConfigs[currentSessionId]?.modelId
+      if (cfgModelId) return cfgModelId
+    }
     // Fall back: find the primary model across all enabled providers.
     const primary = allModels.find(m => m.is_primary)
     if (primary) return primary.id

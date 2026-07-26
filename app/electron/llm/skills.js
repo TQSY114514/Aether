@@ -119,16 +119,15 @@ function recordSkillUse(name) {
     _usageTimer = setTimeout(() => {
       _usageTimer = null
       try {
-        const { getDbHandle } = require('../database')
-        const db = getDbHandle()
-        if (!db) return
+        const dbi = require('../database')
+        if (!dbi.run) return
         for (const [name, u] of Object.entries(_usage)) {
           try {
-            db.run('INSERT OR REPLACE INTO skill_usage (name, use_count, last_used_at) VALUES (?, ?, ?)',
+            dbi.run('INSERT OR REPLACE INTO skill_usage (name, use_count, last_used_at) VALUES (?, ?, ?)',
               [name, u.count, u.lastUsedAt])
           } catch {}
         }
-        try { db.saveDatabase && db.saveDatabase() } catch {}
+        try { dbi.saveDatabase() } catch {}
       } catch {}
     }, 2000)
   }
@@ -140,10 +139,9 @@ function resetSkillUsage() { _usage = {} }
 // Load usage data from the database (called on startup).
 function loadSkillUsage() {
   try {
-    const { getDbHandle } = require('../database')
-    const db = getDbHandle()
-    if (!db) return
-    const rows = db.allRows('SELECT name, use_count, last_used_at FROM skill_usage') || []
+    const dbi = require('../database')
+    if (!dbi.allRows) return
+    const rows = dbi.allRows('SELECT name, use_count, last_used_at FROM skill_usage') || []
     for (const row of rows) {
       _usage[row.name] = { count: row.use_count || 0, lastUsedAt: row.last_used_at || null }
     }

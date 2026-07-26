@@ -615,22 +615,22 @@ function addAuditLog({ sessionId, turnId, payload }) {
 // (per-tool-level with snapshot/rollback for dangerous tools).
 
 function addCheckpoint({ sessionId, turnId, stepIndex, messages, toolTrace = [], meta = {} }) {
-  const cm = require('../llm/checkpointManager')
+  const cm = require('./llm/checkpointManager')
   return cm.save(db, sessionId, turnId, stepIndex, messages, toolTrace, meta)
 }
 
 function getCheckpoints(sessionId, limit = 20) {
-  const cm = require('../llm/checkpointManager')
+  const cm = require('./llm/checkpointManager')
   return cm.listForSession(db, sessionId, limit)
 }
 
 function deleteCheckpoints(sessionId) {
-  const cm = require('../llm/checkpointManager')
+  const cm = require('./llm/checkpointManager')
   cm.deleteForSession(db, sessionId)
 }
 
 function deleteCheckpoint(id) {
-  const cm = require('../llm/checkpointManager')
+  const cm = require('./llm/checkpointManager')
   cm.deleteOne(db, id)
 }
 
@@ -844,4 +844,6 @@ module.exports = {
   prepare: (...args) => db ? db.prepare(...args) : null,
   run: (...args) => { if (db) { db.run(...args); saveDatabase() } },
   exec: (...args) => db ? db.exec(...args) : [],
+  // Convenience: prepare → step → getAsObject → free, with BigInt→Number coercion.
+  allRows: (sql, params = []) => { if (!db) return []; const stmt = db.prepare(sql); stmt.bind(params); return allRows(stmt) },
 }

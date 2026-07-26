@@ -1043,34 +1043,43 @@ function ensureChunkListener() {
     if (done) {
       // Flush any pending deltas so the StreamingBubble can render the final
       // content. Then schedule buffer cleanup after the next paint so React
-      // has a chance to commit the intermediate state (otherwise both setState
-      // calls batch together and the buffer is never visible).
+      // has a chance to commit the intermediate state.
       flushStreamUpdates()
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
       _pendingDeltas = {}
       const sid = sessionId
       requestAnimationFrame(() => {
+        // Fetch the current state at this point to determine what to update.
+        const st = useStore.getState()
+        // Fire completion notification ONLY if the completed session is not
+        // the one the user is currently viewing.
+        if (st.currentSessionId !== sid) {
+          useStore.getState().pinSession(sid, 0).then(() => {
+            const s = useStore.getState().sessions.find(x => x.id === sid)
+            if (s) useStore.getState().notifyComplete(sid, s.title || 'Chat')
+          }).catch(() => {})
+        }
+        // Reload messages from DB — only for the current session.
+        if (st.currentSessionId === sid) {
+          window.electronAPI.message.list(sid).then(msgs => {
+            if (useStore.getState().currentSessionId === sid) {
+              useStore.setState({ messages: msgs })
+            }
+          }).catch(() => {})
+        }
+        useStore.getState().pinSession(sid, 0).catch(() => {})
+        useStore.getState().loadSessions()
+        // Clean up streaming buffer after DB reload so there's no flicker.
         useStore.setState((s) => {
           const next = { ...s.streamingBySession }
           delete next[sid]
           const cur = useStore.getState().currentSessionId
           return { streamingBySession: next, sending: !!(cur && next[cur]) }
         })
-        // Reload messages from DB — the assistant's reply is now persisted.
-        window.electronAPI.message.list(sid).then(msgs => {
-          if (useStore.getState().currentSessionId === sid) {
-            useStore.setState({ messages: msgs })
-          }
-        }).catch(() => {})
-        useStore.getState().pinSession(sid, 0).then(() => {
-          const s = useStore.getState().sessions.find(x => x.id === sid)
-          const title = s?.title || 'Chat'
-          useStore.getState().notifyComplete(sid, title)
-        }).catch(() => {})
-        useStore.getState().loadSessions()
-        const st = useStore.getState()
-        if (st.queuedMessages.length > 0 && Object.keys(st.streamingBySession).length === 0) {
-          const q = st.queuedMessages[0]
+        // Process queued messages — only when no sessions are streaming.
+        const st2 = useStore.getState()
+        if (st2.queuedMessages.length > 0 && Object.keys(st2.streamingBySession).length === 0) {
+          const q = st2.queuedMessages[0]
           useStore.setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
           setTimeout(() => useStore.getState().sendMessage(q.content), 50)
         }
