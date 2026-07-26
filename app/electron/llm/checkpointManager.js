@@ -28,7 +28,7 @@ function createTable(db) {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`)
     try { db.run(`CREATE INDEX IF NOT EXISTS idx_checkpoint_session ON ${TABLE}(session_id, turn_id, step_index)`) } catch {}
-    db.saveDatabase()
+    if (typeof db.saveDatabase === 'function') db.saveDatabase()
   } catch (e) {
     // best-effort — table creation must not crash the app
   }
@@ -47,8 +47,8 @@ function save(db, sessionId, turnId, stepIndex, messages, toolTrace = [], meta =
     db.run(`DELETE FROM ${TABLE} WHERE session_id = ? AND id NOT IN (
       SELECT id FROM ${TABLE} WHERE session_id = ? ORDER BY id DESC LIMIT ?)`,
       [sessionId, sessionId, MAX_CHECKPOINTS_PER_SESSION])
-    db.saveDatabase()
-    return db.lastId()
+    if (typeof db.saveDatabase === 'function') db.saveDatabase()
+    return typeof db.lastId === 'function' ? db.lastId() : (typeof db.lastId === 'undefined' ? null : db.lastId())
   } catch (e) {
     return null
   }
@@ -100,12 +100,12 @@ function listForSession(db, sessionId, limit = 20) {
 
 // Delete all checkpoints for a session (cleanup on session delete).
 function deleteForSession(db, sessionId) {
-  try { db.run(`DELETE FROM ${TABLE} WHERE session_id = ?`, [sessionId]); db.saveDatabase() } catch {}
+  try { db.run(`DELETE FROM ${TABLE} WHERE session_id = ?`, [sessionId]); if (typeof db.saveDatabase === 'function') db.saveDatabase() } catch {}
 }
 
 // Delete a single checkpoint.
 function deleteOne(db, id) {
-  try { db.run(`DELETE FROM ${TABLE} WHERE id = ?`, [id]); db.saveDatabase() } catch {}
+  try { db.run(`DELETE FROM ${TABLE} WHERE id = ?`, [id]); if (typeof db.saveDatabase === 'function') db.saveDatabase() } catch {}
 }
 
 // Auto-checkpoint: called during the tool loop to decide when to save.
