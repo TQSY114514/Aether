@@ -57,14 +57,14 @@ export default function ChatInput() {
   // Batch store selectors with shallow comparison to reduce re-render triggers.
   const {
     sendMessage, enqueueMessage, removeQueued, stopGeneration,
-    sending, streamingBySession, currentSessionId, createSession,
+    streamingBySession, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs,
   } = useStore((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
-    sending: s.sending, streamingBySession: s.streamingBySession,
+    streamingBySession: s.streamingBySession,
     currentSessionId: s.currentSessionId, createSession: s.createSession,
     chatMode: s.chatMode, arenaModelIds: s.arenaModelIds,
     runArena: s.runArena, effortLevel: s.effortLevel,
@@ -75,16 +75,23 @@ export default function ChatInput() {
     sessionConfigs: s.sessionConfigs,
   }), shallow)
 
-  // Is the current session actively streaming?
+  // Per-session streaming check — NOT a global flag, so one session's stream
+  // never blocks another session's input.
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
 
-  // Active model for the current session.
-  // Active model for the current session — derived from selector data so it
-  // re-computes when sessionConfigs updates (model switch in another tab, etc.)
+  // Active model for the current session. When switching chats, useMemo re-derives
+  // from sessionConfigs. For a brand-new session (null modelId), falls back to
+  // the global default model so the selector always shows something sensible.
   const activeModelId = useMemo(() => {
     if (!currentSessionId) return null
-    return sessionConfigs[currentSessionId]?.modelId ?? null
-  }, [currentSessionId, sessionConfigs])
+    const cfgModelId = sessionConfigs[currentSessionId]?.modelId
+    if (cfgModelId) return cfgModelId
+    // Fall back: find the primary model across all enabled providers.
+    const primary = allModels.find(m => m.is_primary)
+    if (primary) return primary.id
+    if (allModels.length > 0) return allModels[0].id
+    return null
+  }, [currentSessionId, sessionConfigs, allModels])
 
   // Token estimation for the current input.
   const inputTokens = useMemo(() => estimateTextTokens(input), [input])
@@ -168,9 +175,9 @@ export default function ChatInput() {
     const finalContent = snippetBlocks ? (content ? content + '\n' + snippetBlocks : snippetBlocks) : content
 
     if (chatMode === 'arena') {
-      await runArena(finalContent)
+      runArena(finalContent)
     } else if (sessionId) {
-      await sendMessage(finalContent, atts.length > 0 ? atts : undefined)
+      sendMessage(finalContent, atts.length > 0 ? atts : undefined)
     }
   }
 

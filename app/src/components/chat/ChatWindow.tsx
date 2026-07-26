@@ -81,14 +81,13 @@ export default function ChatWindow() {
   // Batch selectors with shallow comparison: only re-renders when selected
   // values actually change, not on every store update.
   const {
-    messages, currentSessionId, sending, streamingBySession,
+    messages, currentSessionId, streamingBySession,
     toolCallsByMessage, arenaResults, arenaAggregate, arenaError,
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote,
   } = useStore((s) => ({
     messages: s.messages,
     currentSessionId: s.currentSessionId,
-    sending: s.sending,
     streamingBySession: s.streamingBySession,
     toolCallsByMessage: s.toolCallsByMessage,
     arenaResults: s.arenaResults,
@@ -228,7 +227,7 @@ export default function ChatWindow() {
       </div>
 
       {/* Streaming status bar */}
-      {sending && streamingStatus && (
+      {(currentSessionId && streamingBySession[currentSessionId]) && streamingStatus && (
         <div className="px-4 py-1 shrink-0 animate-blur-fade" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="max-w-3xl mx-auto flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
@@ -247,12 +246,12 @@ export default function ChatWindow() {
             <MessageBubble key={msg.id} message={msg} searchHighlight={searchQuery} />
           ))}
 
-          {/* Streaming bubble — render for ANY actively-streaming session. The
-              bubble subscribes to store updates and renders content as it arrives. */}
-          {Object.entries(streamingBySession).map(([sid, buf]) => {
-            if (!buf) return null
-            return <StreamingBubble key={sid} sessionId={Number(sid)} isAtBottom={isAtBottom} />
-          })}
+          {/* Streaming bubble — render ONLY for the current session. Other
+              sessions keep streaming in the background but their output is not
+              shown here, preventing double-output when switching chats. */}
+          {currentSessionId && streamingBySession[currentSessionId] && (
+            <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />
+          )}
 
           {/* Arena results */}
           {arenaError && (
