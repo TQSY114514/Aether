@@ -72,7 +72,9 @@ interface AppState {
 
   // Chat — per-session streaming state so multiple sessions can stream concurrently.
   // `streamingBySession[sid]` holds the live assistant content being streamed for that
-  // session. `sending` is a convenience boolean derived from the current session's entry.
+  // session. Components should derive their own per-session `isStreaming` from this
+  // map rather than relying on the global `sending` flag, so one session's stream
+  // never blocks another session's input.
   streamingBySession: Record<number, { content: string; messageId: number | null }>
   sending: boolean
   // Per-message tool-call invocations, keyed by the assistant messageId the
@@ -675,7 +677,6 @@ export const useStore = create<AppState>((set, get) => ({
     if (userIdx < 0) return
     set((s) => ({
       messages: messages.slice(0, userIdx + 1),
-      sending: true,
       streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
     }))
     ensureChunkListener()
@@ -720,7 +721,6 @@ export const useStore = create<AppState>((set, get) => ({
     const truncated = messages.slice(0, idx + 1).map(m => m.id === messageId ? { ...m, content } : m)
     set((s) => ({
       messages: truncated,
-      sending: true,
       streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
     }))
     ensureChunkListener()
