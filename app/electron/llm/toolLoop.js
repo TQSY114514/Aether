@@ -418,13 +418,9 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
     if (onAudit) {
       try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus, planId: plan?.id, planStatus: plan?.tasks?.map(t => t.status) }) } catch {}
     }
-    // Verification stop: after a successful loop exit, review tool calls.
-    if (finalStatus === 'success' && auditTrail.length > 0) {
-      const verification = await runVerification()
-      if (verification && !verification.includes('STATUS: COMPLETE')) {
-        return `${msg.content || ''}\n\n${verification}`
-      }
-    }
+    // Always return the model's actual content — never return verification text
+    // as the reply. Verification is fire-and-forget: it runs in the background
+    // and its results are logged, not surfaced to the user as the answer.
     return msg.content || ''
   }
   try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
@@ -432,13 +428,10 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
   if (onAudit) {
     try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'budget_exhausted', planId: plan?.id, planStatus: plan?.tasks.map(t => t.status) }) } catch {}
   }
-  // Verification stop: also run on budget exhaustion if any tools were called.
+  // Verification is fire-and-forget: run in background, log results, never
+  // block the reply or surface verification text as the answer.
   if (auditTrail.length > 0) {
-    const verification = await runVerification()
-    if (verification) {
-      const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
-      return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}\n\n${verification}`
-    }
+    try { runVerification().then(v => { if (v && !v.includes('STATUS: COMPLETE')) onStatus?.({ text: `⚠ ${v.slice(0, 200)}`, kind: 'verification' }) }).catch(() => {}) } catch {}
   }
   const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}`

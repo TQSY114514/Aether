@@ -354,7 +354,8 @@
       "tool.rollback": "回滚本次 Agent 改动",
       "tool.rollback.running": "正在回滚...",
       "tool.rollback.done": "已回滚",
-      "tool.rollback.error": "回滚失败"
+      "tool.rollback.error": "回滚失败",
+      "sidebar.nav.skills": "技能"
     }
   },
   {
@@ -499,7 +500,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "Habilidades"
     }
   },
   {
@@ -644,7 +646,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "スキル"
     }
   },
   {
@@ -934,7 +937,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "Compétences"
     }
   },
   {
@@ -1079,7 +1083,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "Fähigkeiten"
     }
   },
   {
@@ -1224,7 +1229,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "Habilidades"
     }
   },
   {
@@ -1369,7 +1375,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "Навыки"
     }
   },
   {
@@ -1514,7 +1521,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "技能"
     }
   },
   {
@@ -1659,7 +1667,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "المهارات"
     }
   },
   {
@@ -1804,7 +1813,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "Навички"
     }
   },
   {
@@ -1949,7 +1959,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "스킬"
     }
   },
   {
@@ -2094,7 +2105,8 @@
       "tool.rollback": "Rollback this Agent change",
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
-      "tool.rollback.error": "Rollback failed"
+      "tool.rollback.error": "Rollback failed",
+      "sidebar.nav.skills": "स्किल्स"
     }
   }
 ]
