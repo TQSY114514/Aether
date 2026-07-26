@@ -2894,6 +2894,7 @@ const translations: Record<string, Record<string, string>> = {
 // without importing the store (avoids a circular dep: store imports `t`).
 let currentLang: LangCode = 'en'
 export function setLang(code: LangCode) { currentLang = code }
+export function setLangAsync(code: LangCode): Promise<void> { return Promise.resolve(setLang(code)) }
 export function getLang(): LangCode { return currentLang }
 
 // Detect the user's system language and map to a supported code. Falls back to en.
