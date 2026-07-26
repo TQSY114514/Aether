@@ -145,6 +145,17 @@ function createWindow() {
       nodeIntegration: false,
     },
     backgroundColor: '#FFFFFF',
+    show: false,  // hide until page is ready — no blank flash on startup
+  })
+
+  // Show the window only after the page has rendered, avoiding the flash of
+  // blank/white content that users see on every launch.
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+    // On Windows, bring to front explicitly.
+    if (process.platform === 'win32') {
+      mainWindow?.focus()
+    }
   })
 
   if (process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL) {
