@@ -1,18 +1,18 @@
 <div align="center">
 
-<img src="assets/logo.png" width="128" height="128" alt="AetherAI logo" />
+<img src="assets/logo.png" width="160" height="160" alt="AetherAI logo" />
 
 # AetherAI
 
-**本地优先的多模型桌面 AI 聊天客户端 · Electron + React + TypeScript**
+### A local-first, multi-model desktop AI workbench
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
+**Electron · React · TypeScript · MCP · Agent · Skills**
 
-</div>
+[![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/AetherAI?style=flat-square&label=latest)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/AetherAI?style=flat-square&color=blue)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=flat-square&label=Forks)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI?style=flat-square&label=Issues)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
-<div align="center">
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-install-from-source) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
-[![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing) [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]() [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)]() [![electron](https://img.shields.io/badge/electron-31-4781ff.svg)]() [![i18n](https://img.shields.io/badge/i18n-15%20languages-blue.svg)]() [![tools](https://img.shields.io/badge/agent-16%20tools-green.svg)]() [![mcp](https://img.shields.io/badge/MCP-supported-purple.svg)]()
+[English](./README.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन্दी](./README.hi.md) · [한국어](./README.ko.md)
 
 </div>
 
@@ -141,45 +141,9 @@ npm start        # 启动 Electron
 
 ---
 
-## 📁 项目结构
-
-```
-app/
-├── electron/              # 主进程(Node)
-│   ├── database.js        # SQLite (sql.js) 数据层
-│   ├── ipc/               # IPC 处理器(chat / arena / session / mcp / ...)
-│   ├── llm/               # LLM 抽象
-│   │   ├── providerAdapter.js   # 按 api_format 分发
-│   │   ├── openaiAdapter.js     # OpenAI 兼容实现
-│   │   ├── reasoning.js         # 思考强度参数构建器
-│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
-│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
-│   │   ├── subAgent.js          # parallel sub-agent delegation
-│   │   ├── compaction.js        # Context compaction (pair-preserving)
-│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
-│   │   ├── habitLearner.js      # Recurring preference → auto-skills
-│   │   ├── hooks.js             # 10-point extensibility hooks
-│   │   ├── skills.js            # SKILL.md loader (Claude Code format)
-│   │   ├── modelAdvisor.js      # Heuristic model suggestion
-│   │   ├── toolCallRepair.js    # Malformed tool-call recovery
-│   │   ├── auditLog.js          # Per-turn agent execution trace
-│   │   └── ...
-│   ├── tools/             # 内置工具注册表
-│   │   ├── registry.js         # 16 tool definitions (OpenClaw-inspired)
-│   │   └── sandbox.js          # 3-layer defense (workspace root, traversal guard, blocklist)
-│   ├── mcp/               # MCP 客户端 + 管理器
-│   ├── main.js / preload.js
-├── src/                   # 渲染进程(React + TS)
-│   ├── store/index.ts     # zustand 全局状态
-│   ├── components/        # UI(chat / sidebar / settings / ui)
-│   ├── pages/             # Chat / Models / Persona / Settings / Scores / ...
-│   ├── utils/             # i18n(15 种语言)/ 主题 / markdown
-│   └── types/
-├── skills/                # Built-in skills (release-checklist, git-commit)
-├── commands/              # Built-in slash commands (/code, /explain, /polish, …)
-├── locales/               # Translation files (13 languages, lazy-loaded)
-└── resources/             # App icons
-```
+<p align="center">
+  <img src="assets/architecture.svg" width="100%" alt="AetherAI Architecture Overview">
+</p>
 
 ---
 

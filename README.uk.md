@@ -1,20 +1,20 @@
 <div align="center">
 
-<img src="assets/logo.png" width="128" height="128" alt="AetherAI logo" />
+<img src="assets/logo.png" width="160" height="160" alt="AetherAI logo" />
 
 # AetherAI
 
-**Локальний багатомодельний десктопний AI-чат-клієнт · Electron + React + TypeScript**
+### A local-first, multi-model desktop AI workbench
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
+**Electron · React · TypeScript · MCP · Agent · Skills**
 
-</div>
+[![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/AetherAI?style=flat-square&label=latest)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/AetherAI?style=flat-square&color=blue)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=flat-square&label=Forks)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI?style=flat-square&label=Issues)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
-<div align="center">
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-install-from-source) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
-[![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=social)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing) [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]() [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)]() [![electron](https://img.shields.io/badge/electron-31-4781ff.svg)]() [![i18n](https://img.shields.io/badge/i18n-15%20languages-blue.svg)]() [![tools](https://img.shields.io/badge/agent-16%20tools-green.svg)]() [![mcp](https://img.shields.io/badge/MCP-supported-purple.svg)]()
 
-</div>
+[English](./README.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दీ](./README.hi.md) · [한국어](./README.ko.md)
+
 
 ---
 
@@ -88,45 +88,9 @@ npm start        # запустити Electron
 
 ---
 
-## 📁 Структура проєкту
-
-```
-app/
-├── electron/              # головний процес (Node)
-│   ├── database.js        # шар даних SQLite (sql.js)
-│   ├── ipc/               # обробники IPC (chat / arena / session / mcp / ...)
-│   ├── llm/               # абстракція LLM
-│   │   ├── providerAdapter.js   # диспетчер за api_format
-│   │   ├── openaiAdapter.js     # OpenAI-сумісна реалізація
-│   │   ├── reasoning.js         # конструктор параметра thinking-effort
-│   │   ├── planning.js          # hierarchical task decomposition (DS4-inspired)
-│   │   ├── toolLoop.js          # Plan→Act→Observe function-calling loop
-│   │   ├── subAgent.js          # parallel sub-agent delegation
-│   │   ├── compaction.js        # Context compaction (pair-preserving)
-│   │   ├── autoMemory.js        # structured long-term memory (Hermes-inspired)
-│   │   ├── habitLearner.js      # Recurring preference → auto-skills
-│   │   ├── hooks.js             # 10-point extensibility hooks
-│   │   ├── skills.js            # SKILL.md loader (Claude Code format)
-│   │   ├── modelAdvisor.js      # Heuristic model suggestion
-│   │   ├── toolCallRepair.js    # Malformed tool-call recovery
-│   │   ├── auditLog.js          # Per-turn agent execution trace
-│   │   └── ...
-│   ├── tools/             # реєстр вбудованих інструментів
-│   │   ├── registry.js         # 16 tool definitions (OpenClaw-inspired)
-│   │   └── sandbox.js          # 3-layer defense (workspace root, traversal guard, blocklist)
-│   ├── mcp/               # клієнт + менеджер MCP
-│   ├── main.js / preload.js
-├── src/                   # рендерер (React + TS)
-│   ├── store/index.ts     # глобальний стан zustand
-│   ├── components/        # UI (chat / sidebar / settings / ui)
-│   ├── pages/             # Chat / Models / Persona / Settings / Scores / ...
-│   ├── utils/             # i18n (15 локалей) / тема / markdown
-│   └── types/
-├── skills/                # Built-in skills (release-checklist, git-commit)
-├── commands/              # Built-in slash commands (/code, /explain, /polish, …)
-├── locales/               # Translation files (13 languages, lazy-loaded)
-└── resources/             # App icons
-```
+<p align="center">
+  <img src="assets/architecture.svg" width="100%" alt="AetherAI Architecture Overview">
+</p>
 
 ---
 
