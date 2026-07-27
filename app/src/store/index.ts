@@ -147,6 +147,8 @@ interface AppState {
   arenaModelIds: number[]
   setArenaModelIds: (ids: number[]) => void
   arenaError: string | null
+  arenaVoted: boolean
+  arenaVoteWinnerId: number | null
   runArena: (content: string) => Promise<void>
   arenaVote: (winner: { model_id: number; model_name: string }, losers: { model_id: number; model_name: string }[]) => Promise<void>
 
@@ -505,7 +507,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Chat mode
   chatMode: 'normal',
-  setChatMode: (mode) => set({ chatMode: mode }),
+  setChatMode: (mode) => {
+    set({ chatMode: mode })
+    // Reset arena state when leaving arena mode
+    if (mode !== 'arena') {
+      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaAggregate: null, arenaError: null })
+    }
+    // When switching to arena mode on a blank page (no session), create one
+    // so the arena model selector is available immediately.
+    if (mode === 'arena' && !get().currentSessionId && get().arenaModelIds.length >= 2) {
+      get().createSession()
+    }
+  },
 
   // Message search
   messageSearchQuery: '',
@@ -663,8 +676,14 @@ export const useStore = create<AppState>((set, get) => ({
   stopGeneration: async () => {
     await window.electronAPI.chat.stop()
     await window.electronAPI.arena.stop().catch(() => {})
-    // Clear streaming buffers for all sessions; nothing is sending anymore.
-    set({ streamingBySession: {}, sending: false })
+    // Clear only the sending flag and streaming buffers for the current session;
+    // keep already-received content visible so the user sees what was produced.
+    set((s) => {
+      const next = { ...s.streamingBySession }
+      // Keep buffers for sessions that have results already committed
+      if (s.currentSessionId) delete next[s.currentSessionId]
+      return { streamingBySession: next, sending: false }
+    })
   },
 
   regenerate: async () => {
@@ -675,10 +694,27 @@ export const useStore = create<AppState>((set, get) => ({
     let userIdx = -1
     for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === 'user') { userIdx = i; break } }
     if (userIdx < 0) return
-    set((s) => ({
-      messages: messages.slice(0, userIdx + 1),
-      streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
-    }))
+    // Identify the assistant message being regenerated so we can clear its per-message state
+    const regeneratedMsgId = messages.slice(userIdx + 1).find(m => m.role === 'assistant')?.id
+    set((s) => {
+      const next: Partial<AppState> = {
+        messages: messages.slice(0, userIdx + 1),
+        streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
+      }
+      if (regeneratedMsgId !== undefined) {
+        const { [regeneratedMsgId]: _, ...restTC } = s.toolCallsByMessage
+        const { [regeneratedMsgId]: __, ...restPS } = s.planStepsByMessage
+        const { [regeneratedMsgId]: ___, ...restTB } = s.todosByMessage
+        const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
+        const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
+        next.toolCallsByMessage = restTC
+        next.planStepsByMessage = restPS
+        next.todosByMessage = restTB
+        next.thinkingBlocksByMessage = restTIB
+        next.statusLinesByMessage = restSIB
+      }
+      return next
+    })
     ensureChunkListener()
     try {
       await window.electronAPI.chat.send({
@@ -769,32 +805,40 @@ export const useStore = create<AppState>((set, get) => ({
   arenaAggregate: null,
   arenaModelIds: [],
   arenaError: null,
+  arenaVoted: false,    // true after user has voted in this arena run
+  arenaVoteWinnerId: null as number | null,
   setArenaModelIds: (ids) => set({ arenaModelIds: ids }),
 
   runArena: async (content) => {
-    const { currentSessionId, arenaModelIds } = get()
+    const { currentSessionId, arenaModelIds, sessionConfigs, defaultPersonaId, streamingBySession } = get()
     if (!currentSessionId || arenaModelIds.length < 2) {
       set({ arenaError: '请先选择至少 2 个模型' }); return
     }
-    set({ sending: true, arenaResults: [], arenaAggregate: null, arenaError: null })
+    const cfg = sessionConfigs[currentSessionId]
+    const personaId = cfg?.personaId ?? defaultPersonaId
+    set({ sending: true, arenaResults: [], arenaAggregate: null, arenaError: null, arenaVoted: false, arenaVoteWinnerId: null })
+    set((s) => ({ streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '...', messageId: null } } }))
     try {
-      const { results, aggregate } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, aggregate: true })
+      const { results, aggregate } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, aggregate: true, personaId })
       if (!results || results.length === 0) {
         set({ sending: false, arenaError: '没有返回结果，请检查模型/网络' })
+        set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
         return
       }
       set({ arenaResults: results, arenaAggregate: aggregate || null, sending: false, arenaError: null })
-      // Reload messages so the persisted arena exchange (user prompt + each
-      // model's answer) is in the message list too — survives a reload.
+      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
       get().loadMessages(currentSessionId)
       get().loadSessions()
     } catch (err: unknown) {
       set({ sending: false, arenaError: '竞技场请求失败: ' + (err instanceof Error ? err.message : String(err)) })
+      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
     }
   },
 
   arenaVote: async (winner, losers) => {
-    const { messages, arenaResults } = get()
+    const { messages, arenaResults, arenaVoteWinnerId } = get()
+    // Prevent double-voting
+    if (arenaVoteWinnerId) return
     const userMsg = messages.find(m => m.role === 'user') || arenaResults[0]
     const prompt = typeof userMsg?.content === 'string' ? userMsg.content : ''
     try {
@@ -807,7 +851,11 @@ export const useStore = create<AppState>((set, get) => ({
       })
       if (result?.success) {
         await get().loadScores()
-        set({ arenaResults: [winner as ArenaResult] })
+        // Keep ALL results visible — winner highlighted, losers dimmed
+        set((s) => ({
+          arenaVoted: true,
+          arenaVoteWinnerId: winner.model_id,
+        }))
       } else {
         set({ arenaError: '投票失败，请重试' })
       }

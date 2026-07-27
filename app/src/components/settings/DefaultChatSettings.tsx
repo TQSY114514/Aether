@@ -29,7 +29,7 @@ export default function DefaultChatSettings() {
             const v = e.target.value ? Number(e.target.value) : null
             setDefaultModel(v)
           }} className="px-2.5 py-1.5 text-xs rounded-lg border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
-            <option value="">{t('settings.default_model_none', 'Auto (first enabled provider)')}</option>
+            <option value="">{t('settings.default_model_none')}</option>
             {modelOptions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select>
         </div>

