@@ -401,15 +401,15 @@ function getSetting(key) {
 }
 async function setSetting(key, value) {
   db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value])
-  // Drain any in-flight async save so it can't race past this sync write
+  // Drain any in-flight async save so it can't race past this async write
   // and overwrite the DB with stale data. Critical ordering:
   //   1. Await any prior _writeDb to complete (it has old data — fine, we
   //      overwrite with our own write next)
   //   2. Cancel the debounced timer (prevents another future write)
-  //   3. Sync write the current DB (includes the new setting)
+  //   3. Async write the current DB (includes the new setting)
   if (savePromise) await savePromise.catch(() => {})
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
-  fs.writeFileSync(dbPath, Buffer.from(db.export()))
+  await _writeDb(Buffer.from(db.export()))
 }
 function getAllSettings() {
   const stmt = db.prepare('SELECT key, value FROM settings')
@@ -446,29 +446,26 @@ function updateElo(winnerModelId, loserModelIds, intent) {
       const ws = wRow?.score ?? 1000
       const ls = lRow?.score ?? 1000
       const expected = 1 / (1 + Math.pow(10, (ls - ws) / 400))
-      const newW = ws + K * (1 - expected)
-      const newL = ls + K * (0 - (1 - expected))
-      db.run(`INSERT OR REPLACE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,?,
-        COALESCE((SELECT win_count FROM model_score WHERE model_id=? AND intent=?),0)+1,
-        COALESCE((SELECT total_count FROM model_score WHERE model_id=? AND intent=?),0)+1)`,
-        [winnerModelId, intent, Math.round(newW * 10) / 10, winnerModelId, intent, winnerModelId, intent])
-      db.run(`INSERT OR REPLACE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,?,
-        COALESCE((SELECT win_count FROM model_score WHERE model_id=? AND intent=?),0),
-        COALESCE((SELECT total_count FROM model_score WHERE model_id=? AND intent=?),0)+1)`,
-        [loserId, intent, Math.round(newL * 10) / 10, loserId, intent, loserId, intent])
+      const newW = Math.round((ws + K * (1 - expected)) * 10) / 10
+      const newL = Math.round((ls + K * (0 - (1 - expected))) * 10) / 10
+      // Atomic score + count updates — prevents lost-update race on win_count/total_count
+      db.run(`UPDATE model_score SET score = ?, win_count = win_count + 1, total_count = total_count + 1
+        WHERE model_id = ? AND intent = ?`, [newW, winnerModelId, intent])
+      db.run(`UPDATE model_score SET score = ?, total_count = total_count + 1
+        WHERE model_id = ? AND intent = ?`, [newL, loserId, intent])
     }
     saveDatabase()
   }
-  _eloMutex = _eloMutex.catch(() => {}).then(work)
+  return _eloMutex = _eloMutex.catch(() => {}).then(work)
 }
 
 // Persist an arena vote (prompt + winner/losers + detected intent) and update ELO.
-function recordArenaVote({ prompt, winnerModelId, winnerModelName, loserModelIds, loserModelNames, intent }) {
+async function recordArenaVote({ prompt, winnerModelId, winnerModelName, loserModelIds, loserModelNames, intent }) {
   db.run(`INSERT INTO arena_vote (prompt, intent, winner_model_id, winner_model_name, loser_model_ids, loser_model_names)
     VALUES (?, ?, ?, ?, ?, ?)`,
     [prompt, intent, winnerModelId, winnerModelName, JSON.stringify(loserModelIds), JSON.stringify(loserModelNames)])
   if (winnerModelId && loserModelIds.length > 0) {
-    updateElo(winnerModelId, loserModelIds, intent)
+    await updateElo(winnerModelId, loserModelIds, intent)
   }
   saveDatabase()
 }

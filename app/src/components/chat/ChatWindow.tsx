@@ -9,6 +9,110 @@ import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 
+// Arena results display component with streaming-like animation
+function ArenaResults({ results, aggregate, voted, winnerId, onVote, t, renderMarkdown }: {
+  results: { model_id: number; model_name: string; provider_name: string; content: string }[]
+  aggregate: { content: string; model_name: string } | null
+  voted: boolean
+  winnerId: number | null
+  onVote: (winner: { model_id: number; model_name: string }, losers: { model_id: number; model_name: string }[]) => Promise<void>
+  t: (key: string) => string
+  renderMarkdown: (md: string) => string
+}) {
+  const [revealed, setRevealed] = useState(new Set<string>())
+  const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    // Reset when new results arrive
+    setRevealed(new Set())
+    setDone(false)
+  }, [results.length])
+
+  useEffect(() => {
+    if (results.length === 0) return
+    if (done) return
+
+    const modelIds = results.map(r => String(r.model_id))
+    const toReveal = modelIds.filter(id => !revealed.has(id))
+    if (toReveal.length === 0) {
+      setDone(true)
+      return
+    }
+
+    // Reveal one at a time with short delay
+    let idx = 0
+    const interval = setInterval(() => {
+      if (idx >= toReveal.length) {
+        clearInterval(interval)
+        setDone(true)
+        return
+      }
+      setRevealed(prev => new Set([...prev, toReveal[idx]]))
+      idx++
+    }, 200)
+
+    return () => clearInterval(interval)
+  }, [results.length, revealed, done])
+
+  return (
+    <div className="space-y-3">
+      {aggregate && !voted && (
+        <div className="border-2 rounded-xl overflow-hidden animate-blur-fade" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="px-3 py-2 border-b flex items-center gap-2 text-sm font-medium" style={{ borderColor: 'var(--warning)' }}>
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>MoA</span>
+            <span style={{ color: 'var(--text-primary)' }}>{t('chat.arena.aggregate')}</span>
+            <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>{aggregate.model_name}</span>
+          </div>
+          <div className="p-3 text-sm leading-relaxed max-h-96 overflow-y-auto">
+            <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(aggregate.content) }} />
+          </div>
+        </div>
+      )}
+      <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
+      {results.map((r) => {
+        const key = String(r.model_id)
+        const isRevealed = revealed.has(key)
+        const isWinner = voted && r.model_id === winnerId
+        const isLoser = voted && r.model_id !== winnerId
+        return (
+          <div key={r.model_id} className="border rounded-xl overflow-hidden animate-blur-fade"
+            style={{
+              borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
+              opacity: isLoser ? 0.35 : isRevealed ? 1 : 0,
+              backgroundColor: isLoser ? 'var(--bg-primary)' : undefined,
+              maxHeight: isLoser ? 60 : undefined,
+              overflow: 'hidden',
+              transform: isLoser ? 'scale(0.97)' : undefined,
+              filter: isLoser ? 'grayscale(0.5)' : undefined,
+            }}>
+            <div className="px-3 py-2 border-b flex items-center justify-between text-sm font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+              <span style={{ color: isWinner ? 'var(--success)' : isLoser ? 'var(--text-muted)' : 'var(--text-primary)' }}>{r.model_name}</span>
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.provider_name}</span>
+            </div>
+            <div className="p-3 text-sm leading-relaxed max-h-60 overflow-y-auto">
+              <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }} />
+            </div>
+            {!voted && (
+              <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                <button onClick={() => onVote(
+                  { model_id: r.model_id, model_name: r.model_name },
+                  results.filter(x => x.model_id !== r.model_id).map(x => ({ model_id: x.model_id, model_name: x.model_name }))
+                )}
+                  className="text-xs px-3 py-1 rounded-lg border bg-white hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
+                  ⭐ {t('chat.arena.vote')}
+                </button>
+              </div>
+            )}
+            {isWinner && voted && (
+              <div className="px-3 py-2 border-t text-xs" style={{ borderColor: 'var(--success)', backgroundColor: 'rgba(34,197,94,0.08)', color: 'var(--success)' }}>✅ {t('chat.arena.voted')}</div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // Lightweight streaming bubble: rendered inside the message flow, updated via
 // direct DOM writes to avoid re-rendering ChatWindow on every streaming token.
 // Styled as a proper assistant message bubble with AI avatar, border, and
@@ -84,7 +188,7 @@ export default function ChatWindow() {
     messages, currentSessionId, streamingBySession,
     toolCallsByMessage, arenaResults, arenaAggregate, arenaError,
     proposedHabits, activeHints, loadMessages,
-    resolveHabit, dismissHint, arenaVote,
+    resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
   } = useStore((s) => ({
     messages: s.messages,
     currentSessionId: s.currentSessionId,
@@ -99,6 +203,8 @@ export default function ChatWindow() {
     resolveHabit: s.resolveHabit,
     dismissHint: s.dismissHint,
     arenaVote: s.arenaVote,
+    arenaVoted: s.arenaVoted,
+    arenaVoteWinnerId: s.arenaVoteWinnerId,
   }), shallow)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -238,7 +344,7 @@ export default function ChatWindow() {
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">
-          {messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0 && (
+          {messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0 && arenaAggregate === null && (
             <EmptyState />
           )}
 
@@ -282,47 +388,15 @@ export default function ChatWindow() {
             </div>
           ))}
           {arenaResults.length > 0 && (
-            <div className="space-y-3">
-              {arenaAggregate && (
-                <div className="border-2 rounded-xl overflow-hidden" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
-                  <div className="px-3 py-2 border-b flex items-center gap-2 text-sm font-medium" style={{ borderColor: 'var(--warning)' }}>
-                    <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>MoA</span>
-                    <span style={{ color: 'var(--text-primary)' }}>{t('chat.arena.aggregate')}</span>
-                    <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>{arenaAggregate.model_name}</span>
-                  </div>
-                  <div className="p-3 text-sm leading-relaxed max-h-96 overflow-y-auto">
-                    <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(arenaAggregate.content) }} />
-                  </div>
-                </div>
-              )}
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
-              {arenaResults.map((r) => {
-                const others = arenaResults.filter(x => x.model_id !== r.model_id)
-                const voted = arenaResults.length === 1 // collapsed to winner after voting
-                return (
-                  <div key={r.model_id} className="border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-                    <div className="px-3 py-2 border-b flex items-center justify-between text-sm font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-                      <span style={{ color: 'var(--text-primary)' }}>{r.model_name}</span>
-                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.provider_name}</span>
-                    </div>
-                    <div className="p-3 text-sm leading-relaxed max-h-60 overflow-y-auto">
-                      <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }} />
-                    </div>
-                    {!voted && (
-                      <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                        <button onClick={() => arenaVote({ model_id: r.model_id, model_name: r.model_name }, others.map(x => ({ model_id: x.model_id, model_name: x.model_name })))}
-                          className="text-xs px-3 py-1 rounded-lg border bg-white hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
-                          ⭐ {t('chat.arena.vote')}
-                        </button>
-                      </div>
-                    )}
-                    {voted && (
-                      <div className="px-3 py-2 border-t text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>✅ {t('chat.arena.voted')}</div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <ArenaResults
+              results={arenaResults}
+              aggregate={arenaAggregate}
+              voted={arenaVoted}
+              winnerId={arenaVoteWinnerId}
+              onVote={arenaVote}
+              t={t}
+              renderMarkdown={renderMarkdown}
+            />
           )}
 
           <div ref={bottomRef} />

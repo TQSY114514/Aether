@@ -1,4 +1,4 @@
-const { clearAllowRules } = require('./chat.handler')
+const { clearAllowRules, cleanupSessionControllers } = require('./chat.handler')
 const log = require('../logger')
 
 function registerSessionHandlers(ipcMain, db) {
@@ -13,6 +13,7 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:delete', (_e, id) => {
     try { db.deleteSession(id) } catch (e) { log.warn('session:delete db error:', e) }
     try { clearAllowRules(id) } catch {}
+    try { cleanupSessionControllers(id) } catch {}
   })
   ipcMain.handle('session:touch', (_e, id) => db.touchSession(id))
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))

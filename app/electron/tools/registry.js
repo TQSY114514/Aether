@@ -25,10 +25,11 @@
 
 const fs = require('fs')
 const path = require('path')
-const { exec } = require('child_process')
+const { runCommand, runCommandSync } = require('./exec')
 const { glob } = require('glob')
 const { checkWritePath, checkCommand } = require('./sandbox')
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
+const { checkSSRF, ssrfFetchOptions } = require('./ssrf')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 const MAX_GREP_BYTES = 32 * 1024
@@ -158,10 +159,14 @@ const TOOLS = [
       const timeout = setTimeout(() => controller.abort(), 15000)
       try {
         const url = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q)
-        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' } })
+        // DNS-based SSRF check: resolve hostname before request
+        await checkSSRFHostname(new URL(url).hostname)
+        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' }, redirect: 'error' })
         if (!res.ok) return `[search failed: HTTP ${res.status}]`
         const html = await res.text()
-        return extractDdgSnippets(html, q)
+        const snippets = extractDdgSnippets(html, q)
+        // Mark as external content to prevent prompt injection
+        return `<!-- EXTERNAL_WEB_SEARCH -->\n${snippets}`
       } catch (e) {
         return `[search error: ${e.message}]`
       } finally {
@@ -183,21 +188,29 @@ const TOOLS = [
     run: async (args) => {
       const url = String(args.url || '')
       if (!url) throw new Error('url is required')
-      // Reject non-http(s) schemes so a prompt-injected model can't read local
-      // files via file:// (web_fetch is 'safe' and would otherwise bypass the
-      // dangerous-tool permission gate).
+      // SSRF protection: reject non-http(s), localhost, and cloud metadata
+      const ssrf = checkSSRF(url)
+      if (!ssrf.ok) return `[blocked: ${ssrf.reason}]`
       let parsed
       try { parsed = new URL(url) } catch { return '[invalid url]' }
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '[blocked: non-http(s) url]'
+      // DNS-based SSRF check: resolve hostname to IP before request to catch
+      // private IP targets. This also guards against DNS rebinding in the
+      // initial request (not just redirects).
+      try { await checkSSRFHostname(parsed.hostname) } catch (e) {
+        return `[blocked: ${e.message}]`
+      }
+      // Block redirects to prevent SSRF via HTTP redirect to internal URL
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 20000)
       try {
-        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' } })
+        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' }, redirect: 'error' })
         if (!res.ok) return `[fetch failed: HTTP ${res.status}]`
         const ct = res.headers.get('content-type') || ''
         const raw = await res.text()
         const text = ct.includes('html') ? raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[^>]*>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<style[^>]*>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
-        return text.slice(0, 16384) + (text.length > 16384 ? '\n[truncated]' : '')
+        const marked = `<!-- EXTERNAL_WEB_FETCH -->\n${text.slice(0, 16384)}${text.length > 16384 ? '\n[truncated]' : ''}`
+        return marked
       } catch (e) {
         return `[fetch error: ${e.message}]`
       } finally {
@@ -217,7 +230,7 @@ const TOOLS = [
       },
       required: ['path', 'content'],
     },
-    run: (args, ctx) => {
+    run: async (args, ctx) => {
       const p = String(args.path || '')
       const content = String(args.content ?? '')
       if (!p) throw new Error('path is required')
@@ -227,8 +240,8 @@ const TOOLS = [
         const guard = checkWritePath(p, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
-      fs.mkdirSync(path.dirname(p), { recursive: true })
-      fs.writeFileSync(p, content, 'utf-8')
+      await fs.promises.mkdir(path.dirname(p), { recursive: true })
+      await fs.promises.writeFile(p, content, 'utf-8')
       return `wrote ${content.length} chars to ${p}`
     },
   },
@@ -245,7 +258,7 @@ const TOOLS = [
       },
       required: ['path', 'old_string', 'new_string'],
     },
-    run: (args, ctx) => {
+    run: async (args, ctx) => {
       const p = String(args.path || '')
       const oldS = String(args.old_string ?? '')
       const newS = String(args.new_string ?? '')
@@ -255,12 +268,12 @@ const TOOLS = [
         const guard = checkWritePath(p, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
-      const orig = fs.readFileSync(p, 'utf-8')
+      const orig = await fs.promises.readFile(p, 'utf-8')
       const idx = orig.indexOf(oldS)
       if (idx === -1) throw new Error('old_string not found')
       if (orig.indexOf(oldS, idx + 1) !== -1) throw new Error('old_string is not unique — make it more specific')
       const updated = orig.slice(0, idx) + newS + orig.slice(idx + oldS.length)
-      fs.writeFileSync(p, updated, 'utf-8')
+      await fs.promises.writeFile(p, updated, 'utf-8')
       return `edited ${p}: replaced ${oldS.length} chars with ${newS.length} chars`
     },
   },
@@ -293,11 +306,18 @@ const TOOLS = [
       const timeoutMs = Number(args.timeout) || 30000
       const extraEnv = args.env && typeof args.env === 'object' ? args.env : undefined
 
+      // Whitelist env keys the model is allowed to set — prevents PATH/PYTHONPATH
+      // manipulation via crafted tool arguments.
+      const SAFE_ENV_KEYS = new Set(['LANG', 'LC_ALL', 'NODE_ENV', 'TERM', 'DEBUG', 'CI', 'VERBOSE'])
+      const filteredEnv = extraEnv
+        ? Object.fromEntries(Object.entries(extraEnv).filter(([k]) => SAFE_ENV_KEYS.has(k)))
+        : undefined
+
       // If the caller provides onStream, use the streaming path for real-time
       // output (like Claude Code's live command output).
       if (ctx?.onStream) {
         return streamCommand(cmd, {
-          cwd, timeoutMs, env: extraEnv, sessionId: ctx?.sessionId,
+          cwd, timeoutMs, env: filteredEnv, sessionId: ctx?.sessionId,
         }).then((result) => {
           const text = formatStreamResult(result)
           ctx.onStream({ type: 'done', text, exitCode: result.exitCode })
@@ -305,21 +325,30 @@ const TOOLS = [
         })
       }
 
-      // Standard non-streaming path.
-      return new Promise((resolve, reject) => {
-        const mergedEnv = extraEnv ? { ...process.env, ...extraEnv } : process.env
-        exec(cmd, { cwd, env: mergedEnv, maxBuffer: 32 * 1024, timeout: Math.min(timeoutMs, 120000), windowsHide: true }, (err, stdout, stderr) => {
-          const out = (stdout || '').trim()
-          const errOut = (stderr || '').trim()
-          const parts = []
-          if (out) parts.push('[stdout]\n' + out.slice(0, 4096))
-          if (errOut) parts.push('[stderr]\n' + errOut.slice(0, 4096))
-          if (err && !out && !errOut) return reject(new Error(err.message))
-          const exitCode = err && err.code ? err.code : 0
-          const result = parts.join('\n\n') || '(no output)'
-          if (exitCode !== 0) resolve(`[exit code: ${exitCode}]\n${result}`)
-          else resolve(result)
-        })
+      // Standard non-streaming path — use spawn() for safety.
+      // For Windows, git commands and simple commands don't need a shell.
+      // For commands that need shell features (pipes, redirects, &&), we
+      // detect them and fall back to shell execution.
+      const needsShell = /[|&;`$(){}!\\]/.test(cmd)
+      return (needsShell
+        ? runCommand('cmd.exe', ['/c', cmd], {
+            cwd, env: filteredEnv, timeout: timeoutMs,
+            maxBuffer: 32 * 1024, shell: true,
+          })
+        : runCommand(cmd, [], {
+            cwd, env: filteredEnv, timeout: timeoutMs,
+            maxBuffer: 32 * 1024,
+          })
+      ).then(({ stdout, stderr, exitCode, timedOut }) => {
+        const out = stdout?.trim() || ''
+        const errOut = stderr?.trim() || ''
+        const parts = []
+        if (out) parts.push('[stdout]\n' + out.slice(0, 4096))
+        if (errOut) parts.push('[stderr]\n' + errOut.slice(0, 4096))
+        const result = parts.join('\n\n') || '(no output)'
+        if (timedOut) return `[timed out] ${result}`
+        if (exitCode !== 0) return `[exit code: ${exitCode}]\n${result}`
+        return result
       })
     },
   },
@@ -452,11 +481,11 @@ const TOOLS = [
     },
     run: (args) => {
       const cwd = String(args.cwd || '')
-      return new Promise((resolve, reject) => {
-        exec('git status --short', { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr || err.message))
-          resolve(stdout || '(clean)')
-        })
+      return runCommand('git', ['status', '--short'], {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000,
+      }).then(({ stdout, stderr, exitCode }) => {
+        if (exitCode !== 0) throw new Error(stderr || `exit code ${exitCode}`)
+        return stdout?.trim() || '(clean)'
       })
     },
   },
@@ -474,13 +503,10 @@ const TOOLS = [
     },
     run: (args) => {
       const cwd = String(args.cwd || '')
-      const flag = args.staged ? ' --cached' : ''
-      return new Promise((resolve, reject) => {
-        exec('git diff' + flag, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr || err.message))
-          resolve((stdout || '(no changes)').slice(0, 16384))
-        })
-      })
+      const flag = args.staged ? ['--cached'] : []
+      return runCommand('git', ['diff', ...flag], {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000,
+      }).then(({ stdout }) => (stdout || '(no changes)').slice(0, 16384))
     },
   },
   {
@@ -500,12 +526,9 @@ const TOOLS = [
       const cwd = String(args.cwd || '')
       const count = Math.min(Number(args.count) || 10, 50)
       const fmt = args.format === 'detailed' ? 'full' : args.format === 'short' ? 'short' : 'oneline'
-      return new Promise((resolve, reject) => {
-        exec(`git log --${fmt} -n ${count} --no-decorate`, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr || err.message))
-          resolve(stdout || '(no commits)')
-        })
-      })
+      return runCommand('git', ['log', `--${fmt}`, '-n', String(count), '--no-decorate'], {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000,
+      }).then(({ stdout }) => stdout || '(no commits)')
     },
   },
   {
@@ -523,7 +546,7 @@ const TOOLS = [
       },
       required: ['cwd'],
     },
-    run: (args, ctx) => {
+    run: async (args, ctx) => {
       const cwd = String(args.cwd || '')
       const msg = String(args.message || '').trim()
       if (!msg) throw new Error('commit message is required — read the diff first and compose one')
@@ -531,18 +554,25 @@ const TOOLS = [
         const guard = checkWritePath(cwd, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
-      const allFlag = args.all !== false ? ' -A' : ''
-      return new Promise((resolve, reject) => {
-        exec(`git add${allFlag} && git commit -m ${JSON.stringify(msg)}`, { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000, windowsHide: true }, (err, stdout, stderr) => {
-          if (err) {
-            const out = (stdout || '') + (stderr || '')
-            // Detect "nothing to commit" as a non-error.
-            if (/nothing (to commit|added)/i.test(out)) return resolve('nothing to commit (working tree clean)')
-            return reject(new Error(stderr || err.message))
-          }
-          resolve(stdout || stderr || 'committed')
-        })
+      // Use spawn with separate git add + git commit for safety (no shell string).
+      const addArgs = args.all !== false ? ['add', '-A'] : ['add', '.']
+      const addResult = await runCommand('git', addArgs, {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000,
       })
+      if (addResult.exitCode !== 0) {
+        const out = addResult.stdout + addResult.stderr
+        if (/nothing (to commit|added)/i.test(out)) return 'nothing to commit (working tree clean)'
+        throw new Error(addResult.stderr || `git add failed (exit ${addResult.exitCode})`)
+      }
+      const commitResult = await runCommand('git', ['commit', '-m', msg], {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000,
+      })
+      if (commitResult.exitCode !== 0) {
+        const out = commitResult.stdout + commitResult.stderr
+        if (/nothing (to commit|added)/i.test(out)) return 'nothing to commit (working tree clean)'
+        throw new Error(commitResult.stderr || `git commit failed (exit ${commitResult.exitCode})`)
+      }
+      return commitResult.stdout?.trim() || commitResult.stderr?.trim() || 'committed'
     },
   },
   {
@@ -745,7 +775,7 @@ const TOOLS = [
       },
       required: ['path', 'patch'],
     },
-    run: (args, ctx) => {
+    run: async (args, ctx) => {
       const p = String(args.path || '')
       const patchText = String(args.patch || '')
       if (!p) throw new Error('path is required')
@@ -754,8 +784,8 @@ const TOOLS = [
         const guard = checkWritePath(p, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
-      if (!fs.existsSync(p)) throw new Error(`file not found: ${p}`)
-      const original = fs.readFileSync(p, 'utf-8')
+      if (!await fs.promises.access(p).then(() => true).catch(() => false)) throw new Error(`file not found: ${p}`)
+      const original = await fs.promises.readFile(p, 'utf-8')
       const lines = original.split('\n')
       const hunks = parseUnifiedDiff(patchText, lines.length)
       if (!hunks.length) return 'patch had no valid hunks — file unchanged'
@@ -763,7 +793,7 @@ const TOOLS = [
       if (result.conflicts.length > 0) {
         return `patch conflicts detected:\n${result.conflicts.map(c => `  - ${c}`).join('\n')}\nFile NOT modified. Retry with a corrected patch.`
       }
-      fs.writeFileSync(p, result.content, 'utf-8')
+      await fs.promises.writeFile(p, result.content, 'utf-8')
       return `patch applied: ${result.applied} hunk(s), ${result.content.length} chars written to ${p}`
     },
   },

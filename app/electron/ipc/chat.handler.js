@@ -19,13 +19,58 @@ const checkpoints = require('../llm/checkpoints')
 // scope (so it can be unit-tested) but needs DB access to persist the title.
 let dbHandle = null
 
-// Placeholder titles (in any language) that indicate a session hasn't been
-// named yet. When auto-title is on and the session has one of these, we
-// generate a summary title after the first response.
-const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
+// Placeholder titles that indicate a session hasn't been named yet.
+// Includes common phrases across all 15 locale files so auto-title
+// doesn't churn for non-Chinese/English users.
+const PLACEHOLDER_TITLES = new Set([
+  // Chinese
+  '新会话', '新对话', '新建会话', '新建对话',
+  // English
+  'New Chat', 'New Conversation', 'New Message',
+  // Japanese
+  '新しいチャット', '新しい会話',
+  // Korean
+  '새 채팅', '새 대화',
+  // French
+  'Nouveau chat', 'Nouvelle conversation',
+  // German
+  'Neuer Chat', 'Neues Gespräch',
+  // Spanish
+  'Nuevo chat', 'Nueva conversación',
+  // Portuguese
+  'Nova conversa', 'Novo chat',
+  // Russian
+  'Новый чат',
+  // Italian
+  'Nuova chat',
+  // Dutch
+  'Nieuwe chat',
+  // Turkish
+  'Yeni Sohbet',
+  // Arabic
+  'محادثة جديدة',
+  // Polish
+  'Nowy czat',
+])
 
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
+
+// Per-session message tracking for abortControllers cleanup on session delete.
+let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
+function registerSessionMessages(sessionId, messageIds) {
+  sessionMessagesMap.set(sessionId, new Set(messageIds))
+}
+function cleanupSessionControllers(sessionId) {
+  const msgIds = sessionMessagesMap.get(sessionId)
+  if (msgIds) {
+    for (const mid of msgIds) {
+      const ctrl = abortControllers.get(mid)
+      if (ctrl) { ctrl.abort(); abortControllers.delete(mid) }
+    }
+    sessionMessagesMap.delete(sessionId)
+  }
+}
 
 // ─── Session-scoped permission allow-rules ─────────────────────────────────
 // When the user picks "allow + remember" in the permission dialog, we store a
@@ -235,6 +280,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
       const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
       const msgId = asstMsg.lastInsertRowid
+      // Track msgId → session mapping for abortControllers cleanup on session delete
+      registerSessionMessages(sessionId, [msgId])
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
       const wc = getWebContents()
@@ -376,6 +423,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         model_used: m.model_name, provider_used: p.id, status: isFallback ? 'fallback' : 'success',
       })
       const msgId = asstMsg.lastInsertRowid
+      registerSessionMessages(sessionId, [msgId])
 
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
@@ -605,4 +653,4 @@ const { estimateTextTokens: estimateTokens } = require('../llm/compaction')
 // Per-call cost uses the shared computeCost from utils/cost.js
 
 
-module.exports = { registerChatHandlers, clearAllowRules }
+module.exports = { registerChatHandlers, clearAllowRules, registerSessionMessages, cleanupSessionControllers }
