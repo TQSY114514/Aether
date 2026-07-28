@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="assets/logo.png" width="160" height="160" alt="AetherAI logo" />
+<p align="center">
+  <img src="./assets/banner.svg" width="512" alt="AetherAI Banner" />
+</p>
 
 # AetherAI
 

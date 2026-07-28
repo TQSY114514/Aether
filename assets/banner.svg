@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="45%">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+  </defs>
+
+  <!-- 背景（浅灰底，白底场景也有层次） -->
+  <rect width="512" height="512" fill="#faf5ff" rx="0"/>
+
+  <!-- 背景光晕 -->
+  <circle cx="256" cy="220" r="200" fill="url(#bgGlow)"/>
+
+  <!-- 单层轨道 -->
+  <circle cx="256" cy="220" r="150" fill="none" stroke="url(#bGrad)" stroke-width="1.2" opacity="0.25"/>
+  <circle cx="256" cy="220" r="150" fill="none" stroke="#a78bfa" stroke-width="0.6" opacity="0.15" stroke-dasharray="3 6"/>
+
+  <!-- 主菱形 -->
+  <polygon points="256,60 380,220 256,380 132,220" fill="none" stroke="url(#bGrad)" stroke-width="3.5"/>
+  <!-- 内层菱形 -->
+  <polygon points="256,100 334,220 256,340 178,220" fill="none" stroke="#a78bfa" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- A 斜线（无横杠） -->
+  <line x1="206" y1="290" x2="256" y2="120" stroke="#c4b5fd" stroke-width="4" stroke-linecap="round"/>
+  <line x1="306" y1="290" x2="256" y2="120" stroke="#c4b5fd" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 中心节点（横杠） -->
+  <circle cx="256" cy="230" r="8" fill="#faf5ff" stroke="#a78bfa" stroke-width="1" opacity="0.95" filter="url(#softGlow)"/>
+
+  <!-- 子节点 -->
+  <circle cx="198" cy="260" r="4.5" fill="#a78bfa" opacity="0.7"/>
+  <circle cx="314" cy="260" r="4.5" fill="#67e8f9" opacity="0.7"/>
+  <line x1="198" y1="260" x2="256" y2="230" stroke="#818cf8" stroke-width="1.5" opacity="0.4"/>
+  <line x1="314" y1="260" x2="256" y2="230" stroke="#818cf8" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- 品牌文字 -->
+  <text x="256" y="440" font-family="'Inter','Segoe UI','Helvetica Neue',sans-serif" font-size="52" font-weight="700" letter-spacing="10" fill="url(#bGrad)" text-anchor="middle" opacity="0.95">AETHER</text>
+  <text x="256" y="476" font-family="'Inter','Segoe UI','Helvetica Neue',sans-serif" font-size="16" font-weight="300" letter-spacing="8" fill="#818cf8" text-anchor="middle" opacity="0.5">LOCAL-FIRST AI WORKBENCH</text>
+</svg>

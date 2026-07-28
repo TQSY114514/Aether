@@ -25,6 +25,11 @@ win:
     - nsis
     - portable
   icon: resources/icon.png
+  darkModeSupport: true
+  artifactName: ${name}-${version}-${os}-${arch}.${ext}
+
+linux:
+  icon: resources
 
 nsis:
   oneClick: false
