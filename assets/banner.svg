@@ -14,10 +14,7 @@
     </filter>
   </defs>
 
-  <!-- 背景（浅灰底，白底场景也有层次） -->
-  <rect width="512" height="512" fill="#faf5ff" rx="0"/>
-
-  <!-- 背景光晕 -->
+  <!-- 背景光晕（半透明，适配浅色/深色背景） -->
   <circle cx="256" cy="220" r="200" fill="url(#bgGlow)"/>
 
   <!-- 单层轨道 -->
@@ -34,7 +31,7 @@
   <line x1="306" y1="290" x2="256" y2="120" stroke="#c4b5fd" stroke-width="4" stroke-linecap="round"/>
 
   <!-- 中心节点（横杠） -->
-  <circle cx="256" cy="230" r="8" fill="#faf5ff" stroke="#a78bfa" stroke-width="1" opacity="0.95" filter="url(#softGlow)"/>
+  <circle cx="256" cy="230" r="8" fill="#ffffff" opacity="0.9" filter="url(#softGlow)"/>
 
   <!-- 子节点 -->
   <circle cx="198" cy="260" r="4.5" fill="#a78bfa" opacity="0.7"/>

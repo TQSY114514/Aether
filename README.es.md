@@ -1,7 +1,7 @@
 <div align="center">
 
 <p align="center">
-  <img src="./assets/banner.svg" width="512" alt="AetherAI Banner" />
+  <img src="./assets/banner.svg" width="420" alt="AetherAI Banner" />
 </p>
 
 # AetherAI
