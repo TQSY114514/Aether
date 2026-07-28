@@ -349,19 +349,6 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
         const fn = tc.function || {}
         const args = safeParseToolCallArgs(fn.arguments)
 
-        // Schema validation: reject arguments that don't match the tool's
-        // declared JSON schema — prevents type confusion and missing fields.
-        if (!entry.error) {
-          const toolSchema = getTool(fn.name)?.parameters
-          if (toolSchema) {
-            const validation = validateToolArgs(args, toolSchema)
-            if (!validation.ok) {
-              entry.error = `invalid arguments: ${validation.errors.slice(0, 3).join('; ')}`
-              entry.failure_kind = 'model_invalid_args'
-            }
-          }
-        }
-
         // Plan-progress meta-tool: record + return a synthetic tool result.
         if (fn.name === 'plan_progress' && planningMode) {
           const handled = planning.handlePlanProgress(plan, args)
@@ -371,6 +358,18 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
         }
         const tool = getTool(fn.name)
         const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null, checkpointId: null }
+
+        // Schema validation: reject arguments that don't match the tool's
+        // declared JSON schema — prevents type confusion and missing fields.
+        const toolSchema = getTool(fn.name)?.parameters
+        if (toolSchema) {
+          const validation = validateToolArgs(args, toolSchema)
+          if (!validation.ok) {
+            entry.error = `invalid arguments: ${validation.errors.slice(0, 3).join('; ')}`
+            entry.failure_kind = 'model_invalid_args'
+          }
+        }
+
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
           entry.failure_kind = 'model_invalid_args'

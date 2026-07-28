@@ -29,7 +29,7 @@ const { runCommand, runCommandSync } = require('./exec')
 const { glob } = require('glob')
 const { checkWritePath, checkCommand } = require('./sandbox')
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
-const { checkSSRF, ssrfFetchOptions } = require('./ssrf')
+const { checkSSRF, checkSSRFHostname, ssrfFetchOptions } = require('./ssrf')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 const MAX_GREP_BYTES = 32 * 1024

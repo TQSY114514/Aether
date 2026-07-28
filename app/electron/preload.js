@@ -144,7 +144,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:thinking-chunk', handler)
       return () => ipcRenderer.removeListener('chat:thinking-chunk', handler)
     },
-    stop: () => ipcRenderer.invoke('chat:stop'),
+    stop: (sessionId) => ipcRenderer.invoke('chat:stop', sessionId),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),

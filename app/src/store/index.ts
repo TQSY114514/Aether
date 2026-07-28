@@ -688,8 +688,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
-    await window.electronAPI.chat.stop()
     const { currentSessionId } = get()
+    if (currentSessionId) await window.electronAPI.chat.stop(currentSessionId)
     await window.electronAPI.arena.stop().catch(() => {})
     // Small delay to let electron's abort handler finish writing accumulated
     // content to the DB. Do NOT delete the buffer before the delay — the

@@ -59,7 +59,9 @@ const abortControllers = new Map()
 // Per-session message tracking for abortControllers cleanup on session delete.
 let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
 function registerSessionMessages(sessionId, messageIds) {
-  sessionMessagesMap.set(sessionId, new Set(messageIds))
+  if (!sessionMessagesMap.has(sessionId)) sessionMessagesMap.set(sessionId, new Set())
+  const set = sessionMessagesMap.get(sessionId)
+  for (const mid of messageIds) set.add(mid)
 }
 function cleanupSessionControllers(sessionId) {
   const msgIds = sessionMessagesMap.get(sessionId)
@@ -285,10 +287,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
       const wc = getWebContents()
+      let finalContent = ''
       try {
         const modelName = (model?.model_name || '').toLowerCase()
       const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test(modelName)
-      const finalContent = await runToolLoop({
+      finalContent = await runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
@@ -529,14 +532,19 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     return { messageId: 0, modelSuggestion }
   })
 
-  ipcMain.handle('chat:stop', () => {
-    // Signal all pending requests to abort. Each request has a catch block that
-    // preserves accumulated content in the DB and sends the 'done' signal to the
-    // renderer. DO NOT clear the map here — the abort handlers in chat:send will
-    // delete their own entry after saving content (lines ~404, ~457, ~502). Clearing
-    // the map here would lose the controller reference and skip content preservation.
-    for (const [id, controller] of abortControllers) {
-      controller.abort()
+  ipcMain.handle('chat:stop', (_e, sessionId) => {
+    // Abort only controllers for the given session. Each request has a catch
+    // block that preserves accumulated content in the DB and sends the 'done'
+    // signal to the renderer. DO NOT clear the map here — the abort handlers in
+    // chat:send will delete their own entry after saving content.
+    if (sessionId) {
+      const msgIds = sessionMessagesMap.get(sessionId)
+      if (msgIds) {
+        for (const mid of msgIds) {
+          const ctrl = abortControllers.get(mid)
+          if (ctrl) { ctrl.abort(); abortControllers.delete(mid) }
+        }
+      }
     }
   })
 

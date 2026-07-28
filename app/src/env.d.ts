@@ -69,7 +69,7 @@ interface Window {
       dismissHabit: (key: string) => Promise<{ ok: boolean }>
       onHabitSuggestion: (callback: (payload: { key: string; imperative: string; reason: string }[]) => void) => () => void
       onContextBudget: (callback: (payload: { text: string }) => void) => () => void
-      stop: () => Promise<void>
+      stop: (sessionId: number) => Promise<void>
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void
