@@ -8,7 +8,7 @@
     "dev:renderer": "vite",
     "dev:electron": "electron .",
     "dev": "concurrently -k \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",
-    "build": "vite build && node build-icons.js && electron-builder",
+    "build": "vite build && node build-icons.js && electron-builder --publish never",
     "build:icon": "node build-icons.js",
     "build:win": "vite build && electron-builder --win --x64",
     "build:ci": "vite build && electron-builder --win nsis portable --x64 --publish always",
