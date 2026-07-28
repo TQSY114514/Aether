@@ -18,6 +18,7 @@
 // → we store both entities and can later answer "who works on Project X?"
 
 const { completeChat } = require('./providerAdapter')
+const knowledgeGraph = require('./knowledgeGraph')
 const log = require('../logger')
 
 const PREFETCH_TOP_K = 5
@@ -73,6 +74,18 @@ function prefetch(db, userMessage) {
   if (!memories || memories.length === 0) return ''
   const qkw = keywords(userMessage)
   if (qkw.size === 0) return ''
+
+  // Phase 3: graph-aware expansion. If graph search finds entities linked to the query,
+  // merge those results with keyword results so related memories surface even without
+  // direct keyword overlap ("Alice works on X" → search "Alice" finds X-related memories).
+  let graphIds = new Set()
+  try {
+    const graphResults = knowledgeGraph.searchGraph(db, userMessage, PREFETCH_TOP_K)
+    if (graphResults.length > 0) {
+      for (const m of graphResults) graphIds.add(m.id)
+    }
+  } catch {}
+
   const scored = memories
     .map(m => {
       const kwScore = score(m.content, qkw)
@@ -89,12 +102,15 @@ function prefetch(db, userMessage) {
         const daysSinceAccess = (Date.now() - lastAccess) / 86400000
         const decayFactor = Math.max(0.1, 1 - daysSinceAccess / 180) // half-life ~180 days
         w = (kwScore + recencyBonus + accessBonus) * decayFactor
+        // Graph expansion bonus: if this memory matched via graph neighbours,
+        // give it a small boost so related context surfaces.
+        if (graphIds.has(m.id) && kwScore === 0) w = 0.3
         // Record access for decay tracking.
         try { db.incrementMemoryAccess(m.id) } catch {}
       }
       return { m, s: w }
     })
-    .filter(x => x.s >= MIN_HITS)
+    .filter(x => x.s >= MIN_HITS * 0.3) // lower threshold for graph hits
     .sort((a, b) => b.s - a.s)
     .slice(0, PREFETCH_TOP_K)
   if (scored.length === 0) return ''
@@ -207,6 +223,8 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
       }
     }
     _memV++ // invalidate prefetch cache
+    // Phase 3: build knowledge graph from recent memories after sync.
+    try { knowledgeGraph.buildGraph(db) } catch {}
   } catch (e) {
     log.warn('sync failed:', e && e.message)
   }

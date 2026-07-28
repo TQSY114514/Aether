@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
+import Tooltip from '@/components/Tooltip'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
@@ -42,6 +43,11 @@ export default function ChatInput() {
     }).catch(() => {})
     return () => { cancelled = true }
   }, [])
+  // Load arena scores on mount so model selector shows ratings.
+  useEffect(() => {
+    const { scores, loadScores } = useStore.getState()
+    if (scores.length === 0) loadScores()
+  }, [])
   const [input, setInput] = useState('')
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
@@ -56,14 +62,15 @@ export default function ChatInput() {
 
   // Batch store selectors with shallow comparison to reduce re-render triggers.
   const {
-    sendMessage, enqueueMessage, removeQueued, stopGeneration,
+    sendMessage, enqueueMessage, removeQueued, stopGeneration, sending,
     streamingBySession, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     providers, allModels, saveSessionConfig, queuedMessages,
-    modelSuggestion, agentMode, setAgentMode, sessionConfigs,
+    modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
   } = useStore((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
+    sending: s.sending,
     streamingBySession: s.streamingBySession,
     currentSessionId: s.currentSessionId, createSession: s.createSession,
     chatMode: s.chatMode, arenaModelIds: s.arenaModelIds,
@@ -72,12 +79,22 @@ export default function ChatInput() {
     allModels: s.allModels, saveSessionConfig: s.saveSessionConfig,
     queuedMessages: s.queuedMessages,
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
-    sessionConfigs: s.sessionConfigs,
+    sessionConfigs: s.sessionConfigs, scores: s.scores,
   }), shallow)
 
+  // ELO score map for model selector display
+  const scoreByModel = useMemo(() => {
+    const map: Record<number, number> = {}
+    for (const sc of scores) { map[sc.model_id] = Math.round(sc.score) }
+    return map
+  }, [scores])
+
   // Per-session streaming check — NOT a global flag, so one session's stream
-  // never blocks another session's input.
+  // never blocks another session's input. Also block when arena is running
+  // (sending flag covers arena because runArena sets sending: true before
+  // the streaming buffer).
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
+  const isArenaRunning = chatMode === 'arena' && sending
 
   // Active model for the current session. When switching chats, useMemo re-derives
   // from sessionConfigs. For the blank chat page (no session yet), falls back to
@@ -157,7 +174,7 @@ export default function ChatInput() {
   const handleSubmit = async () => {
     const content = input.trim()
     if (!content && pending.length === 0 && snippets.length === 0) return
-    if (isStreaming) {
+    if (isStreaming || isArenaRunning) {
       if (content) { enqueueMessage(content); setInput('') }
       return
     }
@@ -370,8 +387,8 @@ export default function ChatInput() {
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
             placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : t('chat.placeholder')}
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
-            disabled={isStreaming} />
-          {isStreaming ? (
+            disabled={isStreaming || isArenaRunning} />
+          {(isStreaming || isArenaRunning) ? (
             <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')}>
               <Square size={14} />
             </button>
@@ -383,14 +400,22 @@ export default function ChatInput() {
           )}
         </div>
 
-        {!isStreaming && (
+        {!isStreaming && !isArenaRunning && (
           <div className="flex items-center gap-2 px-0.5 mt-1.5 flex-wrap">
             <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
             <EffortControl level={effortLevel} onChange={setEffortLevel} />
             <ModelSelector providers={providers} allModels={allModels}
               activeModelId={activeModelId}
               modelSuggestion={modelSuggestion}
-              onSelect={(mid, pid) => currentSessionId && saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })} />
+              scoreByModel={scoreByModel}
+              onSelect={(mid, pid) => {
+                if (currentSessionId) {
+                  saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
+                } else {
+                  // Blank page: set default for new sessions
+                  useStore.getState().setDefaultModel(mid)
+                }
+              }} />
             <div className="flex items-center gap-1.5">
               {slashCommands.slice(0, 3).map((cmd) => (
                 <button key={cmd.id} onClick={() => {
@@ -441,27 +466,29 @@ function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 
 // Agent mode selector (Claude Code / Cline-style): a compact toggle group in
 // the input bar showing the current permission level. Each mode has a distinct
 // color so the user always knows how much freedom the agent has.
-const AGENT_MODES: { value: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; label: string; color: string }[] = [
-  { value: 'off', label: 'Off', color: 'var(--text-muted)' },
-  { value: 'plan', label: 'Plan', color: '#3b82f6' },
-  { value: 'ask', label: 'Ask', color: 'var(--accent)' },
-  { value: 'auto_confirm', label: 'Auto', color: '#f59e0b' },
-  { value: 'auto', label: 'Auto+', color: '#f97316' },
-  { value: 'yolo', label: 'Yolo', color: 'var(--error)' },
+const AGENT_MODES: { value: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; label: string; color: string; tooltip: string }[] = [
+  { value: 'off', label: 'Off', color: 'var(--text-muted)', tooltip: t('agent.off') },
+  { value: 'plan', label: 'Plan', color: '#3b82f6', tooltip: t('agent.plan') },
+  { value: 'ask', label: 'Ask', color: 'var(--accent)', tooltip: t('agent.ask') },
+  { value: 'auto_confirm', label: 'Auto', color: '#f59e0b', tooltip: t('agent.auto_confirm') },
+  { value: 'auto', label: 'Auto+', color: '#f97316', tooltip: t('agent.auto') },
+  { value: 'yolo', label: 'Yolo', color: 'var(--error)', tooltip: t('agent.yolo') },
 ]
 function AgentModeSelector({ mode, onChange }: { mode: string; onChange: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void }) {
   const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[2]
   return (
-    <div className="flex items-center gap-0.5" title={t('agent.tooltip')}>
+    <div className="flex items-center gap-0.5">
       <Shield size={13} className="text-gray-400 shrink-0" />
       {AGENT_MODES.map(m => (
-        <button key={m.value} onClick={() => onChange(m.value)}
-          className="text-[10px] font-medium px-1.5 py-0.5 rounded-md transition-all duration-150"
-          style={m.value === active.value
-            ? { backgroundColor: m.color + '20', color: m.color, boxShadow: `0 0 0 1px ${m.color}40` }
-            : { color: 'var(--text-muted)', opacity: 0.6 }}>
-          {m.label}
-        </button>
+        <Tooltip key={m.value} text={m.tooltip}>
+          <button onClick={() => onChange(m.value)}
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded-md transition-all duration-150"
+            style={m.value === active.value
+              ? { backgroundColor: m.color + '20', color: m.color, boxShadow: `0 0 0 1px ${m.color}40` }
+              : { color: 'var(--text-muted)', opacity: 0.6 }}>
+            {m.label}
+          </button>
+        </Tooltip>
       ))}
     </div>
   )
@@ -493,12 +520,13 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   )
 }
 
-function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion }: {
+function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion, scoreByModel }: {
   providers: { id: number; name: string }[]
   allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]
   activeModelId: number | null
   onSelect: (modelId: number, providerId: number) => void
   modelSuggestion: { suggestedModelId: number | null; reason: string; confidence: number } | null
+  scoreByModel: Record<number, number>
 }) {
   const groups = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
@@ -527,7 +555,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
         {groups.map(g => (
           <optgroup key={g.providerId} label={g.providerName}>
             {g.models.map(m => (
-              <option key={m.id} value={m.id}>{m.display_name || m.model_name}</option>
+              <option key={m.id} value={m.id}>{m.display_name || m.model_name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
             ))}
           </optgroup>
         ))}

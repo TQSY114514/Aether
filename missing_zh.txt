@@ -1,0 +1,7 @@
+﻿error.title
+error.unknown
+error.retry
+chat.drag_drop_hint
+chat.tokens
+chat.tokens_estimate
+status.compacting

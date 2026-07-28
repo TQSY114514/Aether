@@ -21,6 +21,8 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('message:list', (_e, sessionId) => db.getMessages(sessionId))
   ipcMain.handle('message:update', (_e, id, data) => db.updateMessage(id, data))
   ipcMain.handle('message:delete-after', (_e, sessionId, afterId) => db.deleteMessagesAfter(sessionId, afterId))
+  ipcMain.handle('message:delete-arena', (_e, sessionId) => db.deleteArenaAssistantMessages(sessionId))
+  ipcMain.handle('message:add-normal', (_e, msg) => db.addNormalMessage(msg))
 
   ipcMain.handle('session:create-and-select', async (_e, { providerId, modelId, personaId } = {}) => {
     const work = async () => {

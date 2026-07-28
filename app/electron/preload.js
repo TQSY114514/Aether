@@ -65,6 +65,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: (sessionId) => ipcRenderer.invoke('message:list', sessionId),
     update: (id, data) => ipcRenderer.invoke('message:update', id, data),
     deleteAfter: (sessionId, afterId) => ipcRenderer.invoke('message:delete-after', sessionId, afterId),
+    deleteArena: (sessionId) => ipcRenderer.invoke('message:delete-arena', sessionId),
+    addNormal: (msg) => ipcRenderer.invoke('message:add-normal', msg),
   },
   chat: {
     send: (params) => ipcRenderer.invoke('chat:send', params),
@@ -234,5 +236,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   agentCheckpoint: {
     list: (params) => ipcRenderer.invoke('agent-checkpoint:list', params),
     rollback: (params) => ipcRenderer.invoke('agent-checkpoint:rollback', params),
+  },
+  trust: {
+    badge: (params) => ipcRenderer.invoke('trust:badge', params),
   },
 })

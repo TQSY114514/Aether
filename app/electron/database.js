@@ -118,6 +118,12 @@ async function initDatabase() {
   // Conflict tracking: when a similar fact already exists, link them.
   try { db.run("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
 
+  // Knowledge graph: entity-relationship layer on top of flat memory.
+  db.run('CREATE TABLE IF NOT EXISTS kg_nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL UNIQUE, type TEXT DEFAULT "entity", created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
+  db.run('CREATE TABLE IF NOT EXISTS kg_edges (id INTEGER PRIMARY KEY AUTOINCREMENT, "from" TEXT NOT NULL, "to" TEXT NOT NULL, relation TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 0.8, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges("from")') } catch {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges("to")') } catch {}
+
   // Skill usage tracking: how often each skill is invoked.
   db.run(`CREATE TABLE IF NOT EXISTS skill_usage (
     name TEXT PRIMARY KEY,
@@ -230,6 +236,9 @@ async function initDatabase() {
   addCol('message', 'arena_model', 'TEXT')
   addCol('user_habit', 'proposed', "INTEGER NOT NULL DEFAULT 0")
   addCol('agent_checkpoint', 'rolled_back_at', 'DATETIME')
+  // Phase 4: trust engine — adaptive permission based on historical behaviour.
+  try { db.run("ALTER TABLE session ADD COLUMN trust_score INTEGER DEFAULT 50") } catch {}
+  try { db.run("ALTER TABLE session ADD COLUMN last_update DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
 
   // Seed defaults
   const existingKeys = (db.exec('SELECT key FROM settings')[0]?.values || []).map(r => r[0])
@@ -788,6 +797,13 @@ function deleteMessagesAfter(sessionId, afterId) {
   saveDatabase()
 }
 
+// Delete all assistant messages tagged with arena_model in a session.
+// Used after arena voting to clean up arena responses and convert to normal chat.
+function deleteArenaAssistantMessages(sessionId) {
+  db.run("DELETE FROM message WHERE session_id = ? AND arena_model IS NOT NULL AND arena_model != ''", [sessionId])
+  saveDatabase()
+}
+
 // ===== MCP server CRUD =====
 // Each server: { id, name, command, args (JSON array string), env (JSON object string), enabled }.
 function getMcpServers() {
@@ -826,6 +842,12 @@ module.exports = {
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
   deleteAssistantAfterLastUser,
   deleteMessagesAfter,
+  deleteArenaAssistantMessages,
+  addNormalMessage: function({ session_id, role, content, model_used }) {
+    db.run("INSERT INTO message (session_id, role, content, model_used, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+      [session_id, role, content, model_used || null])
+    saveDatabase()
+  },
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
   // agent audit log
   addAuditLog, getAuditLog,

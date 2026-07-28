@@ -408,7 +408,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       } catch (err) {
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
-        db.updateMessage(msgId, { content: '', status: 'aborted', error_message: errMsg })
+        // Preserve accumulated content on abort (tool-loop path)
+        db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted', error_message: errMsg })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         return { messageId: msgId, modelSuggestion }
       }
@@ -504,7 +505,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         if (err.status === 429) providerHealth.setCooldown(p.id)
         providerHealth.recordError(p.id, err.message)
         if (err.name === 'AbortError') {
-          db.updateMessage(msgId, { content: '', status: 'aborted', error_message: '已中止' })
+          // Preserve accumulated content so the user sees what was produced before stop.
+          // Update the message with whatever fullContent was accumulated.
+          db.updateMessage(msgId, { content: fullContent, status: 'aborted', error_message: '已中止' })
           getWebContents()?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
           return { messageId: msgId }
         }
@@ -527,10 +530,14 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   })
 
   ipcMain.handle('chat:stop', () => {
+    // Signal all pending requests to abort. Each request has a catch block that
+    // preserves accumulated content in the DB and sends the 'done' signal to the
+    // renderer. DO NOT clear the map here — the abort handlers in chat:send will
+    // delete their own entry after saving content (lines ~404, ~457, ~502). Clearing
+    // the map here would lose the controller reference and skip content preservation.
     for (const [id, controller] of abortControllers) {
       controller.abort()
     }
-    abortControllers.clear()
   })
 
   // Habit-confirmation flow: the renderer asks us to confirm (promote now) or
@@ -606,6 +613,17 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     return db.listAgentCheckpoints(sessionId, messageId)
   })
   ipcMain.handle('agent-checkpoint:rollback', (_e, { id }) => checkpoints.rollbackCheckpoint(id))
+
+  // Trust badge: renderer queries trust score for current session
+  ipcMain.handle('trust:badge', (_e, { sessionId }) => {
+    try {
+      if (!sessionId) return null
+      const trustEngine = require('../llm/trustEngine')
+      return trustEngine.getTrustBadge(db, sessionId)
+    } catch {
+      return null
+    }
+  })
 }
 
 // Generate a concise, summarized title for a session's first exchange.

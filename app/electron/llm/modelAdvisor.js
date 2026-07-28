@@ -111,25 +111,49 @@ class ModelRouter {
 
   /**
    * Main entry: pick the best model for a turn.
-   * @param {{ allModels: array, userMessage: string, useTools: boolean }} ctx
+   * @param {{ allModels: array, userMessage: string, useTools: boolean, routingContext?: { priority?: 'quality'|'speed'|'cost' } }} ctx
    * @returns {object|null}  winning model object, or null
    */
-  route({ allModels, userMessage, useTools }) {
+  route({ allModels, userMessage, useTools, routingContext = {} }) {
     if (!this.autoMode || !allModels || !allModels.length) return null
 
     try {
       const task = classifyTask(userMessage)
+      const priority = routingContext.priority || 'quality'
 
-      // Score every available model for the primary task
-      const scored = allModels
-        .map(m => ({ model: m, score: scoreModel(m, task.primary) }))
+      // Phase 5: Score every available model with priority-aware adjustments.
+      let scored = allModels
+        .map(m => {
+          const baseScore = scoreModel(m, task.primary)
+          const family = detectFamily(m.model_name || m.id || '')
+          let finalScore = baseScore
+
+          // When tools are on, prefer a reasoning-capable family if one scores well
+          if (useTools && baseScore > 0) {
+            if (REASONING_FAMILIES.has(family)) finalScore *= 1.1
+          }
+
+          // Priority-aware adjustments (speed/cost)
+          if (priority === 'speed') {
+            const ctxWindow = m.context_window || 128000
+            const speedFactor = Math.max(0.3, 1 - (ctxWindow / 200000))
+            finalScore = baseScore * speedFactor
+            if (REASONING_FAMILIES.has(family)) finalScore *= 1.05
+          } else if (priority === 'cost') {
+            const pricePerK = m.input_price_per_1k || 0.003
+            const costFactor = Math.max(0.4, 0.01 / (pricePerK + 0.001))
+            finalScore = baseScore * costFactor
+          }
+
+          return { model: m, score: finalScore, baseScore }
+        })
         .filter(s => s.score > 0)
         .sort((a, b) => b.score - a.score)
 
       if (!scored.length) return null
 
-      // When tools are on, prefer a reasoning-capable family if one scores well
-      if (useTools) {
+      // When tools are on with quality priority, prefer a reasoning-capable family
+      if (useTools && priority === 'quality') {
         const pick = scored.find(s =>
           REASONING_FAMILIES.has(detectFamily(s.model.model_name || s.model.id || ''))
         )

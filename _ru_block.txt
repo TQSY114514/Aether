@@ -1,0 +1,126 @@
+## 🎯 Чем AetherAI отличается
+
+AetherAI объединяет несколько возможностей, которые обычно разбросаны по нескольким инструментам, в одном локальном настольном приложении:
+
+| Возможность | Описание | Статус |
+|---|---|:---:|
+| **Мульти-провайдер чат** | Переключайтесь между OpenAI, Claude, DeepSeek и любым OpenAI-совместимым эндпоинтом прямо во время разговора. | `Stable` |
+| **Агент инструментального цикла** | 16 встроенных инструментов с циклом Plan-Act-Observe, sandboxing, лестницей разрешений. | `Beta` |
+| **Мульти-модель арена** | Отправьте один промпт нескольким моделям, проголосуйте за лучший, отслеживайте ELO рейтинги. | `Beta` |
+| **Skills и расширяемость** | Файлы `SKILL.md` drop-in, MCP серверы, 10-точечная система hooks. | `Experimental` |
+| **Структурированная память** | Агент запоминает предпочтения и прошлые решения между сессиями. | `Beta` |
+| **Иерархическое планирование** | Сложные запросы автоматически разбиваются на параллельные подзадачи. | `Experimental` |
+| **Context Compaction** | Длинные разговоры автоматически суммируются без потери пар tool-calls. | `Beta` |
+| **Local-First Privacy** | Разговоры, ключи, персонажи в локальном SQLite. Ничего не покидает вашу машину. | `Stable` |
+| **15 языков UI** | Включая классический китайский (文言) и арабский RTL. | `Beta` |
+| **MIT Licensed** | Полностью open source. | `Stable` |
+
+---
+
+### 🧠 Memory & Learning
+
+- `Beta` **Auto long-term memory** — релевантные воспоминания инжектируются перед каждым ходом; ключевые факты извлекаются и сохраняются автоматически. Переключается в Настройки - Агент.
+- `Experimental` **Habit learner** — обнаруживает повторяющиеся предпочтения (напр. «всегда использовать Claude») и предлагает автоматически применяемые skills.
+- `Beta` **Audit log** — трассировка выполнения агента по ходам для отладки.
+
+### 🏟️ Arena
+
+- `Beta` **Мульти-модель арена** — один промпт, несколько моделей отвечают **параллельно**; голосуйте за лучший и **ELO рейтинг** обновляется автоматически. Модели оцениваются **по намерению** (coding / math / translation / summary / general). *Ни одно другое локальное настольное чат-приложение не поставляется со встроенной мульти-модельной ареной с ELO.*
+
+### 🛠️ Skills и расширяемость
+
+| Компонент | Формат | Статус | Детали |
+|---|---|:---:|---|
+| **Skills** | `SKILL.md` | `Experimental` | Drop-in в `<workspace>/.claude/skills/`; поставляется с `release-checklist` и `git-commit` |
+| **Slash Commands** | `CMD.md` | `Stable` | 6 встроенных: `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
+| **Hooks** | Script | `Experimental` | 10 точек жизненного цикла: PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
+| **MCP** | stdio JSON-RPC 2.0 | `Beta` | Внешние MCP серверы автоматически объединяются со встроенными инструментами |
+
+### ⚙️ Customization
+
+| Настройка | Статус | Описание |
+|---|:---:|---|
+| **Расширенные настройки модели** | `Stable` | Max tokens, temperature, top_p, пользовательский system prefix, per-language auto-titles, thinking effort |
+| **Пользовательский фон** | `Stable` | Загрузите изображение с настройками opacity / blur |
+| **Personas** | `Stable` | Пресеты system prompt, переключаемые для каждой сессии |
+| **Темы** | `Stable` | Light / Dark / Blue / Glass / Retro |
+| **15 языков UI** | `Beta` | English, Chinese (简/繁/文言), Japanese, Spanish, French, German, Portuguese, Russian, Ukrainian, Arabic (RTL), Hindi, Korean |
+| **Auto-update** | `Beta` | NSIS installer проверяет при запуске; portable тоже (manual install) |
+| **Usage tracking** | `Beta` | Лог по каждому API-вызову с tokens, cost, latency, cache hit rate |
+
+### 🔒 Privacy
+
+> **Все данные остаются локальными.** AetherAI не собирает и не загружает ничего о вас. Ваши API-ключи, разговоры и personas живут в локальной базе данных SQLite. Единственные исходящие сетевые запросы идут к настраиваемым вами LLM провайдерам.
+
+---
+
+## 📸 Screenshots
+
+> Capture screenshots under `assets/screenshots/` and update the paths below.
+
+| Flow | Preview |
+|---|:---:|
+| Chat streaming | `assets/screenshots/chat-streaming.gif` — _TODO_ |
+| Agent tool execution | `assets/screenshots/agent-tool-execution.gif` — _TODO_ |
+| Arena voting | `assets/screenshots/arena-voting.gif` — _TODO_ |
+| Provider settings | `assets/screenshots/provider-settings.png` — _TODO_ |
+
+---
+
+## 📦 Download
+
+### Windows — Prebuilt (Recommended)
+
+Скачайте последний [Release](https://github.com/TQSY114514/AetherAI/releases):
+
+| Build | Описание |
+|---|---|
+| **`AetherAI-Setup-x.y.z.exe`** | NSIS installer. Per-user (без admin), auto-updates в приложении. **Рекомендуется.** |
+| **`AetherAI-x.y.z.exe`** | Portable single-exe. Без install, без auto-update; просто запустите. |
+
+> Installer показывает предупреждение SmartScreen "unknown publisher" при первом запуске — ожидаемо для non-signed solo app. Все данные остаются локальными.
+
+---
+
+### Enable Ask mode
+
+1. Откройте **Settings - Agent & Safety**.
+2. Установите режим разрешений агента на **Ask**.
+3. Убедитесь, что workspace root — это папка, где агент должен читать/записывать.
+4. Держите **Yolo** disabled, если не хотите неограниченный доступ.
+
+### Run your first agent task
+
+1. Откройте новый чат.
+2. Задайте вопрос: `List the files in this project and summarize what the app does.`
+3. Просмотрите каждый предлагаемый tool call. Одобрите безопасные чтения; отклоните неожиданное.
+4. Проверьте live reasoning trace и окончательный ответ.
+
+---
+
+## 🔑 Tech Stack
+
+| Layer | Технология |
+|---|---|
+| Desktop | Electron 31 |
+| Frontend | React 18.3 + TypeScript 5.5 |
+| State | Zustand 4.5 |
+| Build | Vite 5.4 + electron-builder |
+| Database | sql.js (SQLite in-memory, persisted to disk) |
+| LLM | OpenAI-compatible + Anthropic Messages API |
+| UI | Tailwind CSS 3.4, lucide-react, highlight.js |
+| MCP | Custom stdio JSON-RPC 2.0 client |
+
+---
+
+## 🤝 Contributing
+
+All contributions are welcome! Whether it's a bug fix, feature request, translation improvement, or documentation update — please open an issue or submit a PR.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/my-feature`)
+3. Commit your changes (`git commit -am 'Add feature'`)
+4. Push to the branch (`git push origin feat/my-feature`)
+5. Open a Pull Request
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.

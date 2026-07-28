@@ -55,6 +55,53 @@ const { reasoningFamily } = require('./reasoning')
 const hooks = require('./hooks')
 const checkpoints = require('./checkpoints')
 
+class SemanticLoopDetector {
+  constructor(windowSize = 6, threshold = 0.85, warnThreshold = 2, breakThreshold = 4) {
+    this.windowSize = windowSize
+    this.threshold = threshold
+    this.warnThreshold = warnThreshold
+    this.breakThreshold = breakThreshold
+    this._history = [] // array of { tokens: Set, toolCalls: string }
+  }
+
+  // Compute token-overlap similarity between two rounds based on response text (first 300 chars) + tool call names.
+  static similarity(a, b) {
+    const sa = new Set(String(a || '').split(/\s+/).filter(t => t.length > 1))
+    const sb = new Set(String(b || '').split(/\s+/).filter(t => t.length > 1))
+    if (sa.size === 0 && sb.size === 0) return 1.0
+    let overlap = 0
+    for (const t of sa) if (sb.has(t)) overlap++
+    return (2 * overlap) / (sa.size + sb.size) // F1-style Jaccard
+  }
+
+  // Process a round and return { action: 'normal' | 'warn' | 'break', score, consecutive }.
+  processRound(responseText, toolCallNames) {
+    const sig = responseText.slice(0, 300) + ' ' + toolCallNames.join(',')
+    this._history.push({ sig, toolCalls: toolCallNames })
+    if (this._history.length > this.windowSize) this._history.shift()
+
+    // Compare with previous round.
+    if (this._history.length < 2) return { action: 'normal', score: 0, consecutive: 0 }
+
+    const prev = this._history[this._history.length - 2].sig
+    const score = SemanticLoopDetector.similarity(prev, sig)
+
+    // Count consecutive rounds above threshold.
+    let consecutive = 0
+    for (let i = this._history.length - 1; i >= 1; i--) {
+      const s = SemanticLoopDetector.similarity(this._history[i - 1].sig, this._history[i].sig)
+      if (s >= this.threshold) consecutive++
+      else break
+    }
+
+    if (consecutive >= this.breakThreshold) return { action: 'break', score, consecutive }
+    if (consecutive >= this.warnThreshold) return { action: 'warn', score, consecutive }
+    return { action: 'normal', score, consecutive: 0 }
+  }
+
+  reset() { this._history = [] }
+}
+
 const DEFAULT_MAX_ITERATIONS = 25
 const MAX_TOTAL_CHARS = 200000
 const LOOP_REPEAT_LIMIT = 3
@@ -130,8 +177,15 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Collect all tool calls for the audit log.
   const auditTrail = []
 
-  // Verification stop: after the agent loop finishes, optionally ask the model
-  // to review its own tool-call trace for correctness (Codex-inspired).
+  // Collect evidence for evidence-based verification (Codex-inspired).
+  const verificationEvidence = []
+
+  // Semantic loop detector (OpenClaw-inspired): detects repeated reasoning patterns,
+  // not just identical tool calls.
+  const semanticLoopDetector = new SemanticLoopDetector()
+
+  // Evidence-based verification (Codex-inspired): uses test results and git diffs
+  // as external evidence instead of LLM self-assessment alone.
   // Also triggers an automatic git commit when file changes were made (Aider/
   // Claude Code-inspired): stages and commits with a conventional message so
   // the user has a clean rollback point without manual intervention.
@@ -140,10 +194,35 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     try {
       const toolTrace = auditTrail.map((tc, i) =>
         `${i + 1}. ${tc.name}(${JSON.stringify(tc.args).slice(0, 200)}) → ${tc.error ? 'ERROR: ' + tc.error.slice(0, 100) : 'OK'}`).join('\n')
-      let verifyPrompt = `You just completed a task using tools. Review your tool-call trace below and answer: did you successfully complete ALL requirements? Are there any errors, missed steps, or incomplete results?
+
+      // Build evidence section from collected data.
+      let evidenceSection = ''
+      if (verificationEvidence.length > 0) {
+        const fileTouching = auditTrail.some(tc => ['write_file', 'edit_file', 'apply_patch'].includes(tc.name))
+        if (fileTouching) {
+          // Git diff evidence.
+          for (const ev of verificationEvidence) {
+            if (ev.diff) {
+              evidenceSection += `\nGit diff for ${ev.tool}:\n${ev.diff.slice(0, 2000)}`
+            }
+          }
+        }
+        // Test result evidence.
+        for (const ev of verificationEvidence) {
+          if (ev.exitCode !== undefined) {
+            evidenceSection += `\n${ev.tool} exit code: ${ev.exitCode}`
+          }
+          if (ev.isTestFailure) {
+            evidenceSection += `\nTest failure detected: ${ev.error?.slice(0, 500) || 'unknown'}`
+          }
+        }
+      }
+
+      let verifyPrompt = `You just completed a task using tools. Review the evidence below and answer: did you successfully complete ALL requirements? Are there any errors, missed steps, or incomplete results?
 
 Tool calls:
 ${toolTrace}
+${evidenceSection}
 
 Reply in this format:
 - STATUS: COMPLETE or INCOMPLETE
@@ -154,7 +233,8 @@ Reply in this format:
         verifyPrompt += `
 
 AUTOMATIC COMMIT:
-If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_patch) were used, you should also compose a conventional commit message. After your review, output a line: COMMIT_MSG: <message>` }
+If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_patch) were used, you should also compose a conventional commit message. After your review, output a line: COMMIT_MSG: <message>`
+      }
       const result = await completeChatMessage({
         provider, model,
         messages: [...convo.filter(m => m.role !== 'system'), { role: 'user', content: verifyPrompt }],
@@ -238,13 +318,29 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
     if (msg.tool_calls && msg.tool_calls.length) {
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
 
-      // Per-round loop detection
+      // Per-round loop detection (exact-match — existing)
       const roundSig = msg.tool_calls.map(tc => (tc.function||{}).name + ':' + (tc.function||{}).arguments).join('||')
       if (roundSig === lastSig) { sigRepeat++ } else { lastSig = roundSig; sigRepeat = 1 }
       if (sigRepeat >= LOOP_REPEAT_LIMIT) {
         if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected', planId: plan?.id }) } catch {}
         try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
         return '（检测到工具调用循环，已停止）'
+      }
+
+      // Semantic loop detection (OpenClaw-inspired): detects repeated reasoning patterns,
+      // not just identical tool calls.
+      const toolNames = msg.tool_calls.map(tc => (tc.function||{}).name)
+      const respText = msg.content || ''
+      const semanticResult = semanticLoopDetector.processRound(respText, toolNames)
+      if (semanticResult.action === 'warn') {
+        // Inject strategy change prompt to force the model out of the rut.
+        try {
+          convo.push({ role: 'system', content: `[⚠ Repeated reasoning detected (similarity: ${semanticResult.score.toFixed(2)}). Try a completely different approach — read different files, use a different tool, or summarize what you've learned so far.]` })
+        } catch {}
+      }
+      if (semanticResult.action === 'break') {
+        if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'semantic_loop', planId: plan?.id }) } catch {}
+        return '（检测到语义循环，已停止）'
       }
 
       // Execute the round's tool calls CONCURRENTLY (capped at MAX_CONCURRENT_TOOLS).
@@ -310,6 +406,13 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
           let effectiveMode = agentMode === 'auto_confirm'
             ? (tool.risk === 'safe' ? 'auto' : 'ask')
             : agentMode
+          // Phase 4: trust engine — adaptive permission based on history.
+          if (!entry.error && sessionId && db && effectiveMode === 'ask' && tool.risk === 'dangerous') {
+            try {
+              const trustEngine = require('./trustEngine')
+              effectiveMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
+            } catch {}
+          }
           // Permission gate
           if (!entry.error) {
             if (tool.risk === 'dangerous' && effectiveMode !== 'auto' && effectiveMode !== 'yolo') {
@@ -321,6 +424,17 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
                 if (!allowed) {
                   entry.error = 'denied by user'
                   entry.failure_kind = 'permission_denied'
+                  // Phase 4: record denial → lower trust.
+                  try {
+                    const trustEngine = require('./trustEngine')
+                    trustEngine.adjustTrust(db, sessionId, -10, fn.name)
+                  } catch {}
+                } else {
+                  // User approved → increase trust.
+                  try {
+                    const trustEngine = require('./trustEngine')
+                    trustEngine.adjustTrust(db, sessionId, 5, fn.name)
+                  } catch {}
                 }
               }
             }
@@ -346,6 +460,13 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
               entry.failure_kind = classifyToolError(r.error).kind
               entry.recovery_hint = classifyToolError(r.error).recover
               try { await hooks.runHooks('ToolError', { toolName: fn.name, args, error: r.error, sessionId, messageId: tc.id }) } catch {}
+              // Phase 4: tool error → minor trust penalty.
+              if (tool?.risk === 'dangerous') {
+                try {
+                  const trustEngine = require('./trustEngine')
+                  trustEngine.adjustTrust(db, sessionId, -2, fn.name)
+                } catch {}
+              }
             } else {
               entry.result = r.result
               // Tool lifecycle: afterToolCall can modify the result (OpenClaw pattern).
@@ -407,6 +528,19 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
         try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args }) } catch {}
         // Enrich structured results with a summary line (OpenClaw-inspired).
         try { rawContent = enrichWithSummary(rawContent, (tc.function||{}).name) } catch {}
+        // Collect evidence for verification (Codex-inspired).
+        try {
+          const evidenceEntry = { tool: (tc.function||{}).name, result: rawContent, error: entry.error, diff: entry.diff }
+          if (evidenceEntry.tool === 'run_command' && entry.result !== undefined) {
+            const exitMatch = String(entry.result).match(/exit\s+code:\s*(\d+)/i)
+            if (exitMatch) evidenceEntry.exitCode = parseInt(exitMatch[1], 10)
+          }
+          if (evidenceEntry.diff) verificationEvidence.push(evidenceEntry)
+          else if (evidenceEntry.exitCode !== undefined) verificationEvidence.push(evidenceEntry)
+          else if (evidenceEntry.error && /test\s*(fail|error)|assert/i.test(evidenceEntry.error)) {
+            verificationEvidence.push({ ...evidenceEntry, isTestFailure: true })
+          }
+        } catch {}
         totalChars += rawContent.length
         convo.push({ role: 'tool', tool_call_id: tc.id, content: rawContent })
       }

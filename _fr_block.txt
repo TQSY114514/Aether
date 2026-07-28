@@ -1,0 +1,126 @@
+## 🎯 Ce qui différencie AetherAI
+
+AetherAI combine plusieurs capacités normalement réparties entre plusieurs outils en une seule application de bureau locale :
+
+| Capacité | Description | État |
+|---|---|:---:|
+| **Chat multi-fournisseurs** | Basculez entre OpenAI, Claude, DeepSeek et tout point de terminaison compatible OpenAI en plein conversation. | `Stable` |
+| **Boucle d'outils Agent** | 16 outils intégrés avec boucle Plan-Act-Observe, sandboxing, échelle de permissions. | `Beta` |
+| **Arène multi-modèles** | Envoyez une seule invite à plusieurs modèles, votez pour le meilleur, suivez les classements ELO. | `Beta` |
+| **Compétences et extensibilité** | Fichiers `SKILL.md` en drop-in, serveurs MCP, système de hooks 10 points. | `Experimental` |
+| **Mémoire structurée** | L'agent se rappelle des préférences et décisions passées entre les sessions. | `Beta` |
+| **Planification hiérarchique** | Les demandes complexes se décomposent automatiquement en sous-tâches parallèles. | `Experimental` |
+| **Compaction du contexte** | Les longues conversations se résument automatiquement sans perdre les paires d'appels d'outils. | `Beta` |
+| **Confidentialité locale** | Conversations, clés, personas dans SQLite local. Rien ne quitte votre machine. | `Stable` |
+| **15 langues d'interface** | Y compris le chinois classique (文言) et l'arabe RTL. | `Beta` |
+| **Licence MIT** | Totalement open source. | `Stable` |
+
+---
+
+### 🧠 Mémoire et apprentissage
+
+- `Beta` **Mémoire à long terme automatique** — souvenirs pertinents injectés avant chaque tour ; faits clés extraits et sauvegardés automatiquement. Activable dans Paramètres - Agent.
+- `Experimental` **Apprenant d'habitudes** — détecte les préférences récurrentes (ex. « toujours utiliser Claude ») et propose des compétences auto-appliquées.
+- `Beta` **Journal d'audit** — trace d'exécution agent par tour pour le débogage.
+
+### 🏟️ Arène
+
+- `Beta` **Arène multi-modèles** — une seule invite, plusieurs modèles répondent de façon **concurrente** ; votez pour le meilleur et un **classement ELO** se met à jour automatiquement. Les modèles sont notés **par intention** (codage / math / traduction / résumé / général). *Aucun autre appli de chat desktop local-first n'offre une arène multi-modèles intégrée avec ELO.*
+
+### 🛠️ Compétences et extensibilité
+
+| Composant | Format | État | Détails |
+|---|---|:---:|---|
+| **Compétences** | `SKILL.md` | `Experimental` | Déposez dans `<espace_travail>/.claude/skills/`; livré avec `release-checklist` et `git-commit` |
+| **Commandes slash** | `CMD.md` | `Stable` | 6 intégrées : `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
+| **Hooks** | Script | `Experimental` | 10 points de cycle de vie : PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
+| **MCP** | stdio JSON-RPC 2.0 | `Beta` | Les serveurs MCP externes fusionnent automatiquement avec les outils intégrés |
+
+### ⚙️ Personnalisation
+
+| Paramètre | État | Description |
+|---|:---:|---|
+| **Paramètres avancés des modèles** | `Stable` | Tokens max, température, top_p, préfixe système personnalisé, titres auto par langue, effort de réflexion |
+| **Arrière-plan personnalisé** | `Stable` | Importez une image avec contrôles d'opacité / flou |
+| **Personas** | `Stable` | Préréglages de prompt système, commutables par session |
+| **Thèmes** | `Stable` | Clair / Sombre / Bleu / Verre / Rétro |
+| **15 langues d'interface** | `Beta` | Anglais, chinois (简体/繁體/文言), japonais, espagnol, français, allemand, portugais, russe, ukrainien, arabe (RTL), hindi, coréen |
+| **Mise à jour automatique** | `Beta` | L'installateur NSIS vérifie au lancement ; portable aussi (installation manuelle) |
+| **Suivi d'utilisation** | `Beta` | Journal par appel API avec tokens, coût, latence, taux de hit cache |
+
+### 🔒 Confidentialité
+
+> **Toutes les données restent locales.** AetherAI ne collecte rien et ne téléverse rien vous concernant. Vos clés API, conversations et personas vivent dans une base SQLite locale. Les seules requêtes réseau sortantes vont vers les fournisseurs LLM que vous configurez.
+
+---
+
+## 📸 Captures d'écran
+
+> Capturez des captures d'écran sous `assets/screenshots/` et mettez à jour les chemins ci-dessous.
+
+| Flux | Aperçu |
+|---|:---:|
+| Streaming du chat | `assets/screenshots/chat-streaming.gif` — _TODO_ |
+| Exécution d'outils agent | `assets/screenshots/agent-tool-execution.gif` — _TODO_ |
+| Vote en arène | `assets/screenshots/arena-voting.gif` — _TODO_ |
+| Paramètres fournisseur | `assets/screenshots/provider-settings.png` — _TODO_ |
+
+---
+
+## 📦 Téléchargement
+
+### Windows — Préconstruit (Recommandé)
+
+Téléchargez le dernier [Release](https://github.com/TQSY114514/AetherAI/releases) :
+
+| Build | Description |
+|---|---|
+| **`AetherAI-Setup-x.y.z.exe`** | Installateur NSIS. Par utilisateur (pas besoin d'admin), mise à jour auto dans l'appli. **Recommandé.** |
+| **`AetherAI-x.y.z.exe`** | Portable monofichier. Pas d'installation, pas de mise à jour auto ; il suffit de l'exécuter. |
+
+> L'installateur affiche un avertissement SmartScreen « éditeur inconnu » au premier lancement — attendu pour une app solo non signée. Toutes les données restent locales.
+
+---
+
+### Activer le mode Ask
+
+1. Ouvrez **Paramètres - Agent & Sécurité**.
+2. Définissez le mode de permission agent sur **Ask**.
+3. Confirmez que la racine de l'espace de travail est le dossier où vous voulez que l'agent lise/écrive.
+4. Gardez **Yolo** désactivé sauf si vous voulez un accès sans restrictions.
+
+### Exécuter votre première tâche agent
+
+1. Ouvrez un nouveau chat.
+2. Demandez : `Liste les fichiers de ce projet et résume ce que fait l'appli.`
+3. Revoyez chaque appel d'outil proposé. Approuvez les lectures sûres ; rejetez tout inattendu.
+4. Consultez la trace de raisonnement en direct et la réponse finale.
+
+---
+
+## 🔑 Technologies utilisées
+
+| Couche | Technologie |
+|---|---|
+| Bureau | Electron 31 |
+| Frontend | React 18.3 + TypeScript 5.5 |
+| État | Zustand 4.5 |
+| Build | Vite 5.4 + electron-builder |
+| Base de données | sql.js (SQLite en mémoire, persisté sur disque) |
+| LLM | OpenAI-compatible + Anthropic Messages API |
+| UI | Tailwind CSS 3.4, lucide-react, highlight.js |
+| MCP | Client stdio JSON-RPC 2.0 personnalisé |
+
+---
+
+## 🤝 Contribuer
+
+Toutes les contributions sont les bienvenues ! Qu'il s'agisse d'un correctif de bug, d'une demande de fonctionnalité, d'une amélioration de traduction ou d'une mise à jour de documentation — ouvrez un ticket ou soumettez une PR.
+
+1. Forkez le dépôt
+2. Créez une branche de fonctionnalité (`git checkout -b feat/ma-fonctionnalite`)
+3. Committez vos modifications (`git commit -am 'Ajouter fonctionnalité'`)
+4. Poussez vers la branche (`git push origin feat/ma-fonctionnalite`)
+5. Ouvrez une Pull Request
+
+Voir [CONTRIBUTING.md](./CONTRIBUTING.md) pour des directives détaillées.

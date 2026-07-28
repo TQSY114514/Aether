@@ -22,10 +22,7 @@ interface AppState {
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
   newChat: () => void
-  welcomeDismissed: boolean
-  setWelcomeDismissed: (v: boolean) => void
-
-  // Sessions
+  // Chat mode
   sessions: Session[]
   currentSessionId: number | null
   messages: Message[]
@@ -196,6 +193,13 @@ interface AppState {
   setBackgroundOpacity: (v: number) => Promise<void>
   setBackgroundBlur: (v: number) => Promise<void>
 
+  // Model routing priority (used by modelAdvisor to pick models).
+  modelRoutingPriority: 'quality' | 'speed' | 'cost'
+  setModelRoutingPriority: (v: 'quality' | 'speed' | 'cost') => Promise<void>
+  // Auto-commit after test-gate verification passes.
+  autoCommitOnTestPass: boolean
+  setAutoCommitOnTestPass: (v: boolean) => Promise<void>
+
   // UI
   sidebarOpen: boolean
   toggleSidebar: () => void
@@ -240,9 +244,6 @@ export const useStore = create<AppState>((set, get) => ({
   // Navigation
   currentView: 'chat',
   setCurrentView: (view) => set({ currentView: view }),
-  welcomeDismissed: false,
-  setWelcomeDismissed: (v) => set({ welcomeDismissed: v }),
-
   // Sessions
   sessions: [],
   currentSessionId: null,
@@ -269,6 +270,8 @@ export const useStore = create<AppState>((set, get) => ({
   effortLevel: 'off',
   agentWorkspace: '', // current session's workspace path (or global)
   modelSuggestion: null as { suggestedModelId: number | null; reason: string; confidence: number } | null,
+  modelRoutingPriority: 'quality',
+  autoCommitOnTestPass: false,
 
   loadSessions: async () => {
     const sessions = await window.electronAPI.session.list()
@@ -323,7 +326,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Navigate to the chat view without selecting a session.
   // Session is only created when the user sends their first message.
   // Also dismisses the welcome page so the blank chat view (View 2) shows.
-  newChat: () => set({ currentView: 'chat', currentSessionId: null, messages: [], arenaResults: [], welcomeDismissed: true }),
+  newChat: () => set({ currentView: 'chat', currentSessionId: null, messages: [], arenaResults: [] }),
   selectSession: async (id) => {
     // Push to the navigation history unless we got here via goBack/goForward
     // (those move the pointer, they don't push a new entry).
@@ -514,9 +517,10 @@ export const useStore = create<AppState>((set, get) => ({
       set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaAggregate: null, arenaError: null })
     }
     // When switching to arena mode on a blank page (no session), create one
-    // so the arena model selector is available immediately.
-    if (mode === 'arena' && !get().currentSessionId && get().arenaModelIds.length >= 2) {
-      get().createSession()
+    // so the arena model selector has a target session. Only skip if arena already has
+    // a session (user already selected models).
+    if (mode === 'arena' && !get().currentSessionId) {
+      get().createSession().catch(() => {})
     }
   },
 
@@ -622,6 +626,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setAgentMode: (v) => set({ agentMode: v }),
+  setModelRoutingPriority: async (v) => {
+    await window.electronAPI.settings.set('modelRoutingPriority', v)
+    set({ modelRoutingPriority: v })
+  },
+  setAutoCommitOnTestPass: async (v) => {
+    await window.electronAPI.settings.set('autoCommitOnTestPass', v ? '1' : '0')
+    set({ autoCommitOnTestPass: v })
+  },
   setAgentWorkspace: async (dir: string) => {
     try { await window.electronAPI.agent.setWorkspace({ dir }) } catch {}
     set({ agentWorkspace: dir })
@@ -675,15 +687,44 @@ export const useStore = create<AppState>((set, get) => ({
   setEffortLevel: (v) => set({ effortLevel: v }),
   stopGeneration: async () => {
     await window.electronAPI.chat.stop()
+    const { currentSessionId } = get()
     await window.electronAPI.arena.stop().catch(() => {})
-    // Clear only the sending flag and streaming buffers for the current session;
-    // keep already-received content visible so the user sees what was produced.
-    set((s) => {
-      const next = { ...s.streamingBySession }
-      // Keep buffers for sessions that have results already committed
-      if (s.currentSessionId) delete next[s.currentSessionId]
-      return { streamingBySession: next, sending: false }
-    })
+    // Small delay to let electron's abort handler finish writing accumulated
+    // content to the DB. Do NOT delete the buffer before the delay — the
+    // recovery code below needs it. We only clear the `sending` flag so the
+    // user can send a new message immediately.
+    set({ sending: false })
+    await new Promise(r => setTimeout(r, 500))
+    // Read current session from store (not stale closure) so switching sessions
+    // during streaming doesn't lose the stopped session's messages.
+    const st = get()
+    const current = st.currentSessionId
+    const buf = st.streamingBySession[current]
+    const preservedContent = buf?.content ?? ''
+    // Now delete the buffer
+    const nextStream = { ...st.streamingBySession }
+    if (current) delete nextStream[current]
+    set({ streamingBySession: nextStream })
+    // Reload messages so the user sees persisted arena exchanges after stop.
+    if (current) {
+      const now = Date.now()
+      const hasRecentOptimistic = st.messages.some(m =>
+        m.session_id === current && m.role === 'user' &&
+        (now - new Date(m.created_at).getTime()) < 3000
+      )
+      if (!hasRecentOptimistic) {
+        const { messages } = await window.electronAPI.message.list(current)
+        // If the DB has empty content for an assistant message right after stop,
+        // preserve the accumulated streaming content in the UI.
+        if (messages.length > 0) {
+          const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant')
+          if (lastAssistant && !lastAssistant.content && preservedContent.length > 0) {
+            set({ messages: messages.map(m => m.id === lastAssistant.id ? { ...m, content: preservedContent } : m) })
+          }
+        }
+        set({ messages })
+      }
+    }
   },
 
   regenerate: async () => {
@@ -793,8 +834,16 @@ export const useStore = create<AppState>((set, get) => ({
     )
     if (hasRecentOptimistic) return
     try {
-      const messages = await window.electronAPI.message.list(sessionId)
-      set({ messages })
+      const allMessages = await window.electronAPI.message.list(sessionId)
+      // In arena mode, hide arena_model-tagged messages from the normal chat
+      // flow — they're only shown via the ArenaResults component to avoid
+      // duplicates. The ArenaResults component renders the same content.
+      if (get().chatMode === 'arena') {
+        const filtered = allMessages.filter(m => !m.arena_model || m.arena_model === '')
+        set({ messages: filtered })
+      } else {
+        set({ messages: allMessages })
+      }
     } catch (err) {
       log.error('[AetherAI] loadMessages error:', err)
     }
@@ -850,12 +899,32 @@ export const useStore = create<AppState>((set, get) => ({
         loserModelNames: losers.map(l => l.model_name),
       })
       if (result?.success) {
+        // Clean up arena messages from DB: delete all arena_model-tagged
+        // messages (both winners and losers) and replace with a single normal
+        // assistant message so the winner appears as a regular chat bubble.
+        const current = get().currentSessionId
+        if (current) {
+          await window.electronAPI.message.deleteArena(current)
+          const winnerResult = arenaResults.find(r => r.model_id === winner.model_id)
+          if (winnerResult) {
+            await window.electronAPI.message.addNormal({
+              session_id: current,
+              role: 'assistant' as const,
+              content: winnerResult.content,
+              model_used: winnerResult.model_name,
+            })
+          }
+          get().loadMessages(current)
+        }
         await get().loadScores()
-        // Keep ALL results visible — winner highlighted, losers dimmed
-        set((s) => ({
+        // Clear arena results so the winner doesn't show twice — it's now
+        // stored as a normal message and visible in the normal message flow.
+        set({
+          arenaResults: [],
+          arenaAggregate: null,
           arenaVoted: true,
           arenaVoteWinnerId: winner.model_id,
-        }))
+        })
       } else {
         set({ arenaError: '投票失败，请重试' })
       }
@@ -917,13 +986,15 @@ export const useStore = create<AppState>((set, get) => ({
       const systemPrefix = s.systemPrefix ?? ''
       const autoTitle = (s.autoTitle ?? '1') === '1'
       const titleLanguage = s.titleLanguage ?? 'auto'
+      const modelRoutingPriority = ['quality', 'speed', 'cost'].includes(s.modelRoutingPriority as string) ? (s.modelRoutingPriority as 'quality' | 'speed' | 'cost') : 'quality'
+      const autoCommitOnTestPass = (s.autoCommitOnTestPass ?? '0') === '1'
       await setLangAsync(lang)
       applyTheme(theme)
       applyFontScale(fontScale)
       applyLangDir(lang)
       let seenHints: string[] = []
       try { seenHints = JSON.parse(s.seen_hints || '[]') } catch (e) { log.warn('parse seen_hints failed:', e) }
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints, modelRoutingPriority, autoCommitOnTestPass })
       // Background image is loaded asynchronously by App.tsx (deferred to next
       // frame) — no need to load it here.
     } catch (e) { log.warn('loadSettings failed:', e) }
@@ -1108,12 +1179,21 @@ function ensureChunkListener() {
           }).catch(() => {})
         }
         // Reload messages from DB — only for the current session.
+        // Guard against overwriting optimistic user messages that haven't
+        // reached the DB yet (same 3s guard as loadMessages).
         if (st.currentSessionId === sid) {
-          window.electronAPI.message.list(sid).then(msgs => {
-            if (useStore.getState().currentSessionId === sid) {
-              useStore.setState({ messages: msgs })
-            }
-          }).catch(() => {})
+          const now = Date.now()
+          const hasRecentOptimistic = st.messages.some(m =>
+            m.session_id === sid && m.role === 'user' &&
+            (now - new Date(m.created_at).getTime()) < 3000
+          )
+          if (!hasRecentOptimistic) {
+            window.electronAPI.message.list(sid).then(msgs => {
+              if (useStore.getState().currentSessionId === sid) {
+                useStore.setState({ messages: msgs })
+              }
+            }).catch(() => {})
+          }
         }
         useStore.getState().pinSession(sid, 0).catch(() => {})
         useStore.getState().loadSessions()

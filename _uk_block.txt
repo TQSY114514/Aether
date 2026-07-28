@@ -1,0 +1,126 @@
+## 🎯 Чим AetherAI відрізняється
+
+AetherAI поєднує кілька можливостей, які зазвичай розподілені між кількома інструментами, в одній локальній настільній програмі:
+
+| Можливість | Опис | Статус |
+|---|---|:---:|
+| **Мульти-провайдер чат** | Перемикання між OpenAI, Claude, DeepSeek та будь-яким OpenAI-сумісним ендпоінтом прямо під час розмови. | `Stable` |
+| **Агент інструментального циклу** | 16 вбудованих інструментів із циклом Plan-Act-Observe, sandboxing, драбина дозволів. | `Beta` |
+| **Мульти-модель арена** | Надішліть один промпт кільком моделям, голосуйте за найкращу, відстежуйте ELO рейтинги. | `Beta` |
+| **Skills та розширюваність** | Файли `SKILL.md` drop-in, MCP сервери, 10-точкова система hooks. | `Experimental` |
+| **Структурована пам'ять** | Агент запам'ятовує вподобання та минулі рішення між сесіями. | `Beta` |
+| **Ієрархічне планування** | Складні запити автоматично розбиваються на паралельні підзадачі. | `Experimental` |
+| **Context Compaction** | Довгі розмови автоматично підсумовуються без втрати пар tool-calls. | `Beta` |
+| **Local-First Privacy** | Розмови, ключі, персони в локальному SQLite. Нічого не залишає ваш пристрій. | `Stable` |
+| **15 мов UI** | Включно з класичною китайською (文言) та арабською RTL. | `Beta` |
+| **MIT Licensed** | Повністю open source. | `Stable` |
+
+---
+
+### 🧠 Memory & Learning
+
+- `Beta` **Auto long-term memory** — релевантні спогади інжектування перед кожним ходом; ключові факти видобуваються та зберігаються автоматично. Пермикається в Налаштування - Агент.
+- `Experimental` **Habit learner** — виявляє повторювані вподобання (напр. «завжди використовувати Claude») та пропонує автоматично застосовувані skills.
+- `Beta` **Audit log** — трасування виконання агента по ходах для дебагінгу.
+
+### 🏟️ Arena
+
+- `Beta` **Мульти-модель арена** — один промпт, кілька моделей відповідають **одночасно**; голосуйте за найкращу, і **ELO рейтинг** оновлюється автоматично. Моделі оцінюються **за наміром** (coding / math / translation / summary / general). *Жодна інша локальна настільна чат-програма не постачається зі вбудованою мульти-модельною ареною з ELO.*
+
+### 🛠️ Skills та розширюваність
+
+| Компонент | Формат | Статус | Деталі |
+|---|---|:---:|---|
+| **Skills** | `SKILL.md` | `Experimental` | Drop-in у `<workspace>/.claude/skills/`; постачається з `release-checklist` та `git-commit` |
+| **Slash Commands** | `CMD.md` | `Stable` | 6 вбудованих: `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
+| **Hooks** | Script | `Experimental` | 10 точок життєвого циклу: PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
+| **MCP** | stdio JSON-RPC 2.0 | `Beta` | Зовнішні MCP сервери автоматично об'єднуються з вбудованими інструментами |
+
+### ⚙️ Customization
+
+| Налаштування | Статус | Опис |
+|---|:---:|---|
+| **Розширені налаштування моделі** | `Stable` | Max tokens, temperature, top_p, власний system prefix, per-language auto-titles, thinking effort |
+| **Власний фон** | `Stable` | Завантажте зображення з налаштуваннями opacity / blur |
+| **Personas** | `Stable` | Пресети system prompt, перемикаються для кожної сесії |
+| **Теми** | `Stable` | Light / Dark / Blue / Glass / Retro |
+| **15 мов UI** | `Beta` | English, Chinese (简/繁/文言), Japanese, Spanish, French, German, Portuguese, Russian, Ukrainian, Arabic (RTL), Hindi, Korean |
+| **Auto-update** | `Beta` | NSIS installer перевіряє при запуску; portable також (manual install) |
+| **Usage tracking** | `Beta` | Лог по кожному API-виклику з tokens, cost, latency, cache hit rate |
+
+### 🔒 Privacy
+
+> **Всі дані залишаються локальними.** AetherAI не збирає і не завантажує нічого про вас. Ваші API-ключі, розмови та персони живуть у локальній базі даних SQLite. Єдині вихідні мережеві запити йдуть до налаштовуваних вами LLM провайдерів.
+
+---
+
+## 📸 Screenshots
+
+> Capture screenshots under `assets/screenshots/` and update the paths below.
+
+| Flow | Preview |
+|---|:---:|
+| Chat streaming | `assets/screenshots/chat-streaming.gif` — _TODO_ |
+| Agent tool execution | `assets/screenshots/agent-tool-execution.gif` — _TODO_ |
+| Arena voting | `assets/screenshots/arena-voting.gif` — _TODO_ |
+| Provider settings | `assets/screenshots/provider-settings.png` — _TODO_ |
+
+---
+
+## 📦 Download
+
+### Windows — Prebuilt (Recommended)
+
+Завантажте останній [Release](https://github.com/TQSY114514/AetherAI/releases):
+
+| Build | Опис |
+|---|---|
+| **`AetherAI-Setup-x.y.z.exe`** | NSIS installer. Per-user (без admin), auto-updates у програмі. **Рекомендовано.** |
+| **`AetherAI-x.y.z.exe`** | Portable single-exe. Без install, без auto-update; просто запустіть. |
+
+> Installer показує попередження SmartScreen "unknown publisher" при першому запуску — очікувано для non-signed solo app. Усі дані залишаються локальними.
+
+---
+
+### Enable Ask mode
+
+1. Відкрийте **Settings - Agent & Safety**.
+2. Встановіть режим дозволів агента на **Ask**.
+3. Підтвердіть, що workspace root — це папка, де агент повинен читати/записувати.
+4. Тримайте **Yolo** disabled, якщо не хочете необмежений доступ.
+
+### Run your first agent task
+
+1. Відкрийте новий чат.
+2. Запитайте: `List the files in this project and summarize what the app does.`
+3. Перегляньте кожен пропонуваний tool call. Затверджуйте безпечні читання; відхиляйте несподіване.
+4. Перевірте live reasoning trace та остаточну відповідь.
+
+---
+
+## 🔑 Tech Stack
+
+| Layer | Технологія |
+|---|---|
+| Desktop | Electron 31 |
+| Frontend | React 18.3 + TypeScript 5.5 |
+| State | Zustand 4.5 |
+| Build | Vite 5.4 + electron-builder |
+| Database | sql.js (SQLite in-memory, persisted to disk) |
+| LLM | OpenAI-compatible + Anthropic Messages API |
+| UI | Tailwind CSS 3.4, lucide-react, highlight.js |
+| MCP | Custom stdio JSON-RPC 2.0 client |
+
+---
+
+## 🤝 Contributing
+
+All contributions are welcome! Whether it's a bug fix, feature request, translation improvement, or documentation update — please open an issue or submit a PR.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/my-feature`)
+3. Commit your changes (`git commit -am 'Add feature'`)
+4. Push to the branch (`git push origin feat/my-feature`)
+5. Open a Pull Request
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.

@@ -78,12 +78,12 @@ function ArenaResults({ results, aggregate, voted, winnerId, onVote, t, renderMa
           <div key={r.model_id} className="border rounded-xl overflow-hidden animate-blur-fade"
             style={{
               borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
-              opacity: isLoser ? 0.35 : isRevealed ? 1 : 0,
-              backgroundColor: isLoser ? 'var(--bg-primary)' : undefined,
-              maxHeight: isLoser ? 60 : undefined,
-              overflow: 'hidden',
-              transform: isLoser ? 'scale(0.97)' : undefined,
-              filter: isLoser ? 'grayscale(0.5)' : undefined,
+              opacity: isLoser ? 0.5 : isRevealed ? 1 : 0,
+              backgroundColor: isLoser ? 'var(--bg-secondary)' : undefined,
+              maxHeight: isLoser ? 120 : undefined,
+              overflow: isLoser ? 'hidden' : undefined,
+              transform: isLoser ? 'scale(0.98)' : undefined,
+              filter: isLoser ? 'grayscale(0.3)' : undefined,
             }}>
             <div className="px-3 py-2 border-b flex items-center justify-between text-sm font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
               <span style={{ color: isWinner ? 'var(--success)' : isLoser ? 'var(--text-muted)' : 'var(--text-primary)' }}>{r.model_name}</span>
