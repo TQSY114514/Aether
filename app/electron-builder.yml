@@ -20,16 +20,17 @@ publish:
   releaseType: release
   vPrefixedTagName: true
 
-win:
-  target:
-    - nsis
-    - portable
-  icon: resources/icon.png
-  darkModeSupport: true
-  artifactName: ${name}-${version}-${os}-${arch}.${ext}
-
-linux:
-  icon: resources
+# Platform-specific build configurations — grouped under 'build' for electron-builder v26+
+build:
+  win:
+    target:
+      - nsis
+      - portable
+    icon: resources/icon.png
+    darkModeSupport: true
+    artifactName: ${name}-${version}-${os}-${arch}.${ext}
+  linux:
+    icon: resources
 
 nsis:
   oneClick: false
