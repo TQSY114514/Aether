@@ -9,11 +9,14 @@
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/AetherAI?style=flat-square&label=latest)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/AetherAI?style=flat-square&color=blue)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=flat-square&label=Forks)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI?style=flat-square&label=Issues)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
+---
+
+---
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-install-from-source) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
 
-[English](./README.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दీ](./README.hi.md) · [한국어](./README.ko.md)
+[English](./README.md) · [繁體中文](./README.zh-TW.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दী](./README.hi.md) · [한국어](./README.ko.md)
 
 
 ---
@@ -23,68 +26,162 @@
 
 AetherAI 合諸 LLM 供應商於一器（OpenAI / Claude / DeepSeek / 本地模型 / 凡 OpenAI 相容之端），悉聚一桌面應用之中。所載皆存於本地——汝之 API 鑰與對談，除發往所設供應商外，決不外泄於他處。
 
-## 📑 Table of Contents
+## 🎯 與他器異於何？
 
-- [✨ 特性](#-特性)
-  - [🖥️ 聊天](#️-chat)
-  - [🤖 Agent（函式呼叫）](#-agent函式呼叫)
-  - [🔒 隱私](#-privacy)
-- [🚀 速啟](#-速啟)
-- [📁 工程結構](#-工程結構)
-- [🤝 鳴謝](#-鳴謝)
-- [📄 授權](#-授權)
+AetherAI 合眾器之長，納於一器：
+
+| 能事 | 說明 | 成熟度 |
+|---|---|:---:|
+| **多供應商對話** | 於 OpenAI、Claude、DeepSeek 及凡 OpenAI 相容端之間切換。 | `穩定` |
+| **Agent 工具迴圈** | 十六內建工具，伴 Plan-Act-Observe 迴圈、沙箱、許可階梯。 | `測試版` |
+| **多模型競技場** | 一提示同時發多模型，投票選最佳，追蹤 ELO 排名。 | `測試版` |
+| **技能與擴充** | 放入 `SKILL.md` 檔案、MCP 伺服器、十點鉤子系統。 | `實驗性` |
+| **結構化記憶** | Agent 越會話自動憶汝偏好與舊決策。 | `測試版` |
+| **階層式規劃** | 複雜請求自動拆解為並行子任務。 | `實驗性` |
+| **上下文壓縮** | 長對話自動摘要，不丟 tool-call/result 對。 | `測試版` |
+| **本地優先隱私** | 對話、鑰、人格存本地 SQLite。無物離汝機器。 | `穩定` |
+| **十五種界面語** | 含文言與 RTL 阿拉伯語。 | `測試版` |
+| **MIT 授權** | 完全開放原始碼。 | `穩定` |
 
 ---
 
 ## ✨ 特性
 
+**狀態標籤：** `穩定` = 宜日常用，`測試版` = 可用而有已知粗糙，`實驗性` = 新/進階功能或變動，`規劃中` = 已列路線圖而未竟。
+
 ### 🖥️ 聊天
 
-- **多供應商抽象**——設一適配之層；欲增一供應商格式，但添一檔可也。今已相容 OpenAI 格式（OpenRouter、Together、DeepSeek、Ollama 之 OpenAI 接口、LM Studio 等皆涵其中）。
-- **多會話並行流式**——一談方流式而下，另室亦可續言不輟。
-- **Arena**——一問而諸模型並答；擇其最善者投一票，ELO 榜單隨之自更。
-- **Personas**——系統提示預設，可隨會話而易。
-- **附件**——文字檔注入為脈絡；圖像行多模之道（須具視覺之模型）。
-- **長貼折疊**——貼入數百行，自折為可展之片段（效 ChatGPT 之法）。
-- **思考之力滑桿**——實參也：OpenAI o 系列 → `reasoning_effort`，Claude → `thinking.budget_tokens`。
-- **側欄摘要**——題名皆模型所擬之主題短語（如「新英靈天使抽卡之議」），非鈔錄原文也。
-- **進階設定**——最高 tokens、temperature、top_p、自訂系統前綴、各語自生題名。
-- **自訂背景**——上傳圖像，可調透明度與模糊。
-- **介面語言十五**——English（正體與倒置）、中文（簡體/繁體/文言）、日本語、español、français、Deutsch、português、русский、українська、العربية（RTL）、हिन्दी、한국어。
-- **主題**——Light / Dark / Blue / Glass / Retro。
-- **本地之藏**——諸數據悉存本地 SQLite 資料庫；無一上傳。
+| 功能 | 狀態 | 說明 |
+|---|:---:|---|
+| **多供應商** | `穩定` | 單一適配層；增供應商 = 一檔。涵蓋 OpenRouter、Together、DeepSeek、Ollama、LM Studio。 |
+| **並行串流** | `穩定` | 一談串流時，另室續談。 |
+| **思考之力滑桿** | `測試版` | OpenAI o 系列 / gpt-5 / Claude 透過中繼。唯推理模型有效。 |
+| **附件** | `測試版` | 文本為脈絡；圖像走多模態（須視覺模型）。 |
+| **長貼折疊** | `穩定` | 數百行自動摺為可展開片段（ChatGPT 風）。 |
+| **訊息編輯** | `穩定` | 任一點覆蓋並重生。 |
+| **訊息搜尋** | `穩定` | 全訊息高亮。 |
+| **側欄摘要** | `測試版` | 模型生成主題語，非複製文。 |
 
 ### 🤖 Agent（函式呼叫）
 
-- **內建工具十三**（`read_file`、`list_dir`、`glob_find`、`grep_search`、`web_search`、`web_fetch`、`write_file`、`edit_file`、`run_command`、`git_status`、`git_diff`、`memory_save`、`memory_list`），循 Plan→Act→Observe 之環，推理軌跡即時可見。
-- **Agent 授權模式**——關閉 / 詢問（每遇險器皆請確認）/ 自動（悉皆允之）/ 計畫（唯讀）。蓋效程式 Agent 授權之制。
-- **MCP 之援**——可接外部 stdio MCP 伺服器；其工具自與內建者合而為一。
-- **Tool call repair**——LLMs 間或產出格式錯誤之 JSON；agent 迴圈於執行前自動修復缺漏之引數、未標引號之鍵與截斷之呼叫。
+- `測試版` **十六內建工具**（`read_file`、`list_dir`、`glob_find`、`grep_search`、`web_search`、`web_fetch`、`write_file`、`edit_file`、`run_command`、`git_status`、`git_diff`、`memory_save`、`memory_list`、`use_skill`、`ask_user`、`todo_write`），伴 Plan-Act-Observe 迴圈、即時推理軌跡 + 任務清單、迴圈偵測、工具超時、迭代預算（預設 25 回合）與上下文壓縮。
+- `實驗性` **階層式規劃** — 自動為複雜請求產任務分解（DS4 啟發）。
+- `實驗性` **子代理委派** — 獨立子任務經 `delegate_task` 並行執行。
+- `穩定` **許可模式** — 風險階梯：
+
+| 模式 | 說明 | 沙箱 |
+|---|---|:---:|
+| **關閉** | 純聊天，無工具 | N/A |
+| **計畫** | 唯讀工具（調查不改） | - |
+| **詢問** | 確每風險操作（推薦） | - |
+| **自動** | 行一切，不需確認 | 有 |
+| **Yolo** | 全許可，無沙箱 | 無 |
+
+- `穩定` **工作區沙箱** — `write_file`/`edit_file` 設好工作區根目錄外被拒；`run_command` 阻破壞模式。設定 - Agent 與安全可配置。
+- `測試版` **上下文壓縮** — 自動摘要舊歷史（tool-call/result 對保持；標識符保留）。
+- `測試版` **工具呼叫修復** — 自動修復錯 JSON、缺引數、未引鍵、截斷呼叫。
+
+### 🧠 記憶與學習
+
+- `測試版` **自動長期記憶** — 每回合前注入相關記憶；自動提取並存關鍵事實。設定可切換。
+- `實驗性` **習慣學習器** — 偵測重複偏好（如「始終用 Claude」）並自動套用技能。
+- `測試版` **稽核日誌** — 每回合 Agent 執行軌跡，便除錯。
+
+### 🏟️ 競技場
+
+- `測試版` **多模型競技場** — 一提示，多模型**同時**作答；投票選最佳，**ELO 排行榜**自動更新。模型按**意圖**打分（編碼 / 數學 / 翻譯 / 摘要 / 一般）。*無其他本地優先桌面聊天應用內建帶 ELO 之多模型競技場。*
+
+### 🛠️ 技能與擴充性
+
+| 元件 | 格式 | 狀態 | 說明 |
+|---|---|:---:|---|
+| **技能** | `SKILL.md` | `實驗性` | 放 `<workspace>/.claude/skills/`；附 `release-checklist` 與 `git-commit` |
+| **斜線指令** | `CMD.md` | `穩定` | 六內建：`/code`、`/continue`、`/explain`、`/polish`、`/summarize`、`/translate` |
+| **鉤子** | 腳本 | `實驗性` | 十生命週期點：PreToolUse、PostToolUse、ToolError、PreCompact、PostCompact、PreSend、PostResponse、SessionStart、SessionEnd、SubagentStop |
+| **MCP** | stdio JSON-RPC 2.0 | `測試版` | 外部 MCP 伺服器自動與內建工具合併 |
+
+### ⚙️ 自訂
+
+| 設定 | 狀態 | 說明 |
+|---|:---:|---|
+| **進階模型設定** | `穩定` | Max tokens、temperature、top_p、自訂系統前綴、依語言自動標題、思考強度 |
+| **自訂背景** | `穩定` | 傳圖，調不透明度 / 模糊 |
+| **人設** | `穩定` | 系統提示預設，每會話可切換 |
+| **主題** | `穩定` | 淺色 / 深色 / 藍色 / 玻璃 / 復古 |
+| **十五種界面語** | `測試版` | 英文、中文（簡/繁/文言）、日文、西班牙文、法文、德文、葡萄牙文、俄文、烏克蘭文、阿拉伯文（RTL）、印地文、韓文 |
+| **自動更新** | `測試版` | NSIS 安裝程式啟動時檢查；可攜版亦支援（手動安裝） |
+| **使用追蹤** | `測試版` | 依 API 呼叫記錄 tokens、成本、延遲、快取命中率 |
+
+### 🔒 隱私
+
+> **諸數據悉存本地。** AetherAI 不集不傳關於汝之事。汝之 API 鑰、對話與人格存於本地 SQLite。唯一向外之網路請求僅發往汝所設之 LLM 供應商。
+
+---
+
+## 📸 截圖
+
+> 截圖存 `assets/screenshots/` 下，請更新下方路徑。
+
+| 流程 | 預覽 |
+|---|:---:|
+| 對話串流 | `assets/screenshots/chat-streaming.gif` — _待完成_ |
+| Agent 工具執行 | `assets/screenshots/agent-tool-execution.gif` — _待完成_ |
+| 競技場投票 | `assets/screenshots/arena-voting.gif` — _待完成_ |
+| 供應商設定 | `assets/screenshots/provider-settings.png` — _待完成_ |
+
+---
+
+## 📦 下載
+
+### Windows — 預先建置（推薦）
+
+下載最新 [Release](https://github.com/TQSY114514/AetherAI/releases)：
+
+| 建構 | 說明 |
+|---|---|
+| **`AetherAI-Setup-x.y.z.exe`** | NSIS 安裝程式。使用者安裝（不需管理員），內建自動更新。**推薦。** |
+| **`AetherAI-x.y.z.exe`** | 可攜單一執行檔。不需安裝，不自動更新；直接執行即可。 |
+
+> 安裝程式首次啟動時顯示 SmartScreen「未知發行者」警告——此於未簽署之個人應用為常態。諸數據悉留本地。
 
 ---
 
 ## 🚀 速啟
 
-### 先備
-- Node.js 18+
-- npm 9+
+### 從原始碼安裝
 
-### 安裝與運行
+**前置要求：** Node.js 18+、npm 9+
+
 ```bash
 cd app
 npm install
-npm run dev      # 開發之用（熱重載）
-npm run build    # 構建生產前端
+npm run dev      # 開發（熱重載）
+npm run build    # 建置正式前端
 npm start        # 啟動 Electron
 ```
 
-若於 Windows，可於庫根行 `start.bat`。
+或於 Windows 上執行 `start.bat`。
 
-### 設汝首個供應商
-1. 啟後，點側欄之 **Models**。
-2. 增一供應商（名 / API URL / API Key）。
-3. 點 **Fetch models** 以取可用模型之列。
-4. 歸對談而始言。
+### 設定供應商
+
+1. 啟動後，點側欄之 **Models**。
+2. 增供應商（名 / API URL / API Key）。
+3. 點 **Fetch models** 取可用模型清單。
+4. 歸聊天始談。
+
+### 啟用 Ask 模式
+
+1. 開 **設定 - Agent 與安全**。
+2. 將 Agent 許可模式設為 **Ask**。
+3. 確認 workspace root 為 Agent 讀寫之資料夾。
+4. 除非需無限制存取，否則保持 **Yolo** 關閉。
+
+### 執行第一個 Agent 任務
+
+1. 開新聊天。
+2. 輸入：`List the files in this project and summarize what the app does.`
+3. 查每工具呼叫。批安全讀；拒意外操作。
+4. 查即時推理軌跡與最終答案。
 
 ---
 
@@ -135,26 +232,74 @@ app/
 
 ---
 
+## 🔑 技術棧
+
+| 層 | 技術 |
+|---|---|
+| 桌面 | Electron 31 |
+| 前端 | React 18.3 + TypeScript 5.5 |
+| 狀態 | Zustand 4.5 |
+| 建構 | Vite 5.4 + electron-builder |
+| 資料庫 | sql.js（SQLite 記憶體中，持久化到磁碟） |
+| LLM | OpenAI 相容 + Anthropic Messages API |
+| UI | Tailwind CSS 3.4, lucide-react, highlight.js |
+| MCP | 自訂 stdio JSON-RPC 2.0 用戶端 |
+
+---
+
 ## 🤝 鳴謝
 
-AetherAI 立於諸專案之肩——其構想啟迪本器之架構與介面：
+AetherAI 竊比諸子，納百川而成海：
 
-- [Claude Code](https://github.com/anthropics/claude-code)——Agent 授權之制、思考之力滑桿、工具呼叫之可視、新談空態。
-- [Continue](https://github.com/continuedev/continue)——以宣告式配置為本、供應商抽象、函式呼叫之約。
-- [Dify](https://github.com/langgen/dify)——多格式供應商歸一之法。
-- [Model Context Protocol](https://modelcontextprotocol.io)——AetherAI Agent 所操之 MCP 規範。
-- [shadcn/ui](https://github.com/shadcn-ui/ui)——`cn()` / `cva` 複貼元件之法。
-- [Magic UI](https://github.com/magicuidesign/magicui)——動畫之範（流式文字、微光、模糊漸隱）。
-- [new-api](https://github.com/QuantumNous/new-api)——推理之力中轉換算之參。
-- [OpenClaw](https://github.com/openclaw/openclaw)——README 修飾與入門之啟。
-- [DS4](https://github.com/antirez/ds4) — structured task decomposition before execution.
-- [Hermes](https://github.com/NousResearch/Hermes) — iteration budget, memory_manager pattern, structured memory extraction.
+### Agent 框架
+
+| 專案 | 啟發 |
+|---|---|
+| [Claude Code](https://github.com/anthropics/claude-code) | Agent 許可模型、思考滑桿、工具呼叫視覺化、子代理委派、鉤子 |
+| [OpenClaw](https://github.com/openclaw/openclaw) | 上下文壓縮、工具呼叫迴圈偵測、事件流架構 |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 迭代預算、結構化長期記憶、自主技能 |
+| [OpenAI Codex](https://github.com/openai/codex) | 沙箱、上下文壓縮、工具呼叫修復 |
+| [DS4](https://github.com/antirez/ds4) | 階層式任務分解 |
+
+### UI 與 UX
+
+| 專案 | 啟發 |
+|---|---|
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva 複製貼上元件之法 |
+| [Magic UI](https://github.com/magicuidesign/magicui) | 動畫之勢（shimmer、blur-fade） |
+
+### 基礎建設
+
+| 專案 | 啟發 |
+|---|---|
+| [Dify](https://github.com/langgenius/dify) | 多格式供應商正規化 |
+| [MCP](https://modelcontextprotocol.io) | AetherAI Agent 所說之規 |
+| [cc-switch](https://github.com/farion1231/cc-switch) | 使用統計儀表板之制 |
+| [new-api](https://github.com/QuantumNous/new-api) | 推理強度中繼、使用/成本追蹤 |
+| [Continue](https://github.com/continuedev/continue) | 設定為真諦、供應商抽象 |
+| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | 多輪 Agent 執行、沙箱工具執行 |
+| [Aider](https://github.com/Aider-AI/aider) | LLM 編碼助手工具迴圈、git 整合 |
+| [Cline](https://github.com/cline/cline) | IDE 內嵌 Agent、MCP 整合、許可 UX |
+
+---
+
+## 🤝 貢獻
+
+歡迎諸君貢獻！無論 bug 修復、功能請求、翻譯改進或文件更新——請開問題或提交 PR。
+
+1. Fork 此專案
+2. 創功能分支（`git checkout -b feat/my-feature`）
+3. 提交變更（`git commit -am 'Add feature'`）
+4. 推送至分支（`git push origin feat/my-feature`）
+5. 開 Pull Request
+
+詳見 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ---
 
 ## 📄 授權
 
-MIT
+[MIT](./LICENSE) 2025 AetherAI
 
 ---
 

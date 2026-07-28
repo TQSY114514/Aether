@@ -9,6 +9,9 @@
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/AetherAI?style=flat-square&label=latest)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/AetherAI?style=flat-square&color=blue)](https://github.com/TQSY114514/AetherAI/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/AetherAI?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/AetherAI/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/AetherAI?style=flat-square&label=Forks)](https://github.com/TQSY114514/AetherAI/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/AetherAI?style=flat-square&label=Issues)](https://github.com/TQSY114514/AetherAI/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
+---
+
+---
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-install-from-source) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
@@ -23,68 +26,164 @@
 
 AetherAI कई LLM प्रदाताओं (OpenAI / Claude / DeepSeek / स्थानीय मॉडल / कोई भी OpenAI-संगत एंडपॉइंट) को एक ही डेस्कटॉप ऐप में एकीकृत करता है। सब कुछ स्थानीय रूप से संग्रहीत होता है — आपकी API कुंजियाँ और वार्तालाप आपके द्वारा विन्यस्त प्रदाताओं को छोड़कर कहीं और नहीं जाते।
 
-## 📑 Table of Contents
+---
 
-- [✨ विशेषताएँ](#-विशेषताएँ)
-  - [🖥️ चैट](#️-chat)
-  - [🤖 एजेंट (function calling)](#-एजेंट-function-calling)
-  - [🔒 गोपनीयता](#-privacy)
-- [🚀 त्वरित आरंभ](#-त्वरित-आरंभ)
-- [📁 परियोजना संरचना](#-परियोजना-संरचना)
-- [🤝 आभार](#-आभार)
-- [📄 लाइसेंस](#-लाइसेंस)
+## 🎯 AetherAI अलग क्यों है
+
+AetherAI कई capabilities को एक ही local desktop app में जोड़ता है जो आमतौर पर कई tools में फैली होती हैं:
+
+| capability | description | maturity |
+|---|---|:---:|
+| **Multi-provider Chat** | Switch between OpenAI, Claude, DeepSeek, and any OpenAI-compatible endpoint mid-conversation. | `स्थिर` |
+| **Agent Tool Loop** | 16 built-in tools with Plan-Act-Observe loop, sandboxing, permission ladder. | `बीटा` |
+| **Multi-model Arena** | Send one prompt to multiple models, vote on the best, track ELO rankings. | `बीटा` |
+| **Skills & Extensibility** | Drop-in `SKILL.md` files, MCP servers, 10-point hook system. | `प्रयोगात्मक` |
+| **Structured Memory** | Agent recalls preferences and past decisions across sessions. | `बीटा` |
+| **Hierarchical Planning** | Complex requests auto-decompose into parallel sub-tasks. | `प्रयोगात्मक` |
+| **Context Compaction** | Long conversations auto-summarize without losing tool-call pairs. | `बीटा` |
+| **Local-First Privacy** | Conversations, keys, personas in local SQLite. Nothing leaves your machine. | `स्थिर` |
+| **15 UI Languages** | Including Classical Chinese (文言) and RTL Arabic. | `बीटा` |
+| **MIT Licensed** | Fully open source. | `स्थिर` |
 
 ---
 
 ## ✨ विशेषताएँ
 
+**Status labels:** `स्थिर` = daily-use ready, `बीटा` = usable with known rough edges, `प्रयोगात्मक` = new/advanced behavior may change, `योजनाबद्ध` = documented roadmap item.
+
 ### 🖥️ चैट
 
-- **मल्टी-प्रदाता एब्स्ट्रैक्शन** — एकल एडेप्टर परत; किसी प्रदाता प्रारूप को जोड़ना मात्र एक फ़ाइल का काम है। वर्तमान में OpenAI-संगत (OpenRouter, Together, DeepSeek, Ollama की OpenAI शिम, LM Studio, आदि को आच्छादित करता है)।
-- **समवर्ती मल्टी-सत्र स्ट्रीमिंग** — एक चैट स्ट्रीम कर सकती है जबकि आप दूसरे में बातचीत जारी रखें।
-- **Arena** — एक प्रॉम्प्ट, कई मॉडल एक साथ उत्तर देते हैं; सर्वश्रेष्ठ के लिए वोट करें और एक ELO लीडरबोर्ड स्वतः अद्यतन होता है।
-- **पर्सोना** — सिस्टम-प्रॉम्प्ट प्रिसेट, प्रति-सत्र बदले जा सकते हैं।
-- **अटैचमेंट** — पाठ फ़ाइलें संदर्भ के रूप में डाली जाती हैं; चित्र मल्टिमॉडल हो जाते हैं (एक विज़न मॉडल चाहिए)।
-- **लंबे-पेस्ट संक्षिप्तीकरण** — सैकड़ों पंक्तियाँ पेस्ट करने पर स्वतः एक विस्तार-योग्य स्निपेट में सिमट जाती हैं (ChatGPT-शैली)।
-- **थिंकिंग-प्रयास स्लाइडर** — वास्तविक पैरामीटर: OpenAI o-series → `reasoning_effort`, Claude → `thinking.budget_tokens`।
-- **साइडबार सारांश** — शीर्षक मॉडल-निर्मित विषय वाक्यांश होते हैं (जैसे "नई Eiyuu Angel पुल सलाह"), न कि कॉपी किया गया पाठ।
-- **उन्नत सेटिंग्स** — अधिकतम टोकन, तापमान, top_p, कस्टम सिस्टम प्रिफ़िक्स, प्रति-भाषा स्वतः-शीर्षक।
-- **कस्टम पृष्ठभूमि** — अस्पष्टता / धुंधलापन नियंत्रण के साथ एक चित्र अपलोड करें।
-- **15 UI भाषाएँ** — English (मानक + उल्टा), 中文 (简体/繁體/文言), 日本語, español, français, Deutsch, português, русский, українська, العربية (RTL), हिन्दी, 한국어।
-- **थीम** — Light / Dark / Blue / Glass / Retro।
-- **स्थानीय भंडारण** — सभी डेटा एक स्थानीय SQLite डेटाबेस में; कुछ भी अपलोड नहीं होता।
+| Feature | Status | Description |
+|---|:---:|---|
+| **Multi-provider** | `स्थिर` | Single adapter layer; adding a provider = one file. Covers OpenRouter, Together, DeepSeek, Ollama, LM Studio, ... |
+| **Concurrent streaming** | `स्थिर` | One chat streams while you keep talking in another. |
+| **Thinking-effort slider** | `बीटा` | Real params: OpenAI o-series / gpt-5 / Claude via relay. Only effective on reasoning models. |
+| **Attachments** | `बीटा` | Text files as context; images for multimodal (needs a vision model). |
+| **Long-paste collapse** | `स्थिर` | Hundreds of lines auto-collapse into an expandable snippet (ChatGPT-style). |
+| **Message editing** | `स्थिर` | Overwrite + regenerate from any point. |
+| **Message search** | `स्थिर` | With highlighting across all messages. |
+| **Sidebar summaries** | `बीटा` | Model-generated topic phrases, not copied text. |
 
 ### 🤖 एजेंट (function calling)
 
-- **13 अंतर्निर्मित टूल** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`) एक Plan→Act→Observe लूप और लाइव रीज़निंग ट्रेस के साथ।
-- **एजेंट अनुमति मोड** — Off / Ask (प्रत्येक जोखिमपूर्ण टूल की पुष्टि करें) / Auto (सभी की अनुमति दें) / Plan (केवल-पठनीय)। यह एक कोडिंग एजेंट के अनुमति मॉडल को प्रतिबिंबित करता है।
-- **MCP समर्थन** — बाहरी stdio MCP सर्वर जोड़ें; उनके टूल अंतर्निर्मित टूलों में स्वतः मिल जाते हैं।
-- **Tool call repair** — LLMs कभी-कभी गलत JSON उत्पन्न करते हैं; एजेंट लूप निष्पादन से पहले गुम अर्ग्यूमेंट, बिना उद्धरण चाइल्ड और ट्रंकेटेड कॉल स्वतः ठीक करता है।
+- `बीटा` **16 built-in tools** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) with a Plan-Act-Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, configurable iteration budget (default 25 rounds), and context compaction.
+- `प्रयोगात्मक` **Hierarchical planning** — auto-generates task breakdown for complex requests (DS4-inspired).
+- `प्रयोगात्मक` **Sub-agent delegation** — independent sub-tasks run in parallel via `delegate_task`.
+- `स्थिर` **Permission modes** — risk-ascending ladder:
+
+| Mode | Description | Sandbox |
+|---|---|:---:|
+| **बंद** | Plain chat, no tools | N/A |
+| **योजना** | Read-only tools (investigate without changes) | - |
+| **पूछें** | Confirm each risky action (recommended) | - |
+| **स्वचालित** | Run everything, no confirms | Yes |
+| **Yolo** | Full permission, no sandbox | No |
+
+- `स्थिर` **Workspace sandbox** — `write_file`/`edit_file` are refused outside the configured workspace root; `run_command` blocks destructive patterns. Configurable in Settings - Agent & Safety.
+- `बीटा` **Context compaction** — auto-summarizes older history (tool-call/result pairs kept intact; identifiers preserved verbatim).
+- `बीटा` **Tool call repair** — auto-repairs malformed JSON, missing args, unquoted keys, and truncated calls.
+
+### 🧠 Memory & Learning
+
+- `बीटा` **Auto long-term memory** — relevant memories injected before each turn; key facts extracted and saved automatically. Toggleable in Settings - Agent.
+- `प्रयोगात्मक` **Habit learner** — detects recurring preferences (e.g. "always use Claude") and proposes auto-applied skills.
+- `बीटा` **Audit log** — per-turn agent execution trace for debugging.
+
+### 🏟️ Arena
+
+- `बीटा` **Multi-model arena** — one prompt, multiple models answer **concurrently**; vote for the best and an **ELO leaderboard** updates automatically. Models are scored **per intent** (coding / math / translation / summary / general). *No other local-first desktop chat app ships a built-in multi-model arena with ELO.*
+
+### 🛠️ Skills & Extensibility
+
+| Component | Format | Status | Details |
+|---|---|:---:|---|
+| **Skills** | `SKILL.md` | `प्रयोगात्मक` | Drop into `<workspace>/.claude/skills/`; ships with `release-checklist` and `git-commit` |
+| **Slash Commands** | `CMD.md` | `स्थिर` | 6 built-in: `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
+| **Hooks** | Script | `प्रयोगात्मक` | 10 lifecycle points: PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
+| **MCP** | stdio JSON-RPC 2.0 | `बीटा` | External MCP servers merge with built-in tools automatically |
+
+### ⚙️ Customization
+
+| Setting | Status | Description |
+|---|:---:|---|
+| **Advanced model settings** | `स्थिर` | Max tokens, temperature, top_p, custom system prefix, per-language auto-titles, thinking effort |
+| **Custom background** | `स्थिर` | Upload image with opacity / blur controls |
+| **Personas** | `स्थिर` | System-prompt presets, switchable per session |
+| **Themes** | `स्थिर` | Light / Dark / Blue / Glass / Retro |
+| **15 UI languages** | `बीटा` | English, Chinese (簡/繁/文言), Japanese, Spanish, French, German, Portuguese, Russian, Ukrainian, Arabic (RTL), Hindi, Korean |
+| **Auto-update** | `बीटा` | NSIS installer checks on launch; portable checks too (manual install) |
+| **Usage tracking** | `बीटा` | Per-API-call log with tokens, cost, latency, cache hit rate |
+
+### 🔒 Privacy
+
+> **All data stays local.** AetherAI collects nothing and uploads nothing about you. Your API keys, conversations, and personas live in a local SQLite database. The only outbound network requests go to the LLM providers you configure.
 
 ---
 
-## 🚀 त्वरित आरंभ
+## 📸 Screenshots
 
-### पूर्व-आवश्यकताएँ
-- Node.js 18+
-- npm 9+
+> Capture screenshots under `assets/screenshots/` and update the paths below.
 
-### स्थापित करें और चलाएँ
+| Flow | Preview |
+|---|:---:|
+| Chat streaming | `assets/screenshots/chat-streaming.gif` — _TODO_ |
+| Agent tool execution | `assets/screenshots/agent-tool-execution.gif` — _TODO_ |
+| Arena voting | `assets/screenshots/arena-voting.gif` — _TODO_ |
+| Provider settings | `assets/screenshots/provider-settings.png` — _TODO_ |
+
+---
+
+## 📦 Download
+
+### Windows — Prebuilt (Recommended)
+
+Download the latest [Release](https://github.com/TQSY114514/AetherAI/releases):
+
+| Build | Description |
+|---|---|
+| **`AetherAI-Setup-x.y.z.exe`** | NSIS installer. Per-user (no admin), auto-updates in-app. **Recommended.** |
+| **`AetherAI-x.y.z.exe`** | Portable single-exe. No install, no auto-update; just run it. |
+
+> The installer shows a SmartScreen "unknown publisher" warning on first launch — expected for an unsigned solo app. All data stays local.
+
+---
+
+## 🚀 Quick Start
+
+### Install from source
+
+**Prerequisites:** Node.js 18+, npm 9+
+
 ```bash
 cd app
 npm install
-npm run dev      # विकास (हॉट रीलोड)
-npm run build    # उत्पादन फ्रंटएंड का निर्माण
-npm start        # Electron लॉन्च करें
+npm run dev      # development (hot reload)
+npm run build    # production frontend
+npm start        # launch Electron
 ```
 
-अथवा Windows पर रिपॉज़िटरी मूल पर `start.bat` चलाएँ।
+Or run `start.bat` at the repo root on Windows.
 
-### अपना पहला प्रदाता विन्यस्त करें
-1. लॉन्च होने के बाद, साइडबार में **Models** पर क्लिक करें।
-2. एक प्रदाता जोड़ें (नाम / API URL / API Key)।
-3. उपलब्ध मॉडल सूची लाने के लिए **Fetch models** पर क्लिक करें।
-4. चैट पर लौटें और बात करना आरंभ करें।
+### Configure provider
+
+1. After launch, click **Models** in the sidebar.
+2. Add a provider (name / API URL / API Key).
+3. Click **Fetch models** to pull the available model list.
+4. Go back to chat and start talking.
+
+### Enable Ask mode
+
+1. Open **Settings - Agent & Safety**.
+2. Set agent permission mode to **पूछें**.
+3. Confirm the workspace root is the folder you want the agent to read/write.
+4. Keep **Yolo** disabled unless you want unrestricted access.
+
+### Run your first agent task
+
+1. Open a new chat.
+2. Ask: `List the files in this project and summarize what the app does.`
+3. Review each proposed tool call. Approve safe reads; deny anything unexpected.
+4. Check the live reasoning trace and final answer.
 
 ---
 
@@ -135,7 +234,50 @@ app/
 
 ---
 
-## 🗺️ ## 🤝 आभार
+## 🔑 Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Desktop | Electron 31 |
+| Frontend | React 18.3 + TypeScript 5.5 |
+| State | Zustand 4.5 |
+| Build | Vite 5.4 + electron-builder |
+| Database | sql.js (SQLite in-memory, persisted to disk) |
+| LLM | OpenAI-compatible + Anthropic Messages API |
+| UI | Tailwind CSS 3.4, lucide-react, highlight.js |
+| MCP | Custom stdio JSON-RPC 2.0 client |
+
+---
+
+## 🤝 Contributing
+
+All contributions are welcome! Whether it's a bug fix, feature request, translation improvement, or documentation update — please open an issue or submit a PR.
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feat/my-feature`)
+3. Commit your changes (`git commit -am 'Add feature'`)
+4. Push to the branch (`git push origin feat/my-feature`)
+5. Open a Pull Request
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
+
+---
+
+## 🤝 योगदान
+
+सभी योगदान का स्वागत है! चाहे बग रिपोर्ट हो, फीचर रिक्वेस्ट, अनुवाद सुधार, या दस्तावेज़ी अपडेट — कृपया issue खोलें या PR सबमिट करें।
+
+1. रिपो को फॉक करें
+2. फीचर ब्रांच बनाएं (`git checkout -b feat/my-feature`)
+3. अपनी चेंजेस कॉमिट करें (`git commit -am 'Add feature'`)
+4. ब्रांच पर पुश करें (`git push origin feat/my-feature`)
+5. Pull Request खोलें
+
+विस्तृत गाइडलाइन के लिए [CONTRIBUTING.md](./CONTRIBUTING.md) देखें।
+
+---
+
+## 🤝 आभार
 
 AetherAI इन परियोजनाओं के कंधों पर खड़ा है — इनके विचारों ने वास्तुकला और अनुभव को आकार दिया:
 
