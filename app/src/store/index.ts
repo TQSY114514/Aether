@@ -169,6 +169,7 @@ interface AppState {
   systemPrefix: string         // custom text prepended to every system prompt
   autoTitle: boolean           // auto-generate a summary title for new sessions
   titleLanguage: string        // language for generated titles ('auto' follows UI lang)
+  titleModelId: number | null  // model to use for generating session titles (null = first enabled)
   backgroundImage: string | null
   backgroundOpacity: number   // 0–100, how visible the image is
   backgroundBlur: number      // 0–20px
@@ -186,6 +187,7 @@ interface AppState {
   setSystemPrefix: (v: string) => Promise<void>
   setAutoTitle: (v: boolean) => Promise<void>
   setTitleLanguage: (v: string) => Promise<void>
+  setTitleModel: (id: number | null) => Promise<void>
   setDefaultEffort: (v: 'off' | 'low' | 'medium' | 'high') => Promise<void>
   setDefaultModel: (id: number | null) => Promise<void>
   setDefaultPersona: (id: number | null) => Promise<void>
@@ -326,7 +328,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Navigate to the chat view without selecting a session.
   // Session is only created when the user sends their first message.
   // Also dismisses the welcome page so the blank chat view (View 2) shows.
-  newChat: () => set({ currentView: 'chat', currentSessionId: null, messages: [], arenaResults: [] }),
+  newChat: () => set({ currentView: 'chat', currentSessionId: null, messages: [], arenaResults: [], chatMode: 'normal' }),
   selectSession: async (id) => {
     // Push to the navigation history unless we got here via goBack/goForward
     // (those move the pointer, they don't push a new entry).
@@ -955,6 +957,7 @@ export const useStore = create<AppState>((set, get) => ({
   systemPrefix: '',
   autoTitle: true,
   titleLanguage: 'auto',
+  titleModelId: null as number | null,
   backgroundImage: null,
   backgroundOpacity: 100,
   backgroundBlur: 0,
@@ -986,6 +989,7 @@ export const useStore = create<AppState>((set, get) => ({
       const systemPrefix = s.systemPrefix ?? ''
       const autoTitle = (s.autoTitle ?? '1') === '1'
       const titleLanguage = s.titleLanguage ?? 'auto'
+      const titleModelId = parseInt(s.titleModelId ?? '0', 10) || null
       const modelRoutingPriority = ['quality', 'speed', 'cost'].includes(s.modelRoutingPriority as string) ? (s.modelRoutingPriority as 'quality' | 'speed' | 'cost') : 'quality'
       const autoCommitOnTestPass = (s.autoCommitOnTestPass ?? '0') === '1'
       await setLangAsync(lang)
@@ -994,7 +998,7 @@ export const useStore = create<AppState>((set, get) => ({
       applyLangDir(lang)
       let seenHints: string[] = []
       try { seenHints = JSON.parse(s.seen_hints || '[]') } catch (e) { log.warn('parse seen_hints failed:', e) }
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints, modelRoutingPriority, autoCommitOnTestPass })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints, modelRoutingPriority, autoCommitOnTestPass })
       // Background image is loaded asynchronously by App.tsx (deferred to next
       // frame) — no need to load it here.
     } catch (e) { log.warn('loadSettings failed:', e) }
@@ -1046,6 +1050,7 @@ export const useStore = create<AppState>((set, get) => ({
   setTopP:        async (v) => { await window.electronAPI.settings.set('topP', String(v)); set({ topP: v }) },
   setSystemPrefix:async (v) => { await window.electronAPI.settings.set('systemPrefix', v); set({ systemPrefix: v }) },
   setTitleLanguage:async (v) => { await window.electronAPI.settings.set('titleLanguage', v); set({ titleLanguage: v }) },
+  setTitleModel: async (v) => { await window.electronAPI.settings.set('titleModelId', String(v ?? '')); set({ titleModelId: v }) },
   setBackgroundOpacity: async (v) => { await window.electronAPI.settings.set('backgroundOpacity', String(v)); set({ backgroundOpacity: v }) },
   setBackgroundBlur: async (v) => { await window.electronAPI.settings.set('backgroundBlur', String(v)); set({ backgroundBlur: v }) },
   // Special-case setters that need extra logic.

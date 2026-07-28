@@ -15,6 +15,8 @@ export default function AdvancedSettings() {
   const systemPrefix = useStore((s) => s.systemPrefix)
   const autoTitle = useStore((s) => s.autoTitle)
   const titleLanguage = useStore((s) => s.titleLanguage)
+  const titleModelId = useStore((s) => s.titleModelId)
+  const allModels = useStore((s) => s.allModels)
   const autoCommitOnTestPass = useStore((s) => s.autoCommitOnTestPass)
   const setMaxTokens = useStore((s) => s.setMaxTokens)
   const setTemperature = useStore((s) => s.setTemperature)
@@ -22,6 +24,7 @@ export default function AdvancedSettings() {
   const setSystemPrefix = useStore((s) => s.setSystemPrefix)
   const setAutoTitle = useStore((s) => s.setAutoTitle)
   const setTitleLanguage = useStore((s) => s.setTitleLanguage)
+  const setTitleModel = useStore((s) => s.setTitleModel)
   const setAutoCommitOnTestPass = useStore((s) => s.setAutoCommitOnTestPass)
 
   return (
@@ -92,6 +95,19 @@ export default function AdvancedSettings() {
               <option value="zh">中文</option>
               <option value="en">English</option>
               <option value="ja">日本語</option>
+            </select>
+          </div>
+          <div>
+            <p className="text-sm mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.title_model')}</p>
+            <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('settings.title_model_desc')}</p>
+            <select value={titleModelId ?? ''} onChange={(e) => {
+              const v = e.target.value ? Number(e.target.value) : null
+              setTitleModel(v)
+            }} className="px-2.5 py-1.5 text-xs rounded-lg border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+              <option value="">{t('settings.default_model_none')}</option>
+              {allModels.map(m => (
+                <option key={m.id} value={m.id}>{`${m.provider_name || ''} · ${m.display_name || m.model_name}`}</option>
+              ))}
             </select>
           </div>
         </div>

@@ -5,7 +5,7 @@ import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
-import { PanelLeft, Cpu, FlaskConical, Plus } from 'lucide-react'
+import { PanelLeft, Cpu, FlaskConical } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // Trust badge dot color → tailwind class
@@ -22,7 +22,6 @@ const TRUST_TIP: Record<string, string> = {
 
 export default function ChatPage() {
   const currentSessionId = useStore((s) => s.currentSessionId)
-  const sessions = useStore((s) => s.sessions)
   const personas = useStore((s) => s.personas)
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
