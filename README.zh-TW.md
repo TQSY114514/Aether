@@ -87,9 +87,50 @@ npm start        # 啟動 Electron
 
 ---
 
-<p align="center">
-  <img src="assets/architecture.svg" width="100%" alt="AetherAI Architecture Overview">
-</p>
+## 📁 Project Structure
+
+```
+app/
+├── electron/              # main process (Node)
+│   ├── database.js        # SQLite (sql.js) data layer — 14 tables
+│   ├── ipc/               # IPC handlers (chat / arena / session / mcp / ...)
+│   │   ├── chat.handler.js    # THE central handler (540 lines)
+│   │   ├── arena.handler.js   # Multi-model arena with ELO
+│   │   ├── agent.handler.js   # Workspace management
+│   │   └── ...
+│   ├── llm/               # LLM abstraction (~3,700 lines, 19 files)
+│   │   ├── providerAdapter.js # Dispatch by api_format (openai/anthropic)
+│   │   ├── openaiAdapter.js   # OpenAI-compatible SSE streaming + retry
+│   │   ├── anthropicAdapter.js# Anthropic Messages API
+│   │   ├── credentialPool.js  # Multi-key rotation + cooldown
+│   │   ├── toolLoop.js        # Plan-Act-Observe with iteration budget
+│   │   ├── planning.js        # Hierarchical task decomposition
+│   │   ├── subAgent.js        # Parallel sub-agent delegation
+│   │   ├── compaction.js      # Context compaction (pair-preserving)
+│   │   ├── autoMemory.js      # Long-term structured memory
+│   │   ├── habitLearner.js    # Recurring preference -> auto-skills
+│   │   ├── hooks.js           # 10-point extensibility hooks
+│   │   ├── skills.js          # SKILL.md loader (Claude Code format)
+│   │   ├── modelAdvisor.js    # Heuristic model suggestion
+│   │   ├── toolCallRepair.js  # Malformed tool-call recovery
+│   │   ├── auditLog.js        # Per-turn agent execution trace
+│   │   └── ...
+│   ├── tools/             # built-in tool registry + sandbox
+│   │   ├── registry.js       # 16 tool definitions (OpenClaw-inspired)
+│   │   └── sandbox.js        # 3-layer defense (workspace root, traversal guard, blocklist)
+│   ├── mcp/               # MCP client + server manager
+│   ├── main.js / preload.js
+├── src/                   # renderer (React + TS + Zustand)
+│   ├── store/index.ts     # Zustand global state (~1,000 lines)
+│   ├── components/        # UI (chat / sidebar / settings / ui)
+│   ├── pages/             # Chat / Models / Persona / Settings / Scores / ...
+│   ├── utils/             # i18n (15 locales) / theme / markdown
+│   └── types/
+├── skills/                # Built-in skills (release-checklist, git-commit)
+├── commands/              # Built-in slash commands (/code, /explain, /polish, ...)
+├── locales/               # Translation files (13 languages, lazy-loaded)
+└── resources/             # App icons
+```
 
 ---
 
