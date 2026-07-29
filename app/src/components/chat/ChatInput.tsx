@@ -179,6 +179,7 @@ export default function ChatInput() {
       return
     }
     setInput('')
+    try { localStorage.removeItem(`draft:${currentSessionId ?? 'new'}`) } catch {}
 
     let sessionId = currentSessionId
     if (!sessionId) {
@@ -381,7 +382,7 @@ export default function ChatInput() {
             </div>
           )}
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
+          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
             <Paperclip size={16} className="text-gray-400" />
           </button>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
@@ -389,12 +390,12 @@ export default function ChatInput() {
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
             disabled={isStreaming || isArenaRunning} />
           {(isStreaming || isArenaRunning) ? (
-            <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')}>
+            <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
               <Square size={14} />
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')}>
+              className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
               <Send size={14} />
             </button>
           )}
@@ -477,7 +478,7 @@ function AgentModeSelector({ mode, onChange }: { mode: string; onChange: (v: 'of
     { value: 'auto', label: t('agent.mode.auto'), color: '#f97316', tooltip: t('agent.mode.auto.desc') },
     { value: 'yolo', label: t('agent.mode.yolo'), color: 'var(--error)', tooltip: t('agent.mode.yolo.desc') },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [language])
+  ], [language, t])
   const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[2]
   return (
     <div className="flex items-center gap-0.5">
@@ -569,7 +570,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
         }}
           className="shrink-0 rounded-full hover:opacity-80 transition-opacity"
           style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
-          title={modelSuggestion!.reason}>
+          title={modelSuggestion!.reason} aria-label={modelSuggestion!.reason}>
           <Wand2 size={10} className="px-1 py-0.5" />
         </button>
       )}

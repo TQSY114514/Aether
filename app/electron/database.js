@@ -17,6 +17,16 @@ function getTableColumns(table) {
   } catch { return [] }
 }
 
+// Whitelist helper for dynamic UPDATE queries. Filters data keys against the
+// table's actual columns (via PRAGMA table_info) so a caller can never inject
+// a column name into the SQL string. Returns [] if the table doesn't exist
+// (which makes the UPDATE a no-op — safer than allowing all keys through).
+function safeKeys(table, data) {
+  const cols = getTableColumns(table)
+  if (cols.length === 0) return []
+  return Object.keys(data).filter(k => k !== 'id' && cols.includes(k))
+}
+
 // Persisting the DB is expensive: db.export() serializes the whole database and
 // writeFileSync is synchronous, blocking the main process. During streaming we
 // updateMessage on every chunk, so we debounce the save — coalesce rapid writes
@@ -333,7 +343,7 @@ function addModel({ provider_id, model_name, display_name = null, is_primary = 0
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 function updateModel(id, data) {
-  const keys = Object.keys(data).filter(k => k !== 'id')
+  const keys = safeKeys('model', data)
   if (!keys.length) return
   db.run(`UPDATE model SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
   saveDatabase()
@@ -359,7 +369,7 @@ function addPersona({ name, prompt, avatar = null }) {
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 function updatePersona(id, data) {
-  const keys = Object.keys(data).filter(k => k !== 'id')
+  const keys = safeKeys('persona', data)
   if (!keys.length) return
   db.run(`UPDATE persona SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
   saveDatabase()
@@ -448,7 +458,7 @@ function addMessage({ session_id, role, content, model_used = null, provider_use
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 function updateMessage(id, data) {
-  const keys = Object.keys(data).filter(k => k !== 'id')
+  const keys = safeKeys('message', data)
   if (!keys.length) return
   db.run(`UPDATE message SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
   saveDatabase()
@@ -874,7 +884,7 @@ function addMcpServer({ name, command, args = [], env = {}, enabled = 1 }) {
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 function updateMcpServer(id, data) {
-  const keys = Object.keys(data).filter(k => k !== 'id')
+  const keys = safeKeys('mcp_server', data)
   if (!keys.length) return
   // Serialize args/env to JSON strings if given as arrays/objects.
   const serialized = keys.map(k => k === 'args' || k === 'env' ? JSON.stringify(data[k]) : data[k])

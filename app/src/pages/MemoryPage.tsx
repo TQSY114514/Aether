@@ -18,6 +18,7 @@ export default function MemoryPage() {
   const [conflicts, setConflicts] = useState<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>([])
   const [showConflicts, setShowConflicts] = useState(false)
   const [resolving, setResolving] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
   const { toast } = useUI()
 
   const loadEntries = async () => {
@@ -25,6 +26,7 @@ export default function MemoryPage() {
     setEntries(memories || [])
     const conf = await window.electronAPI.memory.conflicts()
     setConflicts(conf)
+    setLoading(false)
   }
 
   useEffect(() => { loadEntries() }, [])
@@ -82,7 +84,7 @@ export default function MemoryPage() {
           }
         }
         loadEntries()
-      } catch { alert('Invalid JSON file') }
+      } catch { toast('Invalid JSON file', { type: 'error' }) }
     }
     input.click()
   }
@@ -95,6 +97,9 @@ export default function MemoryPage() {
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      {loading ? (
+        <div className="p-8 text-center" style={{ color: 'var(--text-secondary)' }}>Loading...</div>
+      ) : (
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-2">
           <div>
@@ -250,6 +255,7 @@ export default function MemoryPage() {
           ))}
         </div>
       </div>
+      )}
     </div>
   )
 }

@@ -356,12 +356,17 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
             return { tc, isPlan: true, entry: { name: fn.name, args, result: `progress recorded for task ${args.task_id}`, error: null, risk: null, latencyMs: null }, planStep: `📊 [${args.task_id}] ${(args.result || '').slice(0, 60)}` }
           }
         }
-        const tool = getTool(fn.name)
+        let tool = null
+        try { tool = getTool(fn.name) } catch (e) {
+          // MCP manager load failure or registry error — don't let one broken
+          // tool crash the whole Promise.all batch. Report it as a tool error.
+          return { tc, entry: { name: fn.name, args, result: null, error: `failed to load tool: ${e?.message || fn.name}`, risk: null, latencyMs: null, checkpointId: null, failure_kind: 'tool_load_error' } }
+        }
         const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null, checkpointId: null }
 
         // Schema validation: reject arguments that don't match the tool's
         // declared JSON schema — prevents type confusion and missing fields.
-        const toolSchema = getTool(fn.name)?.parameters
+        const toolSchema = tool?.parameters
         if (toolSchema) {
           const validation = validateToolArgs(args, toolSchema)
           if (!validation.ok) {

@@ -397,15 +397,27 @@ export const useStore = create<AppState>((set, get) => ({
     await window.electronAPI.session.delete(id)
     const { currentSessionId } = get()
     // Clean up per-session state so deleted sessions don't leak streaming
-    // buffers / configs in memory.
+    // buffers / configs / per-message state in memory.
     set((s) => {
       const nextStream = { ...s.streamingBySession }
       delete nextStream[id]
       const nextConfigs = { ...s.sessionConfigs }
       delete nextConfigs[id]
+      // Clean per-message附属状态 for this session's messages
+      const msgIds = new Set(s.messages.filter(m => m.session_id === id).map(m => m.id))
+      const cleanMap = <T>(obj: Record<number, T>) => {
+        const n = { ...obj }
+        msgIds.forEach(mid => delete n[mid])
+        return n
+      }
       return {
         streamingBySession: nextStream,
         sessionConfigs: nextConfigs,
+        toolCallsByMessage: cleanMap(s.toolCallsByMessage),
+        planStepsByMessage: cleanMap(s.planStepsByMessage),
+        todosByMessage: cleanMap(s.todosByMessage),
+        thinkingBlocksByMessage: cleanMap(s.thinkingBlocksByMessage),
+        statusLinesByMessage: cleanMap(s.statusLinesByMessage),
         ...(currentSessionId === id ? { currentSessionId: null, messages: [] } : {}),
       }
     })
