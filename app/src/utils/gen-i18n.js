@@ -1,7 +1,7 @@
 // Build i18n.ts from the english base + the 13-language translation set.
 const fs = require('fs')
-const en = JSON.parse(fs.readFileSync('D:/aetherai/app/src/utils/i18n-en-base.json', 'utf-8'))
-const data = JSON.parse(fs.readFileSync('D:/aetherai/app/src/utils/i18n-translations.json', 'utf-8'))
+const en = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'i18n-en-base.json'), 'utf-8'))
+const data = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'i18n-translations.json'), 'utf-8'))
 
 // Upside-down English: reverse the string and swap a few letters so it reads
 // upside-down. Cosmetic joke locale, not a real translation.
@@ -46,6 +46,7 @@ const translations: Record<string, Record<string, string>> = ${JSON.stringify(tr
 // without importing the store (avoids a circular dep: store imports \`t\`).
 let currentLang: LangCode = 'en'
 export function setLang(code: LangCode) { currentLang = code }
+export function setLangAsync(code: LangCode): Promise<void> { return Promise.resolve(setLang(code)) }
 export function getLang(): LangCode { return currentLang }
 
 // Detect the user's system language and map to a supported code. Falls back to en.
@@ -74,5 +75,5 @@ export function getLangDir(code: string): "ltr" | "rtl" {
   return (LANGS.find((l) => l.code === code)?.dir as "ltr" | "rtl") || "ltr"
 }
 `
-fs.writeFileSync('D:/aetherai/app/src/utils/i18n.ts', code)
+fs.writeFileSync(require('path').join(__dirname, 'i18n.ts'), code)
 console.log('i18n.ts generated:', langs.length, 'locales,', Object.keys(en).length, 'keys each')

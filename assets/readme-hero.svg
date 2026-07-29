@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320" role="img" aria-label="AetherAI — Local-first multi-model AI workbench">
+  <defs>
+    <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="heroFade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.85"/>
+    </linearGradient>
+    <radialGradient id="heroGlow" cx="22%" cy="50%" r="40%">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="heroBlur"><feGaussianBlur stdDeviation="3"/></filter>
+  </defs>
+
+  <!-- 背景光晕 -->
+  <rect width="960" height="320" fill="url(#heroGlow)"/>
+
+  <!-- 左侧几何标识（延续 banner.svg 的菱形体系） -->
+  <g transform="translate(150,160)">
+    <circle r="120" fill="none" stroke="url(#heroGrad)" stroke-width="1" opacity="0.18"/>
+    <circle r="120" fill="none" stroke="#a78bfa" stroke-width="0.5" opacity="0.12" stroke-dasharray="3 6"/>
+    <polygon points="0,-110 100,0 0,110 -100,0" fill="none" stroke="url(#heroGrad)" stroke-width="3"/>
+    <polygon points="0,-66 60,0 0,66 -60,0" fill="none" stroke="#a78bfa" stroke-width="1.2" opacity="0.45"/>
+    <line x1="-44" y1="48" x2="0" y2="-72" stroke="#c4b5fd" stroke-width="3.2" stroke-linecap="round"/>
+    <line x1="44" y1="48" x2="0" y2="-72" stroke="#c4b5fd" stroke-width="3.2" stroke-linecap="round"/>
+    <circle r="6.5" fill="#ffffff" opacity="0.9" filter="url(#heroBlur)"/>
+    <circle cx="-38" cy="32" r="3.5" fill="#a78bfa" opacity="0.7"/>
+    <circle cx="38" cy="32" r="3.5" fill="#67e8f9" opacity="0.7"/>
+    <line x1="-38" y1="32" x2="0" y2="0" stroke="#818cf8" stroke-width="1.2" opacity="0.35"/>
+    <line x1="38" y1="32" x2="0" y2="0" stroke="#818cf8" stroke-width="1.2" opacity="0.35"/>
+  </g>
+
+  <!-- 右侧品牌文字 -->
+  <text x="320" y="138" font-family="'Inter','Segoe UI','Helvetica Neue',sans-serif" font-size="64" font-weight="700" letter-spacing="6" fill="url(#heroGrad)">AetherAI</text>
+  <text x="324" y="172" font-family="'Inter','Segoe UI','Helvetica Neue',sans-serif" font-size="17" font-weight="400" letter-spacing="3" fill="#818cf8" opacity="0.75">LOCAL-FIRST · MULTI-MODEL · AI WORKBENCH</text>
+
+  <!-- 能力胶囊 -->
+  <g font-family="'Inter','Segoe UI',sans-serif" font-size="12.5" font-weight="500">
+    <rect x="324" y="196" width="96" height="26" rx="13" fill="#6366f1" fill-opacity="0.12" stroke="#6366f1" stroke-opacity="0.35"/>
+    <text x="372" y="213" fill="#818cf8" text-anchor="middle">Multi-Provider</text>
+    <rect x="430" y="196" width="80" height="26" rx="13" fill="#8b5cf6" fill-opacity="0.12" stroke="#8b5cf6" stroke-opacity="0.35"/>
+    <text x="470" y="213" fill="#a78bfa" text-anchor="middle">Agent Loop</text>
+    <rect x="520" y="196" width="80" height="26" rx="13" fill="#06b6d4" fill-opacity="0.12" stroke="#06b6d4" stroke-opacity="0.35"/>
+    <text x="560" y="213" fill="#22d3ee" text-anchor="middle">ELO Arena</text>
+    <rect x="610" y="196" width="74" height="26" rx="13" fill="#6366f1" fill-opacity="0.12" stroke="#6366f1" stroke-opacity="0.35"/>
+    <text x="647" y="213" fill="#818cf8" text-anchor="middle">15 Langs</text>
+    <rect x="694" y="196" width="66" height="26" rx="13" fill="#8b5cf6" fill-opacity="0.12" stroke="#8b5cf6" stroke-opacity="0.35"/>
+    <text x="727" y="213" fill="#a78bfa" text-anchor="middle">MCP</text>
+  </g>
+
+  <!-- 底部渐变分隔线 -->
+  <rect x="324" y="248" width="436" height="2" fill="url(#heroFade)" opacity="0.5"/>
+  <text x="324" y="272" font-family="'Inter','Segoe UI',sans-serif" font-size="11" fill="#818cf8" opacity="0.5">Electron · React · TypeScript · sql.js · MIT</text>
+</svg>

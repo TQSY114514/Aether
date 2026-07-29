@@ -38,6 +38,7 @@ class McpClient extends EventEmitter {
         this.proc = spawn(this.command, this.args, {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { ...process.env, ...this.env },
+          windowsHide: true,
         })
       } catch (e) {
         return reject(new Error(`spawn failed: ${e.message}`))

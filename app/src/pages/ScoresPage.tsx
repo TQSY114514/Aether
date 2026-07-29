@@ -1,19 +1,24 @@
+import { useMemo } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 
 export default function ScoresPage() {
   const scores = useStore((s) => s.scores)
-  const byIntent: Record<string, typeof scores> = {}
-  for (const s of scores) {
-    if (!byIntent[s.intent]) byIntent[s.intent] = []
-    byIntent[s.intent].push(s)
-  }
-  for (const k of Object.keys(byIntent)) byIntent[k].sort((a, b) => b.score - a.score)
 
-  const intentLabels: Record<string, string> = {
+  const byIntent = useMemo(() => {
+    const grouped: Record<string, typeof scores> = {}
+    for (const s of scores) {
+      if (!grouped[s.intent]) grouped[s.intent] = []
+      grouped[s.intent].push(s)
+    }
+    for (const k of Object.keys(grouped)) grouped[k].sort((a, b) => b.score - a.score)
+    return grouped
+  }, [scores])
+
+  const intentLabels: Record<string, string> = useMemo(() => ({
     coding: t('scores.intent.coding'), math: t('scores.intent.math'),
     translation: t('scores.intent.translation'), summary: t('scores.intent.summary'), general: t('scores.intent.general'),
-  }
+  }), [])
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>

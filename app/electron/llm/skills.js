@@ -22,9 +22,13 @@ const path = require('path')
 const { app } = require('electron')
 const { getWorkspaceRoot } = require('../tools/sandbox')
 
-// In-memory index: name → skill metadata. Refreshed on demand (no file watcher
-// — desktop app reloads on session start or explicit rescan IPC).
+// In-memory index: name → skill metadata. Refreshed on demand.
 let _skills = new Map()
+
+// Usage tracking: skill name → { count, lastUsedAt }.
+// Persisted to disk via the database on each invocation.
+let _usage = {}
+let _usageTimer = null
 
 // Minimal YAML frontmatter parser — we only need name / description / disabled,
 // so no js-yaml dependency. Handles `---\nkey: value\n---` blocks.
@@ -54,12 +58,20 @@ function loadSkillsFromDir(dir) {
     // (Claude-Code convention; we warn but don't hard-fail on mismatch).
     if (!meta.name || !meta.description) continue
     if (meta.disabled === 'true' || meta.disabled === true) continue
+    // Collect optional metadata fields from frontmatter — unrecognized keys
+    // are silently dropped so users can add tags/category/version etc.
+    const extra = {}
+    const KNOWN_KEYS = new Set(['name', 'description', 'disabled'])
+    for (const [k, v] of Object.entries(meta)) {
+      if (!KNOWN_KEYS.has(k)) extra[k] = v
+    }
     found.push({
       name: meta.name,
       description: meta.description,
       filePath: skillPath,
       baseDir: path.join(dir, ent.name),
       body,
+      metadata: Object.keys(extra).length > 0 ? extra : undefined,
     })
   }
   return found
@@ -85,6 +97,7 @@ function scanSkills() {
     }
   }
   _skills = byName
+  loadSkillUsage()
   return _skills.size
 }
 
@@ -95,6 +108,45 @@ function getSkill(name) { return _skills.get(name) || null }
 // Add or replace a single skill in the in-memory index without a disk rescan.
 // Used by habitLearner.promoteToSkill to refresh the user-habits entry in O(1).
 function upsertSkill(name, skill) { _skills.set(name, skill) }
+
+// ─── Usage Tracking ─────────────────────────────────────────────────────────
+// Track when each skill is invoked so the UI can show usage counts and
+// last-used timestamps. Debounced disk write to avoid I/O on every call.
+
+function recordSkillUse(name) {
+  _usage[name] = { count: (_usage[name]?.count || 0) + 1, lastUsedAt: new Date().toISOString() }
+  if (!_usageTimer) {
+    _usageTimer = setTimeout(() => {
+      _usageTimer = null
+      try {
+        const dbi = require('../database')
+        if (!dbi.run) return
+        for (const [name, u] of Object.entries(_usage)) {
+          try {
+            dbi.run('INSERT OR REPLACE INTO skill_usage (name, use_count, last_used_at) VALUES (?, ?, ?)',
+              [name, u.count, u.lastUsedAt])
+          } catch {}
+        }
+        try { dbi.saveDatabase() } catch {}
+      } catch {}
+    }, 2000)
+  }
+}
+
+function getSkillUsage() { return _usage }
+function resetSkillUsage() { _usage = {} }
+
+// Load usage data from the database (called on startup).
+function loadSkillUsage() {
+  try {
+    const dbi = require('../database')
+    if (!dbi.allRows) return
+    const rows = dbi.allRows('SELECT name, use_count, last_used_at FROM skill_usage') || []
+    for (const row of rows) {
+      _usage[row.name] = { count: row.use_count || 0, lastUsedAt: row.last_used_at || null }
+    }
+  } catch {}
+}
 
 // Build the <available_skills> system-prompt block. Only name + description
 // appear (progressive-disclosure level 1). The use_skill tool loads the body.
@@ -111,4 +163,70 @@ function formatSkillsForPrompt() {
   return `<available_skills>\nThe following skills are available. When the user's request matches a skill's description, call the use_skill tool with the skill name to load its full instructions, then follow them. Only load a skill when it is relevant to the task.\n${items}\n</available_skills>`
 }
 
-module.exports = { scanSkills, getSkills, getSkill, getSkillBody, formatSkillsForPrompt, parseFrontmatter, upsertSkill }
+// ───────────────────────────────────────────────────────────────────────────
+// Slash command loader (Claude-Code-compatible .claude/commands/ format).
+//
+// A command is a directory under a `commands/` folder containing a CMD.md with
+// YAML frontmatter (required: name, description, prompt; optional: disabled).
+// Scan roots mirror the skills scan roots but under `commands/` sub-dirs:
+//   <workspace>/.claude/commands   ← Claude-Code compat
+//   <workspace>/.aetherai/commands ← app-native
+//   <userData>/commands            ← user-global
+//   <app>/commands                 ← built-in (lowest precedence)
+// ───────────────────────────────────────────────────────────────────────────
+
+let _commands = new Map()
+
+function loadCommandsFromDir(dir) {
+  const found = []
+  if (!dir) return found
+  let entries
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return found }
+  for (const ent of entries) {
+    if (!ent.isDirectory() || ent.name.startsWith('.') || ent.name === 'node_modules') continue
+    const cmdFile = path.join(dir, ent.name, 'CMD.md')
+    let text
+    try { text = fs.readFileSync(cmdFile, 'utf-8') } catch { continue }
+    const { meta, body } = parseFrontmatter(text)
+    if (!meta.name || !meta.prompt) continue
+    if (meta.disabled === 'true' || meta.disabled === true) continue
+    found.push({
+      id: ent.name,
+      name: meta.name,
+      description: meta.description || '',
+      prompt: meta.prompt,
+    })
+  }
+  return found
+}
+
+function scanCommands() {
+  const roots = []
+  const ws = getWorkspaceRoot()
+  if (ws) {
+    roots.push(path.join(ws, '.claude', 'commands'))
+    roots.push(path.join(ws, '.aetherai', 'commands'))
+  }
+  roots.push(path.join(app.getPath('userData'), 'commands'))
+  roots.push(path.join(__dirname, '..', '..', 'commands'))
+  const byId = new Map()
+  for (const root of roots) {
+    for (const c of loadCommandsFromDir(root)) {
+      if (!byId.has(c.id)) byId.set(c.id, c)
+    }
+  }
+  _commands = byId
+  return _commands.size
+}
+
+function getCommands() { return Array.from(_commands.values()) }
+function getCommand(id) { return _commands.get(id) || null }
+
+// Re-scan skills AND commands together (convenience for callers).
+function rescan() { scanSkills(); scanCommands() }
+
+module.exports = {
+  scanSkills, getSkills, getSkill, getSkillBody, formatSkillsForPrompt, parseFrontmatter, upsertSkill,
+  scanCommands, getCommands, getCommand, rescan,
+  recordSkillUse, getSkillUsage, resetSkillUsage, loadSkillUsage,
+}

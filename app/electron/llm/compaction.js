@@ -22,11 +22,14 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const { completeChat } = require('./providerAdapter')
+const hooks = require('./hooks')
 
 const SAFETY_MARGIN = 1.2          // estimateTokens is rough; pad it
 const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of budget
 const RECENT_WINDOW = 8           // messages always kept verbatim at the tail
 const SUMMARIZATION_OVERHEAD = 2048 // reserve for the summary prompt + system + reply
+const SUMMARIZATION_TIMEOUT_MS = 15000 // guard timeout for the summarization HTTP call
+const FETCH_CONNECT_TIMEOUT_MS = 3000   // short guard: reject before the test framework times out
 
 // Estimate token count for a single message. Content may be a string or a
 // multimodal parts array (OpenAI shape). Image parts cost nothing here — we
@@ -82,14 +85,20 @@ function safeSplitIndex(messages, recentCount) {
 
 // Core entry point. Returns the (possibly compacted) message array.
 // `budget` is the model's context window in tokens (approx). 0 = no compaction.
-async function maybeCompact({ provider, model, messages, budget, signal }) {
+async function maybeCompact({ provider, model, messages, budget, signal, sessionId }) {
   if (!budget) return messages
   const threshold = Math.floor(budget * COMPACT_AT_RATIO)
   const est = estimateMessagesTokens(messages)
   if (est < threshold) return messages
 
+  // Hooks: PreCompact — allow blocking or modification.
+  let ctx = { provider, model, messages, budget, est, threshold, sessionId }
+  try { await hooks.runHooks('PreCompact', ctx) } catch (e) {
+    return messages // hook blocked compaction
+  }
+
   const split = safeSplitIndex(messages, RECENT_WINDOW)
-  if (split <= 0) return messages // everything is "recent" already
+  if (split <= 0) return messages
   const older = messages.slice(0, split)
   const recent = messages.slice(split)
   const systemMsgs = older.filter(m => m.role === 'system')
@@ -99,8 +108,6 @@ async function maybeCompact({ provider, model, messages, budget, signal }) {
   try {
     summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal })
   } catch {
-    // Summarization failed — hard-truncate the oldest non-system messages,
-    // then use safeSplit to ensure no tool_call ↔ tool_result pair is broken.
     const targetRecent = Math.floor(RECENT_WINDOW * 1.5)
     const split = safeSplitIndex(nonSystemOlder, targetRecent)
     const keep = nonSystemOlder.slice(split)
@@ -111,7 +118,12 @@ async function maybeCompact({ provider, model, messages, budget, signal }) {
   }
   if (!summary) return messages
   const summaryMsg = { role: 'system', content: `Summary of earlier conversation:\n${summary}` }
-  return [...systemMsgs, summaryMsg, ...recent]
+  const result = [...systemMsgs, summaryMsg, ...recent]
+
+  // Hooks: PostCompact
+  try { await hooks.runHooks('PostCompact', { ...ctx, summary, olderCount: older.length, recentCount: recent.length }) } catch {}
+
+  return result
 }
 
 // Ask the model to summarize a block of older messages into a compact paragraph.
@@ -132,15 +144,32 @@ async function summarizeHistory({ provider, model, history, signal }) {
     if (m.tool_calls) return `[${m.role}] ${c || ''}\n[tool calls: ${JSON.stringify(m.tool_calls.map(t => t.function?.name))}]`
     return `[${m.role}] ${c}`
   }).join('\n')
-  const text = await completeChat({
+  // Guard against hanging forever when the provider is unreachable (e.g. tests).
+  const ctrl = new AbortController()
+  const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
+  // Promise.race safety net: AbortController does not abort DNS resolution in
+  // Node.js fetch, so a short Promise.race ensures the call fails fast even
+  // when the signal is ignored at the transport layer.
+  const fetchPromise = completeChat({
     provider, model,
     messages: [
       { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
       { role: 'user', content: transcript.slice(0, 24000) }, // cap the summarizer input
     ],
-    signal,
+    signal: ctrl.signal,
     options: { max_tokens: 600, temperature: 0.2 },
   })
+  let text
+  try {
+    text = await Promise.race([
+      fetchPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('summarize fetch timeout')), FETCH_CONNECT_TIMEOUT_MS)),
+    ])
+    clearTimeout(guard)
+  } catch (e) {
+    clearTimeout(guard)
+    throw e
+  }
   return (text || '').trim()
 }
 

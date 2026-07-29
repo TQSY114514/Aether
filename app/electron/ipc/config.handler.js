@@ -73,13 +73,14 @@ function registerConfigHandlers(ipcMain, db) {
         if (!pid) { skipped.models++; continue }
         const key = `${m.provider_name}|${m.model_name}`
         if (modelKey.has(key)) { skipped.models++; continue }
-        db.addModel({
+        const result = db.addModel({
           provider_id: pid, model_name: m.model_name, display_name: m.display_name,
           is_primary: m.is_primary ?? 0, fallback_order: m.fallback_order ?? null,
           context_window: m.context_window ?? null,
           input_price_per_1k: m.input_price_per_1k ?? null,
           output_price_per_1k: m.output_price_per_1k ?? null,
         })
+        db.initModelScores(result.lastInsertRowid)
         modelKey.add(key)
         created.models++
       }

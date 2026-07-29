@@ -12,7 +12,8 @@ function registerProviderHandlers(ipcMain, db) {
   ipcMain.handle('provider:test-connection', async (_e, id) => {
     const provider = db.getProvider(id)
     if (!provider) return { success: false, errorMessage: '供应商未找到' }
-    return testConnection({ provider })
+    try { return await testConnection({ provider }) }
+    catch (e) { return { success: false, errorMessage: e?.message || String(e) } }
   })
 
   // Fetch the provider's model list — also delegated to the adapter.

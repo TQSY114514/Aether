@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
+import type { Session } from '@/types'
 import { Brain, Wrench, Link, Search, Cpu } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
@@ -19,7 +20,7 @@ const COLORS: Record<Node['type'] | 'default', string> = {
 
 // Build the graph from DB data. Simple keyword overlap (not NLP) so it stays
 // fast and zero-dependency.
-function buildGraph(memories: { id: number; content: string; created_at: string }[], skills: { name: string; description: string }[], sessions: { id: number; title: string; updated_at: string; last_message?: string }[]): GraphData {
+function buildGraph(memories: { id: number; content: string; created_at: string }[], skills: { name: string; description: string }[], sessions: Session[]): GraphData {
   const nodes: Node[] = []
   const edges: Edge[] = []
   // Nodes

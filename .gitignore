@@ -29,6 +29,9 @@ _ref/
 **/out/
 **/node_modules/
 
+# ── Electron builder cache ──
+**/.electron-builder-cache/
+
 # ── Logs ──
 *.log
 npm-debug.log*
@@ -43,3 +46,11 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+# electron-builder extracted temp files
+app/dist-out/
+app/.electron-builder-cache/
+
+# Release artifacts staging (local downloads, not for the repo)
+release-download/
+

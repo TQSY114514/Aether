@@ -1,4 +1,3 @@
-// ───────────────────────────────────────────────────────────────────────────
 // MCP server manager.
 //
 // Owns the live McpClient instances. On startup (or when the user adds a
@@ -8,13 +7,14 @@
 // both built-ins and MCP tools — so the agent can use external tools (file
 // systems, databases, browsers, anything with an MCP server) with no special
 // handling, and the permission gate applies uniformly.
-// ───────────────────────────────────────────────────────────────────────────
 
 const { McpClient } = require('./client')
 const builtin = require('../tools/registry')
+const log = require('../logger')
 
 const clients = new Map() // name -> McpClient
 const mergedTools = new Map() // tool name -> tool object (built-ins + MCP)
+const MCP_CONNECT_TIMEOUT = 5000 // 5s per server — a hung server must not block startup
 
 // Seed with built-in tools on first use.
 function ensureSeeded() {
@@ -31,12 +31,16 @@ async function connectServer(cfg) {
   if (clients.has(cfg.name)) return []
   const client = new McpClient(cfg)
   try {
-    const tools = await client.connect()
+    // Race the connect call against a timeout so a hung server never blocks startup.
+    const tools = await Promise.race([
+      client.connect(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), MCP_CONNECT_TIMEOUT))
+    ])
     for (const t of tools) mergedTools.set(t.name, t)
     clients.set(cfg.name, client)
     return tools
   } catch (e) {
-    console.warn(`[MCP] ${cfg.name} connect failed:`, e.message)
+    log.warn(`${cfg.name} connect failed:`, e.message)
     return []
   }
 }

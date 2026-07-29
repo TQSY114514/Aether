@@ -1,6 +1,17 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+// app.getLocale() requires the app to be ready. Lazily resolve it on first
+// access so the preload doesn't crash during module load in sandbox mode.
+let _locale = null
+function getLocale() {
+  if (_locale === null) {
+    try { _locale = require('electron').app.getLocale() } catch { _locale = 'en-US' }
+  }
+  return _locale
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
+  sys: { locale: getLocale() },
   provider: {
     list: () => ipcRenderer.invoke('provider:list'),
     get: (id) => ipcRenderer.invoke('provider:get', id),
@@ -10,6 +21,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     testConnection: (id) => ipcRenderer.invoke('provider:test-connection', id),
     fetchModels: (id) => ipcRenderer.invoke('provider:fetch-models', id),
   },
+  agent: {
+    getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
+    setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', typeof opts === 'string' ? { dir: opts } : opts),
+    reindexProject: () => ipcRenderer.invoke('agent:project:reindex'),
+    hasProjectInstructions: () => ipcRenderer.invoke('agent:has-project-instructions'),
+    listCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:list', sessionId),
+    getCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:get', id),
+    deleteCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:delete', id),
+    cleanupCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:cleanup', sessionId),
+  },
   model: {
     list: (providerId) => ipcRenderer.invoke('model:list', providerId),
     create: (data) => ipcRenderer.invoke('model:create', data),
@@ -18,6 +39,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fallbackChain: (providerId) => ipcRenderer.invoke('model:fallback-chain', providerId),
     listAll: () => ipcRenderer.invoke('model:list-all'),
     primary: () => ipcRenderer.invoke('model:primary'),
+    suggest: (params) => ipcRenderer.invoke('model:suggest', params),
+    routeTier: (params) => ipcRenderer.invoke('model:route-tier', params),
   },
   persona: {
     list: () => ipcRenderer.invoke('persona:list'),
@@ -42,6 +65,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: (sessionId) => ipcRenderer.invoke('message:list', sessionId),
     update: (id, data) => ipcRenderer.invoke('message:update', id, data),
     deleteAfter: (sessionId, afterId) => ipcRenderer.invoke('message:delete-after', sessionId, afterId),
+    deleteArena: (sessionId) => ipcRenderer.invoke('message:delete-arena', sessionId),
+    addNormal: (msg) => ipcRenderer.invoke('message:add-normal', msg),
   },
   chat: {
     send: (params) => ipcRenderer.invoke('chat:send', params),
@@ -91,7 +116,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:permission-expired', handler)
       return () => ipcRenderer.removeListener('chat:permission-expired', handler)
     },
-    replyPermission: (payload) => ipcRenderer.send('chat:permission-reply', payload),
+    replyPermission: (payload) => ipcRenderer.invoke('chat:permission-reply', payload),
+    onToolStream: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:tool-stream', handler)
+      return () => ipcRenderer.removeListener('chat:tool-stream', handler)
+    },
     onHabitProposed: (callback) => {
       const handler = (_e, payload) => callback(payload)
       ipcRenderer.on('chat:habit-proposed', handler)
@@ -99,7 +129,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     confirmHabit: (key) => ipcRenderer.invoke('chat:habit-confirm', key),
     dismissHabit: (key) => ipcRenderer.invoke('chat:habit-dismiss', key),
-    stop: () => ipcRenderer.invoke('chat:stop'),
+    onHabitSuggestion: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:habit-suggestion', handler)
+      return () => ipcRenderer.removeListener('chat:habit-suggestion', handler)
+    },
+    onContextBudget: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:context-budget', handler)
+      return () => ipcRenderer.removeListener('chat:context-budget', handler)
+    },
+    onThinkingChunk: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:thinking-chunk', handler)
+      return () => ipcRenderer.removeListener('chat:thinking-chunk', handler)
+    },
+    stop: (sessionId) => ipcRenderer.invoke('chat:stop', sessionId),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
@@ -130,6 +175,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create: (data) => ipcRenderer.invoke('memory:create', data),
     update: (id, data) => ipcRenderer.invoke('memory:update', id, data),
     delete: (id) => ipcRenderer.invoke('memory:delete', id),
+    conflicts: () => ipcRenderer.invoke('memory:conflicts'),
+    conflictResolve: (keepId, removeId) => ipcRenderer.invoke('memory:conflict:resolve', keepId, removeId),
+    access: (id) => ipcRenderer.invoke('memory:access', id),
   },
   background: {
     set: (dataUrl) => ipcRenderer.invoke('background:set', dataUrl),
@@ -139,13 +187,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
   },
-  agent: {
-    getWorkspace: () => ipcRenderer.invoke('agent:workspace:get'),
-    setWorkspace: (dir) => ipcRenderer.invoke('agent:workspace:set', dir),
+  protocol: {
+    onOpen: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('protocol:open', handler)
+      return () => ipcRenderer.removeListener('protocol:open', handler)
+    },
   },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     rescan: () => ipcRenderer.invoke('skills:rescan'),
+  },
+  commands: {
+    list: () => ipcRenderer.invoke('commands:list'),
+    rescan: () => ipcRenderer.invoke('commands:rescan'),
   },
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),
@@ -174,5 +229,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     byModel: (range) => ipcRenderer.invoke('usage:by-model', range),
     daily: (range) => ipcRenderer.invoke('usage:daily', range),
     log: (range) => ipcRenderer.invoke('usage:log', range),
+  },
+  audit: {
+    log: (params) => ipcRenderer.invoke('audit:log', params),
+  },
+  agentCheckpoint: {
+    list: (params) => ipcRenderer.invoke('agent-checkpoint:list', params),
+    rollback: (params) => ipcRenderer.invoke('agent-checkpoint:rollback', params),
+  },
+  trust: {
+    badge: (params) => ipcRenderer.invoke('trust:badge', params),
   },
 })

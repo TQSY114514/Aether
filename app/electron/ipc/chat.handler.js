@@ -1,23 +1,78 @@
 const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
-const { runToolLoop } = require('../llm/toolLoop')
+const { runToolLoop, MAX_CONCURRENT_TOOLS } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
 const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
+const { computeCost } = require('../utils/cost')
+const { estimateMessagesTokens, estimateTextTokens } = require('../llm/compaction')
+const auditLog = require('../llm/auditLog')
+const modelAdvisor = require('../llm/modelAdvisor')
+const modelRouter = require('../llm/modelRouter')
+const log = require('../logger')
+const providerHealth = require('../llm/providerHealth')
+const checkpoints = require('../llm/checkpoints')
 
 // dbHandle is set by registerChatHandlers — generateSummaryTitle lives at module
 // scope (so it can be unit-tested) but needs DB access to persist the title.
 let dbHandle = null
 
-// Placeholder titles (in any language) that indicate a session hasn't been
-// named yet. When auto-title is on and the session has one of these, we
-// generate a summary title after the first response.
-const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
+// Placeholder titles that indicate a session hasn't been named yet.
+// Includes common phrases across all 15 locale files so auto-title
+// doesn't churn for non-Chinese/English users.
+const PLACEHOLDER_TITLES = new Set([
+  // Chinese
+  '新会话', '新对话', '新建会话', '新建对话',
+  // English
+  'New Chat', 'New Conversation', 'New Message',
+  // Japanese
+  '新しいチャット', '新しい会話',
+  // Korean
+  '새 채팅', '새 대화',
+  // French
+  'Nouveau chat', 'Nouvelle conversation',
+  // German
+  'Neuer Chat', 'Neues Gespräch',
+  // Spanish
+  'Nuevo chat', 'Nueva conversación',
+  // Portuguese
+  'Nova conversa', 'Novo chat',
+  // Russian
+  'Новый чат',
+  // Italian
+  'Nuova chat',
+  // Dutch
+  'Nieuwe chat',
+  // Turkish
+  'Yeni Sohbet',
+  // Arabic
+  'محادثة جديدة',
+  // Polish
+  'Nowy czat',
+])
 
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
+
+// Per-session message tracking for abortControllers cleanup on session delete.
+let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
+function registerSessionMessages(sessionId, messageIds) {
+  if (!sessionMessagesMap.has(sessionId)) sessionMessagesMap.set(sessionId, new Set())
+  const set = sessionMessagesMap.get(sessionId)
+  for (const mid of messageIds) set.add(mid)
+}
+function cleanupSessionControllers(sessionId) {
+  const msgIds = sessionMessagesMap.get(sessionId)
+  if (msgIds) {
+    for (const mid of msgIds) {
+      const ctrl = abortControllers.get(mid)
+      if (ctrl) { ctrl.abort(); abortControllers.delete(mid) }
+    }
+    sessionMessagesMap.delete(sessionId)
+  }
+}
 
 // ─── Session-scoped permission allow-rules ─────────────────────────────────
 // When the user picks "allow + remember" in the permission dialog, we store a
@@ -55,15 +110,15 @@ function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
 
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
+  auditLog.setDb(db)
+  checkpoints.setDb(db)
   // Cache rarely-changing settings at handler registration time. Invalidation
-  // happens on the `settings-changed` IPC (broadcast from settings.handler).
-  const _s: Record<string, string> = {}
-  const getCached = (k: string, fallback: string) => {
-    if (!(k in _s)) _s[k] = db.getSetting(k) ?? fallback
-    return _s[k]
-  }
-  // Re-populate cache from DB (covers app restart where the handler is re-registered).
-  ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? '' })
+  // happens via the settings:changed event emitted by the settings handler.
+  const _s = {}
+  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: '30000', agent_max_iterations: '25' }
+  ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? SETTING_DEFAULTS[k] })
+
+  ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })
 
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
     // Save user message
@@ -90,11 +145,26 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { messageId: 0 }
     }
 
-    // Build fallback chain
+    // Model suggestion (auto-routing rationale for the renderer).
+    let modelSuggestion = null
+    try {
+      const allModelsForSuggest = db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
+      const intent = db.classifyIntent(content)
+      const scores = db.getModelScores()
+      const eloData = {}
+      for (const s of scores) { if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 } }
+      const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData })
+      if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, confidence: result.confidence }
+    } catch {}
+
+    // Build fallback chain — skip providers that are in cooldown or have a
+    // poor success rate (provider health tracking).
     const fallbackModels = [{ model, provider }]
     const chain = db.getFallbackChain(model.provider_id)
     for (const m of chain) {
-      if (m.id !== modelId) fallbackModels.push({ model: m, provider })
+      if (m.id !== modelId && providerHealth.isHealthy(m.provider_id)) {
+        fallbackModels.push({ model: m, provider: m.provider || provider })
+      }
     }
 
     // Get conversation history
@@ -104,8 +174,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // Used for both the placeholder-title check and the persona_id fallback below.
     const session0 = db.getSession(sessionId)
     // Respect the autoTitle setting (default on) and only summarize the first exchange.
-    const autoTitleOn = (getCached('autoTitle', '1') ?? '1') === '1'
-    const titleLanguage = getCached('titleLanguage') || 'auto'
+    const autoTitleOn = (_s['autoTitle'] ?? '1') === '1'
+    const titleLanguage = _s['titleLanguage'] || 'auto'
     const needsTitle = autoTitleOn && session0 && PLACEHOLDER_TITLES.has((session0.title || '').trim()) && msgs.length === 1
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
@@ -144,7 +214,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     const beforeCompact = apiMsgs.length
     let compacted
     try {
-      compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget })
+      compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget, sessionId })
     } catch (e) {
       compacted = apiMsgs
     }
@@ -174,12 +244,28 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // system message so the model can recall context from earlier sessions.
     // Done once here so BOTH the tool path and the plain streaming path inherit it.
     // Gateable via the auto_memory_enabled setting (default on).
-    const autoMemoryOn = getCached('auto_memory_enabled', '1') !== '0'
+    const autoMemoryOn = _s['auto_memory_enabled'] !== '0'
     const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
 
-    const timeoutMs = parseInt(getCached('fallback_timeout_ms', '30000'), 10)
+    // Proactive habit suggestions (Hermes-style): fire-and-forget match.
+    if (autoMemoryOn) {
+      try { habitLearner.proactiveSuggest({ db, provider, model, userMessage: content, signal: controller?.signal, onSuggest: (h) => { try { getWebContents()?.send('chat:habit-suggestion', h) } catch {} } }) } catch {}
+    }
+
+    const timeoutMs = parseInt(_s['fallback_timeout_ms'] ?? '30000', 10)
     let lastError = null
+
+    // Set workspace root for this session (from session config or global default).
+    // This lets the sandbox resolve per-session workspaces.
+    try { const { setWorkspaceRootForSession } = require('../tools/sandbox'); setWorkspaceRootForSession(sessionId, (session0?.config && JSON.parse(session0.config)?.workspace) || null) } catch {}
+
+    // Context budget: compute usage before the request so we can report it.
+    const budgetBefore = estimateMessagesTokens(compacted)
+    const budgetPct = Math.min(100, Math.round((budgetBefore / ctxBudget) * 100))
+    if (budgetPct >= 70) {
+      try { getWebContents()?.send('chat:status', { messageId: 0, sessionId, text: `⚠️ 上下文使用 ${budgetPct}% (${budgetBefore} / ${ctxBudget} tokens)`, kind: 'context_budget' }) } catch {}
+    }
 
     // Tool-calling path: when the session has tools enabled, run a non-streaming
     // tool loop (detect tool_calls → run built-in tools → re-request). Each tool
@@ -196,19 +282,43 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
       const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
       const msgId = asstMsg.lastInsertRowid
+      // Track msgId → session mapping for abortControllers cleanup on session delete
+      registerSessionMessages(sessionId, [msgId])
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
       const wc = getWebContents()
+      let finalContent = ''
       try {
-        const finalContent = await runToolLoop({
+        const modelName = (model?.model_name || '').toLowerCase()
+      const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test(modelName)
+      finalContent = await runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
-          maxIterations: parseInt(getCached('agent_max_iterations', '25'), 10),
+          maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
+          sessionId, messageId: msgId, db,
+          autoCommit: true,
+          onThinkingStart: thinkingSupported ? () => wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) : undefined,
+          onThinkingEnd: thinkingSupported ? () => wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) : undefined,
           onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
           onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
-          onStatus: (s) => wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: s.kind }),
+          onStatus: (s) => {
+            // Context budget update on each step.
+            if (s.kind === 'budget_exhausted') {
+              wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: 'budget_exhausted' })
+            } else {
+              wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: s.kind || 'step' })
+            }
+          },
           onTodoUpdate: (todos) => wc?.send('chat:todo-update', { messageId: msgId, sessionId, todos }),
+          // Stream tool output (e.g. run_command stdout) in real-time to the UI.
+          onStream: (chunk) => {
+            if (chunk?.text) wc?.send('chat:tool-stream', { messageId: msgId, sessionId, text: chunk.text, done: chunk.type === 'done' })
+          },
+          // Audit log callback: persists the agent turn trace.
+          onAudit: (trace) => {
+            try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
+          },
           // AskUserQuestion: surface a structured question dialog and await the
           // user's choice. Returns a JSON string of answers so the model can read
           // them as a tool result.
@@ -236,18 +346,15 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           // Session-scoped permission allow-rules: when the user picks "allow +
           // remember" in the dialog, we store a prefix rule and skip the dialog
           // for matching subsequent calls. Cleared when the session is deleted.
-          //   run_command  → prefix = first 2 space-tokens of the command
-          //                  (e.g. "git status" matches "git diff" via prefix "git")
-          //                  Actually we key on the first token (the binary) to be
-          //                  useful but not over-broad. Edit below.
-          //   write/edit   → prefix = the directory of the path
-          // For run_command we match by the first whitespace token (the binary),
-          // so "npm test" and "npm run build" both match a remembered "npm" rule.
-          // That's the useful granularity Claude Code uses.
           requestPermission: ({ name, args, risk }) => {
             // Check session allow-rules first.
             const rule = matchAllowRule(sessionId, name, args)
             if (rule) return Promise.resolve(true)
+            // Build impact preview for the permission dialog.
+            let impactPreview = null
+            try {
+              impactPreview = require('../tools/toolImpact').toolImpact(name, args)
+            } catch {}
             return new Promise((resolve) => {
             const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
             const safeWc = wc && !wc.isDestroyed() ? wc : null
@@ -276,10 +383,16 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
             controller.signal.addEventListener('abort', onAbort)
             if (!safeWc) { finish(false); return }
             safeWc.on('chat:permission-reply', onReply)
-            safeWc.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk })
+            safeWc.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk, impact: impactPreview })
             })
           },
         })
+        // Report final context budget.
+        const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)
+        const pctAfter = Math.min(100, Math.round((budgetAfter / ctxBudget) * 100))
+        if (pctAfter >= 70) {
+          try { wc?.send('chat:status', { messageId: msgId, sessionId, text: `⚠️ 上下文使用 ${pctAfter}% (≈${budgetAfter} / ${ctxBudget} tokens)`, kind: 'context_budget' }) } catch {}
+        }
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
         if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage })
@@ -292,13 +405,16 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
-        return { messageId: msgId }
+        // Persist agentMode to session config for next time.
+        try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
+        return { messageId: msgId, modelSuggestion }
       } catch (err) {
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
-        db.updateMessage(msgId, { content: '', status: 'aborted', error_message: errMsg })
+        // Preserve accumulated content on abort (tool-loop path)
+        db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted', error_message: errMsg })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
-        return { messageId: msgId }
+        return { messageId: msgId, modelSuggestion }
       }
     }
 
@@ -311,6 +427,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         model_used: m.model_name, provider_used: p.id, status: isFallback ? 'fallback' : 'success',
       })
       const msgId = asstMsg.lastInsertRowid
+      registerSessionMessages(sessionId, [msgId])
 
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
@@ -319,16 +436,25 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       try {
         let fullContent = ''
         const wc = getWebContents()
-        // mergedOpts carries reasoning params + advanced generation params (max_tokens/
-        // temperature/top_p) set in Settings, spread into the request body by the adapter.
-        // streamChat returns a generator that exposes .usage (server-reported tokens)
-        // once the stream ends — captured here for the usage log.
-        const stream = streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: mergedOpts })
+        const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test((m?.model_name || '').toLowerCase())
+        let lastThinkingLen = 0
+        const stream = streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: { ...mergedOpts, onThinkingDelta: thinkingSupported ? (text) => {
+          if (text.length > lastThinkingLen) {
+            const newLen = text.length - lastThinkingLen
+            wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text.slice(lastThinkingLen, text.length), done: false })
+            lastThinkingLen = text.length
+          }
+        } : undefined } })
         const streamStart = Date.now()
         for await (const delta of stream) {
           if (delta) {
             fullContent += delta
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
+          }
+          // Surface completed thinking block to the UI.
+          if (thinkingSupported && stream.thinkingBlocks && stream.thinkingBlocks.length > 0 && lastThinkingLen > 0 && stream.thinkingBlocks[0].text.length === lastThinkingLen) {
+            wc?.send('chat:thinking-end', { messageId: msgId, sessionId })
+            lastThinkingLen = -1 // don't re-send
           }
         }
         clearTimeout(timeout)
@@ -368,7 +494,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
       if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
       if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
-      console.log('[AetherAI] DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
+      log.info('DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
+      providerHealth.recordResult(p.id, true)
+      providerHealth.recordError(p.id, null)
       wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
       return { messageId: msgId }
@@ -376,8 +504,13 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       } catch (err) {
         clearTimeout(timeout)
         abortControllers.delete(msgId)
+        providerHealth.recordResult(p.id, false)
+        if (err.status === 429) providerHealth.setCooldown(p.id)
+        providerHealth.recordError(p.id, err.message)
         if (err.name === 'AbortError') {
-          db.updateMessage(msgId, { content: '', status: 'aborted', error_message: '已中止' })
+          // Preserve accumulated content so the user sees what was produced before stop.
+          // Update the message with whatever fullContent was accumulated.
+          db.updateMessage(msgId, { content: fullContent, status: 'aborted', error_message: '已中止' })
           getWebContents()?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
           return { messageId: msgId }
         }
@@ -396,21 +529,76 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     }
 
     if (lastError) getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-    return { messageId: 0 }
+    return { messageId: 0, modelSuggestion }
   })
 
-  ipcMain.handle('chat:stop', () => {
-    for (const [id, controller] of abortControllers) {
-      controller.abort()
+  ipcMain.handle('chat:stop', (_e, sessionId) => {
+    // Abort only controllers for the given session. Each request has a catch
+    // block that preserves accumulated content in the DB and sends the 'done'
+    // signal to the renderer. DO NOT clear the map here — the abort handlers in
+    // chat:send will delete their own entry after saving content.
+    if (sessionId) {
+      const msgIds = sessionMessagesMap.get(sessionId)
+      if (msgIds) {
+        for (const mid of msgIds) {
+          const ctrl = abortControllers.get(mid)
+          if (ctrl) { ctrl.abort(); abortControllers.delete(mid) }
+        }
+      }
     }
-    abortControllers.clear()
   })
 
   // Habit-confirmation flow: the renderer asks us to confirm (promote now) or
   // dismiss (delete) a proposed habit. We don't need to reply with data — the
   // skill is rewritten synchronously inside habitLearner.
-  ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db) } catch {} return { ok: true } })
-  ipcMain.handle('chat:habit-dismiss', (_e, key) => { try { habitLearner.dismissHabit(db, key) } catch {} return { ok: true } })
+  ipcMain.handle('chat:habit-confirm', (_e, key) => { try { habitLearner.confirmHabit(db, key) } catch (e) { log.warn('habit confirm failed:', e) } return { ok: true } })
+  ipcMain.handle('chat:habit-dismiss', (_e, key) => { try { habitLearner.dismissHabit(db, key) } catch (e) { log.warn('habit dismiss failed:', e) } return { ok: true } })
+
+  // Model suggestion (Claude Code-style): given a user message and the full model
+  // list, return the best model id for the task. Falls back to the user's current
+  // model if no better match is found. Includes explainable rationale combining
+  // heuristic family fit with Arena ELO data when available.
+  ipcMain.handle('model:suggest', (_e, { sessionId, userMessage }) => {
+    try {
+      const session = db.getSession(sessionId)
+      const currentModelId = session?.config ? JSON.parse(session.config)?.modelId : null
+      const allModels = db.getAllModels().filter(m => {
+        const p = db.getProvider(m.provider_id)
+        return p && p.enabled
+      })
+      const intent = db.classifyIntent(userMessage)
+      // Fetch ELO data for all models — keyed by model_id for the explainable router
+      const scores = db.getModelScores()
+      const eloData = {}
+      for (const s of scores) {
+        if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 }
+      }
+      const result = modelAdvisor.suggestModelExplained({ allModels, userMessage, useTools: true, intent, eloData })
+      if (result) {
+        return { suggestedModelId: result.suggestedModelId, reason: result.reason,
+          heuristicScores: result.heuristicScores, confidence: result.confidence }
+      }
+      return { suggestedModelId: currentModelId, reason: 'current', confidence: 0 }
+    } catch {
+      return { suggestedModelId: null, reason: 'error', confidence: 0 }
+    }
+  })
+
+  // Model router (Claude Code-style): pick a model tier for a task type.
+  // Returns { tier, suggestedModelName, rationale } for cost-optimized routing.
+  ipcMain.handle('model:route-tier', (_e, { taskType, userMessage }) => {
+    try {
+      const allModels = db.getAllModels().filter(m => {
+        const p = db.getProvider(m.provider_id)
+        return p && p.enabled
+      })
+      const tier = modelRouter.routeTask(taskType, userMessage || '', 0)
+      const suggestion = modelRouter.suggestModelForTier(tier, allModels)
+      return { tier, modelName: suggestion?.modelName || null, modelId: suggestion?.modelId || null, rationale: suggestion?.rationale || '' }
+    } catch {
+      return { tier: 'standard', modelName: null, rationale: 'error' }
+    }
+  })
 
   // Renderer replies to a permission-request via this invoke. We just forward
   // the reply as an event so the waiting requestPermission closure (which uses
@@ -423,6 +611,26 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('chat:question-reply', (event, payload) => {
     event.sender.send('chat:question-reply', payload)
     return true
+  })
+
+  // ─── Audit log ───────────────────────────────────────────────────────────
+  ipcMain.handle('audit:log', (_e, { sessionId, limit = 50 }) => {
+    return db.getAuditLog(sessionId, limit)
+  })
+  ipcMain.handle('agent-checkpoint:list', (_e, { sessionId, messageId = null } = {}) => {
+    return db.listAgentCheckpoints(sessionId, messageId)
+  })
+  ipcMain.handle('agent-checkpoint:rollback', (_e, { id }) => checkpoints.rollbackCheckpoint(id))
+
+  // Trust badge: renderer queries trust score for current session
+  ipcMain.handle('trust:badge', (_e, { sessionId }) => {
+    try {
+      if (!sessionId) return null
+      const trustEngine = require('../llm/trustEngine')
+      return trustEngine.getTrustBadge(db, sessionId)
+    } catch {
+      return null
+    }
   })
 }
 
@@ -455,12 +663,12 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
       options: { max_tokens: 30, temperature: 0.2 },
     })
     clearTimeout(timeout)
-    const cleaned = (text || '').trim().replace(/^["“『]|["”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
+    const cleaned = (text || '').trim().replace(/^[“”『]|[“”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
     if (cleaned) title = cleaned.slice(0, 20)
   } catch (e) {
-    console.warn('[AetherAI] title summary failed:', e.message)
+    log.warn('title summary failed:', e.message)
   }
-  try { dbHandle.renameSession(sessionId, title) } catch {}
+  try { dbHandle.renameSession(sessionId, title) } catch (e) { log.warn('renameSession failed:', e.message) }
 }
 
 // estimateTextTokens is imported from compaction.js (shared with the same
@@ -468,14 +676,7 @@ async function generateSummaryTitle({ sessionId, content, fullContent, model, pr
 // The old local estimateTokens had only 1 range and under-counted CJK tokens.
 const { estimateTextTokens: estimateTokens } = require('../llm/compaction')
 
-// Per-call cost from the model's price columns (USD per 1K tokens). 0 if unpriced.
-// Cached-read tokens aren't billed at the full input rate (best-effort).
-function computeCost(model, u) {
-  const inPrice = Number(model.input_price_per_1k) || 0
-  const outPrice = Number(model.output_price_per_1k) || 0
-  if (!inPrice && !outPrice) return 0
-  const billableInput = Math.max(0, (u.prompt_tokens || 0) - (u.cache_read_tokens || 0))
-  return (billableInput / 1000) * inPrice + ((u.completion_tokens || 0) / 1000) * outPrice
-}
+// Per-call cost uses the shared computeCost from utils/cost.js
 
-module.exports = { registerChatHandlers, clearAllowRules }
+
+module.exports = { registerChatHandlers, clearAllowRules, registerSessionMessages, cleanupSessionControllers }

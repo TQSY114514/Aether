@@ -25,6 +25,17 @@ export interface Model {
   api_key?: string
 }
 
+export interface PartialModel {
+  provider_id: number
+  model_name: string
+  is_primary?: number
+  display_name?: string | null
+  fallback_order?: number | null
+  context_window?: number | null
+  input_price_per_1k?: number | null
+  output_price_per_1k?: number | null
+}
+
 export interface Persona {
   id: number
   name: string
@@ -59,7 +70,7 @@ export interface Message {
   attachment?: { name: string; mime: string; kind: 'text' | 'image'; preview?: string } | null
 }
 
-export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning'
+export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning' | 'skills'
 
 export interface TestConnectionResult {
   success: boolean

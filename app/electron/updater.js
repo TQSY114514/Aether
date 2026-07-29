@@ -16,6 +16,7 @@
 
 const { autoUpdater } = require('electron-updater')
 const { ipcMain } = require('electron')
+const log = require('./logger')
 
 autoUpdater.autoDownload = true            // download as soon as an update is found
 autoUpdater.autoInstallOnAppQuit = true    // install on next quit if not confirmed in-UI
@@ -29,15 +30,15 @@ function init(getWc) {
   getWebContents = getWc
 
   autoUpdater.on('error', (err) => {
-    console.error('[updater] error:', err?.message || err)
+    log.error('error:', err?.message || err)
   })
   autoUpdater.on('update-available', (info) => {
     updateInfo = info
-    console.log('[updater] update available:', info.version)
+    log.info('update available:', info.version)
     getWebContents()?.send('updater:update-available', { version: info.version })
   })
   autoUpdater.on('update-not-available', (info) => {
-    console.log('[updater] up to date:', info.version)
+    log.info('up to date:', info.version)
     getWebContents()?.send('updater:up-to-date', { version: info.version })
   })
   autoUpdater.on('download-progress', (p) => {
@@ -46,7 +47,7 @@ function init(getWc) {
   autoUpdater.on('update-downloaded', (info) => {
     downloaded = true
     updateInfo = info
-    console.log('[updater] downloaded:', info.version)
+    log.info('downloaded:', info.version)
     getWebContents()?.send('updater:update-downloaded', { version: info.version })
   })
 }

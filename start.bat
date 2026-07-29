@@ -2,8 +2,15 @@
 title AetherAI Launcher
 chcp 65001 >nul
 cd /d "%~dp0"
+
+:: Read version from package.json (works even if node_modules doesn't exist)
+for /f "tokens=2 delims=:," %%v in ('findstr /c:"\"version\"" app\package.json 2^>nul') do set VERSION=%%v
+set VERSION=%VERSION:"=%
+set VERSION=%VERSION: =%
+if "%VERSION%"=="" set VERSION=0.3.1
+
 echo.
-echo   AetherAI v0.1.15
+echo   AetherAI v%VERSION%
 echo   =================
 echo.
 
@@ -23,7 +30,7 @@ cd /d "%~dp0app"
 if not exist "node_modules" (
     echo.
     echo [1/2] Installing dependencies...
-    call npm install --ignore-scripts --no-audit --no-fund
+    call npm install --no-audit --no-fund
     if %ERRORLEVEL% neq 0 (
         echo [!] npm install failed
         pause & exit /b 1

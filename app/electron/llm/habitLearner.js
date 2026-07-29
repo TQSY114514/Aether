@@ -23,6 +23,7 @@
 const fs = require('fs')
 const path = require('path')
 const { completeChat } = require('./providerAdapter')
+const log = require('../logger')
 
 const PROMOTE_THRESHOLD = 2   // seen twice → promote to a skill
 const HABIT_DIRNAME = 'user-habits'
@@ -78,7 +79,7 @@ async function detectAndLearn({ db, provider, model, userMessage, assistantReply
     }
   } catch (e) {
     // never let habit-learning break a chat
-    console.warn('[habitLearner] detect failed:', e && e.message)
+    log.warn('detect failed:', e && e.message)
   }
 }
 
@@ -99,7 +100,11 @@ function markProposed(db, key) {
 }
 
 // User accepted → promote now (rewrites the user-habits skill).
-function confirmHabit(db) { promoteToSkill(db) }
+function confirmHabit(db, key) {
+  // Promote only the confirmed habit; leave others pending for future review.
+  try { db.run('UPDATE user_habit SET proposed=2 WHERE key=?', [key]) } catch {}
+  promoteToSkill(db)
+}
 
 // User dismissed → delete the habit so it never re-proposes.
 function dismissHabit(db, key) {
@@ -159,7 +164,7 @@ ${body}
     // re-scanning all skill dirs from disk (which is O(skills) stat calls).
     try { require('./skills').upsertSkill('user-habits', { name: 'user-habits', description: 'Updated user habits', filePath: path.join(skillsDir, 'SKILL.md'), baseDir: skillsDir, body: md }) } catch {}
   } catch (e) {
-    console.warn('[habitLearner] promote failed:', e && e.message)
+    log.warn('promote failed:', e && e.message)
   }
 }
 
@@ -182,4 +187,31 @@ function deleteHabit(db, key) {
   try { db.run('DELETE FROM user_habit WHERE key=?', [key]); promoteToSkill(db) } catch {}
 }
 
-module.exports = { detectAndLearn, listHabits, deleteHabit, dismissHabit, confirmHabit, promoteToSkill, PROMOTE_THRESHOLD }
+// ───────────────────────────────────────────────────────────────────────────
+// Proactive habit suggestions — surface relevant habits at conversation start.
+// ───────────────────────────────────────────────────────────────────────────
+
+async function proactiveSuggest({ db, provider, model, userMessage, signal, onSuggest }) {
+  if (!db || !provider || !model || !onSuggest) return
+  try {
+    const habits = readHabits(db, PROMOTE_THRESHOLD)
+    if (habits.length === 0) return
+    const topic = String(userMessage || '').slice(0, 200)
+    const text = await completeChat({
+      provider, model,
+      messages: [
+        { role: 'system', content: 'Given a user message and a list of habits (standing preferences), identify which habits are relevant to apply. Reply with a JSON array of habit keys that match, or empty array [] if none match.' },
+        { role: 'user', content: `Message: ${topic}\n\nHabits:\n${habits.map(h => `${h.key}: ${h.imperative}`).join('\n')}` },
+      ],
+      signal,
+      options: { max_tokens: 100, temperature: 0.1 },
+    })
+    const keys = JSON.parse((text || '[]').trim())
+    const matched = habits.filter(h => keys.includes(h.key))
+    if (matched.length > 0 && onSuggest) {
+      try { onSuggest(matched) } catch {}
+    }
+  } catch {}
+}
+
+module.exports = { detectAndLearn, listHabits, deleteHabit, dismissHabit, confirmHabit, promoteToSkill, proactiveSuggest, PROMOTE_THRESHOLD }

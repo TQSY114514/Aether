@@ -8,6 +8,7 @@ import McpSettings from '@/components/settings/McpSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 import AgentSettings from '@/components/settings/AgentSettings'
 import SkillsSettings from '@/components/settings/SkillsSettings'
+import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
 
 // "Check for updates" card — wraps electron-updater. In dev this is a no-op
 // (the updater logs "application is not packed"); in a packaged build it hits
@@ -146,7 +147,7 @@ export default function SettingPage() {
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>{t('settings.theme')}</h2>
             <div className="flex gap-2 flex-wrap">
-              {(['light', 'dark', 'blue', 'glass', 'retro'] as const).map((tKey) => (
+              {(['light', 'auto', 'dark', 'blue', 'glass', 'retro'] as const).map((tKey) => (
                 <button key={tKey} onClick={() => setTheme(tKey)}
                   className={`px-4 py-2 text-sm rounded-lg border transition-colors ${theme === tKey ? 'bg-black text-white border-black' : ''}`}
                   style={theme !== tKey ? { borderColor: 'var(--border)', color: 'var(--text-secondary)' } : {}}>
@@ -182,30 +183,26 @@ export default function SettingPage() {
                 )}
               </div>
             </div>
-            {backgroundImage ? (
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.opacity')}</span>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundOpacity}%</span>
-                  </div>
-                  <input type="range" min={10} max={100} value={backgroundOpacity}
-                    onChange={(e) => setBackgroundOpacity(parseInt(e.target.value, 10))}
-                    className="w-full accent-black" />
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.opacity')}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundOpacity}%</span>
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.blur')}</span>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundBlur}px</span>
-                  </div>
-                  <input type="range" min={0} max={20} value={backgroundBlur}
-                    onChange={(e) => setBackgroundBlur(parseInt(e.target.value, 10))}
-                    className="w-full accent-black" />
-                </div>
+                <input type="range" min={10} max={100} value={backgroundOpacity}
+                  onChange={(e) => setBackgroundOpacity(parseInt(e.target.value, 10))}
+                  className="w-full accent-black" />
               </div>
-            ) : (
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.background.none')}</p>
-            )}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.blur')}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{backgroundBlur}px</span>
+                </div>
+                <input type="range" min={0} max={20} value={backgroundBlur}
+                  onChange={(e) => setBackgroundBlur(parseInt(e.target.value, 10))}
+                  className="w-full accent-black" />
+              </div>
+            </div>
           </div>
 
           {/* Display customization */}
@@ -247,6 +244,9 @@ export default function SettingPage() {
               </div>
             </div>
           </div>
+
+          {/* Default chat settings */}
+          <DefaultChatSettings />
 
           {/* Advanced */}
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
