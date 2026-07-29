@@ -43,9 +43,9 @@ export default function MessageNav({
 
   if (userMsgs.length < 3) return null
 
-  // 动态点大小:消息越多点越小 (3px ~ 6px)
+  // 动态点大小:消息越多点越小 (4px ~ 8px)
   const count = userMsgs.length
-  const dotSize = count > 30 ? 3 : count > 15 ? 4 : count > 8 ? 5 : 6
+  const dotSize = count > 30 ? 4 : count > 15 ? 5 : count > 8 ? 6 : 8
 
   // hover 时记录鼠标 Y (相对于视口),用于定位预览气泡
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -77,8 +77,8 @@ export default function MessageNav({
       <div
         ref={navRef}
         onMouseMove={handleMouseMove}
-        className="absolute right-0 top-12 bottom-12 z-10"
-        style={{ width: '12px', cursor: 'pointer' }}
+        className="absolute right-1 top-10 bottom-10 z-30"
+        style={{ width: '16px', cursor: 'pointer' }}
       >
         {/* 轨道线 */}
         <div
@@ -94,15 +94,15 @@ export default function MessageNav({
               onClick={() => scrollTo(msg.id)}
               onMouseEnter={() => setHoverId(msg.id)}
               onMouseLeave={() => setHoverId(null)}
-              className="absolute left-1/2 rounded-full transition-all duration-150 hover:scale-150"
+              className="absolute left-1/2 rounded-full transition-all duration-150 hover:scale-200"
               style={{
                 top: `${((idx + 1) / (count + 1)) * 100}%`,
                 transform: 'translate(-50%, -50%)',
                 width: `${dotSize}px`,
                 height: `${dotSize}px`,
                 backgroundColor: isActive ? 'var(--accent)' : 'var(--text-muted)',
-                opacity: isActive ? 1 : 0.5,
-                boxShadow: isActive ? `0 0 4px var(--accent)` : 'none',
+                opacity: isActive ? 1 : 0.6,
+                boxShadow: isActive ? `0 0 6px var(--accent)` : 'none',
               }}
               title={`消息 ${idx + 1}`}
             />
