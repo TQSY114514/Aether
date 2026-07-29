@@ -136,17 +136,17 @@ export default function Sidebar() {
           )}
         </div>
         <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
-          <ChevronLeft size={16} className="text-gray-400" />
+          <ChevronLeft size={16} className="text-[var(--text-muted)]" />
         </button>
       </div>
       <div className="p-2 shrink-0">
-        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
-          <Plus size={16} className="text-gray-500" />{t('chat.new')}
+        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
+          <Plus size={16} className="text-[var(--text-secondary)]" />{t('chat.new')}
         </button>
       </div>
       <div className="px-2 pb-2 shrink-0">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white text-sm transition-colors" style={{ borderColor: 'var(--border)' }}>
-          <Search size={14} className="text-gray-400 shrink-0" />
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[var(--content-bg)] text-sm transition-colors" style={{ borderColor: 'var(--border)' }}>
+          <Search size={14} className="text-[var(--text-muted)] shrink-0" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('sidebar.search')} className="w-full bg-transparent outline-none text-sm" />
           {searchQuery && (
@@ -173,10 +173,10 @@ export default function Sidebar() {
                 onClick={() => { selectSession(session.id); setCurrentView('chat') }}
                 onDoubleClick={() => handleDoubleClick(session)}
                 onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
-                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'bg-white border shadow-soft' : 'border border-transparent hover:bg-white/70 hover:border-[var(--border)]'}`}
-                style={currentSessionId === session.id ? { borderColor: 'var(--border)' } : {}}>
+                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
+                style={currentSessionId === session.id ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
-                  : <MessageSquare size={14} className="text-gray-400 shrink-0" />}
+                  : <MessageSquare size={14} className="text-[var(--text-muted)] shrink-0" />}
                 {streamingBySession[session.id] && (
                   <Loader2 size={11} className="shrink-0 animate-spin" style={{ color: 'var(--accent)' }} />
                 )}
@@ -184,7 +184,7 @@ export default function Sidebar() {
                   <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenamingId(null) }}
                     onBlur={handleRenameSubmit} autoFocus
-                    className="flex-1 text-[13px] px-1.5 py-0.5 rounded border outline-none bg-white"
+                    className="flex-1 text-[13px] px-1.5 py-0.5 rounded border outline-none bg-[var(--content-bg)]"
                     style={{ borderColor: 'var(--accent)' }} onClick={(e) => e.stopPropagation()} />
                 ) : (
                   <div className="flex-1 min-w-0">
@@ -269,9 +269,9 @@ export default function Sidebar() {
 
 function NavItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'bg-white border shadow-soft' : 'border border-transparent hover:bg-white/70 hover:border-[var(--border)]'}`}
-      style={active ? { borderColor: 'var(--border)' } : {}}>
-      <Icon size={16} className={active ? 'text-gray-700' : 'text-gray-500'} />{label}
+    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
+      style={active ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
+      <Icon size={16} className={active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} />{label}
     </button>
   )
 }

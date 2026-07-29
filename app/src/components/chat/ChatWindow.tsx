@@ -157,14 +157,15 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     <div id={`msg-streaming-${sessionId}`} className="flex justify-start message-enter">
       <div className="w-full" style={{ maxWidth: '85%' }}>
         <div className="flex items-center gap-2 mb-1.5 px-1">
-          <div className="w-6 h-6 rounded-full bg-black flex items-center justify-center shrink-0">
+          <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }}>
             <span className="text-white text-[10px] font-medium">AI</span>
           </div>
           <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Assistant</span>
           <span className="flex items-center gap-0.5 ml-1">
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '300ms' }} />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
           </span>
         </div>
         <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
