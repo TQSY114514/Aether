@@ -127,7 +127,11 @@ function registerArenaHandlers(ipcMain, db) {
   })
   ipcMain.handle('arena:auto-route', (_e, query) => {
     const intent = db.classifyIntent(query)
-    return { intent, route: db.autoRoute(intent) }
+    const route = db.autoRoute(intent)
+    // Strip api_key before sending to the renderer — the renderer only needs
+    // the model_id/name for display, never the key. Keys stay main-process only.
+    if (route) { const { api_key, ...rest } = route; return { intent, route: rest } }
+    return { intent, route: null }
   })
 }
 

@@ -143,6 +143,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: true,
+      sandbox: true,
     },
     backgroundColor: '#FFFFFF',
     show: false,  // hide until page is ready — no blank flash on startup

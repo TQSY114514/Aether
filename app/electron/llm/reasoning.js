@@ -19,13 +19,15 @@
 // Regexes are pre-compiled once (module-level) since they're called once per turn.
 const RE_OPENAI = /^o[134]|^gpt-5/
 const RE_CLAUDE = /claude/
-const RE_DEEPSEEK = /deepseek/
+const RE_DEEPSEEK_R = /deepseek[_-]r/i
 const RE_QWEN = /^qwq|qwen.*-(thinking|reason)/
 function reasoningFamily(modelName = '') {
   const m = modelName.toLowerCase()
   if (RE_OPENAI.test(m)) return 'openai'
   if (RE_CLAUDE.test(m)) return 'claude'
-  if (RE_DEEPSEEK.test(m) && /r/.test(m)) return 'deepseek'
+  // Only match deepseek-reasoner / deepseek-r1 style names. The old
+  // /deepseek/ + /r/.test(m) regex falsely matched "deepseek-coder" (has r).
+  if (RE_DEEPSEEK_R.test(m)) return 'deepseek'
   if (RE_QWEN.test(m)) return 'qwen'
   return 'none'
 }

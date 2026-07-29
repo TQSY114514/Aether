@@ -13,13 +13,13 @@ function relativeTime(iso: string | undefined): string {
   if (isNaN(then)) return ''
   const diff = Date.now() - then
   const min = Math.floor(diff / 60000)
-  if (min < 1) return t('time.just_now', '刚刚')
-  if (min < 60) return t('time.minutes_ago', `${min}分钟前`)
+  if (min < 1) return t('time.just_now')
+  if (min < 60) return t('time.minutes_ago', min)
   const hr = Math.floor(min / 60)
-  if (hr < 24) return t('time.hours_ago', `${hr}小时前`)
+  if (hr < 24) return t('time.hours_ago', hr)
   const day = Math.floor(hr / 24)
-  if (day === 1) return t('time.yesterday', '昨天')
-  if (day < 7) return t('time.days_ago', `${day}天前`)
+  if (day === 1) return t('time.yesterday')
+  if (day < 7) return t('time.days_ago', day)
   return new Date(then).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
 }
 

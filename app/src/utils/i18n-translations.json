@@ -391,7 +391,25 @@
       "tool.rollback.running": "正在回滚...",
       "tool.rollback.done": "已回滚",
       "tool.rollback.error": "回滚失败",
-      "sidebar.nav.skills": "技能"
+      "sidebar.nav.skills": "技能",
+      "thinking.full": "思考过程",
+      "thinking.collapsed": "已思考",
+      "risk.writes_files": "写入文件",
+      "risk.network_or_install": "联网/安装",
+      "risk.installs_deps": "安装依赖",
+      "risk.deletes_files": "删除文件",
+      "risk.long_process": "启动长进程",
+      "risk.read_only": "只读操作",
+      "tool.git_log": "查看 git 日志",
+      "tool.git_commit": "git 提交",
+      "tool.use_skill": "使用技能",
+      "tool.ask_user": "向你提问",
+      "tool.todo_write": "更新任务清单",
+      "time.just_now": "刚刚",
+      "time.minutes_ago": "{0}分钟前",
+      "time.hours_ago": "{0}小时前",
+      "time.yesterday": "昨天",
+      "time.days_ago": "{0}天前"
     }
   },
   {

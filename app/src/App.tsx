@@ -49,6 +49,19 @@ export default function App() {
   // Ensure global IPC listeners are registered (idempotent).
   useEffect(() => { ensureAllListeners() }, [])
 
+  // Warn before closing/refreshing while streaming or with unsent input.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      const { sending, streamingBySession } = useStore.getState()
+      if (sending || Object.keys(streamingBySession).length > 0) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
+
   // Window-level overscroll spring bounce: F = -k*off - b*vel
   useEffect(() => {
     const root = document.getElementById('root')

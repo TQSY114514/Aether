@@ -22,24 +22,24 @@ function toolLabel(tool: ToolCall): string {
   const basename = (p: string) => { try { return String(p).replace(/\\/g, '/').split('/').pop() } catch { return p } }
   const first = (s: string, n = 40) => { const x = String(s || '').trim().replace(/\s+/g, ' '); return x.length > n ? x.slice(0, n) + '…' : x }
   switch (tool.name) {
-    case 'read_file': return a.path ? `读取 ${basename(a.path)}` : '读取文件'
-    case 'list_dir': return a.path ? `列出 ${basename(a.path)}` : '列出目录'
-    case 'glob_find': return a.pattern ? `查找 ${first(a.pattern, 30)}` : '查找文件'
-    case 'grep_search': return a.pattern ? `搜索 ${first(a.pattern, 30)}` : '搜索内容'
-    case 'web_search': return a.query ? `联网搜索 ${first(a.query)}` : '联网搜索'
-    case 'web_fetch': return a.url ? `抓取 ${first(a.url, 40)}` : '抓取网页'
-    case 'write_file': return a.path ? `写入 ${basename(a.path)}` : '写入文件'
-    case 'edit_file': return a.path ? `编辑 ${basename(a.path)}` : '编辑文件'
-    case 'run_command': return a.command ? `运行 ${first((a.command + '').split(' ').slice(0, 3).join(' '), 30)}` : '运行命令'
-    case 'git_status': return '查看 git 状态'
-    case 'git_diff': return '查看 git 差异'
-    case 'git_log': return a.count ? `查看 git 日志 (${a.count} 条)` : '查看 git 日志'
-    case 'git_commit': return a.message ? `提交: ${first(a.message, 30)}` : 'git 提交'
-    case 'memory_save': return '保存记忆'
-    case 'memory_list': return '列出记忆'
-    case 'use_skill': return a.name ? `使用技能 ${first(a.name, 30)}` : '使用技能'
-    case 'ask_user': return '向你提问'
-    case 'todo_write': return '更新任务清单'
+    case 'read_file': return a.path ? `${t('tool.read_file')} ${basename(a.path)}` : t('tool.read_file')
+    case 'list_dir': return a.path ? `${t('tool.list_dir')} ${basename(a.path)}` : t('tool.list_dir')
+    case 'glob_find': return a.pattern ? `${t('tool.glob_find')} ${first(a.pattern, 30)}` : t('tool.glob_find')
+    case 'grep_search': return a.pattern ? `${t('tool.grep_search')} ${first(a.pattern, 30)}` : t('tool.grep_search')
+    case 'web_search': return a.query ? `${t('tool.web_search')} ${first(a.query)}` : t('tool.web_search')
+    case 'web_fetch': return a.url ? `${t('tool.web_fetch')} ${first(a.url, 40)}` : t('tool.web_fetch')
+    case 'write_file': return a.path ? `${t('tool.write_file')} ${basename(a.path)}` : t('tool.write_file')
+    case 'edit_file': return a.path ? `${t('tool.edit_file')} ${basename(a.path)}` : t('tool.edit_file')
+    case 'run_command': return a.command ? `${t('tool.run_command')} ${first((a.command + '').split(' ').slice(0, 3).join(' '), 30)}` : t('tool.run_command')
+    case 'git_status': return t('tool.git_status')
+    case 'git_diff': return t('tool.git_diff')
+    case 'git_log': return a.count ? `${t('tool.git_log')} (${a.count})` : t('tool.git_log')
+    case 'git_commit': return a.message ? `${t('tool.git_commit')}: ${first(a.message, 30)}` : t('tool.git_commit')
+    case 'memory_save': return t('tool.memory_save')
+    case 'memory_list': return t('tool.memory_list')
+    case 'use_skill': return a.name ? `${t('tool.use_skill')} ${first(a.name, 30)}` : t('tool.use_skill')
+    case 'ask_user': return t('tool.ask_user')
+    case 'todo_write': return t('tool.todo_write')
     default: return tool.name
   }
 }

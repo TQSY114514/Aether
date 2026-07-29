@@ -132,8 +132,16 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       const newLen = buf.content.length
       if (newLen === lastLenRef.current) return
       lastLenRef.current = newLen
-      // Render markdown into the bubble content area.
-      ref.current.innerHTML = renderMarkdown(buf.content)
+      // During streaming, render plain escaped text (not full markdown) for
+      // performance: re-parsing markdown + highlight.js on every token is O(n²)
+      // for long messages. The final rendered version is produced by
+      // MessageBubble via renderMarkdown when the stream completes.
+      const escaped = buf.content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
+      ref.current.innerHTML = escaped
       // Auto-grow the bubble height based on content.
       if (bubbleRef.current) {
         bubbleRef.current.style.minHeight = ''
@@ -342,11 +350,11 @@ export default function ChatWindow() {
                 {matchCount > 0 ? `${matchIdx + 1}/${matchCount}` : `0/${matchCount}`}
               </span>
               <button onClick={() => jumpTo(-1)} disabled={matchCount === 0} title={t('chat.search_prev')}
-                className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
+                aria-label={t('chat.search_prev')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
                 <ChevronUp size={13} className="text-gray-400" />
               </button>
               <button onClick={() => jumpTo(1)} disabled={matchCount === 0} title={t('chat.search_next')}
-                className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
+                aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
                 <ChevronDown size={13} className="text-gray-400" />
               </button>
               <button onClick={() => setSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
