@@ -456,7 +456,7 @@ export default function ChatWindow() {
         </div>
       </div>
 
-      <MessageNav messages={messages} activeId={activeMsgId} scrollTo={scrollToMsg} />
+      <MessageNav messages={messages} activeId={activeMsgId} scrollTo={scrollToMsg} scrollRef={scrollRef} />
     </div>
   )
 }
