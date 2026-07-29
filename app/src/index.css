@@ -1,0 +1,336 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #FFFFFF;
+  --content-bg: #FFFFFF;
+  --bg-secondary: #F8F9FA;
+  --border: #E5E7EB;
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --error: #DC2626;
+  --success: #16A34A;
+  --warning: #D97706;
+  --sidebar-width: 260px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card: 0 1px 4px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+  --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+
+/* font-scale is set by the settings page (0.85–1.25); clamp the base size. */
+html { font-size: clamp(12px, calc(16px * var(--font-scale, 1)), 22px); }
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection { background-color: var(--accent); color: white; }
+
+/* ── Code blocks (rendered by markdown.ts) ─────────────────────────────────
+   A header bar with the language label + a copy button sits above the code;
+   the button text swaps to "已复制" briefly (driven by MessageBubble's click
+   delegate). Colors use theme vars so they adapt to light/dark/glass/etc. */
+/* Code blocks with syntax highlighting — dark background for contrast */
+pre.code-block { margin: 0.6em 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: #282c34; }
+pre.code-block .code-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.08); }
+pre.code-block .code-lang { font-size: 10px; font-family: var(--font-sans); color: #abb2bf; text-transform: lowercase; letter-spacing: 0.03em; }
+pre.code-block .code-copy { font-size: 10px; padding: 2px 8px; border-radius: 5px; color: #abb2bf; cursor: pointer; background: transparent; border: 1px solid transparent; transition: all .15s; }
+pre.code-block .code-copy:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+pre.code-block .code-copy.copied { color: #98c379; }
+pre.code-block .code-fold { font-size: 10px; padding: 2px 6px; border-radius: 5px; color: #abb2bf; cursor: pointer; background: transparent; border: 1px solid transparent; margin-right: auto; transition: all .15s; }
+pre.code-block .code-fold:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+pre.code-block.collapsed code { display: none; }
+pre.code-block.collapsed .code-fold::after { content: " … " attr(data-lines) " lines"; color: #5c6370; font-size: 10px; margin-left: 4px; }
+pre.code-block code { display: block; padding: 12px 14px; font-family: 'JetBrains Mono', 'Consolas', var(--font-sans); font-size: 12px; line-height: 1.6; overflow-x: auto; color: #abb2bf; }
+/* highlight.js token colors work on top of the dark bg */
+pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
+.mc code:not([class*="language-"]) { background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px; font-family: 'JetBrains Mono','Consolas',monospace; font-size: 0.88em; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+/* ── Magic UI animations (zero-dep, CSS-only) ───────────────────────────────
+   BlurFade: mount entrance — fade in + blur out, used on message bubbles
+   and sidebar items so new content arrives gently instead of popping. */
+@keyframes blur-fade-in {
+  from { opacity: 0; filter: blur(6px); transform: translateY(4px); }
+  to   { opacity: 1; filter: blur(0);   transform: translateY(0); }
+}
+.animate-blur-fade { animation: blur-fade-in 0.4s ease-out both; }
+
+/* BorderBeam: a traveling light along a box border — used to mark the
+   currently-streaming assistant bubble. Driven by a rotating conic gradient
+   clipped to the border via a mask. */
+@keyframes border-beam-spin { to { transform: rotate(360deg); } }
+.border-beam::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: conic-gradient(from var(--beam-angle, 0deg), transparent 0deg, var(--accent) 40deg, transparent 80deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: border-beam-spin 2.5s linear infinite;
+  pointer-events: none;
+}
+
+/* Shimmer sweep for loading/empty-state text. */
+@keyframes shimmer-x { to { background-position: 200% center; } }
+.shimmer-text {
+  background: linear-gradient(90deg, var(--text-muted) 0%, var(--text-primary) 50%, var(--text-muted) 100%);
+  background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer-x 2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-blur-fade, .border-beam::after, .shimmer-text { animation: none; }
+  .shimmer-text { color: var(--text-muted); -webkit-background-clip: unset; background-clip: unset; }
+}
+
+
+/* Animations */
+@keyframes slideUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes springUp {
+  0% { opacity: 0; transform: translateY(12px) scale(0.97); }
+  60% { transform: translateY(-2px) scale(1.01); }
+  80% { transform: translateY(1px) scale(0.995); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 10px 30px -10px var(--accent); }
+  50% { box-shadow: 0 10px 40px -5px var(--accent), 0 0 20px -5px var(--accent-hover); }
+}
+.animate-pulse-glow { animation: pulseGlow 3s ease-in-out infinite; }
+
+.message-enter { animation: springUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.cursor-blink { animation: blink 0.8s step-end infinite; }
+
+/* Effort slider — slim track + pill thumb (Claude-Code-style).
+   The filled portion uses a soft accent tint, the thumb is a solid accent pill. */
+.effort-slider {
+  -webkit-appearance: none; appearance: none;
+  height: 18px; background: transparent; outline: none; cursor: pointer;
+}
+.effort-slider::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--border) var(--fill, 0%));
+}
+.effort-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--bg-primary);
+  margin-top: -5.5px; cursor: grab;
+  box-shadow: 0 0 0 1px var(--accent), 0 2px 4px rgba(0,0,0,0.15);
+  transition: transform 0.12s ease;
+}
+.effort-slider::-webkit-slider-thumb:hover { transform: scale(1.12); }
+.effort-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.2); }
+.effort-slider::-moz-range-track { height: 5px; border-radius: 999px; background: var(--border); }
+.effort-slider::-moz-range-progress { height: 5px; border-radius: 999px; background: var(--accent); }
+.effort-slider::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--bg-primary);
+  background: var(--accent); cursor: grab; box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+/* Smooth overscroll with rubber-band containment */
+.scroll-bounce {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Hover lift effect for clickable cards */
+.hover-lift { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.hover-lift:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+/* Context bar */
+.ctx-safe { background: linear-gradient(90deg, #2563EB, #3B82F6); }
+.ctx-warn { background: linear-gradient(90deg, #F59E0B, #F97316); }
+.ctx-danger { background: linear-gradient(90deg, #EF4444, #DC2626); }
+
+/* Input */
+.input-ring:focus-within {
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.12), 0 2px 8px rgba(0,0,0,0.04);
+  border-color: var(--accent);
+}
+
+/* Quick action pills */
+.qaction {
+  @apply px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all duration-150;
+  @apply border-[var(--border)] text-[var(--text-secondary)];
+  @apply hover:bg-[var(--accent)] hover:text-white hover:border-[var(--accent)] hover-lift;
+  cursor: pointer;
+}
+.qaction:active { transform: scale(0.96); }
+
+/* Slash command menu */
+.slash-menu {
+  position: absolute;
+  bottom: 100%; left: 0; margin-bottom: 8px;
+  width: 220px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: scaleIn 0.12s ease-out;
+  transform-origin: bottom left;
+}
+.slash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s, transform 0.1s;
+}
+.slash-item:hover { background: var(--bg-secondary); }
+.slash-item:active { transform: scale(0.98); }
+
+/* Session group header */
+.session-date { font-size: 11px; color: var(--text-muted); padding: 8px 12px 4px; font-weight: 500; letter-spacing: 0.02em; }
+
+/* Cost badge */
+.cost-badge {
+  font-size: 10px; color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 1px 6px; border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* Shadow utility */
+.shadow-soft { box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); }
+.shadow-card-hover { transition: box-shadow 0.2s ease; }
+.shadow-card-hover:hover { box-shadow: var(--shadow-md); }
+
+/* Markdown rendered content */
+.mc pre { background: #f5f5f5; border: 1px solid #eee; border-radius: 5px; padding: 10px; margin: 6px 0; overflow-x: auto; font-size: 12px; }
+.mc code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.mc table { border-collapse: collapse; margin: 6px 0; width: 100%; }
+.mc td, .mc th { border: 1px solid #ddd; padding: 4px 8px; font-size: 12px; }
+.mc th { background: var(--bg-secondary); }
+.mc p { margin: 4px 0; }
+.mc ul, .mc ol { padding-left: 20px; margin: 4px 0; }
+.mc blockquote { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--text-secondary); margin: 6px 0; }
+.mc table { border-collapse: collapse; margin: 6px 0; width: 100%; font-size: 12px; }
+.mc td, .mc th { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+.mc th { background: var(--bg-secondary); font-weight: 600; }
+.mc hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.mc img { max-width: 100%; border-radius: 6px; margin: 8px 0; }
+.mc .math { padding: 8px 12px; margin: 6px 0; background: var(--bg-secondary); border-radius: 6px; font-family: 'Times New Roman', serif; font-style: italic; text-align: center; }
+.mc .math-inline { font-family: 'Times New Roman', serif; font-style: italic; padding: 0 2px; }
+.mc ul { list-style: disc; }
+.mc ol { list-style: decimal; }
+.mc li { margin: 2px 0; }
+.mc li.task-item { list-style: none; margin-left: -18px; }
+.mc li.task-item input[type="checkbox"] { margin-right: 4px; accent-color: var(--accent); }
+.mc li.task-item.completed { opacity: 0.6; }
+.mc li.task-item.completed input[type="checkbox"]:checked + * { text-decoration: line-through; }
+.mc del { opacity: 0.6; }
+.mc a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.mc a:hover { color: var(--accent-hover); }
+.mc strong { font-weight: 600; }
+.mc em { font-style: italic; }
+.mc h2 { font-size: 1.2em; font-weight: 700; margin: 12px 0 6px; color: var(--text-primary); }
+.mc h3 { font-size: 1.1em; font-weight: 600; margin: 10px 0 4px; color: var(--text-primary); }
+.mc h4 { font-size: 1em; font-weight: 600; margin: 8px 0 4px; color: var(--text-primary); }
+.mc h5 { font-size: 0.95em; font-weight: 600; margin: 6px 0 2px; color: var(--text-secondary); }
+.mc blockquote { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--text-secondary); margin: 6px 0; }
+
+/* Hide scrollbar for model selector */
+.hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.hide-scrollbar::-webkit-scrollbar { height: 0; }
+
+/* Chat density: breathable spacing between message turns */
+.chat-gap { display: flex; flex-direction: column; gap: 14px; }
+
+/* Translucent surfaces when a background image is active.
+   --content-bg/--content-secondary are set by applyTheme(); fall back to solid. */
+.bg-surface { background-color: var(--content-bg, var(--bg-primary)); }
+.bg-surface-2 { background-color: var(--content-secondary, var(--bg-secondary)); }
+
+/* Smoother focus rings on translucent inputs */
+.input-ring { transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+
+/* Subtle backdrop scrim so text stays readable over busy backgrounds */
+.scrim { backdrop-filter: saturate(120%) blur(2px); }
+
+/* Line clamp utility */
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ── Context menu (Sidebar right-click) ────────────────────────────────────── */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  border-radius: 12px;
+  min-width: 180px;
+  padding: 4px 0;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  animation: menuFadeIn 0.12s ease-out;
+}
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 14px;
+  font-size: 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: background 0.1s;
+  color: var(--text-primary);
+}
+.context-menu button:hover { background: var(--bg-secondary); }
+.context-menu .menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+/* ── Code block line numbers ────────────────────────────────────────────────
+   The markdown renderer wraps each line in <span class="ln"><span class="ln-i" data-l="N"></span></span>.
+   The .ln-i span shows the line number via its data-l attribute (set via JS in
+   MessageBubble for foldable blocks; static for non-foldable). */
+.code-block.lines code {
+  display: block;
+}
+.code-block.lines code .ln {
+  display: inline-block;
+  min-width: 100%;
+}
+.code-block.lines code .ln-i {
+  display: inline-block;
+  min-width: 2.5em;
+  text-align: right;
+  padding-right: 12px;
+  user-select: none;
+  opacity: 0.35;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}

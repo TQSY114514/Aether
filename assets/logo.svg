@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="aGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="aGradLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#67e8f9"/>
+    </linearGradient>
+    <filter id="glowIcon">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+  </defs>
+
+  <!-- 主菱形 -->
+  <polygon points="128,32 208,128 128,224 48,128" fill="none" stroke="url(#aGrad)" stroke-width="3.5"/>
+  <!-- 内层小菱形 -->
+  <polygon points="128,56 182,128 128,200 74,128" fill="none" stroke="url(#aGradLight)" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- A 的两条斜线（无横杠） -->
+  <line x1="98" y1="170" x2="128" y2="72" stroke="url(#aGradLight)" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="158" y1="170" x2="128" y2="72" stroke="url(#aGradLight)" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- 中心节点（替代横杠，成为品牌标志性元素） -->
+  <circle cx="128" cy="132" r="7" fill="#ffffff" opacity="0.9" filter="url(#glowIcon)"/>
+
+  <!-- 两个子节点 – 象征多模型/工具 -->
+  <circle cx="74" cy="180" r="3.5" fill="#a78bfa" opacity="0.6"/>
+  <circle cx="182" cy="180" r="3.5" fill="#67e8f9" opacity="0.6"/>
+  <line x1="74" y1="180" x2="128" y2="132" stroke="#818cf8" stroke-width="1.2" opacity="0.35"/>
+  <line x1="182" y1="180" x2="128" y2="132" stroke="#818cf8" stroke-width="1.2" opacity="0.35"/>
+</svg>

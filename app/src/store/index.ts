@@ -1,0 +1,1302 @@
+import { create } from 'zustand'
+import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
+import { setLang, setLangAsync, detectLang, t, type LangCode, LANGS, getLangDir } from '@/utils/i18n'
+import { applyTheme, getThemes } from '@/utils/theme'
+import log from '@/utils/logger'
+
+// Set <html dir> for RTL languages (Arabic).
+function applyLangDir(code: LangCode) {
+  document.documentElement.dir = getLangDir(code)
+}
+const LANGS_CODES = LANGS.map(l => l.code)
+
+interface SessionConfig {
+  providerId: number | null
+  modelId: number | null
+  personaId: number | null
+  workspace?: string | null
+}
+
+interface AppState {
+  // Navigation
+  currentView: ViewType
+  setCurrentView: (view: ViewType) => void
+  newChat: () => void
+  // Chat mode
+  sessions: Session[]
+  currentSessionId: number | null
+  messages: Message[]
+  loadSessions: () => Promise<void>
+  createSession: () => Promise<number | null>
+  selectSession: (id: number) => Promise<void>
+  deleteSession: (id: number) => Promise<void>
+
+  // Per-session config map
+  sessionConfigs: Record<number, SessionConfig>
+  getSessionConfig: (id: number) => SessionConfig
+  saveSessionConfig: (id: number, config: Partial<SessionConfig>) => Promise<void>
+
+  // Providers
+  providers: Provider[]
+  allModels: Model[]
+  loadProviders: () => Promise<void>
+  addProvider: (data: Omit<Provider, 'id' | 'created_at'>) => Promise<void>
+  updateProvider: (id: number, data: Partial<Provider>) => Promise<void>
+  deleteProvider: (id: number) => Promise<void>
+
+  // Models
+  modelsByProvider: Record<number, Model[]>
+  loadModels: (providerId: number) => Promise<void>
+  addModel: (data: Omit<Model, 'id' | 'created_at'>) => Promise<void>
+  updateModel: (id: number, data: Partial<Model>) => Promise<void>
+  deleteModel: (id: number) => Promise<void>
+  loadAllModels: () => Promise<void>
+
+  // Personas
+  personas: Persona[]
+  loadPersonas: () => Promise<void>
+  addPersona: (data: Omit<Persona, 'id' | 'created_at'>) => Promise<void>
+  updatePersona: (id: number, data: Partial<Persona>) => Promise<void>
+  deletePersona: (id: number) => Promise<void>
+
+  // Chat mode
+  chatMode: 'normal' | 'arena'
+  setChatMode: (mode: 'normal' | 'arena') => void
+
+  // Message search (scoped to current session)
+  messageSearchQuery: string
+  setMessageSearchQuery: (q: string) => void
+
+  // Chat — per-session streaming state so multiple sessions can stream concurrently.
+  // `streamingBySession[sid]` holds the live assistant content being streamed for that
+  // session. Components should derive their own per-session `isStreaming` from this
+  // map rather than relying on the global `sending` flag, so one session's stream
+  // never blocks another session's input.
+  streamingBySession: Record<number, { content: string; messageId: number | null }>
+  sending: boolean
+  // Per-message tool-call invocations, keyed by the assistant messageId the
+  // tool belongs to. Each entry is the list of tool calls for that message.
+  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null }[]>
+  // Per-message agent plan steps (the assistant's reasoning each round).
+  planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string; kind?: 'plan' | 'act' | 'observe' }[]>
+  // Per-message agent todo checklist (updated via the todo_write tool).
+  todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
+  // Per-message thinking/reasoning blocks from extended-thinking models (Claude
+  // extended thinking, OpenAI o-series reasoning_content). Accumulated as
+  // deltas arrive during streaming; cleared when the stream ends.
+  thinkingBlocksByMessage: Record<number, string>
+  // Inline status lines per message (compaction notice, budget-exhausted, etc.).
+  statusLinesByMessage: Record<number, string[]>
+  // Context budget indicator text (shown in status bar).
+  contextBudgetText: string | null
+  // Pending AskUserQuestion dialogs awaiting a user answer.
+  pendingQuestions: { reqId: string; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
+  resolveQuestion: (reqId: string, answers: { question: string; answer: string }[]) => void
+  // Agent permission mode, in increasing order of risk:
+  //   'off'          — no tools at all (plain chat)
+  //   'plan'         — read-only tools only (read_file/list_dir/grep/web_search…); no writes/commands
+  //   'ask'          — dangerous tools require a confirm dialog (recommended)
+  //   'auto_confirm' — safe tools auto-allowed, dangerous tools still need confirm
+  //   'auto'         — run everything, no confirms (still inside the workspace sandbox)
+  //   'yolo'         — FULL permission: skip the workspace path guard AND the command blocklist.
+  //                    DANGER: the model can write any file and run any command. Only for
+  //                    trusted models + throwaway VMs. Warned on enable.
+  agentMode: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'
+  setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void
+  // Pending permission requests awaiting a user decision (rendered as a dialog).
+  permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous'; impact?: { summary: string; severity: string; affectedFiles: string[]; command?: string } | null }[]
+  resolvePermission: (reqId: string, allowed: boolean, remember?: boolean) => void
+  // Habit proposals awaiting user consent (promote vs dismiss). Surfaced as a
+  // small inline card in ChatWindow — never auto-applied.
+  proposedHabits: { key: string; imperative: string; reason: string }[]
+  resolveHabit: (key: string, accept: boolean) => void
+  // Message queue: when the user sends while a turn is streaming, the message
+  // is queued (not lost, not interrupting) and auto-sent after the current turn.
+  queuedMessages: { id: number; content: string }[]
+  enqueueMessage: (content: string) => void
+  removeQueued: (id: number) => void
+  // Session navigation history (browser-style back/forward). selectSession pushes;
+  // goBack/goForward move the pointer without pushing.
+  sessionHistory: number[]
+  sessionHistoryIdx: number
+  goBack: () => void
+  goForward: () => void
+  // First-use contextual hints (show-once). Persisted in settings as seen_hints.
+  activeHints: { flag: string; text: string }[]
+  seenHints: string[]
+  dismissHint: (flag: string) => void
+  triggerHint: (flag: string, text: string) => void
+  // Thinking/reasoning effort level sent to the model (real param: reasoning_effort
+  // for OpenAI o-series, thinking.budget_tokens for Claude). 'off' = no param.
+  effortLevel: 'off' | 'low' | 'medium' | 'high'
+  setEffortLevel: (v: 'off' | 'low' | 'medium' | 'high') => void
+  // Last model-suggestion rationale from modelAdvisor (shown in ModelSelector).
+  modelSuggestion: { suggestedModelId: number | null; reason: string; confidence: number } | null
+  stopGeneration: () => Promise<void>
+  regenerate: () => Promise<void>
+  editMessage: (messageId: number, newContent: string) => Promise<void>
+  sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[]) => Promise<void>
+  loadMessages: (sessionId: number) => Promise<void>
+
+  // Arena
+  arenaResults: ArenaResult[]
+  arenaAggregate: { content: string; model_name: string; provider_name: string } | null
+  arenaModelIds: number[]
+  setArenaModelIds: (ids: number[]) => void
+  arenaError: string | null
+  arenaVoted: boolean
+  arenaVoteWinnerId: number | null
+  runArena: (content: string) => Promise<void>
+  arenaVote: (winner: { model_id: number; model_name: string }, losers: { model_id: number; model_name: string }[]) => Promise<void>
+
+  // Scores
+  scores: ModelScore[]
+  loadScores: () => Promise<void>
+
+  // Settings
+  language: LangCode
+  theme: string
+  fallbackTimeout: number
+  fontScale: number            // 0.85–1.25, base font-size multiplier
+  bubbleWidth: number          // 60–100 (%), max width of message bubbles
+  defaultEffort: 'off' | 'low' | 'medium' | 'high'  // default thinking effort for new sessions
+  defaultModelId: number | null   // default model for new sessions (null = first enabled)
+  defaultPersonaId: number | null // default persona for new sessions (null = none)
+  // Advanced generation params (advanced users). Empty/0 means "let the provider default".
+  maxTokens: number            // 0 = unset (use provider default); else cap output tokens
+  temperature: number          // 0 = unset; 0.0–2.0 sampling temperature
+  topP: number                 // 0 = unset; 0–1 nucleus sampling
+  systemPrefix: string         // custom text prepended to every system prompt
+  autoTitle: boolean           // auto-generate a summary title for new sessions
+  titleLanguage: string        // language for generated titles ('auto' follows UI lang)
+  titleModelId: number | null  // model to use for generating session titles (null = first enabled)
+  backgroundImage: string | null
+  backgroundOpacity: number   // 0–100, how visible the image is
+  backgroundBlur: number      // 0–20px
+  memories: { id: number; content: string; created_at: string }[]
+  loadMemories: () => Promise<void>
+  loadSettings: () => Promise<void>
+  setLanguage: (lang: LangCode) => Promise<void>
+  setTheme: (theme: string) => Promise<void>
+  setFallbackTimeout: (ms: number) => Promise<void>
+  setFontScale: (v: number) => Promise<void>
+  setBubbleWidth: (v: number) => Promise<void>
+  setMaxTokens: (v: number) => Promise<void>
+  setTemperature: (v: number) => Promise<void>
+  setTopP: (v: number) => Promise<void>
+  setSystemPrefix: (v: string) => Promise<void>
+  setAutoTitle: (v: boolean) => Promise<void>
+  setTitleLanguage: (v: string) => Promise<void>
+  setTitleModel: (id: number | null) => Promise<void>
+  setDefaultEffort: (v: 'off' | 'low' | 'medium' | 'high') => Promise<void>
+  setDefaultModel: (id: number | null) => Promise<void>
+  setDefaultPersona: (id: number | null) => Promise<void>
+  setBackgroundImage: (dataUrl: string | null) => Promise<void>
+  setBackgroundOpacity: (v: number) => Promise<void>
+  setBackgroundBlur: (v: number) => Promise<void>
+
+  // Model routing priority (used by modelAdvisor to pick models).
+  modelRoutingPriority: 'quality' | 'speed' | 'cost'
+  setModelRoutingPriority: (v: 'quality' | 'speed' | 'cost') => Promise<void>
+  // Auto-commit after test-gate verification passes.
+  autoCommitOnTestPass: boolean
+  setAutoCommitOnTestPass: (v: boolean) => Promise<void>
+
+  // UI
+  sidebarOpen: boolean
+  toggleSidebar: () => void
+  completionToasts: { id: number; sessionId: number; sessionTitle: string }[]
+  dismissToast: (id: number) => void
+  pinSession: (id: number, pinned?: number) => Promise<void>
+  notifyComplete: (sessionId: number, sessionTitle: string) => void
+  // Agent workspace root (global, set from settings).
+  agentWorkspace: string
+  setAgentWorkspace: (dir: string) => Promise<void>
+}
+
+// Apply the font-scale multiplier as a root CSS var; index.css uses it on html.
+function applyFontScale(scale: number) {
+  const clamped = Math.min(1.25, Math.max(0.85, scale || 1))
+  document.documentElement.style.setProperty('--font-scale', String(clamped))
+}
+
+function decodeDataUrlText(dataUrl: string): string {
+  const m = /^data:[^;]*;base64,(.*)$/s.exec(dataUrl)
+  if (!m) {
+    // maybe data:text/plain,<urlencoded>
+    const m2 = /^data:[^,]*,(.*)$/s.exec(dataUrl)
+    if (m2) { try { return decodeURIComponent(m2[1]) } catch { return m2[1] } }
+    return ''
+  }
+  try {
+    const bin = atob(m[1])
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return new TextDecoder('utf-8').decode(bytes)
+  } catch {
+    return ''
+  }
+}
+
+// Config bundle shape mirrors `electron/ipc/config.handler.js` (the canonical
+// main-process serializer). The `buildConfigBundle` in `src/types/config.ts`
+// produces the same structure for the renderer-side export path.
+
+export const useStore = create<AppState>((set, get) => ({
+  // Navigation
+  currentView: 'chat',
+  setCurrentView: (view) => set({ currentView: view }),
+  // Sessions
+  sessions: [],
+  currentSessionId: null,
+  messages: [],
+  // Per-session streaming buffers: { [sessionId]: { content, messageId } }
+  streamingBySession: {},
+  sending: false,
+  toolCallsByMessage: {},
+  planStepsByMessage: {},
+  todosByMessage: {},
+  thinkingBlocksByMessage: {},
+  statusLinesByMessage: {},
+  contextBudgetText: null,
+  pendingQuestions: [],
+  proposedHabits: [],
+  queuedMessages: [],
+  sessionHistory: [],
+  sessionHistoryIdx: -1,
+  activeHints: [],
+  seenHints: [],
+  agentMode: 'off',
+  permissionRequests: [],
+  completionToasts: [],
+  effortLevel: 'off',
+  agentWorkspace: '', // current session's workspace path (or global)
+  modelSuggestion: null as { suggestedModelId: number | null; reason: string; confidence: number } | null,
+  modelRoutingPriority: 'quality',
+  autoCommitOnTestPass: false,
+
+  loadSessions: async () => {
+    const sessions = await window.electronAPI.session.list()
+    set({ sessions })
+    const { currentSessionId } = get()
+    if (currentSessionId && !sessions.some(s => s.id === currentSessionId)) {
+      set({ currentSessionId: null, messages: [], arenaResults: [] })
+    }
+  },
+  createSession: async () => {
+    const s = get()
+    const allProviders = await window.electronAPI.provider.list()
+    const enabledProviders = allProviders.filter(p => p.enabled)
+    let cfg = { providerId: null as number | null, modelId: null as number | null, personaId: null as number | null }
+
+    // Prefer user-set defaults; fall back to first enabled provider's primary model.
+    if (s.defaultModelId) {
+      const defModel = (s.allModels.find(m => m.id === s.defaultModelId) ||
+        (await window.electronAPI.model.listAll()).find(m => m.id === s.defaultModelId))
+      if (defModel) {
+        cfg.providerId = defModel.provider_id
+        cfg.modelId = defModel.id
+      }
+    }
+    if (s.defaultPersonaId) {
+      cfg.personaId = s.defaultPersonaId
+    }
+    if (!cfg.providerId && enabledProviders.length > 0) {
+      cfg.providerId = enabledProviders[0].id as number
+      const models = await window.electronAPI.model.list(cfg.providerId)
+      const primary = models.find(m => m.is_primary) || models[0]
+      if (primary) cfg.modelId = primary.id
+    }
+    if (cfg.providerId && !cfg.modelId) {
+      const models = await window.electronAPI.model.list(cfg.providerId)
+      const primary = models.find(m => m.is_primary) || models[0]
+      if (primary) cfg.modelId = primary.id
+    }
+    const result = await window.electronAPI.session.createAndSelect(cfg)
+    const sid = result.session.id
+    const sessionCfg = result.config
+    set((s) => ({
+      currentView: 'chat',
+      currentSessionId: sid,
+      sessions: [...s.sessions, result.session],
+      sessionConfigs: { ...s.sessionConfigs, [sid]: sessionCfg },
+      messages: result.messages || [],
+    }))
+    if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
+    return sid
+  },
+  // Navigate to the chat view and immediately create a blank session so the
+  // semi-transparent chat view (with model badge + persona selector in the
+  // header) shows instead of the solid-white welcome page. Best-effort: if
+  // session creation fails (e.g. no enabled provider), fall back to the
+  // welcome page so the user isn't left looking at the previous chat.
+  newChat: () => {
+    set({ currentView: 'chat', arenaResults: [], chatMode: 'normal' })
+    get().createSession().catch(() => {
+      set({ currentSessionId: null, messages: [] })
+    })
+  },
+  selectSession: async (id) => {
+    // Push to the navigation history unless we got here via goBack/goForward
+    // (those move the pointer, they don't push a new entry).
+    if (!_navigating) {
+      const { sessionHistory, sessionHistoryIdx } = get()
+      const truncated = sessionHistory.slice(0, sessionHistoryIdx + 1)
+      if (truncated[truncated.length - 1] !== id) {
+        truncated.push(id)
+        set({ sessionHistory: truncated, sessionHistoryIdx: truncated.length - 1 })
+      }
+    }
+    // Always reload messages from DB when switching sessions. This ensures
+    // messages completed while the user was viewing another session are
+    // visible on switch-back (cross-session streaming fix).
+    let msgs: Message[] = []
+    try { msgs = await window.electronAPI.message.list(id) } catch (e) { log.error('preload', e) }
+    set({ currentSessionId: id, messages: msgs, arenaResults: [] })
+    // Load per-session config from DB. If missing/incomplete, resolve from allModels.
+    try {
+      let cfg = await window.electronAPI.session.getConfig(id)
+      if (!cfg || !cfg.modelId) {
+        const enabledProviders = (await window.electronAPI.provider.list()).filter(p => p.enabled)
+        const providerId = enabledProviders.length > 0 ? enabledProviders[0].id : null
+        cfg = { providerId, modelId: null, personaId: null }
+        window.electronAPI.session.setConfig(id, cfg).catch(() => {})
+      }
+      set((s) => ({
+        currentSessionId: id,
+        sessionConfigs: { ...s.sessionConfigs, [id]: cfg },
+      }))
+      // Restore per-session workspace if configured.
+      const savedCfg = get().sessionConfigs[id]
+      if (savedCfg?.workspace) {
+        try { await window.electronAPI.agent.setWorkspace({ dir: savedCfg.workspace, sessionId: id }) } catch {}
+      }
+      if (cfg.providerId) get().loadModels(cfg.providerId)
+    } catch {
+      set({ currentSessionId: id })
+    }
+  },
+
+  // Per-session config
+  sessionConfigs: {},
+  getSessionConfig: (id) => {
+    return get().sessionConfigs[id] || { providerId: null, modelId: null, personaId: null }
+  },
+  saveSessionConfig: async (id, partial) => {
+    const existing = get().sessionConfigs[id] || { providerId: null, modelId: null, personaId: null, workspace: null }
+    const updated = { ...existing, ...partial }
+    await window.electronAPI.session.setConfig(id, updated)
+    // If workspace changed, also update the sandbox.
+    if (partial.workspace !== undefined) {
+      try { await window.electronAPI.agent.setWorkspace({ dir: partial.workspace, sessionId: id }) } catch {}
+    }
+    set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [id]: updated } }))
+  },
+
+  deleteSession: async (id) => {
+    await window.electronAPI.session.delete(id)
+    const { currentSessionId } = get()
+    // Clean up per-session state so deleted sessions don't leak streaming
+    // buffers / configs in memory.
+    set((s) => {
+      const nextStream = { ...s.streamingBySession }
+      delete nextStream[id]
+      const nextConfigs = { ...s.sessionConfigs }
+      delete nextConfigs[id]
+      return {
+        streamingBySession: nextStream,
+        sessionConfigs: nextConfigs,
+        ...(currentSessionId === id ? { currentSessionId: null, messages: [] } : {}),
+      }
+    })
+    await get().loadSessions()
+  },
+
+  // Providers
+  providers: [],
+  allModels: [],
+  loadProviders: async () => {
+    const providers = await window.electronAPI.provider.list()
+    set({ providers })
+  },
+  addProvider: async (data) => {
+    await window.electronAPI.provider.create(data)
+    await get().loadProviders()
+  },
+  updateProvider: async (id, data) => {
+    await window.electronAPI.provider.update(id, data)
+    await get().loadProviders()
+  },
+  deleteProvider: async (id) => {
+    await window.electronAPI.provider.delete(id)
+    const { currentSessionId, sessionConfigs } = get()
+    // Clean up session configs that referenced the deleted provider, and
+    // evict the provider's cached model list so stale rows don't surface.
+    const nextConfigs = { ...sessionConfigs }
+    for (const sid of Object.keys(nextConfigs)) {
+      const numSid = Number(sid)
+      const c = nextConfigs[numSid]
+      if (c.providerId === id) {
+        const cfg = { providerId: null as number | null, modelId: null as number | null, personaId: c.personaId }
+        if (numSid === currentSessionId) await window.electronAPI.session.setConfig(numSid, cfg)
+        nextConfigs[numSid] = cfg
+      }
+    }
+    const nextModels = { ...get().modelsByProvider }
+    delete nextModels[id]
+    set((s) => ({
+      providers: s.providers.filter(p => p.id !== id),
+      allModels: s.allModels.filter(m => m.provider_id !== id),
+      modelsByProvider: nextModels,
+      sessionConfigs: nextConfigs,
+    }))
+    await get().loadAllModels()
+  },
+
+  // Models
+  modelsByProvider: {},
+  loadModels: async (providerId) => {
+    const models = await window.electronAPI.model.list(providerId)
+    set((s) => ({ modelsByProvider: { ...s.modelsByProvider, [providerId]: models } }))
+  },
+  addModel: async (data) => {
+    await window.electronAPI.model.create(data)
+    await get().loadModels(data.provider_id)
+    await get().loadAllModels()
+  },
+  updateModel: async (id, data) => {
+    await window.electronAPI.model.update(id, data)
+    await get().loadAllModels()
+    // Refresh the provider's models if we know which provider
+    const { allModels } = get()
+    const updated = allModels.find(m => m.id === id)
+    if (updated) await get().loadModels(updated.provider_id)
+  },
+  deleteModel: async (id) => {
+    const { allModels, currentSessionId } = get()
+    const target = allModels.find(m => m.id === id)
+    await window.electronAPI.model.delete(id)
+    const updatedAll = allModels.filter(m => m.id !== id)
+    const nextConfigs = { ...get().sessionConfigs }
+    for (const sid of Object.keys(nextConfigs)) {
+      const numSid = Number(sid)
+      const c = nextConfigs[numSid]
+      if (c.modelId === id) {
+        const fallback = updatedAll.find(m => m.provider_id === c.providerId)
+        const cfg = { providerId: c.providerId, modelId: fallback?.id ?? null, personaId: c.personaId }
+        if (numSid === currentSessionId) await window.electronAPI.session.setConfig(numSid, cfg)
+        nextConfigs[numSid] = cfg
+      }
+    }
+    set((s) => ({ allModels: updatedAll, sessionConfigs: nextConfigs }))
+    if (target) {
+      await get().loadModels(target.provider_id)
+    }
+  },
+  loadAllModels: async () => {
+    const allModels = await window.electronAPI.model.listAll()
+    set({ allModels })
+  },
+
+  // Personas
+  personas: [],
+  loadPersonas: async () => {
+    const personas = await window.electronAPI.persona.list()
+    set({ personas })
+  },
+  addPersona: async (data) => {
+    await window.electronAPI.persona.create(data)
+    await get().loadPersonas()
+  },
+  updatePersona: async (id, data) => {
+    await window.electronAPI.persona.update(id, data)
+    await get().loadPersonas()
+  },
+  deletePersona: async (id) => {
+    await window.electronAPI.persona.delete(id)
+    await get().loadPersonas()
+  },
+
+  // Chat mode
+  chatMode: 'normal',
+  setChatMode: (mode) => {
+    set({ chatMode: mode })
+    // Reset arena state when leaving arena mode
+    if (mode !== 'arena') {
+      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaAggregate: null, arenaError: null })
+    }
+    // When switching to arena mode on a blank page (no session), create one
+    // so the arena model selector has a target session. Only skip if arena already has
+    // a session (user already selected models).
+    if (mode === 'arena' && !get().currentSessionId) {
+      get().createSession().catch(() => {})
+    }
+  },
+
+  // Message search
+  messageSearchQuery: '',
+  setMessageSearchQuery: (q) => set({ messageSearchQuery: q }),
+
+  // Chat
+  sendMessage: async (content, attachments) => {
+    const { currentSessionId, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
+    const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
+    let modelId = cfg?.modelId
+    // Auto-resolve missing model: try allModels (already loaded globally)
+    if (!modelId) {
+      const enabledProviders = (await window.electronAPI.provider.list()).filter(p => p.enabled)
+      if (enabledProviders.length > 0 && currentSessionId) {
+        const providerId = enabledProviders[0].id
+        const models = await window.electronAPI.model.list(providerId)
+        const primary = models.find(m => m.is_primary) || models[0]
+        modelId = primary?.id
+        if (modelId) {
+          const newCfg = { providerId, modelId, personaId: cfg?.personaId || null }
+          await window.electronAPI.session.setConfig(currentSessionId, newCfg)
+          set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [currentSessionId]: newCfg } }))
+          get().loadModels(providerId)
+        }
+      }
+    }
+    if (!currentSessionId || !modelId) {
+      log.warn('sendMessage: no session or model configured')
+      return
+    }
+
+    // Fold text attachments into the prompt as fenced context blocks.
+    let finalContent = content
+    const imageAttachments: { name: string; mime: string; dataUrl: string }[] = []
+    const firstAttachment = attachments && attachments.length > 0 ? attachments[0] : null
+    if (attachments && attachments.length > 0) {
+      const textBlocks: string[] = []
+      for (const a of attachments) {
+        if (a.kind === 'image' && a.dataUrl) {
+          imageAttachments.push({ name: a.name, mime: a.mime, dataUrl: a.dataUrl })
+        } else if (a.kind === 'text' && a.dataUrl) {
+          // dataUrl like data:text/plain;base64,XXXX
+          const text = decodeDataUrlText(a.dataUrl)
+          textBlocks.push(`📎 ${a.name}:\n\`\`\`\n${text}\n\`\`\``)
+        }
+      }
+      if (textBlocks.length > 0) {
+        finalContent = textBlocks.join('\n\n') + (content ? '\n\n' + content : '')
+      }
+    }
+
+    // Optimistically add user message
+    const tempUserMsg: Message = {
+      id: Date.now(), session_id: currentSessionId, role: 'user',
+      content: finalContent, model_used: null, provider_used: null,
+      token_count: null, latency_ms: null,
+      status: 'success', error_message: null,
+      created_at: new Date().toISOString(),
+      attachment: firstAttachment ? { name: firstAttachment.name, mime: firstAttachment.mime, kind: firstAttachment.kind, preview: firstAttachment.kind === 'image' ? firstAttachment.dataUrl : undefined } : null,
+    }
+
+    set((s) => ({
+      sending: true,
+      streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
+      messages: [...s.messages, tempUserMsg],
+    }))
+    // Refresh sidebar immediately so the new session (or updated session) appears
+    // right after the user sends a message — not after the AI finishes responding.
+    get().loadSessions()
+
+    // Ensure the global chunk listener is registered exactly once; it routes every
+    // chunk to whichever session it belongs to, so background streams keep flowing.
+    ensureChunkListener()
+    ensureToolCallListener()
+
+    try {
+      const result = await window.electronAPI.chat.send({
+        sessionId: currentSessionId,
+        content: finalContent,
+        modelId,
+        mode: chatMode,
+        personaId: cfg?.personaId ?? null,
+        attachments: imageAttachments,
+        useTools: agentMode !== 'off',
+        agentMode: agentMode === 'off' ? 'ask' : agentMode,
+        effortLevel,
+        genParams: { maxTokens, temperature, topP },
+        systemPrefix,
+        })
+      if (result?.modelSuggestion) set({ modelSuggestion: result.modelSuggestion })
+    } catch (err) {
+      log.error('[AetherAI] chat.send FAILED:', err)
+      // Drop this session's streaming buffer on error; keep other sessions intact.
+      set((s) => {
+        const next = { ...s.streamingBySession }
+        delete next[currentSessionId]
+        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
+      })
+      log.error('chat error', err)
+    }
+  },
+
+  setAgentMode: (v) => set({ agentMode: v }),
+  setModelRoutingPriority: async (v) => {
+    await window.electronAPI.settings.set('modelRoutingPriority', v)
+    set({ modelRoutingPriority: v })
+  },
+  setAutoCommitOnTestPass: async (v) => {
+    await window.electronAPI.settings.set('autoCommitOnTestPass', v ? '1' : '0')
+    set({ autoCommitOnTestPass: v })
+  },
+  setAgentWorkspace: async (dir: string) => {
+    try { await window.electronAPI.agent.setWorkspace({ dir }) } catch {}
+    set({ agentWorkspace: dir })
+  },
+  resolvePermission: (reqId, allowed, remember = false) => {
+    window.electronAPI.chat.replyPermission({ reqId, allowed, remember })
+    set((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
+  },
+  resolveQuestion: (reqId, answers) => {
+    window.electronAPI.chat.replyQuestion({ reqId, answers })
+    set((s) => ({ pendingQuestions: s.pendingQuestions.filter((q) => q.reqId !== reqId) }))
+  },
+  resolveHabit: (key, accept) => {
+    if (accept) window.electronAPI.chat.confirmHabit(key).catch(() => {})
+    else window.electronAPI.chat.dismissHabit(key).catch(() => {})
+    set((s) => ({ proposedHabits: s.proposedHabits.filter((h) => h.key !== key) }))
+  },
+  enqueueMessage: (content) => {
+    set((s) => ({ queuedMessages: [...s.queuedMessages, { id: Date.now() + Math.random(), content }] }))
+    get().triggerHint('first_queue', t('hint.first_queue'))
+  },
+  removeQueued: (id) => {
+    set((s) => ({ queuedMessages: s.queuedMessages.filter((m) => m.id !== id) }))
+  },
+  goBack: () => {
+    const { sessionHistory, sessionHistoryIdx } = get()
+    if (sessionHistoryIdx <= 0) return
+    const newIdx = sessionHistoryIdx - 1
+    set({ sessionHistoryIdx: newIdx })
+    _navigating = true
+    get().selectSession(sessionHistory[newIdx]).finally(() => { _navigating = false })
+  },
+  goForward: () => {
+    const { sessionHistory, sessionHistoryIdx } = get()
+    if (sessionHistoryIdx >= sessionHistory.length - 1) return
+    const newIdx = sessionHistoryIdx + 1
+    set({ sessionHistoryIdx: newIdx })
+    _navigating = true
+    get().selectSession(sessionHistory[newIdx]).finally(() => { _navigating = false })
+  },
+  triggerHint: (flag, text) => {
+    const { seenHints, activeHints } = get()
+    if (seenHints.includes(flag) || activeHints.some((h) => h.flag === flag)) return
+    set((s) => ({ activeHints: [...s.activeHints, { flag, text }] }))
+  },
+  dismissHint: (flag) => {
+    const seen = [...new Set([...get().seenHints, flag])]
+    set((s) => ({ activeHints: s.activeHints.filter((h) => h.flag !== flag), seenHints: seen }))
+    try { window.electronAPI.settings.set('seen_hints', JSON.stringify(seen)) } catch (e) { log.warn('dismissHint persist failed:', e) }
+  },
+  setEffortLevel: (v) => set({ effortLevel: v }),
+  stopGeneration: async () => {
+    const st0 = get()
+    const sid0 = st0.currentSessionId
+    // Snapshot the streaming buffer BEFORE calling chat.stop — the backend's
+    // abort handler will fire a done:true chunk whose listener deletes the
+    // buffer concurrently. We capture content first so it can never be lost.
+    const preservedContent = (sid0 ? st0.streamingBySession[sid0]?.content : '') ?? ''
+    const preservedMsgId = sid0 ? st0.streamingBySession[sid0]?.messageId : null
+    if (sid0) await window.electronAPI.chat.stop(sid0)
+    await window.electronAPI.arena.stop().catch(() => {})
+    set({ sending: false })
+
+    const st = get()
+    const current = st.currentSessionId
+    if (!current) return
+    // Preserve whatever has been streamed so far. The backend writes the
+    // accumulated content to the DB on abort, so a DB reload should contain
+    // the assistant message — but the 3s optimistic-message guard in the chunk
+    // listener blocks that reload right after sending. To guarantee the user
+    // sees their partial output, inject a synthetic assistant message from
+    // the buffer snapshot if none is present yet.
+    const hasAssistantTail = [...st.messages].reverse().some(m =>
+      m.session_id === current && m.role === 'assistant')
+    if (preservedContent && !hasAssistantTail) {
+      const tempAssistant: Message = {
+        id: preservedMsgId ?? Date.now(),
+        session_id: current,
+        role: 'assistant',
+        content: preservedContent,
+        model_used: null, provider_used: null,
+        token_count: null, latency_ms: null,
+        status: 'aborted', error_message: null,
+        created_at: new Date().toISOString(),
+      }
+      set((s) => ({ messages: [...s.messages, tempAssistant] }))
+    }
+    // Now safe to drop the streaming buffer.
+    set((s) => {
+      const next = { ...s.streamingBySession }
+      if (current) delete next[current]
+      return { streamingBySession: next }
+    })
+    // Best-effort DB reload to reconcile the synthetic message with the real
+    // persisted one (which may carry model_used/provider_used metadata).
+    // We bypass the optimistic guard here because the stop flow must reflect
+    // the DB's final state for the current session.
+    try {
+      const { messages } = await window.electronAPI.message.list(current)
+      if (get().currentSessionId === current) {
+        // If DB already has the assistant message, trust it; otherwise keep
+        // the synthetic one with preserved content.
+        const dbHasAssistant = messages.some(m => m.session_id === current && m.role === 'assistant')
+        if (dbHasAssistant) {
+          set({ messages })
+        }
+      }
+    } catch {}
+  },
+
+  regenerate: async () => {
+    const { currentSessionId, messages, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix } = get()
+    const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
+    const activeModelId = cfg?.modelId
+    if (!currentSessionId || !activeModelId || messages.length < 2) return
+    let userIdx = -1
+    for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === 'user') { userIdx = i; break } }
+    if (userIdx < 0) return
+    // Identify the assistant message being regenerated so we can clear its per-message state
+    const regeneratedMsgId = messages.slice(userIdx + 1).find(m => m.role === 'assistant')?.id
+    set((s) => {
+      const next: Partial<AppState> = {
+        messages: messages.slice(0, userIdx + 1),
+        streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
+      }
+      if (regeneratedMsgId !== undefined) {
+        const { [regeneratedMsgId]: _, ...restTC } = s.toolCallsByMessage
+        const { [regeneratedMsgId]: __, ...restPS } = s.planStepsByMessage
+        const { [regeneratedMsgId]: ___, ...restTB } = s.todosByMessage
+        const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
+        const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
+        next.toolCallsByMessage = restTC
+        next.planStepsByMessage = restPS
+        next.todosByMessage = restTB
+        next.thinkingBlocksByMessage = restTIB
+        next.statusLinesByMessage = restSIB
+      }
+      return next
+    })
+    ensureChunkListener()
+    try {
+      await window.electronAPI.chat.send({
+        sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
+        personaId: cfg?.personaId ?? null,
+        useTools: agentMode !== 'off',
+        agentMode: agentMode === 'off' ? 'ask' : agentMode,
+        effortLevel,
+        genParams: { maxTokens, temperature, topP },
+        systemPrefix,
+      })
+    } catch (err) {
+      set((s) => {
+        const next = { ...s.streamingBySession }
+        delete next[currentSessionId]
+        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
+      })
+      log.error('regenerate error:', err)
+    }
+  },
+
+  // Edit a past user message: overwrite its content, drop everything after it
+  // (both in DB and in-memory), then re-send as a regenerate so the model
+  // replies to the edited prompt. No branching (overwrites history) — matches
+  // ChatGPT's simple edit; a future parent_id model could add branches.
+  editMessage: async (messageId, newContent) => {
+    const { currentSessionId, messages, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix } = get()
+    const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
+    const activeModelId = cfg?.modelId
+    if (!currentSessionId || !activeModelId) return
+    const target = messages.find(m => m.id === messageId)
+    if (!target || target.role !== 'user') return
+    const content = newContent.trim()
+    if (!content) return
+    // Persist: update the edited message + delete everything after it.
+    await window.electronAPI.message.update(messageId, { content })
+    await window.electronAPI.message.deleteAfter(currentSessionId, messageId)
+    // Truncate in-memory to the edited message (inclusive), with new content.
+    const idx = messages.findIndex(m => m.id === messageId)
+    const truncated = messages.slice(0, idx + 1).map(m => m.id === messageId ? { ...m, content } : m)
+    set((s) => ({
+      messages: truncated,
+      streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } },
+    }))
+    ensureChunkListener()
+    try {
+      await window.electronAPI.chat.send({
+        sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
+        personaId: cfg?.personaId ?? null,
+        useTools: agentMode !== 'off',
+        agentMode: agentMode === 'off' ? 'ask' : agentMode,
+        effortLevel,
+        genParams: { maxTokens, temperature, topP },
+        systemPrefix,
+      })
+    } catch (err) {
+      set((s) => {
+        const next = { ...s.streamingBySession }
+        delete next[currentSessionId]
+        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
+      })
+      log.error('editMessage error:', err)
+    }
+  },
+
+  loadMessages: async (sessionId) => {
+    // Skip if this session is actively streaming — optimistic user messages
+    // and live chunk updates would be overwritten by a stale DB snapshot.
+    if (get().streamingBySession[sessionId]) return
+    // Also skip if a user message was optimistically added within the last 3s
+    // (IPC hasn't reached the DB yet — this prevents the blank-screen bug).
+    const now = Date.now()
+    const hasRecentOptimistic = get().messages.some(m =>
+      m.session_id === sessionId && m.role === 'user' &&
+      (now - new Date(m.created_at).getTime()) < 3000 && m.status === 'success'
+    )
+    if (hasRecentOptimistic) return
+    try {
+      const allMessages = await window.electronAPI.message.list(sessionId)
+      // In arena mode, hide arena_model-tagged messages from the normal chat
+      // flow — they're only shown via the ArenaResults component to avoid
+      // duplicates. The ArenaResults component renders the same content.
+      if (get().chatMode === 'arena') {
+        const filtered = allMessages.filter(m => !m.arena_model || m.arena_model === '')
+        set({ messages: filtered })
+      } else {
+        set({ messages: allMessages })
+      }
+    } catch (err) {
+      log.error('[AetherAI] loadMessages error:', err)
+    }
+  },
+
+  // Arena
+  arenaResults: [],
+  arenaAggregate: null,
+  arenaModelIds: [],
+  arenaError: null,
+  arenaVoted: false,    // true after user has voted in this arena run
+  arenaVoteWinnerId: null as number | null,
+  setArenaModelIds: (ids) => set({ arenaModelIds: ids }),
+
+  runArena: async (content) => {
+    const { currentSessionId, arenaModelIds, sessionConfigs, defaultPersonaId, streamingBySession } = get()
+    if (!currentSessionId || arenaModelIds.length < 2) {
+      set({ arenaError: '请先选择至少 2 个模型' }); return
+    }
+    const cfg = sessionConfigs[currentSessionId]
+    const personaId = cfg?.personaId ?? defaultPersonaId
+    set({ sending: true, arenaResults: [], arenaAggregate: null, arenaError: null, arenaVoted: false, arenaVoteWinnerId: null })
+    set((s) => ({ streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '...', messageId: null } } }))
+    try {
+      const { results, aggregate } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, aggregate: true, personaId })
+      if (!results || results.length === 0) {
+        set({ sending: false, arenaError: '没有返回结果，请检查模型/网络' })
+        set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
+        return
+      }
+      set({ arenaResults: results, arenaAggregate: aggregate || null, sending: false, arenaError: null })
+      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
+      get().loadMessages(currentSessionId)
+      get().loadSessions()
+    } catch (err: unknown) {
+      set({ sending: false, arenaError: '竞技场请求失败: ' + (err instanceof Error ? err.message : String(err)) })
+      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
+    }
+  },
+
+  arenaVote: async (winner, losers) => {
+    const { messages, arenaResults, arenaVoteWinnerId } = get()
+    // Prevent double-voting
+    if (arenaVoteWinnerId) return
+    const userMsg = messages.find(m => m.role === 'user') || arenaResults[0]
+    const prompt = typeof userMsg?.content === 'string' ? userMsg.content : ''
+    try {
+      const result = await window.electronAPI.arena.vote({
+        prompt,
+        winnerModelId: winner.model_id,
+        winnerModelName: winner.model_name,
+        loserModelIds: losers.map(l => l.model_id),
+        loserModelNames: losers.map(l => l.model_name),
+      })
+      if (result?.success) {
+        // Clean up arena messages from DB: delete all arena_model-tagged
+        // messages (both winners and losers) and replace with a single normal
+        // assistant message so the winner appears as a regular chat bubble.
+        const current = get().currentSessionId
+        if (current) {
+          await window.electronAPI.message.deleteArena(current)
+          const winnerResult = arenaResults.find(r => r.model_id === winner.model_id)
+          if (winnerResult) {
+            await window.electronAPI.message.addNormal({
+              session_id: current,
+              role: 'assistant' as const,
+              content: winnerResult.content,
+              model_used: winnerResult.model_name,
+            })
+          }
+          get().loadMessages(current)
+        }
+        await get().loadScores()
+        // Clear arena results so the winner doesn't show twice — it's now
+        // stored as a normal message and visible in the normal message flow.
+        set({
+          arenaResults: [],
+          arenaAggregate: null,
+          arenaVoted: true,
+          arenaVoteWinnerId: winner.model_id,
+        })
+      } else {
+        set({ arenaError: '投票失败，请重试' })
+      }
+    } catch (err: unknown) {
+      set({ arenaError: '投票失败: ' + (err instanceof Error ? err.message : String(err)) })
+    }
+  },
+
+  // Scores
+  scores: [],
+  loadScores: async () => {
+    const scores = await window.electronAPI.arena.scores()
+    set({ scores })
+  },
+
+  // Settings
+  language: 'en',
+  theme: 'light',
+  fallbackTimeout: 30000,
+  fontScale: 1,
+  bubbleWidth: 85,
+  defaultEffort: 'off',
+  defaultModelId: null,
+  defaultPersonaId: null,
+  maxTokens: 0,
+  temperature: 0,
+  topP: 0,
+  systemPrefix: '',
+  autoTitle: true,
+  titleLanguage: 'auto',
+  titleModelId: null as number | null,
+  backgroundImage: null,
+  backgroundOpacity: 100,
+  backgroundBlur: 0,
+  memories: [],
+  loadMemories: async () => {
+    try {
+      const entries = await window.electronAPI.memory.list()
+      set({ memories: entries })
+    } catch (e) { log.warn('loadMemories failed:', e) }
+  },
+
+  loadSettings: async () => {
+    try {
+      const s = await window.electronAPI.settings.getAll()
+      const saved = s.language as LangCode | undefined
+      const lang: LangCode = saved && LANGS_CODES.includes(saved) ? saved : detectLang()
+      const theme = s.theme || 'light'
+      const timeout = parseInt(s.fallback_timeout_ms || '30000', 10)
+      const bgOpacity = parseInt(s.backgroundOpacity ?? '100', 10)
+      const bgBlur = parseInt(s.backgroundBlur ?? '0', 10)
+      const fontScale = parseFloat(s.fontScale ?? '1')
+      const bubbleWidth = parseInt(s.bubbleWidth ?? '85', 10)
+      const defaultEffort = (s.defaultEffort ?? 'off') as 'off' | 'low' | 'medium' | 'high'
+      const defaultModelId = parseInt(s.defaultModelId ?? '0', 10) || null
+      const defaultPersonaId = parseInt(s.defaultPersonaId ?? '0', 10) || null
+      const maxTokens = parseInt(s.maxTokens ?? '0', 10)
+      const temperature = parseFloat(s.temperature ?? '0')
+      const topP = parseFloat(s.topP ?? '0')
+      const systemPrefix = s.systemPrefix ?? ''
+      const autoTitle = (s.autoTitle ?? '1') === '1'
+      const titleLanguage = s.titleLanguage ?? 'auto'
+      const titleModelId = parseInt(s.titleModelId ?? '0', 10) || null
+      const modelRoutingPriority = ['quality', 'speed', 'cost'].includes(s.modelRoutingPriority as string) ? (s.modelRoutingPriority as 'quality' | 'speed' | 'cost') : 'quality'
+      const autoCommitOnTestPass = (s.autoCommitOnTestPass ?? '0') === '1'
+      await setLangAsync(lang)
+      applyTheme(theme)
+      applyFontScale(fontScale)
+      applyLangDir(lang)
+      let seenHints: string[] = []
+      try { seenHints = JSON.parse(s.seen_hints || '[]') } catch (e) { log.warn('parse seen_hints failed:', e) }
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints, modelRoutingPriority, autoCommitOnTestPass })
+      // Background image is loaded asynchronously by App.tsx (deferred to next
+      // frame) — no need to load it here.
+    } catch (e) { log.warn('loadSettings failed:', e) }
+  },
+  setLanguage: async (lang) => {
+    try {
+      await window.electronAPI.settings.set('language', lang)
+      await setLangAsync(lang)
+    } catch (e) {
+      log.warn('setLanguage failed:', e)
+    }
+    applyLangDir(lang)
+    set({ language: lang })
+  },
+  setTheme: async (theme) => {
+    await window.electronAPI.settings.set('theme', theme)
+    if (_autoThemeCleanup) { _autoThemeCleanup(); _autoThemeCleanup = null }
+    applyTheme(theme, get().backgroundImage !== null, (fn) => { _autoThemeCleanup = fn })
+    set({ theme })
+  },
+  setFallbackTimeout: async (ms) => {
+    await window.electronAPI.settings.set('fallback_timeout_ms', String(ms))
+    set({ fallbackTimeout: ms })
+  },
+  setFontScale: async (v) => {
+    await window.electronAPI.settings.set('fontScale', String(v))
+    applyFontScale(v)
+    set({ fontScale: v })
+  },
+  setBubbleWidth: async (v) => {
+    await window.electronAPI.settings.set('bubbleWidth', String(v))
+    set({ bubbleWidth: v })
+  },
+  setDefaultEffort: async (v) => {
+    await window.electronAPI.settings.set('defaultEffort', v)
+    set({ defaultEffort: v, effortLevel: v })
+  },
+  setDefaultModel: async (v) => {
+    await window.electronAPI.settings.set('defaultModelId', String(v ?? ''))
+    set({ defaultModelId: v })
+  },
+  setDefaultPersona: async (v) => {
+    await window.electronAPI.settings.set('defaultPersonaId', String(v ?? ''))
+    set({ defaultPersonaId: v })
+  },
+  // Settings — simple numeric/string setters.
+  setMaxTokens:   async (v) => { await window.electronAPI.settings.set('maxTokens', String(v)); set({ maxTokens: v }) },
+  setTemperature: async (v) => { await window.electronAPI.settings.set('temperature', String(v)); set({ temperature: v }) },
+  setTopP:        async (v) => { await window.electronAPI.settings.set('topP', String(v)); set({ topP: v }) },
+  setSystemPrefix:async (v) => { await window.electronAPI.settings.set('systemPrefix', v); set({ systemPrefix: v }) },
+  setTitleLanguage:async (v) => { await window.electronAPI.settings.set('titleLanguage', v); set({ titleLanguage: v }) },
+  setTitleModel: async (v) => { await window.electronAPI.settings.set('titleModelId', String(v ?? '')); set({ titleModelId: v }) },
+  setBackgroundOpacity: async (v) => { await window.electronAPI.settings.set('backgroundOpacity', String(v)); set({ backgroundOpacity: v }) },
+  setBackgroundBlur: async (v) => { await window.electronAPI.settings.set('backgroundBlur', String(v)); set({ backgroundBlur: v }) },
+  // Special-case setters that need extra logic.
+  setAutoTitle: async (v) => { await window.electronAPI.settings.set('autoTitle', v ? '1' : '0'); set({ autoTitle: v }) },
+  setBackgroundImage: async (dataUrl) => {
+    await window.electronAPI.background.set(dataUrl)
+    applyTheme(get().theme, dataUrl !== null)
+    set({ backgroundImage: dataUrl })
+  },
+
+  // UI
+  sidebarOpen: true,
+  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+
+  pinSession: async (id: number, pinned: number = 1) => {
+    try { await window.electronAPI.session.pin(id, pinned) } catch {}
+    await get().loadSessions()
+  },
+  notifyComplete: (sessionId: number, sessionTitle: string) => {
+    const id = Date.now() + Math.random()
+    set((s: AppState) => ({ completionToasts: [...s.completionToasts, { id, sessionId, sessionTitle }] }))
+    setTimeout(() => set((s: AppState) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })), 3000)
+  },
+  dismissToast: (id: number) => set((s: AppState) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })),
+}))
+
+// Ensure all global listeners are registered (idempotent).
+// Global listeners (called from App.tsx on mount).
+export function ensureAllListeners() {
+  ensureChunkListener()
+  ensureToolCallListener()
+  ensurePlanStepListener()
+  ensureStatusListener()
+  ensureHabitSuggestionListener()
+  ensureThinkingListener()
+}
+// Session back/forward nav guard: set true during goBack/goForward so
+// selectSession doesn't push a duplicate entry into history.
+// Auto-theme listener cleanup: torn down when switching away from 'auto'.
+let _navigating = false
+let chunkListenerInstalled = false
+let _toolCallListenerInstalled = false
+let _streamRaf = 0
+let _pendingDeltas: Record<number, string> = {}
+let _autoThemeCleanup: (() => void) | null = null
+
+function ensureToolCallListener() {
+  if (_toolCallListenerInstalled) return
+  _toolCallListenerInstalled = true
+  window.electronAPI.chat.onToolCall(({ messageId, sessionId, tool }) => {
+    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, failureKind: (tool as any).failure_kind ?? null, recoveryHint: (tool as any).recovery_hint ?? null, risk: tool.risk, latencyMs: (tool as any).latencyMs ?? null, checkpointId: (tool as any).checkpointId ?? null, diff: (tool as any).diff ?? null, afterSnapshot: (tool as any).after_snapshot ?? null }
+    useStore.setState((s) => {
+      const existing = s.toolCallsByMessage[messageId] || []
+      // Append if new, replace if result changed (for live streaming)
+      if (existing.length > 0 && existing[existing.length - 1].name === entry.name && entry.result == null && entry.error == null) {
+        return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing.slice(0, -1), entry] } }
+      }
+      return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing, entry] } }
+    })
+  })
+}
+
+let _planStepListenerInstalled = false
+function ensurePlanStepListener() {
+  if (_planStepListenerInstalled) return
+  _planStepListenerInstalled = true
+  window.electronAPI.chat.onPlanStep?.(({ messageId, sessionId, step }) => {
+    if (!messageId) return
+    useStore.setState((s) => {
+      const existing = s.planStepsByMessage[messageId] || []
+      // Append each plan step; replace if step number matches (live update)
+      const idx = existing.findIndex(e => e.step === step.step && e.depth === step.depth)
+      const entry = { step: step.step, depth: step.depth, assistantText: step.assistantText, kind: step.kind }
+      if (idx >= 0) {
+        const next = [...existing]
+        next[idx] = entry
+        return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: next } }
+      }
+      return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: [...existing, entry] } }
+    })
+  })
+}
+
+function flushStreamUpdates() {
+  const deltas = _pendingDeltas
+  _pendingDeltas = {}
+  if (Object.keys(deltas).length === 0) return
+  useStore.setState((s) => {
+    const next = { ...s.streamingBySession }
+    for (const [sid, delta] of Object.entries(deltas)) {
+      const n = Number(sid)
+      const buf = next[n]
+      if (buf) next[n] = { ...buf, content: buf.content + delta }
+    }
+    return { streamingBySession: next }
+  })
+}
+
+function ensureChunkListener() {
+  if (chunkListenerInstalled) return
+  chunkListenerInstalled = true
+  window.electronAPI.chat.onChunk(({ messageId, delta, done, sessionId }) => {
+    if (!sessionId) return
+    const state = useStore.getState()
+    const buf = state.streamingBySession[sessionId]
+    // Lazy-init: first chunk creates the buffer with the real messageId so the
+    // StreamingBubble can render and track updates from this point forward.
+    if (!buf && !done) {
+      useStore.setState((s) => ({
+        streamingBySession: { ...s.streamingBySession, [sessionId]: { content: delta, messageId } },
+      }))
+      return
+    }
+    if (done) {
+      // Flush any pending deltas so the StreamingBubble can render the final
+      // content. Then schedule buffer cleanup after the next paint so React
+      // has a chance to commit the intermediate state.
+      flushStreamUpdates()
+      if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
+      _pendingDeltas = {}
+      const sid = sessionId
+      requestAnimationFrame(() => {
+        // Fetch the current state at this point to determine what to update.
+        const st = useStore.getState()
+        // Fire completion notification ONLY if the completed session is not
+        // the one the user is currently viewing.
+        if (st.currentSessionId !== sid) {
+          useStore.getState().pinSession(sid, 0).then(() => {
+            const s = useStore.getState().sessions.find(x => x.id === sid)
+            if (s) useStore.getState().notifyComplete(sid, s.title || 'Chat')
+          }).catch(() => {})
+        }
+        // Reload messages from DB — only for the current session.
+        // Guard against overwriting optimistic user messages that haven't
+        // reached the DB yet (same 3s guard as loadMessages).
+        if (st.currentSessionId === sid) {
+          const now = Date.now()
+          const hasRecentOptimistic = st.messages.some(m =>
+            m.session_id === sid && m.role === 'user' &&
+            (now - new Date(m.created_at).getTime()) < 3000
+          )
+          if (!hasRecentOptimistic) {
+            window.electronAPI.message.list(sid).then(msgs => {
+              if (useStore.getState().currentSessionId === sid) {
+                useStore.setState({ messages: msgs })
+              }
+            }).catch(() => {})
+          }
+        }
+        useStore.getState().pinSession(sid, 0).catch(() => {})
+        useStore.getState().loadSessions()
+        // Clean up streaming buffer after DB reload so there's no flicker.
+        useStore.setState((s) => {
+          const next = { ...s.streamingBySession }
+          delete next[sid]
+          const cur = useStore.getState().currentSessionId
+          return { streamingBySession: next, sending: !!(cur && next[cur]) }
+        })
+        // Process queued messages — only when no sessions are streaming.
+        const st2 = useStore.getState()
+        if (st2.queuedMessages.length > 0 && Object.keys(st2.streamingBySession).length === 0) {
+          const q = st2.queuedMessages[0]
+          useStore.setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
+          setTimeout(() => useStore.getState().sendMessage(q.content), 50)
+        }
+      })
+    } else {
+      _pendingDeltas[sessionId] = (_pendingDeltas[sessionId] || '') + delta
+      if (!_streamRaf) {
+        _streamRaf = requestAnimationFrame(() => { _streamRaf = 0; flushStreamUpdates() })
+      }
+    }
+  })
+}
+
+// Global onStatus listener: routes status lines to the owning message.
+// Installed once alongside the chunk listener.
+let _statusListenerInstalled = false
+function ensureStatusListener() {
+  if (_statusListenerInstalled) return
+  _statusListenerInstalled = true
+  window.electronAPI.chat.onStatus(({ messageId, text, kind }) => {
+    if (!messageId || !text) return
+    useStore.setState((s) => {
+      const existing = s.statusLinesByMessage[messageId] || []
+      // Avoid duplicates; cap at 5 status lines.
+      if (existing.some(l => l === text || (l.includes(text.slice(0, 30)) && kind === 'context_budget'))) return s
+      const next = [...existing.slice(-4), text]
+      return { statusLinesByMessage: { ...s.statusLinesByMessage, [messageId]: next } }
+    })
+    // Context budget: also store as a global indicator.
+    if (kind === 'context_budget') {
+      useStore.setState({ contextBudgetText: text })
+    }
+  })
+}
+
+// Global habit suggestion listener.
+let _habitSuggestionInstalled = false
+function ensureHabitSuggestionListener() {
+  if (_habitSuggestionInstalled) return
+  _habitSuggestionInstalled = true
+  window.electronAPI.chat.onHabitSuggestion?.((habits) => {
+    useStore.setState((s) => ({
+      proposedHabits: [...s.proposedHabits, ...habits.filter(h => !s.proposedHabits.some(ph => ph.key === h.key))],
+    }))
+  })
+}
+
+// Global thinking chunk listener: accumulates extended-thinking / reasoning
+// content per message so MessageBubble can render it as a collapsible block.
+let _thinkingListenerInstalled = false
+function ensureThinkingListener() {
+  if (_thinkingListenerInstalled) return
+  _thinkingListenerInstalled = true
+  window.electronAPI.chat.onThinkingChunk?.(({ messageId, delta }) => {
+    if (!messageId || !delta) return
+    useStore.setState((s) => ({
+      thinkingBlocksByMessage: {
+        ...s.thinkingBlocksByMessage,
+        [messageId]: (s.thinkingBlocksByMessage[messageId] || '') + delta,
+      },
+    }))
+  })
+}
