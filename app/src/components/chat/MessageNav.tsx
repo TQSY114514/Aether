@@ -54,13 +54,13 @@ export default function MessageNav({
 
   return (
     <>
-      {/* hover 预览气泡 — 跟随鼠标 Y 位置 */}
+      {/* hover 预览气泡 — 跟随鼠标 Y 位置,显示在点条右侧 */}
       {hoverMsg && (
         <div
           className="fixed z-50 bg-[var(--content-bg)] border border-[var(--border)] rounded-xl shadow-elevated p-2.5 text-xs max-w-[240px] pointer-events-none transition-opacity duration-100"
           style={{
             top: mouseY,
-            right: '36px',
+            left: '36px',
             transform: 'translateY(-50%)',
           }}
         >
@@ -73,11 +73,11 @@ export default function MessageNav({
         </div>
       )}
 
-      {/* 导航点条 — 固定在右侧,滚轮转发到消息列表 */}
+      {/* 导航点条 — 固定在左侧,滚轮转发到消息列表 */}
       <div
         ref={navRef}
         onMouseMove={handleMouseMove}
-        className="absolute right-1 top-10 bottom-10 z-30"
+        className="absolute left-1 top-10 bottom-10 z-30"
         style={{ width: '16px', cursor: 'pointer' }}
       >
         {/* 轨道线 */}
@@ -85,7 +85,7 @@ export default function MessageNav({
           className="absolute left-1/2 top-2 bottom-2 -translate-x-1/2"
           style={{ width: '1px', backgroundColor: 'var(--border)', opacity: 0.5 }}
         />
-        {/* 点 — 百分比分布,不溢出 */}
+        {/* 点 — 紧凑分布,不按百分比铺满 */}
         {userMsgs.map((msg, idx) => {
           const isActive = activeId === msg.id
           return (
@@ -96,7 +96,7 @@ export default function MessageNav({
               onMouseLeave={() => setHoverId(null)}
               className="absolute left-1/2 rounded-full transition-all duration-150 hover:scale-200"
               style={{
-                top: `${((idx + 1) / (count + 1)) * 100}%`,
+                top: `calc(50% + ${(idx - (count - 1) / 2) * (dotSize + 4)}px)`,
                 transform: 'translate(-50%, -50%)',
                 width: `${dotSize}px`,
                 height: `${dotSize}px`,
