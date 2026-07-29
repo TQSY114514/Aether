@@ -163,9 +163,9 @@ let _syncTimer = null
 let _syncPromise = null
 let _pendingSyncArgs = null // the most recent args; used when timer fires
 
-async function sync({ db, provider, model, userMessage, assistantReply, signal }) {
+async function sync({ db, provider, model, userMessage, assistantReply, signal, sessionId }) {
   // Always keep the latest args; the debounced call picks them up when it fires.
-  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal }
+  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal, sessionId }
 
   if (_syncTimer) clearTimeout(_syncTimer)
   _syncTimer = setTimeout(() => {
@@ -181,7 +181,7 @@ async function sync({ db, provider, model, userMessage, assistantReply, signal }
   }, SYNC_DEBOUNCE_MS)
 }
 
-async function _doSync({ db, provider, model, userMessage, assistantReply, signal }) {
+async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId }) {
   try {
     const transcript = `User: ${String(userMessage || '').slice(0, 2000)}\n\nAssistant: ${String(assistantReply || '').slice(0, 3000)}`
     const text = await completeChat({
@@ -216,10 +216,10 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
       if (entry.type === 'relation') {
         try {
           db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, source_turn_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, provider?.id || null, null])
+            [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, sessionId || null, null])
         } catch {}
       } else {
-        try { db.addMemoryWithProvenance(entry.content, entry.type, provider?.id || null) } catch {}
+        try { db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null) } catch {}
       }
     }
     _memV++ // invalidate prefetch cache

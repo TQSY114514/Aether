@@ -79,7 +79,7 @@ function validateToolArgs(args, schema) {
         errors.push(`"${key}" should be a string, got array`)
         continue
       }
-      actualType = String(value) === value ? 'string' : 'string' // coerced
+      actualType = 'string' // value is coerced to string for this branch
       // Check minLength
       if (prop.minLength && String(value).length < prop.minLength) {
         errors.push(`"${key}" is too short (min ${prop.minLength} chars)`)
