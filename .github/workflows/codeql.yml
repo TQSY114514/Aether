@@ -1,0 +1,28 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 6 * * 1'   # 每周一 06:00 UTC 定期扫描
+
+permissions:
+  contents: read
+  security-events: write   # 上传 CodeQL 结果需要
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          # 项目是 Electron + React + TypeScript,只分析 JS/TS。
+          # 默认配置会自动把 Python 等语言加进来,但本仓库没有 Python
+          # 代码,导致 "CodeQL / 分析（Python）" 失败。显式限定语言即可。
+          languages: javascript-typescript
+
+      - uses: github/codeql-action/analyze@v3
