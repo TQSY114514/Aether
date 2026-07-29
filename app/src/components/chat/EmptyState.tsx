@@ -41,15 +41,21 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
     return pickFour(sid + dayOfYear)
   }, [currentSessionId])
 
-  // Show user's default model on the blank chat screen (no session selected yet).
-  // Falls back to primary model only if no default is set.
+  // 优先读当前会话已配置的模型(覆盖"有会话但无消息"的空窗口场景),
+  // 无会话时回退到全局默认模型,最后回退到 primary/第一个。
   const activeModel = useMemo(() => {
+    const sid = currentSessionId
+    const cfgModelId = sid ? sessionConfigs[sid]?.modelId : null
+    if (cfgModelId) {
+      const found = allModels.find(m => m.id === cfgModelId)
+      if (found) return found
+    }
     if (defaultModelId) {
       const found = allModels.find(m => m.id === defaultModelId)
       if (found) return found
     }
     return allModels.find(m => m.is_primary) || allModels[0]
-  }, [defaultModelId, allModels])
+  }, [currentSessionId, sessionConfigs, defaultModelId, allModels])
   const effortLabel = { off: t('effort.off'), low: t('effort.low'), medium: t('effort.medium'), high: t('effort.high') }[effortLevel]
 
   return (
