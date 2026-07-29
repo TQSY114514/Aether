@@ -7,57 +7,173 @@ import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
+import { shallow } from 'zustand/shallow'
 
-// Lightweight placeholder: rendered once, updated via direct DOM writes
-// to avoid re-rendering ChatWindow on every streaming token.
-// Uses rAF-throttled scrollIntoView with an isAtBottom guard — skips scroll
-// when the user has scrolled up to read history (no more jarring yanks).
+// Arena results display component with streaming-like animation
+function ArenaResults({ results, aggregate, voted, winnerId, onVote, t, renderMarkdown }: {
+  results: { model_id: number; model_name: string; provider_name: string; content: string }[]
+  aggregate: { content: string; model_name: string } | null
+  voted: boolean
+  winnerId: number | null
+  onVote: (winner: { model_id: number; model_name: string }, losers: { model_id: number; model_name: string }[]) => Promise<void>
+  t: (key: string) => string
+  renderMarkdown: (md: string) => string
+}) {
+  const [revealed, setRevealed] = useState(new Set<string>())
+  const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    // Reset when new results arrive
+    setRevealed(new Set())
+    setDone(false)
+  }, [results.length])
+
+  useEffect(() => {
+    if (results.length === 0) return
+    if (done) return
+
+    const modelIds = results.map(r => String(r.model_id))
+    const toReveal = modelIds.filter(id => !revealed.has(id))
+    if (toReveal.length === 0) {
+      setDone(true)
+      return
+    }
+
+    // Reveal one at a time with short delay
+    let idx = 0
+    const interval = setInterval(() => {
+      if (idx >= toReveal.length) {
+        clearInterval(interval)
+        setDone(true)
+        return
+      }
+      setRevealed(prev => new Set([...prev, toReveal[idx]]))
+      idx++
+    }, 200)
+
+    return () => clearInterval(interval)
+  }, [results.length, revealed, done])
+
+  return (
+    <div className="space-y-3">
+      {aggregate && !voted && (
+        <div className="border-2 rounded-xl overflow-hidden animate-blur-fade" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="px-3 py-2 border-b flex items-center gap-2 text-sm font-medium" style={{ borderColor: 'var(--warning)' }}>
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>MoA</span>
+            <span style={{ color: 'var(--text-primary)' }}>{t('chat.arena.aggregate')}</span>
+            <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>{aggregate.model_name}</span>
+          </div>
+          <div className="p-3 text-sm leading-relaxed max-h-96 overflow-y-auto">
+            <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(aggregate.content) }} />
+          </div>
+        </div>
+      )}
+      <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
+      {results.map((r) => {
+        const key = String(r.model_id)
+        const isRevealed = revealed.has(key)
+        const isWinner = voted && r.model_id === winnerId
+        const isLoser = voted && r.model_id !== winnerId
+        return (
+          <div key={r.model_id} className="border rounded-xl overflow-hidden animate-blur-fade"
+            style={{
+              borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
+              opacity: isLoser ? 0.5 : isRevealed ? 1 : 0,
+              backgroundColor: isLoser ? 'var(--bg-secondary)' : undefined,
+              maxHeight: isLoser ? 120 : undefined,
+              overflow: isLoser ? 'hidden' : undefined,
+              transform: isLoser ? 'scale(0.98)' : undefined,
+              filter: isLoser ? 'grayscale(0.3)' : undefined,
+            }}>
+            <div className="px-3 py-2 border-b flex items-center justify-between text-sm font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+              <span style={{ color: isWinner ? 'var(--success)' : isLoser ? 'var(--text-muted)' : 'var(--text-primary)' }}>{r.model_name}</span>
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.provider_name}</span>
+            </div>
+            <div className="p-3 text-sm leading-relaxed max-h-60 overflow-y-auto">
+              <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }} />
+            </div>
+            {!voted && (
+              <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                <button onClick={() => onVote(
+                  { model_id: r.model_id, model_name: r.model_name },
+                  results.filter(x => x.model_id !== r.model_id).map(x => ({ model_id: x.model_id, model_name: x.model_name }))
+                )}
+                  className="text-xs px-3 py-1 rounded-lg border bg-white hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
+                  ⭐ {t('chat.arena.vote')}
+                </button>
+              </div>
+            )}
+            {isWinner && voted && (
+              <div className="px-3 py-2 border-t text-xs" style={{ borderColor: 'var(--success)', backgroundColor: 'rgba(34,197,94,0.08)', color: 'var(--success)' }}>✅ {t('chat.arena.voted')}</div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Lightweight streaming bubble: rendered inside the message flow, updated via
+// direct DOM writes to avoid re-rendering ChatWindow on every streaming token.
+// Styled as a proper assistant message bubble with AI avatar, border, and
+// auto-growing height. Uses rAF-throttled scrollIntoView with an isAtBottom
+// guard — skips scroll when the user has scrolled up to read history.
 function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBottom: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const msgIdRef = useRef<number>(-1)
+  const bubbleRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
 
   useEffect(() => {
     const unsub = useStore.subscribe((s) => {
       const buf = s.streamingBySession[sessionId]
-      if (!buf && msgIdRef.current === -1) return
-      if (!ref.current) return
-      if (buf && buf.messageId && buf.messageId !== msgIdRef.current) {
-        msgIdRef.current = buf.messageId
-        lastLenRef.current = 0
-        ref.current.innerHTML = renderMarkdown(buf.content)
-        ref.current.style.display = ''
-        queueScroll()
-      } else if (!buf && msgIdRef.current !== -1) {
-        msgIdRef.current = -1
-        lastLenRef.current = 0
-        ref.current.innerHTML = ''
-        ref.current.style.display = 'none'
-      } else if (buf && msgIdRef.current === buf.messageId) {
-        const newLen = buf.content.length
-        if (newLen === lastLenRef.current) return
-        if (newLen - lastLenRef.current < 2 && newLen > 0) return
-        lastLenRef.current = newLen
-        ref.current.innerHTML = renderMarkdown(buf.content)
-        queueScroll()
+      if (!buf || !ref.current) return
+      const newLen = buf.content.length
+      if (newLen === lastLenRef.current) return
+      lastLenRef.current = newLen
+      // Render markdown into the bubble content area.
+      ref.current.innerHTML = renderMarkdown(buf.content)
+      // Auto-grow the bubble height based on content.
+      if (bubbleRef.current) {
+        bubbleRef.current.style.minHeight = ''
+        bubbleRef.current.style.minHeight = bubbleRef.current.scrollHeight + 'px'
+      }
+      // Auto-scroll only if user is at the bottom.
+      if (isAtBottom) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = 0
+          ref.current?.scrollIntoView({ behavior: 'auto' })
+        })
       }
     })
-    function queueScroll() {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0
-        if (!isAtBottom) return
-        ref.current?.scrollIntoView({ behavior: 'smooth' })
-      })
-    }
     return () => {
       unsub()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [sessionId, isAtBottom])
 
-  return <div ref={ref} style={{ display: 'none' }} />
+  return (
+    <div id={`msg-streaming-${sessionId}`} className="flex justify-start message-enter">
+      <div className="w-full" style={{ maxWidth: '85%' }}>
+        <div className="flex items-center gap-2 mb-1.5 px-1">
+          <div className="w-6 h-6 rounded-full bg-black flex items-center justify-center shrink-0">
+            <span className="text-white text-[10px] font-medium">AI</span>
+          </div>
+          <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Assistant</span>
+          <span className="flex items-center gap-0.5 ml-1">
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '300ms' }} />
+          </span>
+        </div>
+        <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
+          style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
+          <div ref={ref} className="mc" />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function ChatWindow() {
@@ -65,22 +181,50 @@ export default function ChatWindow() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   useOverscrollSpring(scrollRef)
-  const messages = useStore((s) => s.messages)
-  const currentSessionId = useStore((s) => s.currentSessionId)
-  const loadMessages = useStore((s) => s.loadMessages)
-  const arenaResults = useStore((s) => s.arenaResults)
-  const arenaAggregate = useStore((s) => s.arenaAggregate)
-  const arenaError = useStore((s) => s.arenaError)
-  const proposedHabits = useStore((s) => s.proposedHabits)
-  const resolveHabit = useStore((s) => s.resolveHabit)
-  const activeHints = useStore((s) => s.activeHints)
-  const dismissHint = useStore((s) => s.dismissHint)
-  const arenaVote = useStore((s) => s.arenaVote)
+
+  // Batch selectors with shallow comparison: only re-renders when selected
+  // values actually change, not on every store update.
+  const {
+    messages, currentSessionId, streamingBySession,
+    toolCallsByMessage, arenaResults, arenaAggregate, arenaError,
+    proposedHabits, activeHints, loadMessages,
+    resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
+  } = useStore((s) => ({
+    messages: s.messages,
+    currentSessionId: s.currentSessionId,
+    streamingBySession: s.streamingBySession,
+    toolCallsByMessage: s.toolCallsByMessage,
+    arenaResults: s.arenaResults,
+    arenaAggregate: s.arenaAggregate,
+    arenaError: s.arenaError,
+    proposedHabits: s.proposedHabits,
+    activeHints: s.activeHints,
+    loadMessages: s.loadMessages,
+    resolveHabit: s.resolveHabit,
+    dismissHint: s.dismissHint,
+    arenaVote: s.arenaVote,
+    arenaVoted: s.arenaVoted,
+    arenaVoteWinnerId: s.arenaVoteWinnerId,
+  }), shallow)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
   const scrollToMsg = useCallback((id: number) => {
     document.getElementById('msg-' + id)?.scrollIntoView({ behavior: 'smooth' })
   }, [])
+
+  // Compute streaming status for the header bar — derive from specific keys
+  // so the memo only invalidates when tool-call state actually changes.
+  const streamingStatus = useMemo(() => {
+    if (!currentSessionId) return ''
+    const buf = streamingBySession[currentSessionId]
+    if (!buf) return ''
+    const hasToolCalls = Object.values(toolCallsByMessage).some(tcs =>
+      tcs.some(tc => tc.result === null && tc.error === null)
+    )
+    if (hasToolCalls) return t('status.using_tools')
+    return t('status.thinking')
+  }, [currentSessionId, toolCallsByMessage])
 
   // Reload messages when window regains focus (fix: text disappearing on alt-tab).
   // Skipped while a stream is active for this session — reloading mid-stream
@@ -106,8 +250,11 @@ export default function ChatWindow() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
+  // Always reload messages when switching sessions. The messages array belongs
+  // to whichever session was active when it was last set; switching back needs
+  // a fresh load so cross-session streaming completion doesn't leave stale data.
   useEffect(() => {
-    if (currentSessionId && messages.length === 0) {
+    if (currentSessionId) {
       loadMessages(currentSessionId)
     }
     setSearchQuery('')
@@ -185,9 +332,19 @@ export default function ChatWindow() {
         </div>
       </div>
 
+      {/* Streaming status bar */}
+      {(currentSessionId && streamingBySession[currentSessionId]) && streamingStatus && (
+        <div className="px-4 py-1 shrink-0 animate-blur-fade" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="max-w-3xl mx-auto flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+            <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{streamingStatus}</span>
+          </div>
+        </div>
+      )}
+
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">
-          {messages.length === 0 && !useStore.getState().sending && arenaResults.length === 0 && (
+          {messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0 && arenaAggregate === null && (
             <EmptyState />
           )}
 
@@ -195,8 +352,12 @@ export default function ChatWindow() {
             <MessageBubble key={msg.id} message={msg} searchHighlight={searchQuery} />
           ))}
 
-          {/* Streaming bubble — rendered once, updated via DOM writes for perf */}
-          {currentSessionId && <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />}
+          {/* Streaming bubble — render ONLY for the current session. Other
+              sessions keep streaming in the background but their output is not
+              shown here, preventing double-output when switching chats. */}
+          {currentSessionId && streamingBySession[currentSessionId] && (
+            <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />
+          )}
 
           {/* Arena results */}
           {arenaError && (
@@ -227,47 +388,15 @@ export default function ChatWindow() {
             </div>
           ))}
           {arenaResults.length > 0 && (
-            <div className="space-y-3">
-              {arenaAggregate && (
-                <div className="border-2 rounded-xl overflow-hidden" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
-                  <div className="px-3 py-2 border-b flex items-center gap-2 text-sm font-medium" style={{ borderColor: 'var(--warning)' }}>
-                    <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>MoA</span>
-                    <span style={{ color: 'var(--text-primary)' }}>{t('chat.arena.aggregate')}</span>
-                    <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>{arenaAggregate.model_name}</span>
-                  </div>
-                  <div className="p-3 text-sm leading-relaxed max-h-96 overflow-y-auto">
-                    <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(arenaAggregate.content) }} />
-                  </div>
-                </div>
-              )}
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
-              {arenaResults.map((r) => {
-                const others = arenaResults.filter(x => x.model_id !== r.model_id)
-                const voted = arenaResults.length === 1 // collapsed to winner after voting
-                return (
-                  <div key={r.model_id} className="border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-                    <div className="px-3 py-2 border-b flex items-center justify-between text-sm font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-                      <span style={{ color: 'var(--text-primary)' }}>{r.model_name}</span>
-                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.provider_name}</span>
-                    </div>
-                    <div className="p-3 text-sm leading-relaxed max-h-60 overflow-y-auto">
-                      <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }} />
-                    </div>
-                    {!voted && (
-                      <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                        <button onClick={() => arenaVote({ model_id: r.model_id, model_name: r.model_name, content: r.content, provider_name: r.provider_name }, others.map(x => ({ model_id: x.model_id, model_name: x.model_name })))}
-                          className="text-xs px-3 py-1 rounded-lg border bg-white hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
-                          ⭐ {t('chat.arena.vote')}
-                        </button>
-                      </div>
-                    )}
-                    {voted && (
-                      <div className="px-3 py-2 border-t text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>✅ {t('chat.arena.voted')}</div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <ArenaResults
+              results={arenaResults}
+              aggregate={arenaAggregate}
+              voted={arenaVoted}
+              winnerId={arenaVoteWinnerId}
+              onVote={arenaVote}
+              t={t}
+              renderMarkdown={renderMarkdown}
+            />
           )}
 
           <div ref={bottomRef} />

@@ -1,57 +1,67 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu } from 'lucide-react'
-import type { ViewType, Session } from '@/types'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash, Download, FolderOpen, Loader2, BookOpen } from 'lucide-react'
+import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 
-// "3分钟前" / "刚刚" / "2小时前" / "昨天" — relative time for the session row.
-// Falls back to a date string for anything older than a week.
+const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
+
 function relativeTime(iso: string | undefined): string {
   if (!iso) return ''
   const then = new Date(iso).getTime()
   if (isNaN(then)) return ''
   const diff = Date.now() - then
   const min = Math.floor(diff / 60000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min}分钟前`
+  if (min < 1) return t('time.just_now', '刚刚')
+  if (min < 60) return t('time.minutes_ago', `${min}分钟前`)
   const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}小时前`
+  if (hr < 24) return t('time.hours_ago', `${hr}小时前`)
   const day = Math.floor(hr / 24)
-  if (day === 1) return '昨天'
-  if (day < 7) return `${day}天前`
+  if (day === 1) return t('time.yesterday', '昨天')
+  if (day < 7) return t('time.days_ago', `${day}天前`)
   return new Date(then).toLocaleDateString([], { month: 'numeric', day: 'numeric' })
 }
 
-// Pre-computed group labels (translated once per render, not per-session).
 function getSessionGroups(sessions: Session[]) {
   const now = Date.now()
   const todayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime()
   const yesterdayStart = todayStart - 86400000
   const weekStart = todayStart - 7 * 86400000
-  const groups: { label: string; sessions: Session[] }[] = [
-    { label: t('sidebar.group.pinned'), sessions: [] },
-    { label: t('sidebar.group.today'), sessions: [] },
-    { label: t('sidebar.group.yesterday'), sessions: [] },
-    { label: t('sidebar.group.week'), sessions: [] },
-    { label: t('sidebar.group.older'), sessions: [] },
+  const pinned: Session[] = []
+  const groups: { label: string; sessions: Session[]; count: number }[] = [
+    { label: t('sidebar.group.today'), sessions: [], count: 0 },
+    { label: t('sidebar.group.yesterday'), sessions: [], count: 0 },
+    { label: t('sidebar.group.week'), sessions: [], count: 0 },
+    { label: t('sidebar.group.older'), sessions: [], count: 0 },
   ]
   for (const s of sessions) {
+    if (s.pinned) { pinned.push(s); continue }
     const raw = s.updated_at || s.created_at || ''
     const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z'
     const date = new Date(iso).getTime()
-    if (s.pinned) { groups[0].sessions.push(s); continue }
-    if (date >= todayStart) { groups[1].sessions.push(s); continue }
-    if (date >= yesterdayStart) { groups[2].sessions.push(s); continue }
-    if (date >= weekStart) { groups[3].sessions.push(s); continue }
-    groups[4].sessions.push(s)
+    if (date >= todayStart) { groups[0].sessions.push(s); groups[0].count++; continue }
+    if (date >= yesterdayStart) { groups[1].sessions.push(s); groups[1].count++; continue }
+    if (date >= weekStart) { groups[2].sessions.push(s); groups[2].count++; continue }
+    groups[3].sessions.push(s); groups[3].count++
   }
-  return groups.filter(g => g.sessions.length > 0)
+  // Pinned group first, then date groups (sorted by updated_at DESC within each).
+  const result: { label: string; sessions: Session[]; count: number }[] = []
+  if (pinned.length > 0) {
+    pinned.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+    result.push({ label: t('sidebar.group.pinned'), sessions: pinned, count: pinned.length })
+  }
+  for (const g of groups) {
+    if (g.sessions.length > 0) result.push(g)
+  }
+  return result
 }
 
 export default function Sidebar() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const language = useStore((s) => s.language)
+  const streamingBySession = useStore((s) => s.streamingBySession)
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
   const selectSession = useStore((s) => s.selectSession)
@@ -64,12 +74,20 @@ export default function Sidebar() {
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; session: Session } | null>(null)
+  const lowerQuery = searchQuery.toLowerCase()
 
-  const filteredSessions = useMemo(() =>
-    searchQuery ? sessions.filter(s => (s.title || '').toLowerCase().includes(searchQuery.toLowerCase())) : sessions,
-    [sessions, searchQuery]
-  )
-  const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions])
+  const filteredSessions = useMemo(() => {
+    // Show sessions that have had at least one message.
+    // Sessions with placeholder titles are kept visible if they have messages —
+    // the auto-title generation happens asynchronously after the first response,
+    // so hiding them would make the chat disappear mid-conversation.
+    const withMessages = sessions.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingBySession[s.id])
+    if (!lowerQuery) return withMessages
+    return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
+  }, [sessions, lowerQuery])
+  const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
+  const totalSessions = sessions.length
 
   const handleDoubleClick = (session: Session) => {
     setRenamingId(session.id); setRenameValue(session.title || '')
@@ -82,52 +100,86 @@ export default function Sidebar() {
     setRenamingId(null)
   }, [renamingId, renameValue, loadSessions])
 
-  // A session keeps the default placeholder title ("新会话"/"新对话") until the
-  // AI summary is generated. Until then, show a preview of the first message.
   const isPlaceholderTitle = (title: string | null) => {
     if (!title) return true
     return title === '新会话' || title === '新对话' || title === 'New Chat'
   }
   const previewOf = (text: string) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
 
-  useEffect(() => { loadSessions() }, [loadSessions])
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('contextmenu', close)
+    return () => { window.removeEventListener('click', close); window.removeEventListener('contextmenu', close) }
+  }, [ctxMenu])
+
+  const exportSession = async (session: Session) => {
+    const msgs = await window.electronAPI.message.list(session.id)
+    const data = { session, messages: msgs }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `aetherai-session-${session.id}-${(session.title || 'chat').slice(0, 20)}.json`
+    a.click(); URL.revokeObjectURL(a.href)
+  }
 
   return (
     <div className="w-[260px] h-full flex flex-col shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
-      <div className="h-12 flex items-center justify-between px-4" style={{ borderBottom: '1px solid var(--border)' }}>
-        <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>AetherAI</span>
+      <div className="h-12 flex items-center justify-between px-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>AetherAI</span>
+          {totalSessions > 0 && (
+            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+              <Hash size={8} />{totalSessions}
+            </span>
+          )}
+        </div>
         <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
       </div>
-      <div className="p-2">
-        <button onClick={() => { createSession(); setCurrentView('chat') }} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
+      <div className="p-2 shrink-0">
+        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-white hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
           <Plus size={16} className="text-gray-500" />{t('chat.new')}
         </button>
       </div>
-      <div className="px-2 pb-2">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border text-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-2 pb-2 shrink-0">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white text-sm transition-colors" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-gray-400 shrink-0" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('sidebar.search')} className="w-full bg-transparent outline-none text-sm" />
+          {searchQuery && (
+            <span className="text-[10px] shrink-0 px-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+              {filteredSessions.length}
+            </span>
+          )}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-2 scroll-bounce">
+      <div className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
         {groups.length === 0 && (
           <div className="text-center py-8 text-xs" style={{ color: 'var(--text-muted)' }}>
             {searchQuery ? t('sidebar.no_match') : t('sidebar.no_sessions')}
           </div>
         )}
         {groups.map((group) => (
-          <div key={group.label}>
-            <div className="session-date">{group.label}</div>
+          <div key={group.label} className="mb-1">
+            <div className="session-date flex items-center justify-between">
+              <span>{group.label}</span>
+              <span className="text-[10px] font-normal" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>{group.count}</span>
+            </div>
             {group.sessions.map((session) => (
-              <div key={session.id} onClick={() => { selectSession(session.id); setCurrentView('chat') }}
+              <div key={session.id}
+                onClick={() => { selectSession(session.id); setCurrentView('chat') }}
                 onDoubleClick={() => handleDoubleClick(session)}
-                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'bg-white border shadow-soft relative' : 'hover:bg-white/50'}`}
-                style={{ borderColor: 'var(--border)' }}>
+                onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
+                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'bg-white border shadow-soft' : 'border border-transparent hover:bg-white/70 hover:border-[var(--border)]'}`}
+                style={currentSessionId === session.id ? { borderColor: 'var(--border)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
                   : <MessageSquare size={14} className="text-gray-400 shrink-0" />}
+                {streamingBySession[session.id] && (
+                  <Loader2 size={11} className="shrink-0 animate-spin" style={{ color: 'var(--accent)' }} />
+                )}
                 {renamingId === session.id ? (
                   <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenamingId(null) }}
@@ -151,10 +203,21 @@ export default function Sidebar() {
                     )}
                   </div>
                 )}
-                <button onClick={async (e) => { e.stopPropagation()
-                    const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
-                    if (ok) deleteSession(session.id)
-                  }}
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  const pinned = session.pinned ? 0 : 1
+                  await window.electronAPI?.session?.pin?.(session.id, pinned)
+                  loadSessions()
+                }}
+                  className={`opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all shrink-0 ${session.pinned ? 'opacity-100 text-amber-500' : ''}`}
+                  title={session.pinned ? 'Unpin' : 'Pin'}>
+                  <Pin size={11} />
+                </button>
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
+                  if (ok) deleteSession(session.id)
+                }}
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all">
                   <Trash2 size={12} className="text-gray-400" />
                 </button>
@@ -162,27 +225,53 @@ export default function Sidebar() {
             ))}
           </div>
         ))}
-        {!searchQuery && (
-          <div className="text-[10px] text-center py-2" style={{ color: 'var(--text-muted)' }}>{t('sidebar.new_chat_tip')}</div>
+        {ctxMenu && (
+          <div className="fixed z-50 rounded-xl border shadow-lg py-1 min-w-[180px]"
+            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 200), backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+            onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { setCtxMenu(null); handleDoubleClick(ctxMenu.session) }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              Rename
+            </button>
+            <button onClick={() => { setCtxMenu(null); window.electronAPI?.session?.pin?.(ctxMenu.session.id, ctxMenu.session.pinned ? 0 : 1); loadSessions() }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Pin size={11} /> {ctxMenu.session.pinned ? 'Unpin' : 'Pin'}
+            </button>
+            <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
+            <button onClick={() => { setCtxMenu(null); exportSession(ctxMenu.session) }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Download size={11} /> Export conversation
+            </button>
+            <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
+            <button onClick={async () => {
+              setCtxMenu(null)
+              const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
+              if (ok) deleteSession(ctxMenu.session.id)
+            }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 transition-colors flex items-center gap-2" style={{ color: 'var(--error)' }}>
+              <Trash2 size={11} /> {t('chat.delete')}
+            </button>
+          </div>
         )}
       </div>
-      <div className="p-2 space-y-0.5" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="p-2 space-y-0.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
         <NavItem icon={DollarSign} label={t('sidebar.nav.tokens')} active={currentView === 'tokens'} onClick={() => setCurrentView('tokens')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
         <NavItem icon={Cpu} label={t('sidebar.nav.learning')} active={currentView === 'learning'} onClick={() => setCurrentView('learning')} />
+        <NavItem icon={BookOpen} label={t('sidebar.nav.skills')} active={currentView === 'skills'} onClick={() => setCurrentView('skills')} />
         <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>
     </div>
   )
 }
 
-function NavItem({ icon: Icon, label, active, onClick }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; active: boolean; onClick: () => void }) {
+function NavItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${active ? 'bg-white border shadow-soft' : 'hover:bg-white/50'}`} style={{ borderColor: 'var(--border)' }}>
-      <Icon size={16} className="text-gray-500" />{label}
+    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'bg-white border shadow-soft' : 'border border-transparent hover:bg-white/70 hover:border-[var(--border)]'}`}
+      style={active ? { borderColor: 'var(--border)' } : {}}>
+      <Icon size={16} className={active ? 'text-gray-700' : 'text-gray-500'} />{label}
     </button>
   )
 }

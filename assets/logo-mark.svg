@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="mGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="mGradLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#67e8f9"/>
+    </linearGradient>
+    <filter id="glowSmall">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+  </defs>
+
+  <!-- 主菱形（加粗） -->
+  <polygon points="64,16 104,64 64,112 24,64" fill="none" stroke="url(#mGrad)" stroke-width="5"/>
+  <!-- 内层菱形 -->
+  <polygon points="64,28 91,64 64,100 37,64" fill="none" stroke="url(#mGradLight)" stroke-width="2" opacity="0.6"/>
+
+  <!-- 斜线（加粗） -->
+  <line x1="49" y1="85" x2="64" y2="36" stroke="url(#mGradLight)" stroke-width="5" stroke-linecap="round"/>
+  <line x1="79" y1="85" x2="64" y2="36" stroke="url(#mGradLight)" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- 中心节点 -->
+  <circle cx="64" cy="66" r="5" fill="#ffffff" opacity="0.95" filter="url(#glowSmall)"/>
+
+  <!-- 子节点 -->
+  <circle cx="37" cy="90" r="3" fill="#a78bfa" opacity="0.8"/>
+  <circle cx="91" cy="90" r="3" fill="#67e8f9" opacity="0.8"/>
+  <line x1="37" y1="90" x2="64" y2="66" stroke="#818cf8" stroke-width="2" opacity="0.5"/>
+  <line x1="91" y1="90" x2="64" y2="66" stroke="#818cf8" stroke-width="2" opacity="0.5"/>
+</svg>

@@ -41,6 +41,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   const inputRef = useRef<HTMLInputElement>(null)
 
   const sessions = useStore((s) => s.sessions)
+  const language = useStore((s) => s.language)
   const selectSession = useStore((s) => s.selectSession)
   const allModels = useStore((s) => s.allModels)
   const sessionConfigs = useStore((s) => s.sessionConfigs)

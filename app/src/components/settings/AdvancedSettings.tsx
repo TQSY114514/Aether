@@ -15,12 +15,17 @@ export default function AdvancedSettings() {
   const systemPrefix = useStore((s) => s.systemPrefix)
   const autoTitle = useStore((s) => s.autoTitle)
   const titleLanguage = useStore((s) => s.titleLanguage)
+  const titleModelId = useStore((s) => s.titleModelId)
+  const allModels = useStore((s) => s.allModels)
+  const autoCommitOnTestPass = useStore((s) => s.autoCommitOnTestPass)
   const setMaxTokens = useStore((s) => s.setMaxTokens)
   const setTemperature = useStore((s) => s.setTemperature)
   const setTopP = useStore((s) => s.setTopP)
   const setSystemPrefix = useStore((s) => s.setSystemPrefix)
   const setAutoTitle = useStore((s) => s.setAutoTitle)
   const setTitleLanguage = useStore((s) => s.setTitleLanguage)
+  const setTitleModel = useStore((s) => s.setTitleModel)
+  const setAutoCommitOnTestPass = useStore((s) => s.setAutoCommitOnTestPass)
 
   return (
     <>
@@ -75,6 +80,13 @@ export default function AdvancedSettings() {
             <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.auto_title')}</span>
             <input type="checkbox" checked={autoTitle} onChange={(e) => setAutoTitle(e.target.checked)} className="w-4 h-4 accent-black" />
           </label>
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.auto_commit_test')}</span>
+              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('settings.auto_commit_test_desc')}</p>
+            </div>
+            <input type="checkbox" checked={autoCommitOnTestPass} onChange={(e) => setAutoCommitOnTestPass(e.target.checked)} className="w-4 h-4 accent-black" />
+          </label>
           <div>
             <p className="text-sm mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.title_language')}</p>
             <select value={titleLanguage} onChange={(e) => setTitleLanguage(e.target.value)}
@@ -83,6 +95,19 @@ export default function AdvancedSettings() {
               <option value="zh">中文</option>
               <option value="en">English</option>
               <option value="ja">日本語</option>
+            </select>
+          </div>
+          <div>
+            <p className="text-sm mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.title_model')}</p>
+            <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('settings.title_model_desc')}</p>
+            <select value={titleModelId ?? ''} onChange={(e) => {
+              const v = e.target.value ? Number(e.target.value) : null
+              setTitleModel(v)
+            }} className="px-2.5 py-1.5 text-xs rounded-lg border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+              <option value="">{t('settings.default_model_none')}</option>
+              {allModels.map(m => (
+                <option key={m.id} value={m.id}>{`${m.provider_name || ''} · ${m.display_name || m.model_name}`}</option>
+              ))}
             </select>
           </div>
         </div>

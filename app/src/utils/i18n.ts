@@ -195,6 +195,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.language": "Language",
     "settings.theme": "Theme",
     "settings.theme.light": "Light",
+    "settings.theme.auto": "Auto (system)",
     "settings.theme.dark": "Dark",
     "settings.theme.blue": "Blue",
     "settings.theme.glass": "Glass",
@@ -237,6 +238,12 @@ const translations: Record<string, Record<string, string>> = {
     "agent.mode.yolo.desc": "Yolo — FULL permission, NO sandbox. The agent can write any file anywhere and run any command (including destructive ones) with no confirms. Only for trusted models on a machine you can afford to lose.",
     "agent.mode.yolo_warn": "⚠ HIGH RISK: Yolo mode grants FULL permission — the agent can write ANY file and run ANY command with no sandbox and no confirms. Only use with a trusted model on a machine you can afford to lose. Continue?",
     "agent.tooltip": "Agent mode (risk ascending): Off · Plan (read-only) · Ask (confirm risky) · Auto (sandboxed) · Yolo (full, no sandbox)",
+    "agent.off": "Off — no tools, plain chat",
+    "agent.plan": "Plan — read-only (files, search, web)",
+    "agent.ask": "Ask — confirm before risky actions",
+    "agent.auto_confirm": "Auto — safe actions auto-allowed, dangerous needs confirm",
+    "agent.auto": "Auto+ — auto everything in workspace sandbox",
+    "agent.yolo": "Yolo — full permissions, no sandbox (dangerous!)",
     "agent.permission.title": "Agent requests to run an action",
     "agent.permission.allow_once": "Allow once",
     "agent.permission.allow_remember": "Allow & remember",
@@ -353,6 +360,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.tokens": "Token Usage",
     "sidebar.nav.learning": "Learning graph",
     "sidebar.nav.memory": "Memory",
+    "sidebar.nav.skills": "Skills",
     "learning_graph.desc": "Knowledge graph — memories, skills, and sessions linked by keyword overlap",
     "learning_graph.empty": "No nodes found — add memories or load skills to populate the graph.",
     "learning_graph.filter": "Filter nodes…",
@@ -395,8 +403,19 @@ const translations: Record<string, Record<string, string>> = {
     "settings.system_prefix_desc": "Prepended to the system prompt of every message.",
     "settings.titles": "Session titles",
     "settings.auto_title": "Auto-generate summary title",
+    "settings.auto_commit_test": "Auto-commit after test gate passes",
+    "settings.auto_commit_test_desc": "When the verification test gate passes, commit changes automatically instead of asking.",
     "settings.title_language": "Title language",
     "settings.title_language.auto": "Follow UI",
+    "settings.routing_priority": "Routing priority",
+    "settings.routing_priority_desc": "When multiple models qualify, prefer quality, speed, or lowest cost.",
+    "settings.default_chat": "Default chat settings",
+    "settings.default_chat.desc": "Default model, persona, and routing for new conversations.",
+    "settings.default_model": "Default model",
+    "settings.default_model_desc": "Auto-selected for new conversations. Leave empty to use the primary model.",
+    "settings.default_model_none": "None",
+    "settings.default_persona": "Default persona",
+    "settings.default_persona_desc": "Injected as a system message for every new conversation.",
     "settings.appearance": "Appearance",
     "settings.font_scale": "Font scale",
     "settings.bubble_width": "Bubble width",
@@ -443,7 +462,17 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.hint": "Scan dirs (precedence): <workspace>/.claude/skills, <workspace>/.aetherai/skills, <userData>/skills, built-in. Only name+description enter the prompt; the body loads via use_skill.",
     "error.title": "Something went wrong",
     "error.unknown": "An unexpected error occurred",
-    "error.retry": "Try again"
+    "error.retry": "Try again",
+    "chat.drag_drop_hint": "Drop files here",
+    "chat.tokens": "tokens",
+    "chat.tokens_estimate": "~{0} tokens",
+    "status.thinking": "Thinking…",
+    "status.using_tools": "Using tools…",
+    "status.compacting": "Compressing context…",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed"
   },
   "en-upside": {
     "app.name": "ᴉɐɹǝɥʇǝɐ",
@@ -543,6 +572,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.language": "ǝƃɐnƃuɐl",
     "settings.theme": "ǝɯǝɥʇ",
     "settings.theme.light": "ʇɥƃᴉl",
+    "settings.theme.auto": ")ɯǝʇsʎs( oʇnɐ",
     "settings.theme.dark": "ʞɹɐp",
     "settings.theme.blue": "ǝnlq",
     "settings.theme.glass": "ssɐlƃ",
@@ -585,6 +615,12 @@ const translations: Record<string, Record<string, string>> = {
     "agent.mode.yolo.desc": ".ǝsol oʇ pɹoɟɟɐ uɐɔ noʎ ǝuᴉɥɔɐɯ ɐ uo slǝpoɯ pǝʇsnɹʇ ɹoɟ ʎluo .sɯɹᴉɟuoɔ ou ɥʇᴉʍ )sǝuo ǝʌᴉʇɔnɹʇsǝp ƃuᴉpnlɔuᴉ( puɐɯɯoɔ ʎuɐ unɹ puɐ ǝɹǝɥʍʎuɐ ǝlᴉɟ ʎuɐ ǝʇᴉɹʍ uɐɔ ʇuǝƃɐ ǝɥʇ .xoqpuɐs ou ,uoᴉssᴉɯɹǝd llnɟ — oloʎ",
     "agent.mode.yolo_warn": "?ǝnuᴉʇuoɔ .ǝsol oʇ pɹoɟɟɐ uɐɔ noʎ ǝuᴉɥɔɐɯ ɐ uo lǝpoɯ pǝʇsnɹʇ ɐ ɥʇᴉʍ ǝsn ʎluo .sɯɹᴉɟuoɔ ou puɐ xoqpuɐs ou ɥʇᴉʍ puɐɯɯoɔ ʎuɐ unɹ puɐ ǝlᴉɟ ʎuɐ ǝʇᴉɹʍ uɐɔ ʇuǝƃɐ ǝɥʇ — uoᴉssᴉɯɹǝd llnɟ sʇuɐɹƃ ǝpoɯ oloʎ :ʞsᴉɹ ɥƃᴉɥ ⚠",
     "agent.tooltip": ")xoqpuɐs ou ,llnɟ( oloʎ · )pǝxoqpuɐs( oʇnɐ · )ʎʞsᴉɹ ɯɹᴉɟuoɔ( ʞsɐ · )ʎluo-pɐǝɹ( uɐld · ɟɟo :)ƃuᴉpuǝɔsɐ ʞsᴉɹ( ǝpoɯ ʇuǝƃɐ",
+    "agent.off": "ʇɐɥɔ uᴉɐld ,slooʇ ou — ɟɟo",
+    "agent.plan": ")qǝʍ ,ɥɔɹɐǝs ,sǝlᴉɟ( ʎluo-pɐǝɹ — uɐld",
+    "agent.ask": "suoᴉʇɔɐ ʎʞsᴉɹ ǝɹoɟǝq ɯɹᴉɟuoɔ — ʞsɐ",
+    "agent.auto_confirm": "ɯɹᴉɟuoɔ spǝǝu snoɹǝƃuɐp ,pǝʍollɐ-oʇnɐ suoᴉʇɔɐ ǝɟɐs — oʇnɐ",
+    "agent.auto": "xoqpuɐs ǝɔɐdsʞɹoʍ uᴉ ƃuᴉɥʇʎɹǝʌǝ oʇnɐ — +oʇnɐ",
+    "agent.yolo": ")!snoɹǝƃuɐp( xoqpuɐs ou ,suoᴉssᴉɯɹǝd llnɟ — oloʎ",
     "agent.permission.title": "uoᴉʇɔɐ uɐ unɹ oʇ sʇsǝnbǝɹ ʇuǝƃɐ",
     "agent.permission.allow_once": "ǝɔuo ʍollɐ",
     "agent.permission.allow_remember": "ɹǝqɯǝɯǝɹ & ʍollɐ",
@@ -701,6 +737,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.tokens": "ǝƃɐsn uǝʞoʇ",
     "sidebar.nav.learning": "ɥdɐɹƃ ƃuᴉuɹɐǝl",
     "sidebar.nav.memory": "ʎɹoɯǝɯ",
+    "sidebar.nav.skills": "sllᴉʞs",
     "learning_graph.desc": "dɐlɹǝʌo pɹoʍʎǝʞ ʎq pǝʞuᴉl suoᴉssǝs puɐ ,sllᴉʞs ,sǝᴉɹoɯǝɯ — ɥdɐɹƃ ǝƃpǝlʍouʞ",
     "learning_graph.empty": ".ɥdɐɹƃ ǝɥʇ ǝʇɐlndod oʇ sllᴉʞs pɐol ɹo sǝᴉɹoɯǝɯ ppɐ — punoɟ sǝpou ou",
     "learning_graph.filter": "…sǝpou ɹǝʇlᴉɟ",
@@ -743,8 +780,19 @@ const translations: Record<string, Record<string, string>> = {
     "settings.system_prefix_desc": ".ǝƃɐssǝɯ ʎɹǝʌǝ ɟo ʇdɯoɹd ɯǝʇsʎs ǝɥʇ oʇ pǝpuǝdǝɹd",
     "settings.titles": "sǝlʇᴉʇ uoᴉssǝs",
     "settings.auto_title": "ǝlʇᴉʇ ʎɹɐɯɯns ǝʇɐɹǝuǝƃ-oʇnɐ",
+    "settings.auto_commit_test": "sǝssɐd ǝʇɐƃ ʇsǝʇ ɹǝʇɟɐ ʇᴉɯɯoɔ-oʇnɐ",
+    "settings.auto_commit_test_desc": ".ƃuᴉʞsɐ ɟo pɐǝʇsuᴉ ʎllɐɔᴉʇɐɯoʇnɐ sǝƃuɐɥɔ ʇᴉɯɯoɔ ,sǝssɐd ǝʇɐƃ ʇsǝʇ uoᴉʇɐɔᴉɟᴉɹǝʌ ǝɥʇ uǝɥʍ",
     "settings.title_language": "ǝƃɐnƃuɐl ǝlʇᴉʇ",
     "settings.title_language.auto": "ᴉn ʍolloɟ",
+    "settings.routing_priority": "ʎʇᴉɹoᴉɹd ƃuᴉʇnoɹ",
+    "settings.routing_priority_desc": ".ʇsoɔ ʇsǝʍol ɹo ,pǝǝds ,ʎʇᴉlɐnb ɹǝɟǝɹd ,ʎɟᴉlɐnb slǝpoɯ ǝldᴉʇlnɯ uǝɥʍ",
+    "settings.default_chat": "sƃuᴉʇʇǝs ʇɐɥɔ ʇlnɐɟǝp",
+    "settings.default_chat.desc": ".suoᴉʇɐsɹǝʌuoɔ ʍǝu ɹoɟ ƃuᴉʇnoɹ puɐ ,ɐuosɹǝd ,lǝpoɯ ʇlnɐɟǝp",
+    "settings.default_model": "lǝpoɯ ʇlnɐɟǝp",
+    "settings.default_model_desc": ".lǝpoɯ ʎɹɐɯᴉɹd ǝɥʇ ǝsn oʇ ʎʇdɯǝ ǝʌɐǝl .suoᴉʇɐsɹǝʌuoɔ ʍǝu ɹoɟ pǝʇɔǝlǝs-oʇnɐ",
+    "settings.default_model_none": "ǝuou",
+    "settings.default_persona": "ɐuosɹǝd ʇlnɐɟǝp",
+    "settings.default_persona_desc": ".uoᴉʇɐsɹǝʌuoɔ ʍǝu ʎɹǝʌǝ ɹoɟ ǝƃɐssǝɯ ɯǝʇsʎs ɐ sɐ pǝʇɔǝɾuᴉ",
     "settings.appearance": "ǝɔuɐɹɐǝddɐ",
     "settings.font_scale": "ǝlɐɔs ʇuoɟ",
     "settings.bubble_width": "ɥʇpᴉʍ ǝlqqnq",
@@ -791,7 +839,17 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.hint": ".llᴉʞs_ǝsn ɐᴉʌ spɐol ʎpoq ǝɥʇ ;ʇdɯoɹd ǝɥʇ ɹǝʇuǝ uoᴉʇdᴉɹɔsǝp+ǝɯɐu ʎluo .uᴉ-ʇlᴉnq ,sllᴉʞs/>ɐʇɐpɹǝsn< ,sllᴉʞs/ᴉɐɹǝɥʇǝɐ./>ǝɔɐdsʞɹoʍ< ,sllᴉʞs/ǝpnɐlɔ./>ǝɔɐdsʞɹoʍ< :)ǝɔuǝpǝɔǝɹd( sɹᴉp uɐɔs",
     "error.title": "ƃuoɹʍ ʇuǝʍ ƃuᴉɥʇǝɯos",
     "error.unknown": "pǝɹɹnɔɔo ɹoɹɹǝ pǝʇɔǝdxǝun uɐ",
-    "error.retry": "uᴉɐƃɐ ʎɹʇ"
+    "error.retry": "uᴉɐƃɐ ʎɹʇ",
+    "chat.drag_drop_hint": "ǝɹǝɥ sǝlᴉɟ doɹp",
+    "chat.tokens": "suǝʞoʇ",
+    "chat.tokens_estimate": "suǝʞoʇ }0{~",
+    "status.thinking": "…ƃuᴉʞuᴉɥʇ",
+    "status.using_tools": "…slooʇ ƃuᴉsn",
+    "status.compacting": "…ʇxǝʇuoɔ ƃuᴉssǝɹdɯoɔ",
+    "tool.rollback": "ǝƃuɐɥɔ ʇuǝƃɐ sᴉɥʇ ʞɔɐqlloɹ",
+    "tool.rollback.running": "...ʞɔɐq ƃuᴉlloɹ",
+    "tool.rollback.done": "ʞɔɐq pǝlloɹ",
+    "tool.rollback.error": "pǝlᴉɐɟ ʞɔɐqlloɹ"
   },
   "zh-CN": {
     "app.name": "AetherAI",
@@ -888,6 +946,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "蓝色",
     "settings.theme.glass": "玻璃",
     "settings.theme.retro": "复古",
+    "settings.theme.auto": "自动（跟随系统）",
     "settings.advanced": "高级",
     "settings.advanced.timeout": "备用切换超时（毫秒）",
     "settings.advanced.timeout_desc": "主模型失败多久后切换到备用模型",
@@ -960,6 +1019,8 @@ const translations: Record<string, Record<string, string>> = {
     "slash.explain": "解释",
     "slash.continue": "续写",
     "slash.code": "代码",
+    "status.thinking": "思考中…",
+    "status.using_tools": "正在使用工具…",
     "paste.snippet_n": "粘贴片段 {0}",
     "chat.file_too_large": "{0} 超过 10MB 限制",
     "chat.file_read_failed": "读取 {0} 失败",
@@ -977,6 +1038,13 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.tokens": "Token统计",
     "sidebar.nav.memory": "记忆",
     "chat.arena.min_models": "至少选 2 个模型",
+    "chat.drag_drop_hint": "拖放文件到此",
+    "chat.tokens": "tokens",
+    "chat.tokens_estimate": "~{0} tokens",
+    "error.title": "出错了",
+    "error.unknown": "发生了意外错误",
+    "error.retry": "重试",
+    "status.compacting": "压缩上下文中…",
     "agent.trace.title": "Agent 推理过程",
     "agent.trace.steps": "步",
     "mcp.title": "MCP 服务器",
@@ -1041,6 +1109,8 @@ const translations: Record<string, Record<string, string>> = {
     "agent.mode.auto.desc": "自动 — 自动执行所有操作（限于工作区）",
     "agent.mode.yolo": "YOLO",
     "agent.mode.yolo.desc": "YOLO — 全权限，无沙盒，慎用",
+    "agent.mode.auto_confirm": "半自动",
+    "agent.mode.auto_confirm.desc": "半自动 — 安全工具自动执行，危险操作仍需确认",
     "agent.mode.yolo_warn": "⚠ YOLO 模式将授予全部权限且关闭沙盒，请谨慎使用",
     "agent.permission.allow_once": "本次允许",
     "agent.permission.allow_remember": "永久允许",
@@ -1137,7 +1207,25 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.rescan": "重新扫描",
     "settings.skills.rescanned": "已扫描 — 找到 {0} 个技能",
     "settings.skills.empty": "未找到技能。把 <skill>/SKILL.md 放进工作区的 .claude/skills/ 即可。",
-    "settings.skills.hint": "扫描目录（优先级）：<workspace>/.claude/skills、<workspace>/.aetherai/skills、<userData>/skills、内置。仅名称+描述进入提示词；匹配时由 use_skill 工具按需加载。"
+    "settings.skills.hint": "扫描目录（优先级）：<workspace>/.claude/skills、<workspace>/.aetherai/skills、<userData>/skills、内置。仅名称+描述进入提示词；匹配时由 use_skill 工具按需加载。",
+    "settings.default_chat": "默认对话设置",
+    "settings.default_chat.desc": "新对话的默认模型、人设和路由。",
+    "settings.default_model": "默认模型",
+    "settings.default_model_desc": "新对话自动选择的模型。留空则使用主模型。",
+    "settings.default_model_none": "无",
+    "settings.default_persona": "默认人设",
+    "settings.default_persona_desc": "注入为新对话的系统消息。",
+    "settings.routing_priority": "路由优先级",
+    "settings.routing_priority_desc": "当多个模型符合条件时，优先选择质量、速度或最低成本。",
+    "settings.auto_commit_test": "测试门禁通过后自动提交",
+    "settings.auto_commit_test_desc": "验证测试门通过后，自动提交更改而不是询问。",
+    "settings.title_model": "标题生成模型",
+    "settings.title_model_desc": "用于自动生成会话标题的模型。",
+    "tool.rollback": "回滚本次 Agent 改动",
+    "tool.rollback.running": "正在回滚...",
+    "tool.rollback.done": "已回滚",
+    "tool.rollback.error": "回滚失败",
+    "sidebar.nav.skills": "技能"
   },
   "es": {
     "app.name": "AetherAI",
@@ -1234,6 +1322,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "Azul",
     "settings.theme.glass": "Cristal",
     "settings.theme.retro": "Retro",
+    "settings.theme.auto": "Automático (sistema)",
     "settings.advanced": "Avanzado",
     "settings.advanced.timeout": "Tiempo de espera alternativo (ms)",
     "settings.advanced.timeout_desc": "Cuánto tarda en cambiar al modelo alternativo",
@@ -1274,7 +1363,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "bajo",
     "effort.medium": "medio",
     "effort.high": "alto",
-    "paste.snippet": "Fragmento"
+    "paste.snippet": "Fragmento",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Habilidades"
   },
   "ja": {
     "app.name": "AetherAI",
@@ -1371,6 +1465,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "ブルー",
     "settings.theme.glass": "グラス",
     "settings.theme.retro": "レトロ",
+    "settings.theme.auto": "自動（システム）",
     "settings.advanced": "詳細設定",
     "settings.advanced.timeout": "フォールバックタイムアウト（ミリ秒）",
     "settings.advanced.timeout_desc": "プライマリモデルからフォールバックへ切り替えるまでの時間",
@@ -1411,7 +1506,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "低",
     "effort.medium": "中",
     "effort.high": "高",
-    "paste.snippet": "スニペット"
+    "paste.snippet": "スニペット",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "スキル"
   },
   "zh-WEN": {
     "app.name": "AetherAI",
@@ -1508,6 +1608,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "青",
     "settings.theme.glass": "琉璃",
     "settings.theme.retro": "古意",
+    "settings.theme.auto": "随系统",
     "settings.advanced": "进阶",
     "settings.advanced.timeout": "备用时限（毫秒）",
     "settings.advanced.timeout_desc": "逾此即换备模型",
@@ -1548,7 +1649,11 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "浅",
     "effort.medium": "中",
     "effort.high": "深",
-    "paste.snippet": "片段"
+    "paste.snippet": "片段",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed"
   },
   "fr": {
     "app.name": "AetherAI",
@@ -1645,6 +1750,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "Bleu",
     "settings.theme.glass": "Verre",
     "settings.theme.retro": "Rétro",
+    "settings.theme.auto": "Auto (système)",
     "settings.advanced": "Avancé",
     "settings.advanced.timeout": "Délai de repli (ms)",
     "settings.advanced.timeout_desc": "Délai avant de basculer vers un modèle de repli",
@@ -1685,7 +1791,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "bas",
     "effort.medium": "moyen",
     "effort.high": "élevé",
-    "paste.snippet": "Extrait"
+    "paste.snippet": "Extrait",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Compétences"
   },
   "de": {
     "app.name": "AetherAI",
@@ -1782,6 +1893,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "Blau",
     "settings.theme.glass": "Glas",
     "settings.theme.retro": "Retro",
+    "settings.theme.auto": "Auto (System)",
     "settings.advanced": "Erweitert",
     "settings.advanced.timeout": "Fallback-Timeout (ms)",
     "settings.advanced.timeout_desc": "Zeit bis zum Wechsel auf ein Fallback-Modell",
@@ -1822,7 +1934,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "niedrig",
     "effort.medium": "mittel",
     "effort.high": "hoch",
-    "paste.snippet": "Snippet"
+    "paste.snippet": "Snippet",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Fähigkeiten"
   },
   "pt": {
     "app.name": "AetherAI",
@@ -1919,6 +2036,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "Azul",
     "settings.theme.glass": "Vidro",
     "settings.theme.retro": "Retro",
+    "settings.theme.auto": "Automático (sistema)",
     "settings.advanced": "Avançado",
     "settings.advanced.timeout": "Tempo limite de fallback (ms)",
     "settings.advanced.timeout_desc": "Quanto tempo antes de mudar para um modelo de fallback",
@@ -1959,7 +2077,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "baixo",
     "effort.medium": "méd.",
     "effort.high": "alto",
-    "paste.snippet": "Snippet"
+    "paste.snippet": "Snippet",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Habilidades"
   },
   "ru": {
     "app.name": "AetherAI",
@@ -2056,6 +2179,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "Синяя",
     "settings.theme.glass": "Стекло",
     "settings.theme.retro": "Ретро",
+    "settings.theme.auto": "Авто (система)",
     "settings.advanced": "Расширенные",
     "settings.advanced.timeout": "Тайм-аут резервной модели (мс)",
     "settings.advanced.timeout_desc": "Через сколько секунд переключаться на резервную модель",
@@ -2096,7 +2220,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "низк",
     "effort.medium": "сред",
     "effort.high": "выс",
-    "paste.snippet": "Сниппет"
+    "paste.snippet": "Сниппет",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Навыки"
   },
   "zh-TW": {
     "app.name": "AetherAI",
@@ -2193,6 +2322,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "藍色",
     "settings.theme.glass": "毛玻璃",
     "settings.theme.retro": "復古",
+    "settings.theme.auto": "自動（跟隨系統）",
     "settings.advanced": "進階",
     "settings.advanced.timeout": "備援逾時（毫秒）",
     "settings.advanced.timeout_desc": "多久未回應後切換至備援模型",
@@ -2233,7 +2363,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "低",
     "effort.medium": "中",
     "effort.high": "高",
-    "paste.snippet": "程式碼片段"
+    "paste.snippet": "程式碼片段",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "技能"
   },
   "ar": {
     "app.name": "AetherAI",
@@ -2330,6 +2465,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "أزرق",
     "settings.theme.glass": "زجاجي",
     "settings.theme.retro": "كلاسيكي",
+    "settings.theme.auto": "تلقائي (النظام)",
     "settings.advanced": "متقدم",
     "settings.advanced.timeout": "مهلة الاحتياطي (م.ث)",
     "settings.advanced.timeout_desc": "المدة قبل التبديل إلى نموذج احتياطي",
@@ -2370,7 +2506,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "منخفض",
     "effort.medium": "متوسط",
     "effort.high": "عالٍ",
-    "paste.snippet": "مقتطف"
+    "paste.snippet": "مقتطف",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "المهارات"
   },
   "uk": {
     "app.name": "AetherAI",
@@ -2467,6 +2608,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "Синя",
     "settings.theme.glass": "Скло",
     "settings.theme.retro": "Ретро",
+    "settings.theme.auto": "Авто (система)",
     "settings.advanced": "Додатково",
     "settings.advanced.timeout": "Час очікування запасної моделі (мс)",
     "settings.advanced.timeout_desc": "Час до переходу на запасну модель",
@@ -2507,7 +2649,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "низьк",
     "effort.medium": "сер",
     "effort.high": "висок",
-    "paste.snippet": "Фрагмент"
+    "paste.snippet": "Фрагмент",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "Навички"
   },
   "ko": {
     "app.name": "AetherAI",
@@ -2604,6 +2751,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "파랑",
     "settings.theme.glass": "글래스",
     "settings.theme.retro": "레트로",
+    "settings.theme.auto": "자동 (시스템)",
     "settings.advanced": "고급",
     "settings.advanced.timeout": "대체 모델 전환 시간 (ms)",
     "settings.advanced.timeout_desc": "기본 모델에서 대체 모델로 전환하기까지 대기 시간",
@@ -2644,7 +2792,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "낮음",
     "effort.medium": "중간",
     "effort.high": "높음",
-    "paste.snippet": "스니펫"
+    "paste.snippet": "스니펫",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "스킬"
   },
   "hi": {
     "app.name": "AetherAI",
@@ -2741,6 +2894,7 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.blue": "नीला",
     "settings.theme.glass": "ग्लास",
     "settings.theme.retro": "रेट्रो",
+    "settings.theme.auto": "ऑटो (सिस्टम)",
     "settings.advanced": "उन्नत",
     "settings.advanced.timeout": "फ़ॉलबैक समय समाप्ति (ms)",
     "settings.advanced.timeout_desc": "फ़ॉलबैक मॉडल पर स्विच करने से पहले कितनी देर रुकें",
@@ -2781,7 +2935,12 @@ const translations: Record<string, Record<string, string>> = {
     "effort.low": "कम",
     "effort.medium": "मध्यम",
     "effort.high": "अधिक",
-    "paste.snippet": "स्निपेट"
+    "paste.snippet": "स्निपेट",
+    "tool.rollback": "Rollback this Agent change",
+    "tool.rollback.running": "Rolling back...",
+    "tool.rollback.done": "Rolled back",
+    "tool.rollback.error": "Rollback failed",
+    "sidebar.nav.skills": "स्किल्स"
   }
 }
 
@@ -2789,6 +2948,7 @@ const translations: Record<string, Record<string, string>> = {
 // without importing the store (avoids a circular dep: store imports `t`).
 let currentLang: LangCode = 'en'
 export function setLang(code: LangCode) { currentLang = code }
+export function setLangAsync(code: LangCode): Promise<void> { return Promise.resolve(setLang(code)) }
 export function getLang(): LangCode { return currentLang }
 
 // Detect the user's system language and map to a supported code. Falls back to en.

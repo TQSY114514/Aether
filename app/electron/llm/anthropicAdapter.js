@@ -10,13 +10,9 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const ANTHROPIC_VERSION = '2023-06-01'
-
-// Credential pool: cached at module level (single require lookup).
 const _credentialPool = require('./credentialPool')
-
-function baseUrl(provider) {
-  return (provider.api_url || '').replace(/\/+$/, '')
-}
+const { baseUrl, normalizeUsage: _nu } = require('../utils/llmShared')
+const { retryPromise, retryStream } = require('../utils/retry')
 
 function headers(provider) {
   // Anthropic uses x-api-key + anthropic-version, NOT Bearer.
@@ -106,7 +102,10 @@ function parseToolUses(content) {
   return { text, tool_calls: tool_calls.length ? tool_calls : undefined }
 }
 
-// Stream. Yields text deltas. Throws on non-2xx.
+// Stream. Yields delta strings (text_delta) and thinking block objects
+// ({ type: 'thinking', text } for thinking_delta). On content_block_start for
+// a thinking block, yields a sentinel { type: 'thinking_start' } so the caller
+// can surface a "thinking…" indicator. Throws on non-2xx.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
   const { system, messages: aMsgs } = toAnthropicMessages(messages)
   const body = {
@@ -142,6 +141,8 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  streamChat.thinkingBlocks = null // collected thinking blocks for this stream
+  let _thinkingText = ''
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -150,21 +151,61 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     buffer = lines.pop() || ''
     for (const line of lines) {
       const delta = parseSSELine(line)
-      if (delta) yield delta
+      if (!delta) continue
+      // Store thinking blocks on the stream object for the consumer to read;
+      // only yield content strings so the plain-chat streaming path (which
+      // concatenates deltas) doesn't get "[object Object]".
+      if (typeof delta === 'string') yield delta
+      else if (delta.type === 'thinking' && delta.text) {
+        _thinkingText += delta.text
+        streamChat.thinkingBlocks = [{ text: _thinkingText, ts: Date.now() }]
+      }
+      // Skip thinking_start/thinking_stop/tool_use_args — control signals only.
     }
   }
 }
 
-// Anthropic SSE: `event: <type>` then `data: {json}`. We only care about
-// content_block_delta (text deltas) and ignore the rest.
+// Anthropic SSE: `event: <type>` then `data: {json}`.
+// Handles:
+//   - content_block_start: yields `{ type: 'thinking_start' }` for thinking blocks
+//   - content_block_delta: yields text strings for text_delta, structured objects
+//     for thinking_delta
+//   - content_block_stop: yields `{ type: 'thinking_stop' }` for thinking blocks
 function parseSSELine(line) {
   if (!line.startsWith('data: ')) return null
   const data = line.slice(6).trim()
   if (!data || data === '[DONE]') return null
   try {
     const parsed = JSON.parse(data)
-    if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
-      return parsed.delta.text || ''
+    if (parsed.type === 'content_block_start') {
+      const block = parsed.content_block || {}
+      const idx = parsed.index != null ? parsed.index : -1
+      if (block.type === 'thinking') {
+        _thinkingIndex = idx
+        return { type: 'thinking_start' }
+      }
+      if (block.type === 'tool_use') return { type: 'tool_use_start', id: block.id, name: block.name }
+    }
+    if (parsed.type === 'content_block_stop') {
+      if (parsed.index != null && _thinkingIndex === parsed.index) {
+        _thinkingIndex = -1
+        return { type: 'thinking_stop' }
+      }
+    }
+    if (parsed.type === 'content_block_delta') {
+      const d = parsed.delta || {}
+      if (d.type === 'thinking_delta') {
+        return { type: 'thinking', text: d.thinking || '' }
+      }
+      if (d.type === 'text_delta') {
+        return d.text || ''
+      }
+      if (d.type === 'input_json_delta') {
+        return { type: 'tool_use_args', id: parsed.id, delta: d.partial_json || '' }
+      }
+    }
+    if (parsed.type === 'message_start') {
+      return { type: 'message_start', usage: parsed.usage }
     }
   } catch {}
   return null
@@ -220,17 +261,12 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
   const data = await res.json()
   const { text, tool_calls } = parseToolUses(data.content)
-  const usage = data.usage ? {
-    prompt_tokens: data.usage.input_tokens || 0,
-    completion_tokens: data.usage.output_tokens || 0,
-    total_tokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
-    cache_read_tokens: data.usage.cache_read_input_tokens || 0,
-    cache_creation_tokens: data.usage.cache_creation_input_tokens || 0,
-  } : null
+  const usage = data.usage ? _nu(data.usage) : null
   return { content: text, tool_calls, usage }
 }
 
-// Anthropic has no /models endpoint; return [] (the user configures model names).
+// Tracks which content block index is the current thinking block (for stop detection).
+let _thinkingIndex = -1
 async function listModels() { return [] }
 
 // Connectivity probe: a minimal /messages request with max_tokens:1.
@@ -257,49 +293,30 @@ async function testConnection({ provider }) {
 }
 
 // ─── Credential-rotation retry wrappers ──────────────────────────────────────
-const MAX_CRED_RETRIES = 3
+// Uses shared retryStream / retryPromise from utils/retry.js. The retry loop
+// logic (MAX_CRED_RETRIES, retryable error detection, cooldown on 429) is
+// centralized there.
+// ───────────────────────────────────────────────────────────────────────────
 
-function _aRotate(provider, err) {
-  if (Number(err?.status) === 429 && provider.id != null) {
-    try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
-  }
-  if (provider.id != null) {
-    const c = _credentialPool.pickCredential(provider.id)
-    if (c) return true
-  }
-  return false
-}
-function _aRetryable(err) {
-  const status = Number(err?.status) || 0
-  return status === 429 || (status >= 500 && status < 600) || /ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network/i.test(String(err?.message || ''))
-}
-
-// Wrapper around Anthropic streamChat with credential rotation on 429/5xx/network.
 async function* streamChatWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
-    try { yield* streamChat({ provider, model, messages, signal, options }); return }
-    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
-  }
-  throw lastErr
+  yield* retryStream(
+    () => streamChat({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 async function completeChatWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
-    try { return await completeChat({ provider, model, messages, signal, options }) }
-    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
-  }
-  throw lastErr
+  return retryPromise(
+    () => completeChat({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 async function completeChatMessageWithRetry({ provider, model, messages, signal, options = {} }) {
-  let lastErr
-  for (let a = 0; a < MAX_CRED_RETRIES; a++) {
-    try { return await completeChatMessage({ provider, model, messages, signal, options }) }
-    catch (err) { lastErr = err; if (!_aRetryable(err)) break; if (!_aRotate(provider, err)) break }
-  }
-  throw lastErr
+  return retryPromise(
+    () => completeChatMessage({ provider, model, messages, signal, options }),
+    () => { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+  )
 }
 
 module.exports = {

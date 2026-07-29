@@ -10,5 +10,5 @@ export function estimateTextTokens(text: string): number {
         (c >= 0xac00 && c <= 0xd7af)) tokens += 1.5
     else tokens += 0.25
   }
-  return Math.max(1, Math.ceil(tokens))
+  return Math.ceil(tokens)
 }

@@ -10,15 +10,26 @@
 //
 // `parameters` is the OpenAI function-call JSON Schema for arguments.
 //
-// Tool surface mirrors a coding agent (read/search/edit/git/web/memory) so the
-// model can do real work — every mutating tool is gated by the permission model.
+// Tool execution modes (OpenClaw-inspired):
+//   executionMode: 'parallel' (default) — safe to run concurrently with others
+//   executionMode: 'sequential'    — must run alone (e.g. commands that mutate
+//                                     shared state). When any tool in a round
+//                                     declares sequential, the whole round falls
+//                                     back to sequential execution.
+//
+// Tool lifecycle hooks (per-tool):
+//   beforeToolCall(ctx) — runs before the tool; can throw to block
+//   afterToolCall(ctx)  — runs after success; can modify the result
+//   prepareArguments(args) — can rewrite arguments before execution
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
 const path = require('path')
-const { exec } = require('child_process')
+const { runCommand, runCommandSync } = require('./exec')
 const { glob } = require('glob')
 const { checkWritePath, checkCommand } = require('./sandbox')
+const { streamCommand, formatStreamResult } = require('../llm/toolStream')
+const { checkSSRF, checkSSRFHostname, ssrfFetchOptions } = require('./ssrf')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 const MAX_GREP_BYTES = 32 * 1024
@@ -148,10 +159,14 @@ const TOOLS = [
       const timeout = setTimeout(() => controller.abort(), 15000)
       try {
         const url = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q)
-        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' } })
+        // DNS-based SSRF check: resolve hostname before request
+        await checkSSRFHostname(new URL(url).hostname)
+        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' }, redirect: 'error' })
         if (!res.ok) return `[search failed: HTTP ${res.status}]`
         const html = await res.text()
-        return extractDdgSnippets(html, q)
+        const snippets = extractDdgSnippets(html, q)
+        // Mark as external content to prevent prompt injection
+        return `<!-- EXTERNAL_WEB_SEARCH -->\n${snippets}`
       } catch (e) {
         return `[search error: ${e.message}]`
       } finally {
@@ -173,21 +188,29 @@ const TOOLS = [
     run: async (args) => {
       const url = String(args.url || '')
       if (!url) throw new Error('url is required')
-      // Reject non-http(s) schemes so a prompt-injected model can't read local
-      // files via file:// (web_fetch is 'safe' and would otherwise bypass the
-      // dangerous-tool permission gate).
+      // SSRF protection: reject non-http(s), localhost, and cloud metadata
+      const ssrf = checkSSRF(url)
+      if (!ssrf.ok) return `[blocked: ${ssrf.reason}]`
       let parsed
       try { parsed = new URL(url) } catch { return '[invalid url]' }
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '[blocked: non-http(s) url]'
+      // DNS-based SSRF check: resolve hostname to IP before request to catch
+      // private IP targets. This also guards against DNS rebinding in the
+      // initial request (not just redirects).
+      try { await checkSSRFHostname(parsed.hostname) } catch (e) {
+        return `[blocked: ${e.message}]`
+      }
+      // Block redirects to prevent SSRF via HTTP redirect to internal URL
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 20000)
       try {
-        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' } })
+        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' }, redirect: 'error' })
         if (!res.ok) return `[fetch failed: HTTP ${res.status}]`
         const ct = res.headers.get('content-type') || ''
         const raw = await res.text()
-        const text = ct.includes('html') ? raw.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
-        return text.slice(0, 16384) + (text.length > 16384 ? '\n[truncated]' : '')
+        const text = ct.includes('html') ? raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[^>]*>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<style[^>]*>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
+        const marked = `<!-- EXTERNAL_WEB_FETCH -->\n${text.slice(0, 16384)}${text.length > 16384 ? '\n[truncated]' : ''}`
+        return marked
       } catch (e) {
         return `[fetch error: ${e.message}]`
       } finally {
@@ -207,18 +230,18 @@ const TOOLS = [
       },
       required: ['path', 'content'],
     },
-    run: (args, ctx) => {
+    run: async (args, ctx) => {
       const p = String(args.path || '')
       const content = String(args.content ?? '')
       if (!p) throw new Error('path is required')
       // Sandbox: refuse writes outside the workspace root — unless 'yolo' mode
       // (full permission, user explicitly accepted the risk).
       if (ctx?.agentMode !== 'yolo') {
-        const guard = checkWritePath(p)
+        const guard = checkWritePath(p, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
-      fs.mkdirSync(path.dirname(p), { recursive: true })
-      fs.writeFileSync(p, content, 'utf-8')
+      await fs.promises.mkdir(path.dirname(p), { recursive: true })
+      await fs.promises.writeFile(p, content, 'utf-8')
       return `wrote ${content.length} chars to ${p}`
     },
   },
@@ -235,22 +258,22 @@ const TOOLS = [
       },
       required: ['path', 'old_string', 'new_string'],
     },
-    run: (args, ctx) => {
+    run: async (args, ctx) => {
       const p = String(args.path || '')
       const oldS = String(args.old_string ?? '')
       const newS = String(args.new_string ?? '')
       if (!p || !oldS) throw new Error('path and old_string are required')
       // Sandbox: refuse edits outside the workspace root — unless 'yolo' mode.
       if (ctx?.agentMode !== 'yolo') {
-        const guard = checkWritePath(p)
+        const guard = checkWritePath(p, ctx?.sessionId)
         if (!guard.ok) throw new Error(guard.reason)
       }
-      const orig = fs.readFileSync(p, 'utf-8')
+      const orig = await fs.promises.readFile(p, 'utf-8')
       const idx = orig.indexOf(oldS)
       if (idx === -1) throw new Error('old_string not found')
       if (orig.indexOf(oldS, idx + 1) !== -1) throw new Error('old_string is not unique — make it more specific')
       const updated = orig.slice(0, idx) + newS + orig.slice(idx + oldS.length)
-      fs.writeFileSync(p, updated, 'utf-8')
+      await fs.promises.writeFile(p, updated, 'utf-8')
       return `edited ${p}: replaced ${oldS.length} chars with ${newS.length} chars`
     },
   },
@@ -258,12 +281,15 @@ const TOOLS = [
     name: 'run_command',
     description: 'Run a shell command and return its stdout+stderr (up to 8KB). DANGEROUS — executes arbitrary code. Use only when the user explicitly asks for it. ALWAYS supply a `description` in active voice explaining the intent (e.g. "List files in the project root") so the user sees what the command claims to do, not just raw shell.',
     risk: 'dangerous',
+    executionMode: 'sequential', // commands may mutate shared state
     parameters: {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'The shell command to execute.' },
         description: { type: 'string', description: 'A short, active-voice summary of what this command does and why (shown to the user). Required.' },
         cwd: { type: 'string', description: 'Working directory (optional, defaults to user home).' },
+        timeout: { type: 'number', description: 'Timeout in milliseconds (optional, default 30000).' },
+        env: { type: 'object', description: 'Extra environment variables (optional).' },
       },
       required: ['command', 'description'],
     },
@@ -277,12 +303,52 @@ const TOOLS = [
         if (!guard.ok) throw new Error(guard.reason)
       }
       const cwd = args.cwd ? String(args.cwd) : undefined
-      return new Promise((resolve, reject) => {
-        exec(cmd, { cwd, maxBuffer: 16 * 1024, timeout: 30000 }, (err, stdout, stderr) => {
-          const out = ((stdout || '') + (stderr ? '\n[stderr]\n' + stderr : '')).slice(0, 8192)
-          if (err && !stdout && !stderr) return reject(new Error(err.message))
-          resolve(out || '(no output)')
+      const timeoutMs = Number(args.timeout) || 30000
+      const extraEnv = args.env && typeof args.env === 'object' ? args.env : undefined
+
+      // Whitelist env keys the model is allowed to set — prevents PATH/PYTHONPATH
+      // manipulation via crafted tool arguments.
+      const SAFE_ENV_KEYS = new Set(['LANG', 'LC_ALL', 'NODE_ENV', 'TERM', 'DEBUG', 'CI', 'VERBOSE'])
+      const filteredEnv = extraEnv
+        ? Object.fromEntries(Object.entries(extraEnv).filter(([k]) => SAFE_ENV_KEYS.has(k)))
+        : undefined
+
+      // If the caller provides onStream, use the streaming path for real-time
+      // output (like Claude Code's live command output).
+      if (ctx?.onStream) {
+        return streamCommand(cmd, {
+          cwd, timeoutMs, env: filteredEnv, sessionId: ctx?.sessionId,
+        }).then((result) => {
+          const text = formatStreamResult(result)
+          ctx.onStream({ type: 'done', text, exitCode: result.exitCode })
+          return text
         })
+      }
+
+      // Standard non-streaming path — use spawn() for safety.
+      // For Windows, git commands and simple commands don't need a shell.
+      // For commands that need shell features (pipes, redirects, &&), we
+      // detect them and fall back to shell execution.
+      const needsShell = /[|&;`$(){}!\\]/.test(cmd)
+      return (needsShell
+        ? runCommand('cmd.exe', ['/c', cmd], {
+            cwd, env: filteredEnv, timeout: timeoutMs,
+            maxBuffer: 32 * 1024, shell: true,
+          })
+        : runCommand(cmd, [], {
+            cwd, env: filteredEnv, timeout: timeoutMs,
+            maxBuffer: 32 * 1024,
+          })
+      ).then(({ stdout, stderr, exitCode, timedOut }) => {
+        const out = stdout?.trim() || ''
+        const errOut = stderr?.trim() || ''
+        const parts = []
+        if (out) parts.push('[stdout]\n' + out.slice(0, 4096))
+        if (errOut) parts.push('[stderr]\n' + errOut.slice(0, 4096))
+        const result = parts.join('\n\n') || '(no output)'
+        if (timedOut) return `[timed out] ${result}`
+        if (exitCode !== 0) return `[exit code: ${exitCode}]\n${result}`
+        return result
       })
     },
   },
@@ -310,6 +376,8 @@ const TOOLS = [
       const skills = require('../llm/skills')
       const body = skills.getSkillBody(name)
       if (body == null) throw new Error(`unknown skill: ${name} (call only skills listed in <available_skills>)`)
+      // Track usage for the skills management UI.
+      try { skills.recordSkillUse(name) } catch {}
       return body
     },
   },
@@ -413,11 +481,11 @@ const TOOLS = [
     },
     run: (args) => {
       const cwd = String(args.cwd || '')
-      return new Promise((resolve, reject) => {
-        exec('git status --short', { cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr || err.message))
-          resolve(stdout || '(clean)')
-        })
+      return runCommand('git', ['status', '--short'], {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000,
+      }).then(({ stdout, stderr, exitCode }) => {
+        if (exitCode !== 0) throw new Error(stderr || `exit code ${exitCode}`)
+        return stdout?.trim() || '(clean)'
       })
     },
   },
@@ -435,13 +503,76 @@ const TOOLS = [
     },
     run: (args) => {
       const cwd = String(args.cwd || '')
-      const flag = args.staged ? ' --cached' : ''
-      return new Promise((resolve, reject) => {
-        exec('git diff' + flag, { cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000 }, (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr || err.message))
-          resolve((stdout || '(no changes)').slice(0, 16384))
-        })
+      const flag = args.staged ? ['--cached'] : []
+      return runCommand('git', ['diff', ...flag], {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000,
+      }).then(({ stdout }) => (stdout || '(no changes)').slice(0, 16384))
+    },
+  },
+  {
+    name: 'git_log',
+    description: 'Show recent git commit history. Returns one line per commit. Read-only.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        count: { type: 'number', description: 'Number of commits to show (default 10, max 50).' },
+        format: { type: 'string', description: 'Format style: "oneline" (default), "detailed", or "short".' },
+      },
+      required: ['cwd'],
+    },
+    run: (args) => {
+      const cwd = String(args.cwd || '')
+      const count = Math.min(Number(args.count) || 10, 50)
+      const fmt = args.format === 'detailed' ? 'full' : args.format === 'short' ? 'short' : 'oneline'
+      return runCommand('git', ['log', `--${fmt}`, '-n', String(count), '--no-decorate'], {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 15000,
+      }).then(({ stdout }) => stdout || '(no commits)')
+    },
+  },
+  {
+    // Git commit — reads the diff, lets the model (optionally) generate a message,
+    // then commits. Inspired by Aider's /commit and Claude Code's git integration.
+    name: 'git_commit',
+    description: 'Stage all changes and create a git commit. If no message is provided, the model should first read the diff with git_diff and compose a concise commit message following conventional commits style (feat/fix/docs/refactor/chore). DANGEROUS — creates a commit.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        message: { type: 'string', description: 'Commit message. If empty, the model should call git_diff first to compose one.' },
+        all: { type: 'boolean', description: 'If true, stage all changes including deletions (git add -A). Default true.' },
+      },
+      required: ['cwd'],
+    },
+    run: async (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      const msg = String(args.message || '').trim()
+      if (!msg) throw new Error('commit message is required — read the diff first and compose one')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      // Use spawn with separate git add + git commit for safety (no shell string).
+      const addArgs = args.all !== false ? ['add', '-A'] : ['add', '.']
+      const addResult = await runCommand('git', addArgs, {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000,
       })
+      if (addResult.exitCode !== 0) {
+        const out = addResult.stdout + addResult.stderr
+        if (/nothing (to commit|added)/i.test(out)) return 'nothing to commit (working tree clean)'
+        throw new Error(addResult.stderr || `git add failed (exit ${addResult.exitCode})`)
+      }
+      const commitResult = await runCommand('git', ['commit', '-m', msg], {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000,
+      })
+      if (commitResult.exitCode !== 0) {
+        const out = commitResult.stdout + commitResult.stderr
+        if (/nothing (to commit|added)/i.test(out)) return 'nothing to commit (working tree clean)'
+        throw new Error(commitResult.stderr || `git commit failed (exit ${commitResult.exitCode})`)
+      }
+      return commitResult.stdout?.trim() || commitResult.stderr?.trim() || 'committed'
     },
   },
   {
@@ -455,11 +586,14 @@ const TOOLS = [
       },
       required: ['content'],
     },
-    run: (args) => {
+    run: (args, ctx) => {
       const content = String(args.content || '')
       if (!content) throw new Error('content is required')
       const db = require('../database')
-      db.addMemory({ content })
+      const sourceSessionId = ctx?.sessionId || null
+      db.addMemoryWithProvenance(content, 'fact', sourceSessionId)
+      // Record skill usage if this was triggered via a skill
+      try { if (ctx?.skillName) require('../llm/skills').recordSkillUse(ctx.skillName) } catch {}
       return `saved to memory (${content.length} chars)`
     },
   },
@@ -499,6 +633,53 @@ const TOOLS = [
     },
   },
   {
+    // ─── Project Context Graph ───────────────────────────────────────────────
+    // Returns the project-level code map: file listing, import/export
+    // relationships, and symbol index. Use this before modifying large projects
+    // to avoid re-searching files on every step. Safe because it's read-only.
+    // ──────────────────────────────────────────────────────────────────────────
+    name: 'get_project_context',
+    description: 'Get a project-level code map for the current workspace. Returns the dependency graph, file listing, and symbol index. Use this to understand project structure before making changes. Call with query="symbol_name" to find references to a specific function/class, or query="" for the full overview.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Optional: a symbol name, file path, or keyword to find related code. Leave empty for full project overview.' },
+        maxFiles: { type: 'number', description: 'Max files to include in the response (default 50).' },
+      },
+      required: [],
+    },
+    run: async (args, ctx) => {
+      const { projectIndexer, dependencyGraph } = require('../context')
+      const { getWorkspaceRoot } = require('./sandbox')
+      const root = getWorkspaceRoot(ctx?.sessionId)
+      if (!root) return 'no workspace configured'
+      const graph = await projectIndexer.indexWorkspace(root)
+      const query = String(args.query || '').trim()
+      const maxFiles = Number(args.maxFiles) || 50
+
+      if (query) {
+        const related = dependencyGraph.query(graph, query)
+        if (!related.length) return `no files reference "${query}"`
+        return related.slice(0, maxFiles).map(r => `[${r.relation}] ${r.path}`).join('\n')
+      }
+
+      const stats = dependencyGraph.getStats(graph)
+      const files = Array.from(graph.files.values()).slice(0, maxFiles)
+      const lines = [
+        `Project: ${stats.totalFiles} files, ${stats.totalEdges} dependencies`,
+        `Languages: ${stats.languages.join(', ')}`,
+        '',
+        ...files.map(f => {
+          const imp = f.imports.length ? ` → ${f.imports.slice(0, 5).join(', ')}` : ''
+          const sym = f.symbols.length ? ` {${f.symbols.slice(0, 8).join(', ')}}` : ''
+          return `${f.path}${imp}${sym}`
+        }),
+      ]
+      return lines.join('\n')
+    },
+  },
+  {
     name: 'delegate_task',
     description: 'Delegate one or more independent sub-tasks to sub-agents that run in parallel, each with its own tool loop and iteration budget. Use for: researching multiple files/topics at once, or any set of independent gather/analyze steps. Each sub-task returns a concise result. Dangerous: sub-agents can run tools (read/write/command), so this is permission-gated. Provide focused, self-contained task descriptions.',
     risk: 'dangerous',
@@ -535,6 +716,136 @@ const TOOLS = [
       }).join('\n\n')
     },
   },
+  {
+    // Automated code review (Claude Code / Aider / Copilot-inspired). Reviews
+    // the provided files for bugs, security issues, performance problems, and
+    // style violations. Safe — read-only, no side effects.
+    name: 'review_code',
+    description: 'Review code for bugs, security issues, performance problems, and style violations. Call this after writing or editing files to get feedback. Returns a structured review with severity levels and fix suggestions.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          description: 'Optional: specific file paths to review. If empty, reviews recent git changes.',
+          items: { type: 'string' },
+        },
+      },
+      required: [],
+    },
+    run: async (args, ctx) => {
+      const { reviewFiles } = require('../../electron/llm/reviewer')
+      const requestedFiles = Array.isArray(args.files) ? args.files : []
+      const fs = require('fs')
+
+      let filesToReview = []
+      if (requestedFiles.length > 0) {
+        for (const f of requestedFiles.slice(0, 5)) {
+          try {
+            const content = fs.readFileSync(f, 'utf-8')
+            filesToReview.push({ path: f, content })
+          } catch {}
+        }
+      }
+
+      const result = await reviewFiles({
+        provider: ctx.provider,
+        model: ctx.model,
+        files: filesToReview,
+        signal: ctx.signal,
+      })
+
+      return result.summary
+    },
+  },
+  {
+    // Unified diff patch application (Codex/OpenClaw-inspired). More precise than
+    // edit_file for multi-line changes: the model generates a proper unified diff
+    // and this tool applies it with conflict detection. Falls back to the full
+    // file content on failure so the model can retry.
+    name: 'apply_patch',
+    description: 'Apply a unified diff patch to a file. Use this instead of edit_file when making multiple or complex edits — a patch preserves context across lines and detects conflicts. Provide the file path and the full unified diff. DANGEROUS — writes to the filesystem.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to the file to patch.' },
+        patch: { type: 'string', description: 'A unified diff (--- a/+++ b/ format) to apply.' },
+      },
+      required: ['path', 'patch'],
+    },
+    run: async (args, ctx) => {
+      const p = String(args.path || '')
+      const patchText = String(args.patch || '')
+      if (!p) throw new Error('path is required')
+      if (!patchText) throw new Error('patch is required')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(p, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      if (!await fs.promises.access(p).then(() => true).catch(() => false)) throw new Error(`file not found: ${p}`)
+      const original = await fs.promises.readFile(p, 'utf-8')
+      const lines = original.split('\n')
+      const hunks = parseUnifiedDiff(patchText, lines.length)
+      if (!hunks.length) return 'patch had no valid hunks — file unchanged'
+      const result = applyHunks(lines, hunks)
+      if (result.conflicts.length > 0) {
+        return `patch conflicts detected:\n${result.conflicts.map(c => `  - ${c}`).join('\n')}\nFile NOT modified. Retry with a corrected patch.`
+      }
+      await fs.promises.writeFile(p, result.content, 'utf-8')
+      return `patch applied: ${result.applied} hunk(s), ${result.content.length} chars written to ${p}`
+    },
+  },
+  {
+    // Debug-fix cycle (Claude-Code-inspired). Automatically runs the project's test
+    // command, captures errors, asks the model to analyze them, and surfaces a fix
+    // suggestion. The tool loop can then apply the fix and re-test in the next cycle.
+    name: 'debug_loop',
+    description: 'Run an automatic debug-fix cycle for the current workspace. Runs the project\'s test command, captures errors, analyzes them, and suggests fixes. Use this after writing/modifying code to verify it works. Max 5 cycles. Dangerous: executes test commands in the workspace.',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        testCommand: { type: 'string', description: 'Override the auto-detected test command (e.g. "npm run test", "pytest").' },
+        maxCycles: { type: 'number', description: 'Max debug-fix cycles (default 5, max 10).' },
+      },
+      required: [],
+    },
+    run: async (args, ctx) => {
+      const { runDebugLoop, MAX_CYCLES } = require('../../electron/llm/debugAgent')
+      const maxCycles = Math.min(Number(args.maxCycles) || MAX_CYCLES, 10)
+      const result = await runDebugLoop({
+        provider: ctx.provider,
+        model: ctx.model,
+        signal: ctx.signal,
+        sessionId: ctx.sessionId,
+        onStatus: ctx.onStatus,
+        onFix: ctx.onStatus,
+      })
+      if (result.success) {
+        return `✅ 调试完成: ${result.summary} (${result.cycles} 轮)`
+      }
+      const lines = [`❌ 调试未完全成功 (${result.cycles}/${maxCycles} 轮)`]
+      if (result.cycleResults) {
+        for (const r of result.cycleResults) {
+          lines.push(`  轮 ${r.cycle}: 退出码 ${r.exitCode}`)
+          lines.push(`  ${r.errorSnippet.slice(0, 200)}`)
+        }
+      }
+      if (result.analysis) {
+        lines.push(`\n分析: ${result.analysis.description}`)
+        lines.push(`根因: ${result.analysis.rootCause}`)
+        lines.push(`修复: ${result.analysis.fix}`)
+        lines.push(`文件: ${(result.analysis.files || []).join(', ')}`)
+      }
+      if (result.error) {
+        lines.unshift(`错误: ${result.error}`)
+      }
+      return lines.join('\n')
+    },
+  },
 ]
 
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;
@@ -564,4 +875,76 @@ function toolsPayload(mode) {
   return list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
 }
 
-module.exports = { TOOLS, getTool, toolsPayload }
+// ─── apply_patch helpers ───────────────────────────────────────────────────────
+// Parse a unified diff into hunk descriptors. Each hunk has:
+//   { oldStart, oldCount, newStart, newCount, lines: [{type, content}] }
+// where type is 'context', 'add', or 'remove'.
+// Returns [] on parse failure (caller should treat as "no valid hunks").
+function parseUnifiedDiff(diffText) {
+  const hunks = []
+  const lines = diffText.split('\n')
+  let i = 0
+  while (i < lines.length) {
+    // Look for a hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+    const m = lines[i].match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+    if (!m) { i++; continue }
+    const oldStart = parseInt(m[1])
+    const oldCount = parseInt(m[2] || '1')
+    const newStart = parseInt(m[3])
+    const newCount = parseInt(m[4] || '1')
+    i++
+    const hunkLines = []
+    while (i < lines.length && !lines[i].startsWith('@@')) {
+      const line = lines[i]
+      if (line.startsWith(' ') || line.startsWith('+') || line.startsWith('-')) {
+        hunkLines.push({ type: line[0] === '+' ? 'add' : line[0] === '-' ? 'remove' : 'context', content: line.slice(1) })
+      } else if (line.startsWith('\\') && line.includes('No newline')) {
+        // \ No newline at end of file marker — record and skip
+        hunkLines.push({ type: 'noeol', content: '' })
+      }
+      i++
+    }
+    if (hunkLines.length > 0) hunks.push({ oldStart, oldCount, newStart, newCount, lines: hunkLines })
+  }
+  return hunks
+}
+
+// Apply parsed hunks to an array of file lines. Returns { content, applied, conflicts }.
+// Each hunk's oldStart references the ORIGINAL file line numbers. We accumulate
+// line-offset deltas so later hunks account for earlier insertions/deletions.
+function applyHunks(fileLines, hunks) {
+  const conflicts = []
+  let result = [...fileLines]
+  let applied = 0
+  let lineDelta = 0 // cumulative shift from prior hunk applications
+
+  for (const hunk of hunks) {
+    const idx = hunk.oldStart - 1 + lineDelta // adjusted for prior shifts
+    // Validate context lines match at the expected position.
+    const ctxLines = hunk.lines.filter(l => l.type === 'context')
+    let matchOffset = -1
+    // Search for the context block in result starting from idx.
+    const searchStart = Math.max(0, idx - 2)
+    for (let start = searchStart; start <= Math.max(searchStart, result.length - ctxLines.length); start++) {
+      let ok = true
+      for (let ci = 0; ci < ctxLines.length; ci++) {
+        if (start + ci >= result.length || result[start + ci] !== ctxLines[ci].content) { ok = false; break }
+      }
+      if (ok) { matchOffset = start; break }
+    }
+    if (matchOffset < 0) {
+      conflicts.push(`hunk at line ${hunk.oldStart}: context did not match (file may have changed)`)
+      continue
+    }
+    // Build replacement: context lines + added lines (skip removed lines).
+    const adds = hunk.lines.filter(l => l.type === 'add')
+    const oldSpan = hunk.oldCount
+    const replacement = adds.map(l => l.content)
+    result = [...result.slice(0, matchOffset), ...replacement, ...result.slice(matchOffset + oldSpan)]
+    lineDelta += replacement.length - oldSpan
+    applied++
+  }
+  return { content: result.join('\n'), applied, conflicts }
+}
+
+module.exports = { TOOLS, getTool, toolsPayload, parseUnifiedDiff, applyHunks }

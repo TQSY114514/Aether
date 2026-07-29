@@ -41,7 +41,7 @@ export default function ModelPage() {
       const existingSet = new Set(existing)
       for (const name of modelNames) {
         if (existingSet.has(name)) continue // skip duplicates from re-fetching
-        await addModel({ provider_id: providerId, model_name: name, is_primary: 0 })
+        await addModel({ provider_id: providerId, model_name: name, is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
       }
       await loadModels(providerId)
     } catch {}
@@ -227,14 +227,14 @@ export default function ModelPage() {
                         className="flex-1 px-2 py-1 text-xs rounded border outline-none bg-white" style={{ borderColor: 'var(--accent)' }}
                         onKeyDown={async (e) => {
                           if (e.key === 'Enter' && newModelName.trim()) {
-                            await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0 })
+                            await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
                             setNewModelName(''); setShowAddModel(null)
                           }
                           if (e.key === 'Escape') setShowAddModel(null)
                         }} />
                       <button onClick={async () => {
                         if (newModelName.trim()) {
-                          await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0 })
+                          await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
                           setNewModelName(''); setShowAddModel(null)
                         }
                       }} className="px-2 py-1 text-xs bg-black text-white rounded-lg">{t('models.add_model')}</button>

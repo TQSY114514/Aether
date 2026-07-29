@@ -1,20 +1,10 @@
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
+const { computeCost } = require('../utils/cost')
+const log = require('../logger')
 const abortControllers = new Map()
 
-// Per-call cost from the model's price columns (USD per 1K tokens).
-// Returns 0 if pricing is unset (unpriced models show as $0, like cc-switch's
-// "未定价"). Cost = (prompt/1000)*in + (completion/1000)*out, minus cached-read
-// tokens which providers don't bill at the full input rate (best-effort).
-function computeCost(model, u) {
-  const inPrice = Number(model.input_price_per_1k) || 0
-  const outPrice = Number(model.output_price_per_1k) || 0
-  if (!inPrice && !outPrice) return 0
-  const billableInput = Math.max(0, u.prompt_tokens - u.cache_read_tokens)
-  return (billableInput / 1000) * inPrice + (u.completion_tokens / 1000) * outPrice
-}
-
 function registerArenaHandlers(ipcMain, db) {
-  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, aggregate = true }) => {
+  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, aggregate = true, personaId }) => {
     const allModels = db.getAllModels()
     const selected = allModels.filter(m => modelIds.includes(m.id))
     if (!selected.length) return { results: [] }
@@ -42,12 +32,16 @@ function registerArenaHandlers(ipcMain, db) {
       const onOuterAbort = () => perModel.abort()
       controller.signal.addEventListener('abort', onOuterAbort, { once: true })
       try {
-        // Use completeChatMessage to also get the server-reported usage, so the
-        // usage log records real tokens/cost (not a client estimate).
+        // Build messages array with persona system prompt
+        const messages = [{ role: 'user', content }]
+        if (personaId) {
+          const p = db.getPersona(personaId)
+          if (p) messages.unshift({ role: 'system', content: p.prompt })
+        }
         const { content: answer, usage } = await completeChatMessage({
           provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
           model: m,
-          messages: [{ role: 'user', content }],
+          messages,
           signal: perModel.signal,
         })
         const u = normalizeUsage(usage)
@@ -128,7 +122,9 @@ function registerArenaHandlers(ipcMain, db) {
     return { success: true }
   })
 
-  ipcMain.handle('arena:scores', () => db.getModelScores())
+  ipcMain.handle('arena:scores', () => {
+    try { return db.getModelScores() } catch (e) { log.warn('arena:scores error:', e); return [] }
+  })
   ipcMain.handle('arena:auto-route', (_e, query) => {
     const intent = db.classifyIntent(query)
     return { intent, route: db.autoRoute(intent) }

@@ -1,5 +1,7 @@
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@/store'
+import { ensureAllListeners } from '@/store'
+import { applyTheme } from '@/utils/theme'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
 import ModelPage from '@/pages/ModelPage'
@@ -9,12 +11,13 @@ import ScoresPage from '@/pages/ScoresPage'
 import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
 import LearningGraphPage from '@/pages/LearningGraphPage'
+import SkillsPage from '@/pages/SkillsPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
+import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { t } from '@/utils/i18n'
-
+import CompletionToasts from '@/components/chat/CompletionToasts'
 export default function App() {
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
@@ -31,11 +34,20 @@ export default function App() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const mainRef = useRef<HTMLDivElement>(null)
+  const shortcutsOpenRef = useRef(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const backgroundOpacity = useStore((s) => s.backgroundOpacity)
   const backgroundBlur = useStore((s) => s.backgroundBlur)
   const hasBg = backgroundImage !== null
+
+  // Keep shortcutsOpenRef in sync with state so the keyboard handler (empty dep
+  // array) can read the current value without re-binding on every toggle.
+  useEffect(() => { shortcutsOpenRef.current = shortcutsOpen }, [shortcutsOpen])
+
+  // Ensure global IPC listeners are registered (idempotent).
+  useEffect(() => { ensureAllListeners() }, [])
 
   // Window-level overscroll spring bounce: F = -k*off - b*vel
   useEffect(() => {
@@ -70,10 +82,11 @@ export default function App() {
     return () => window.removeEventListener('wheel', onWheel)
   }, [])
 
+  const bgLoadedRef = useRef(false)
+  const sessionAutoSelectedRef = useRef(false)
+
   useEffect(() => {
     const init = async () => {
-      // These 6 loads are independent IPC round-trips — run them in parallel
-      // instead of serially to cut cold-start latency (was 6+N serial awaits).
       await Promise.all([
         loadSettings(),
         loadProviders(),
@@ -82,55 +95,94 @@ export default function App() {
         loadScores(),
         loadAllModels(),
       ])
-      // Per-provider model loads depend on loadAllModels resolving, but are
-      // themselves independent — parallelize too.
-      const providers = useStore.getState().providers
-      if (providers.length) {
-        await Promise.all(providers.map(p => loadModels(p.id)))
+      // Build modelsByProvider from the already-loaded allModels — avoids N
+      // extra IPC round-trips (one per provider). This cuts startup time
+      // significantly when multiple providers are configured.
+      const allModels = useStore.getState().allModels
+      const byProvider: Record<number, typeof allModels> = {}
+      for (const m of allModels) {
+        if (!byProvider[m.provider_id]) byProvider[m.provider_id] = []
+        byProvider[m.provider_id].push(m)
       }
-      // Auto-select first session if none selected
-      const s = useStore.getState().sessions
-      if (s.length > 0 && !useStore.getState().currentSessionId) {
-        await selectSession(s[0].id)
+      useStore.setState({ modelsByProvider: byProvider })
+      // Defer session auto-select and background-image load to next frame so
+      // the EmptyState UI can paint first. This cuts perceived startup time.
+      if (!sessionAutoSelectedRef.current) {
+        sessionAutoSelectedRef.current = true
+        requestAnimationFrame(async () => {
+          const s = useStore.getState()
+          if (s.sessions.length > 0 && !s.currentSessionId) {
+            await s.selectSession(s.sessions[0].id)
+          }
+        })
+      }
+      if (!bgLoadedRef.current) {
+        bgLoadedRef.current = true
+        requestAnimationFrame(async () => {
+          try {
+            const dataUrl = await window.electronAPI.background.get()
+            if (dataUrl) {
+              applyTheme(useStore.getState().theme, true)
+              useStore.setState({ backgroundImage: dataUrl })
+            }
+          } catch {}
+        })
       }
     }
     init()
   }, [])
 
-  // Keyboard shortcuts
+  // Protocol handler: respond to aetherai:// links
+  useEffect(() => {
+    // @ts-ignore protocol handler added to preload (not yet in generated types)
+    const off = window.electronAPI?.protocol?.onOpen?.(({ action }: { action: string }) => {
+      if (action === 'new' || action === 'chat') {
+        useStore.getState().newChat()
+      }
+    })
+    return () => off?.()
+  }, [])
+
+  // Keyboard shortcuts — use getState() to avoid re-binding on every store change.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Ctrl/Cmd+K toggles the command palette.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen(o => !o)
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      if ((e.ctrlKey || e.metaKey) && e.key === '?') {
         e.preventDefault()
-        createSession()
-        setCurrentView('chat')
+        setShortcutsOpen(o => !o)
         return
       }
-      // Ctrl/Cmd+R → regenerate the last assistant reply (browser-style re-roll).
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault()
+        setShortcutsOpen(o => !o)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault()
+        useStore.getState().newChat()
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
         const s = useStore.getState()
         if (s.currentSessionId && s.messages.length > 0) { e.preventDefault(); s.regenerate() }
         return
       }
-      // Esc during streaming → stop generation (Esc elsewhere → back to chat).
       if (e.key === 'Escape') {
+        if (shortcutsOpenRef.current) return // ShortcutOverlay handles its own ESC
         const s = useStore.getState()
         if (s.sending) { e.preventDefault(); s.stopGeneration() }
-        else if (currentView !== 'chat') setCurrentView('chat')
+        else if (s.currentView !== 'chat') s.setCurrentView('chat')
       }
-      // Alt+Left / Alt+Right — browser-style session back/forward.
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); useStore.getState().goBack() }
       if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); useStore.getState().goForward() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [currentView, createSession, setCurrentView])
+  }, [])
 
   const renderPage = () => {
     switch (currentView) {
@@ -142,6 +194,7 @@ export default function App() {
       case 'tokens': return <TokenPage />
       case 'memory': return <MemoryPage />
       case 'learning': return <LearningGraphPage />
+      case 'skills': return <SkillsPage />
     }
   }
 
@@ -165,9 +218,11 @@ export default function App() {
         <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
           {renderPage()}
         </main>
+        <CompletionToasts />
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       </div>
     </ErrorBoundary>
   )

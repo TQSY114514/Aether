@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
-import { Shield, FolderOpen } from 'lucide-react'
+import { Shield, FolderOpen, FileText } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Agent workspace + safety settings.
@@ -18,12 +18,15 @@ export default function AgentSettings() {
   const [busy, setBusy] = useState(false)
   const [maxIter, setMaxIter] = useState(25)
   const [autoMemory, setAutoMemory] = useState(true)
+  const [projectInst, setProjectInst] = useState<{ has: boolean; fileName: string | null }>({ has: false, fileName: null })
 
   useEffect(() => {
     // Guard: agent IPC may be absent on an older preload build.
     try { window.electronAPI?.agent?.getWorkspace?.().then(setWorkspace).catch(() => {}) } catch {}
     try { window.electronAPI?.settings?.get?.('agent_max_iterations').then((v) => { if (v) setMaxIter(parseInt(v, 10) || 25) }).catch(() => {}) } catch {}
     try { window.electronAPI?.settings?.get?.('auto_memory_enabled').then((v) => setAutoMemory(v !== '0')).catch(() => {}) } catch {}
+    // Check for project instruction file (CLAUDE.md / .aetherai.md) in workspace.
+    try { window.electronAPI?.agent?.hasProjectInstructions?.().then(setProjectInst).catch(() => {}) } catch {}
   }, [])
 
   const saveMaxIter = async (v: number) => {
@@ -44,7 +47,6 @@ export default function AgentSettings() {
       // folder picker available in Electron without a native dialog module.
       const input = document.createElement('input')
       input.type = 'file'
-      // @ts-expect-error non-standard but supported in chromium/Electron
       input.webkitdirectory = true
       input.onchange = () => {
         const f = input.files?.[0]
@@ -67,7 +69,7 @@ export default function AgentSettings() {
   }
 
   const applyWorkspace = async (dir: string | null) => {
-    const res = await window.electronAPI.agent.setWorkspace(dir)
+    const res = await window.electronAPI.agent.setWorkspace({ dir })
     if (res?.success) {
       setWorkspace(res.root)
       toast(t('settings.agent.workspace_saved'), { type: 'success' })
@@ -108,6 +110,19 @@ export default function AgentSettings() {
           <div>
             <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.blocklist')}</p>
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.blocklist_hint')}</p>
+          </div>
+        </div>
+
+        {/* Project instructions status (CLAUDE.md / .aetherai.md). */}
+        <div className="flex items-center gap-2 p-2.5 rounded-lg" style={{ backgroundColor: projectInst.has ? 'rgba(34,197,94,0.06)' : 'var(--bg-secondary)' }}>
+          <FileText size={13} className={projectInst.has ? 'text-green-500 mt-0.5 shrink-0' : 'text-gray-400 mt-0.5 shrink-0'} />
+          <div>
+            <p className="text-xs" style={{ color: 'var(--text-primary)' }}>Project Instructions</p>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              {projectInst.has
+                ? `Active: ${projectInst.fileName} — agent will follow project conventions`
+                : 'No instruction file found — place CLAUDE.md or .aetherai.md in your workspace root'}
+            </p>
           </div>
         </div>
 

@@ -1,5 +1,3 @@
-import { useStore } from '@/store'
-
 const THEMES: Record<string, Record<string, string>> = {
   light: {
     '--bg-primary': '#FFFFFF',
@@ -101,10 +99,58 @@ const THEMES: Record<string, Record<string, string>> = {
     '--btn-primary': 'bg-[#B8860B] text-white',
     '--btn-active': 'bg-[#B8860B] text-white',
   },
+  auto: {
+    '--bg-primary': '#AUTO',
+    '--bg-secondary': '#AUTO',
+    '--border': '#AUTO',
+    '--text-primary': '#AUTO',
+    '--text-secondary': '#AUTO',
+    '--text-muted': '#AUTO',
+    '--accent': '#AUTO',
+    '--accent-hover': '#AUTO',
+    '--error': '#AUTO',
+    '--success': '#AUTO',
+    '--warning': '#AUTO',
+    '--glass-bg': 'rgba(255,255,255,0.7)',
+    '--glass-border': 'rgba(255,255,255,0.3)',
+    '--content-bg-trans': 'rgba(255,255,255,0.82)',
+    '--content-secondary-trans': 'rgba(255,255,255,0.6)',
+    '--shadow-card': '0 1px 4px rgba(0,0,0,0.06)',
+    '--btn-primary': 'bg-black text-white',
+    '--btn-active': 'bg-black text-white',
+  },
 }
 
-export function applyTheme(theme: string, hasBackground = false) {
-  const vars = THEMES[theme] || THEMES.light
+// Auto-theme listener: stored at module level so applyTheme can tear it
+// down when switching away from 'auto'. setCleanup is a setter provided
+// by the caller (store) to register the cleanup fn for later disposal.
+let _autoCleanup: (() => void) | null = null
+
+function resolveAutoTheme(): string {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return 'light'
+}
+
+// setCleanup lets the caller register the cleanup function. When applyTheme
+// is called again with a non-'auto' theme, the old listener is removed.
+export function applyTheme(theme: string, hasBackground = false, setCleanup?: (fn: (() => void) | null) => void) {
+  if (_autoCleanup) { _autoCleanup(); _autoCleanup = null }
+
+  let resolved = theme
+  if (theme === 'auto') {
+    resolved = resolveAutoTheme()
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      const handler = () => applyTheme('auto', hasBackground, setCleanup)
+      mq.addEventListener('change', handler)
+      _autoCleanup = () => mq.removeEventListener('change', handler)
+      if (setCleanup) setCleanup(() => { _autoCleanup?.(); _autoCleanup = null })
+    }
+  }
+
+  const vars = THEMES[resolved] || THEMES.light
   const root = document.documentElement
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
   // When a custom background image is active, make content surfaces translucent

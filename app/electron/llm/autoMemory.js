@@ -18,6 +18,8 @@
 // → we store both entities and can later answer "who works on Project X?"
 
 const { completeChat } = require('./providerAdapter')
+const knowledgeGraph = require('./knowledgeGraph')
+const log = require('../logger')
 
 const PREFETCH_TOP_K = 5
 const CHUNK_CHARS = 240
@@ -57,8 +59,9 @@ function score(memoryText, qkw) {
 // ─── Prefetch ──────────────────────────────────────────────────────────────
 // Retrieve top-K relevant memories for a user message.
 // In-memory cache avoids repeated full-table scans across consecutive turns.
+// Each prefetch hit increments access_count (for weighted decay).
 
-let _memCache: { data: any[]; v: number } | null = null
+let _memCache = null
 let _memV = 0
 
 function prefetch(db, userMessage) {
@@ -71,9 +74,43 @@ function prefetch(db, userMessage) {
   if (!memories || memories.length === 0) return ''
   const qkw = keywords(userMessage)
   if (qkw.size === 0) return ''
+
+  // Phase 3: graph-aware expansion. If graph search finds entities linked to the query,
+  // merge those results with keyword results so related memories surface even without
+  // direct keyword overlap ("Alice works on X" → search "Alice" finds X-related memories).
+  let graphIds = new Set()
+  try {
+    const graphResults = knowledgeGraph.searchGraph(db, userMessage, PREFETCH_TOP_K)
+    if (graphResults.length > 0) {
+      for (const m of graphResults) graphIds.add(m.id)
+    }
+  } catch {}
+
   const scored = memories
-    .map(m => ({ m, s: score(m.content, qkw) }))
-    .filter(x => x.s >= MIN_HITS)
+    .map(m => {
+      const kwScore = score(m.content, qkw)
+      // Weighted score: base keyword hits + recency bonus + access_count bonus
+      // + time-decay factor (memories not accessed recently fade in priority).
+      let w = kwScore
+      if (kwScore > 0) {
+        const ageDays = (Date.now() - new Date(m.created_at || Date.now()).getTime()) / 86400000
+        const recencyBonus = Math.max(0, 1 - ageDays / 90) * 0.5
+        const accessBonus = Math.log(1 + (m.access_count || 0)) * 0.3
+        // Time-decay: memories not accessed in 30+ days lose priority.
+        // last_accessed_at defaults to created_at if never fetched.
+        const lastAccess = m.last_accessed_at ? new Date(m.last_accessed_at).getTime() : new Date(m.created_at || Date.now()).getTime()
+        const daysSinceAccess = (Date.now() - lastAccess) / 86400000
+        const decayFactor = Math.max(0.1, 1 - daysSinceAccess / 180) // half-life ~180 days
+        w = (kwScore + recencyBonus + accessBonus) * decayFactor
+        // Graph expansion bonus: if this memory matched via graph neighbours,
+        // give it a small boost so related context surfaces.
+        if (graphIds.has(m.id) && kwScore === 0) w = 0.3
+        // Record access for decay tracking.
+        try { db.incrementMemoryAccess(m.id) } catch {}
+      }
+      return { m, s: w }
+    })
+    .filter(x => x.s >= MIN_HITS * 0.3) // lower threshold for graph hits
     .sort((a, b) => b.s - a.s)
     .slice(0, PREFETCH_TOP_K)
   if (scored.length === 0) return ''
@@ -89,11 +126,13 @@ const EXTRACTION_PROMPT = `Extract 0-5 structured memory entries from this conve
 
 Output one entry per line in this EXACT format:
   [ENTITY] name|description
+  [RELATION] entity1|relation_type|entity2
   [FACT] concise statement
   [CONTEXT] brief summary of the conversation topic
 
 Rules:
 - ENTITY: names of people, projects, tools, preferences, skills mentioned
+- RELATION: a connection between two entities (e.g. "Alice|works_on|ProjectX", "Bob|prefers|Python")
 - FACT: specific decisions, preferences, corrections, or learned facts
 - CONTEXT: only if the conversation covers a distinct topic worth recalling later
 - Skip trivial greetings, chit-chat, and information already in the conversation
@@ -102,11 +141,17 @@ Rules:
 
 // Parse a single extraction line into { type, content }.
 function parseEntry(line) {
-  const m = line.match(/^\[(ENTITY|FACT|CONTEXT)\]\s*(.+)/)
+  const m = line.match(/^\[(ENTITY|RELATION|FACT|CONTEXT)\]\s*(.+)/)
   if (!m) return null
   const type = m[1].toLowerCase()
   const content = m[2].trim()
   if (!content || content.length > 300) return null
+  // RELATION format: entity1|relation_type|entity2
+  if (type === 'relation') {
+    const parts = content.split('|')
+    if (parts.length < 3) return null
+    return { type: 'relation', content: content, entity1: parts[0].trim(), relation: parts[1].trim(), entity2: parts.slice(2).join('|').trim() }
+  }
   return { type, content }
 }
 
@@ -163,11 +208,25 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     for (const entry of entries.slice(0, 5)) {
       const key = `${entry.type}:${entry.content.toLowerCase()}`
       if (recentKeys.has(key)) continue
-      try { db.addMemory({ content: entry.content, type: entry.type }) } catch {}
+      // Conflict detection: if a similar fact already exists in the opposite
+      // direction, the older entry is marked as conflicting.
+      if (entry.type === 'fact') {
+        try { detectConflict(db, entry.content, 'fact') } catch {}
+      }
+      if (entry.type === 'relation') {
+        try {
+          db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, source_turn_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, provider?.id || null, null])
+        } catch {}
+      } else {
+        try { db.addMemoryWithProvenance(entry.content, entry.type, provider?.id || null) } catch {}
+      }
     }
-    _memV++ // invalidate prefetch cache — new memories won't show stale results
+    _memV++ // invalidate prefetch cache
+    // Phase 3: build knowledge graph from recent memories after sync.
+    try { knowledgeGraph.buildGraph(db) } catch {}
   } catch (e) {
-    console.warn('[autoMemory] sync failed:', e && e.message)
+    log.warn('sync failed:', e && e.message)
   }
 }
 
@@ -186,15 +245,43 @@ function search(db, query, limit = 20) {
     .slice(0, limit)
 }
 
+// ─── Conflict Detection ─────────────────────────────────────────────────────
+// Detect potential conflicts: if we already have a similar memory in the
+// opposite direction (e.g. "Alice prefers Python" vs "Alice prefers JavaScript"),
+// mark the older one as conflicting.
+
+function detectConflict(db, newContent, newType) {
+  try {
+    if (!db.allRows) return null
+    const existing = db.allRows('SELECT id, content, type FROM memory WHERE type = ? ORDER BY created_at ASC LIMIT 20', [newType]) || []
+    if (existing.length === 0) return null
+    const nkw = new Set(keywords(newContent))
+    for (const row of existing) {
+      const ekw = new Set(keywords(row.content))
+      let overlap = 0
+      for (const k of nkw) if (ekw.has(k)) overlap++
+      if (overlap >= 2 && row.content !== newContent) {
+        try { db.run('UPDATE memory SET conflicts_with = ? WHERE id = ?', [row.id, row.id]) } catch {}
+        return { olderId: row.id, olderContent: row.content, reason: `相同主题但不同内容: "${row.content}" vs "${newContent}"` }
+      }
+    }
+  } catch {}
+  return null
+}
+
 // ─── Memory Pruning ─────────────────────────────────────────────────────────
 // Remove stale memories (old, low-relevance) to keep the store lean.
 // Called occasionally; not on every sync (too expensive).
 
 function prune(db, maxAgeDays = 90) {
   try {
-    const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString()
-    db.run('DELETE FROM memory WHERE created_at < ?', [cutoff])
+    // Two-pronged prune:
+    // 1. Never-accessed memories older than maxAgeDays are safe to drop.
+    // 2. All memories older than 365 days are pruned regardless of access
+    //    (prevents unbounded growth from very old, irrelevant entries).
+    db.run('DELETE FROM memory WHERE access_count = 0 AND created_at < ?', [new Date(Date.now() - maxAgeDays * 86400000).toISOString()])
+    db.run('DELETE FROM memory WHERE created_at < ?', [new Date(Date.now() - 365 * 86400000).toISOString()])
   } catch {}
 }
 
-module.exports = { prefetch, sync, search, prune, keywords, EXTRACTION_PROMPT }
+module.exports = { prefetch, sync, search, prune, keywords, EXTRACTION_PROMPT, detectConflict }

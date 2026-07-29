@@ -18,6 +18,7 @@ export function useOverscrollSpring(
   useEffect(() => {
     const el = ref.current
     if (!el) return
+    const elSafe: HTMLElement = el
 
     const s = state.current
 
@@ -30,10 +31,10 @@ export function useOverscrollSpring(
         s.active = false
         s.offset = 0
         s.velocity = 0
-        el.style.transform = ''
+        elSafe.style.transform = ''
         return
       }
-      el.style.transform = `translateY(${s.offset}px)`
+      elSafe.style.transform = `translateY(${s.offset}px)`
       s.rid = requestAnimationFrame(tick)
     }
 
@@ -46,7 +47,7 @@ export function useOverscrollSpring(
     }
 
     function onWheel(e: WheelEvent) {
-      const { scrollTop, scrollHeight, clientHeight } = el
+      const { scrollTop, scrollHeight, clientHeight } = elSafe
       const atTop = scrollTop <= 0
       const atBottom = scrollTop + clientHeight >= scrollHeight - 1
       if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
@@ -61,7 +62,7 @@ export function useOverscrollSpring(
 
     function onTouchMove(e: TouchEvent) {
       const dy = s.lastY - e.touches[0].clientY
-      const { scrollTop, scrollHeight, clientHeight } = el
+      const { scrollTop, scrollHeight, clientHeight } = elSafe
       const atTop = scrollTop <= 0
       const atBottom = scrollTop + clientHeight >= scrollHeight - 1
       if ((atTop && dy < 0) || (atBottom && dy > 0)) {
