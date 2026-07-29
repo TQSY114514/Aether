@@ -405,7 +405,18 @@ function pinSession(id, pinned = 1) {
   db.run('UPDATE session SET pinned = ?, updated_at = ? WHERE id = ?', [pinned, localNow(), id]); saveDatabase()
 }
 function deleteSession(id) {
-  db.run('DELETE FROM session WHERE id = ?', [id]); saveDatabase()
+  // Cascade delete session-scoped data. The schema has no ON DELETE CASCADE
+  // and sql.js does not enable PRAGMA foreign_keys, so cleanup is manual.
+  // Memory rows are kept (they are cross-session knowledge by design) but
+  // their source_session_id link is cleared to avoid a dangling reference.
+  try { db.run('DELETE FROM messages_fts WHERE session_id = ?', [id]) } catch {}
+  db.run('DELETE FROM message WHERE session_id = ?', [id])
+  try { db.run('DELETE FROM agent_checkpoint WHERE session_id = ?', [id]) } catch {}
+  try { db.run('DELETE FROM agent_execution_log WHERE session_id = ?', [id]) } catch {}
+  try { db.run('DELETE FROM usage_log WHERE session_id = ?', [id]) } catch {}
+  try { db.run('UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?', [id]) } catch {}
+  db.run('DELETE FROM session WHERE id = ?', [id])
+  saveDatabase()
 }
 function touchSession(id) {
   db.run('UPDATE session SET updated_at = ? WHERE id = ?', [localNow(), id]); saveDatabase()

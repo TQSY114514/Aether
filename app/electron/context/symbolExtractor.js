@@ -3,6 +3,8 @@
 // classes, and function declarations.
 // ───────────────────────────────────────────────────────────────────────────
 
+const fs = require('fs')
+
 const JS_TS_EXTS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'])
 const PY_EXTS = new Set(['.py'])
 const RUST_EXTS = new Set(['.rs'])
@@ -156,9 +158,21 @@ function extractJava(content, filePath, lang) {
 
 /**
  * Extract symbols from multiple files.
+ * Reads each file's content from disk (fileScanner only returns metadata).
  */
 async function extractBatch(files) {
-  return files.map(f => extractFile(f.absPath, f.content || '')).filter(Boolean)
+  const results = []
+  for (const f of files) {
+    let content = ''
+    try {
+      content = fs.readFileSync(f.absPath, 'utf-8')
+    } catch {
+      continue // unreadable file — skip
+    }
+    const extracted = extractFile(f.absPath, content)
+    if (extracted) results.push(extracted)
+  }
+  return results
 }
 
 module.exports = { extractFile, extractBatch }

@@ -111,7 +111,9 @@ const HL_LANGS: Record<string, string> = {
 }
 
 // Strip event handler attributes from HTML to prevent XSS via malicious markdown.
-const EVENT_HANDLER_RE = /\s(on[a-z]\s*=\s*["'][^"']*["']|on[a-z]\s*=\s*[^\s>]+)/gi
+// on\w+ matches onerror, onmouseover, onload, onclick, etc. (the old on[a-z]
+// only matched on + 1 letter, so onerror=... slipped through).
+const EVENT_HANDLER_RE = /\s(on\w+\s*=\s*["'][^"']*["']|on\w+\s*=\s*[^\s>]+)/gi
 
 function sanitizeHtml(html: string): string {
   return html
