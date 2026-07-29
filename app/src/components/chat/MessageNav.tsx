@@ -12,7 +12,9 @@ import type { Message } from '@/types'
  *   - 新消息到来时自动跟随到最新窗口
  *   - activeId 高亮当前消息
  */
-const MAX_VISIBLE = 15 // 同时展示的最大点数
+const MAX_VISIBLE = 8 // 同时展示的最大点数
+const DOT_SIZE = 7    // 固定点大小
+const DOT_GAP = 12    // 固定点间距（中心到中心）
 
 export default function MessageNav({
   messages, activeId, scrollTo, scrollRef,
@@ -40,8 +42,8 @@ export default function MessageNav({
       e.preventDefault()
       setScrollOffset(prev => {
         const max = Math.max(0, count - MAX_VISIBLE)
-        // 每次滚动 2 个点，浏览更流畅
-        const step = 2
+        // 每次滚动 1 个点
+        const step = 1
         const next = e.deltaY > 0 ? prev + step : prev - step
         return Math.max(0, Math.min(max, next))
       })
@@ -51,7 +53,6 @@ export default function MessageNav({
   }, [count])
 
   // 新消息到来时自动跟随到最新窗口（像聊天软件自动滚到底部）。
-  // 用户滚轮上滑看旧消息后，下一条新消息会把它拉回最新。
   useEffect(() => {
     const max = Math.max(0, count - MAX_VISIBLE)
     setScrollOffset(max)
@@ -62,14 +63,14 @@ export default function MessageNav({
   const maxOffset = Math.max(0, count - MAX_VISIBLE)
   const clampedOffset = Math.min(scrollOffset, maxOffset)
 
-  // 动态点大小:消息越多点越小 (4px ~ 8px)
-  const dotSize = count > 30 ? 4 : count > 15 ? 5 : count > 8 ? 6 : 8
-
   // 可见窗口
   const visibleCount = Math.min(count, MAX_VISIBLE)
   const visibleMsgs = userMsgs.slice(clampedOffset, clampedOffset + visibleCount)
   const hasMoreAbove = clampedOffset > 0
   const hasMoreBelow = clampedOffset < maxOffset
+
+  // 可见窗口的总高度（用于垂直居中）
+  const windowHeight = visibleCount * DOT_GAP
 
   // hover 时记录鼠标 Y (相对于点条容器),用于定位预览气泡
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -104,21 +105,23 @@ export default function MessageNav({
             }}
           />
         )}
-        {/* 可见点 — 紧凑分布在可见窗口内 */}
+        {/* 可见点 — 在容器垂直居中区域排列，固定大小和间距 */}
         {visibleMsgs.map((msg, idx) => {
           const isActive = activeId === msg.id
+          // 点从窗口顶部开始向下排列，整个窗口在容器中垂直居中
+          const y = `calc(50% - ${windowHeight / 2}px + ${idx * DOT_GAP}px)`
           return (
             <button
               key={msg.id}
               onClick={() => scrollTo(msg.id)}
               onMouseEnter={() => setHoverId(msg.id)}
               onMouseLeave={() => setHoverId(null)}
-              className="absolute left-1/2 rounded-full transition-all duration-150 hover:scale-200"
+              className="absolute left-1/2 rounded-full transition-all duration-150 hover:scale-150"
               style={{
-                top: `calc(50% + ${(idx - (visibleCount - 1) / 2) * (dotSize + 4)}px)`,
+                top: y,
                 transform: 'translate(-50%, -50%)',
-                width: `${dotSize}px`,
-                height: `${dotSize}px`,
+                width: `${DOT_SIZE}px`,
+                height: `${DOT_SIZE}px`,
                 backgroundColor: isActive ? 'var(--accent)' : 'var(--text-muted)',
                 opacity: isActive ? 1 : 0.6,
                 boxShadow: isActive ? `0 0 6px var(--accent)` : 'none',

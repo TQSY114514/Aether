@@ -52,7 +52,7 @@ export default function Tooltip({ text, children, side = 'bottom' }: { text: str
           )}
           style={{
             backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
-            maxWidth: 'min(280px, 80vw)', whiteSpace: 'normal',
+            minWidth: '160px', maxWidth: 'min(280px, 80vw)', whiteSpace: 'normal',
             transform: `translateX(calc(-50% + ${shift}px))`,
           }}>
           {text}
