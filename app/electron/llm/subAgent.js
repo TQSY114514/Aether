@@ -1,76 +1,82 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Sub-Agent Delegate — inspired by Claude Code's Task tool and OpenClaw's
-// parallel agent execution.
+// Subagent — spawn an isolated child session for complex multi-step tasks.
 //
-// For complex multi-step tasks, the main agent can delegate sub-tasks to
-// independent sub-agent instances. Each sub-agent gets its own tool loop
-// with a focused prompt, and returns a structured result.
+// 借鉴自 OpenCode 的 @general subagent + Hermes 的 delegation。
+// 父 agent 调 task 工具 → 开新子 session(隔离上下文 + 受限权限) →
+// 子 agent 自主多步执行 → 取最后一条 assistant 文本返回。
 //
-// Key design decisions:
-//   - Sub-agents share the same provider/model as the parent (no extra config).
-//   - Each sub-agent has its own iteration budget (smaller than the parent).
-//   - Sub-agent failures are isolated — a failed sub-task doesn't crash the
-//     parent, it just reports the error.
-//   - Results are aggregated back into the parent's context as tool results.
-//
-// API:
-//   SubAgent.run({ task, provider, model, signal, options, agentMode, maxIter })
-//     → { success: boolean, output: string, error?: string, iterations: number }
-//   SubAgent.runParallel(tasks[], same params)
-//     → Promise<SubAgentResult[]>  (all run concurrently)
+// 权限派生:继承父 agentMode 的限制 + 默认禁 task 工具(防递归)。
+// ───────────────────────────────────────────────────────────────────────────
 
+const { completeChatMessage } = require('./providerAdapter')
 const { runToolLoop } = require('./toolLoop')
+const { buildReasoningParams } = require('./reasoning')
+const log = require('../logger')
 
-const DEFAULT_SUB_AGENT_ITERATIONS = 12
-const SUB_AGENT_SYSTEM = `You are a focused sub-agent. Complete the assigned task using the available tools. Be concise — only report what's needed. If you cannot complete the task, explain why.`
+const SUBAGENT_SYSTEM_PROMPT = `You are a sub-agent spawned by the parent agent to handle a delegated task.
+You have your own isolated context — previous conversation history is not available.
+Focus solely on the task described. Use available tools as needed.
+When done, provide a clear, concise summary of your findings or actions as your final response.
+Do NOT call the task tool — nested sub-agents are not allowed.`
 
-// Run a single sub-agent for the given task description.
-async function run({ task, provider, model, signal, options = {}, agentMode = 'auto', maxIter, onProgress }) {
-  const iterations = maxIter || DEFAULT_SUB_AGENT_ITERATIONS
+// 运行 subagent。返回最后一条 assistant 文本。
+// 参数:
+//   db, parentSessionId, provider, model, prompt, signal, agentMode
+async function runSubagent({ db, parentSessionId, provider, model, prompt, signal, agentMode = 'plan' }) {
+  if (!db || !provider || !model) {
+    throw new Error('runSubagent: missing required params')
+  }
+
+  // 创建子 session(独立上下文)
+  let childSessionId
+  try {
+    const result = db.createSession({ title: `subagent-${Date.now()}`, persona_id: null })
+    childSessionId = result?.lastInsertRowid || result
+  } catch (e) {
+    throw new Error(`runSubagent: failed to create child session: ${e.message}`)
+  }
+
+  // 添加 user message(子 agent 的任务)
+  db.addMessage({ session_id: childSessionId, role: 'user', content: prompt })
+
+  // 构建 messages
   const messages = [
-    { role: 'system', content: SUB_AGENT_SYSTEM },
-    { role: 'user', content: `Task: ${task}\n\nComplete this task using the available tools. Report the result when done.` },
+    { role: 'system', content: SUBAGENT_SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
   ]
 
-  let iterationsUsed = 0
-  let output = ''
-  let error = null
+  // 权限派生:子 agent 用 plan 模式(只读),除非父是 yolo(才用 auto)
+  // 这样子 agent 安全,不会破坏文件
+  const childAgentMode = agentMode === 'yolo' ? 'auto' : 'plan'
 
+  const reasoningOpts = buildReasoningParams(model.model_name, 'medium')
+  const opts = { ...reasoningOpts, max_tokens: 4096 }
+
+  let finalContent = ''
   try {
-    const result = await runToolLoop({
-      provider, model, messages, signal,
-      agentMode,
-      maxIterations: iterations,
-      options,
-      onPlanStep: ({ assistantText }) => {
-        iterationsUsed++
-        onProgress?.(`Step ${iterationsUsed}: ${(assistantText || '').slice(0, 60)}`)
-      },
-      onStatus: ({ text }) => {
-        if (text?.includes('迭代')) error = text
-      },
+    finalContent = await runToolLoop({
+      provider,
+      model,
+      messages,
+      tools: true,
+      signal,
+      options: opts,
+      agentMode: childAgentMode,
+      maxIterations: 15, // 子 agent 迭代上限更低
+      sessionId: childSessionId,
+      messageId: 0,
+      db,
+      autoCommit: false,
     })
-    output = result
-    if (!output || output.startsWith('（已达到')) {
-      error = output
-      output = ''
-    }
   } catch (e) {
-    error = e.message
+    log.warn('Subagent execution failed:', e?.message)
+    finalContent = `Sub-agent encountered an error: ${e?.message || 'unknown'}`
   }
 
-  return {
-    success: !error && output.length > 0,
-    output: output.slice(0, 10000),
-    error,
-    iterations: iterationsUsed,
-  }
+  // 清理:子 session 是临时的,删除它(消息也级联删除)
+  try { db.deleteSession(childSessionId) } catch {}
+
+  return finalContent || '(sub-agent returned no content)'
 }
 
-// Run multiple sub-agents in parallel. Each gets the same provider/model but
-// independent iteration budgets. Results come back in order.
-async function runParallel(tasks, shared) {
-  return Promise.all(tasks.map(t => run({ ...shared, task: t.description || t })))
-}
-
-module.exports = { run, runParallel, DEFAULT_SUB_AGENT_ITERATIONS, SUB_AGENT_SYSTEM }
+module.exports = { runSubagent, SUBAGENT_SYSTEM_PROMPT }

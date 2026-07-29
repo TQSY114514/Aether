@@ -8,6 +8,7 @@ import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
+import { useVirtualizer } from '@tanstack/react-virtual'
 
 // Arena results display component with streaming-like animation
 function ArenaResults({ results, aggregate, voted, winnerId, onVote, t, renderMarkdown }: {
@@ -98,7 +99,7 @@ function ArenaResults({ results, aggregate, voted, winnerId, onVote, t, renderMa
                   { model_id: r.model_id, model_name: r.model_name },
                   results.filter(x => x.model_id !== r.model_id).map(x => ({ model_id: x.model_id, model_name: x.model_name }))
                 )}
-                  className="text-xs px-3 py-1 rounded-lg border bg-white hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
+                  className="text-xs px-3 py-1 rounded-lg border bg-[var(--content-bg)] hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
                   ⭐ {t('chat.arena.vote')}
                 </button>
               </div>
@@ -208,11 +209,34 @@ export default function ChatWindow() {
     arenaVoteWinnerId: s.arenaVoteWinnerId,
   }), shallow)
 
+  // Memoize the messages array for referential stability. Streaming chunks
+  // update streamingBySession (also in the selector above) which triggers a
+  // ChatWindow re-render, but the messages reference itself is unchanged —
+  // useMemo ensures the virtualizer sees the same array and skips re-rendering
+  // its (memoized) MessageBubble children, eliminating flicker during streaming.
+  const virtualMessages = useMemo(() => messages, [messages])
+
+  // Virtual scroller: only renders visible message rows (+ overscan) instead
+  // of the full list. Mounted on the existing scrollRef container. Uses
+  // measureElement for dynamic heights (markdown, code blocks, images).
+  const virtualizer = useVirtualizer({
+    count: virtualMessages.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 120,
+    overscan: 6,
+    getItemKey: (index) => virtualMessages[index].id,
+  })
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
+  // Use the virtualizer to jump to a message — works even for off-screen rows
+  // (which are not in the DOM under virtual scrolling) by index lookup.
   const scrollToMsg = useCallback((id: number) => {
-    document.getElementById('msg-' + id)?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+    const idx = virtualMessages.findIndex(m => m.id === id)
+    if (idx >= 0) {
+      virtualizer.scrollToIndex(idx, { align: 'start' })
+    }
+  }, [virtualMessages, virtualizer])
 
   // Compute streaming status for the header bar — derive from specific keys
   // so the memo only invalidates when tool-call state actually changes.
@@ -349,9 +373,37 @@ export default function ChatWindow() {
             <EmptyState />
           )}
 
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} searchHighlight={searchQuery} />
-          ))}
+          {/* Virtualized message list — only visible rows are mounted. The
+              relative container height tracks the total measured size so the
+              scrollbar reflects the full conversation. Each row is absolutely
+              positioned via translateY(start) and measured dynamically via
+              measureElement (handles markdown, code blocks, images). The
+              14px paddingBottom mirrors the chat-gap spacing that flex gap
+              can no longer apply to absolutely-positioned children. */}
+          {virtualMessages.length > 0 && (
+            <div style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+              {virtualizer.getVirtualItems().map((vi) => {
+                const msg = virtualMessages[vi.index]
+                return (
+                  <div
+                    key={msg.id}
+                    data-index={vi.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${vi.start}px)`,
+                      paddingBottom: '14px',
+                    }}
+                  >
+                    <MessageBubble message={msg} searchHighlight={searchQuery} />
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* Streaming bubble — render ONLY for the current session. Other
               sessions keep streaming in the background but their output is not

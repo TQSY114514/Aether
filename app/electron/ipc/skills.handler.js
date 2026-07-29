@@ -45,6 +45,18 @@ function registerSkillsHandlers(ipcMain, db) {
   })
 
   // ─── Slash commands ──────────────────────────────────────────────────────
+
+  // Skill lifecycle management (curator)
+  ipcMain.handle('skills:getUsage', () => {
+    try { return db.getSkillUsage() } catch { return [] }
+  })
+  ipcMain.handle('skills:updateState', (_e, name, state) => {
+    db.updateSkillState(name, state); return { ok: true }
+  })
+  ipcMain.handle('skills:pin', (_e, name, pinned) => {
+    db.pinSkill(name, pinned); return { ok: true }
+  })
+
   ipcMain.handle('commands:list', () => {
     return skills.getCommands().map(c => ({ id: c.id, name: c.name, description: c.description, prompt: c.prompt }))
   })

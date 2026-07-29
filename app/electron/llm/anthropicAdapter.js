@@ -13,6 +13,7 @@ const ANTHROPIC_VERSION = '2023-06-01'
 const _credentialPool = require('./credentialPool')
 const { baseUrl, normalizeUsage: _nu } = require('../utils/llmShared')
 const { retryPromise, retryStream } = require('../utils/retry')
+const { applyAnthropicCache } = require('./cachePolicy')
 
 function headers(provider) {
   // Anthropic uses x-api-key + anthropic-version, NOT Bearer.
@@ -115,6 +116,7 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     stream: true,
   }
   if (system) body.system = system
+  applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
   // Claude thinking: relay reasoning_effort → thinking.budget_tokens.
@@ -220,6 +222,7 @@ async function completeChat({ provider, model, messages, signal, options = {} })
     max_tokens: options.max_tokens || 4096,
   }
   if (system) body.system = system
+  applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
   const res = await fetch(`${baseUrl(provider)}/messages`, {
@@ -248,6 +251,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     max_tokens: options.max_tokens || 4096,
   }
   if (system) body.system = system
+  applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
   const res = await fetch(`${baseUrl(provider)}/messages`, {

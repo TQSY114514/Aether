@@ -197,6 +197,38 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
+  // MoA (Mixture of Agents) presets — each preset defines a set of reference
+  // models (advisors) + one aggregator model. Exposed as virtual `moa://` models.
+  db.run(`CREATE TABLE IF NOT EXISTS moa_preset (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    references_config TEXT NOT NULL,
+    aggregator_model_id INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`)
+
+  // Skill lifecycle tracking — extends skill_usage with curator state machine.
+  // States: active → stale (30d unused) → archived (90d unused).
+  try { db.run("ALTER TABLE skill_usage ADD COLUMN state TEXT NOT NULL DEFAULT 'active'") } catch {}
+  try { db.run("ALTER TABLE skill_usage ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.run("ALTER TABLE skill_usage ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'") } catch {}
+  try { db.run("ALTER TABLE skill_usage ADD COLUMN patch_count INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.run("ALTER TABLE skill_usage ADD COLUMN last_viewed_at DATETIME") } catch {}
+  try { db.run("ALTER TABLE skill_usage ADD COLUMN archived_at DATETIME") } catch {}
+
+  // FTS5 full-text search on messages (CJK bigram handled at app layer).
+  // External content table — avoids duplicating message text.
+  try {
+    db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+      content,
+      session_id UNINDEXED,
+      message_id UNINDEXED,
+      tokenize = 'unicode61'
+    )`)
+  } catch {}
+
   // Migrate old schema
   const cols = {
     provider: getTableColumns('provider'),
@@ -400,6 +432,8 @@ function addMessage({ session_id, role, content, model_used = null, provider_use
     [session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model])
   // Clear placeholder flag so pruneEmptySessions no longer targets this session.
   try { db.run('UPDATE session SET is_placeholder = 0 WHERE id = ? AND is_placeholder = 1', [session_id]) } catch {}
+  // Sync FTS index (best-effort — FTS table may not exist on old DBs).
+  try { db.run('INSERT INTO messages_fts (content, session_id, message_id) VALUES (?, ?, ?)', [String(content || ''), session_id, lastId()]) } catch {}
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 function updateMessage(id, data) {
@@ -840,6 +874,67 @@ function deleteMcpServer(id) {
   db.run('DELETE FROM mcp_server WHERE id = ?', [id]); saveDatabase()
 }
 
+// ===== MoA (Mixture of Agents) Presets =====
+function getMoaPresets() {
+  try { return allRows(db.prepare('SELECT * FROM moa_preset ORDER BY id ASC')) } catch { return [] }
+}
+function getMoaPreset(id) {
+  try { const r = allRows(db.prepare('SELECT * FROM moa_preset WHERE id = ?'), [id]); return r[0] || null } catch { return null }
+}
+function addMoaPreset({ name, description, references_config, aggregator_model_id }) {
+  db.run('INSERT INTO moa_preset (name, description, references_config, aggregator_model_id) VALUES (?, ?, ?, ?)',
+    [name, description || '', JSON.stringify(references_config), aggregator_model_id])
+  saveDatabase(); return { lastInsertRowid: lastId() }
+}
+function deleteMoaPreset(id) {
+  db.run('DELETE FROM moa_preset WHERE id = ?', [id]); saveDatabase()
+}
+
+// ===== FTS Full-text Search =====
+function searchMessages(query, sessionId) {
+  try {
+    const sql = sessionId
+      ? 'SELECT message_id, session_id FROM messages_fts WHERE messages_fts MATCH ? AND session_id = ? ORDER BY rowid DESC LIMIT 50'
+      : 'SELECT message_id, session_id FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rowid DESC LIMIT 50'
+    const params = sessionId ? [query, sessionId] : [query]
+    const rows = allRows(db.prepare(sql), params)
+    // Hydrate with full message data
+    return rows.map(r => {
+      const m = allRows(db.prepare('SELECT * FROM message WHERE id = ?'), [r.message_id])[0]
+      return m || null
+    }).filter(Boolean)
+  } catch { return [] }
+}
+
+// ===== Skill Lifecycle Management =====
+function getSkillUsage() {
+  try { return allRows(db.prepare('SELECT * FROM skill_usage ORDER BY use_count DESC')) } catch { return [] }
+}
+function updateSkillState(name, state) {
+  try {
+    if (state === 'archived') {
+      db.run("UPDATE skill_usage SET state = ?, archived_at = datetime('now') WHERE name = ?", [state, name])
+    } else {
+      db.run('UPDATE skill_usage SET state = ? WHERE name = ?', [state, name])
+    }
+    saveDatabase()
+  } catch {}
+}
+function pinSkill(name, pinned) {
+  try { db.run('UPDATE skill_usage SET pinned = ? WHERE name = ?', [pinned ? 1 : 0, name]); saveDatabase() } catch {}
+}
+// Curator: apply automatic state transitions based on last_used_at.
+// active → stale (30d unused) → archived (90d unused). Pinned skills skip.
+function applySkillTransitions() {
+  try {
+    // stale: unused > 30 days
+    db.run("UPDATE skill_usage SET state = 'stale' WHERE state = 'active' AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 30")
+    // archived: unused > 90 days
+    db.run("UPDATE skill_usage SET state = 'archived', archived_at = datetime('now') WHERE state IN ('active','stale') AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 90")
+    saveDatabase()
+  } catch {}
+}
+
 module.exports = {
   initDatabase, getProviders, getProvider, addProvider, updateProvider, deleteProvider,
   getModels, getAllModels, getModel, addModel, updateModel, deleteModel, getFallbackChain,
@@ -867,6 +962,12 @@ module.exports = {
   // agent checkpoints (agent-turn-level + per-tool snapshot/rollback)
   addCheckpoint, getCheckpoints, deleteCheckpoints, deleteCheckpoint,
   addAgentCheckpoint, getAgentCheckpoint, markAgentCheckpointRolledBack, listAgentCheckpoints,
+  // MoA presets
+  getMoaPresets, getMoaPreset, addMoaPreset, deleteMoaPreset,
+  // FTS search
+  searchMessages,
+  // skill lifecycle
+  getSkillUsage, updateSkillState, pinSkill, applySkillTransitions,
   // credential pool: list/add/remove credentials per provider
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },
