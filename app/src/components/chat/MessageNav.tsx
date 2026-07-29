@@ -25,13 +25,9 @@ export default function MessageNav({
 
   const hoverMsg = useMemo(() => hoverId ? messages.find(m => m.id === hoverId) : null, [messages, hoverId])
   const userMsgs = useMemo(() => messages.filter(m => m.role === 'user'), [messages])
-  if (userMsgs.length < 3) return null
-
-  // 动态点大小:消息越多点越小 (3px ~ 6px)
-  const count = userMsgs.length
-  const dotSize = count > 30 ? 3 : count > 15 ? 4 : count > 8 ? 5 : 6
 
   // 非 passive wheel listener — 让 preventDefault 生效,把滚轮转发到消息列表
+  // 注意:必须在条件 return 之前调用,否则违反 hooks 规则 (React error #310)
   useEffect(() => {
     const el = navRef.current
     if (!el) return
@@ -44,6 +40,12 @@ export default function MessageNav({
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [scrollRef])
+
+  if (userMsgs.length < 3) return null
+
+  // 动态点大小:消息越多点越小 (3px ~ 6px)
+  const count = userMsgs.length
+  const dotSize = count > 30 ? 3 : count > 15 ? 4 : count > 8 ? 5 : 6
 
   // hover 时记录鼠标 Y (相对于视口),用于定位预览气泡
   const handleMouseMove = (e: React.MouseEvent) => {
