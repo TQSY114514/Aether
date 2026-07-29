@@ -6,11 +6,14 @@ import type { Message } from '@/types'
  *
  * 功能:
  *   - 点击点 → 跳转到对应 user 消息
- *   - hover 点 → 显示消息内容预览（跟随鼠标 Y 位置）
- *   - 在点条上滚轮 → 滚动消息列表（转发 wheel 到 scrollContainer）
- *   - 消息多时点自动变小，百分比分布不溢出
+ *   - hover 点 → 显示消息内容预览（跟随鼠标 Y 位置，显示在点条右侧）
+ *   - 在点条上滚轮 → 滑动点条自己的可见窗口（不转发到消息列表）
+ *   - 点数量超过 maxVisible 时只显示一个窗口，滚轮可上下翻
+ *   - 新消息到来时自动跟随到最新窗口
  *   - activeId 高亮当前消息
  */
+const MAX_VISIBLE = 15 // 同时展示的最大点数
+
 export default function MessageNav({
   messages, activeId, scrollTo, scrollRef,
 }: {
@@ -21,59 +24,62 @@ export default function MessageNav({
 }) {
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [mouseY, setMouseY] = useState(0)
+  const [scrollOffset, setScrollOffset] = useState(0)
   const navRef = useRef<HTMLDivElement>(null)
 
   const hoverMsg = useMemo(() => hoverId ? messages.find(m => m.id === hoverId) : null, [messages, hoverId])
   const userMsgs = useMemo(() => messages.filter(m => m.role === 'user'), [messages])
+  const count = userMsgs.length
 
-  // 非 passive wheel listener — 让 preventDefault 生效,把滚轮转发到消息列表
-  // 注意:必须在条件 return 之前调用,否则违反 hooks 规则 (React error #310)
+  // 非 passive wheel listener — 滑动点条窗口。必须在条件 return 之前调用,
+  // 否则违反 hooks 规则 (React error #310)。
   useEffect(() => {
     const el = navRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
-      if (!scrollRef?.current) return
       e.preventDefault()
-      // 放大滚动速度,让点条上小幅滚动也能快速浏览
-      scrollRef.current.scrollTop += e.deltaY * 1.5
+      setScrollOffset(prev => {
+        const max = Math.max(0, count - MAX_VISIBLE)
+        // 每次滚动 2 个点，浏览更流畅
+        const step = 2
+        const next = e.deltaY > 0 ? prev + step : prev - step
+        return Math.max(0, Math.min(max, next))
+      })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [scrollRef])
+  }, [count])
 
-  if (userMsgs.length < 3) return null
+  // 新消息到来时自动跟随到最新窗口（像聊天软件自动滚到底部）。
+  // 用户滚轮上滑看旧消息后，下一条新消息会把它拉回最新。
+  useEffect(() => {
+    const max = Math.max(0, count - MAX_VISIBLE)
+    setScrollOffset(max)
+  }, [count])
+
+  if (count < 3) return null
+
+  const maxOffset = Math.max(0, count - MAX_VISIBLE)
+  const clampedOffset = Math.min(scrollOffset, maxOffset)
 
   // 动态点大小:消息越多点越小 (4px ~ 8px)
-  const count = userMsgs.length
   const dotSize = count > 30 ? 4 : count > 15 ? 5 : count > 8 ? 6 : 8
 
-  // hover 时记录鼠标 Y (相对于视口),用于定位预览气泡
+  // 可见窗口
+  const visibleCount = Math.min(count, MAX_VISIBLE)
+  const visibleMsgs = userMsgs.slice(clampedOffset, clampedOffset + visibleCount)
+  const hasMoreAbove = clampedOffset > 0
+  const hasMoreBelow = clampedOffset < maxOffset
+
+  // hover 时记录鼠标 Y (相对于点条容器),用于定位预览气泡
   const handleMouseMove = (e: React.MouseEvent) => {
-    setMouseY(e.clientY)
+    const navRect = navRef.current?.getBoundingClientRect()
+    setMouseY(navRect ? e.clientY - navRect.top : e.clientY)
   }
 
   return (
     <>
-      {/* hover 预览气泡 — 跟随鼠标 Y 位置,显示在点条右侧 */}
-      {hoverMsg && (
-        <div
-          className="fixed z-50 bg-[var(--content-bg)] border border-[var(--border)] rounded-xl shadow-elevated p-2.5 text-xs max-w-[240px] pointer-events-none transition-opacity duration-100"
-          style={{
-            top: mouseY,
-            left: '36px',
-            transform: 'translateY(-50%)',
-          }}
-        >
-          <span className="text-[10px] font-medium block mb-0.5" style={{ color: 'var(--accent)' }}>
-            你 · #{userMsgs.findIndex(m => m.id === hoverMsg.id) + 1}
-          </span>
-          <span className="block leading-relaxed" style={{ color: 'var(--text-primary)' }}>
-            {hoverMsg.content.slice(0, 120)}{hoverMsg.content.length > 120 ? '…' : ''}
-          </span>
-        </div>
-      )}
-
-      {/* 导航点条 — 固定在左侧,滚轮转发到消息列表 */}
+      {/* 导航点条 — 固定在左侧,滚轮滑动自身窗口。作为 tooltip 的定位容器 */}
       <div
         ref={navRef}
         onMouseMove={handleMouseMove}
@@ -85,8 +91,21 @@ export default function MessageNav({
           className="absolute left-1/2 top-2 bottom-2 -translate-x-1/2"
           style={{ width: '1px', backgroundColor: 'var(--border)', opacity: 0.5 }}
         />
-        {/* 点 — 紧凑分布,不按百分比铺满 */}
-        {userMsgs.map((msg, idx) => {
+        {/* 顶部渐变指示:上面还有更多点 */}
+        {hasMoreAbove && (
+          <div
+            className="absolute left-1/2 top-1 -translate-x-1/2 pointer-events-none"
+            style={{
+              width: '0', height: '0',
+              borderLeft: '4px solid transparent',
+              borderRight: '4px solid transparent',
+              borderTop: '5px solid var(--text-muted)',
+              opacity: 0.5,
+            }}
+          />
+        )}
+        {/* 可见点 — 紧凑分布在可见窗口内 */}
+        {visibleMsgs.map((msg, idx) => {
           const isActive = activeId === msg.id
           return (
             <button
@@ -96,7 +115,7 @@ export default function MessageNav({
               onMouseLeave={() => setHoverId(null)}
               className="absolute left-1/2 rounded-full transition-all duration-150 hover:scale-200"
               style={{
-                top: `calc(50% + ${(idx - (count - 1) / 2) * (dotSize + 4)}px)`,
+                top: `calc(50% + ${(idx - (visibleCount - 1) / 2) * (dotSize + 4)}px)`,
                 transform: 'translate(-50%, -50%)',
                 width: `${dotSize}px`,
                 height: `${dotSize}px`,
@@ -104,10 +123,42 @@ export default function MessageNav({
                 opacity: isActive ? 1 : 0.6,
                 boxShadow: isActive ? `0 0 6px var(--accent)` : 'none',
               }}
-              title={`消息 ${idx + 1}`}
             />
           )
         })}
+        {/* 底部渐变指示:下面还有更多点 */}
+        {hasMoreBelow && (
+          <div
+            className="absolute left-1/2 bottom-1 -translate-x-1/2 pointer-events-none"
+            style={{
+              width: '0', height: '0',
+              borderLeft: '4px solid transparent',
+              borderRight: '4px solid transparent',
+              borderBottom: '5px solid var(--text-muted)',
+              opacity: 0.5,
+            }}
+          />
+        )}
+        {/* hover 预览气泡 — 相对点条定位,显示在右侧,宽度随内容自适应 */}
+        {hoverMsg && (
+          <div
+            className="absolute z-50 bg-[var(--content-bg)] border border-[var(--border)] rounded-xl shadow-elevated p-2.5 text-xs pointer-events-none transition-opacity duration-100"
+            style={{
+              top: mouseY,
+              left: '100%',
+              marginLeft: '8px',
+              transform: 'translateY(-50%)',
+              maxWidth: '220px',
+              width: 'max-content',
+              wordBreak: 'break-word',
+              whiteSpace: 'normal',
+            }}
+          >
+            <span className="block leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+              {hoverMsg.content.slice(0, 120)}{hoverMsg.content.length > 120 ? '…' : ''}
+            </span>
+          </div>
+        )}
       </div>
     </>
   )
