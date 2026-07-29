@@ -76,10 +76,10 @@ export default function McpSettings() {
 
       {showAdd && (
         <div className="mb-4 p-3 rounded-lg space-y-2" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('mcp.name_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none bg-white" style={{ borderColor: 'var(--border)' }} />
-          <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder={t('mcp.command_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-white" style={{ borderColor: 'var(--border)' }} />
-          <input value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} placeholder={t('mcp.args_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-white" style={{ borderColor: 'var(--border)' }} />
-          <input value={form.env} onChange={(e) => setForm({ ...form, env: e.target.value })} placeholder={t('mcp.env_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-white" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('mcp.name_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder={t('mcp.command_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} placeholder={t('mcp.args_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.env} onChange={(e) => setForm({ ...form, env: e.target.value })} placeholder={t('mcp.env_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
           <div className="flex gap-2">
             <button onClick={handleAdd} disabled={busy === 'new'} className="px-3 py-1.5 text-xs bg-black text-white rounded-lg hover:opacity-80 disabled:opacity-40">{t('mcp.add_btn')}</button>
             <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 text-xs rounded-lg border" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
