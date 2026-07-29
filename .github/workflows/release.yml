@@ -43,6 +43,18 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
         run: npm install
 
+      # Sync package.json version with the git tag (strip leading 'v').
+      # Without this, electron-builder uses the package.json version and may
+      # collide with an existing Release (e.g. tag v0.5.16 but version still
+      # 0.5.15 → "existing release published more than 2 hours ago" skip).
+      - name: Sync package.json version with tag
+        working-directory: app
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "Syncing package.json version to $TAG"
+          node -e "const fs=require('fs');const p=require('./package.json');p.version='${TAG}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "version=$TAG" >> $GITHUB_ENV
+
       - name: Build renderer (Vite)
         working-directory: app
         run: npm run build

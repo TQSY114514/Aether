@@ -16,7 +16,7 @@ asar: true
 publish:
   provider: github
   owner: TQSY114514
-  repo: AetherAI
+  repo: Aether
   releaseType: release
   vPrefixedTagName: true
 
