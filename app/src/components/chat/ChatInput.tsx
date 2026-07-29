@@ -466,15 +466,18 @@ function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 
 // Agent mode selector (Claude Code / Cline-style): a compact toggle group in
 // the input bar showing the current permission level. Each mode has a distinct
 // color so the user always knows how much freedom the agent has.
-const AGENT_MODES: { value: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; label: string; color: string; tooltip: string }[] = [
-  { value: 'off', label: t('agent.mode.off'), color: 'var(--text-muted)', tooltip: t('agent.mode.off.desc') },
-  { value: 'plan', label: t('agent.mode.plan'), color: '#3b82f6', tooltip: t('agent.mode.plan.desc') },
-  { value: 'ask', label: t('agent.mode.ask'), color: 'var(--accent)', tooltip: t('agent.mode.ask.desc') },
-  { value: 'auto_confirm', label: t('agent.mode.auto_confirm'), color: '#f59e0b', tooltip: t('agent.mode.auto_confirm.desc') },
-  { value: 'auto', label: t('agent.mode.auto'), color: '#f97316', tooltip: t('agent.mode.auto.desc') },
-  { value: 'yolo', label: t('agent.mode.yolo'), color: 'var(--error)', tooltip: t('agent.mode.yolo.desc') },
-]
 function AgentModeSelector({ mode, onChange }: { mode: string; onChange: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void }) {
+  // Subscribe to language so t() re-evaluates when the user switches language.
+  const language = useStore((s) => s.language)
+  const AGENT_MODES = useMemo(() => [
+    { value: 'off', label: t('agent.mode.off'), color: 'var(--text-muted)', tooltip: t('agent.mode.off.desc') },
+    { value: 'plan', label: t('agent.mode.plan'), color: '#3b82f6', tooltip: t('agent.mode.plan.desc') },
+    { value: 'ask', label: t('agent.mode.ask'), color: 'var(--accent)', tooltip: t('agent.mode.ask.desc') },
+    { value: 'auto_confirm', label: t('agent.mode.auto_confirm'), color: '#f59e0b', tooltip: t('agent.mode.auto_confirm.desc') },
+    { value: 'auto', label: t('agent.mode.auto'), color: '#f97316', tooltip: t('agent.mode.auto.desc') },
+    { value: 'yolo', label: t('agent.mode.yolo'), color: 'var(--error)', tooltip: t('agent.mode.yolo.desc') },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [language])
   const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[2]
   return (
     <div className="flex items-center gap-0.5">

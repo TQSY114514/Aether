@@ -698,59 +698,64 @@ export const useStore = create<AppState>((set, get) => ({
     const st0 = get()
     const sid0 = st0.currentSessionId
     // Snapshot the streaming buffer BEFORE calling chat.stop — the backend's
-    // abort handler will fire a done:true chunk whose listener deletes the
-    // buffer concurrently. We capture content first so it can never be lost.
+    // abort handler will fire a done:true chunk. Set the stopping flag so the
+    // chunk listener's rAF callback skips its own reload/delete (which races
+    // with us and can drop content via the optimistic guard).
     const preservedContent = (sid0 ? st0.streamingBySession[sid0]?.content : '') ?? ''
     const preservedMsgId = sid0 ? st0.streamingBySession[sid0]?.messageId : null
-    if (sid0) await window.electronAPI.chat.stop(sid0)
-    await window.electronAPI.arena.stop().catch(() => {})
-    set({ sending: false })
+    _stoppingSessionId = sid0
+    try {
+      if (sid0) await window.electronAPI.chat.stop(sid0)
+      await window.electronAPI.arena.stop().catch(() => {})
+      set({ sending: false })
 
-    const st = get()
-    const current = st.currentSessionId
-    if (!current) return
-    // Preserve whatever has been streamed so far. The backend writes the
-    // accumulated content to the DB on abort, so a DB reload should contain
-    // the assistant message — but the 3s optimistic-message guard in the chunk
-    // listener blocks that reload right after sending. To guarantee the user
-    // sees their partial output, inject a synthetic assistant message from
-    // the buffer snapshot if none is present yet.
-    const hasAssistantTail = [...st.messages].reverse().some(m =>
-      m.session_id === current && m.role === 'assistant')
-    if (preservedContent && !hasAssistantTail) {
-      const tempAssistant: Message = {
-        id: preservedMsgId ?? Date.now(),
-        session_id: current,
-        role: 'assistant',
-        content: preservedContent,
-        model_used: null, provider_used: null,
-        token_count: null, latency_ms: null,
-        status: 'aborted', error_message: null,
-        created_at: new Date().toISOString(),
-      }
-      set((s) => ({ messages: [...s.messages, tempAssistant] }))
+      const current = get().currentSessionId
+      if (!current) return
+
+      // Backend abort handler writes the accumulated content to DB. Reload to
+      // get the authoritative state. If the DB row is missing or empty (race
+      // or backend didn't persist), fall back to the preserved buffer content
+      // so the user never loses what was streamed.
+      try {
+        const messages = await window.electronAPI.message.list(current)
+        if (get().currentSessionId === current) {
+          const dbAssistant = preservedMsgId != null
+            ? messages.find(m => m.id === preservedMsgId && m.role === 'assistant')
+            : [...messages].reverse().find(m => m.session_id === current && m.role === 'assistant')
+          if (dbAssistant && dbAssistant.content) {
+            // DB has the partial content — trust it (carries model metadata).
+            set({ messages })
+          } else if (preservedContent) {
+            // DB missing content — inject synthetic with preserved content,
+            // replacing any empty assistant row the backend may have written.
+            const filtered = preservedMsgId != null
+              ? messages.filter(m => m.id !== preservedMsgId)
+              : messages
+            const tempAssistant: Message = {
+              id: preservedMsgId ?? Date.now(),
+              session_id: current,
+              role: 'assistant',
+              content: preservedContent,
+              model_used: null, provider_used: null,
+              token_count: null, latency_ms: null,
+              status: 'aborted', error_message: null,
+              created_at: new Date().toISOString(),
+            }
+            set({ messages: [...filtered, tempAssistant] })
+          } else {
+            set({ messages })
+          }
+        }
+      } catch {}
+    } finally {
+      _stoppingSessionId = null
     }
-    // Now safe to drop the streaming buffer.
+    // Clean up streaming buffer (idempotent — rAF may have skipped this).
     set((s) => {
       const next = { ...s.streamingBySession }
-      if (current) delete next[current]
+      if (sid0) delete next[sid0]
       return { streamingBySession: next }
     })
-    // Best-effort DB reload to reconcile the synthetic message with the real
-    // persisted one (which may carry model_used/provider_used metadata).
-    // We bypass the optimistic guard here because the stop flow must reflect
-    // the DB's final state for the current session.
-    try {
-      const { messages } = await window.electronAPI.message.list(current)
-      if (get().currentSessionId === current) {
-        // If DB already has the assistant message, trust it; otherwise keep
-        // the synthetic one with preserved content.
-        const dbHasAssistant = messages.some(m => m.session_id === current && m.role === 'assistant')
-        if (dbHasAssistant) {
-          set({ messages })
-        }
-      }
-    } catch {}
   },
 
   regenerate: async () => {
@@ -1120,6 +1125,11 @@ let _toolCallListenerInstalled = false
 let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
 let _autoThemeCleanup: (() => void) | null = null
+// Set by stopGeneration so the chunk listener's done:rAF callback knows NOT to
+// reload/delete — stopGeneration handles cleanup itself. Without this, the rAF
+// callback races with stopGeneration: it can skip the DB reload (optimistic
+// guard) but still delete the streaming buffer, causing content to vanish.
+let _stoppingSessionId: number | null = null
 
 function ensureToolCallListener() {
   if (_toolCallListenerInstalled) return
@@ -1199,6 +1209,11 @@ function ensureChunkListener() {
       requestAnimationFrame(() => {
         // Fetch the current state at this point to determine what to update.
         const st = useStore.getState()
+        // If stopGeneration is handling this session, skip our own reload &
+        // buffer cleanup — stopGeneration owns the full flow and will do a
+        // more thorough job (preserving partial content). We only handle
+        // side effects (notifications, session list refresh, queue).
+        const isStopping = _stoppingSessionId === sid
         // Fire completion notification ONLY if the completed session is not
         // the one the user is currently viewing.
         if (st.currentSessionId !== sid) {
@@ -1210,7 +1225,7 @@ function ensureChunkListener() {
         // Reload messages from DB — only for the current session.
         // Guard against overwriting optimistic user messages that haven't
         // reached the DB yet (same 3s guard as loadMessages).
-        if (st.currentSessionId === sid) {
+        if (st.currentSessionId === sid && !isStopping) {
           const now = Date.now()
           const hasRecentOptimistic = st.messages.some(m =>
             m.session_id === sid && m.role === 'user' &&
@@ -1227,12 +1242,15 @@ function ensureChunkListener() {
         useStore.getState().pinSession(sid, 0).catch(() => {})
         useStore.getState().loadSessions()
         // Clean up streaming buffer after DB reload so there's no flicker.
-        useStore.setState((s) => {
-          const next = { ...s.streamingBySession }
-          delete next[sid]
-          const cur = useStore.getState().currentSessionId
-          return { streamingBySession: next, sending: !!(cur && next[cur]) }
-        })
+        // Skip when stopGeneration is handling it (it manages its own cleanup).
+        if (!isStopping) {
+          useStore.setState((s) => {
+            const next = { ...s.streamingBySession }
+            delete next[sid]
+            const cur = useStore.getState().currentSessionId
+            return { streamingBySession: next, sending: !!(cur && next[cur]) }
+          })
+        }
         // Process queued messages — only when no sessions are streaming.
         const st2 = useStore.getState()
         if (st2.queuedMessages.length > 0 && Object.keys(st2.streamingBySession).length === 0) {
