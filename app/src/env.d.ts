@@ -132,6 +132,17 @@ interface Window {
       stats: () => Promise<{ name: string; totalUses: number; successes: number; successRate: number; lastResult: boolean }[]>
       record: (name: string, success: boolean) => Promise<{ ok: boolean }>
       autoDraft: (name: string, description?: string) => Promise<{ ok: boolean; error?: string }>
+      getUsage: () => Promise<{ name: string; use_count: number; last_used_at: string | null; state: string; pinned: number; created_by: string; patch_count: number; last_viewed_at: string | null; archived_at: string | null }[]>
+      updateState: (name: string, state: string) => Promise<{ ok: boolean }>
+      pin: (name: string, pinned: boolean) => Promise<{ ok: boolean }>
+    }
+    search: {
+      messages: (query: string, sessionId?: number) => Promise<{ id: number; session_id: number; role: string; content: string; model_used: string | null; created_at: string; session_title?: string; terms?: string[] }[]>
+    }
+    moa: {
+      getPresets: () => Promise<{ id: number; name: string; description: string; references_config: string; aggregator_model_id: number; enabled: number; created_at: string }[]>
+      addPreset: (name: string, description: string, references: { model_id: number }[], aggregatorModelId: number) => Promise<{ lastInsertRowid: number }>
+      deletePreset: (id: number) => Promise<void>
     }
     commands: {
       list: () => Promise<{ id: string; name: string; description: string; prompt: string }[]>
@@ -145,6 +156,7 @@ interface Window {
       onUpdateDownloaded: (cb: (p: { version: string }) => void) => () => void
       onProgress: (cb: (p: { percent: number }) => void) => () => void
       onUpToDate: (cb: (p: { version: string }) => void) => () => void
+      onError: (cb: (p: { message: string }) => void) => () => void
     }
     usage: {
       stats: (range?: { since?: string; until?: string }) => Promise<{ requests: number; prompt_tokens: number; completion_tokens: number; total_tokens: number; cache_read_tokens: number; cache_creation_tokens: number; cost: number; latency_avg: number }>

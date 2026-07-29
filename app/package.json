@@ -1,6 +1,6 @@
 {
   "name": "aetherai",
-  "version": "0.5.15",
+  "version": "0.5.17",
   "description": "AetherAI - Multi-provider AI aggregation client",
   "author": "TQSY114514",
   "main": "electron/main.js",
@@ -17,6 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.9",
     "electron-updater": "^6.8.9",
     "highlight.js": "^11.11.1",
     "lucide-react": "^0.400.0",

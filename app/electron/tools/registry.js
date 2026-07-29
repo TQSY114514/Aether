@@ -846,6 +846,39 @@ const TOOLS = [
       return lines.join('\n')
     },
   },
+  // ─── Subagent delegation (OpenCode/Hermes-inspired) ──────────────────────
+  // Spawn an isolated child session for complex multi-step tasks. The sub-agent
+  // runs in plan mode (read-only) with its own context and returns a text summary.
+  // Prevents main-context bloat on long investigation tasks.
+  {
+    name: 'task',
+    description: 'Delegate a complex sub-task to an isolated sub-agent with its own context. The sub-agent can use read-only tools (read_file, glob, grep, web_search) to investigate, then returns a concise summary. Use this for multi-step research or exploration that would bloat the main conversation. Do NOT use for simple single-file reads — use read_file directly for those.',
+    parameters: {
+      type: 'object',
+      properties: {
+        description: { type: 'string', description: 'A short label for the delegated task (e.g. "Explore auth module structure").' },
+        prompt: { type: 'string', description: 'The full task prompt for the sub-agent. Be specific about what to investigate or do.' },
+      },
+      required: ['prompt'],
+    },
+    risk: 'dangerous', // spawns a child agent with tool access
+    executionMode: 'sequential',
+    run: async (args, ctx) => {
+      const { prompt } = args
+      if (!prompt) throw new Error('prompt is required')
+      const { runSubagent } = require('../llm/subagent')
+      const result = await runSubagent({
+        db: ctx.db,
+        parentSessionId: ctx.sessionId,
+        provider: ctx.provider,
+        model: ctx.model,
+        prompt,
+        signal: ctx.signal,
+        agentMode: ctx.agentMode,
+      })
+      return result
+    },
+  },
 ]
 
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;

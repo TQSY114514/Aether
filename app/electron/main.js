@@ -223,6 +223,14 @@ function setupIpcHandlers() {
   registerSkillsHandlers(ipcMain, db)
   const { registerUsageHandlers } = require('./ipc/usage.handler')
   registerUsageHandlers(ipcMain, db)
+  // Search (FTS5) handler
+  try { require('./ipc/search.handler').registerSearchHandlers(ipcMain, db) } catch (e) { log.warn('search handler failed:', e.message) }
+  // MoA preset CRUD
+  ipcMain.handle('moa:getPresets', () => { try { return db.getMoaPresets() } catch { return [] } })
+  ipcMain.handle('moa:addPreset', (_e, { name, description, references, aggregatorModelId }) => {
+    try { return db.addMoaPreset({ name, description, references_config: references, aggregator_model_id: aggregatorModelId }) } catch (e) { return { error: e.message } }
+  })
+  ipcMain.handle('moa:deletePreset', (_e, id) => { try { db.deleteMoaPreset(id) } catch {} })
 }
 
 app.whenReady().then(async () => {
@@ -239,6 +247,11 @@ app.whenReady().then(async () => {
     (async () => {
       try { const { scanSkills } = require('./llm/skills'); scanSkills() }
       catch (e) { log.warn('skill scan failed:', e.message) }
+    })(),
+    // Skill curator: run automatic state transitions on startup (idle trigger).
+    (async () => {
+      try { require('./llm/curator').maybeRunCurator(db) }
+      catch (e) { log.warn('curator init failed:', e.message) }
     })(),
     (async () => {
       try { require('./llm/hooks').scanHooks() }
