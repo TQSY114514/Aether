@@ -310,14 +310,14 @@ export default function ChatInput() {
   }, [input, isStreaming, showSlash, pending.length, snippets.length])
 
   return (
-    <div className="border-t border-[var(--border)] bg-white px-4 py-2.5"
+    <div className="border-t border-[var(--border)] bg-[var(--content-bg)] px-4 py-2.5"
       ref={dropZoneRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}>
       <div className="max-w-3xl mx-auto">
         {dragOver && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 animate-blur-fade pointer-events-none">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-blur-fade pointer-events-none">
             <div className="rounded-2xl border-2 border-dashed border-white/50 bg-white/10 backdrop-blur-md px-8 py-6 text-center">
               <Paperclip size={32} className="text-white/80 mx-auto mb-2" />
               <p className="text-white text-sm font-medium">{t('chat.drag_drop_hint')}</p>
@@ -394,7 +394,7 @@ export default function ChatInput() {
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2.5 rounded-xl bg-black text-white hover:opacity-80 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')}>
+              className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')}>
               <Send size={14} />
             </button>
           )}
@@ -548,7 +548,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
           const model = allModels.find(m => m.id === mid)
           if (model) onSelect(mid, model.provider_id)
         }}
-        className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-white"
+        className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-[var(--content-bg)]"
         style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         title={modelSuggestion ? modelSuggestion.reason : t('chat.model_switch')}>
         <option value="" disabled>{t('chat.select_model')}</option>

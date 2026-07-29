@@ -106,7 +106,8 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
         style={{ maxWidth: `${isUser ? Math.min(bubbleWidth, 85) : bubbleWidth}%` }}>
         {!isUser && (
           <div className="flex items-center gap-2 mb-1.5 px-1">
-            <div className="w-6 h-6 rounded-full bg-black flex items-center justify-center shrink-0">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }}>
               <span className="text-white text-[10px] font-medium">AI</span>
             </div>
             <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
@@ -131,7 +132,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
             ? 'bg-red-50 border border-red-200 text-red-700 rounded-bl-md'
             : 'border rounded-bl-md hover:shadow-soft'
         }`} style={isUser
-          ? { backgroundColor: 'var(--accent)' }
+          ? { background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }
           : isError ? undefined
           : { backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}>
           {!isUser && todos && todos.length > 0 && (
@@ -177,9 +178,9 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           ) : renderContent(message.content)}
           {isStreaming && (
             <span className="inline-flex items-center gap-0.5 ml-0.5 mt-1">
-              <span className="w-1 h-1 rounded-full bg-black/40 animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1 h-1 rounded-full bg-black/40 animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1 h-1 rounded-full bg-black/40 animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
             </span>
           )}
           {isError && message.error_message && (
@@ -195,11 +196,11 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
               {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.copy')}>
+          <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors" title={t('chat.copy')}>
             {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} style={{ color: 'var(--text-muted)' }} />}
           </button>
           {isUser && !isStreaming && !editing && (
-            <button onClick={startEdit} disabled={sending} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors disabled:opacity-30" title={t('chat.edit')}>
+            <button onClick={startEdit} disabled={sending} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-30" title={t('chat.edit')}>
               <Pencil size={12} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}

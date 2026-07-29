@@ -24,7 +24,8 @@
   --shadow-card: 0 1px 4px rgba(0,0,0,0.06);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
   --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
-  --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --shadow-xl: 0 12px 32px rgba(0,0,0,0.14);
+  --font-sans: 'Inter', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -66,8 +67,11 @@ pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; opacity: 0.4; transition: background 0.15s; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* Placeholder color adapts to theme */
+::placeholder { color: var(--text-muted); opacity: 0.7; }
 
 /* ── Magic UI animations (zero-dep, CSS-only) ───────────────────────────────
    BlurFade: mount entrance — fade in + blur out, used on message bubbles
@@ -125,6 +129,15 @@ pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
 .message-enter { animation: springUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 .cursor-blink { animation: blink 0.8s step-end infinite; }
 
+/* Typing indicator dots — gentle wave instead of jarring bounce */
+@keyframes typing-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+.typing-dot { animation: typing-dot 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
 /* Effort slider — slim track + pill thumb (Claude-Code-style).
    The filled portion uses a soft accent tint, the thumb is a solid accent pill. */
 .effort-slider {
@@ -164,9 +177,9 @@ pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
 .hover-lift:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
 /* Context bar */
-.ctx-safe { background: linear-gradient(90deg, #2563EB, #3B82F6); }
-.ctx-warn { background: linear-gradient(90deg, #F59E0B, #F97316); }
-.ctx-danger { background: linear-gradient(90deg, #EF4444, #DC2626); }
+.ctx-safe { background: linear-gradient(90deg, var(--accent), var(--accent-hover)); }
+.ctx-warn { background: linear-gradient(90deg, var(--warning), #F97316); }
+.ctx-danger { background: linear-gradient(90deg, var(--error), #DC2626); }
 
 /* Input */
 .input-ring:focus-within {
@@ -187,11 +200,11 @@ pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
 .slash-menu {
   position: absolute;
   bottom: 100%; left: 0; margin-bottom: 8px;
-  width: 220px;
-  background: white;
+  width: 240px;
+  background: var(--content-bg, var(--bg-primary));
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-xl);
   overflow: hidden;
   animation: scaleIn 0.12s ease-out;
   transform-origin: bottom left;
@@ -225,11 +238,8 @@ pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
 .shadow-card-hover:hover { box-shadow: var(--shadow-md); }
 
 /* Markdown rendered content */
-.mc pre { background: #f5f5f5; border: 1px solid #eee; border-radius: 5px; padding: 10px; margin: 6px 0; overflow-x: auto; font-size: 12px; }
-.mc code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
-.mc table { border-collapse: collapse; margin: 6px 0; width: 100%; }
-.mc td, .mc th { border: 1px solid #ddd; padding: 4px 8px; font-size: 12px; }
-.mc th { background: var(--bg-secondary); }
+.mc pre { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 5px; padding: 10px; margin: 6px 0; overflow-x: auto; font-size: 12px; }
+.mc code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .mc p { margin: 4px 0; }
 .mc ul, .mc ol { padding-left: 20px; margin: 4px 0; }
 .mc blockquote { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--text-secondary); margin: 6px 0; }
