@@ -196,21 +196,21 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
               {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors" title={t('chat.copy')}>
+          <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors" title={t('chat.copy')} aria-label={t('chat.copy')}>
             {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} style={{ color: 'var(--text-muted)' }} />}
           </button>
           {isUser && !isStreaming && !editing && (
-            <button onClick={startEdit} disabled={sending} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-30" title={t('chat.edit')}>
+            <button onClick={startEdit} disabled={sending} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-30" title={t('chat.edit')} aria-label={t('chat.edit')}>
               <Pencil size={12} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}
           {!isUser && !isStreaming && !isError && (
-            <button className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.regenerate')} onClick={() => regenerate()}>
+            <button className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.regenerate')} aria-label={t('chat.regenerate')} onClick={() => regenerate()}>
               <RefreshCw size={12} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}
           {!isUser && isError && !isStreaming && (
-            <button className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] transition-colors" style={{ backgroundColor: 'var(--error)', color: '#fff' }} title={t('chat.retry')} onClick={() => regenerate()}>
+            <button className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] transition-colors" style={{ backgroundColor: 'var(--error)', color: '#fff' }} title={t('chat.retry')} aria-label={t('chat.retry')} onClick={() => regenerate()}>
               <RefreshCw size={11} />{t('chat.retry')}
             </button>
           )}

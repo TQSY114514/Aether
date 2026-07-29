@@ -32,12 +32,12 @@ const TOOL_META: Record<string, { icon: typeof FileText; labelKey: string }> = {
 }
 
 const RISK_TAG_LABELS: Record<string, string> = {
-  writes_files: '写入文件',
-  network_or_install: '联网/安装',
-  installs_deps: '安装依赖',
-  deletes_files: '删除文件',
-  long_process: '启动长进程',
-  read_only: '只读操作',
+  writes_files: t('risk.writes_files'),
+  network_or_install: t('risk.network_or_install'),
+  installs_deps: t('risk.installs_deps'),
+  deletes_files: t('risk.deletes_files'),
+  long_process: t('risk.long_process'),
+  read_only: t('risk.read_only'),
 }
 
 const SEVERITY_COLORS: Record<string, string> = {

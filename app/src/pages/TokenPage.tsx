@@ -35,6 +35,7 @@ export default function TokenPage() {
   const [byModel, setByModel] = useState<any[]>([])
   const [daily, setDaily] = useState<any[]>([])
   const [log, setLog] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const r = rangeToIso(range)
@@ -46,6 +47,7 @@ export default function TokenPage() {
       window.electronAPI.usage.log(r),
     ]).then(([s, p, m, d, l]) => {
       setStats(s); setByProvider(p || []); setByModel(m || []); setDaily(d || []); setLog(l || [])
+      setLoading(false)
     })
   }, [range])
 
@@ -61,6 +63,9 @@ export default function TokenPage() {
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      {loading ? (
+        <div className="p-8 text-center" style={{ color: 'var(--text-secondary)' }}>Loading...</div>
+      ) : (
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>📊 {t('tokens.title')}</h1>
@@ -163,6 +168,7 @@ export default function TokenPage() {
           )}
         </Section>
       </div>
+      )}
     </div>
   )
 }

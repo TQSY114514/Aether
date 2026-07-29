@@ -13,16 +13,16 @@ export default function ThinkingBlock({ text, collapsed: initialCollapsed }: Thi
   const [open, setOpen] = useState(!initialCollapsed)
 
   const preview = useMemo(() => {
-    const t = (text || '').trim()
-    if (!t) return ''
-    if (t.length <= 80) return t
-    return t.slice(0, 80) + '…'
+    const trimmed = (text || '').trim()
+    if (!trimmed) return ''
+    if (trimmed.length <= 80) return trimmed
+    return trimmed.slice(0, 80) + '…'
   }, [text])
 
   if (!text || !text.trim()) return null
 
-  const fullLabel = '思考过程'
-  const collapsedLabel = '已思考'
+  const fullLabel = t18n('thinking.full')
+  const collapsedLabel = t18n('thinking.collapsed')
 
   return (
     <div className="mb-2 rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>

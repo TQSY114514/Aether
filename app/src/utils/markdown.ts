@@ -74,27 +74,25 @@ function loadHljs() {
   return _hljsLoading
 }
 
-// ─── Single-slot memoization ────────────────────────────────────────────────
-let _cacheText: string | null = null
-let _cacheVersion = -1
-let _cacheHtml: string | null = null
+// ─── LRU memoization ────────────────────────────────────────────────────────
+// Cache up to MD_CACHE_SIZE rendered strings. The old single-slot cache only
+// remembered the last input, so alternating between two messages re-parsed
+// both on every render. LRU keeps hot messages cached.
+const _mdCache = new Map<string, { html: string; version: number }>()
+const MD_CACHE_SIZE = 16
 
 export function renderMarkdown(text: string): string {
   if (!text) return ''
-  if (text === _cacheText && _cacheVersion === _highlightVersion && _cacheHtml !== null) return _cacheHtml
-  if (_hljs) {
-    const t = renderInner(text, _hljs)
-    _cacheText = text
-    _cacheVersion = _highlightVersion
-    _cacheHtml = t
-    return t
+  const cached = _mdCache.get(text)
+  if (cached && cached.version === _highlightVersion) return cached.html
+  const html = _hljs
+    ? renderInner(text, _hljs)
+    : (() => { const t = renderInner(text, null); loadHljs(); return t })()
+  if (_mdCache.size >= MD_CACHE_SIZE) {
+    _mdCache.delete(_mdCache.keys().next().value!)
   }
-  const t = renderInner(text, null)
-  _cacheText = text
-  _cacheVersion = _highlightVersion
-  _cacheHtml = t
-  loadHljs()
-  return t
+  _mdCache.set(text, { html, version: _highlightVersion })
+  return html
 }
 
 // Map common shorthand language names to hljs language IDs.
