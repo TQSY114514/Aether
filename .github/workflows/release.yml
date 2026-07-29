@@ -59,11 +59,18 @@ jobs:
         working-directory: app
         run: npm run build
 
-      - name: Build & publish Windows artifacts
+      - name: Build Windows artifacts (no auto-publish to avoid duplicate Release creation)
         working-directory: app
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis portable --x64 --publish onTag
+        run: npx electron-builder --win nsis portable --x64 --publish never
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/release/*.exe
+            app/release/latest*.yml
+            app/release/*.blockmap
+          generate_release_notes: true
 
       # Safety net: upload artifacts even if publish fails.
       - name: Upload artifacts (safety net)
