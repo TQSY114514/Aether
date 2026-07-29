@@ -4,10 +4,10 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 :: Read version from package.json (works even if node_modules doesn't exist)
-for /f "tokens=2 delims=:," %%v in ('findstr /c:"\"version\"" app\package.json 2^>nul') do set VERSION=%%v
+for /f "tokens=2 delims=:," %%v in ('findstr /c:"version" app\package.json 2^>nul') do set VERSION=%%v
 set VERSION=%VERSION:"=%
 set VERSION=%VERSION: =%
-if "%VERSION%"=="" set VERSION=0.3.1
+if "%VERSION%"=="" set VERSION=0.5.19
 
 echo.
 echo   AetherAI v%VERSION%
