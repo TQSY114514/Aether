@@ -576,6 +576,310 @@ const TOOLS = [
     },
   },
   {
+    name: 'git_push',
+    description: 'Push local commits to the remote repository. DANGEROUS — pushes to remote. Requires the repo to have a configured remote. Uses `git push` (no --force).',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        remote: { type: 'string', description: 'Remote name (default "origin").' },
+        branch: { type: 'string', description: 'Branch to push. If omitted, uses current branch with upstream tracking.' },
+      },
+      required: ['cwd'],
+    },
+    run: async (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      const remote = String(args.remote || 'origin')
+      const branch = args.branch ? [String(args.branch)] : []
+      const { stdout, stderr, exitCode } = await runCommand('git', ['push', remote, ...branch], {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 60000,
+      })
+      if (exitCode !== 0) {
+        const out = (stdout || '') + (stderr || '')
+        if (/Everything up-to-date/i.test(out)) return 'Everything up-to-date (no pushes needed)'
+        throw new Error(stderr || `git push failed (exit ${exitCode})`)
+      }
+      return (stdout || stderr || 'pushed').trim()
+    },
+  },
+  {
+    name: 'git_create_branch',
+    description: 'Create and checkout a new git branch. DANGEROUS — modifies repo state.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        name: { type: 'string', description: 'New branch name (e.g. "feat/auth").' },
+        base: { type: 'string', description: 'Base branch to branch from (default: current HEAD).' },
+      },
+      required: ['cwd', 'name'],
+    },
+    run: async (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      const name = String(args.name || '').trim()
+      if (!name) throw new Error('name is required')
+      const baseArgs = args.base ? [String(args.base)] : []
+      const { stdout, stderr, exitCode } = await runCommand('git', ['checkout', '-b', name, ...baseArgs], {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 15000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `git checkout -b failed (exit ${exitCode})`)
+      return (stdout || stderr || `created branch ${name}`).trim()
+    },
+  },
+  // ─── GitHub CLI (gh) integration ────────────────────────────────────────
+  // These tools wrap `gh` commands, enabling the agent to manage PRs, Issues,
+  // Releases, and Actions. Requires the user to have `gh` CLI installed and
+  // authenticated (`gh auth login`). All gh tools are `risk: dangerous` except
+  // read-only ones.
+  {
+    name: 'github_pr_create',
+    description: 'Create a GitHub Pull Request using `gh pr create`. Requires gh CLI. DANGEROUS — creates a PR on the remote repo.',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo (must have a GitHub remote).' },
+        title: { type: 'string', description: 'PR title.' },
+        body: { type: 'string', description: 'PR description (markdown). Optional.' },
+        base: { type: 'string', description: 'Base branch (default: repo default, usually "master" or "main").' },
+        head: { type: 'string', description: 'Head branch (default: current branch).' },
+        draft: { type: 'boolean', description: 'Create as draft PR. Default false.' },
+      },
+      required: ['cwd', 'title'],
+    },
+    run: async (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      const ghArgs = ['pr', 'create', '--title', String(args.title)]
+      if (args.body) ghArgs.push('--body', String(args.body))
+      if (args.base) ghArgs.push('--base', String(args.base))
+      if (args.head) ghArgs.push('--head', String(args.head))
+      if (args.draft) ghArgs.push('--draft')
+      const { stdout, stderr, exitCode } = await runCommand('gh', ghArgs, {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 60000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `gh pr create failed (exit ${exitCode})`)
+      return (stdout || 'PR created').trim()
+    },
+  },
+  {
+    name: 'github_pr_list',
+    description: 'List open Pull Requests in the repo using `gh pr list`. Read-only. Requires gh CLI.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        limit: { type: 'number', description: 'Max PRs to return (default 10, max 30).' },
+        state: { type: 'string', description: 'PR state: "open" (default), "closed", "merged", "all".' },
+      },
+      required: ['cwd'],
+    },
+    run: async (args) => {
+      const cwd = String(args.cwd || '')
+      const limit = Math.min(Number(args.limit) || 10, 30)
+      const state = ['open', 'closed', 'merged', 'all'].includes(args.state) ? args.state : 'open'
+      const { stdout, stderr, exitCode } = await runCommand('gh', ['pr', 'list', '--state', state, '--limit', String(limit)], {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 30000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `gh pr list failed (exit ${exitCode})`)
+      return (stdout || '(no PRs)').trim()
+    },
+  },
+  {
+    name: 'github_pr_merge',
+    description: 'Merge a Pull Request using `gh pr merge`. DANGEROUS — merges the PR, modifying the base branch.',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        number: { type: 'number', description: 'PR number to merge.' },
+        method: { type: 'string', description: 'Merge method: "merge", "squash", or "rebase". Default "squash".' },
+        delete_branch: { type: 'boolean', description: 'Delete the head branch after merge. Default false.' },
+      },
+      required: ['cwd', 'number'],
+    },
+    run: async (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      const method = ['merge', 'squash', 'rebase'].includes(args.method) ? args.method : 'squash'
+      const ghArgs = ['pr', 'merge', String(args.number), '--' + method]
+      if (args.delete_branch) ghArgs.push('--delete-branch')
+      const { stdout, stderr, exitCode } = await runCommand('gh', ghArgs, {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 60000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `gh pr merge failed (exit ${exitCode})`)
+      return (stdout || `PR #${args.number} merged`).trim()
+    },
+  },
+  {
+    name: 'github_issue_create',
+    description: 'Create a GitHub Issue using `gh issue create`. DANGEROUS — creates an issue. Requires gh CLI.',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        title: { type: 'string', description: 'Issue title.' },
+        body: { type: 'string', description: 'Issue body (markdown). Optional.' },
+        labels: { type: 'string', description: 'Comma-separated labels (e.g. "bug,enhancement"). Optional.' },
+        assignee: { type: 'string', description: 'GitHub username to assign. Optional.' },
+      },
+      required: ['cwd', 'title'],
+    },
+    run: async (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      const ghArgs = ['issue', 'create', '--title', String(args.title)]
+      if (args.body) ghArgs.push('--body', String(args.body))
+      if (args.labels) ghArgs.push('--label', String(args.labels))
+      if (args.assignee) ghArgs.push('--assignee', String(args.assignee))
+      const { stdout, stderr, exitCode } = await runCommand('gh', ghArgs, {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `gh issue create failed (exit ${exitCode})`)
+      return (stdout || 'Issue created').trim()
+    },
+  },
+  {
+    name: 'github_issue_list',
+    description: 'List Issues in the repo using `gh issue list`. Read-only. Requires gh CLI.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        limit: { type: 'number', description: 'Max issues (default 10, max 30).' },
+        state: { type: 'string', description: 'State: "open" (default), "closed", "all".' },
+        labels: { type: 'string', description: 'Filter by comma-separated labels.' },
+      },
+      required: ['cwd'],
+    },
+    run: async (args) => {
+      const cwd = String(args.cwd || '')
+      const limit = Math.min(Number(args.limit) || 10, 30)
+      const state = ['open', 'closed', 'all'].includes(args.state) ? args.state : 'open'
+      const ghArgs = ['issue', 'list', '--state', state, '--limit', String(limit)]
+      if (args.labels) ghArgs.push('--label', String(args.labels))
+      const { stdout, stderr, exitCode } = await runCommand('gh', ghArgs, {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 30000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `gh issue list failed (exit ${exitCode})`)
+      return (stdout || '(no issues)').trim()
+    },
+  },
+  {
+    name: 'github_release_create',
+    description: 'Create a GitHub Release using `gh release create`. DANGEROUS — creates a release (and tag if missing). Requires gh CLI.',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        tag: { type: 'string', description: 'Tag name (e.g. "v1.0.0"). Created if missing.' },
+        title: { type: 'string', description: 'Release title. Optional.' },
+        notes: { type: 'string', description: 'Release notes (markdown). Optional — auto-generated if omitted.' },
+        draft: { type: 'boolean', description: 'Create as draft. Default false.' },
+        prerelease: { type: 'boolean', description: 'Mark as prerelease. Default false.' },
+      },
+      required: ['cwd', 'tag'],
+    },
+    run: async (args, ctx) => {
+      const cwd = String(args.cwd || '')
+      if (ctx?.agentMode !== 'yolo') {
+        const guard = checkWritePath(cwd, ctx?.sessionId)
+        if (!guard.ok) throw new Error(guard.reason)
+      }
+      const ghArgs = ['release', 'create', String(args.tag)]
+      if (args.title) ghArgs.push('--title', String(args.title))
+      if (args.notes) ghArgs.push('--notes', String(args.notes))
+      if (args.draft) ghArgs.push('--draft')
+      if (args.prerelease) ghArgs.push('--prerelease')
+      const { stdout, stderr, exitCode } = await runCommand('gh', ghArgs, {
+        cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 60000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `gh release create failed (exit ${exitCode})`)
+      return (stdout || `Release ${args.tag} created`).trim()
+    },
+  },
+  {
+    name: 'github_actions_status',
+    description: 'Check GitHub Actions workflow run status using `gh run list`. Read-only. Requires gh CLI.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        limit: { type: 'number', description: 'Max runs (default 5, max 20).' },
+        workflow: { type: 'string', description: 'Filter by workflow name (e.g. "release.yml").' },
+      },
+      required: ['cwd'],
+    },
+    run: async (args) => {
+      const cwd = String(args.cwd || '')
+      const limit = Math.min(Number(args.limit) || 5, 20)
+      const ghArgs = ['run', 'list', '--limit', String(limit)]
+      if (args.workflow) ghArgs.push('--workflow', String(args.workflow))
+      const { stdout, stderr, exitCode } = await runCommand('gh', ghArgs, {
+        cwd: cwd || undefined, maxBuffer: 32 * 1024, timeout: 30000,
+      })
+      if (exitCode !== 0) throw new Error(stderr || `gh run list failed (exit ${exitCode})`)
+      return (stdout || '(no runs)').trim()
+    },
+  },
+  {
+    name: 'github_pr_review',
+    description: 'View PR review comments and CI checks using `gh pr view` + `gh pr checks`. Read-only. Requires gh CLI.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Absolute path to the git repo.' },
+        number: { type: 'number', description: 'PR number.' },
+      },
+      required: ['cwd', 'number'],
+    },
+    run: async (args) => {
+      const cwd = String(args.cwd || '')
+      // Combined: PR info + checks status
+      const [viewRes, checksRes] = await Promise.all([
+        runCommand('gh', ['pr', 'view', String(args.number), '--json', 'title,state,mergeable,reviewDecision,additions,deletions,changedFiles'], {
+          cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000,
+        }),
+        runCommand('gh', ['pr', 'checks', String(args.number)], {
+          cwd: cwd || undefined, maxBuffer: 16 * 1024, timeout: 30000,
+        }).catch(() => ({ stdout: '(checks unavailable)', stderr: '' })),
+      ])
+      if (viewRes.exitCode !== 0) throw new Error(viewRes.stderr || `gh pr view failed (exit ${viewRes.exitCode})`)
+      return `PR #${args.number}:\n${viewRes.stdout}\n\nChecks:\n${checksRes.stdout}`
+    },
+  },
+  {
     name: 'memory_save',
     description: 'Save a note to the app\'s persistent memory store. Use for facts the user wants remembered across conversations.',
     risk: 'safe',
