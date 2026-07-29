@@ -5,6 +5,7 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:      # 允许手动触发
   schedule:
     - cron: '0 6 * * 1'   # 每周一 06:00 UTC 定期扫描
 
