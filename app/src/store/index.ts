@@ -1223,27 +1223,43 @@ function ensureChunkListener() {
           }).catch(() => {})
         }
         // Reload messages from DB — only for the current session.
-        // Guard against overwriting optimistic user messages that haven't
-        // reached the DB yet (same 3s guard as loadMessages).
+        // When the stream is done, the DB has already been written (main process
+        // writes before sending done:true), so we always reload here. The old
+        // 3s optimistic guard caused fast replies to skip the reload, leaving the
+        // streaming bubble deleted but messages array stale → bubble vanished.
         if (st.currentSessionId === sid && !isStopping) {
-          const now = Date.now()
-          const hasRecentOptimistic = st.messages.some(m =>
-            m.session_id === sid && m.role === 'user' &&
-            (now - new Date(m.created_at).getTime()) < 3000
-          )
-          if (!hasRecentOptimistic) {
-            window.electronAPI.message.list(sid).then(msgs => {
-              if (useStore.getState().currentSessionId === sid) {
-                useStore.setState({ messages: msgs })
-              }
-            }).catch(() => {})
-          }
-        }
-        useStore.getState().pinSession(sid, 0).catch(() => {})
-        useStore.getState().loadSessions()
-        // Clean up streaming buffer after DB reload so there's no flicker.
-        // Skip when stopGeneration is handling it (it manages its own cleanup).
-        if (!isStopping) {
+          // IMPORTANT: clean up the streaming buffer ONLY after the DB reload
+          // completes. If we delete it synchronously here, the StreamingBubble
+          // disappears before the new messages array arrives, causing the
+          // "bubble vanishes then reappears on session switch" flicker.
+          window.electronAPI.message.list(sid).then(msgs => {
+            if (useStore.getState().currentSessionId === sid) {
+              useStore.setState((s) => {
+                const next = { ...s.streamingBySession }
+                delete next[sid]
+                const cur = useStore.getState().currentSessionId
+                return { messages: msgs, streamingBySession: next, sending: !!(cur && next[cur]) }
+              })
+            } else {
+              // User switched away — just clean up the buffer.
+              useStore.setState((s) => {
+                const next = { ...s.streamingBySession }
+                delete next[sid]
+                const cur = useStore.getState().currentSessionId
+                return { streamingBySession: next, sending: !!(cur && next[cur]) }
+              })
+            }
+          }).catch(() => {
+            // On error, still clean up the buffer so the UI isn't stuck.
+            useStore.setState((s) => {
+              const next = { ...s.streamingBySession }
+              delete next[sid]
+              const cur = useStore.getState().currentSessionId
+              return { streamingBySession: next, sending: !!(cur && next[cur]) }
+            })
+          })
+        } else if (!isStopping) {
+          // Not the current session — just clean up the buffer.
           useStore.setState((s) => {
             const next = { ...s.streamingBySession }
             delete next[sid]
@@ -1251,6 +1267,8 @@ function ensureChunkListener() {
             return { streamingBySession: next, sending: !!(cur && next[cur]) }
           })
         }
+        useStore.getState().pinSession(sid, 0).catch(() => {})
+        useStore.getState().loadSessions()
         // Process queued messages — only when no sessions are streaming.
         const st2 = useStore.getState()
         if (st2.queuedMessages.length > 0 && Object.keys(st2.streamingBySession).length === 0) {
