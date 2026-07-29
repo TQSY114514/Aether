@@ -74,27 +74,27 @@ export default function ModelPage() {
           <div className="mb-6 p-4 rounded-xl space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <input value={newProvider.name} onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
               placeholder={t('models.add_provider_name')}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-white"
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <input value={newProvider.api_url} onChange={(e) => setNewProvider({ ...newProvider, api_url: e.target.value })}
               placeholder={t('models.add_provider_url')}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-white"
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <input value={newProvider.api_key} onChange={(e) => setNewProvider({ ...newProvider, api_key: e.target.value })}
               placeholder={t('models.add_provider_key')} type="password"
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-white"
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <div className="flex items-center gap-2">
               <label className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>{t('models.api_format')}</label>
               <select value={newProvider.api_format} onChange={(e) => setNewProvider({ ...newProvider, api_format: e.target.value })}
-                className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+                className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                 <option value="openai">OpenAI (/chat/completions)</option>
                 <option value="anthropic">Anthropic (/messages)</option>
               </select>
             </div>
             <div className="flex gap-2">
               <button onClick={handleAddProvider} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80">{t('models.save')}</button>
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-white transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
+              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
             </div>
           </div>
         )}
@@ -116,7 +116,7 @@ export default function ModelPage() {
                       <Globe size={16} className="text-gray-400" />
                       {isEditing ? (
                         <input value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                          className="text-sm font-medium px-2 py-1 rounded border outline-none bg-white" style={{ borderColor: 'var(--accent)' }} />
+                          className="text-sm font-medium px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }} />
                       ) : (
                         <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{provider.name}</span>
                       )}
@@ -145,9 +145,9 @@ export default function ModelPage() {
                     {isEditing ? (
                       <>
                         <input value={editData.api_url} onChange={(e) => setEditData({ ...editData, api_url: e.target.value })}
-                          placeholder="API URL" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-white mb-2 font-mono" style={{ borderColor: 'var(--accent)' }} />
+                          placeholder="API URL" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)] mb-2 font-mono" style={{ borderColor: 'var(--accent)' }} />
                         <input value={editData.api_key} onChange={(e) => setEditData({ ...editData, api_key: e.target.value })}
-                          placeholder="API Key" type="password" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-white font-mono" style={{ borderColor: 'var(--accent)' }} />
+                          placeholder="API Key" type="password" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)] font-mono" style={{ borderColor: 'var(--accent)' }} />
                       </>
                     ) : (
                       <>
@@ -170,7 +170,7 @@ export default function ModelPage() {
                   <div className="flex gap-2 flex-wrap">
                     <Tooltip text={t('tooltip.model_test')}>
                       <button onClick={() => handleTest(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-white hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
                         style={{ borderColor: 'var(--border)' }}>
                         {testingId === provider.id ? <RefreshCw size={12} className="animate-spin" /> : <Wifi size={12} />}
                         {t('models.test')}
@@ -178,7 +178,7 @@ export default function ModelPage() {
                     </Tooltip>
                     <Tooltip text={t('tooltip.model_fetch')}>
                       <button onClick={() => handleFetchModels(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-white hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
                         style={{ borderColor: 'var(--border)' }}>
                         <RefreshCw size={12} />{t('models.fetch')}
                       </button>
@@ -224,7 +224,7 @@ export default function ModelPage() {
                     <div className="flex gap-2">
                       <input value={newModelName} onChange={(e) => setNewModelName(e.target.value)}
                         placeholder={t('models.add_model_name')} autoFocus
-                        className="flex-1 px-2 py-1 text-xs rounded border outline-none bg-white" style={{ borderColor: 'var(--accent)' }}
+                        className="flex-1 px-2 py-1 text-xs rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }}
                         onKeyDown={async (e) => {
                           if (e.key === 'Enter' && newModelName.trim()) {
                             await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })

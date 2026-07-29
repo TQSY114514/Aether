@@ -31,7 +31,10 @@ function UpdateCard() {
     })
     const off3 = window.electronAPI?.updater?.onProgress?.(({ percent }) => setPercent(Math.round(percent)))
     const off4 = window.electronAPI?.updater?.onUpToDate?.(() => setStatus('已是最新'))
-    return () => { off1?.(); off2?.(); off3?.(); off4?.() }
+    const off5 = window.electronAPI?.updater?.onError?.(({ message }) => {
+      setStatus('检查失败'); setBusy(false); toast(message, { type: 'error' })
+    })
+    return () => { off1?.(); off2?.(); off3?.(); off4?.(); off5?.() }
   }, [])
 
   const check = async () => {
@@ -137,8 +140,8 @@ export default function SettingPage() {
           <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>{t('settings.language')}</h2>
             <select value={language} onChange={(e) => setLanguage(e.target.value as any)}
-              className="w-full max-w-xs px-3 py-2 text-sm rounded-lg border outline-none bg-white"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+              className="w-full max-w-xs px-3 py-2 text-sm rounded-lg border outline-none"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-primary)', backgroundColor: 'var(--content-bg)' }}>
               {LANGS.map((l) => <option key={l.code} value={l.code}>{l.native} — {l.label}</option>)}
             </select>
           </div>
@@ -169,7 +172,7 @@ export default function SettingPage() {
                   : <ImageIcon size={20} className="text-gray-400" />}
               </div>
               <div className="flex gap-2">
-                <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-white hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
+                <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
                   style={{ borderColor: 'var(--border)' }}>
                   <ImageIcon size={12} />{t('settings.background.upload')}
                   <input type="file" accept="image/*" onChange={handleUpload} className="hidden" />
@@ -258,7 +261,7 @@ export default function SettingPage() {
                   <div className="flex items-center gap-2">
                     <input value={localTimeout} onChange={(e) => setLocalTimeout(e.target.value)}
                       type="number" min="5000" max="300000" step="5000"
-                      className="w-24 px-2 py-1 text-xs rounded-lg border outline-none bg-white text-right"
+                      className="w-24 px-2 py-1 text-xs rounded-lg border outline-none bg-[var(--content-bg)] text-right"
                       style={{ borderColor: 'var(--border)' }} />
                     <button onClick={handleSaveTimeout}
                       className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-black text-white hover:opacity-80 transition-opacity">

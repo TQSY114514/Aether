@@ -104,12 +104,12 @@ export default function SkillsSettings() {
       {/* Tab bar */}
       <div className="flex gap-1 mb-4 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
         <button onClick={() => setActiveTab('discover')}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'discover' ? 'bg-white shadow-sm' : ''}`}
+          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'discover' ? 'bg-[var(--content-bg)] shadow-sm' : ''}`}
           style={{ color: activeTab === 'discover' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
           <BookOpen size={12} />{t('settings.skills.tab_discover', '发现')}
         </button>
         <button onClick={() => setActiveTab('performance')}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'performance' ? 'bg-white shadow-sm' : ''}`}
+          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'performance' ? 'bg-[var(--content-bg)] shadow-sm' : ''}`}
           style={{ color: activeTab === 'performance' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
           <Trophy size={12} />{t('settings.skills.tab_performance', '成功率')}
         </button>

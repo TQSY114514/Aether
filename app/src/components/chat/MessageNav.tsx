@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Message } from '@/types'
 
 export default function MessageNav({
@@ -16,7 +16,7 @@ export default function MessageNav({
   return (
     <>
       {hoverMsg && (
-        <div className="fixed z-50 bg-white border border-[var(--border)] rounded-xl shadow-elevated p-2.5 text-xs max-w-[220px] pointer-events-none" style={{
+        <div className="fixed z-50 bg-[var(--content-bg)] border border-[var(--border)] rounded-xl shadow-elevated p-2.5 text-xs max-w-[220px] pointer-events-none" style={{
           top: '50%', right: '38px', transform: 'translateY(-50%)'
         }}>
           <span className="text-[10px] font-medium block mb-0.5" style={{ color: hoverMsg.role === 'user' ? 'var(--accent)' : 'var(--text-muted)' }}>

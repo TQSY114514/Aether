@@ -3,9 +3,9 @@ import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 
 const PRIORITY_OPTIONS = [
-  { value: 'quality', icon: '🎯', label: 'Quality' },
-  { value: 'speed', icon: '⚡', label: 'Speed' },
-  { value: 'cost', icon: '💰', label: 'Cost' },
+  { value: 'quality', icon: '🎯' },
+  { value: 'speed', icon: '⚡' },
+  { value: 'cost', icon: '💰' },
 ]
 
 export default function DefaultChatSettings() {
@@ -41,7 +41,7 @@ export default function DefaultChatSettings() {
           <select value={defaultModelId ?? ''} onChange={(e) => {
             const v = e.target.value ? Number(e.target.value) : null
             setDefaultModel(v)
-          }} className="px-2.5 py-1.5 text-xs rounded-lg border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+          }} className="px-2.5 py-1.5 text-xs rounded-lg border outline-none" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}>
             <option value="">{t('settings.default_model_none')}</option>
             {modelOptions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select>
@@ -52,7 +52,7 @@ export default function DefaultChatSettings() {
           <select value={defaultPersonaId ?? ''} onChange={(e) => {
             const v = e.target.value ? Number(e.target.value) : null
             setDefaultPersona(v)
-          }} className="px-2.5 py-1.5 text-xs rounded-lg border outline-none bg-white" style={{ borderColor: 'var(--border)' }}>
+          }} className="px-2.5 py-1.5 text-xs rounded-lg border outline-none" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}>
             <option value="">{t('chat.no_persona')}</option>
             {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -63,9 +63,9 @@ export default function DefaultChatSettings() {
           <div className="flex gap-2">
             {PRIORITY_OPTIONS.map(opt => (
               <button key={opt.value} onClick={() => setModelRoutingPriority(opt.value as any)}
-                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors ${modelRoutingPriority === opt.value ? 'bg-black text-white' : 'bg-white hover:bg-gray-50'}`}
-                style={modelRoutingPriority !== opt.value ? { borderColor: 'var(--border)', color: 'var(--text-secondary)' } : {}}>
-                {opt.icon} {opt.label}
+                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors ${modelRoutingPriority === opt.value ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
+                style={modelRoutingPriority !== opt.value ? { borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'var(--content-bg)' } : {}}>
+                {opt.icon} {t(`settings.routing_priority.${opt.value}`)}
               </button>
             ))}
           </div>

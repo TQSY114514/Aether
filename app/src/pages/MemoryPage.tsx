@@ -161,7 +161,7 @@ export default function MemoryPage() {
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border text-sm mb-4" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--content-bg)] border text-sm mb-4" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-gray-400 shrink-0" />
           <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索记忆..." className="w-full bg-transparent outline-none text-sm" />
           {searchQuery && (
@@ -174,7 +174,7 @@ export default function MemoryPage() {
         {/* Add new memory */}
         <div className="flex gap-2 mb-6">
           <select value={newType} onChange={e => setNewType(e.target.value)}
-            className="text-xs border rounded-lg px-2 py-2 outline-none bg-white shrink-0" style={{ borderColor: 'var(--border)' }}>
+            className="text-xs border rounded-lg px-2 py-2 outline-none bg-[var(--content-bg)] shrink-0" style={{ borderColor: 'var(--border)' }}>
             <option value="entity">Entity</option>
             <option value="fact">Fact</option>
             <option value="context">Context</option>
@@ -183,7 +183,7 @@ export default function MemoryPage() {
           <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)}
             placeholder={t('memory.add_placeholder')}
             rows={2}
-            className="flex-1 px-3 py-2 text-sm rounded-lg border outline-none resize-none bg-white"
+            className="flex-1 px-3 py-2 text-sm rounded-lg border outline-none resize-none bg-[var(--content-bg)]"
             style={{ borderColor: 'var(--border)' }}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAdd() } }} />
           <button onClick={handleAdd} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80 shrink-0 self-end">添加</button>
@@ -201,7 +201,7 @@ export default function MemoryPage() {
               {editingId === entry.id ? (
                 <div className="space-y-2">
                   <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
-                    rows={2} className="w-full px-2 py-1 text-sm rounded border outline-none resize-none bg-white"
+                    rows={2} className="w-full px-2 py-1 text-sm rounded border outline-none resize-none bg-[var(--content-bg)]"
                     style={{ borderColor: 'var(--accent)' }} />
                   <div className="flex gap-2">
                     <button onClick={() => handleEdit(entry.id)} className="px-3 py-1 bg-black text-white text-xs rounded-lg">保存</button>

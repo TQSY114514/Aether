@@ -169,7 +169,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
             <div className="space-y-2">
               <textarea value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit() } if (e.key === 'Escape') setEditing(false) }}
-                rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg border outline-none resize-none bg-white" style={{ borderColor: 'var(--accent)' }} />
+                rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg border outline-none resize-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }} />
               <div className="flex gap-2">
                 <button onClick={submitEdit} disabled={sending || !draft.trim()} className="px-3 py-1 text-xs rounded-lg text-white disabled:opacity-40 transition-opacity" style={{ backgroundColor: 'var(--accent)' }}>{t('chat.edit.submit')}</button>
                 <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('chat.cancel')}</button>
