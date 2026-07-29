@@ -31,6 +31,7 @@ function init(getWc) {
 
   autoUpdater.on('error', (err) => {
     log.error('error:', err?.message || err)
+    getWebContents()?.send('updater:error', { message: err?.message || String(err) })
   })
   autoUpdater.on('update-available', (info) => {
     updateInfo = info
