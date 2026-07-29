@@ -73,6 +73,13 @@ pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
 /* Placeholder color adapts to theme */
 ::placeholder { color: var(--text-muted); opacity: 0.7; }
 
+/* Native select: option list inherits theme background so dark/glass themes
+   don't show a white dropdown popup. The control itself is styled inline. */
+select option {
+  background-color: var(--content-bg, var(--bg-primary));
+  color: var(--text-primary);
+}
+
 /* ── Magic UI animations (zero-dep, CSS-only) ───────────────────────────────
    BlurFade: mount entrance — fade in + blur out, used on message bubbles
    and sidebar items so new content arrives gently instead of popping. */

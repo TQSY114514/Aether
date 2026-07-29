@@ -91,7 +91,7 @@ export default function LearningGraphPage() {
 
         {/* Search filter */}
         <div className="mb-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border text-sm" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--content-bg)] border text-sm" style={{ borderColor: 'var(--border)' }}>
             <Search size={14} className="text-gray-400 shrink-0" />
             <input value={filter} onChange={e => setFilter(e.target.value)} placeholder={t('learning_graph.filter')} className="w-full bg-transparent outline-none text-sm" />
           </div>
