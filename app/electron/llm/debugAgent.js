@@ -55,20 +55,28 @@ function findTestCommand(projectType, rootDir) {
   return null
 }
 
+// Split a command string into [program, args[]] without invoking a shell.
+// We avoid child_process.exec() because it runs the string through cmd.exe/sh,
+// which makes injection possible if the command is ever built from untrusted
+// input. spawn() with an arg array treats $(), backticks, && as literal chars.
+// npm/cargo/go/mvn/gradle are resolvable via PATH, so we don't need a shell.
+function splitCmd(cmd) {
+  const parts = cmd.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || []
+  // Strip surrounding quotes from each token (cmd is a fixed literal from
+  // TEST_COMMANDS, so this is just to handle "npm run test" style spacing).
+  return [parts[0], parts.slice(1).map(a => a.replace(/^["']|["']$/g, ''))]
+}
+
 function runCommand(cmd, cwd, timeoutMs) {
-  const { exec } = require('child_process')
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve({ exitCode: -1, stdout: '', stderr: 'timeout', timedOut: true }), timeoutMs)
-    exec(cmd, { cwd, maxBuffer: 64 * 1024, timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
-      clearTimeout(timer)
-      resolve({
-        exitCode: err?.code ? err.code : 0,
-        stdout: (stdout || '').slice(0, MAX_ERROR_OUTPUT),
-        stderr: (stderr || '').slice(0, MAX_ERROR_OUTPUT),
-        timedOut: false,
-      })
-    })
-  })
+  const { runCommand: spawnRun } = require('../tools/exec')
+  const [prog, args] = splitCmd(cmd)
+  return spawnRun(prog, args, { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
+    .then(({ stdout, stderr, exitCode, timedOut }) => ({
+      exitCode: exitCode ?? -1,
+      stdout: (stdout || '').slice(0, MAX_ERROR_OUTPUT),
+      stderr: (stderr || '').slice(0, MAX_ERROR_OUTPUT),
+      timedOut,
+    }))
 }
 
 // Main entry: run the debug loop.

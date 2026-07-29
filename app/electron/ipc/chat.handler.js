@@ -426,7 +426,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage })
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
-        if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent })
+        if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent, sessionId })
         // Habit learner: detect recurring preferences and promote them to a
         // user-habits skill once they repeat. Also fire-and-forget.
         if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
@@ -520,7 +520,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         await generateSummaryTitle({ sessionId, content, fullContent, model: m, provider: p, titleLanguage })
       }
       // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
-      if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent })
+      if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, sessionId })
       if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
       log.info('DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
       providerHealth.recordResult(p.id, true)

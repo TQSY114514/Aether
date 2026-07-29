@@ -66,19 +66,31 @@ function rollbackCheckpoint(id) {
   if (cp.rolled_back_at) return { success: false, error: 'checkpoint already rolled back' }
   const snapshot = cp.snapshot || {}
   const restored = []
+  const failed = []
+  // Restore each file in its own try-catch so one failure (permission, disk,
+  // locked file) doesn't abort the whole rollback. We only mark the checkpoint
+  // rolled_back if no file failed — otherwise the user can retry the rollback
+  // and the still-pending files will be attempted again.
   for (const f of snapshot.files || []) {
     if (f.isDirectory) continue
-    if (f.existed) {
-      fs.mkdirSync(path.dirname(f.path), { recursive: true })
-      fs.writeFileSync(f.path, f.content ?? '', 'utf-8')
-      restored.push(f.path)
-    } else if (fs.existsSync(f.path)) {
-      fs.rmSync(f.path, { force: true, recursive: true })
-      restored.push(f.path)
+    try {
+      if (f.existed) {
+        fs.mkdirSync(path.dirname(f.path), { recursive: true })
+        fs.writeFileSync(f.path, f.content ?? '', 'utf-8')
+        restored.push(f.path)
+      } else if (fs.existsSync(f.path)) {
+        fs.rmSync(f.path, { force: true, recursive: true })
+        restored.push(f.path)
+      }
+    } catch (e) {
+      failed.push({ path: f.path, error: e.message })
     }
   }
-  db.markAgentCheckpointRolledBack(id)
-  return { success: true, restored }
+  if (failed.length === 0) {
+    db.markAgentCheckpointRolledBack(id)
+    return { success: true, restored }
+  }
+  return { success: false, error: 'some files failed to restore', restored, failed }
 }
 
 module.exports = { setDb, createCheckpoint, rollbackCheckpoint, extractAffectedPaths }

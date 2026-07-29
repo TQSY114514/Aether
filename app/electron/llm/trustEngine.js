@@ -109,7 +109,7 @@ function getPermissionMode(db, sessionId, toolName) {
     return 'auto' // Standard dangerous → auto
   }
   if (trust < TRUST_YOLO_THRESHOLD && HIGH_RISK_TOOLS.has(toolName)) {
-    return 'yolo' // Low trust + high risk → force manual confirmation
+    return 'ask' // Low trust + high risk → force manual confirmation
   }
   return 'ask' // Default for medium trust
 }
