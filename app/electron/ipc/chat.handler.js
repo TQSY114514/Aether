@@ -11,6 +11,7 @@ const { estimateMessagesTokens, estimateTextTokens } = require('../llm/compactio
 const auditLog = require('../llm/auditLog')
 const modelAdvisor = require('../llm/modelAdvisor')
 const modelRouter = require('../llm/modelRouter')
+const moa = require('../llm/moa')
 const log = require('../logger')
 const providerHealth = require('../llm/providerHealth')
 const checkpoints = require('../llm/checkpoints')
@@ -132,7 +133,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     db.touchSession(sessionId)
 
     // Get model & provider
-    const model = db.getModel(modelId)
+    let model = db.getModel(modelId)
     if (!model) {
       db.addMessage({ session_id: sessionId, role: 'assistant', content: '错误: 模型未找到', status: 'error' })
       getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
@@ -247,6 +248,33 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     const autoMemoryOn = _s['auto_memory_enabled'] !== '0'
     const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
+
+    // MoA (Mixture of Agents): if the selected model is a moa:// virtual model,
+    // run reference fan-out in parallel and inject guidance into the last user
+    // message. The aggregator model replaces the original for the actual turn.
+    try {
+      const moaResult = await moa.maybeRunMoA({
+        modelName: model.model_name, messages: compacted, signal: controller?.signal, db, sessionId,
+      })
+      if (moaResult) {
+        if (moaResult.guidance) {
+          const lastUserIdx = compacted.map(m => m.role).lastIndexOf('user')
+          if (lastUserIdx >= 0) {
+            const u = compacted[lastUserIdx]
+            u.content = typeof u.content === 'string'
+              ? u.content + moaResult.guidance
+              : u.content // multimodal: skip (rare in MoA context)
+          }
+        }
+        if (moaResult.aggregator) {
+          provider = moaResult.aggregator.provider
+          model = moaResult.aggregator.model
+        }
+        try { getWebContents()?.send('chat:status', { messageId: 0, sessionId, text: `🎭 MoA: ${moaResult.aggregator?.model?.model_name || 'aggregator'} (+ references)`, kind: 'moa' }) } catch {}
+      }
+    } catch (e) {
+      log.debug('MoA check failed (non-fatal):', e?.message)
+    }
 
     // Proactive habit suggestions (Hermes-style): fire-and-forget match.
     if (autoMemoryOn) {

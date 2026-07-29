@@ -292,7 +292,7 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
   }
 
   // Build tool context with sessionId for sandbox checks.
-  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined }
+  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, db }
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
 
   while (budget.consume()) {

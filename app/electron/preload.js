@@ -197,6 +197,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     rescan: () => ipcRenderer.invoke('skills:rescan'),
+    getUsage: () => ipcRenderer.invoke('skills:getUsage'),
+    updateState: (name, state) => ipcRenderer.invoke('skills:updateState', name, state),
+    pin: (name, pinned) => ipcRenderer.invoke('skills:pin', name, pinned),
+  },
+  search: {
+    messages: (query, sessionId) => ipcRenderer.invoke('search:messages', { query, sessionId }),
+  },
+  moa: {
+    getPresets: () => ipcRenderer.invoke('moa:getPresets'),
+    addPreset: (name, description, references, aggregatorModelId) => ipcRenderer.invoke('moa:addPreset', { name, description, references, aggregatorModelId }),
+    deletePreset: (id) => ipcRenderer.invoke('moa:deletePreset', id),
   },
   commands: {
     list: () => ipcRenderer.invoke('commands:list'),
@@ -221,6 +232,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onUpToDate: (cb) => {
       const h = (_e, p) => cb(p); ipcRenderer.on('updater:up-to-date', h)
       return () => ipcRenderer.removeListener('updater:up-to-date', h)
+    },
+    onError: (cb) => {
+      const h = (_e, p) => cb(p); ipcRenderer.on('updater:error', h)
+      return () => ipcRenderer.removeListener('updater:error', h)
     },
   },
   usage: {
