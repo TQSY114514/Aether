@@ -12,7 +12,7 @@ the LLM provider as a pluggable backend and keeps all user data on disk.
 
 ## Start
 
-- Repo root: `D:\aetherai`. App code lives under `app/` (`app/src` renderer,
+- App code lives under `app/` (`app/src` renderer,
   `app/electron` main). Do not create a second app tree.
 - Run: `start.bat` at repo root, or `cd app && npm run build && npm start`.
 - Build installer: `cd app && npm run build:win` (note: host AV may remove the
