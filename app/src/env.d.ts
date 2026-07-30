@@ -77,7 +77,7 @@ interface Window {
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void
     }
     arena: {
-      send: (params: { sessionId: number; content: string; modelIds: number[]; aggregate?: boolean; personaId?: number | null }) => Promise<{ results: ArenaResult[]; aggregate?: { content: string; model_name: string; provider_name: string } | null }>
+      send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null }) => Promise<{ results: ArenaResult[] }>
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
       stop: () => Promise<void>
