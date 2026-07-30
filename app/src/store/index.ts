@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
 import { setLang, setLangAsync, detectLang, t, type LangCode, LANGS, getLangDir } from '@/utils/i18n'
 import { applyTheme, getThemes } from '@/utils/theme'
@@ -140,7 +140,6 @@ interface AppState {
 
   // Arena
   arenaResults: ArenaResult[]
-  arenaAggregate: { content: string; model_name: string; provider_name: string } | null
   arenaModelIds: number[]
   setArenaModelIds: (ids: number[]) => void
   arenaError: string | null
@@ -535,7 +534,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ chatMode: mode })
     // Reset arena state when leaving arena mode
     if (mode !== 'arena') {
-      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaAggregate: null, arenaError: null })
+      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaError: null })
     }
     // When switching to arena mode on a blank page (no session), create one
     // so the arena model selector has a target session. Only skip if arena already has
@@ -898,7 +897,6 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Arena
   arenaResults: [],
-  arenaAggregate: null,
   arenaModelIds: [],
   arenaError: null,
   arenaVoted: false,    // true after user has voted in this arena run
@@ -912,16 +910,25 @@ export const useStore = create<AppState>((set, get) => ({
     }
     const cfg = sessionConfigs[currentSessionId]
     const personaId = cfg?.personaId ?? defaultPersonaId
-    set({ sending: true, arenaResults: [], arenaAggregate: null, arenaError: null, arenaVoted: false, arenaVoteWinnerId: null })
+    // Optimistically show user bubble — arena.send only resolves after all
+    // models finish, so without this the user bubble appears at the very end.
+    const tempUserMsg: Message = {
+      id: Date.now(), session_id: currentSessionId, role: 'user',
+      content, model_used: null, provider_used: null,
+      token_count: null, latency_ms: null, status: 'success', error_message: null,
+      created_at: new Date().toISOString(), attachment: null,
+    }
+    set({ sending: true, arenaResults: [], arenaError: null, arenaVoted: false, arenaVoteWinnerId: null, messages: [...get().messages, tempUserMsg] })
     set((s) => ({ streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '...', messageId: null } } }))
+    get().loadSessions()
     try {
-      const { results, aggregate } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, aggregate: true, personaId })
+      const { results } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, personaId })
       if (!results || results.length === 0) {
         set({ sending: false, arenaError: '没有返回结果，请检查模型/网络' })
         set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
         return
       }
-      set({ arenaResults: results, arenaAggregate: aggregate || null, sending: false, arenaError: null })
+      set({ arenaResults: results, sending: false, arenaError: null })
       set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
       get().loadMessages(currentSessionId)
       get().loadSessions()
@@ -968,7 +975,6 @@ export const useStore = create<AppState>((set, get) => ({
         // stored as a normal message and visible in the normal message flow.
         set({
           arenaResults: [],
-          arenaAggregate: null,
           arenaVoted: true,
           arenaVoteWinnerId: winner.model_id,
         })

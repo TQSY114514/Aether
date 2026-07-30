@@ -11,9 +11,8 @@ import { shallow } from 'zustand/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 // Arena results display component with streaming-like animation
-function ArenaResults({ results, aggregate, voted, winnerId, onVote, t, renderMarkdown }: {
+function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown }: {
   results: { model_id: number; model_name: string; provider_name: string; content: string }[]
-  aggregate: { content: string; model_name: string } | null
   voted: boolean
   winnerId: number | null
   onVote: (winner: { model_id: number; model_name: string }, losers: { model_id: number; model_name: string }[]) => Promise<void>
@@ -57,18 +56,6 @@ function ArenaResults({ results, aggregate, voted, winnerId, onVote, t, renderMa
 
   return (
     <div className="space-y-3">
-      {aggregate && !voted && (
-        <div className="border-2 rounded-xl overflow-hidden animate-blur-fade" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
-          <div className="px-3 py-2 border-b flex items-center gap-2 text-sm font-medium" style={{ borderColor: 'var(--warning)' }}>
-            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>MoA</span>
-            <span style={{ color: 'var(--text-primary)' }}>{t('chat.arena.aggregate')}</span>
-            <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>{aggregate.model_name}</span>
-          </div>
-          <div className="p-3 text-sm leading-relaxed max-h-96 overflow-y-auto">
-            <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(aggregate.content) }} />
-          </div>
-        </div>
-      )}
       <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
       {results.map((r) => {
         const key = String(r.model_id)
@@ -196,7 +183,7 @@ export default function ChatWindow() {
   // values actually change, not on every store update.
   const {
     messages, currentSessionId, streamingBySession,
-    toolCallsByMessage, arenaResults, arenaAggregate, arenaError,
+    toolCallsByMessage, arenaResults, arenaError,
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
   } = useStore((s) => ({
@@ -205,7 +192,6 @@ export default function ChatWindow() {
     streamingBySession: s.streamingBySession,
     toolCallsByMessage: s.toolCallsByMessage,
     arenaResults: s.arenaResults,
-    arenaAggregate: s.arenaAggregate,
     arenaError: s.arenaError,
     proposedHabits: s.proposedHabits,
     activeHints: s.activeHints,
@@ -400,7 +386,7 @@ export default function ChatWindow() {
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-3xl mx-auto chat-gap">
-          {messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0 && arenaAggregate === null && (
+          {messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0 && (
             <EmptyState />
           )}
 
@@ -474,7 +460,6 @@ export default function ChatWindow() {
           {arenaResults.length > 0 && (
             <ArenaResults
               results={arenaResults}
-              aggregate={arenaAggregate}
               voted={arenaVoted}
               winnerId={arenaVoteWinnerId}
               onVote={arenaVote}

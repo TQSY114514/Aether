@@ -301,7 +301,6 @@
       "tool.risk.dangerous": "危险",
       "chat.search_prev": "上一个匹配",
       "chat.search_next": "下一个匹配",
-      "chat.arena.aggregate": "聚合最佳答案",
       "habit.proposed.prefix": "检测到习惯",
       "habit.proposed.accept": "保存为技能",
       "habit.proposed.dismiss": "忽略",
