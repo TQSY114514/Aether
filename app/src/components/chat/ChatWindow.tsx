@@ -222,7 +222,30 @@ export default function ChatWindow() {
   // ChatWindow re-render, but the messages reference itself is unchanged —
   // useMemo ensures the virtualizer sees the same array and skips re-rendering
   // its (memoized) MessageBubble children, eliminating flicker during streaming.
-  const virtualMessages = useMemo(() => messages, [messages])
+  //
+  // When the current session is streaming, hide the empty assistant placeholder
+  // that the main process already wrote to the DB (chat.handler.js adds an empty
+  // assistant row before streaming starts). The StreamingBubble renders the live
+  // content instead. Without this filter, switching away and back during a stream
+  // shows TWO bubbles: an empty one (DB placeholder) + the streaming one.
+  const virtualMessages = useMemo(() => {
+    const buf = currentSessionId ? streamingBySession[currentSessionId] : null
+    if (!buf) return messages
+    // Filter out the assistant placeholder that the main process writes to the
+    // DB before streaming starts. We have two cases:
+    //   1. buf.messageId is set (first chunk arrived): filter by id.
+    //   2. buf.messageId is null (chunk not yet arrived): filter the last
+    //      assistant message if it has empty content — that's the placeholder.
+    if (buf.messageId != null) {
+      return messages.filter(m => m.id !== buf.messageId)
+    }
+    // No messageId yet — drop a trailing empty assistant message if present.
+    const last = messages[messages.length - 1]
+    if (last && last.role === 'assistant' && (last.content == null || last.content === '')) {
+      return messages.slice(0, -1)
+    }
+    return messages
+  }, [messages, currentSessionId, streamingBySession])
 
   // Virtual scroller: only renders visible message rows (+ overscan) instead
   // of the full list. Mounted on the existing scrollRef container. Uses

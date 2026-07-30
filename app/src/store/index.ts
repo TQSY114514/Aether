@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
 import { setLang, setLangAsync, detectLang, t, type LangCode, LANGS, getLangDir } from '@/utils/i18n'
 import { applyTheme, getThemes } from '@/utils/theme'
@@ -865,9 +865,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   loadMessages: async (sessionId) => {
-    // Skip if this session is actively streaming — optimistic user messages
-    // and live chunk updates would be overwritten by a stale DB snapshot.
-    if (get().streamingBySession[sessionId]) return
+    // Allow reload even while streaming — the main process writes the assistant
+    // row to the DB before streaming starts, so a reload brings in the user's
+    // own message and prior history. The empty assistant placeholder is filtered
+    // out of rendering by ChatWindow's virtualMessages memo (it checks
+    // streamingBySession[sid].messageId). This fixes the "blank bubble above
+    // streaming bubble" bug when switching away and back during a stream.
+    const _streamingBuf = get().streamingBySession[sessionId]
     // Also skip if a user message was optimistically added within the last 3s
     // (IPC hasn't reached the DB yet — this prevents the blank-screen bug).
     const now = Date.now()

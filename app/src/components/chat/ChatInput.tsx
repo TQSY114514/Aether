@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+﻿import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
@@ -48,7 +48,16 @@ export default function ChatInput() {
     const { scores, loadScores } = useStore.getState()
     if (scores.length === 0) loadScores()
   }, [])
-  const [input, setInput] = useState('')
+  // Per-session draft: each conversation has its own input draft persisted to
+  // localStorage. Switching sessions loads that session's draft; the input no
+  // longer leaks across chats. useState initializer reads once on mount.
+  const [input, setInput] = useState(() => {
+    try {
+      const sid = useStore.getState().currentSessionId
+      return sid ? (localStorage.getItem(`draft:${sid}`) || '') : ''
+    } catch { return '' }
+  })
+  const prevSessionRef = useRef<number | null>(null)
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
@@ -110,6 +119,34 @@ export default function ChatInput() {
     if (allModels.length > 0) return allModels[0].id
     return null
   }, [currentSessionId, sessionConfigs, allModels])
+
+  // Keep a ref of the current session id so the save effect below can read the
+  // latest id WITHOUT depending on it. This is the key fix: if the save effect
+  // depended on currentSessionId, then at the instant of a session switch it
+  // would run with the OLD input value but the NEW session id — overwriting
+  // the new session's draft with the previous session's text. By depending
+  // only on `input`, the save fires on keystrokes (correct) but not on switch.
+  const sessionIdRef = useRef(currentSessionId)
+  useEffect(() => { sessionIdRef.current = currentSessionId }, [currentSessionId])
+
+  // Save draft to localStorage on every keystroke. Per-session key via ref.
+  useEffect(() => {
+    try {
+      const sid = sessionIdRef.current
+      const key = `draft:${sid ?? 'new'}`
+      if (input.trim()) localStorage.setItem(key, input)
+      else localStorage.removeItem(key)
+    } catch {}
+  }, [input])
+
+  // Load draft when switching sessions — each conversation has its own draft.
+  useEffect(() => {
+    if (prevSessionRef.current === currentSessionId) return
+    prevSessionRef.current = currentSessionId
+    try {
+      setInput(localStorage.getItem(`draft:${currentSessionId ?? 'new'}`) || '')
+    } catch { setInput('') }
+  }, [currentSessionId])
 
   // Token estimation for the current input.
   const inputTokens = useMemo(() => estimateTextTokens(input), [input])
