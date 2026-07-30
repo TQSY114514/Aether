@@ -1,4 +1,4 @@
-const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
+﻿const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
 const { runToolLoop, MAX_CONCURRENT_TOOLS } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
@@ -248,6 +248,20 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     const autoMemoryOn = _s['auto_memory_enabled'] !== '0'
     const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
+
+    // Inject current date/time so the model knows "today". LLMs have a training
+    // cutoff and without this cannot answer "what's the date" or reason about
+    // relative time. Injected for ALL paths (tool + streaming) after compaction
+    // so it's never summarized away.
+    try {
+      const _now = new Date()
+      const _pad = (n) => String(n).padStart(2, '0')
+      const _dateStr = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())} ${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`
+      const _tzOff = -_now.getTimezoneOffset() / 60
+      const _tzStr = `UTC${_tzOff >= 0 ? '+' : ''}${_tzOff}`
+      const _weekday = ['日','一','二','三','四','五','六'][_now.getDay()]
+      compacted.unshift({ role: 'system', content: `当前时间：${_dateStr} (${_tzStr}, 星期${_weekday})` })
+    } catch {}
 
     // MoA (Mixture of Agents): if the selected model is a moa:// virtual model,
     // run reference fan-out in parallel and inject guidance into the last user
