@@ -54,3 +54,7 @@ app/.electron-builder-cache/
 # Release artifacts staging (local downloads, not for the repo)
 release-download/
 
+
+# temp files
+export.tmp
+merge_history.*
