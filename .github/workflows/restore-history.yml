@@ -1,0 +1,71 @@
+name: Restore Old History
+
+# 手动触发，把 71 条旧历史（v0.1.0~v0.1.23）拼接到当前 master 前面
+# 旧历史 HEAD: dcd7ae360ac33e91a9bc910b55bc6284d80b9e46 (v0.1.23, 2026-07-20)
+# 新历史 root: 501027d (2026-07-29, initial commit after force push)
+# 拼接后: 旧 71 条 + 新 25 条 = 96 条完整历史
+
+on:
+  workflow_dispatch:
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 完整历史
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch old history
+        run: |
+          # 旧 master HEAD（force push 之前）
+          git fetch origin dcd7ae360ac33e91a9bc910b55bc6284d80b9e46 --depth=1
+          echo "=== 旧历史 HEAD ==="
+          git log --oneline dcd7ae360ac33e91a9bc910b55bc6284d80b9e46
+
+      - name: Create graft and rewrite history
+        run: |
+          # 新历史的 root commit
+          NEW_ROOT="501027dc5b9b43f4e2f3072420b4bc15e0c2c171"
+          OLD_HEAD="dcd7ae360ac33e91a9bc910b55bc6284d80b9e46"
+
+          # 创建 graft：让新 root 的 parent 指向旧 HEAD
+          git replace --graft $NEW_ROOT $OLD_HEAD
+
+          # 用 fast-export/import 把 graft 永久化
+          # 这会重写所有 commit，把 graft 变成真实 parent
+          FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --parent-filter "
+            if [ \"\$GIT_COMMIT\" = '$NEW_ROOT' ]; then
+              echo '-p $OLD_HEAD'
+            else
+              cat
+            fi
+          " -- --all
+
+          # 移除 replace ref
+          git replace -d $NEW_ROOT
+
+      - name: Verify merged history
+        run: |
+          echo "=== 拼接后历史长度 ==="
+          git log --oneline | wc -l
+          echo "=== 最早 5 条（应为旧历史）==="
+          git log --oneline --reverse | head -5
+          echo "=== 最晚 3 条（应为新历史）==="
+          git log --oneline | head -3
+          echo "=== 拼接点附近 ==="
+          git log --oneline --reverse | sed -n '69,75p'
+
+      - name: Force push merged master
+        run: |
+          git push --force origin master
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
