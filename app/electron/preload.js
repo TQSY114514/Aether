@@ -139,6 +139,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:context-budget', handler)
       return () => ipcRenderer.removeListener('chat:context-budget', handler)
     },
+    onThinkingStart: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:thinking-start', handler)
+      return () => ipcRenderer.removeListener('chat:thinking-start', handler)
+    },
+    onThinkingEnd: (callback) => {
+      const handler = (_e, payload) => callback(payload)
+      ipcRenderer.on('chat:thinking-end', handler)
+      return () => ipcRenderer.removeListener('chat:thinking-end', handler)
+    },
     onThinkingChunk: (callback) => {
       const handler = (_e, payload) => callback(payload)
       ipcRenderer.on('chat:thinking-chunk', handler)
@@ -197,6 +207,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     rescan: () => ipcRenderer.invoke('skills:rescan'),
+    stats: () => ipcRenderer.invoke('skills:stats'),
+    record: (name, success) => ipcRenderer.invoke('skills:record', name, success),
+    autoDraft: (name, description) => ipcRenderer.invoke('skills:autoDraft', name, description),
     getUsage: () => ipcRenderer.invoke('skills:getUsage'),
     updateState: (name, state) => ipcRenderer.invoke('skills:updateState', name, state),
     pin: (name, pinned) => ipcRenderer.invoke('skills:pin', name, pinned),
