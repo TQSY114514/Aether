@@ -49,6 +49,8 @@ interface Window {
       list: (sessionId: number) => Promise<Message[]>
       update: (id: number, data: Partial<Message>) => Promise<void>
       deleteAfter: (sessionId: number, afterId: number) => Promise<void>
+      deleteArena: (sessionId: number) => Promise<void>
+      addNormal: (msg: any) => Promise<{ lastInsertRowid: number }>
     }
     chat: {
       send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: { suggestedModelId: number | null; reason: string; confidence: number } | null }>
@@ -92,6 +94,7 @@ interface Window {
       get: (key: string) => Promise<string | null>
       set: (key: string, value: string) => Promise<void>
       getAll: () => Promise<Record<string, string>>
+      onChanged: (callback: (key: string, value: string) => void) => () => void
     }
     memory: {
       list: () => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null }[]>
@@ -171,6 +174,9 @@ interface Window {
     agentCheckpoint: {
       list: (params: { sessionId: number; messageId?: number | null }) => Promise<any[]>
       rollback: (params: { id: number }) => Promise<{ success: boolean; restored?: string[]; error?: string }>
+    }
+    trust: {
+      badge: (params: { sessionId?: number; modelId?: number }) => Promise<{ level: string; score: number; reason: string } | null>
     }
   }
 }
