@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     primary: () => ipcRenderer.invoke('model:primary'),
     suggest: (params) => ipcRenderer.invoke('model:suggest', params),
     routeTier: (params) => ipcRenderer.invoke('model:route-tier', params),
+    setUlwRole: (id, role) => ipcRenderer.invoke('model:set-ulw-role', id, role),
   },
   persona: {
     list: () => ipcRenderer.invoke('persona:list'),
