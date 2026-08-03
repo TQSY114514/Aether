@@ -76,6 +76,7 @@ export default function ChatInput() {
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
+    loopingSessions,
   } = useStore((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -89,6 +90,7 @@ export default function ChatInput() {
     queuedMessages: s.queuedMessages,
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
     sessionConfigs: s.sessionConfigs, scores: s.scores,
+    loopingSessions: s.loopingSessions,
   }), shallow)
 
   // ELO score map for model selector display
@@ -104,6 +106,8 @@ export default function ChatInput() {
   // the streaming buffer).
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
   const isArenaRunning = chatMode === 'arena' && sending
+  // Feature B: true when the current session has an active tool loop (can accept injections).
+  const isLooping = isStreaming && loopingSessions.has(currentSessionId ?? -1)
 
   // Active model for the current session. When switching chats, useMemo re-derives
   // from sessionConfigs. For the blank chat page (no session yet), falls back to
@@ -211,8 +215,19 @@ export default function ChatInput() {
   const handleSubmit = async () => {
     const content = input.trim()
     if (!content && pending.length === 0 && snippets.length === 0) return
-    if (isStreaming || isArenaRunning) {
+    if (isArenaRunning) {
       if (content) { enqueueMessage(content); setInput('') }
+      return
+    }
+    if (isStreaming) {
+      const looping = useStore.getState().loopingSessions.has(currentSessionId ?? -1)
+      if (looping && content) {
+        useStore.getState().injectMessage(content)
+        setInput('')
+      } else if (content) {
+        enqueueMessage(content)
+        setInput('')
+      }
       return
     }
     setInput('')
@@ -423,10 +438,10 @@ export default function ChatInput() {
             <Paperclip size={16} className="text-gray-400" />
           </button>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
-            placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : t('chat.placeholder')}
+            placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
-            disabled={isStreaming || isArenaRunning} />
-          {(isStreaming || isArenaRunning) ? (
+            disabled={isArenaRunning || (isStreaming && !isLooping)} />
+          {isArenaRunning || (isStreaming && !isLooping) ? (
             <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
               <Square size={14} />
             </button>

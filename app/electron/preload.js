@@ -155,6 +155,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('chat:thinking-chunk', handler)
     },
     stop: (sessionId) => ipcRenderer.invoke('chat:stop', sessionId),
+    inject: (payload) => ipcRenderer.invoke('chat:inject', payload),
+    onInjectionQueued: (callback) => {
+      const h = (_e, p) => callback(p); ipcRenderer.on('chat:injection-queued', h)
+      return () => ipcRenderer.removeListener('chat:injection-queued', h)
+    },
+    onToolLoopStart: (callback) => {
+      const h = (_e, p) => callback(p); ipcRenderer.on('chat:tool-loop-start', h)
+      return () => ipcRenderer.removeListener('chat:tool-loop-start', h)
+    },
+    onToolLoopEnd: (callback) => {
+      const h = (_e, p) => callback(p); ipcRenderer.on('chat:tool-loop-end', h)
+      return () => ipcRenderer.removeListener('chat:tool-loop-end', h)
+    },
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
@@ -225,6 +238,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
   commands: {
     list: () => ipcRenderer.invoke('commands:list'),
     rescan: () => ipcRenderer.invoke('commands:rescan'),
+  },
+  task: {
+    start: (params) => ipcRenderer.invoke('task:start', params),
+    list: () => ipcRenderer.invoke('task:list'),
+    cancel: (taskId) => ipcRenderer.invoke('task:cancel', taskId),
+    getResult: (taskId) => ipcRenderer.invoke('task:get-result', taskId),
+    onStarted: (callback) => {
+      const h = (_e, p) => callback(p)
+      ipcRenderer.on('task:started', h)
+      return () => ipcRenderer.removeListener('task:started', h)
+    },
+    onProgress: (callback) => {
+      const h = (_e, p) => callback(p)
+      ipcRenderer.on('task:progress', h)
+      return () => ipcRenderer.removeListener('task:progress', h)
+    },
+    onDone: (callback) => {
+      const h = (_e, p) => callback(p)
+      ipcRenderer.on('task:done', h)
+      return () => ipcRenderer.removeListener('task:done', h)
+    },
+    onCancelled: (callback) => {
+      const h = (_e, p) => callback(p)
+      ipcRenderer.on('task:cancelled', h)
+      return () => ipcRenderer.removeListener('task:cancelled', h)
+    },
+    onError: (callback) => {
+      const h = (_e, p) => callback(p)
+      ipcRenderer.on('task:error', h)
+      return () => ipcRenderer.removeListener('task:error', h)
+    },
   },
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),

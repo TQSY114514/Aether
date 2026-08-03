@@ -1,4 +1,5 @@
-﻿const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
+﻿const { createAllowRulesStore, buildToolLoopCallbacks } = require('./toolLoopCallbacks')
+const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
 const { runToolLoop, MAX_CONCURRENT_TOOLS } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
 const { maybeCompact } = require('../llm/compaction')
@@ -57,6 +58,10 @@ const PLACEHOLDER_TITLES = new Set([
 // Per-request abort controllers to avoid race conditions
 const abortControllers = new Map()
 
+// Feature B: track active tool loops and buffered injection messages.
+const activeToolLoops = new Set() // sessionIds with a running tool loop
+const pendingInjections = new Map() // sessionId -> string[] of pending injections
+
 // Per-session message tracking for abortControllers cleanup on session delete.
 let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
 function registerSessionMessages(sessionId, messageIds) {
@@ -76,38 +81,11 @@ function cleanupSessionControllers(sessionId) {
 }
 
 // ─── Session-scoped permission allow-rules ─────────────────────────────────
-// When the user picks "allow + remember" in the permission dialog, we store a
-// rule so subsequent similar calls skip the dialog. Rules are per-session and
-// cleared on session delete. Granularity:
-//   run_command  → key = first whitespace token (the binary, e.g. "git", "npm")
-//   write/edit   → key = the directory of the path (so all writes under a
-//                  project dir match after one approval)
-//   others       → exact name match (remember "yes to this tool")
-const allowRules = new Map() // sessionId -> Set<string> of `${name}:${key}`
-
-function ruleKey(name, args) {
-  if (name === 'run_command') {
-    const cmd = String(args?.command || '').trim()
-    const firstTok = cmd.split(/\s+/)[0] || cmd
-    return firstTok
-  }
-  if (name === 'write_file' || name === 'edit_file') {
-    const p = String(args?.path || '')
-    const dir = p.includes('/') || p.includes('\\') ? p.replace(/[\\/][^\\/]*$/, '') : p
-    return dir || p
-  }
-  return '*' // any args for this tool name
-}
-function matchAllowRule(sessionId, name, args) {
-  const set = allowRules.get(sessionId)
-  if (!set) return false
-  return set.has(`${name}:${ruleKey(name, args)}`) || set.has(`${name}:*`)
-}
-function addAllowRule(sessionId, name, args) {
-  if (!allowRules.has(sessionId)) allowRules.set(sessionId, new Set())
-  allowRules.get(sessionId).add(`${name}:${ruleKey(name, args)}`)
-}
-function clearAllowRules(sessionId) { allowRules.delete(sessionId) }
+// Backed by createAllowRulesStore() from toolLoopCallbacks.js.
+// Granularity preserved: run_command → binary token; write/edit → directory;
+// others → '*'. Rules are per-session and cleared on session delete.
+const allowRulesStore = createAllowRulesStore()
+function clearAllowRules(sessionId) { allowRulesStore.clear(sessionId) }
 
 function registerChatHandlers(ipcMain, db, getWebContents) {
   dbHandle = db
@@ -122,6 +100,15 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })
 
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
+    // Backstop guard: if a tool loop is active for this session, buffer the message
+    // as an injection instead of starting a new send turn. Prevents race conditions
+    // when the renderer's loopingSessions state hasn't caught up with main-process reality.
+    if (activeToolLoops.has(sessionId) && content && !regenerate) {
+      if (!pendingInjections.has(sessionId)) pendingInjections.set(sessionId, [])
+      pendingInjections.get(sessionId).push(content)
+      try { getWebContents()?.send('chat:injection-queued', { sessionId, content }) } catch {}
+      return { messageId: 0, queued: true }
+    }
     // Save user message
     if (!regenerate) {
       db.addMessage({ session_id: sessionId, role: 'user', content })
@@ -329,10 +316,25 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
       const wc = getWebContents()
+      activeToolLoops.add(sessionId)
+      try { wc?.send('chat:tool-loop-start', { sessionId }) } catch {}
       let finalContent = ''
       try {
         const modelName = (model?.model_name || '').toLowerCase()
       const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test(modelName)
+      // Build shared callback bag (onToolCall, onAskUser, requestPermission, etc.)
+      // using the extracted factory. Feature B's injection options stay inline below.
+      const cb = buildToolLoopCallbacks({
+          db,
+          send: (c, p) => wc?.send(c, p),
+          getWc: () => (wc && !wc.isDestroyed() ? wc : null),
+          sessionId,
+          msgId,
+          controller,
+          source: 'chat',
+          allowRules: allowRulesStore,
+          thinkingSupported,
+        })
       finalContent = await runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
@@ -340,95 +342,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
           sessionId, messageId: msgId, db,
           autoCommit: true,
-          onThinkingStart: thinkingSupported ? () => wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) : undefined,
-          onThinkingEnd: thinkingSupported ? () => wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) : undefined,
-          onToolCall: (entry) => wc?.send('chat:tool-call', { messageId: msgId, sessionId, tool: entry }),
-          onPlanStep: (step) => wc?.send('chat:plan-step', { messageId: msgId, sessionId, step }),
-          onStatus: (s) => {
-            // Context budget update on each step.
-            if (s.kind === 'budget_exhausted') {
-              wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: 'budget_exhausted' })
-            } else {
-              wc?.send('chat:status', { messageId: msgId, sessionId, text: s.text, kind: s.kind || 'step' })
-            }
-          },
-          onTodoUpdate: (todos) => wc?.send('chat:todo-update', { messageId: msgId, sessionId, todos }),
-          // Stream tool output (e.g. run_command stdout) in real-time to the UI.
-          onStream: (chunk) => {
-            if (chunk?.text) wc?.send('chat:tool-stream', { messageId: msgId, sessionId, text: chunk.text, done: chunk.type === 'done' })
-          },
-          // Audit log callback: persists the agent turn trace.
-          onAudit: (trace) => {
-            try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
-          },
-          // AskUserQuestion: surface a structured question dialog and await the
-          // user's choice. Returns a JSON string of answers so the model can read
-          // them as a tool result.
-          onAskUser: (questions) => new Promise((resolve) => {
-            const reqId = `${msgId}:q:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-            const safeWc = wc && !wc.isDestroyed() ? wc : null
-            let settled = false
-            const finish = (val) => {
-              if (settled) return
-              settled = true
-              clearTimeout(timer)
-              controller.signal.removeEventListener('abort', onAbort)
-              safeWc?.removeListener('chat:question-reply', onReply)
-              resolve(val)
-            }
-            const onReply = (_e, r) => { if (r && r.reqId === reqId) finish(JSON.stringify(r.answers || [])) }
-            const onAbort = () => finish(JSON.stringify([{ question: questions[0]?.question, answer: '(aborted)' }]))
-            const onTimeout = () => { safeWc?.send('chat:question-expired', { reqId }); finish(JSON.stringify([{ answer: '(no response)' }])) }
-            const timer = setTimeout(onTimeout, 300000) // 5 min — questions can wait longer
-            controller.signal.addEventListener('abort', onAbort)
-            if (!safeWc) { finish(JSON.stringify([{ answer: '(no window)' }])); return }
-            safeWc.on('chat:question-reply', onReply)
-            safeWc.send('chat:question', { reqId, messageId: msgId, sessionId, questions })
-          }),
-          // Session-scoped permission allow-rules: when the user picks "allow +
-          // remember" in the dialog, we store a prefix rule and skip the dialog
-          // for matching subsequent calls. Cleared when the session is deleted.
-          requestPermission: ({ name, args, risk }) => {
-            // Check session allow-rules first.
-            const rule = matchAllowRule(sessionId, name, args)
-            if (rule) return Promise.resolve(true)
-            // Build impact preview for the permission dialog.
-            let impactPreview = null
-            try {
-              impactPreview = require('../tools/toolImpact').toolImpact(name, args)
-            } catch {}
-            return new Promise((resolve) => {
-            const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-            const safeWc = wc && !wc.isDestroyed() ? wc : null
-            let settled = false
-            const finish = (val) => {
-              if (settled) return
-              settled = true
-              clearTimeout(timer)
-              controller.signal.removeEventListener('abort', onAbort)
-              safeWc?.removeListener('chat:permission-reply', onReply)
-              resolve(val)
-            }
-            const onReply = (_e, r) => {
-              if (!r || r.reqId !== reqId) return
-              // If the user chose "allow + remember", persist the rule for the session.
-              if (r.allowed && r.remember) addAllowRule(sessionId, name, args)
-              finish(!!r.allowed)
-            }
-            const onAbort = () => finish(false)
-            const onTimeout = () => {
-              // Notify the renderer so its dialog dismisses instead of hanging.
-              safeWc?.send('chat:permission-expired', { reqId })
-              finish(false)
-            }
-            const timer = setTimeout(onTimeout, 60000)
-            controller.signal.addEventListener('abort', onAbort)
-            if (!safeWc) { finish(false); return }
-            safeWc.on('chat:permission-reply', onReply)
-            safeWc.send('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk, impact: impactPreview })
-            })
-          },
+          ...cb,
+          getPendingInjections: () => pendingInjections.get(sessionId) || [],
+          clearPendingInjections: () => pendingInjections.delete(sessionId),
         })
+        try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
         const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)
         const pctAfter = Math.min(100, Math.round((budgetAfter / ctxBudget) * 100))
@@ -451,12 +369,15 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
         return { messageId: msgId, modelSuggestion }
       } catch (err) {
+        try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
         // Preserve accumulated content on abort (tool-loop path)
         db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted', error_message: errMsg })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         return { messageId: msgId, modelSuggestion }
+      } finally {
+        activeToolLoops.delete(sessionId)
       }
     }
 
@@ -587,6 +508,21 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
           if (ctrl) { ctrl.abort(); abortControllers.delete(mid) }
         }
       }
+    }
+  })
+
+  // Feature B: mid-turn message injection. The renderer calls this when a tool loop
+  // is running for the session. The message is buffered and consumed at the next loop
+  // iteration instead of starting a new send turn.
+  ipcMain.handle('chat:inject', (event, { sessionId, content }) => {
+    try {
+      if (!sessionId || !content) return { queued: false }
+      if (!pendingInjections.has(sessionId)) pendingInjections.set(sessionId, [])
+      pendingInjections.get(sessionId).push(content)
+      try { getWebContents()?.send('chat:injection-queued', { sessionId, content }) } catch {}
+      return { queued: true }
+    } catch {
+      return { queued: false }
     }
   })
 
