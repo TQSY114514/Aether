@@ -6,12 +6,20 @@
 // 子 agent 自主多步执行 → 取最后一条 assistant 文本返回。
 //
 // 权限派生:继承父 agentMode 的限制 + 默认禁 task 工具(防递归)。
+//
+// Phase 4: 使用多维度 IterationBudget (iterations, tokens, time, errors)
+// 替代简单的 maxIterations 参数。
 // ───────────────────────────────────────────────────────────────────────────
 
 const { completeChatMessage } = require('./providerAdapter')
 const { runToolLoop } = require('./toolLoop')
 const { buildReasoningParams } = require('./reasoning')
 const log = require('../logger')
+
+// Phase 4: Multi-dimensional iteration budget for sub-agent tracking.
+// Use the extended IterationBudget from toolLoop (which has consume()/refund()
+// interface) to ensure compatibility with the tool loop's while(budget.consume()).
+const { IterationBudget } = require('./toolLoop')
 
 const SUBAGENT_SYSTEM_PROMPT = `You are a sub-agent spawned by the parent agent to handle a delegated task.
 You have your own isolated context — previous conversation history is not available.
@@ -52,6 +60,9 @@ async function runSubagent({ db, parentSessionId, provider, model, prompt, signa
   const reasoningOpts = buildReasoningParams(model.model_name, 'medium')
   const opts = { ...reasoningOpts, max_tokens: 4096 }
 
+  // Phase 4: 创建多维度迭代预算，上限 15 次迭代。
+  const budget = new IterationBudget(15)
+
   let finalContent = ''
   try {
     finalContent = await runToolLoop({
@@ -62,7 +73,7 @@ async function runSubagent({ db, parentSessionId, provider, model, prompt, signa
       signal,
       options: opts,
       agentMode: childAgentMode,
-      maxIterations: 15, // 子 agent 迭代上限更低
+      budget, // Phase 4: 传递多维度预算实例
       sessionId: childSessionId,
       messageId: 0,
       db,

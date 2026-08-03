@@ -193,8 +193,12 @@ async function initDatabase() {
     genes TEXT NOT NULL,
     strategy TEXT NOT NULL DEFAULT "balanced",
     signals TEXT,
+    blast_radius TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
+
+  // Migration: add blast_radius column if missing
+  try { db.run("ALTER TABLE evolution_events ADD COLUMN blast_radius TEXT"); } catch (e) {}
 
 
   // Skill success tracking: records how often each skill succeeds or fails.
