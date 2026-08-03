@@ -10,6 +10,7 @@
     "dev": "concurrently -k \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",
     "build": "node scripts/check-ipc.js && tsc --noEmit && vite build && node build-icons.js && electron-builder --publish never",
     "typecheck": "tsc --noEmit",
+    "smoke:boot": "node scripts/boot-smoke.js",
     "build:icon": "node build-icons.js",
     "build:win": "vite build && electron-builder --win --x64",
     "build:ci": "vite build && electron-builder --win nsis portable --x64 --publish always",
