@@ -9,6 +9,15 @@ const PREFIXES = {
   '!': { label: 'Commands', color: 'text-purple-400', fetch: null }, // populated via IPC
 }
 
+type Suggestion = { text: string; desc: string; type: 'skill' | 'tool' | 'command' }
+
+type InputReferenceProps = {
+  value: string
+  cursorPos: number
+  visible: boolean
+  onSelect: (sel: { prefix: string; query: string; replacement: string }) => void
+}
+
 // Built-in tool list (同步可用，无需 IPC)
 const BUILTIN_TOOLS = [
   'read_file', 'list_dir', 'glob_find', 'grep_search', 'web_search', 'web_fetch',
@@ -16,14 +25,14 @@ const BUILTIN_TOOLS = [
   'memory_save', 'memory_list', 'use_skill', 'ask_user', 'todo_write',
 ]
 
-export default function InputReference({ value, cursorPos, onSelect, visible }) {
-  const [suggestions, setSuggestions] = useState([])
+export default function InputReference({ value, cursorPos, onSelect, visible }: InputReferenceProps) {
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
-  const [prefix, setPrefix] = useState(null)
+  const [prefix, setPrefix] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [skills, setSkills] = useState([])
-  const [commands, setCommands] = useState([])
-  const ref = useRef(null)
+  const [skills, setSkills] = useState<{ name: string; description: string }[]>([])
+  const [commands, setCommands] = useState<{ id: string; name: string; description: string }[]>([])
+  const ref = useRef<HTMLDivElement>(null)
 
   // Load skills and commands on mount
   useEffect(() => {
@@ -60,7 +69,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }) 
     setSelectedIdx(0)
 
     // Build suggestions based on prefix
-    let items = []
+    let items: Suggestion[] = []
     if (p === '@') {
       // Skills
       items = skills
@@ -82,8 +91,11 @@ export default function InputReference({ value, cursorPos, onSelect, visible }) 
   }, [value, cursorPos, visible, skills, commands])
 
   // Keyboard navigation
-  const handleKeyDown = useCallback((e) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!visible || suggestions.length === 0) return
+    // Stop the event from reaching the textarea so Enter/Tab/arrows select a
+    // suggestion instead of submitting the message or moving the caret.
+    e.stopPropagation()
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSelectedIdx(i => Math.min(i + 1, suggestions.length - 1))
@@ -94,7 +106,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }) 
       e.preventDefault()
       const sel = suggestions[selectedIdx]
       if (sel) {
-        onSelect({ prefix, query, replacement: sel.text })
+        onSelect({ prefix: prefix || '', query, replacement: sel.text })
       }
     } else if (e.key === 'Escape') {
       setSuggestions([])
@@ -111,7 +123,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }) 
 
   if (!visible || suggestions.length === 0) return null
 
-  const prefixInfo = PREFIXES[prefix] || { label: '', color: 'text-gray-400' }
+  const prefixInfo = (prefix && PREFIXES[prefix as keyof typeof PREFIXES]) || { label: '', color: 'text-gray-400' }
 
   return (
     <div
@@ -127,7 +139,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }) 
           className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm transition-colors ${
             i === selectedIdx ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5'
           }`}
-          onClick={() => onSelect({ prefix, query, replacement: s.text })}
+          onClick={() => onSelect({ prefix: prefix || '', query, replacement: s.text })}
           onMouseEnter={() => setSelectedIdx(i)}
         >
           <span className={`text-xs font-mono ${prefixInfo.color}`}>{prefix}</span>

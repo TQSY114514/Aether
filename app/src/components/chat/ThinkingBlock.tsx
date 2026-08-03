@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react'
+import { t } from '@/utils/i18n'
 
 type ThinkingBlockProps = {
   text: string
@@ -21,8 +22,8 @@ export default function ThinkingBlock({ text, collapsed: initialCollapsed }: Thi
 
   if (!text || !text.trim()) return null
 
-  const fullLabel = t18n('thinking.full')
-  const collapsedLabel = t18n('thinking.collapsed')
+  const fullLabel = t('thinking.full')
+  const collapsedLabel = t('thinking.collapsed')
 
   return (
     <div className="mb-2 rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>

@@ -1,5 +1,4 @@
 const skills = require('../llm/skills')
-const hooks = require('../llm/hooks')
 const habitLearner = require('../llm/habitLearner')
 
 function registerSkillsHandlers(ipcMain, db) {
@@ -66,13 +65,6 @@ function registerSkillsHandlers(ipcMain, db) {
   })
 
   // ─── Hooks (Claude Code-style extensibility) ──────────────────────────────
-  ipcMain.handle('hooks:scan', () => {
-    const count = hooks.scanHooks()
-    return { success: true, count }
-  })
-  ipcMain.handle('hooks:list', () => {
-    return hooks.listHooks()
-  })
 }
 
 module.exports = { registerSkillsHandlers }

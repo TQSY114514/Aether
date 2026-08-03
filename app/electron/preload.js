@@ -10,6 +10,14 @@ function getLocale() {
   return _locale
 }
 
+// Wrap ipcRenderer.on with automatic listener cleanup. The returned function
+// unsubscribes, so callers can wire it straight into useEffect cleanup.
+function subscribe(channel, callback) {
+  const handler = (_e, ...args) => callback(...args)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   sys: { locale: getLocale() },
   provider: {
@@ -70,104 +78,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   chat: {
     send: (params) => ipcRenderer.invoke('chat:send', params),
-    onChunk: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:stream-chunk', handler)
-      return () => ipcRenderer.removeListener('chat:stream-chunk', handler)
-    },
-    onToolCall: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:tool-call', handler)
-      return () => ipcRenderer.removeListener('chat:tool-call', handler)
-    },
-    onPlanStep: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:plan-step', handler)
-      return () => ipcRenderer.removeListener('chat:plan-step', handler)
-    },
-    onTodoUpdate: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:todo-update', handler)
-      return () => ipcRenderer.removeListener('chat:todo-update', handler)
-    },
-    onStatus: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:status', handler)
-      return () => ipcRenderer.removeListener('chat:status', handler)
-    },
-    onQuestion: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:question', handler)
-      return () => ipcRenderer.removeListener('chat:question', handler)
-    },
-    onQuestionExpired: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:question-expired', handler)
-      return () => ipcRenderer.removeListener('chat:question-expired', handler)
-    },
+    onChunk: (cb) => subscribe('chat:stream-chunk', cb),
+    onToolCall: (cb) => subscribe('chat:tool-call', cb),
+    onPlanStep: (cb) => subscribe('chat:plan-step', cb),
+    onTodoUpdate: (cb) => subscribe('chat:todo-update', cb),
+    onStatus: (cb) => subscribe('chat:status', cb),
+    onQuestion: (cb) => subscribe('chat:question', cb),
+    onQuestionExpired: (cb) => subscribe('chat:question-expired', cb),
     replyQuestion: (payload) => ipcRenderer.invoke('chat:question-reply', payload),
-    onPermissionRequest: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:permission-request', handler)
-      return () => ipcRenderer.removeListener('chat:permission-request', handler)
-    },
-    onPermissionExpired: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:permission-expired', handler)
-      return () => ipcRenderer.removeListener('chat:permission-expired', handler)
-    },
+    onPermissionRequest: (cb) => subscribe('chat:permission-request', cb),
+    onPermissionExpired: (cb) => subscribe('chat:permission-expired', cb),
     replyPermission: (payload) => ipcRenderer.invoke('chat:permission-reply', payload),
-    onToolStream: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:tool-stream', handler)
-      return () => ipcRenderer.removeListener('chat:tool-stream', handler)
-    },
-    onHabitProposed: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:habit-proposed', handler)
-      return () => ipcRenderer.removeListener('chat:habit-proposed', handler)
-    },
+    onToolStream: (cb) => subscribe('chat:tool-stream', cb),
+    onHabitProposed: (cb) => subscribe('chat:habit-proposed', cb),
     confirmHabit: (key) => ipcRenderer.invoke('chat:habit-confirm', key),
     dismissHabit: (key) => ipcRenderer.invoke('chat:habit-dismiss', key),
-    onHabitSuggestion: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:habit-suggestion', handler)
-      return () => ipcRenderer.removeListener('chat:habit-suggestion', handler)
-    },
-    onContextBudget: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:context-budget', handler)
-      return () => ipcRenderer.removeListener('chat:context-budget', handler)
-    },
-    onThinkingStart: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:thinking-start', handler)
-      return () => ipcRenderer.removeListener('chat:thinking-start', handler)
-    },
-    onThinkingEnd: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:thinking-end', handler)
-      return () => ipcRenderer.removeListener('chat:thinking-end', handler)
-    },
-    onThinkingChunk: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('chat:thinking-chunk', handler)
-      return () => ipcRenderer.removeListener('chat:thinking-chunk', handler)
-    },
+    onHabitSuggestion: (cb) => subscribe('chat:habit-suggestion', cb),
+    onContextBudget: (cb) => subscribe('chat:context-budget', cb),
+    onThinkingStart: (cb) => subscribe('chat:thinking-start', cb),
+    onThinkingEnd: (cb) => subscribe('chat:thinking-end', cb),
+    onThinkingChunk: (cb) => subscribe('chat:thinking-chunk', cb),
     stop: (sessionId) => ipcRenderer.invoke('chat:stop', sessionId),
     inject: (payload) => ipcRenderer.invoke('chat:inject', payload),
-    onInjectionQueued: (callback) => {
-      const h = (_e, p) => callback(p); ipcRenderer.on('chat:injection-queued', h)
-      return () => ipcRenderer.removeListener('chat:injection-queued', h)
-    },
-    onToolLoopStart: (callback) => {
-      const h = (_e, p) => callback(p); ipcRenderer.on('chat:tool-loop-start', h)
-      return () => ipcRenderer.removeListener('chat:tool-loop-start', h)
-    },
-    onToolLoopEnd: (callback) => {
-      const h = (_e, p) => callback(p); ipcRenderer.on('chat:tool-loop-end', h)
-      return () => ipcRenderer.removeListener('chat:tool-loop-end', h)
-    },
+    onInjectionQueued: (cb) => subscribe('chat:injection-queued', cb),
+    onToolLoopStart: (cb) => subscribe('chat:tool-loop-start', cb),
+    onToolLoopEnd: (cb) => subscribe('chat:tool-loop-end', cb),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
@@ -187,11 +122,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     get: (key) => ipcRenderer.invoke('settings:get', key),
     set: (key, value) => ipcRenderer.invoke('settings:set', key, value),
     getAll: () => ipcRenderer.invoke('settings:getAll'),
-    onChanged: (callback) => {
-      const handler = (_e, key, value) => callback(key, value)
-      ipcRenderer.on('settings:changed', handler)
-      return () => ipcRenderer.removeListener('settings:changed', handler)
-    },
+    onChanged: (cb) => subscribe('settings:changed', cb),
   },
   memory: {
     list: () => ipcRenderer.invoke('memory:list'),
@@ -211,11 +142,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
   },
   protocol: {
-    onOpen: (callback) => {
-      const handler = (_e, payload) => callback(payload)
-      ipcRenderer.on('protocol:open', handler)
-      return () => ipcRenderer.removeListener('protocol:open', handler)
-    },
+    onOpen: (cb) => subscribe('protocol:open', cb),
   },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
@@ -244,31 +171,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: () => ipcRenderer.invoke('task:list'),
     cancel: (taskId) => ipcRenderer.invoke('task:cancel', taskId),
     getResult: (taskId) => ipcRenderer.invoke('task:get-result', taskId),
-    onStarted: (callback) => {
-      const h = (_e, p) => callback(p)
-      ipcRenderer.on('task:started', h)
-      return () => ipcRenderer.removeListener('task:started', h)
-    },
-    onProgress: (callback) => {
-      const h = (_e, p) => callback(p)
-      ipcRenderer.on('task:progress', h)
-      return () => ipcRenderer.removeListener('task:progress', h)
-    },
-    onDone: (callback) => {
-      const h = (_e, p) => callback(p)
-      ipcRenderer.on('task:done', h)
-      return () => ipcRenderer.removeListener('task:done', h)
-    },
-    onCancelled: (callback) => {
-      const h = (_e, p) => callback(p)
-      ipcRenderer.on('task:cancelled', h)
-      return () => ipcRenderer.removeListener('task:cancelled', h)
-    },
-    onError: (callback) => {
-      const h = (_e, p) => callback(p)
-      ipcRenderer.on('task:error', h)
-      return () => ipcRenderer.removeListener('task:error', h)
-    },
+    onStarted: (cb) => subscribe('task:started', cb),
+    onProgress: (cb) => subscribe('task:progress', cb),
+    onDone: (cb) => subscribe('task:done', cb),
+    onCancelled: (cb) => subscribe('task:cancelled', cb),
+    onError: (cb) => subscribe('task:error', cb),
   },
   cron: {
     list: () => ipcRenderer.invoke('cron:list'),
@@ -290,26 +197,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     check: () => ipcRenderer.invoke('updater:check'),
     install: () => ipcRenderer.invoke('updater:install'),
     status: () => ipcRenderer.invoke('updater:status'),
-    onUpdateAvailable: (cb) => {
-      const h = (_e, p) => cb(p); ipcRenderer.on('updater:update-available', h)
-      return () => ipcRenderer.removeListener('updater:update-available', h)
-    },
-    onUpdateDownloaded: (cb) => {
-      const h = (_e, p) => cb(p); ipcRenderer.on('updater:update-downloaded', h)
-      return () => ipcRenderer.removeListener('updater:update-downloaded', h)
-    },
-    onProgress: (cb) => {
-      const h = (_e, p) => cb(p); ipcRenderer.on('updater:progress', h)
-      return () => ipcRenderer.removeListener('updater:progress', h)
-    },
-    onUpToDate: (cb) => {
-      const h = (_e, p) => cb(p); ipcRenderer.on('updater:up-to-date', h)
-      return () => ipcRenderer.removeListener('updater:up-to-date', h)
-    },
-    onError: (cb) => {
-      const h = (_e, p) => cb(p); ipcRenderer.on('updater:error', h)
-      return () => ipcRenderer.removeListener('updater:error', h)
-    },
+    onUpdateAvailable: (cb) => subscribe('updater:update-available', cb),
+    onUpdateDownloaded: (cb) => subscribe('updater:update-downloaded', cb),
+    onProgress: (cb) => subscribe('updater:progress', cb),
+    onUpToDate: (cb) => subscribe('updater:up-to-date', cb),
+    onError: (cb) => subscribe('updater:error', cb),
   },
   usage: {
     stats: (range) => ipcRenderer.invoke('usage:stats', range),
