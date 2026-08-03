@@ -1,4 +1,4 @@
-﻿const initSqlJs = require('sql.js')
+const initSqlJs = require('sql.js')
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
@@ -172,29 +172,29 @@ async function initDatabase() {
   // Habit learner: tracks recurring user preferences.
   db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
   // Skill self-creation: tracks repeated tool-use patterns for auto-drafting.
-  db.run('CREATE TABLE IF NOT EXISTS skill_patterns (
+  db.run(`CREATE TABLE IF NOT EXISTS skill_patterns (
     signature TEXT PRIMARY KEY,
     tools TEXT NOT NULL,
     count INTEGER NOT NULL DEFAULT 1,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
-  )')
+  )`)
 
   // Skill self-creation: tracks which patterns have been auto-drafted.
-  db.run('CREATE TABLE IF NOT EXISTS skill_drafts (
+  db.run(`CREATE TABLE IF NOT EXISTS skill_drafts (
     signature TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     drafted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )')
+  )`)
 
   // GEP Evolution: records evolution events for analysis.
-  db.run('CREATE TABLE IF NOT EXISTS evolution_events (
+  db.run(`CREATE TABLE IF NOT EXISTS evolution_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     capsule_id TEXT NOT NULL,
     genes TEXT NOT NULL,
     strategy TEXT NOT NULL DEFAULT "balanced",
     signals TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )')
+  )`)
 
 
   // Skill success tracking: records how often each skill succeeds or fails.
