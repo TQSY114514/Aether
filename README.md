@@ -263,8 +263,6 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 | [Claude Code](https://github.com/anthropics/claude-code) | Agent permission model, thinking slider, tool-call visualization, sub-agent delegation, hooks |
 | [OpenClaw](https://github.com/openclaw/openclaw) | Context compaction, tool-call loop detection, event-stream architecture |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iteration budget, structured long-term memory, autonomous skills |
-| [Evolver](https://github.com/EvoMap/evolver) | Self-evolution engine, GEP (Genome Evolution Protocol) |
-| [pi](https://github.com/earendil-works/pi) | Event stream system, AgentMessage abstraction, Steering/Follow-up mechanisms |
 | [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, context compression, tool-call repair |
 | [DS4](https://github.com/antirez/ds4) | Hierarchical task decomposition |
 
@@ -274,7 +272,6 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 |---|---|
 | [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva copy-paste component methodology |
 | [Magic UI](https://github.com/magicuidesign/magicui) | Animation patterns (shimmer, blur-fade) |
-| [SonettoHere](https://github.com/SonettoHere) | Input box reference system and UI/UX inspiration |
 
 ### Infrastructure
 
