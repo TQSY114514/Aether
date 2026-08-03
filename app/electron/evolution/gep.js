@@ -1,0 +1,349 @@
+// ───────────────────────────────────────────────────────────────────────────
+// GEP (Genome Evolution Protocol) — self-evolution engine.
+//
+// Inspired by Evolver's GEP protocol: lightweight strategy fragments (Genes)
+// are combined into reusable asset packages (Capsules), which map to the
+// Skill system for automatic application.
+//
+// Gene  = a lightweight strategy fragment (e.g., "always run git status before
+//         git diff", "prefer parallel reads over sequential")
+// Capsule = a reusable evolution asset package — a collection of related Genes
+//           that form a coherent strategy, mapped to a SKILL.md
+//
+// Evolution flow:
+//   1. Signal detection — scan memory/audit logs for patterns
+//   2. Gene selection — pick Genes that address detected signals
+//   3. Capsule assembly — group related Genes into a Capsule
+//   4. GEP prompt generation — inject evolution guidance into the agent
+//   5. EvolutionEvent recording — log what was evolved for future analysis
+// ───────────────────────────────────────────────────────────────────────────
+
+const fs = require('fs')
+const path = require('path')
+const { app } = require('electron')
+const log = require('../logger')
+
+// ─── Gene Registry ─────────────────────────────────────────────────────────
+
+const BUILTIN_GENES = [
+  {
+    id: 'parallel-reads',
+    name: 'Parallel Reads',
+    description: 'Combine independent read operations into parallel calls',
+    trigger: { signal: 'sequential_reads', threshold: 3 },
+    guidance: 'When reading multiple files, use parallel tool calls instead of sequential reads.',
+    category: 'efficiency'
+  },
+  {
+    id: 'git-status-before-edit',
+    name: 'Git Status Before Edit',
+    description: 'Always check git status before making file changes',
+    trigger: { signal: 'edit_without_status', threshold: 2 },
+    guidance: 'Before editing files, run git_status to check the current state.',
+    category: 'safety'
+  },
+  {
+    id: 'narrow-reads',
+    name: 'Narrow Reads',
+    description: 'Prefer targeted reads with offset/limit over full file dumps',
+    trigger: { signal: 'full_file_reads', threshold: 4 },
+    guidance: 'Use offset/limit on read_file for targeted reads instead of reading entire files.',
+    category: 'efficiency'
+  },
+  {
+    id: 'todo-first',
+    name: 'Todo First',
+    description: 'Create a todo checklist before starting multi-step tasks',
+    trigger: { signal: 'no_todo_multi_step', threshold: 2 },
+    guidance: 'For multi-step tasks (3+ steps), call todo_write first to create a checklist.',
+    category: 'planning'
+  },
+  {
+    id: 'error-escalation',
+    name: 'Error Escalation',
+    description: 'After 3 consecutive tool errors, summarize and ask for guidance',
+    trigger: { signal: 'error_loop', threshold: 2 },
+    guidance: 'After 3 consecutive tool errors, stop and ask the user for guidance instead of looping.',
+    category: 'resilience'
+  },
+  {
+    id: 'verification-after-edit',
+    name: 'Verification After Edit',
+    description: 'Run tests or verification after making code changes',
+    trigger: { signal: 'edit_without_verify', threshold: 3 },
+    guidance: 'After editing files, verify the changes work (run tests, check syntax, etc.).',
+    category: 'quality'
+  },
+  {
+    id: 'cache-results',
+    name: 'Cache Results',
+    description: 'Cache tool results to avoid redundant calls',
+    trigger: { signal: 'repeated_tool_calls', threshold: 3 },
+    guidance: 'If you already have a result from a previous tool call, reuse it instead of calling again.',
+    category: 'efficiency'
+  },
+  {
+    id: 'use-skills',
+    name: 'Use Skills',
+    description: 'Check available skills before starting a task',
+    trigger: { signal: 'skill_not_used', threshold: 2 },
+    guidance: 'Before starting a task, check if any available skills match the request.',
+    category: 'planning'
+  },
+]
+
+// ─── Capsule Definition ────────────────────────────────────────────────────
+
+class Capsule {
+  constructor({ id, name, description, genes, strategy = 'balanced' }) {
+    this.id = id
+    this.name = name
+    this.description = description
+    this.genes = genes          // array of Gene IDs
+    this.strategy = strategy    // balanced | innovate | harden | repair-only
+    this.version = 1
+    this.createdAt = new Date().toISOString()
+  }
+
+  // Generate a SKILL.md body from this capsule.
+  toSkillBody() {
+    const geneDetails = this.genes
+      .map(gid => BUILTIN_GENES.find(g => g.id === gid))
+      .filter(Boolean)
+      .map(g => `- **${g.name}**: ${g.guidance}`)
+    return `---
+name: evo-${this.id}
+description: ${this.description}
+strategy: ${this.strategy}
+version: ${this.version}
+---
+
+# Evolution Capsule: ${this.name}
+
+${this.description}
+
+## Strategy Guidance
+${geneDetails.join('\n')}
+
+## Strategy Mode
+**${this.strategy}** — ${STRATEGY_DESCRIPTIONS[this.strategy] || 'Balanced evolution approach.'}
+
+---
+*Auto-generated by GEP Evolution Engine. Review and adjust as needed.*
+`
+  }
+}
+
+const STRATEGY_DESCRIPTIONS = {
+  balanced: 'Balanced approach: apply genes when signals are strong, avoid over-optimization.',
+  innovate: 'Exploratory approach: try new strategies even with weak signals, favor experimentation.',
+  harden: 'Conservative approach: only apply well-proven genes, increase safety margins.',
+  'repair-only': 'Minimal approach: only evolve to fix detected errors, never for optimization.',
+}
+
+// ─── Signal Detection ──────────────────────────────────────────────────────
+
+// Scan memory and audit logs for evolution signals.
+// Returns an array of { signal, count, severity } objects.
+function detectSignals(db, auditTrail = []) {
+  const signals = []
+
+  // Signal: repeated tool errors
+  const errorCount = auditTrail.filter(tc => tc.error).length
+  if (errorCount >= 3) {
+    signals.push({ signal: 'error_loop', count: errorCount, severity: errorCount >= 5 ? 'high' : 'medium' })
+  }
+
+  // Signal: sequential reads (reading files one at a time)
+  const readCalls = auditTrail.filter(tc => tc.name === 'read_file')
+  if (readCalls.length >= 4) {
+    // Check if reads were done sequentially (no parallel batches)
+    const sequentialReads = readCalls.length >= 4 && auditTrail.every((tc, i, arr) => {
+      if (tc.name !== 'read_file' || i === 0) return true
+      return arr[i - 1].name !== 'read_file'
+    })
+    // Actually, we can't reliably detect parallelism from the audit trail alone.
+    // Count as sequential if there are many reads in a single round.
+    if (readCalls.length >= 5) {
+      signals.push({ signal: 'sequential_reads', count: readCalls.length, severity: 'low' })
+    }
+  }
+
+  // Signal: full file reads without offset/limit
+  const fullReads = auditTrail.filter(tc =>
+    tc.name === 'read_file' && tc.args && !tc.args.offset && !tc.args.limit
+  )
+  if (fullReads.length >= 3) {
+    signals.push({ signal: 'full_file_reads', count: fullReads.length, severity: 'low' })
+  }
+
+  // Signal: edits without verification
+  const edits = auditTrail.filter(tc => ['write_file', 'edit_file'].includes(tc.name))
+  const verifications = auditTrail.filter(tc =>
+    tc.name === 'run_command' && tc.args?.command &&
+    /test|verify|check|lint/i.test(tc.args.command)
+  )
+  if (edits.length >= 2 && verifications.length === 0) {
+    signals.push({ signal: 'edit_without_verify', count: edits.length, severity: 'medium' })
+  }
+
+  // Signal: edits without git status
+  const gitStatus = auditTrail.filter(tc => tc.name === 'git_status')
+  if (edits.length >= 2 && gitStatus.length === 0) {
+    signals.push({ signal: 'edit_without_status', count: edits.length, severity: 'medium' })
+  }
+
+  // Signal: no todo for multi-step tasks
+  const hasTodo = auditTrail.some(tc => tc.name === 'todo_write')
+  if (auditTrail.length >= 5 && !hasTodo) {
+    signals.push({ signal: 'no_todo_multi_step', count: auditTrail.length, severity: 'low' })
+  }
+
+  // Signal: repeated identical tool calls
+  const toolCounts = new Map()
+  for (const tc of auditTrail) {
+    const key = `${tc.name}:${JSON.stringify(tc.args || {})}`
+    toolCounts.set(key, (toolCounts.get(key) || 0) + 1)
+  }
+  for (const [key, count] of toolCounts) {
+    if (count >= 3) {
+      signals.push({ signal: 'repeated_tool_calls', count, severity: 'medium', detail: key })
+    }
+  }
+
+  // Signal: skill not used when available
+  try {
+    const skills = require('../llm/skills').getSkills()
+    if (skills.length > 0 && !auditTrail.some(tc => tc.name === 'use_skill')) {
+      signals.push({ signal: 'skill_not_used', count: skills.length, severity: 'low' })
+    }
+  } catch {}
+
+  return signals
+}
+
+// ─── Gene Selection ────────────────────────────────────────────────────────
+
+// Select genes that address the detected signals.
+// Returns an array of Gene objects.
+function selectGenes(signals, strategy = 'balanced') {
+  const selected = []
+  const signalNames = new Set(signals.map(s => s.signal))
+
+  for (const gene of BUILTIN_GENES) {
+    if (!signalNames.has(gene.trigger.signal)) continue
+    const signal = signals.find(s => s.signal === gene.trigger.signal)
+    const count = signal?.count || 0
+    const threshold = gene.trigger.threshold
+
+    // Apply strategy-specific thresholds
+    let effectiveThreshold = threshold
+    if (strategy === 'innovate') effectiveThreshold = Math.max(1, threshold - 1)
+    if (strategy === 'harden') effectiveThreshold = threshold + 1
+    if (strategy === 'repair-only' && gene.category !== 'safety' && gene.category !== 'resilience') continue
+
+    if (count >= effectiveThreshold) {
+      selected.push({ ...gene, matchCount: count, matchSignal: signal.signal })
+    }
+  }
+
+  return selected
+}
+
+// ─── Capsule Assembly ──────────────────────────────────────────────────────
+
+// Group selected genes into a capsule and write it as a SKILL.md.
+function assembleCapsule(db, selectedGenes, strategy = 'balanced') {
+  if (selectedGenes.length === 0) return null
+
+  const geneIds = selectedGenes.map(g => g.id)
+  const capsuleId = geneIds.sort().join('-').slice(0, 40)
+  const name = `Evolution Strategy: ${selectedGenes.map(g => g.name).join(' + ')}`
+  const description = `Auto-generated evolution capsule addressing ${selectedGenes.length} detected signals.`
+
+  const capsule = new Capsule({
+    id: capsuleId,
+    name,
+    description,
+    genes: geneIds,
+    strategy
+  })
+
+  // Write as SKILL.md
+  const skillsDir = path.join(app.getPath('userData'), 'skills', 'evolution')
+  const capsuleDir = path.join(skillsDir, `evo-${capsuleId}`)
+  try {
+    fs.mkdirSync(capsuleDir, { recursive: true })
+    fs.writeFileSync(path.join(capsuleDir, 'SKILL.md'), capsule.toSkillBody(), 'utf8')
+    // Invalidate skills cache
+    try { require('../llm/skills').scanSkills() } catch {}
+    log.info(`gep: assembled capsule "${capsuleId}" (${selectedGenes.length} genes, strategy: ${strategy})`)
+  } catch (e) {
+    log.warn('gep: capsule assembly failed:', e.message)
+    return null
+  }
+
+  // Record evolution event
+  try {
+    const event = {
+      capsuleId,
+      genes: JSON.stringify(geneIds),
+      strategy,
+      signals: JSON.stringify(selectedGenes.map(g => g.matchSignal)),
+      createdAt: new Date().toISOString()
+    }
+    db.run(
+      'INSERT INTO evolution_events (capsule_id, genes, strategy, signals, created_at) VALUES (?, ?, ?, ?, ?)',
+      [event.capsuleId, event.genes, event.strategy, event.signals, event.createdAt]
+    )
+  } catch (e) {
+    log.warn('gep: failed to record evolution event:', e.message)
+  }
+
+  return capsule
+}
+
+// ─── GEP Prompt Generation ─────────────────────────────────────────────────
+
+// Generate a system-prompt block with evolution guidance for the agent.
+function generateGepPrompt(selectedGenes) {
+  if (selectedGenes.length === 0) return ''
+  const items = selectedGenes.map(g => `- ${g.guidance}`).join('\n')
+  return `\n<evolution_guidance>\nThe following strategies have been learned from past sessions and should be applied:\n${items}\n</evolution_guidance>\n`
+}
+
+// ─── Full Evolution Cycle ──────────────────────────────────────────────────
+
+// Run the complete evolution cycle: detect → select → assemble → prompt.
+// Returns { capsule, prompt, signals, genes } or null if no evolution needed.
+function runEvolutionCycle(db, auditTrail = [], strategy = 'balanced') {
+  const signals = detectSignals(db, auditTrail)
+  if (signals.length === 0) return null
+
+  const genes = selectGenes(signals, strategy)
+  if (genes.length === 0) return null
+
+  const capsule = assembleCapsule(db, genes, strategy)
+  const prompt = generateGepPrompt(genes)
+
+  return { capsule, prompt, signals, genes }
+}
+
+// Get all evolution events from the database.
+function getEvolutionHistory(db) {
+  try {
+    return db.allRows('SELECT * FROM evolution_events ORDER BY created_at DESC LIMIT 50') || []
+  } catch { return [] }
+}
+
+module.exports = {
+  BUILTIN_GENES,
+  Capsule,
+  detectSignals,
+  selectGenes,
+  assembleCapsule,
+  generateGepPrompt,
+  runEvolutionCycle,
+  getEvolutionHistory,
+  STRATEGY_DESCRIPTIONS,
+}

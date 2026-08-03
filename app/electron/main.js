@@ -82,6 +82,7 @@ const { registerSkillsHandlers } = require('./ipc/skills.handler')
 const { registerTaskHandlers } = require('./ipc/task.handler')
 const { registerCronHandlers } = require('./ipc/cron.handler')
 const { initScheduler } = require('./cron/scheduler')
+const { runEvolutionCycle } = require('./evolution/gep')
 const mcpManager = require('./mcp/manager')
 const { setWorkspaceRoot } = require('./tools/sandbox')
 
@@ -228,6 +229,24 @@ function setupIpcHandlers() {
   registerSkillsHandlers(ipcMain, db)
   registerTaskHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerCronHandlers(ipcMain)
+
+  // ── Evolution IPC ──
+  ipcMain.handle('evolution:run-cycle', (_e, { strategy }) => {
+    try {
+      const result = runEvolutionCycle(db, [], strategy || 'balanced')
+      return { ok: true, result }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  })
+  ipcMain.handle('evolution:history', () => {
+    try {
+      const { getEvolutionHistory } = require('./evolution/gep')
+      return getEvolutionHistory(db)
+    } catch (e) {
+      return []
+    }
+  })
   const { registerUsageHandlers } = require('./ipc/usage.handler')
   registerUsageHandlers(ipcMain, db)
   // Search (FTS5) handler

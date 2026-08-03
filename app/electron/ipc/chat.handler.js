@@ -1,4 +1,4 @@
-﻿const { createAllowRulesStore, buildToolLoopCallbacks } = require('./toolLoopCallbacks')
+const { createAllowRulesStore, buildToolLoopCallbacks } = require('./toolLoopCallbacks')
 const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
 const { runToolLoop, MAX_CONCURRENT_TOOLS } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
@@ -14,6 +14,8 @@ const modelAdvisor = require('../llm/modelAdvisor')
 const modelRouter = require('../llm/modelRouter')
 const moa = require('../llm/moa')
 const log = require('../logger')
+const steering = require('../llm/steering')
+const trajectory = require('../llm/trajectory')
 const providerHealth = require('../llm/providerHealth')
 const checkpoints = require('../llm/checkpoints')
 
@@ -608,6 +610,38 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return trustEngine.getTrustBadge(db, sessionId)
     } catch {
       return null
+    }
+  })
+
+  // ─── Steering IPC ────────────────────────────────────────────────────────
+  ipcMain.handle('steering:steer', (_e, { sessionId, text, priority }) => {
+    try {
+      return steering.steer(sessionId, text, priority)
+    } catch (e) {
+      return { error: e.message }
+    }
+  })
+  ipcMain.handle('steering:follow-up', (_e, { sessionId, task }) => {
+    try {
+      return steering.followUp(sessionId, task)
+    } catch (e) {
+      return { error: e.message }
+    }
+  })
+  ipcMain.handle('steering:list-sessions', () => {
+    try {
+      return steering.listSessions()
+    } catch (e) {
+      return []
+    }
+  })
+
+  // ─── Trajectory IPC ──────────────────────────────────────────────────────
+  ipcMain.handle('trajectory:stats', (_e, sessionId) => {
+    try {
+      return trajectory.getCompressionStats(sessionId)
+    } catch (e) {
+      return { totalCompressed: 0, turnsSinceCompression: 0 }
     }
   })
 }

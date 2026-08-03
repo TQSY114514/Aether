@@ -53,6 +53,10 @@ try {
 const planning = require('./planning')
 const { reasoningFamily } = require('./reasoning')
 const hooks = require('./hooks')
+const { stream: eventStream } = require('./agentEvents')
+const skillSelfCreate = require('./skillSelfCreate')
+const steering = require('./steering')
+const trajectory = require('./trajectory')
 const checkpoints = require('./checkpoints')
 
 class SemanticLoopDetector {
@@ -154,6 +158,9 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 // Returns the final assistant text.
 async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections }) {
   toolCache.clear()
+  // Event stream: agent start
+  eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
+  steering.setRunning(sessionId, true)
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
   let totalChars = 0
@@ -297,12 +304,14 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
 
   while (budget.consume()) {
     const depth = budget.used
+    // Event stream: turn start
+    eventStream.turnStart({ sessionId, depth, remaining: budget.remaining })
     // Feature B: inject any pending user messages before completeChatMessage.
-    const _pendingInj = getPendingInjections ? getPendingInjections() : []
+    const _pendingInj = steering.getPendingInjections(sessionId)
     if (_pendingInj.length) {
       for (const text of _pendingInj) convo.push({ role: 'user', content: text })
       convo.push({ role: 'system', content: '[用户打断:优先回应这条新消息,再决定是否继续原任务]' })
-      clearPendingInjections?.()
+      // injections already cleared by getPendingInjections
       try { onStatus?.({ text: '📥 已插入你的新消息', kind: 'injection' }) } catch {}
     }
     const opts = { ...options }
@@ -502,6 +511,11 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
         return { tc, isPlan: false, entry }
       }
 
+      // Record tool patterns for skill self-creation
+      const toolNames = msg.tool_calls.map(tc => (tc.function || {}).name).filter(Boolean)
+      if (toolNames.length > 0) {
+        try { skillSelfCreate.recordPattern(toolNames) } catch {}
+      }
       // Execute tool calls. If any tool declares sequential mode (e.g. run_command),
       // run them one at a time to avoid shared-state races. Otherwise, batch into
       // MAX_CONCURRENT_TOOLS groups for parallel execution.
@@ -530,6 +544,8 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
           try { onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: planStep, kind: 'observe' }) } catch {}
         } else {
           try { onToolCall?.(entry) } catch {}
+          // Event stream: tool end
+          eventStream.toolEnd({ sessionId, name: entry.name, args: entry.args, result: entry.result, error: entry.error, latencyMs: entry.latencyMs, depth })
           // Audit log: record each tool call.
           if (onAudit && !isPlan) {
             auditTrail.push({ name: entry.name, args: entry.args, result: entry.result, error: entry.error, failure_kind: entry.failure_kind, recovery_hint: entry.recovery_hint, latencyMs: entry.latencyMs, depth })
@@ -568,6 +584,17 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
         } catch {}
       }
 
+      // Trajectory compression: proactively compress mechanical messages
+      if (sessionId) {
+        try {
+          const compressed = trajectory.maybeCompressTrajectory(sessionId, convo)
+          if (compressed !== convo) {
+            convo.length = 0
+            convo.push(...compressed)
+            eventStream.compactEnd({ sessionId, type: 'trajectory', stats: trajectory.getCompressionStats(sessionId) })
+          }
+        } catch {}
+      }
       if (totalChars > MAX_TOTAL_CHARS) {
         return '（工具输出超出上下文预算，已停止）'
       }
@@ -584,6 +611,9 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
     }
     // No tool calls — final answer.
     const finalStatus = budget.used >= budget.maxTotal ? 'budget_exhausted' : 'success'
+    // Event stream: agent end
+    eventStream.agentEnd({ sessionId, finalStatus, totalIterations: budget.used })
+    steering.setRunning(sessionId, false)
     if (onAudit) {
       try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus, planId: plan?.id, planStatus: plan?.tasks?.map(t => t.status) }) } catch {}
     }
@@ -592,6 +622,8 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
     // and its results are logged, not surfaced to the user as the answer.
     return msg.content || ''
   }
+  eventStream.agentEnd({ sessionId, finalStatus: 'budget_exhausted', totalIterations: budget.used })
+  steering.setRunning(sessionId, false)
   try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
   // Audit log: record the complete agent turn.
   if (onAudit) {

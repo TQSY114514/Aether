@@ -197,5 +197,17 @@ interface Window {
       list: () => Promise<{ name: string; intervalMs: number; running: boolean }[]>
       runNow: (name: string) => Promise<boolean>
     }
+    steering: {
+      steer: (params: { sessionId: number; text: string; priority?: string }) => Promise<{ text: string; priority: string; timestamp: number; processed: boolean }>
+      followUp: (params: { sessionId: number; task: string | { text: string; context?: Record<string, unknown> } }) => Promise<{ id: string; text: string; status: string }>
+      listSessions: () => Promise<number[]>
+    }
+    evolution: {
+      runCycle: (params: { strategy?: string }) => Promise<{ ok: boolean; result?: unknown; error?: string }>
+      history: () => Promise<unknown[]>
+    }
+    trajectory: {
+      getStats: (sessionId: number) => Promise<{ totalCompressed: number; turnsSinceCompression: number }>
+    }
   }
 }
