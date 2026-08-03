@@ -302,7 +302,7 @@ async function initDatabase() {
   addCol('model', 'context_window', 'INTEGER')
   addCol('model', 'input_price_per_1k', 'REAL')
   addCol('model', 'output_price_per_1k', 'REAL')
-  addCol('model', 'created_at', 'DATETIME')
+  addCol('model', 'ulw_role', "TEXT NOT NULL DEFAULT 'none'")
   addCol('persona', 'avatar', 'TEXT')
   addCol('persona', 'created_at', 'DATETIME')
   addCol('session', 'pinned', 'INTEGER NOT NULL DEFAULT 0')

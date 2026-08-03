@@ -12,6 +12,12 @@
 //
 // Phase 4: Permission model upgrade (5-tier PermissionPolicy) and
 // multi-dimensional IterationBudget (iterations, tokens, time, errors).
+//
+// UltraWork (ULW) mode (OMO-inspired):
+//   - Detects `ulw` / `ultrawork` in user messages.
+//   - Discovers user's configured models and assigns ULW roles by tier.
+//   - Spawns parallel sub-agents (analyzer + planner) with different models.
+//   - Falls back to enhanced system prompt if only one model is available.
 // ───────────────────────────────────────────────────────────────────────────
 
 const { completeChatMessage } = require('./providerAdapter')
@@ -65,6 +71,7 @@ const skillSelfCreate = require('./skillSelfCreate')
 const steering = require('./steering')
 const trajectory = require('./trajectory')
 const checkpoints = require('./checkpoints')
+const ultraWork = require('./ultraWork')
 
 class SemanticLoopDetector {
   constructor(windowSize = 6, threshold = 0.85, warnThreshold = 2, breakThreshold = 4) {
@@ -216,6 +223,73 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, projectCtx)
   }
 
+  // ─── UltraWork (ULW) Mode Detection ──────────────────────────────────────
+  // If the last user message contains `ulw` or `ultrawork`, activate enhanced
+  // multi-agent mode: deep codebase analysis, richer system prompt, and
+  // auto-verification.
+  //
+  // ULW now supports true multi-model orchestration:
+  //   - Discovers all user-configured models from the database
+  //   - Assigns roles (analyzer/planner/implementer/verifier) based on tier
+  //   - Spawns parallel sub-agents with different models when available
+  //   - Falls back to enhanced system prompt if only one model exists
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
+  const ulwMode = lastUserMsg ? ultraWork.isUltraWorkRequest(lastUserMsg.content) : false
+  let ulwRoleModels = null
+
+  if (ulwMode) {
+    // Strip the trigger word from the user message so the model doesn't see it.
+    if (lastUserMsg) {
+      lastUserMsg.content = ultraWork.stripUlwTrigger(lastUserMsg.content)
+    }
+
+    // Run ULW multi-agent prelude: model discovery + parallel sub-agents.
+    // This is best-effort — never blocks the main loop.
+    let projectStructure = null
+    let techStack = null
+    let ulwPlan = null
+
+    try {
+      // Run codebase analysis (always, cheap).
+      projectStructure = ultraWork.analyzeProjectStructure(4)
+      techStack = ultraWork.detectProjectTechStack()
+    } catch {}
+
+    try {
+      // Discover models and run parallel sub-agents (analyzer + planner).
+      const ulwPrelude = await ultraWork.runUlwPrelude({ db, provider, signal, options })
+      if (ulwPrelude) {
+        ulwRoleModels = ulwPrelude.roleModels
+        if (ulwPrelude.analysis) {
+          if (ulwPrelude.analysis.structure) projectStructure = ulwPrelude.analysis.structure
+          if (ulwPrelude.analysis.techStack) techStack = ulwPrelude.analysis.techStack
+        }
+        if (ulwPrelude.plan) {
+          ulwPlan = ulwPrelude.plan
+        }
+      }
+    } catch {}
+
+    // Inject ULW-enhanced system prompt after the main system prompt.
+    const ulwBlock = ultraWork.buildUlwSystemBlock(projectStructure, techStack, ulwRoleModels)
+    if (ulwBlock) {
+      const sysIdx = convo.findIndex(m => m.role === 'system')
+      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, { role: 'system', content: ulwBlock })
+    }
+
+    // Inject ULW sub-agent analysis report if available.
+    if (ulwPlan) {
+      const sysIdx = convo.findIndex(m => m.role === 'system')
+      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, { role: 'system', content: `\n\n### ULW 规划器分析结果\n${ulwPlan}` })
+    }
+
+    const isMultiModel = ulwRoleModels && ulwRoleModels._multiModel
+    const statusText = isMultiModel
+      ? `⚡ UltraWork 多模型模式已激活 — 分析器:${ulwRoleModels.analyzer?.model_name || '?'} 规划器:${ulwRoleModels.planner?.model_name || '?'} 执行器:${ulwRoleModels.implementer?.model_name || '?'}`
+      : '⚡ UltraWork 模式已激活 — 增强系统提示 + 深度代码库探索'
+    try { onStatus?.({ text: statusText, kind: 'ulw' }) } catch {}
+  }
+
   let plan = null
   let planningMode = false
   let planToolsPayload = []
@@ -263,7 +337,13 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         }
       }
 
-      let verifyPrompt = `You just completed a task using tools. Review the evidence below and answer: did you successfully complete ALL requirements? Are there any errors, missed steps, or incomplete results?
+      // Use ULW-specific verification prompt when in ULW mode.
+      let verifyPrompt
+      if (ulwMode) {
+        const planSummary = plan ? planning.planSummary(plan) : ''
+        verifyPrompt = ultraWork.buildUlwVerificationPrompt(planSummary, toolTrace, ulwRoleModels)
+      } else {
+        verifyPrompt = `You just completed a task using tools. Review the evidence below and answer: did you successfully complete ALL requirements? Are there any errors, missed steps, or incomplete results?
 
 Tool calls:
 ${toolTrace}
@@ -273,6 +353,7 @@ Reply in this format:
 - STATUS: COMPLETE or INCOMPLETE
 - ISSUES: list any problems found, or "none"
 - SUMMARY: brief summary of what was accomplished`
+      }
 
       if (autoCommit) {
         verifyPrompt += `
@@ -321,8 +402,8 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
   }
 
   // Planning gate: if the request is complex enough, generate a plan first.
-  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
-  if (lastUserMsg && planning.isComplexRequest(lastUserMsg.content, messages.length)) {
+  // ULW mode always triggers planning (even for simpler requests).
+  if (lastUserMsg && (ulwMode || planning.isComplexRequest(lastUserMsg.content, messages.length))) {
     try {
       plan = await planning.generatePlan(provider, model, lastUserMsg.content, signal, options)
       if (plan && plan.tasks.length > 1) {
@@ -331,7 +412,8 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
         // Inject plan into system context
         const planBlock = planning.planSystemBlock(plan)
         convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
-        onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)`, kind: 'plan' })
+        const prefix = ulwMode ? '⚡ ' : ''
+        onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `${prefix}📋 Plan: ${plan.description} (${plan.tasks.length} tasks)`, kind: 'plan' })
       }
     } catch {}
   }
