@@ -75,7 +75,7 @@ export default function ChatInput() {
 
   // Batch store selectors with shallow comparison to reduce re-render triggers.
   const {
-    sendMessage, enqueueMessage, removeQueued, stopGeneration, sending,
+    sendMessage, enqueueMessage, removeQueued, stopGeneration,
     streamingBySession, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
     providers, allModels, saveSessionConfig, queuedMessages,
@@ -84,7 +84,6 @@ export default function ChatInput() {
   } = useStore((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
-    sending: s.sending,
     streamingBySession: s.streamingBySession,
     currentSessionId: s.currentSessionId, createSession: s.createSession,
     chatMode: s.chatMode, arenaModelIds: s.arenaModelIds,
@@ -105,11 +104,11 @@ export default function ChatInput() {
   }, [scores])
 
   // Per-session streaming check — NOT a global flag, so one session's stream
-  // never blocks another session's input. Also block when arena is running
-  // (sending flag covers arena because runArena sets sending: true before
-  // the streaming buffer).
+  // never blocks another session's input. Arena is also per-session: runArena
+  // writes a streaming buffer entry for the session that started the run, so
+  // another session's arena stays usable while this one is generating.
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
-  const isArenaRunning = chatMode === 'arena' && sending
+  const isArenaRunning = chatMode === 'arena' && isStreaming
   // Feature B: true when the current session has an active tool loop (can accept injections).
   const isLooping = isStreaming && loopingSessions.has(currentSessionId ?? -1)
 
@@ -466,7 +465,7 @@ export default function ChatInput() {
             placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning || (isStreaming && !isLooping)} />
-          {isArenaRunning || (isStreaming && !isLooping) ? (
+          {isArenaRunning || isStreaming ? (
             <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
               <Square size={14} />
             </button>

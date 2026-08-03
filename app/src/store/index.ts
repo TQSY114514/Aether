@@ -185,6 +185,7 @@ interface AppState {
   // never blocks another session's input.
   streamingBySession: Record<number, { content: string; messageId: number | null }>
   sending: boolean
+  appendArenaResult: (sessionId: number, result: ArenaResult) => void
   // Per-message tool-call invocations, keyed by the assistant messageId the
   // tool belongs to. Each entry is the list of tool calls for that message.
   toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null }[]>
@@ -270,6 +271,8 @@ interface AppState {
 
   // Arena
   arenaResults: ArenaResult[]
+  arenaResultsSessionId: number | null
+  arenaPending: number
   arenaModelIds: number[]
   setArenaModelIds: (ids: number[]) => void
   arenaError: string | null
@@ -463,7 +466,7 @@ export const useStore = create<AppState>((set, get) => ({
   // session creation fails (e.g. no enabled provider), fall back to the
   // welcome page so the user isn't left looking at the previous chat.
   newChat: () => {
-    set({ currentView: 'chat', arenaResults: [], chatMode: 'normal' })
+    set({ currentView: 'chat', arenaResults: [], arenaResultsSessionId: null, arenaPending: 0, chatMode: 'normal' })
     get().createSession().catch(() => {
       set({ currentSessionId: null, messages: [] })
     })
@@ -667,7 +670,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ chatMode: mode })
     // Reset arena state when leaving arena mode
     if (mode !== 'arena') {
-      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaError: null })
+      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaResultsSessionId: null, arenaPending: 0, arenaError: null })
     }
     // When switching to arena mode on a blank page (no session), create one
     // so the arena model selector has a target session. Only skip if arena already has
@@ -773,7 +776,7 @@ export const useStore = create<AppState>((set, get) => ({
       set((s) => {
         const next = { ...s.streamingBySession }
         delete next[currentSessionId]
-        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
+        return { streamingBySession: next, sending: Object.keys(next).length > 0 }
       })
       log.error('chat error', err)
     }
@@ -897,8 +900,7 @@ export const useStore = create<AppState>((set, get) => ({
     _stoppingSessionId = sid0
     try {
       if (sid0) await window.electronAPI.chat.stop(sid0)
-      await window.electronAPI.arena.stop().catch(() => {})
-      set({ sending: false })
+      await window.electronAPI.arena.stop(sid0 || undefined).catch(() => {})
 
       const current = get().currentSessionId
       if (!current) return
@@ -945,7 +947,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => {
       const next = { ...s.streamingBySession }
       if (sid0) delete next[sid0]
-      return { streamingBySession: next }
+      return { streamingBySession: next, sending: Object.keys(next).length > 0 }
     })
   },
 
@@ -993,7 +995,7 @@ export const useStore = create<AppState>((set, get) => ({
       set((s) => {
         const next = { ...s.streamingBySession }
         delete next[currentSessionId]
-        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
+        return { streamingBySession: next, sending: Object.keys(next).length > 0 }
       })
       log.error('regenerate error:', err)
     }
@@ -1037,7 +1039,7 @@ export const useStore = create<AppState>((set, get) => ({
       set((s) => {
         const next = { ...s.streamingBySession }
         delete next[currentSessionId]
-        return { streamingBySession: next, sending: get().currentSessionId !== currentSessionId ? s.sending : false }
+        return { streamingBySession: next, sending: Object.keys(next).length > 0 }
       })
       log.error('editMessage error:', err)
     }
@@ -1077,6 +1079,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Arena
   arenaResults: [],
+  arenaResultsSessionId: null,
+  arenaPending: 0,
   arenaModelIds: [],
   arenaError: null,
   arenaVoted: false,    // true after user has voted in this arena run
@@ -1098,24 +1102,38 @@ export const useStore = create<AppState>((set, get) => ({
       token_count: null, latency_ms: null, status: 'success', error_message: null,
       created_at: new Date().toISOString(), attachment: null,
     }
-    set({ sending: true, arenaResults: [], arenaError: null, arenaVoted: false, arenaVoteWinnerId: null, messages: [...get().messages, tempUserMsg] })
+    set({ sending: true, arenaResults: [], arenaError: null, arenaVoted: false, arenaVoteWinnerId: null, arenaResultsSessionId: currentSessionId, arenaPending: arenaModelIds.length, messages: [...get().messages, tempUserMsg] })
     set((s) => ({ streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '...', messageId: null } } }))
     get().loadSessions()
+    ensureArenaListener()
     try {
       const { results } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, personaId })
       if (!results || results.length === 0) {
-        set({ sending: false, arenaError: '没有返回结果，请检查模型/网络' })
-        set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
+        set({ arenaError: '没有返回结果，请检查模型/网络' })
+        set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n, sending: Object.keys(n).length > 0, arenaPending: 0 } })
         return
       }
-      set({ arenaResults: results, sending: false, arenaError: null })
-      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
+      set({ arenaResults: results, arenaError: null, arenaPending: 0 })
+      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n, sending: Object.keys(n).length > 0 } })
       get().loadMessages(currentSessionId)
       get().loadSessions()
     } catch (err: unknown) {
-      set({ sending: false, arenaError: '竞技场请求失败: ' + (err instanceof Error ? err.message : String(err)) })
-      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n } })
+      set({ arenaError: '竞技场请求失败: ' + (err instanceof Error ? err.message : String(err)) })
+      set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n, sending: Object.keys(n).length > 0, arenaPending: 0 } })
     }
+  },
+
+  appendArenaResult: (sessionId, result) => {
+    set((s) => {
+      // Ignore events from arena runs of other sessions (results are scoped
+      // to the session that started the run).
+      if (s.arenaResultsSessionId !== sessionId) return {}
+      const exists = s.arenaResults.some(r => r.model_id === result.model_id)
+      return {
+        arenaResults: exists ? s.arenaResults : [...s.arenaResults, result],
+        arenaPending: Math.max(0, s.arenaPending - (exists ? 0 : 1)),
+      }
+    })
   },
 
   arenaVote: async (winner, losers) => {
@@ -1326,6 +1344,7 @@ export function ensureAllListeners() {
 let _navigating = false
 let chunkListenerInstalled = false
 let _toolCallListenerInstalled = false
+let _arenaListenerInstalled = false
 let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
 let _autoThemeCleanup: (() => void) | null = null
@@ -1350,6 +1369,16 @@ function ensureToolCallListener() {
       }
       return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing, entry] } }
     })
+  })
+}
+
+// Progressive arena results: each model's result arrives via a push event as
+// soon as it finishes, so the UI renders results while the rest still run.
+function ensureArenaListener() {
+  if (_arenaListenerInstalled) return
+  _arenaListenerInstalled = true
+  window.electronAPI.arena.onModelDone(({ sessionId, result }) => {
+    useStore.getState().appendArenaResult(sessionId, result)
   })
 }
 
@@ -1443,16 +1472,14 @@ function ensureChunkListener() {
               useStore.setState((s) => {
                 const next = { ...s.streamingBySession }
                 delete next[sid]
-                const cur = useStore.getState().currentSessionId
-                return { messages: msgs, streamingBySession: next, sending: !!(cur && next[cur]) }
+                return { messages: msgs, streamingBySession: next, sending: Object.keys(next).length > 0 }
               })
             } else {
               // User switched away — just clean up the buffer.
               useStore.setState((s) => {
                 const next = { ...s.streamingBySession }
                 delete next[sid]
-                const cur = useStore.getState().currentSessionId
-                return { streamingBySession: next, sending: !!(cur && next[cur]) }
+                return { streamingBySession: next, sending: Object.keys(next).length > 0 }
               })
             }
           }).catch(() => {
@@ -1460,8 +1487,7 @@ function ensureChunkListener() {
             useStore.setState((s) => {
               const next = { ...s.streamingBySession }
               delete next[sid]
-              const cur = useStore.getState().currentSessionId
-              return { streamingBySession: next, sending: !!(cur && next[cur]) }
+              return { streamingBySession: next, sending: Object.keys(next).length > 0 }
             })
           })
         } else if (!isStopping) {
@@ -1469,8 +1495,7 @@ function ensureChunkListener() {
           useStore.setState((s) => {
             const next = { ...s.streamingBySession }
             delete next[sid]
-            const cur = useStore.getState().currentSessionId
-            return { streamingBySession: next, sending: !!(cur && next[cur]) }
+            return { streamingBySession: next, sending: Object.keys(next).length > 0 }
           })
         }
         useStore.getState().pinSession(sid, 0).catch(() => {})

@@ -6,6 +6,7 @@
       "chat.new": "新建对话",
       "chat.placeholder": "输入消息…（Shift+Enter 换行）",
       "chat.arena.placeholder": "输入一个问题，多个模型同时作答…",
+      "chat.arena.running": "还有 {0} 个模型正在运行…",
       "chat.empty": "发送一条消息即可开始",
       "chat.no_session": "选择或新建一个对话以开始",
       "empty.welcome": "我能帮你做什么？",

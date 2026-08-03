@@ -84,7 +84,8 @@ interface Window {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null }) => Promise<{ results: ArenaResult[] }>
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
-      stop: () => Promise<void>
+      stop: (sessionId?: number) => Promise<void>
+      onModelDone: (callback: (payload: { sessionId: number; result: ArenaResult }) => void) => () => void
     }
     mcp: {
       list: () => Promise<{ id: number; name: string; command: string; args: string[]; env: Record<string, string>; enabled: number }[]>

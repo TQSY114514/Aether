@@ -108,7 +108,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     send: (params) => ipcRenderer.invoke('arena:send', params),
     vote: (data) => ipcRenderer.invoke('arena:vote', data),
     scores: () => ipcRenderer.invoke('arena:scores'),
-    stop: () => ipcRenderer.invoke('arena:stop'),
+    stop: (sessionId) => ipcRenderer.invoke('arena:stop', sessionId),
+    onModelDone: (cb) => subscribe('arena:model-done', cb),
   },
   mcp: {
     list: () => ipcRenderer.invoke('mcp:list'),

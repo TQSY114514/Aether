@@ -37,6 +37,7 @@
   "chat.aborted": "Aborted",
   "chat.arena.min_models": "Select at least 2 models",
   "chat.arena.placeholder": "Enter a question, multiple models answer at once...",
+  "chat.arena.running": "{0} models still running...",
   "chat.arena.result": "Arena results",
   "chat.arena.vote": "Best answer",
   "chat.arena.voted": "Selected as best answer, score updated",
