@@ -122,6 +122,47 @@ const TOOL_RETRY_BASE_MS = 1000
 const PERMISSION_TIMEOUT_MS = 120000
 const MAX_CONCURRENT_TOOLS = 5 // cap parallel tool calls per round
 
+// Dynamic concurrency: read-only tools can run in larger batches, write tools
+// and commands are serialized to avoid race conditions on shared state.
+const MAX_READ_CONCURRENT = 8
+const MAX_WRITE_CONCURRENT = 1
+const MAX_DEFAULT_CONCURRENT = 5
+
+const READ_TOOLS = new Set([
+  'read_file', 'list_dir', 'glob_find', 'grep_search', 'web_search',
+  'web_fetch', 'get_file_contents', 'list_branches', 'list_commits',
+  'list_issues', 'list_pull_requests', 'list_releases', 'list_tags',
+  'search_code', 'search_commits', 'search_issues', 'search_pull_requests',
+  'search_repositories', 'search_users', 'get_commit', 'get_label',
+  'get_latest_release', 'get_release_by_tag', 'get_tag', 'get_me',
+  'get_team_members', 'get_teams', 'list_repository_collaborators',
+  'issue_read', 'pull_request_read', 'list_issue_fields', 'list_issue_types',
+])
+
+const WRITE_TOOLS = new Set([
+  'write_file', 'edit_file', 'apply_patch', 'delete_file',
+  'run_command', 'exec', 'create_or_update_file', 'push_files',
+  'create_branch', 'create_pull_request', 'create_repository',
+  'fork_repository', 'merge_pull_request', 'update_pull_request',
+  'update_pull_request_branch', 'issue_write', 'sub_issue_write',
+  'add_issue_comment', 'add_comment_to_pending_review',
+  'add_reply_to_pull_request_comment', 'pull_request_review_write',
+  'request_copilot_review', 'run_secret_scanning',
+])
+
+function getMaxConcurrent(toolCalls) {
+  const names = toolCalls.map(tc => (tc.function || {}).name).filter(Boolean)
+  const hasWrite = names.some(n => WRITE_TOOLS.has(n))
+  const hasAnySequential = toolCalls.some(tc => {
+    const t = getTool((tc.function || {}).name)
+    return t && t.executionMode === 'sequential'
+  })
+  if (hasAnySequential || hasWrite) return 1
+  const allRead = names.every(n => READ_TOOLS.has(n))
+  if (allRead) return MAX_READ_CONCURRENT
+  return MAX_DEFAULT_CONCURRENT
+}
+
 // Phase 4: IterationBudget extends the multi-dimensional base from iterationBudget.js.
 // Retains the original consume/refund/used/remaining interface for backward compatibility
 // while adding multi-dimensional tracking (tokens, time, errors) via the base class.
@@ -408,8 +449,8 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
         return '（检测到语义循环，已停止）'
       }
 
-      // Execute the round's tool calls CONCURRENTLY (capped at MAX_CONCURRENT_TOOLS).
-      // Batch into chunks so independent calls take max(latency) not sum.
+      // Execute the round's tool calls. Dynamic concurrency: read-only tools
+      // run in larger batches, write tools serialize to avoid race conditions.
       const execOne = async (tc) => {
         const fn = tc.function || {}
         const args = safeParseToolCallArgs(fn.arguments)
@@ -585,23 +626,20 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
       if (toolPatternNames.length > 0) {
         try { skillSelfCreate.recordPattern(toolPatternNames) } catch {}
       }
-      // Execute tool calls. If any tool declares sequential mode (e.g. run_command),
-      // run them one at a time to avoid shared-state races. Otherwise, batch into
-      // MAX_CONCURRENT_TOOLS groups for parallel execution.
-      const anySequential = msg.tool_calls.some(tc => {
-        const t = getTool((tc.function || {}).name)
-        return t && t.executionMode === 'sequential'
-      })
+      // Dynamic concurrency: use getMaxConcurrent to determine batch size based
+      // on tool types. Write tools and sequential tools serialize; read-only
+      // tools get higher parallelism.
+      const maxConcurrent = getMaxConcurrent(msg.tool_calls)
       let allExecuted = []
-      if (anySequential) {
+      if (maxConcurrent === 1) {
         // Sequential execution — one tool at a time.
         for (const tc of msg.tool_calls) {
           allExecuted.push(await execOne(tc))
         }
       } else {
-        // Parallel execution — batch into groups of MAX_CONCURRENT_TOOLS.
-        for (let i = 0; i < msg.tool_calls.length; i += MAX_CONCURRENT_TOOLS) {
-          const chunk = msg.tool_calls.slice(i, i + MAX_CONCURRENT_TOOLS)
+        // Parallel execution — batch into groups of maxConcurrent.
+        for (let i = 0; i < msg.tool_calls.length; i += maxConcurrent) {
+          const chunk = msg.tool_calls.slice(i, i + maxConcurrent)
           const executed = await Promise.all(chunk.map(execOne))
           allExecuted.push(...executed)
         }

@@ -1,149 +1,103 @@
-const initSqlJs = require('sql.js')
+const Database = require('better-sqlite3')
 const fs = require('fs')
 const path = require('path')
-const { app } = require('electron')
+const { app, safeStorage } = require('electron')
 const log = require('./logger')
 
 let db = null
 let dbPath = null
+
 // Simple async mutex to serialize ELO updates and prevent lost-update races.
 let _eloMutex = Promise.resolve()
 
+// ─── API Key Encryption (safeStorage) ─────────────────────────────────────
+
+function encryptKey(plain) {
+  if (!plain || !safeStorage.isEncryptionAvailable()) return plain
+  try {
+    return safeStorage.encryptString(String(plain)).toString('base64')
+  } catch { return plain }
+}
+
+function decryptKey(encoded) {
+  if (!encoded || !safeStorage.isEncryptionAvailable()) return encoded
+  try {
+    return safeStorage.decryptString(Buffer.from(encoded, 'base64'))
+  } catch { return encoded }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
 function getTableColumns(table) {
   try {
-    const r = db.exec(`PRAGMA table_info(${table})`)
-    if (!r || !r[0]) return []
-    return r[0].values.map(row => row[1])
+    const rows = db.prepare(`PRAGMA table_info(${table})`).all()
+    return rows.map(row => row.name)
   } catch { return [] }
 }
 
-// Whitelist helper for dynamic UPDATE queries. Filters data keys against the
-// table's actual columns (via PRAGMA table_info) so a caller can never inject
-// a column name into the SQL string. Returns [] if the table doesn't exist
-// (which makes the UPDATE a no-op — safer than allowing all keys through).
 function safeKeys(table, data) {
   const cols = getTableColumns(table)
   if (cols.length === 0) return []
   return Object.keys(data).filter(k => k !== 'id' && cols.includes(k))
 }
 
-// Persisting the DB is expensive: db.export() serializes the whole database and
-// writeFileSync is synchronous, blocking the main process. During streaming we
-// updateMessage on every chunk, so we debounce the save — coalesce rapid writes
-// into a single flush 200ms after the last one. `flushNow` forces an immediate
-// write for moments that must be durable before returning (e.g. before quit).
-// Uses async writeFile so the main process is never blocked.
-let saveTimer = null
-let savePromise = null // tracks the in-flight async write so flushDatabase can await it
-const SAVE_DEBOUNCE_MS = 200
-function _writeDb(data) {
-  return fs.promises.writeFile(dbPath, Buffer.from(data)).catch(e => {
-    log.error('_writeDb failed:', e.message || e)
-    throw e
-  })
-}
-function saveDatabase() {
-  if (!db || !dbPath) return
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    saveTimer = null
-    const data = db.export()
-    savePromise = _writeDb(data).finally(() => { savePromise = null })
-  }, SAVE_DEBOUNCE_MS)
-}
-// Async flush — used by config.handler.js and the before-quit path (awaited there).
-// The debounce in saveDatabase means an in-flight write may need to be awaited.
-async function flushDatabase() {
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
-  if (savePromise) await savePromise
-  if (db && dbPath) {
-    const data = db.export()
-    await _writeDb(data)
-  }
-}
+function saveDatabase() { /* no-op: better-sqlite3 writes directly to disk */ }
+async function flushDatabase() { /* no-op: better-sqlite3 writes directly to disk */ }
 
 function lastId() {
-  const r = db.exec('SELECT last_insert_rowid()')
-  let id = r[0]?.values?.[0]?.[0]
-  if (!id) { const m = db.exec('SELECT MAX(id) FROM message'); id = m[0]?.values?.[0]?.[0] }
-  // sql.js may return BigInt for INTEGER columns; coerce to Number so JS
-  // strict-equality (currentSessionId === session.id) works across the app.
-  if (typeof id === 'bigint') id = Number(id)
-  return id || 0
+  const row = db.prepare('SELECT last_insert_rowid() as id').get()
+  let id = row ? row.id : 0
+  if (!id) {
+    const m = db.prepare('SELECT MAX(id) as max_id FROM message').get()
+    id = m ? m.max_id : 0
+  }
+  return Number(id) || 0
 }
+
 function allRows(stmt) {
-  const rows = []
-  try {
-    while (stmt.step()) {
-      const obj = stmt.getAsObject()
-      for (const k of Object.keys(obj)) {
-        if (typeof obj[k] === 'bigint') obj[k] = Number(obj[k])
-      }
-      rows.push(obj)
-    }
-  } finally {
-    stmt.free()
-  }
-  return rows
+  return stmt.all()
 }
 
-async function initDatabase() {
-  const SQL = await initSqlJs()
+function initDatabase() {
   dbPath = path.join(app.getPath('userData'), 'aetherai.db')
+  db = new Database(dbPath)
+  db.pragma('journal_mode = WAL')
+  db.pragma('foreign_keys = OFF')
 
-  if (fs.existsSync(dbPath)) {
-    const buffer = fs.readFileSync(dbPath)
-    db = new SQL.Database(buffer)
-  } else {
-    db = new SQL.Database()
-  }
+  db.exec("CREATE TABLE IF NOT EXISTS provider (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_url TEXT NOT NULL, api_key TEXT, api_format TEXT NOT NULL DEFAULT 'openai', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  db.exec("CREATE TABLE IF NOT EXISTS model (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, model_name TEXT NOT NULL, display_name TEXT, is_primary INTEGER NOT NULL DEFAULT 0, fallback_order INTEGER, context_window INTEGER, input_price_per_1k REAL, output_price_per_1k REAL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  db.exec("CREATE TABLE IF NOT EXISTS persona (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prompt TEXT NOT NULL, avatar TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  db.exec("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)")
+  db.exec("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
-  // Core tables
-  db.run("CREATE TABLE IF NOT EXISTS provider (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_url TEXT NOT NULL, api_key TEXT, api_format TEXT NOT NULL DEFAULT 'openai', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.run("CREATE TABLE IF NOT EXISTS model (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, model_name TEXT NOT NULL, display_name TEXT, is_primary INTEGER NOT NULL DEFAULT 0, fallback_order INTEGER, context_window INTEGER, input_price_per_1k REAL, output_price_per_1k REAL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.run("CREATE TABLE IF NOT EXISTS persona (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prompt TEXT NOT NULL, avatar TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.run("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)")
-  db.run("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+  db.exec('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
+  db.exec('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  db.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  db.exec("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  try { db.exec("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN relation_entity TEXT") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN relation_type TEXT") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN relation_target TEXT") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN source_session_id INTEGER") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN source_turn_id INTEGER") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN confidence REAL DEFAULT 1.0") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
 
-  // Phase 2 tables
-  db.run('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-  db.run('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
-  db.run('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-  // MCP servers: external tool servers the agent can call via stdio.
-  db.run('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-  db.run("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  try { db.run("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
-  // Relation fields for memory relationship inference (Hermes-style).
-  try { db.run("ALTER TABLE memory ADD COLUMN relation_entity TEXT") } catch {}
-  try { db.run("ALTER TABLE memory ADD COLUMN relation_type TEXT") } catch {}
-  try { db.run("ALTER TABLE memory ADD COLUMN relation_target TEXT") } catch {}
-  // Access count for memory decay (how often a memory was prefetched).
-  try { db.run("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0") } catch {}
-  // Last-accessed timestamp for time-decay scoring.
-  try { db.run("ALTER TABLE memory ADD COLUMN last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
-  // Provenance: source session + turn + message for traceability.
-  try { db.run("ALTER TABLE memory ADD COLUMN source_session_id INTEGER") } catch {}
-  try { db.run("ALTER TABLE memory ADD COLUMN source_turn_id INTEGER") } catch {}
-  try { db.run("ALTER TABLE memory ADD COLUMN confidence REAL DEFAULT 1.0") } catch {}
-  // Conflict tracking: when a similar fact already exists, link them.
-  try { db.run("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
+  db.exec('CREATE TABLE IF NOT EXISTS kg_nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL UNIQUE, type TEXT DEFAULT "entity", created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
+  db.exec('CREATE TABLE IF NOT EXISTS kg_edges (id INTEGER PRIMARY KEY AUTOINCREMENT, "from" TEXT NOT NULL, "to" TEXT NOT NULL, relation TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 0.8, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges("from")') } catch {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges("to")') } catch {}
 
-  // Knowledge graph: entity-relationship layer on top of flat memory.
-  db.run('CREATE TABLE IF NOT EXISTS kg_nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL UNIQUE, type TEXT DEFAULT "entity", created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
-  db.run('CREATE TABLE IF NOT EXISTS kg_edges (id INTEGER PRIMARY KEY AUTOINCREMENT, "from" TEXT NOT NULL, "to" TEXT NOT NULL, relation TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 0.8, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-  try { db.run('CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges("from")') } catch {}
-  try { db.run('CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges("to")') } catch {}
-
-  // Skill usage tracking: how often each skill is invoked.
-  db.run(`CREATE TABLE IF NOT EXISTS skill_usage (
+  db.exec(`CREATE TABLE IF NOT EXISTS skill_usage (
     name TEXT PRIMARY KEY,
     use_count INTEGER NOT NULL DEFAULT 0,
     last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Agent execution audit log (Codex-style). One row per agent turn, full trace
-  // as JSON payload for debugging and analysis.
-  db.run(`CREATE TABLE IF NOT EXISTS agent_execution_log (
+  db.exec(`CREATE TABLE IF NOT EXISTS agent_execution_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
     turn_id INTEGER NOT NULL,
@@ -151,9 +105,7 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Agent filesystem checkpoints. One row is recorded immediately before each
-  // dangerous tool runs so the renderer can restore this tool's file changes.
-  db.run(`CREATE TABLE IF NOT EXISTS agent_checkpoint (
+  db.exec(`CREATE TABLE IF NOT EXISTS agent_checkpoint (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
     message_id INTEGER NOT NULL,
@@ -165,29 +117,22 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Agent checkpoints — save/restore snapshots of long agent tasks.
   try { require('./llm/checkpointManager').createTable(db) } catch {}
   initSkillSuccessTable()
 
-  // Habit learner: tracks recurring user preferences.
-  db.run('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
-  // Skill self-creation: tracks repeated tool-use patterns for auto-drafting.
-  db.run(`CREATE TABLE IF NOT EXISTS skill_patterns (
+  db.exec('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
+  db.exec(`CREATE TABLE IF NOT EXISTS skill_patterns (
     signature TEXT PRIMARY KEY,
     tools TEXT NOT NULL,
     count INTEGER NOT NULL DEFAULT 1,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
-
-  // Skill self-creation: tracks which patterns have been auto-drafted.
-  db.run(`CREATE TABLE IF NOT EXISTS skill_drafts (
+  db.exec(`CREATE TABLE IF NOT EXISTS skill_drafts (
     signature TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     drafted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
-
-  // GEP Evolution: records evolution events for analysis.
-  db.run(`CREATE TABLE IF NOT EXISTS evolution_events (
+  db.exec(`CREATE TABLE IF NOT EXISTS evolution_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     capsule_id TEXT NOT NULL,
     genes TEXT NOT NULL,
@@ -196,13 +141,9 @@ async function initDatabase() {
     blast_radius TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
+  try { db.exec("ALTER TABLE evolution_events ADD COLUMN blast_radius TEXT"); } catch (e) {}
 
-  // Migration: add blast_radius column if missing
-  try { db.run("ALTER TABLE evolution_events ADD COLUMN blast_radius TEXT"); } catch (e) {}
-
-
-  // Skill success tracking: records how often each skill succeeds or fails.
-  db.run(`CREATE TABLE IF NOT EXISTS skill_success (
+  db.exec(`CREATE TABLE IF NOT EXISTS skill_success (
     name TEXT PRIMARY KEY,
     total_uses INTEGER NOT NULL DEFAULT 0,
     successes INTEGER NOT NULL DEFAULT 0,
@@ -210,15 +151,9 @@ async function initDatabase() {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Per-provider credential pool — multiple API keys per provider with rotation
-  // (least-recently-used) and backoff (cooldown on 429, disabled on 401).
-  db.run('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0)')
+  db.exec('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0)')
 
-  // Per-API-call usage log (one row per real provider request, across ALL
-  // call sites: primary chat, arena, title-gen, auto-memory, compaction).
-  // Drives the TokenPage stats: total tokens / cost / cache hit rate /
-  // per-provider & per-model breakdowns + a request-log table.
-  db.run(`CREATE TABLE IF NOT EXISTS usage_log (
+  db.exec(`CREATE TABLE IF NOT EXISTS usage_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER,
     provider_id INTEGER,
@@ -236,9 +171,7 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // MoA (Mixture of Agents) presets — each preset defines a set of reference
-  // models (advisors) + one aggregator model. Exposed as virtual `moa://` models.
-  db.run(`CREATE TABLE IF NOT EXISTS moa_preset (
+  db.exec(`CREATE TABLE IF NOT EXISTS moa_preset (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     description TEXT,
@@ -248,30 +181,23 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Skill lifecycle tracking — extends skill_usage with curator state machine.
-  // States: active → stale (30d unused) → archived (90d unused).
-  try { db.run("ALTER TABLE skill_usage ADD COLUMN state TEXT NOT NULL DEFAULT 'active'") } catch {}
-  try { db.run("ALTER TABLE skill_usage ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") } catch {}
-  try { db.run("ALTER TABLE skill_usage ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'") } catch {}
-  try { db.run("ALTER TABLE skill_usage ADD COLUMN patch_count INTEGER NOT NULL DEFAULT 0") } catch {}
-  try { db.run("ALTER TABLE skill_usage ADD COLUMN last_viewed_at DATETIME") } catch {}
-  try { db.run("ALTER TABLE skill_usage ADD COLUMN archived_at DATETIME") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN state TEXT NOT NULL DEFAULT 'active'") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN patch_count INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN last_viewed_at DATETIME") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN archived_at DATETIME") } catch {}
 
-  // FTS5 full-text search on messages (CJK bigram handled at app layer).
-  // External content table — avoids duplicating message text.
   try {
-    db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+    db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
       content,
       session_id UNINDEXED,
       message_id UNINDEXED,
       tokenize = 'unicode61'
     )`)
   } catch {}
-
-  // FTS5 full-text search on memories -- enables fast semantic recall across
-  // all stored facts, entities, and context summaries.
   try {
-    db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+    db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       content,
       type UNINDEXED,
       memory_id UNINDEXED,
@@ -279,7 +205,6 @@ async function initDatabase() {
     )`)
   } catch {}
 
-  // Migrate old schema
   const cols = {
     provider: getTableColumns('provider'),
     model: getTableColumns('model'),
@@ -291,7 +216,7 @@ async function initDatabase() {
   }
   const addCol = (table, col, def) => {
     if (!cols[table].includes(col)) {
-      try { db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); saveDatabase() } catch {}
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`) } catch {}
     }
   }
   addCol('provider', 'api_format', "TEXT NOT NULL DEFAULT 'openai'")
@@ -318,217 +243,165 @@ async function initDatabase() {
   addCol('message', 'arena_model', 'TEXT')
   addCol('user_habit', 'proposed', "INTEGER NOT NULL DEFAULT 0")
   addCol('agent_checkpoint', 'rolled_back_at', 'DATETIME')
-  // Phase 4: trust engine — adaptive permission based on historical behaviour.
-  // Note: ALTER TABLE ADD COLUMN rejects non-constant defaults (e.g. DEFAULT
-  // CURRENT_TIMESTAMP), so last_update is added nullable; trustEngine writes
-  // CURRENT_TIMESTAMP explicitly on each update.
   addCol('session', 'trust_score', 'INTEGER DEFAULT 50')
   addCol('session', 'last_update', 'DATETIME')
 
-  // Backfill: ensure every existing model has score rows for all intents.
-  // Models added via config import (older code path) never got initModelScores,
-  // so getModelScores() returned empty and ELO never displayed.
   try {
-    const modelIds = (db.exec('SELECT id FROM model')[0]?.values || []).map(r => r[0])
+    const modelIds = db.prepare('SELECT id FROM model').pluck().all()
     for (const mid of modelIds) initModelScores(mid)
   } catch {}
 
-  // Seed defaults
-  const existingKeys = (db.exec('SELECT key FROM settings')[0]?.values || []).map(r => r[0])
-  if (!existingKeys.includes('fallback_timeout_ms')) db.run("INSERT INTO settings (key, value) VALUES ('fallback_timeout_ms', '30000')")
-  if (!existingKeys.includes('theme')) db.run("INSERT INTO settings (key, value) VALUES ('theme', 'light')")
+  const existingKeys = db.prepare('SELECT key FROM settings').pluck().all()
+  if (!existingKeys.includes('fallback_timeout_ms')) db.prepare("INSERT INTO settings (key, value) VALUES ('fallback_timeout_ms', '30000')").run()
+  if (!existingKeys.includes('theme')) db.prepare("INSERT INTO settings (key, value) VALUES ('theme', 'light')").run()
 
-  saveDatabase()
   return db
 }
 
 // ===== Provider CRUD =====
 function getProviders() {
-  const stmt = db.prepare('SELECT * FROM provider ORDER BY id')
-  return allRows(stmt)
+  return db.prepare('SELECT * FROM provider ORDER BY id').all().map(r => ({ ...r, api_key: decryptKey(r.api_key) }))
 }
 function getProvider(id) {
-  const stmt = db.prepare('SELECT * FROM provider WHERE id = ?'); stmt.bind([id])
-  return allRows(stmt)[0] || null
+  const row = db.prepare('SELECT * FROM provider WHERE id = ?').get(id)
+  return row ? { ...row, api_key: decryptKey(row.api_key) } : null
 }
 function addProvider({ name, api_url, api_key, api_format = 'openai', enabled = 1 }) {
-  db.run('INSERT INTO provider (name, api_url, api_key, api_format, enabled) VALUES (?, ?, ?, ?, ?)', [name, api_url, api_key, api_format, enabled])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const encrypted = encryptKey(api_key)
+  const info = db.prepare('INSERT INTO provider (name, api_url, api_key, api_format, enabled) VALUES (?, ?, ?, ?, ?)').run(name, api_url, encrypted, api_format, enabled)
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function updateProvider(id, data) {
   const keys = Object.keys(data).filter(k => k !== 'id')
   if (!keys.length) return
-  db.run(`UPDATE provider SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
-  saveDatabase()
+  const values = keys.map(k => k === 'api_key' ? encryptKey(data[k]) : data[k])
+  db.prepare(`UPDATE provider SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...values, id)
 }
 function deleteProvider(id) {
-  // cascade models
-  db.run('DELETE FROM model WHERE provider_id = ?', [id])
-  db.run('DELETE FROM provider WHERE id = ?', [id]); saveDatabase()
+  db.prepare('DELETE FROM model WHERE provider_id = ?').run(id)
+  db.prepare('DELETE FROM provider WHERE id = ?').run(id)
 }
 
 // ===== Model CRUD =====
 function getModels(providerId) {
-  const stmt = db.prepare('SELECT * FROM model WHERE provider_id = ? ORDER BY fallback_order ASC, id ASC')
-  stmt.bind([providerId]); return allRows(stmt)
+  return db.prepare('SELECT * FROM model WHERE provider_id = ? ORDER BY fallback_order ASC, id ASC').all(providerId)
 }
 function getAllModels() {
-  const stmt = db.prepare('SELECT m.*, p.name as provider_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id')
-  return allRows(stmt)
+  return db.prepare('SELECT m.*, p.name as provider_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id').all().map(r => ({ ...r, api_key: decryptKey(r.api_key) }))
 }
 function getModel(id) {
-  const stmt = db.prepare('SELECT * FROM model WHERE id = ?'); stmt.bind([id])
-  return allRows(stmt)[0] || null
+  return db.prepare('SELECT * FROM model WHERE id = ?').get(id) || null
 }
 function addModel({ provider_id, model_name, display_name = null, is_primary = 0, fallback_order = null, context_window = null, input_price_per_1k = null, output_price_per_1k = null }) {
-  db.run('INSERT INTO model (provider_id, model_name, display_name, is_primary, fallback_order, context_window, input_price_per_1k, output_price_per_1k) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [provider_id, model_name, display_name, is_primary, fallback_order, context_window, input_price_per_1k, output_price_per_1k])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO model (provider_id, model_name, display_name, is_primary, fallback_order, context_window, input_price_per_1k, output_price_per_1k) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(provider_id, model_name, display_name, is_primary, fallback_order, context_window, input_price_per_1k, output_price_per_1k)
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function updateModel(id, data) {
   const keys = safeKeys('model', data)
   if (!keys.length) return
-  db.run(`UPDATE model SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
-  saveDatabase()
+  db.prepare(`UPDATE model SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => data[k]), id)
 }
 function deleteModel(id) {
-  db.run('DELETE FROM model WHERE id = ?', [id]); saveDatabase()
+  db.prepare('DELETE FROM model WHERE id = ?').run(id)
 }
 function getFallbackChain(providerId) {
-  const stmt = db.prepare('SELECT * FROM model WHERE provider_id = ? AND fallback_order IS NOT NULL ORDER BY fallback_order ASC')
-  stmt.bind([providerId]); return allRows(stmt)
+  return db.prepare('SELECT * FROM model WHERE provider_id = ? AND fallback_order IS NOT NULL ORDER BY fallback_order ASC').all(providerId)
 }
 
 // ===== Persona CRUD =====
 function getPersonas() {
-  const stmt = db.prepare('SELECT * FROM persona ORDER BY id'); return allRows(stmt)
+  return db.prepare('SELECT * FROM persona ORDER BY id').all()
 }
 function getPersona(id) {
-  const stmt = db.prepare('SELECT * FROM persona WHERE id = ?'); stmt.bind([id])
-  return allRows(stmt)[0] || null
+  return db.prepare('SELECT * FROM persona WHERE id = ?').get(id) || null
 }
 function addPersona({ name, prompt, avatar = null }) {
-  db.run('INSERT INTO persona (name, prompt, avatar) VALUES (?, ?, ?)', [name, prompt, avatar])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO persona (name, prompt, avatar) VALUES (?, ?, ?)').run(name, prompt, avatar)
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function updatePersona(id, data) {
   const keys = safeKeys('persona', data)
   if (!keys.length) return
-  db.run(`UPDATE persona SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
-  saveDatabase()
+  db.prepare(`UPDATE persona SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => data[k]), id)
 }
 function deletePersona(id) {
-  db.run('DELETE FROM persona WHERE id = ?', [id]); saveDatabase()
+  db.prepare('DELETE FROM persona WHERE id = ?').run(id)
 }
 
 // ===== Session CRUD =====
 function getSessions() {
-  const stmt = db.prepare("SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s ORDER BY s.pinned DESC, s.updated_at DESC")
-  return allRows(stmt)
+  return db.prepare("SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s ORDER BY s.pinned DESC, s.updated_at DESC").all()
 }
-// Fetch a single session by id — a direct indexed lookup, far cheaper than
-// getSessions() (which runs a correlated subquery per session row + sorts all).
-// Used by hot paths like chat:send that only need the current session.
 function getSession(id) {
-  const stmt = db.prepare('SELECT * FROM session WHERE id = ?'); stmt.bind([id])
-  return allRows(stmt)[0] || null
+  return db.prepare('SELECT * FROM session WHERE id = ?').get(id) || null
 }
 function localNow() {
   const d = new Date()
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
-
 function createSession({ title = '新会话', persona_id = null }) {
-  db.run('INSERT INTO session (title, persona_id, updated_at, is_placeholder) VALUES (?, ?, ?, 1)', [title, persona_id, localNow()])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO session (title, persona_id, updated_at, is_placeholder) VALUES (?, ?, ?, 1)').run(title, persona_id, localNow())
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
-// Remove sessions that were created but never got a message (placeholder title,
-// no rows in message). Called on startup + before creating a new session so the
-// sidebar isn't littered with empty "新会话" entries (ChatGPT-style: an unsent
-// new chat doesn't persist).
 function pruneEmptySessions() {
-  db.run(`DELETE FROM session WHERE is_placeholder = 1 AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`)
-  saveDatabase()
+  db.prepare(`DELETE FROM session WHERE is_placeholder = 1 AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`).run()
 }
 function renameSession(id, title) {
-  db.run('UPDATE session SET title = ?, updated_at = ? WHERE id = ?', [title, localNow(), id]); saveDatabase()
+  db.prepare('UPDATE session SET title = ?, updated_at = ? WHERE id = ?').run(title, localNow(), id)
 }
 function pinSession(id, pinned = 1) {
-  db.run('UPDATE session SET pinned = ?, updated_at = ? WHERE id = ?', [pinned, localNow(), id]); saveDatabase()
+  db.prepare('UPDATE session SET pinned = ?, updated_at = ? WHERE id = ?').run(pinned, localNow(), id)
 }
 function deleteSession(id) {
-  // Cascade delete session-scoped data. The schema has no ON DELETE CASCADE
-  // and sql.js does not enable PRAGMA foreign_keys, so cleanup is manual.
-  // Memory rows are kept (they are cross-session knowledge by design) but
-  // their source_session_id link is cleared to avoid a dangling reference.
-  try { db.run('DELETE FROM messages_fts WHERE session_id = ?', [id]) } catch {}
-  db.run('DELETE FROM message WHERE session_id = ?', [id])
-  try { db.run('DELETE FROM agent_checkpoint WHERE session_id = ?', [id]) } catch {}
-  try { db.run('DELETE FROM agent_execution_log WHERE session_id = ?', [id]) } catch {}
-  try { db.run('DELETE FROM usage_log WHERE session_id = ?', [id]) } catch {}
-  try { db.run('UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?', [id]) } catch {}
-  db.run('DELETE FROM session WHERE id = ?', [id])
-  saveDatabase()
+  try { db.prepare('DELETE FROM messages_fts WHERE session_id = ?').run(id) } catch {}
+  db.prepare('DELETE FROM message WHERE session_id = ?').run(id)
+  try { db.prepare('DELETE FROM agent_checkpoint WHERE session_id = ?').run(id) } catch {}
+  try { db.prepare('DELETE FROM agent_execution_log WHERE session_id = ?').run(id) } catch {}
+  try { db.prepare('DELETE FROM usage_log WHERE session_id = ?').run(id) } catch {}
+  try { db.prepare('UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?').run(id) } catch {}
+  db.prepare('DELETE FROM session WHERE id = ?').run(id)
 }
 function touchSession(id) {
-  db.run('UPDATE session SET updated_at = ? WHERE id = ?', [localNow(), id]); saveDatabase()
+  db.prepare('UPDATE session SET updated_at = ? WHERE id = ?').run(localNow(), id)
 }
 function getSessionConfig(id) {
-  const stmt = db.prepare('SELECT config, persona_id FROM session WHERE id = ?')
-  stmt.bind([id])
-  const rows = allRows(stmt)
-  if (!rows.length) return null
-  try { return JSON.parse(rows[0].config || 'null') } catch { return null }
+  const row = db.prepare('SELECT config, persona_id FROM session WHERE id = ?').get(id)
+  if (!row) return null
+  try { return JSON.parse(row.config || 'null') } catch { return null }
 }
 function setSessionConfig(id, config) {
-  db.run('UPDATE session SET config = ? WHERE id = ?', [JSON.stringify(config), id])
-  saveDatabase()
+  db.prepare('UPDATE session SET config = ? WHERE id = ?').run(JSON.stringify(config), id)
 }
 
 // ===== Message CRUD =====
 function getMessages(sessionId) {
-  const stmt = db.prepare('SELECT * FROM message WHERE session_id = ? ORDER BY id ASC')
-  stmt.bind([sessionId]); return allRows(stmt)
+  return db.prepare('SELECT * FROM message WHERE session_id = ? ORDER BY id ASC').all(sessionId)
 }
 function addMessage({ session_id, role, content, model_used = null, provider_used = null, token_count = null, latency_ms = null, status = 'success', error_message = null, arena_model = null }) {
-  db.run('INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model])
-  // Clear placeholder flag so pruneEmptySessions no longer targets this session.
-  try { db.run('UPDATE session SET is_placeholder = 0 WHERE id = ? AND is_placeholder = 1', [session_id]) } catch {}
-  // Sync FTS index (best-effort — FTS table may not exist on old DBs).
-  try { db.run('INSERT INTO messages_fts (content, session_id, message_id) VALUES (?, ?, ?)', [String(content || ''), session_id, lastId()]) } catch {}
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model)
+  try { db.prepare('UPDATE session SET is_placeholder = 0 WHERE id = ? AND is_placeholder = 1').run(session_id) } catch {}
+  try { db.prepare('INSERT INTO messages_fts (content, session_id, message_id) VALUES (?, ?, ?)').run(String(content || ''), session_id, Number(info.lastInsertRowid)) } catch {}
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function updateMessage(id, data) {
   const keys = safeKeys('message', data)
   if (!keys.length) return
-  db.run(`UPDATE message SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...keys.map(k => data[k]), id])
-  saveDatabase()
+  db.prepare(`UPDATE message SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => data[k]), id)
 }
 
 // ===== Settings CRUD =====
 function getSetting(key) {
-  const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
-  stmt.bind([key])
-  const rows = allRows(stmt)
-  return rows[0]?.value || null
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
+  return row ? row.value : null
 }
 async function setSetting(key, value) {
-  db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value])
-  // Drain any in-flight async save so it can't race past this async write
-  // and overwrite the DB with stale data. Critical ordering:
-  //   1. Await any prior _writeDb to complete (it has old data — fine, we
-  //      overwrite with our own write next)
-  //   2. Cancel the debounced timer (prevents another future write)
-  //   3. Async write the current DB (includes the new setting)
-  if (savePromise) await savePromise.catch(() => {})
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
-  await _writeDb(Buffer.from(db.export()))
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
 }
 function getAllSettings() {
-  const stmt = db.prepare('SELECT key, value FROM settings')
-  const rows = allRows(stmt)
+  const rows = db.prepare('SELECT key, value FROM settings').all()
   const result = {}
   rows.forEach(r => result[r.key] = r.value)
   return result
@@ -536,33 +409,22 @@ function getAllSettings() {
 
 // ===== Arena / ELO =====
 function getModelScores() {
-  const stmt = db.prepare(`
-    SELECT ms.*, m.model_name, p.name as provider_name
-    FROM model_score ms JOIN model m ON ms.model_id=m.id JOIN provider p ON m.provider_id=p.id
-    ORDER BY ms.intent, ms.score DESC`)
-  return allRows(stmt)
+  return db.prepare(`SELECT ms.*, m.model_name, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id=m.id JOIN provider p ON m.provider_id=p.id ORDER BY ms.intent, ms.score DESC`).all()
 }
-
 function initModelScores(modelId) {
   for (const intent of ['coding', 'math', 'translation', 'summary', 'general']) {
-    db.run("INSERT OR IGNORE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,1000,0,0)", [modelId])
+    db.prepare("INSERT OR IGNORE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,1000,0,0)").run(modelId)
   }
-  saveDatabase()
 }
-
 function updateElo(winnerModelId, loserModelIds, intent) {
   const K = 32
   const readScore = (modelId) => {
-    const stmt = db.prepare('SELECT score FROM model_score WHERE model_id=? AND intent=?'); stmt.bind([modelId, intent])
-    const row = stmt.step() ? stmt.getAsObject() : null; stmt.free()
-    return row?.score ?? 1000
+    const row = db.prepare('SELECT score FROM model_score WHERE model_id=? AND intent=?').get(modelId, intent)
+    return row ? row.score : 1000
   }
-  // Upsert helper: ensure a score row exists (default 1000) before UPDATE so
-  // models added via config import (which skip initModelScores) still get ELO.
   const upsertScore = (modelId, newScore, incrementWin) => {
-    db.run('INSERT OR IGNORE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,1000,0,0)', [modelId, intent])
-    db.run(`UPDATE model_score SET score = ?, win_count = win_count + ?, total_count = total_count + 1
-      WHERE model_id = ? AND intent = ?`, [newScore, incrementWin ? 1 : 0, modelId, intent])
+    db.prepare('INSERT OR IGNORE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,1000,0,0)').run(modelId, intent)
+    db.prepare('UPDATE model_score SET score = ?, win_count = win_count + ?, total_count = total_count + 1 WHERE model_id = ? AND intent = ?').run(newScore, incrementWin ? 1 : 0, modelId, intent)
   }
   const work = async () => {
     for (const loserId of loserModelIds) {
@@ -574,140 +436,88 @@ function updateElo(winnerModelId, loserModelIds, intent) {
       upsertScore(winnerModelId, newW, true)
       upsertScore(loserId, newL, false)
     }
-    saveDatabase()
   }
   return _eloMutex = _eloMutex.catch(() => {}).then(work)
 }
-
-// Persist an arena vote (prompt + winner/losers + detected intent) and update ELO.
 async function recordArenaVote({ prompt, winnerModelId, winnerModelName, loserModelIds, loserModelNames, intent }) {
-  db.run(`INSERT INTO arena_vote (prompt, intent, winner_model_id, winner_model_name, loser_model_ids, loser_model_names)
-    VALUES (?, ?, ?, ?, ?, ?)`,
-    [prompt, intent, winnerModelId, winnerModelName, JSON.stringify(loserModelIds), JSON.stringify(loserModelNames)])
-  if (winnerModelId && loserModelIds.length > 0) {
-    await updateElo(winnerModelId, loserModelIds, intent)
-  }
-  saveDatabase()
+  db.prepare('INSERT INTO arena_vote (prompt, intent, winner_model_id, winner_model_name, loser_model_ids, loser_model_names) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(prompt, intent, winnerModelId, winnerModelName, JSON.stringify(loserModelIds), JSON.stringify(loserModelNames))
+  if (winnerModelId && loserModelIds.length > 0) await updateElo(winnerModelId, loserModelIds, intent)
 }
-
 function getPrimaryModel() {
-  const r = db.exec('SELECT m.id, m.provider_id FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.is_primary DESC, m.id ASC LIMIT 1')
-  if (r[0]?.values?.[0]) {
-    const v = r[0].values[0]
-    // sql.js may return BigInt for INTEGER columns; coerce to Number so the
-    // value survives JSON.stringify (setSessionConfig) and strict-equality checks.
-    const num = (x) => typeof x === 'bigint' ? Number(x) : x
-    return { id: num(v[0]), provider_id: num(v[1]) }
-  }
-  return null
+  const row = db.prepare('SELECT m.id, m.provider_id FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.is_primary DESC, m.id ASC LIMIT 1').get()
+  return row ? { id: Number(row.id), provider_id: Number(row.provider_id) } : null
 }
-
-// ===== Intent classification (ported from Python v0.3) =====
 function classifyIntent(text) {
   if (!text) return 'general'
   const t = text.toLowerCase()
-  if (/\b(def |class |import |function|debug|bug|compile|error|git|bash|cmd|docker|sql|api|rest)\b/.test(t) ||
-      /代码|编程|python|javascript|写一个|实现|算法|terminal/i.test(t)) return 'coding'
+  if (/\b(def |class |import |function|debug|bug|compile|error|git|bash|cmd|docker|sql|api|rest)\b/.test(t) || /代码|编程|python|javascript|写一个|实现|算法|terminal/i.test(t)) return 'coding'
   if (/数|算|方程|公式|证明|积分|导数|矩阵|定理|概率|统计|calculate|solve|math|equation/i.test(t)) return 'math'
   if (/翻译|english|chinese|translate|日语|英语|法语/i.test(t)) return 'translation'
   if (/总结|摘要|概括|summarize|summarise|提炼/i.test(t)) return 'summary'
   return 'general'
 }
-
 function autoRoute(intent) {
-  const stmt = db.prepare(`
-    SELECT ms.score, ms.model_id, m.model_name, m.provider_id, p.api_url, p.api_key, p.name as provider_name
-    FROM model_score ms JOIN model m ON ms.model_id = m.id JOIN provider p ON m.provider_id = p.id
-    WHERE ms.intent=? AND p.enabled=1 ORDER BY ms.score DESC LIMIT 1`)
-  stmt.bind([intent])
-  const scores = allRows(stmt)
+  const scores = db.prepare(`SELECT ms.score, ms.model_id, m.model_name, m.provider_id, p.api_url, p.api_key, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id = m.id JOIN provider p ON m.provider_id = p.id WHERE ms.intent=? AND p.enabled=1 ORDER BY ms.score DESC LIMIT 1`).all(intent)
   if (scores.length > 0) {
     const best = scores[0]
-    return { model_id: best.model_id, model_name: best.model_name, provider_id: best.provider_id,
-      api_url: best.api_url, api_key: best.api_key, route_reason: `ELO ${best.score.toFixed(0)}` }
+    return { model_id: best.model_id, model_name: best.model_name, provider_id: best.provider_id, api_url: best.api_url, api_key: decryptKey(best.api_key), route_reason: `ELO ${best.score.toFixed(0)}` }
   }
-  // fallback: primary model
-  const m2 = db.exec('SELECT m.id, m.model_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id=p.id WHERE m.is_primary=1 AND p.enabled=1 LIMIT 1')
-  if (m2[0]?.values?.[0]) {
-    const v = m2[0].values[0]
-    const num = (x) => (typeof x === 'bigint' ? Number(x) : x)
-    return { model_id: num(v[0]), model_name: v[1], api_url: v[2], api_key: v[3], route_reason: 'Primary model' }
-  }
+  const m2 = db.prepare('SELECT m.id, m.model_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id=p.id WHERE m.is_primary=1 AND p.enabled=1 LIMIT 1').get()
+  if (m2) return { model_id: Number(m2.id), model_name: m2.model_name, api_url: m2.api_url, api_key: decryptKey(m2.api_key), route_reason: 'Primary model' }
   return null
 }
 
 // ===== Memory CRUD =====
 function getMemories(limit) {
   const q = limit ? `LIMIT ${Math.max(1, Math.floor(limit))}` : ''
-  const stmt = db.prepare(`SELECT * FROM memory ORDER BY created_at DESC ${q}`)
-  return allRows(stmt)
+  return db.prepare(`SELECT * FROM memory ORDER BY created_at DESC ${q}`).all()
 }
 function addMemory({ content, type }) {
-  db.run('INSERT INTO memory (content, type) VALUES (?, ?)', [content, type || 'fact'])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO memory (content, type) VALUES (?, ?)').run(content, type || 'fact')
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function addMemoryWithProvenance(content, type, sourceSessionId) {
-  db.run('INSERT INTO memory (content, type, source_session_id, confidence) VALUES (?, ?, ?, 1.0)', [content, type || 'fact', sourceSessionId])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence) VALUES (?, ?, ?, 1.0)').run(content, type || 'fact', sourceSessionId)
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function updateMemory(id, { content }) {
   if (!content) return
-  db.run('UPDATE memory SET content = ? WHERE id = ?', [content, id])
-  saveDatabase()
+  db.prepare('UPDATE memory SET content = ? WHERE id = ?').run(content, id)
 }
 function deleteMemory(id) {
-  db.run('DELETE FROM memory WHERE id = ?', [id]); saveDatabase()
+  db.prepare('DELETE FROM memory WHERE id = ?').run(id)
 }
 function incrementMemoryAccess(id) {
-  try { db.run('UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?', [localNow(), id]) } catch {}
+  try { db.prepare('UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?').run(localNow(), id) } catch {}
 }
-
-// Memory conflicts: return pairs of conflicting memories for the UI.
 function getMemoryConflicts() {
   try {
-    const stmt = db.prepare('SELECT m.*, c.content as conflicting_content, c.type as conflicting_type FROM memory m JOIN memory c ON c.id = m.conflicts_with WHERE m.conflicts_with IS NOT NULL ORDER BY m.created_at DESC')
-    const rows = allRows(stmt)
+    const rows = db.prepare('SELECT m.*, c.content as conflicting_content, c.type as conflicting_type FROM memory m JOIN memory c ON c.id = m.conflicts_with WHERE m.conflicts_with IS NOT NULL ORDER BY m.created_at DESC').all()
     return rows.map(r => ({ memoryId: r.id, content: r.content, type: r.type, conflictingId: r.conflicts_with, conflictingContent: r.conflicting_content, conflictingType: r.conflicting_type }))
   } catch { return [] }
 }
-// Resolve a conflict by keeping the newer entry and removing the older.
 function resolveMemoryConflict(keepId, removeId) {
-  try { db.run('DELETE FROM memory WHERE id = ?', [removeId]) } catch {}
-  try { db.run('UPDATE memory SET conflicts_with = NULL WHERE id = ?', [keepId]) } catch {}
-  saveDatabase()
+  try { db.prepare('DELETE FROM memory WHERE id = ?').run(removeId) } catch {}
+  try { db.prepare('UPDATE memory SET conflicts_with = NULL WHERE id = ?').run(keepId) } catch {}
 }
 
 // ===== Skill Usage & Success Rate =====
 function recordSkillResult(name, success) {
   try {
-    // skill_success table: name | total_uses | successes | last_result (1/0)
-    db.run('INSERT INTO skill_success (name, total_uses, successes, last_result) VALUES (?, 1, ?, ?) ON CONFLICT(name) DO UPDATE SET total_uses=total_uses+1, successes=successes+?, last_result=?, updated_at=CURRENT_TIMESTAMP',
-      [name, success ? 1 : 0, success ? 1 : 0, success ? 1 : 0])
+    db.prepare('INSERT INTO skill_success (name, total_uses, successes, last_result) VALUES (?, 1, ?, ?) ON CONFLICT(name) DO UPDATE SET total_uses=total_uses+1, successes=successes+?, last_result=?, updated_at=CURRENT_TIMESTAMP')
+      .run(name, success ? 1 : 0, success ? 1 : 0, success ? 1 : 0)
   } catch {}
 }
 function getSkillStats() {
   try {
-    const stmt = db.prepare('SELECT name, total_uses, successes, last_result, updated_at FROM skill_success ORDER BY total_uses DESC')
-    const rows = allRows(stmt)
+    const rows = db.prepare('SELECT name, total_uses, successes, last_result, updated_at FROM skill_success ORDER BY total_uses DESC').all()
     return rows.map(r => ({ name: r.name, totalUses: r.total_uses || 0, successes: r.successes || 0, lastResult: !!r.last_result, successRate: r.total_uses > 0 ? ((r.successes || 0) / r.total_uses) : 0, updatedAt: r.updated_at }))
   } catch { return [] }
 }
-
-// ===== Skill Success Table Init =====
-// Called from database init (guarded — idempotent).
 function initSkillSuccessTable() {
-  try { db.run(`CREATE TABLE IF NOT EXISTS skill_success (
-    name TEXT PRIMARY KEY,
-    total_uses INTEGER NOT NULL DEFAULT 0,
-    successes INTEGER NOT NULL DEFAULT 0,
-    last_result INTEGER DEFAULT 1,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`) } catch {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS skill_success (name TEXT PRIMARY KEY, total_uses INTEGER NOT NULL DEFAULT 0, successes INTEGER NOT NULL DEFAULT 0, last_result INTEGER DEFAULT 1, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`) } catch {}
 }
-
-// ===== Auto-draft skill from recurring patterns =====
-// When a skill succeeds multiple times for similar tasks, generate a draft
-// SKILL.md for the user to review.
 function autoDraftSkill(name, body, description) {
   try {
     const { app } = require('electron')
@@ -723,63 +533,43 @@ function autoDraftSkill(name, body, description) {
 
 // ===== Agent Audit Log =====
 function addAuditLog({ sessionId, turnId, payload }) {
-  db.run('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)',
-    [sessionId, turnId, JSON.stringify(payload)])
-  saveDatabase()
+  db.prepare('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)').run(sessionId, turnId, JSON.stringify(payload))
 }
-// ===== Agent Checkpoints =====
-// Dual interface: checkpointManager (agent-turn-level) + direct agent checkpoint
-// (per-tool-level with snapshot/rollback for dangerous tools).
-
 function addCheckpoint({ sessionId, turnId, stepIndex, messages, toolTrace = [], meta = {} }) {
   const cm = require('./llm/checkpointManager')
   return cm.save(db, sessionId, turnId, stepIndex, messages, toolTrace, meta)
 }
-
 function getCheckpoints(sessionId, limit = 20) {
   const cm = require('./llm/checkpointManager')
   return cm.listForSession(db, sessionId, limit)
 }
-
 function deleteCheckpoints(sessionId) {
   const cm = require('./llm/checkpointManager')
   cm.deleteForSession(db, sessionId)
 }
-
 function deleteCheckpoint(id) {
   const cm = require('./llm/checkpointManager')
   cm.deleteOne(db, id)
 }
-
-// Direct agent-checkpoint: record a snapshot before a dangerous tool runs so the
-// renderer can restore the tool's file changes.
 function addAgentCheckpoint({ sessionId, messageId, toolName, args, affectedPaths, snapshot }) {
-  db.run('INSERT INTO agent_checkpoint (session_id, message_id, tool_name, args, affected_paths, snapshot) VALUES (?, ?, ?, ?, ?, ?)',
-    [sessionId, messageId, toolName, JSON.stringify(args || {}), JSON.stringify(affectedPaths || []), JSON.stringify(snapshot || {})])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO agent_checkpoint (session_id, message_id, tool_name, args, affected_paths, snapshot) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(sessionId, messageId, toolName, JSON.stringify(args || {}), JSON.stringify(affectedPaths || []), JSON.stringify(snapshot || {}))
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
-
 function getAgentCheckpoint(id) {
-  const stmt = db.prepare('SELECT * FROM agent_checkpoint WHERE id = ?')
-  stmt.bind([id])
-  const row = allRows(stmt)[0]
+  const row = db.prepare('SELECT * FROM agent_checkpoint WHERE id = ?').get(id)
   if (!row) return null
   try { row.args = JSON.parse(row.args || '{}') } catch { row.args = {} }
   try { row.affected_paths = JSON.parse(row.affected_paths || '[]') } catch { row.affected_paths = [] }
   try { row.snapshot = JSON.parse(row.snapshot || '{}') } catch { row.snapshot = {} }
   return row
 }
-
 function markAgentCheckpointRolledBack(id) {
-  db.run('UPDATE agent_checkpoint SET rolled_back_at = ? WHERE id = ?', [localNow(), id])
-  saveDatabase()
+  db.prepare('UPDATE agent_checkpoint SET rolled_back_at = ? WHERE id = ?').run(localNow(), id)
 }
-
 function listAgentCheckpoints(sessionId, messageId = null) {
   const where = messageId ? 'session_id = ? AND message_id = ?' : 'session_id = ?'
-  const stmt = db.prepare(`SELECT id, session_id, message_id, tool_name, args, affected_paths, rolled_back_at, created_at FROM agent_checkpoint WHERE ${where} ORDER BY id DESC`)
-  stmt.bind(messageId ? [sessionId, messageId] : [sessionId])
-  const rows = allRows(stmt)
+  const rows = db.prepare(`SELECT id, session_id, message_id, tool_name, args, affected_paths, rolled_back_at, created_at FROM agent_checkpoint WHERE ${where} ORDER BY id DESC`).all(messageId ? sessionId : messageId, sessionId)
   for (const row of rows) {
     try { row.args = JSON.parse(row.args || '{}') } catch { row.args = {} }
     try { row.affected_paths = JSON.parse(row.affected_paths || '[]') } catch { row.affected_paths = [] }
@@ -787,257 +577,119 @@ function listAgentCheckpoints(sessionId, messageId = null) {
   return rows
 }
 function getAuditLog(sessionId, limit = 50) {
-  const stmt = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?')
-  stmt.bind([sessionId, limit])
-  const rows = []
-  while (stmt.step()) {
-    const row = stmt.getAsObject()
-    try { row.payload = JSON.parse(row.payload || '{}') } catch { row.payload = {} }
-    rows.push(row)
-  }
-  stmt.free()
+  const rows = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?').all(sessionId, limit)
+  for (const row of rows) try { row.payload = JSON.parse(row.payload || '{}') } catch { row.payload = {} }
   return rows
 }
-// One row per real API call. `source` tags the call site: 'chat' | 'arena' |
-// 'title' | 'memory' | 'compaction' | 'tool'. cost is computed by the caller
-// from the model's price columns; if unknown, 0.
-function logUsage({ session_id = null, provider_id = null, provider_name = null, model_name = null,
-  prompt_tokens = 0, completion_tokens = 0, total_tokens = 0,
-  cache_read_tokens = 0, cache_creation_tokens = 0, cost = 0, latency_ms = null, status = 200, source = 'chat' }) {
-  db.run(`INSERT INTO usage_log
-    (session_id, provider_id, provider_name, model_name, prompt_tokens, completion_tokens, total_tokens,
-     cache_read_tokens, cache_creation_tokens, cost, latency_ms, status, source)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [session_id, provider_id, provider_name, model_name, prompt_tokens, completion_tokens, total_tokens,
-     cache_read_tokens, cache_creation_tokens, cost, latency_ms, status, source])
-  saveDatabase()
+function logUsage({ session_id = null, provider_id = null, provider_name = null, model_name = null, prompt_tokens = 0, completion_tokens = 0, total_tokens = 0, cache_read_tokens = 0, cache_creation_tokens = 0, cost = 0, latency_ms = null, status = 200, source = 'chat' }) {
+  db.prepare('INSERT INTO usage_log (session_id, provider_id, provider_name, model_name, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, cost, latency_ms, status, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(session_id, provider_id, provider_name, model_name, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, cost, latency_ms, status, source)
 }
-// Aggregate stats for the TokenPage. Optional since/until (ISO) for the range picker.
 function getUsageStats({ since = null, until = null } = {}) {
-  const where = []
-  const params = []
-  if (since) { where.push('created_at >= ?'); params.push(since) }
-  if (until) { where.push('created_at <= ?'); params.push(until) }
-  const w = where.length ? 'WHERE ' + where.join(' AND ') : ''
-  const stmt = db.prepare(`SELECT
-      COUNT(*) as requests,
-      COALESCE(SUM(prompt_tokens),0) as prompt_tokens,
-      COALESCE(SUM(completion_tokens),0) as completion_tokens,
-      COALESCE(SUM(total_tokens),0) as total_tokens,
-      COALESCE(SUM(cache_read_tokens),0) as cache_read_tokens,
-      COALESCE(SUM(cache_creation_tokens),0) as cache_creation_tokens,
-      COALESCE(SUM(cost),0) as cost,
-      COALESCE(SUM(latency_ms),0) as latency_ms_sum,
-      COUNT(latency_ms) as latency_count
-    FROM usage_log ${w}`)
-  stmt.bind(params)
-  const row = stmt.step() ? stmt.getAsObject() : {}; stmt.free()
-  // Bigints already normalized by getAsObject? No — getAsObject doesn't run allRows coercion.
-  const num = (v) => typeof v === 'bigint' ? Number(v) : (v || 0)
-  return {
-    requests: num(row.requests),
-    prompt_tokens: num(row.prompt_tokens),
-    completion_tokens: num(row.completion_tokens),
-    total_tokens: num(row.total_tokens),
-    cache_read_tokens: num(row.cache_read_tokens),
-    cache_creation_tokens: num(row.cache_creation_tokens),
-    cost: num(row.cost),
-    latency_avg: row.latency_count > 0 ? num(row.latency_ms_sum) / num(row.latency_count) : 0,
-  }
+  const w = buildRangeWhere(since, until)
+  const row = db.prepare(`SELECT COUNT(*) as requests, COALESCE(SUM(prompt_tokens),0) as prompt_tokens, COALESCE(SUM(completion_tokens),0) as completion_tokens, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cache_read_tokens),0) as cache_read_tokens, COALESCE(SUM(cache_creation_tokens),0) as cache_creation_tokens, COALESCE(SUM(cost),0) as cost, COALESCE(SUM(latency_ms),0) as latency_ms_sum, COUNT(latency_ms) as latency_count FROM usage_log ${w.where}`).get(...w.params)
+  if (!row) return { requests: 0, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0, cost: 0, latency_avg: 0 }
+  return { requests: Number(row.requests) || 0, prompt_tokens: Number(row.prompt_tokens) || 0, completion_tokens: Number(row.completion_tokens) || 0, total_tokens: Number(row.total_tokens) || 0, cache_read_tokens: Number(row.cache_read_tokens) || 0, cache_creation_tokens: Number(row.cache_creation_tokens) || 0, cost: Number(row.cost) || 0, latency_avg: row.latency_count > 0 ? Number(row.latency_ms_sum) / Number(row.latency_count) : 0 }
 }
-// Per-provider and per-model breakdowns (same range filter).
 function getUsageByProvider({ since = null, until = null } = {}) {
   const w = buildRangeWhere(since, until)
-  const stmt = db.prepare(`SELECT provider_name, COUNT(*) as requests,
-      COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost
-    FROM usage_log ${w.where} GROUP BY provider_name ORDER BY cost DESC`)
-  stmt.bind(w.params); const out = allRows(stmt); return out
+  return db.prepare(`SELECT provider_name, COUNT(*) as requests, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost FROM usage_log ${w.where} GROUP BY provider_name ORDER BY cost DESC`).all(...w.params)
 }
 function getUsageByModel({ since = null, until = null } = {}) {
   const w = buildRangeWhere(since, until)
-  const stmt = db.prepare(`SELECT model_name, COUNT(*) as requests,
-      COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost
-    FROM usage_log ${w.where} GROUP BY model_name ORDER BY cost DESC`)
-  stmt.bind(w.params); const out = allRows(stmt); return out
+  return db.prepare(`SELECT model_name, COUNT(*) as requests, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost FROM usage_log ${w.where} GROUP BY model_name ORDER BY cost DESC`).all(...w.params)
 }
-// Daily series for the trend chart.
 function getUsageDaily({ since = null, until = null } = {}) {
   const w = buildRangeWhere(since, until)
-  const stmt = db.prepare(`SELECT date(created_at) as day, COUNT(*) as requests,
-      COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost
-    FROM usage_log ${w.where} GROUP BY day ORDER BY day ASC`)
-  stmt.bind(w.params); const out = allRows(stmt); return out
+  return db.prepare(`SELECT date(created_at) as day, COUNT(*) as requests, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(cost),0) as cost FROM usage_log ${w.where} GROUP BY day ORDER BY day ASC`).all(...w.params)
 }
-// Raw request log (most recent first, capped).
 function getUsageLog({ limit = 200, since = null, until = null } = {}) {
   const w = buildRangeWhere(since, until)
-  const stmt = db.prepare(`SELECT * FROM usage_log ${w.where} ORDER BY id DESC LIMIT ?`)
-  stmt.bind([...w.params, limit]); const out = allRows(stmt); return out
+  return db.prepare(`SELECT * FROM usage_log ${w.where} ORDER BY id DESC LIMIT ?`).all(...w.params, limit)
 }
 function buildRangeWhere(since, until) {
-  const where = []
-  const params = []
+  const where = []; const params = []
   if (since) { where.push('created_at >= ?'); params.push(since) }
   if (until) { where.push('created_at <= ?'); params.push(until) }
   return { where: where.length ? 'WHERE ' + where.join(' AND ') : '', params }
 }
-
-
-// Drop assistant messages that follow the last user message in a session.
-// Used by regenerate so the discarded reply doesn't resurface on reload.
 function deleteAssistantAfterLastUser(sessionId) {
-  const stmt = db.prepare('SELECT id, role FROM message WHERE session_id = ? ORDER BY id ASC')
-  stmt.bind([sessionId])
+  const rows = db.prepare('SELECT id, role FROM message WHERE session_id = ? ORDER BY id ASC').all(sessionId)
   let lastUserId = 0
-  while (stmt.step()) {
-    const row = stmt.getAsObject()
-    if (String(row.role) === 'user') lastUserId = Number(row.id)
-  }
-  stmt.free()
-  if (lastUserId > 0) {
-    db.run('DELETE FROM message WHERE session_id = ? AND role = ? AND id > ?', [sessionId, 'assistant', lastUserId])
-    saveDatabase()
-  }
+  for (const row of rows) { if (String(row.role) === 'user') lastUserId = Number(row.id) }
+  if (lastUserId > 0) db.prepare('DELETE FROM message WHERE session_id = ? AND role = ? AND id > ?').run(sessionId, 'assistant', lastUserId)
 }
-
-// Delete every message with id > afterId in a session (used by message-edit:
-// editing a user message discards everything after it, then the edited message
-// is re-sent). Does NOT touch the message at afterId itself.
 function deleteMessagesAfter(sessionId, afterId) {
-  db.run('DELETE FROM message WHERE session_id = ? AND id > ?', [sessionId, afterId])
-  saveDatabase()
+  db.prepare('DELETE FROM message WHERE session_id = ? AND id > ?').run(sessionId, afterId)
 }
-
-// Delete all assistant messages tagged with arena_model in a session.
-// Used after arena voting to clean up arena responses and convert to normal chat.
 function deleteArenaAssistantMessages(sessionId) {
-  db.run("DELETE FROM message WHERE session_id = ? AND arena_model IS NOT NULL AND arena_model != ''", [sessionId])
-  saveDatabase()
+  db.prepare("DELETE FROM message WHERE session_id = ? AND arena_model IS NOT NULL AND arena_model != ''").run(sessionId)
 }
 
 // ===== MCP server CRUD =====
-// Each server: { id, name, command, args (JSON array string), env (JSON object string), enabled }.
-function getMcpServers() {
-  const stmt = db.prepare('SELECT * FROM mcp_server ORDER BY id')
-  return allRows(stmt)
-}
+function getMcpServers() { return db.prepare('SELECT * FROM mcp_server ORDER BY id').all() }
 function addMcpServer({ name, command, args = [], env = {}, enabled = 1 }) {
-  db.run('INSERT INTO mcp_server (name, command, args, env, enabled) VALUES (?, ?, ?, ?, ?)',
-    [name, command, JSON.stringify(args), JSON.stringify(env), enabled ? 1 : 0])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO mcp_server (name, command, args, env, enabled) VALUES (?, ?, ?, ?, ?)').run(name, command, JSON.stringify(args), JSON.stringify(env), enabled ? 1 : 0)
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function updateMcpServer(id, data) {
   const keys = safeKeys('mcp_server', data)
   if (!keys.length) return
-  // Serialize args/env to JSON strings if given as arrays/objects.
   const serialized = keys.map(k => k === 'args' || k === 'env' ? JSON.stringify(data[k]) : data[k])
-  db.run(`UPDATE mcp_server SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`, [...serialized, id])
-  saveDatabase()
+  db.prepare(`UPDATE mcp_server SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...serialized, id)
 }
-function deleteMcpServer(id) {
-  db.run('DELETE FROM mcp_server WHERE id = ?', [id]); saveDatabase()
-}
+function deleteMcpServer(id) { db.prepare('DELETE FROM mcp_server WHERE id = ?').run(id) }
 
-// ===== MoA (Mixture of Agents) Presets =====
-function getMoaPresets() {
-  try { return allRows(db.prepare('SELECT * FROM moa_preset ORDER BY id ASC')) } catch { return [] }
-}
-function getMoaPreset(id) {
-  try {
-    const stmt = db.prepare('SELECT * FROM moa_preset WHERE id = ?')
-    stmt.bind([id])
-    const r = allRows(stmt)
-    return r[0] || null
-  } catch { return null }
-}
+// ===== MoA Presets =====
+function getMoaPresets() { try { return db.prepare('SELECT * FROM moa_preset ORDER BY id ASC').all() } catch { return [] } }
+function getMoaPreset(id) { try { return db.prepare('SELECT * FROM moa_preset WHERE id = ?').get(id) || null } catch { return null } }
 function addMoaPreset({ name, description, references_config, aggregator_model_id }) {
-  db.run('INSERT INTO moa_preset (name, description, references_config, aggregator_model_id) VALUES (?, ?, ?, ?)',
-    [name, description || '', JSON.stringify(references_config), aggregator_model_id])
-  saveDatabase(); return { lastInsertRowid: lastId() }
+  const info = db.prepare('INSERT INTO moa_preset (name, description, references_config, aggregator_model_id) VALUES (?, ?, ?, ?)').run(name, description || '', JSON.stringify(references_config), aggregator_model_id)
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
-function deleteMoaPreset(id) {
-  db.run('DELETE FROM moa_preset WHERE id = ?', [id]); saveDatabase()
-}
+function deleteMoaPreset(id) { db.prepare('DELETE FROM moa_preset WHERE id = ?').run(id) }
 
 // ===== FTS Full-text Search =====
 function searchMessages(ftsQuery, sessionId, rawQuery) {
   try {
-    const ftsAvailable = allRows(db.prepare("SELECT name FROM sqlite_master WHERE name = 'messages_fts'")).length > 0
+    const ftsAvailable = db.prepare("SELECT name FROM sqlite_master WHERE name = 'messages_fts'").all().length > 0
     if (ftsAvailable) {
-      const sql = sessionId
-        ? 'SELECT message_id, session_id FROM messages_fts WHERE messages_fts MATCH ? AND session_id = ? ORDER BY rowid DESC LIMIT 50'
-        : 'SELECT message_id, session_id FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rowid DESC LIMIT 50'
-      const stmt = db.prepare(sql)
-      stmt.bind(sessionId ? [ftsQuery, sessionId] : [ftsQuery])
-      const rows = allRows(stmt)
-      // Hydrate with full message data
-      return rows.map(r => {
-        const mStmt = db.prepare('SELECT * FROM message WHERE id = ?')
-        mStmt.bind([r.message_id])
-        return allRows(mStmt)[0] || null
-      }).filter(Boolean)
+      const sql = sessionId ? 'SELECT message_id, session_id FROM messages_fts WHERE messages_fts MATCH ? AND session_id = ? ORDER BY rowid DESC LIMIT 50' : 'SELECT message_id, session_id FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rowid DESC LIMIT 50'
+      const rows = sessionId ? db.prepare(sql).all(ftsQuery, sessionId) : db.prepare(sql).all(ftsQuery)
+      return rows.map(r => db.prepare('SELECT * FROM message WHERE id = ?').get(r.message_id) || null).filter(Boolean)
     }
-    // sql.js builds without FTS5 cannot create the virtual tables; fall back
-    // to a substring scan so message search still returns results.
     if (!rawQuery) return []
     const like = `%${rawQuery.replace(/[!%_]/g, '!$&')}%`
-    const sql = sessionId
-      ? "SELECT * FROM message WHERE content LIKE ? ESCAPE '!' AND session_id = ? ORDER BY id DESC LIMIT 50"
-      : "SELECT * FROM message WHERE content LIKE ? ESCAPE '!' ORDER BY id DESC LIMIT 50"
-    const stmt = db.prepare(sql)
-    stmt.bind(sessionId ? [like, sessionId] : [like])
-    return allRows(stmt)
+    const sql = sessionId ? "SELECT * FROM message WHERE content LIKE ? ESCAPE '!' AND session_id = ? ORDER BY id DESC LIMIT 50" : "SELECT * FROM message WHERE content LIKE ? ESCAPE '!' ORDER BY id DESC LIMIT 50"
+    return sessionId ? db.prepare(sql).all(like, sessionId) : db.prepare(sql).all(like)
   } catch { return [] }
 }
-
-// ===== Memory FTS Search =====
 function searchMemories(query) {
   try {
-    const ftsAvailable = allRows(db.prepare("SELECT name FROM sqlite_master WHERE name = 'memories_fts'")).length > 0
+    const ftsAvailable = db.prepare("SELECT name FROM sqlite_master WHERE name = 'memories_fts'").all().length > 0
     if (ftsAvailable) {
-      const stmt = db.prepare('SELECT memory_id FROM memories_fts WHERE memories_fts MATCH ? ORDER BY rowid DESC LIMIT 30')
-      stmt.bind([query])
-      const rows = allRows(stmt)
-      return rows.map(r => {
-        const mStmt = db.prepare('SELECT * FROM memory WHERE id = ?')
-        mStmt.bind([r.memory_id])
-        return allRows(mStmt)[0] || null
-      }).filter(Boolean)
+      const rows = db.prepare('SELECT memory_id FROM memories_fts WHERE memories_fts MATCH ? ORDER BY rowid DESC LIMIT 30').all(query)
+      return rows.map(r => db.prepare('SELECT * FROM memory WHERE id = ?').get(r.memory_id) || null).filter(Boolean)
     }
     if (!query) return []
     const like = `%${query.replace(/[!%_]/g, '!$&')}%`
-    const stmt = db.prepare("SELECT * FROM memory WHERE content LIKE ? ESCAPE '!' ORDER BY id DESC LIMIT 30")
-    stmt.bind([like])
-    return allRows(stmt)
+    return db.prepare("SELECT * FROM memory WHERE content LIKE ? ESCAPE '!' ORDER BY id DESC LIMIT 30").all(like)
   } catch { return [] }
 }
 
-// ===== Skill Lifecycle Management =====
-function getSkillUsage() {
-  try { return allRows(db.prepare('SELECT * FROM skill_usage ORDER BY use_count DESC')) } catch { return [] }
-}
+// ===== Skill Lifecycle =====
+function getSkillUsage() { try { return db.prepare('SELECT * FROM skill_usage ORDER BY use_count DESC').all() } catch { return [] } }
 function updateSkillState(name, state) {
   try {
-    if (state === 'archived') {
-      db.run("UPDATE skill_usage SET state = ?, archived_at = datetime('now') WHERE name = ?", [state, name])
-    } else {
-      db.run('UPDATE skill_usage SET state = ? WHERE name = ?', [state, name])
-    }
-    saveDatabase()
+    if (state === 'archived') db.prepare("UPDATE skill_usage SET state = ?, archived_at = datetime('now') WHERE name = ?").run(state, name)
+    else db.prepare('UPDATE skill_usage SET state = ? WHERE name = ?').run(state, name)
   } catch {}
 }
-function pinSkill(name, pinned) {
-  try { db.run('UPDATE skill_usage SET pinned = ? WHERE name = ?', [pinned ? 1 : 0, name]); saveDatabase() } catch {}
-}
-// Curator: apply automatic state transitions based on last_used_at.
-// active → stale (30d unused) → archived (90d unused). Pinned skills skip.
+function pinSkill(name, pinned) { try { db.prepare('UPDATE skill_usage SET pinned = ? WHERE name = ?').run(pinned ? 1 : 0, name) } catch {} }
 function applySkillTransitions() {
   try {
-    // stale: unused > 30 days
-    db.run("UPDATE skill_usage SET state = 'stale' WHERE state = 'active' AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 30")
-    // archived: unused > 90 days
-    db.run("UPDATE skill_usage SET state = 'archived', archived_at = datetime('now') WHERE state IN ('active','stale') AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 90")
-    saveDatabase()
+    db.prepare("UPDATE skill_usage SET state = 'stale' WHERE state = 'active' AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 30").run()
+    db.prepare("UPDATE skill_usage SET state = 'archived', archived_at = datetime('now') WHERE state IN ('active','stale') AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 90").run()
   } catch {}
 }
 
@@ -1054,35 +706,23 @@ module.exports = {
   getMemoryConflicts, resolveMemoryConflict,
   recordSkillResult, getSkillStats,
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
-  deleteAssistantAfterLastUser,
-  deleteMessagesAfter,
-  deleteArenaAssistantMessages,
+  deleteAssistantAfterLastUser, deleteMessagesAfter, deleteArenaAssistantMessages,
   addNormalMessage: function({ session_id, role, content, model_used }) {
-    db.run("INSERT INTO message (session_id, role, content, model_used, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
-      [session_id, role, content, model_used || null])
-    saveDatabase()
+    db.prepare("INSERT INTO message (session_id, role, content, model_used, created_at) VALUES (?, ?, ?, ?, datetime('now'))").run(session_id, role, content, model_used || null)
   },
   getMcpServers, addMcpServer, updateMcpServer, deleteMcpServer,
-  // agent audit log
   addAuditLog, getAuditLog,
-  // agent checkpoints (agent-turn-level + per-tool snapshot/rollback)
   addCheckpoint, getCheckpoints, deleteCheckpoints, deleteCheckpoint,
   addAgentCheckpoint, getAgentCheckpoint, markAgentCheckpointRolledBack, listAgentCheckpoints,
-  // MoA presets
   getMoaPresets, getMoaPreset, addMoaPreset, deleteMoaPreset,
-  // FTS search
   searchMessages, searchMemories,
-  // skill lifecycle
   getSkillUsage, updateSkillState, pinSkill, applySkillTransitions,
-  // credential pool: list/add/remove credentials per provider
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },
   removeCredential: function(cid) { return require('./llm/credentialPool').removeCredential(cid) },
-  // Raw sql.js handles for modules that build their own prepared statements
-  // (credentialPool, etc.). These proxy to the live internal Database instance.
   prepare: (...args) => db ? db.prepare(...args) : null,
-  run: (...args) => { if (db) { db.run(...args); saveDatabase() } },
+  run: (...args) => { if (db) db.prepare(args[0]).run(...args.slice(1)) },
   exec: (...args) => db ? db.exec(...args) : [],
-  // Convenience: prepare → step → getAsObject → free, with BigInt→Number coercion.
-  allRows: (sql, params = []) => { if (!db) return []; const stmt = db.prepare(sql); stmt.bind(params); return allRows(stmt) },
+  allRows: (sql, params = []) => { if (!db) return []; return db.prepare(sql).all(...params) },
+  encryptKey, decryptKey,
 }
