@@ -261,6 +261,8 @@ AetherAI 站在这些项目的肩膀上——它们的想法塑造了架构与�
 | [Claude Code](https://github.com/anthropics/claude-code) | Agent 权限模型、思考强度滑块、tool-call 可视化、子 Agent 委托、钩子 |
 | [OpenClaw](https://github.com/openclaw/openclaw) | 上下文压缩、tool-call 循环检测、事件流架构 |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 迭代预算、结构化长期记忆、自主 Skills |
+| [Evolver](https://github.com/EvoMap/evolver) | 自进化引擎、GEP（基因组进化协议） |
+| [pi](https://github.com/earendil-works/pi) | 事件流系统、AgentMessage 抽象层、Steering/Follow-up 机制 |
 | [OpenAI Codex](https://github.com/openai/codex) | 沙箱机制、上下文压缩、tool-call 修复 |
 | [DS4](https://github.com/antirez/ds4) | 分层任务拆解 |
 
@@ -270,6 +272,7 @@ AetherAI 站在这些项目的肩膀上——它们的想法塑造了架构与�
 |---|---|
 | [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva 复制粘贴组件方法论 |
 | [Magic UI](https://github.com/magicuidesign/magicui) | 动画模式(shimmer、blur-fade) |
+| [SonettoHere](https://github.com/SonettoHere) | 输入框引用系统和 UI/UX 灵感 |
 
 ### 基础设施
 

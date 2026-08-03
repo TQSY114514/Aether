@@ -80,6 +80,8 @@ const { registerMcpHandlers } = require('./ipc/mcp.handler')
 const { registerAgentHandlers } = require('./ipc/agent.handler')
 const { registerSkillsHandlers } = require('./ipc/skills.handler')
 const { registerTaskHandlers } = require('./ipc/task.handler')
+const { registerCronHandlers } = require('./ipc/cron.handler')
+const { initScheduler } = require('./cron/scheduler')
 const mcpManager = require('./mcp/manager')
 const { setWorkspaceRoot } = require('./tools/sandbox')
 
@@ -225,6 +227,7 @@ function setupIpcHandlers() {
   registerAgentHandlers(ipcMain, db)
   registerSkillsHandlers(ipcMain, db)
   registerTaskHandlers(ipcMain, db, () => mainWindow?.webContents)
+  registerCronHandlers(ipcMain)
   const { registerUsageHandlers } = require('./ipc/usage.handler')
   registerUsageHandlers(ipcMain, db)
   // Search (FTS5) handler
@@ -270,6 +273,8 @@ app.whenReady().then(async () => {
   createWindow()
   createTray()
   setupIpcHandlers()
+  // Cron scheduler: start recurring agent tasks (memory cleanup, skill scan, etc.)
+  try { initScheduler(db) } catch (e) { log.warn('cron scheduler init failed:', e.message) }
   // Connect to all enabled MCP servers so their tools are available before any
   // chat uses the agent. Failures are logged inside the manager, never thrown.
   const mcpServers = db.getMcpServers().filter(s => s.enabled).map(s => ({

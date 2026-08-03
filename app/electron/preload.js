@@ -270,6 +270,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('task:error', h)
     },
   },
+  cron: {
+    list: () => ipcRenderer.invoke('cron:list'),
+    runNow: (name) => ipcRenderer.invoke('cron:run-now', name),
+  },
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),
     install: () => ipcRenderer.invoke('updater:install'),
