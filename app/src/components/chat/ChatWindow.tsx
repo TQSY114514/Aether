@@ -182,7 +182,7 @@ export default function ChatWindow() {
   // Batch selectors with shallow comparison: only re-renders when selected
   // values actually change, not on every store update.
   const {
-    messages, currentSessionId, streamingBySession,
+    messages, currentSessionId, streamingBySession, chatMode,
     toolCallsByMessage, arenaResults, arenaResultsSessionId, arenaPending, arenaError,
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
@@ -190,6 +190,7 @@ export default function ChatWindow() {
     messages: s.messages,
     currentSessionId: s.currentSessionId,
     streamingBySession: s.streamingBySession,
+    chatMode: s.chatMode,
     toolCallsByMessage: s.toolCallsByMessage,
     arenaResults: s.arenaResults,
     arenaResultsSessionId: s.arenaResultsSessionId,
@@ -427,7 +428,7 @@ export default function ChatWindow() {
           {/* Streaming bubble — render ONLY for the current session. Other
               sessions keep streaming in the background but their output is not
               shown here, preventing double-output when switching chats. */}
-          {currentSessionId && streamingBySession[currentSessionId] && (
+          {chatMode !== 'arena' && currentSessionId && streamingBySession[currentSessionId] && (
             <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />
           )}
 
