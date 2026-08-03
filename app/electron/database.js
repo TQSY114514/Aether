@@ -292,18 +292,18 @@ async function initDatabase() {
   }
   addCol('provider', 'api_format', "TEXT NOT NULL DEFAULT 'openai'")
   addCol('provider', 'enabled', 'INTEGER NOT NULL DEFAULT 1')
-  addCol('provider', 'created_at', "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+  addCol('provider', 'created_at', 'DATETIME')
   addCol('model', 'display_name', 'TEXT')
   addCol('model', 'fallback_order', 'INTEGER')
   addCol('model', 'context_window', 'INTEGER')
   addCol('model', 'input_price_per_1k', 'REAL')
   addCol('model', 'output_price_per_1k', 'REAL')
-  addCol('model', 'created_at', "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+  addCol('model', 'created_at', 'DATETIME')
   addCol('persona', 'avatar', 'TEXT')
-  addCol('persona', 'created_at', "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+  addCol('persona', 'created_at', 'DATETIME')
   addCol('session', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
   addCol('session', 'config', 'TEXT')
-  addCol('session', 'updated_at', "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+  addCol('session', 'updated_at', 'DATETIME')
   addCol('session', 'is_placeholder', 'INTEGER NOT NULL DEFAULT 0')
   addCol('message', 'model_used', 'TEXT')
   addCol('message', 'provider_used', 'INTEGER')
@@ -315,8 +315,11 @@ async function initDatabase() {
   addCol('user_habit', 'proposed', "INTEGER NOT NULL DEFAULT 0")
   addCol('agent_checkpoint', 'rolled_back_at', 'DATETIME')
   // Phase 4: trust engine — adaptive permission based on historical behaviour.
-  try { db.run("ALTER TABLE session ADD COLUMN trust_score INTEGER DEFAULT 50") } catch {}
-  try { db.run("ALTER TABLE session ADD COLUMN last_update DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
+  // Note: ALTER TABLE ADD COLUMN rejects non-constant defaults (e.g. DEFAULT
+  // CURRENT_TIMESTAMP), so last_update is added nullable; trustEngine writes
+  // CURRENT_TIMESTAMP explicitly on each update.
+  addCol('session', 'trust_score', 'INTEGER DEFAULT 50')
+  addCol('session', 'last_update', 'DATETIME')
 
   // Backfill: ensure every existing model has score rows for all intents.
   // Models added via config import (older code path) never got initModelScores,
