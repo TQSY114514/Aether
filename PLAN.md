@@ -43,12 +43,12 @@ Aether 已有 20+ Agent 模块，基础设施远超预期：
 
 ### 阶段一：Agent 学习闭环
 
-#### 1.1 Cron 定时任务
+#### 1.1 Cron 定时任务 ✅
 - 新增 electron/cron/scheduler.js，基于 node-cron
 - 任务类型：code-review、summary、memory-cleanup、skill-scan
 - 与 hooks.js SessionStart 集成
 
-#### 1.2 FTS5 全文搜索
+#### 1.2 FTS5 全文搜索 ✅
 - database.js 创建 FTS5 虚拟表
 - 替换 autoMemory.js 关键词匹配为 FTS5 MATCH
 - 增加 LLM 摘要召回
