@@ -193,5 +193,9 @@ interface Window {
       onCancelled: (callback: (payload: { taskId: number }) => void) => () => void
       onError: (callback: (payload: { taskId: number; error: string }) => void) => () => void
     }
+    cron: {
+      list: () => Promise<{ name: string; intervalMs: number; running: boolean }[]>
+      runNow: (name: string) => Promise<boolean>
+    }
   }
 }

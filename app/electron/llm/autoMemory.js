@@ -217,7 +217,7 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         try {
           db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, source_turn_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, sessionId || null, null])
-        } catch {}
+          try { const rid = db.exec('SELECT last_insert_rowid()')[0]?.values?.[0]?.[0]; if (rid) db.run('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)', [String(entry.content || ''), 'relation', Number(rid)]) } catch {}
       } else {
         try { db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null) } catch {}
       }
@@ -233,6 +233,16 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
 // ─── Memory Search (for UI) ────────────────────────────────────────────────
 
 function search(db, query, limit = 20) {
+  // Phase 1: try FTS5 full-text search first (fast, index-backed)
+  if (query && query.trim()) {
+    try {
+      const ftsResults = db.searchMemories(query)
+      if (ftsResults && ftsResults.length > 0) {
+        return ftsResults.slice(0, limit)
+      }
+    } catch {}
+  }
+  // Fallback to keyword-based search for CJK and edge cases
   let memories
   try { memories = db.getMemories() } catch { return [] }
   if (!query || !query.trim()) return memories.slice(0, limit)

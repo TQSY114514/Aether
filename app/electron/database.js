@@ -1,4 +1,4 @@
-const initSqlJs = require('sql.js')
+﻿const initSqlJs = require('sql.js')
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
@@ -20,7 +20,7 @@ function getTableColumns(table) {
 // Whitelist helper for dynamic UPDATE queries. Filters data keys against the
 // table's actual columns (via PRAGMA table_info) so a caller can never inject
 // a column name into the SQL string. Returns [] if the table doesn't exist
-// (which makes the UPDATE a no-op — safer than allowing all keys through).
+// (which makes the UPDATE a no-op �?safer than allowing all keys through).
 function safeKeys(table, data) {
   const cols = getTableColumns(table)
   if (cols.length === 0) return []
@@ -29,7 +29,7 @@ function safeKeys(table, data) {
 
 // Persisting the DB is expensive: db.export() serializes the whole database and
 // writeFileSync is synchronous, blocking the main process. During streaming we
-// updateMessage on every chunk, so we debounce the save — coalesce rapid writes
+// updateMessage on every chunk, so we debounce the save �?coalesce rapid writes
 // into a single flush 200ms after the last one. `flushNow` forces an immediate
 // write for moments that must be durable before returning (e.g. before quit).
 // Uses async writeFile so the main process is never blocked.
@@ -51,7 +51,7 @@ function saveDatabase() {
     savePromise = _writeDb(data).finally(() => { savePromise = null })
   }, SAVE_DEBOUNCE_MS)
 }
-// Async flush — used by config.handler.js and the before-quit path (awaited there).
+// Async flush �?used by config.handler.js and the before-quit path (awaited there).
 // The debounce in saveDatabase means an in-flight write may need to be awaited.
 async function flushDatabase() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
@@ -102,7 +102,7 @@ async function initDatabase() {
   db.run("CREATE TABLE IF NOT EXISTS provider (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_url TEXT NOT NULL, api_key TEXT, api_format TEXT NOT NULL DEFAULT 'openai', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
   db.run("CREATE TABLE IF NOT EXISTS model (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, model_name TEXT NOT NULL, display_name TEXT, is_primary INTEGER NOT NULL DEFAULT 0, fallback_order INTEGER, context_window INTEGER, input_price_per_1k REAL, output_price_per_1k REAL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
   db.run("CREATE TABLE IF NOT EXISTS persona (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prompt TEXT NOT NULL, avatar TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.run("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)")
+  db.run("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会�?, persona_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)")
   db.run("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
   // Phase 2 tables
@@ -165,7 +165,7 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Agent checkpoints — save/restore snapshots of long agent tasks.
+  // Agent checkpoints �?save/restore snapshots of long agent tasks.
   try { require('./llm/checkpointManager').createTable(db) } catch {}
   initSkillSuccessTable()
 
@@ -181,7 +181,7 @@ async function initDatabase() {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Per-provider credential pool — multiple API keys per provider with rotation
+  // Per-provider credential pool �?multiple API keys per provider with rotation
   // (least-recently-used) and backoff (cooldown on 429, disabled on 401).
   db.run('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0)')
 
@@ -207,7 +207,7 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // MoA (Mixture of Agents) presets — each preset defines a set of reference
+  // MoA (Mixture of Agents) presets �?each preset defines a set of reference
   // models (advisors) + one aggregator model. Exposed as virtual `moa://` models.
   db.run(`CREATE TABLE IF NOT EXISTS moa_preset (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -219,8 +219,8 @@ async function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  // Skill lifecycle tracking — extends skill_usage with curator state machine.
-  // States: active → stale (30d unused) → archived (90d unused).
+  // Skill lifecycle tracking �?extends skill_usage with curator state machine.
+  // States: active �?stale (30d unused) �?archived (90d unused).
   try { db.run("ALTER TABLE skill_usage ADD COLUMN state TEXT NOT NULL DEFAULT 'active'") } catch {}
   try { db.run("ALTER TABLE skill_usage ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") } catch {}
   try { db.run("ALTER TABLE skill_usage ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'") } catch {}
@@ -229,7 +229,7 @@ async function initDatabase() {
   try { db.run("ALTER TABLE skill_usage ADD COLUMN archived_at DATETIME") } catch {}
 
   // FTS5 full-text search on messages (CJK bigram handled at app layer).
-  // External content table — avoids duplicating message text.
+  // External content table �?avoids duplicating message text.
   try {
     db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
       content,
@@ -239,7 +239,18 @@ async function initDatabase() {
     )`)
   } catch {}
 
-  // Migrate old schema
+  // FTS5 full-text search on memories -- enables fast semantic recall across
+  // all stored facts, entities, and context summaries.
+  try {
+    db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+      content,
+      type UNINDEXED,
+      memory_id UNINDEXED,
+      tokenize = 'unicode61'
+    )`)
+  } catch {}
+
+ // Migrate old schema
   const cols = {
     provider: getTableColumns('provider'),
     model: getTableColumns('model'),
@@ -278,7 +289,7 @@ async function initDatabase() {
   addCol('message', 'arena_model', 'TEXT')
   addCol('user_habit', 'proposed', "INTEGER NOT NULL DEFAULT 0")
   addCol('agent_checkpoint', 'rolled_back_at', 'DATETIME')
-  // Phase 4: trust engine — adaptive permission based on historical behaviour.
+  // Phase 4: trust engine �?adaptive permission based on historical behaviour.
   try { db.run("ALTER TABLE session ADD COLUMN trust_score INTEGER DEFAULT 50") } catch {}
   try { db.run("ALTER TABLE session ADD COLUMN last_update DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
 
@@ -383,7 +394,7 @@ function getSessions() {
   const stmt = db.prepare("SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s ORDER BY s.pinned DESC, s.updated_at DESC")
   return allRows(stmt)
 }
-// Fetch a single session by id — a direct indexed lookup, far cheaper than
+// Fetch a single session by id �?a direct indexed lookup, far cheaper than
 // getSessions() (which runs a correlated subquery per session row + sorts all).
 // Used by hot paths like chat:send that only need the current session.
 function getSession(id) {
@@ -396,13 +407,13 @@ function localNow() {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-function createSession({ title = '新会话', persona_id = null }) {
+function createSession({ title = '新会�?, persona_id = null }) {
   db.run('INSERT INTO session (title, persona_id, updated_at, is_placeholder) VALUES (?, ?, ?, 1)', [title, persona_id, localNow()])
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
 // Remove sessions that were created but never got a message (placeholder title,
 // no rows in message). Called on startup + before creating a new session so the
-// sidebar isn't littered with empty "新会话" entries (ChatGPT-style: an unsent
+// sidebar isn't littered with empty "新会�? entries (ChatGPT-style: an unsent
 // new chat doesn't persist).
 function pruneEmptySessions() {
   db.run(`DELETE FROM session WHERE is_placeholder = 1 AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`)
@@ -453,7 +464,7 @@ function addMessage({ session_id, role, content, model_used = null, provider_use
     [session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model])
   // Clear placeholder flag so pruneEmptySessions no longer targets this session.
   try { db.run('UPDATE session SET is_placeholder = 0 WHERE id = ? AND is_placeholder = 1', [session_id]) } catch {}
-  // Sync FTS index (best-effort — FTS table may not exist on old DBs).
+  // Sync FTS index (best-effort �?FTS table may not exist on old DBs).
   try { db.run('INSERT INTO messages_fts (content, session_id, message_id) VALUES (?, ?, ?)', [String(content || ''), session_id, lastId()]) } catch {}
   saveDatabase(); return { lastInsertRowid: lastId() }
 }
@@ -475,7 +486,7 @@ async function setSetting(key, value) {
   db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value])
   // Drain any in-flight async save so it can't race past this async write
   // and overwrite the DB with stale data. Critical ordering:
-  //   1. Await any prior _writeDb to complete (it has old data — fine, we
+  //   1. Await any prior _writeDb to complete (it has old data �?fine, we
   //      overwrite with our own write next)
   //   2. Cancel the debounced timer (prevents another future write)
   //   3. Async write the current DB (includes the new setting)
@@ -651,7 +662,7 @@ function getSkillStats() {
 }
 
 // ===== Skill Success Table Init =====
-// Called from database init (guarded — idempotent).
+// Called from database init (guarded �?idempotent).
 function initSkillSuccessTable() {
   try { db.run(`CREATE TABLE IF NOT EXISTS skill_success (
     name TEXT PRIMARY KEY,
@@ -672,7 +683,7 @@ function autoDraftSkill(name, body, description) {
     fs.mkdirSync(dir, { recursive: true })
     const fp = path.join(dir, `${name}.md`)
     if (!fs.existsSync(fp)) {
-      const md = `---\nname: ${name}\ndescription: ${description || 'Auto-drafted skill'}\nauto_draft: true\n---\n\n${body}\n\n(This skill was auto-drafted from successful usage. Edit or delete it via Settings → Skills.)`
+      const md = `---\nname: ${name}\ndescription: ${description || 'Auto-drafted skill'}\nauto_draft: true\n---\n\n${body}\n\n(This skill was auto-drafted from successful usage. Edit or delete it via Settings �?Skills.)`
       fs.writeFileSync(fp, md, 'utf8')
     }
   } catch {}
@@ -789,7 +800,7 @@ function getUsageStats({ since = null, until = null } = {}) {
     FROM usage_log ${w}`)
   stmt.bind(params)
   const row = stmt.step() ? stmt.getAsObject() : {}; stmt.free()
-  // Bigints already normalized by getAsObject? No — getAsObject doesn't run allRows coercion.
+  // Bigints already normalized by getAsObject? No �?getAsObject doesn't run allRows coercion.
   const num = (v) => typeof v === 'bigint' ? Number(v) : (v || 0)
   return {
     requests: num(row.requests),
@@ -927,6 +938,17 @@ function searchMessages(query, sessionId) {
   } catch { return [] }
 }
 
+// ===== Memory FTS Search =====
+function searchMemories(query) {
+  try {
+    const rows = allRows(db.prepare('SELECT memory_id FROM memories_fts WHERE memories_fts MATCH ? ORDER BY rowid DESC LIMIT 30'), [query])
+    return rows.map(r => {
+      const m = allRows(db.prepare('SELECT * FROM memory WHERE id = ?'), [r.memory_id])[0]
+      return m || null
+    }).filter(Boolean)
+  } catch { return [] }
+}
+
 // ===== Skill Lifecycle Management =====
 function getSkillUsage() {
   try { return allRows(db.prepare('SELECT * FROM skill_usage ORDER BY use_count DESC')) } catch { return [] }
@@ -945,7 +967,7 @@ function pinSkill(name, pinned) {
   try { db.run('UPDATE skill_usage SET pinned = ? WHERE name = ?', [pinned ? 1 : 0, name]); saveDatabase() } catch {}
 }
 // Curator: apply automatic state transitions based on last_used_at.
-// active → stale (30d unused) → archived (90d unused). Pinned skills skip.
+// active �?stale (30d unused) �?archived (90d unused). Pinned skills skip.
 function applySkillTransitions() {
   try {
     // stale: unused > 30 days
@@ -986,7 +1008,7 @@ module.exports = {
   // MoA presets
   getMoaPresets, getMoaPreset, addMoaPreset, deleteMoaPreset,
   // FTS search
-  searchMessages,
+  searchMessages, searchMemories,
   // skill lifecycle
   getSkillUsage, updateSkillState, pinSkill, applySkillTransitions,
   // credential pool: list/add/remove credentials per provider
@@ -998,6 +1020,6 @@ module.exports = {
   prepare: (...args) => db ? db.prepare(...args) : null,
   run: (...args) => { if (db) { db.run(...args); saveDatabase() } },
   exec: (...args) => db ? db.exec(...args) : [],
-  // Convenience: prepare → step → getAsObject → free, with BigInt→Number coercion.
+  // Convenience: prepare �?step �?getAsObject �?free, with BigInt→Number coercion.
   allRows: (sql, params = []) => { if (!db) return []; const stmt = db.prepare(sql); stmt.bind(params); return allRows(stmt) },
 }
