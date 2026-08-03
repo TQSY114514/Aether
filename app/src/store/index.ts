@@ -1103,7 +1103,7 @@ export const useStore = create<AppState>((set, get) => ({
       created_at: new Date().toISOString(), attachment: null,
     }
     set({ sending: true, arenaResults: [], arenaError: null, arenaVoted: false, arenaVoteWinnerId: null, arenaResultsSessionId: currentSessionId, arenaPending: arenaModelIds.length, messages: [...get().messages, tempUserMsg] })
-    set((s) => ({ streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '...', messageId: null } } }))
+    set((s) => ({ streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: '', messageId: null } } }))
     get().loadSessions()
     ensureArenaListener()
     try {
@@ -1505,7 +1505,11 @@ function ensureChunkListener() {
         if (st2.queuedMessages.length > 0 && Object.keys(st2.streamingBySession).length === 0) {
           const q = st2.queuedMessages[0]
           useStore.setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
-          setTimeout(() => useStore.getState().sendMessage(q.content), 50)
+          setTimeout(() => {
+            const st3 = useStore.getState()
+            if (st3.chatMode === 'arena') st3.runArena(q.content)
+            else st3.sendMessage(q.content)
+          }, 50)
         }
       })
     } else {
