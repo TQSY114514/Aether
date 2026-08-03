@@ -155,7 +155,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
   const data = await res.json()
   const msg = data.choices?.[0]?.message || {}
-  return { content: msg.content || '', tool_calls: msg.tool_calls, usage: data.usage }
+  return { content: msg.content || '', tool_calls: msg.tool_calls, usage: data.usage, reasoning: msg.reasoning_content || msg.reasoning || '' }
 }
 
 // normalizeUsage is imported from ../utils/llmShared

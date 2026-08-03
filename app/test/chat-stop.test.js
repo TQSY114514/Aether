@@ -19,7 +19,7 @@ const db = {
   getSetting: () => null,
   addMessage: () => ({ lastInsertRowid: 1 }),
   touchSession: () => {},
-  getModel: () => ({ id: 1, provider_id: 10, provider_name: 'pA', model_name: 'test-model', api_url: 'x', api_key: 'k', api_format: 'openai', context_window: 32000, input_price_per_1k: 0, output_price_per_1k: 0 }),
+  getModel: () => ({ id: 1, provider_id: 10, provider_name: 'pA', model_name: 'gpt-5-test', api_url: 'x', api_key: 'k', api_format: 'openai', context_window: 32000, input_price_per_1k: 0, output_price_per_1k: 0 }),
   getProvider: () => ({ id: 10, name: 'pA', api_url: 'x', api_key: 'k', api_format: 'openai' }),
   getAllModels: () => [],
   getModelScores: () => [],
@@ -38,7 +38,6 @@ function installStubs() {
   Module._load = function (request, parent, isMain) {
     if (parent && parent.filename && parent.filename.includes('chat.handler.js')) {
       const stub = {
-        './toolLoopCallbacks': { createAllowRulesStore: () => ({ clear: () => {} }), buildToolLoopCallbacks: () => ({}) },
         '../llm/providerAdapter': {
           completeChat: async () => ({ content: 'x' }),
           normalizeUsage: (u) => u,
@@ -54,7 +53,8 @@ function installStubs() {
         },
         '../llm/toolLoop': {
           MAX_CONCURRENT_TOOLS: 4,
-          runToolLoop: async ({ signal }) => {
+          runToolLoop: async ({ signal, onThinkingDelta }) => {
+            if (onThinkingDelta) onThinkingDelta('hidden reasoning text')
             await new Promise((resolve, reject) => {
               const onAbort = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
               signal.addEventListener('abort', onAbort, { once: true })
@@ -129,6 +129,8 @@ describe('chat:stop', () => {
     expect(events.filter(e => e.channel === 'chat:tool-loop-end').length).toBe(1)
     expect(doneEvents().length).toBe(1)
     expect(updateCalls.some(u => u.status === 'aborted')).toBe(true)
+    // Thinking deltas from the tool loop must be forwarded to the renderer.
+    expect(events.some(e => e.channel === 'chat:thinking-chunk' && e.payload.delta === 'hidden reasoning text')).toBe(true)
 
     // Same session can send again: the new turn must start (not be queued).
     events.length = 0
