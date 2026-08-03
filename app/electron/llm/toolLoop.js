@@ -512,9 +512,9 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
       }
 
       // Record tool patterns for skill self-creation
-      const toolNames = msg.tool_calls.map(tc => (tc.function || {}).name).filter(Boolean)
-      if (toolNames.length > 0) {
-        try { skillSelfCreate.recordPattern(toolNames) } catch {}
+      const toolPatternNames = msg.tool_calls.map(tc => (tc.function || {}).name).filter(Boolean)
+      if (toolPatternNames.length > 0) {
+        try { skillSelfCreate.recordPattern(toolPatternNames) } catch {}
       }
       // Execute tool calls. If any tool declares sequential mode (e.g. run_command),
       // run them one at a time to avoid shared-state races. Otherwise, batch into
