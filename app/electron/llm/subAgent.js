@@ -27,7 +27,7 @@ Focus solely on the task described. Use available tools as needed.
 When done, provide a clear, concise summary of your findings or actions as your final response.
 Do NOT call the task tool — nested sub-agents are not allowed.`
 
-// 运行 subagent。返回最后一条 assistant 文本。
+// 运行单个 subagent。返回最后一条 assistant 文本。
 // 参数:
 //   db, parentSessionId, provider, model, prompt, signal, agentMode
 async function runSubagent({ db, parentSessionId, provider, model, prompt, signal, agentMode = 'plan' }) {
@@ -90,4 +90,33 @@ async function runSubagent({ db, parentSessionId, provider, model, prompt, signa
   return finalContent || '(sub-agent returned no content)'
 }
 
-module.exports = { runSubagent, SUBAGENT_SYSTEM_PROMPT }
+// 并行运行多个 subagent。每个 task 独立执行，通过 Promise.all 并发。
+// 返回 { success, output, error, iterations }[] 数组。
+async function runParallel(tasks, shared) {
+  if (!shared.db) throw new Error('runParallel: db is required')
+  if (!Array.isArray(tasks) || tasks.length === 0) return []
+
+  const runners = tasks.map((task) => {
+    return (async () => {
+      let iterations = 0
+      try {
+        const output = await runSubagent({
+          db: shared.db,
+          parentSessionId: null,
+          provider: shared.provider,
+          model: shared.model,
+          prompt: task,
+          signal: shared.signal,
+          agentMode: shared.agentMode || 'plan',
+        })
+        return { success: true, output, iterations }
+      } catch (e) {
+        return { success: false, error: e.message || 'unknown', iterations }
+      }
+    })()
+  })
+
+  return Promise.all(runners)
+}
+
+module.exports = { runSubagent, runParallel, SUBAGENT_SYSTEM_PROMPT }
