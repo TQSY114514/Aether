@@ -183,7 +183,7 @@ export default function ChatWindow() {
   // values actually change, not on every store update.
   const {
     messages, currentSessionId, streamingBySession,
-    toolCallsByMessage, arenaResults, arenaError,
+    toolCallsByMessage, arenaResults, arenaResultsSessionId, arenaPending, arenaError,
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
   } = useStore((s) => ({
@@ -192,6 +192,8 @@ export default function ChatWindow() {
     streamingBySession: s.streamingBySession,
     toolCallsByMessage: s.toolCallsByMessage,
     arenaResults: s.arenaResults,
+    arenaResultsSessionId: s.arenaResultsSessionId,
+    arenaPending: s.arenaPending,
     arenaError: s.arenaError,
     proposedHabits: s.proposedHabits,
     activeHints: s.activeHints,
@@ -457,7 +459,7 @@ export default function ChatWindow() {
               </div>
             </div>
           ))}
-          {arenaResults.length > 0 && (
+          {arenaResults.length > 0 && arenaResultsSessionId === currentSessionId && (
             <ArenaResults
               results={arenaResults}
               voted={arenaVoted}
@@ -466,6 +468,12 @@ export default function ChatWindow() {
               t={t}
               renderMarkdown={renderMarkdown}
             />
+          )}
+          {arenaPending > 0 && arenaResultsSessionId === currentSessionId && (
+            <div className="text-[11px] px-1 py-1 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+              <span>{t('chat.arena.running', String(arenaPending))}</span>
+            </div>
           )}
 
           <div ref={bottomRef} />

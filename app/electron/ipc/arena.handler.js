@@ -3,7 +3,7 @@ const { computeCost } = require('../utils/cost')
 const log = require('../logger')
 const abortControllers = new Map()
 
-function registerArenaHandlers(ipcMain, db) {
+function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, personaId }) => {
     const allModels = db.getAllModels()
     const selected = allModels.filter(m => modelIds.includes(m.id))
@@ -18,9 +18,11 @@ function registerArenaHandlers(ipcMain, db) {
     // controller. Results preserve input order. This is the #1-differentiating
     // arena feature, so latency matters: parallel turns a 5-model arena from
     // ~5×latency into ~1×latency.
-    const requestId = Date.now()
     const controller = new AbortController()
-    abortControllers.set(requestId, controller)
+    // Keyed by sessionId so arena:stop can abort one arena run without
+    // killing a different session's arena.
+    abortControllers.set(sessionId, controller)
+    const wc = getWebContents()
 
     const runOne = async (m) => {
       const start = Date.now()
@@ -52,14 +54,20 @@ function registerArenaHandlers(ipcMain, db) {
           cache_creation_tokens: u.cache_creation_tokens,
           cost: computeCost(m, u), latency_ms: Date.now() - start, status: 200, source: 'arena',
         })
-        return { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
+        const result = { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
           content: answer, latency_ms: Date.now() - start }
+        // Stream each model's result as it finishes so the UI can render
+        // progress instead of waiting for the slowest model.
+        try { wc?.send('arena:model-done', { sessionId, result }) } catch {}
+        return result
       } catch (err) {
         const status = err.status || 0
         db.logUsage({ session_id: sessionId, provider_id: m.provider_id, provider_name: m.provider_name,
           model_name: m.model_name, latency_ms: Date.now() - start, status, source: 'arena' })
-        return { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
+        const result = { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
           content: `[Error: ${err.name === 'AbortError' ? 'aborted/timeout' : err.message}]`, latency_ms: Date.now() - start }
+        try { wc?.send('arena:model-done', { sessionId, result }) } catch {}
+        return result
       } finally {
         clearTimeout(timeout)
         controller.signal.removeEventListener('abort', onOuterAbort)
@@ -67,7 +75,7 @@ function registerArenaHandlers(ipcMain, db) {
     }
 
     const results = await Promise.all(selected.map(runOne))
-    abortControllers.delete(requestId)
+    if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     // Persist each model's answer as an assistant message tagged with
     // arena_model, so the arena exchange survives a reload (it used to be
     // in-memory only and vanished on session switch).
@@ -83,9 +91,14 @@ function registerArenaHandlers(ipcMain, db) {
     return { results }
   })
 
-  ipcMain.handle('arena:stop', () => {
-    for (const [, c] of abortControllers) c.abort()
-    abortControllers.clear()
+  ipcMain.handle('arena:stop', (_e, sessionId) => {
+    if (sessionId) {
+      const c = abortControllers.get(sessionId)
+      if (c) { c.abort(); abortControllers.delete(sessionId) }
+    } else {
+      for (const [, c] of abortControllers) c.abort()
+      abortControllers.clear()
+    }
   })
 
   ipcMain.handle('arena:vote', async (_e, data) => {
