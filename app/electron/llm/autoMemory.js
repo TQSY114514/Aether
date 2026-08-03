@@ -218,6 +218,7 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
           db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, source_turn_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, sessionId || null, null])
           try { const rid = db.exec('SELECT last_insert_rowid()')[0]?.values?.[0]?.[0]; if (rid) db.run('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)', [String(entry.content || ''), 'relation', Number(rid)]) } catch {}
+        } catch {}
       } else {
         try { db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null) } catch {}
       }
