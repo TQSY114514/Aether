@@ -81,7 +81,7 @@ function registerSearchHandlers(ipcMain, db) {
     const ftsQuery = cjkBigramQuery(query || '')
     if (!ftsQuery) return []
     try {
-      const rows = db.searchMessages(ftsQuery, sessionId || null) || []
+      const rows = db.searchMessages(ftsQuery, sessionId || null, query || '') || []
       // Unquoted bigram tokens — the renderer uses them for highlighting.
       const terms = cjkBigram(query || '').split(/\s+/).filter(Boolean)
       return rows.map((m) => ({
