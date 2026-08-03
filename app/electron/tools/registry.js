@@ -1009,8 +1009,8 @@ const TOOLS = [
       // the sub-agents run in 'auto' to avoid re-prompting for every internal
       // call — the outer gate is the trust boundary).
       const shared = {
-        provider: ctx.provider, model: ctx.model, signal: ctx.signal,
-        options: ctx.options || {}, agentMode: 'auto',
+        db: ctx.db, provider: ctx.provider, model: ctx.model,
+        signal: ctx.signal, options: ctx.options || {}, agentMode: 'auto',
       }
       const results = await SubAgent.runParallel(tasks, shared)
       return results.map((r, i) => {
