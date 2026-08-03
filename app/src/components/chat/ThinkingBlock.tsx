@@ -10,7 +10,7 @@ type ThinkingBlockProps = {
 // Collapsible extended-thinking / reasoning block, styled like Claude Code's
 // thinking sections. Shows a one-line indicator when collapsed, full text
 // (rendered as plain text, not markdown) when expanded.
-export default function ThinkingBlock({ text, collapsed: initialCollapsed }: ThinkingBlockProps) {
+export default function ThinkingBlock({ text, collapsed: initialCollapsed = true }: ThinkingBlockProps) {
   const [open, setOpen] = useState(!initialCollapsed)
 
   const preview = useMemo(() => {

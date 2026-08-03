@@ -161,6 +161,11 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
       else if (delta.type === 'thinking' && delta.text) {
         _thinkingText += delta.text
         streamChat.thinkingBlocks = [{ text: _thinkingText, ts: Date.now() }]
+        // Forward accumulated thinking so the renderer can display it live
+        // (chat.handler slices by lastThinkingLen to emit only new text).
+        if (typeof options?.onThinkingDelta === 'function') {
+          try { options.onThinkingDelta(_thinkingText) } catch {}
+        }
       }
       // Skip thinking_start/thinking_stop/tool_use_args — control signals only.
     }
@@ -266,7 +271,11 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   const data = await res.json()
   const { text, tool_calls } = parseToolUses(data.content)
   const usage = data.usage ? _nu(data.usage) : null
-  return { content: text, tool_calls, usage }
+  const reasoning = (data.content || [])
+    .filter(b => b.type === 'thinking' && b.thinking)
+    .map(b => b.thinking)
+    .join('')
+  return { content: text, tool_calls, usage, reasoning }
 }
 
 // Tracks which content block index is the current thinking block (for stop detection).

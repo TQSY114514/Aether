@@ -156,7 +156,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections }) {
   toolCache.clear()
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
@@ -323,6 +323,9 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
       try { onThinkingStart?.() } catch {}
       msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
       try { onThinkingEnd?.() } catch {}
+      if (msg && msg.reasoning) {
+        try { onThinkingDelta?.(msg.reasoning) } catch {}
+      }
     } catch (e) {
       try { onThinkingEnd?.() } catch {}
       return `[agent error: ${e && e.message ? e.message : String(e)}]`
