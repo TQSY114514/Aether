@@ -7,7 +7,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
-import TodoList from './TodoList'
+import TaskCard from './TaskCard'
 import ThinkingBlock from './ThinkingBlock'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
@@ -29,6 +29,8 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
   const editMessage = useStore(s => s.editMessage)
 
   const isUser = message.role === 'user'
+  // An assistant turn with a live todo checklist renders as a task card.
+  const hasTask = !!todos && todos.length > 0
   // A message is "streaming" when it's the last message (assistant, empty content)
   // and the session has an active stream buffer.
   const streamingBySession = useStore(s => s.streamingBySession)
@@ -135,10 +137,13 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           ? { background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }
           : isError ? undefined
           : { backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}>
-          {!isUser && todos && todos.length > 0 && (
-            <TodoList todos={todos} />
+          {/* Task card — top of the bubble so multi-step progress reads first.
+              It absorbs the todo checklist + status lines, so those only render
+              standalone below when there's no active task list. */}
+          {!isUser && hasTask && (
+            <TaskCard todos={todos} planSteps={planSteps} statusLines={statusLines} />
           )}
-          {!isUser && statusLines && statusLines.length > 0 && (
+          {!isUser && !hasTask && statusLines && statusLines.length > 0 && (
             <div className="mb-2 space-y-0.5">
               {statusLines.map((line, i) => (
                 <div key={i} className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>

@@ -79,6 +79,7 @@ const { registerConfigHandlers } = require('./ipc/config.handler')
 const { registerMcpHandlers } = require('./ipc/mcp.handler')
 const { registerAgentHandlers } = require('./ipc/agent.handler')
 const { registerSkillsHandlers } = require('./ipc/skills.handler')
+const { registerTaskHandlers } = require('./ipc/task.handler')
 const mcpManager = require('./mcp/manager')
 const { setWorkspaceRoot } = require('./tools/sandbox')
 
@@ -223,6 +224,7 @@ function setupIpcHandlers() {
   registerMcpHandlers(ipcMain, db)
   registerAgentHandlers(ipcMain, db)
   registerSkillsHandlers(ipcMain, db)
+  registerTaskHandlers(ipcMain, db, () => mainWindow?.webContents)
   const { registerUsageHandlers } = require('./ipc/usage.handler')
   registerUsageHandlers(ipcMain, db)
   // Search (FTS5) handler

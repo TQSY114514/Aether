@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash, Download, FolderOpen, Loader2, BookOpen } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash, Download, FolderOpen, Loader2, BookOpen, ListTodo } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
+import TaskPanel, { tx } from '@/components/tasks/TaskPanel'
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
 
@@ -69,6 +70,9 @@ export default function Sidebar() {
   const deleteSession = useStore((s) => s.deleteSession)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const loadSessions = useStore((s) => s.loadSessions)
+  const tasksOpen = useStore((s) => s.tasksOpen)
+  const setTasksOpen = useStore((s) => s.setTasksOpen)
+  const runningTasks = useStore((s) => s.tasks.filter((x) => x.status === 'running').length)
   const { confirm } = useUI()
 
   const [renamingId, setRenamingId] = useState<number | null>(null)
@@ -261,17 +265,29 @@ export default function Sidebar() {
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
         <NavItem icon={Cpu} label={t('sidebar.nav.learning')} active={currentView === 'learning'} onClick={() => setCurrentView('learning')} />
         <NavItem icon={BookOpen} label={t('sidebar.nav.skills')} active={currentView === 'skills'} onClick={() => setCurrentView('skills')} />
+        {/* Background tasks (功能 A): a drawer toggle, not a view — the page
+            switch lives in App.tsx and stays untouched. */}
+        <NavItem icon={ListTodo} label={tx('sidebar.nav.tasks', '任务')} active={tasksOpen}
+          onClick={() => setTasksOpen(!tasksOpen)} badge={runningTasks} />
         <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>
+      {/* Fixed-position drawer; renders null unless `tasksOpen`. Mounted here so
+          it hydrates from task.list() as soon as the sidebar exists. */}
+      <TaskPanel />
     </div>
   )
 }
 
-function NavItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active: boolean; onClick: () => void }) {
+function NavItem({ icon: Icon, label, active, onClick, badge }: { icon: any; label: string; active: boolean; onClick: () => void; badge?: number }) {
   return (
     <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
       style={active ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
       <Icon size={16} className={active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} />{label}
+      {badge ? (
+        <span className="ms-auto flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full tabular-nums" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+          <Loader2 size={8} className="animate-spin" />{badge}
+        </span>
+      ) : null}
     </button>
   )
 }

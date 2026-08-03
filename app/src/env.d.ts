@@ -72,6 +72,10 @@ interface Window {
       onHabitSuggestion: (callback: (payload: { key: string; imperative: string; reason: string }[]) => void) => () => void
       onContextBudget: (callback: (payload: { text: string }) => void) => () => void
       stop: (sessionId: number) => Promise<void>
+      inject: (payload: { sessionId: number; content: string }) => Promise<{ queued: boolean }>
+      onInjectionQueued: (callback: (payload: { sessionId: number; content: string }) => void) => () => void
+      onToolLoopStart: (callback: (payload: { sessionId: number }) => void) => () => void
+      onToolLoopEnd: (callback: (payload: { sessionId: number }) => void) => () => void
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void
@@ -177,6 +181,17 @@ interface Window {
     }
     trust: {
       badge: (params: { sessionId?: number; modelId?: number }) => Promise<{ level: string; score: number; reason: string } | null>
+    }
+    task: {
+      start: (params: { content: string; modelId: number; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+      list: () => Promise<{ id: number; sessionId: number; status: 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; finalContent?: string | null; error?: string | null }[]>
+      cancel: (taskId: number) => Promise<{ ok: boolean }>
+      getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
+      onStarted: (callback: (payload: { id: number; sessionId: number; status: 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; finalContent?: string | null; error?: string | null }) => void) => () => void
+      onProgress: (callback: (payload: { taskId: number; type: 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk'; payload: unknown }) => void) => () => void
+      onDone: (callback: (payload: { taskId: number; sessionId: number; finalContent: string }) => void) => () => void
+      onCancelled: (callback: (payload: { taskId: number }) => void) => () => void
+      onError: (callback: (payload: { taskId: number; error: string }) => void) => () => void
     }
   }
 }

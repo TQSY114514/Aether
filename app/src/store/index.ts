@@ -17,6 +17,117 @@ interface SessionConfig {
   workspace?: string | null
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Feature A — background tasks (docs/p0-agent-workbench.md 功能 A).
+// A task runs `runToolLoop` in its own child session in the main process; the
+// renderer keeps a mirror of the TaskManager's list so TaskPanel can show live
+// progress and open a task's session to read the full trace.
+// ───────────────────────────────────────────────────────────────────────────
+
+export type TaskStatus = 'running' | 'done' | 'cancelled' | 'error'
+
+export interface TaskInfo {
+  id: number
+  sessionId: number
+  status: TaskStatus
+  title: string
+  createdAt: number
+  finalContent?: string | null
+  error?: string | null
+  /** Renderer-only: newest `task:progress` line, condensed to one line. Never
+   *  sent over IPC, so a fresh `task.list()` must not clobber it. */
+  lastProgress?: string | null
+}
+
+export type TaskProgressType = 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk'
+
+/** The `task:*` IPC surface (handler + preload + env.d.ts — AGENTS.md hard rule).
+ *  Mirrored here so the renderer half type-checks and degrades gracefully when
+ *  it runs against an older main process: `electron/` files are NOT hot-reloaded,
+ *  so a rebuilt renderer can legitimately meet a preload without `task`. */
+interface TaskApi {
+  start: (params: { content: string; modelId: number; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+  list: () => Promise<TaskInfo[]>
+  cancel: (taskId: number) => Promise<{ ok: boolean }>
+  getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
+  onStarted: (cb: (task: TaskInfo) => void) => () => void
+  onProgress: (cb: (p: { taskId: number; type: TaskProgressType; payload: unknown }) => void) => () => void
+  onDone: (cb: (p: { taskId: number; sessionId: number; finalContent: string }) => void) => () => void
+  onCancelled: (cb: (p: { taskId: number }) => void) => () => void
+  onError: (cb: (p: { taskId: number; error: string }) => void) => () => void
+}
+
+/** Returns the task IPC bridge, or null when the running main process predates
+ *  Feature A (see TaskApi). Callers must handle null instead of throwing. */
+export function taskApi(): TaskApi | null {
+  const api: unknown = window.electronAPI
+  if (!api || typeof api !== 'object') return null
+  const task = (api as { task?: unknown }).task
+  return task && typeof task === 'object' ? (task as TaskApi) : null
+}
+
+// Field-by-field merge: `undefined` in the patch means "not reported", which
+// must keep the previous value; explicit `null` means "cleared".
+function mergeTask(prev: TaskInfo, patch: Partial<TaskInfo>): TaskInfo {
+  return {
+    id: prev.id,
+    sessionId: patch.sessionId ?? prev.sessionId,
+    status: patch.status ?? prev.status,
+    title: patch.title ?? prev.title,
+    createdAt: patch.createdAt ?? prev.createdAt,
+    finalContent: patch.finalContent !== undefined ? patch.finalContent : prev.finalContent ?? null,
+    error: patch.error !== undefined ? patch.error : prev.error ?? null,
+    lastProgress: patch.lastProgress !== undefined ? patch.lastProgress : prev.lastProgress ?? null,
+  }
+}
+
+function newTask(patch: Partial<TaskInfo> & { id: number }): TaskInfo {
+  return {
+    id: patch.id,
+    sessionId: patch.sessionId ?? 0,
+    status: patch.status ?? 'running',
+    title: patch.title ?? '',
+    createdAt: patch.createdAt ?? Date.now(),
+    finalContent: patch.finalContent ?? null,
+    error: patch.error ?? null,
+    lastProgress: patch.lastProgress ?? null,
+  }
+}
+
+// Condense one `task:progress` event into a single summary line. Returns null
+// for events that carry no summary (streamed chunks, malformed payloads).
+function taskProgressText(type: TaskProgressType, payload: unknown): string | null {
+  const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+  const str = (v: unknown, key: string): string => {
+    if (!isRecord(v)) return ''
+    const raw = v[key]
+    return typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : ''
+  }
+  switch (type) {
+    case 'status': {
+      const text = str(payload, 'text')
+      return text || null
+    }
+    case 'tool-call': {
+      const name = str(payload, 'name')
+      if (!name) return null
+      const failed = isRecord(payload) && payload.error != null && payload.error !== ''
+      return `${failed ? '⚠️' : '🔧'} ${name}`
+    }
+    case 'plan-step': {
+      const text = str(payload, 'assistantText')
+      return text ? text.slice(0, 140) : null
+    }
+    case 'todo-update': {
+      if (!Array.isArray(payload) || payload.length === 0) return null
+      const done = payload.filter((x) => isRecord(x) && x.status === 'completed').length
+      return `📋 ${done}/${payload.length}`
+    }
+    case 'chunk':
+      return null
+  }
+}
+
 interface AppState {
   // Navigation
   currentView: ViewType
@@ -132,6 +243,25 @@ interface AppState {
   setEffortLevel: (v: 'off' | 'low' | 'medium' | 'high') => void
   // Last model-suggestion rationale from modelAdvisor (shown in ModelSelector).
   modelSuggestion: { suggestedModelId: number | null; reason: string; confidence: number } | null
+  // Feature B: mid-turn injection tracking.
+  loopingSessions: Set<number>
+  setLooping: (sessionId: number, looping: boolean) => void
+  injectMessage: (content: string) => void
+  isInjectedMsg: (id: number) => boolean
+  // Feature A: background tasks. In-memory mirror of the main-process
+  // TaskManager (which is itself not persisted — see the plan's 明确不做 #2),
+  // hydrated by TaskPanel via `task.list()` on mount.
+  tasks: TaskInfo[]
+  // Add-or-merge by id. Fields left `undefined` keep their previous value, so a
+  // fresh `task.list()` never wipes a running task's `lastProgress`.
+  upsertTask: (task: Partial<TaskInfo> & { id: number }) => void
+  // Explicit dismissal only. Finished/cancelled tasks stay in the list until
+  // the user removes them — a cancelled task is still a result worth seeing.
+  removeTask: (id: number) => void
+  // TaskPanel drawer visibility. A drawer (not a `ViewType` page) because the
+  // page switch lives in App.tsx, which this feature must not touch.
+  tasksOpen: boolean
+  setTasksOpen: (v: boolean) => void
   stopGeneration: () => Promise<void>
   regenerate: () => Promise<void>
   editMessage: (messageId: number, newContent: string) => Promise<void>
@@ -271,6 +401,9 @@ export const useStore = create<AppState>((set, get) => ({
   effortLevel: 'off',
   agentWorkspace: '', // current session's workspace path (or global)
   modelSuggestion: null as { suggestedModelId: number | null; reason: string; confidence: number } | null,
+  loopingSessions: new Set<number>(),
+  tasks: [],
+  tasksOpen: false,
   modelRoutingPriority: 'quality',
   autoCommitOnTestPass: false,
 
@@ -617,6 +750,7 @@ export const useStore = create<AppState>((set, get) => ({
     // chunk to whichever session it belongs to, so background streams keep flowing.
     ensureChunkListener()
     ensureToolCallListener()
+    ensureLoopStateListener()
 
     try {
       const result = await window.electronAPI.chat.send({
@@ -646,6 +780,52 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setAgentMode: (v) => set({ agentMode: v }),
+  setLooping: (sessionId, looping) => {
+    set((s) => {
+      const next = new Set(s.loopingSessions)
+      if (looping) next.add(sessionId)
+      else next.delete(sessionId)
+      return { loopingSessions: next }
+    })
+  },
+  injectMessage: (content) => {
+    const { currentSessionId } = get()
+    if (!currentSessionId) return
+    window.electronAPI.chat.inject({ sessionId: currentSessionId, content })
+      .then((result) => {
+        if (result?.queued) {
+          const tempMsg: Message = {
+            id: Date.now(),
+            session_id: currentSessionId,
+            role: 'user',
+            content,
+            model_used: null,
+            provider_used: null,
+            token_count: null,
+            latency_ms: null,
+            status: 'success',
+            error_message: null,
+            created_at: new Date().toISOString(),
+            attachment: null,
+          }
+          _injectedMsgIds.add(tempMsg.id)
+          set((s) => ({ messages: [...s.messages, tempMsg] }))
+        }
+      })
+      .catch(() => {})
+  },
+  isInjectedMsg: (id) => _injectedMsgIds.has(id),
+  upsertTask: (patch) => {
+    set((s) => {
+      const idx = s.tasks.findIndex((x) => x.id === patch.id)
+      if (idx < 0) return { tasks: [...s.tasks, newTask(patch)] }
+      const next = [...s.tasks]
+      next[idx] = mergeTask(next[idx], patch)
+      return { tasks: next }
+    })
+  },
+  removeTask: (id) => set((s) => ({ tasks: s.tasks.filter((x) => x.id !== id) })),
+  setTasksOpen: (v) => set({ tasksOpen: v }),
   setModelRoutingPriority: async (v) => {
     await window.electronAPI.settings.set('modelRoutingPriority', v)
     set({ modelRoutingPriority: v })
@@ -1137,6 +1317,8 @@ export function ensureAllListeners() {
   ensureStatusListener()
   ensureHabitSuggestionListener()
   ensureThinkingListener()
+  ensureLoopStateListener()
+  ensureTaskListeners()
 }
 // Session back/forward nav guard: set true during goBack/goForward so
 // selectSession doesn't push a duplicate entry into history.
@@ -1152,6 +1334,8 @@ let _autoThemeCleanup: (() => void) | null = null
 // callback races with stopGeneration: it can skip the DB reload (optimistic
 // guard) but still delete the streaming buffer, causing content to vanish.
 let _stoppingSessionId: number | null = null
+// Ephemeral set of injected message ids (optimistic bubbles, not persisted to DB).
+const _injectedMsgIds = new Set<number>()
 
 function ensureToolCallListener() {
   if (_toolCallListenerInstalled) return
@@ -1356,5 +1540,57 @@ function ensureThinkingListener() {
         [messageId]: (s.thinkingBlocksByMessage[messageId] || '') + delta,
       },
     }))
+  })
+}
+
+// Feature B: listen for tool-loop-start/end to keep loopingSessions in sync.
+let _loopStateListenerInstalled = false
+function ensureLoopStateListener() {
+  if (_loopStateListenerInstalled) return
+  _loopStateListenerInstalled = true
+  window.electronAPI.chat.onToolLoopStart?.(({ sessionId }) => {
+    useStore.setState((s) => {
+      const next = new Set(s.loopingSessions)
+      next.add(sessionId)
+      return { loopingSessions: next }
+    })
+  })
+  window.electronAPI.chat.onToolLoopEnd?.(({ sessionId }) => {
+    useStore.setState((s) => {
+      const next = new Set(s.loopingSessions)
+      next.delete(sessionId)
+      return { loopingSessions: next }
+    })
+  })
+}
+
+// Feature A: background-task events → `tasks`. Installed once (same pattern as
+// the listeners above); safe to call before the main process gained the task
+// handler — taskApi() returns null and this becomes a no-op that can be retried
+// on the next call because the install flag is only set once a bridge exists.
+let _taskListenerInstalled = false
+export function ensureTaskListeners() {
+  if (_taskListenerInstalled) return
+  const api = taskApi()
+  if (!api) return
+  _taskListenerInstalled = true
+  const upsert = (patch: Partial<TaskInfo> & { id: number }) => useStore.getState().upsertTask(patch)
+  api.onStarted((task) => {
+    if (!task || typeof task.id !== 'number') return
+    upsert({ ...task, lastProgress: null })
+  })
+  api.onProgress(({ taskId, type, payload }) => {
+    const text = taskProgressText(type, payload)
+    if (!text) return
+    upsert({ id: taskId, lastProgress: text })
+  })
+  api.onDone(({ taskId, sessionId, finalContent }) => {
+    upsert({ id: taskId, sessionId, status: 'done', finalContent })
+  })
+  api.onCancelled(({ taskId }) => {
+    upsert({ id: taskId, status: 'cancelled' })
+  })
+  api.onError(({ taskId, error }) => {
+    upsert({ id: taskId, status: 'error', error })
   })
 }

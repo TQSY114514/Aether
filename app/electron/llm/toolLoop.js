@@ -152,7 +152,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections }) {
   toolCache.clear()
   const toolPayload = tools ? toolsPayload(agentMode) : []
   const budget = new IterationBudget(maxIterations)
@@ -297,6 +297,14 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
 
   while (budget.consume()) {
     const depth = budget.used
+    // Feature B: inject any pending user messages before completeChatMessage.
+    const _pendingInj = getPendingInjections ? getPendingInjections() : []
+    if (_pendingInj.length) {
+      for (const text of _pendingInj) convo.push({ role: 'user', content: text })
+      convo.push({ role: 'system', content: '[用户打断:优先回应这条新消息,再决定是否继续原任务]' })
+      clearPendingInjections?.()
+      try { onStatus?.({ text: '📥 已插入你的新消息', kind: 'injection' }) } catch {}
+    }
     const opts = { ...options }
     if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
     if (planToolsPayload.length) { opts.tools = [...toolPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
