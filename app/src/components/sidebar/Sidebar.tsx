@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Hash, Download, FolderOpen, Loader2, BookOpen, ListTodo } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Download, FolderOpen, Loader2, BookOpen, ListTodo } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import TaskPanel, { tx } from '@/components/tasks/TaskPanel'
@@ -91,7 +91,6 @@ export default function Sidebar() {
     return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
   }, [sessions, lowerQuery])
   const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
-  const totalSessions = sessions.length
 
   const handleDoubleClick = (session: Session) => {
     setRenamingId(session.id); setRenameValue(session.title || '')
@@ -133,11 +132,6 @@ export default function Sidebar() {
       <div className="h-12 flex items-center justify-between px-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>AetherAI</span>
-          {totalSessions > 0 && (
-            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
-              <Hash size={8} />{totalSessions}
-            </span>
-          )}
         </div>
         <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
           <ChevronLeft size={16} className="text-[var(--text-muted)]" />
