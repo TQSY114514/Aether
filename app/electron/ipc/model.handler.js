@@ -17,7 +17,6 @@ function registerModelHandlers(ipcMain, db) {
   ipcMain.handle('model:update', (_e, id, data) => db.updateModel(id, data))
   ipcMain.handle('model:delete', (_e, id) => db.deleteModel(id))
   ipcMain.handle('model:fallback-chain', (_e, providerId) => db.getFallbackChain(providerId))
-  ipcMain.handle('model:set-ulw-role', (_e, id, role) => db.updateModel(id, { ulw_role: role }))
 }
 
 module.exports = { registerModelHandlers }

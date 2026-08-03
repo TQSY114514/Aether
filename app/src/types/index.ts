@@ -18,7 +18,6 @@ export interface Model {
   context_window: number | null
   input_price_per_1k: number | null
   output_price_per_1k: number | null
-  ulw_role: string
   created_at: string
   // populated by join
   provider_name?: string
