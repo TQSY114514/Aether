@@ -1,0 +1,323 @@
+// ───────────────────────────────────────────────────────────────────────────
+// Aether Agent — Phase 4.1: Permission Model Upgrade (5-tier + hook override)
+//
+// Permission levels assigned to a tool invocation or runtime session.
+// Ordered from least to most permissive — comparisons use >= semantics.
+// ───────────────────────────────────────────────────────────────────────────
+
+// ── PermissionMode (ordered 0-4, least to most permissive) ────────────────
+
+const PermissionMode = Object.freeze({
+  ReadOnly:         0,
+  WorkspaceWrite:   1,
+  DangerFullAccess: 2,
+  Prompt:           3,
+  Allow:            4,
+})
+
+const PermissionModeLabel = Object.freeze({
+  [PermissionMode.ReadOnly]:         'read-only',
+  [PermissionMode.WorkspaceWrite]:   'workspace-write',
+  [PermissionMode.DangerFullAccess]: 'danger-full-access',
+  [PermissionMode.Prompt]:           'prompt',
+  [PermissionMode.Allow]:            'allow',
+})
+
+function permissionModeToString(mode) {
+  return PermissionModeLabel[mode] ?? 'unknown'
+}
+
+// ── PermissionOverride ────────────────────────────────────────────────────
+
+const PermissionOverride = Object.freeze({
+  Allow: 'allow',
+  Deny:  'deny',
+  Ask:   'ask',
+})
+
+// ── PermissionRequest ─────────────────────────────────────────────────────
+
+class PermissionRequest {
+  constructor({ tool_name, input, current_mode, required_mode, reason = null }) {
+    this.tool_name = tool_name
+    this.input = input
+    this.current_mode = current_mode
+    this.required_mode = required_mode
+    this.reason = reason
+  }
+}
+
+// ── PermissionOutcome ─────────────────────────────────────────────────────
+
+class PermissionOutcome {
+  constructor({ allowed, reason = null }) {
+    this.allowed = allowed
+    this.reason = reason
+  }
+
+  static allow() {
+    return new PermissionOutcome({ allowed: true })
+  }
+
+  static deny(reason) {
+    return new PermissionOutcome({ allowed: false, reason })
+  }
+}
+
+// ── PermissionPrompter (interface) ────────────────────────────────────────
+//
+// Subclasses override decide(request) to return PermissionPromptDecision.
+
+class PermissionPrompter {
+  decide(_request) {
+    throw new Error('PermissionPrompter.decide() must be overridden')
+  }
+}
+
+const PermissionPromptDecision = Object.freeze({
+  Allow: 'allow',
+  Deny:  'deny',
+})
+
+// ── PermissionRule (internal) ─────────────────────────────────────────────
+
+const _RuleMatcher = Object.freeze({
+  Any:   0,
+  Exact: 1,
+  Prefix: 2,
+})
+
+class _PermissionRule {
+  constructor(raw, toolName, matcher, matcherValue) {
+    this.raw = raw
+    this.toolName = toolName
+    this.matcher = matcher
+    this.matcherValue = matcherValue
+  }
+
+  matches(toolName, input) {
+    if (this.toolName !== toolName) return false
+    if (this.matcher === _RuleMatcher.Any) return true
+    const subject = _extractPermissionSubject(input)
+    if (subject === undefined) return false
+    if (this.matcher === _RuleMatcher.Exact) return subject === this.matcherValue
+    if (this.matcher === _RuleMatcher.Prefix) return subject.startsWith(this.matcherValue)
+    return false
+  }
+
+  static parse(raw) {
+    const trimmed = raw.trim()
+    const open = _findFirstUnescaped(trimmed, '(')
+    const close = _findLastUnescaped(trimmed, ')')
+
+    if (open !== -1 && close !== -1 && close === trimmed.length - 1 && open < close) {
+      const toolName = trimmed.slice(0, open).trim().toLowerCase()
+      const content = trimmed.slice(open + 1, close)
+      if (toolName.length > 0) {
+        return new _PermissionRule(
+          trimmed,
+          toolName,
+          ..._parseRuleMatcher(content)
+        )
+      }
+    }
+
+    return new _PermissionRule(trimmed, trimmed.toLowerCase(), _RuleMatcher.Any, null)
+  }
+}
+
+function _parseRuleMatcher(content) {
+  const unescaped = _unescapeRuleContent(content.trim())
+  if (unescaped.length === 0 || unescaped === '*') {
+    return [_RuleMatcher.Any, null]
+  }
+  if (unescaped.endsWith(':*')) {
+    return [_RuleMatcher.Prefix, unescaped.slice(0, -2)]
+  }
+  return [_RuleMatcher.Exact, unescaped]
+}
+
+function _unescapeRuleContent(content) {
+  return content.replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\')
+}
+
+function _findFirstUnescaped(value, needle) {
+  let escaped = false
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === '\\') { escaped = !escaped; continue }
+    if (value[i] === needle && !escaped) return i
+    escaped = false
+  }
+  return -1
+}
+
+function _findLastUnescaped(value, needle) {
+  let i = value.length
+  while (i-- > 0) {
+    if (value[i] !== needle) continue
+    let backslashes = 0
+    for (let j = i - 1; j >= 0 && value[j] === '\\'; j--) backslashes++
+    if (backslashes % 2 === 0) return i
+  }
+  return -1
+}
+
+function _extractPermissionSubject(input) {
+  try {
+    const parsed = JSON.parse(input)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const key of ['command', 'path', 'file_path', 'filePath', 'notebook_path', 'notebookPath', 'url', 'pattern', 'code', 'message']) {
+        if (typeof parsed[key] === 'string') return parsed[key]
+      }
+    }
+  } catch { /* not JSON */ }
+  return input.trim().length > 0 ? input : undefined
+}
+
+// ── PermissionPolicy — rule engine ────────────────────────────────────────
+
+class PermissionPolicy {
+  constructor(activeMode) {
+    this.activeMode = activeMode
+    this.toolRequirements = new Map()   // tool_name -> PermissionMode
+    this.allowRules = []                // _PermissionRule[]
+    this.denyRules = []                 // _PermissionRule[]
+    this.askRules = []                  // _PermissionRule[]
+    this.deniedTools = []               // unconditional deny list
+  }
+
+  /**
+   * Set the permission mode required for a specific tool.
+   */
+  withToolRequirement(toolName, requiredMode) {
+    this.toolRequirements.set(toolName, requiredMode)
+    return this
+  }
+
+  /**
+   * Load allow/deny/ask/denied_tools rules from a config object.
+   *   config = { allow: [...], deny: [...], ask: [...], denied_tools: [...] }
+   */
+  withPermissionRules(config) {
+    this.allowRules = (config.allow || []).map(r => _PermissionRule.parse(r))
+    this.denyRules = (config.deny || []).map(r => _PermissionRule.parse(r))
+    this.askRules = (config.ask || []).map(r => _PermissionRule.parse(r))
+    this.deniedTools = (config.denied_tools || []).map(t => t.toLowerCase())
+    return this
+  }
+
+  /**
+   * Returns the required PermissionMode for a tool (defaults to DangerFullAccess).
+   */
+  requiredModeFor(toolName) {
+    return this.toolRequirements.has(toolName)
+      ? this.toolRequirements.get(toolName)
+      : PermissionMode.DangerFullAccess
+  }
+
+  /**
+   * Evaluate authorization: (toolName, input, optional prompter) -> PermissionOutcome.
+   */
+  authorize(toolName, input, prompter = null) {
+    return this.authorizeWithContext(toolName, input, null, prompter)
+  }
+
+  /**
+   * Evaluate authorization with optional PermissionOverride from hooks.
+   *   context = { permissionOverride, overrideReason } or null
+   */
+  authorizeWithContext(toolName, input, context = null, prompter = null) {
+    const override = context ? context.permissionOverride : null
+    const overrideReason = context ? context.overrideReason : null
+
+    // Unconditional deny by denied_tools config
+    if (this.deniedTools.includes(toolName)) {
+      return PermissionOutcome.deny(`tool '${toolName}' has been denied by denied_tools configuration`)
+    }
+
+    // Deny rules checked first
+    if (_findMatchingRule(this.denyRules, toolName, input)) {
+      return PermissionOutcome.deny(`Permission to use ${toolName} has been denied by rule`)
+    }
+
+    const currentMode = this.activeMode
+    const requiredMode = this.requiredModeFor(toolName)
+    const askRule = _findMatchingRule(this.askRules, toolName, input)
+    const allowRule = _findMatchingRule(this.allowRules, toolName, input)
+
+    // Process hook override
+    if (override === PermissionOverride.Deny) {
+      return PermissionOutcome.deny(overrideReason || `tool '${toolName}' denied by hook`)
+    }
+
+    if (override === PermissionOverride.Ask) {
+      const reason = overrideReason || `tool '${toolName}' requires approval due to hook guidance`
+      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+    }
+
+    if (override === PermissionOverride.Allow) {
+      if (askRule) {
+        const reason = `tool '${toolName}' requires approval due to ask rule`
+        return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+      }
+      if (allowRule || currentMode === PermissionMode.Allow || currentMode >= requiredMode) {
+        return PermissionOutcome.allow()
+      }
+    }
+
+    // No override — evaluate rules
+    if (askRule) {
+      const reason = `tool '${toolName}' requires approval due to ask rule`
+      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+    }
+
+    if (allowRule || currentMode === PermissionMode.Allow || currentMode >= requiredMode) {
+      return PermissionOutcome.allow()
+    }
+
+    // WorkspaceWrite -> DangerFullAccess escalation -> prompt
+    if (currentMode === PermissionMode.Prompt ||
+        (currentMode === PermissionMode.WorkspaceWrite && requiredMode === PermissionMode.DangerFullAccess)) {
+      const reason = `tool '${toolName}' requires approval to escalate from ${permissionModeToString(currentMode)} to ${permissionModeToString(requiredMode)}`
+      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+    }
+
+    // Default deny
+    return PermissionOutcome.deny(
+      `tool '${toolName}' requires ${permissionModeToString(requiredMode)} permission; current mode is ${permissionModeToString(currentMode)}`
+    )
+  }
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────
+
+function _findMatchingRule(rules, toolName, input) {
+  return rules.find(rule => rule.matches(toolName, input)) || null
+}
+
+function _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter) {
+  const request = new PermissionRequest({ tool_name: toolName, input, current_mode: currentMode, required_mode: requiredMode, reason })
+
+  if (prompter && typeof prompter.decide === 'function') {
+    const decision = prompter.decide(request)
+    if (decision === PermissionPromptDecision.Allow) return PermissionOutcome.allow()
+    return PermissionOutcome.deny(decision.reason || 'denied by user')
+  }
+
+  // No prompter available — treat as deny
+  return PermissionOutcome.deny(reason || `tool '${toolName}' requires approval to run while mode is ${permissionModeToString(currentMode)}`)
+}
+
+// ── Exports ───────────────────────────────────────────────────────────────
+
+module.exports = {
+  PermissionMode,
+  PermissionModeLabel,
+  permissionModeToString,
+  PermissionOverride,
+  PermissionRequest,
+  PermissionOutcome,
+  PermissionPrompter,
+  PermissionPromptDecision,
+  PermissionPolicy,
+}

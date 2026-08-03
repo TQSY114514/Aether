@@ -27,11 +27,17 @@
 // None of this is a true sandbox (a determined model could still cause harm
 // within the workspace, or via a command we didn't blocklist). The real
 // guarantee is the permission model: keep 'ask' on for untrusted models.
+//
+// Enhanced with sandbox executor integration for Phase 4:
+//   4. Sandbox Executor — optional safe JavaScript subset execution via
+//      sandboxExecutor.js, enabled through configuration.
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
+
+// ─── Workspace Management ──────────────────────────────────────────────────
 
 // The workspace root. Supports per-session overrides.
 let _workspaceRoot = null
@@ -89,6 +95,8 @@ function checkWritePath(target, sessionId) {
   if (r.ok === true) return { ok: true }
   return { ok: false, reason: `path is outside the agent workspace (${r.root}). Use 'ask' mode to approve, or set the workspace root to include this path.`, abs: r.abs }
 }
+
+// ─── Command Blocklist ─────────────────────────────────────────────────────
 
 const BLOCKED_COMMAND_PATTERNS = [
   /\bformat\b\s+[a-z]:/i,
@@ -165,7 +173,75 @@ function checkCommand(cmd) {
   return { ok: true }
 }
 
+// ─── Sandbox Executor Integration (Phase 4) ───────────────────────────────
+
+/**
+ * Check whether the sandbox executor is enabled in the current configuration.
+ * Reads the 'sandbox_executor_enabled' setting from the provided database
+ * instance. Falls back to false if no db is provided or the setting is absent.
+ *
+ * @param {object} [db] - Database instance with getSetting(key) method
+ * @returns {boolean} True if sandbox executor is enabled
+ */
+function isSandboxExecutorEnabled(db) {
+  if (!db || typeof db.getSetting !== 'function') return false
+  try {
+    const val = db.getSetting('sandbox_executor_enabled')
+    return val === 'true' || val === true || val === '1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Run a command through the sandbox executor if enabled, falling back to the
+ * standard checkCommand path otherwise.
+ *
+ * The sandbox executor provides additional isolation:
+ *   - Whitelist: only node, npm, npx commands
+ *   - Shell metacharacter blocking
+ *   - Isolated temp directories
+ *   - Output size limits (4000 chars)
+ *   - Timeout control (60s)
+ *   - Environment variable sanitization
+ *
+ * @param {string} command - The command to execute
+ * @param {object} [opts]
+ * @param {object} [opts.db] - Database instance for config check
+ * @param {string[]} [opts.args] - Additional arguments
+ * @param {string} [opts.cwd] - Working directory
+ * @param {number} [opts.timeout] - Timeout in ms
+ * @param {object} [opts.env] - Additional environment variables
+ * @returns {Promise<{ok: boolean, stdout: string, stderr: string, exitCode: number|null}>}
+ */
+async function runInSandboxExecutor(command, opts = {}) {
+  const { db, ...executorOpts } = opts
+
+  // Check if the sandbox executor is enabled
+  if (!isSandboxExecutorEnabled(db)) {
+    // Fallback: just validate the command with the standard blocklist
+    const result = checkCommand(command)
+    if (!result.ok) {
+      return { ok: false, stdout: '', stderr: result.reason, exitCode: null }
+    }
+    return { ok: true, stdout: '', stderr: 'sandbox executor disabled — command not executed', exitCode: null }
+  }
+
+  try {
+    const sandboxExecutor = require('./sandboxExecutor')
+    return await sandboxExecutor.runInSandbox(command, executorOpts)
+  } catch (err) {
+    return {
+      ok: false,
+      stdout: '',
+      stderr: `sandbox executor error: ${err.message}`,
+      exitCode: null,
+    }
+  }
+}
+
 module.exports = {
   getWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, clearSessionWorkspaces,
   isInsideWorkspace, checkWritePath, checkCommand,
+  isSandboxExecutorEnabled, runInSandboxExecutor,
 }

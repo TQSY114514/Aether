@@ -9,6 +9,9 @@
 //   - isComplexRequest() gates whether to invest in explicit planning.
 //   - generatePlan() asks the model for a sub-task breakdown.
 //   - plan_progress tool calls from the model update plan status live.
+//
+// Phase 4: Permission model upgrade (5-tier PermissionPolicy) and
+// multi-dimensional IterationBudget (iterations, tokens, time, errors).
 // ───────────────────────────────────────────────────────────────────────────
 
 const { completeChatMessage } = require('./providerAdapter')
@@ -22,6 +25,10 @@ const { buildProjectContextMessage, invalidateCache } = require('./projectInstru
 const { getWorkspaceRoot } = require('../tools/sandbox')
 const modelRouter = require('./modelRouter')
 const path = require('path')
+
+// Phase 4: Permission model and multi-dimensional iteration budget.
+const permissions = require('./permissions')
+const IterationBudgetBase = require('./iterationBudget')
 
 // Classify tool-execution errors (distinct from LLM API errors).
 // These are errors thrown by tool.run() — e.g. file not found, command
@@ -115,15 +122,37 @@ const TOOL_RETRY_BASE_MS = 1000
 const PERMISSION_TIMEOUT_MS = 120000
 const MAX_CONCURRENT_TOOLS = 5 // cap parallel tool calls per round
 
-class IterationBudget {
+// Phase 4: IterationBudget extends the multi-dimensional base from iterationBudget.js.
+// Retains the original consume/refund/used/remaining interface for backward compatibility
+// while adding multi-dimensional tracking (tokens, time, errors) via the base class.
+class IterationBudget extends IterationBudgetBase {
   constructor(maxTotal) {
+    const opts = {}
+    if (maxTotal > 0) opts.maxIterations = maxTotal
+    super(opts)
     this.maxTotal = maxTotal > 0 ? Math.floor(maxTotal) : DEFAULT_MAX_ITERATIONS
     this._used = 0
   }
-  consume() { if (this._used >= this.maxTotal) return false; this._used++; return true }
-  refund() { if (this._used > 0) this._used-- }
+  consume() {
+    if (this._used >= this.maxTotal) return false
+    this._used++
+    this.track('iteration')
+    return true
+  }
+  refund() { if (this._used > 0) { this._used-- } }
   get used() { return this._used }
   get remaining() { return Math.max(0, this.maxTotal - this._used) }
+}
+
+// Phase 4: Map agent mode strings to PermissionMode enum values.
+function agentModeToPermissionMode(agentMode) {
+  const map = {
+    'plan': 'ReadOnly',
+    'ask': 'Prompt',
+    'auto': 'WorkspaceWrite',
+    'yolo': 'Allow',
+  }
+  return map[agentMode] || 'Prompt'
 }
 
 // System prompt: Plan→Act→Observe rhythm (coding-agent style).
@@ -156,13 +185,22 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget }) {
   toolCache.clear()
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
   steering.setRunning(sessionId, true)
   const toolPayload = tools ? toolsPayload(agentMode) : []
-  const budget = new IterationBudget(maxIterations)
+
+  // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
+  const budget = externalBudget || new IterationBudget(maxIterations)
+  budget.start()
+
+  // Phase 4: Initialize permission policy from agent mode.
+  const permissionPolicy = new permissions.PermissionPolicy(
+    permissions.PermissionMode[agentModeToPermissionMode(agentMode) || 'Prompt']
+  )
+
   let totalChars = 0
   let lastSig = ''
   let sigRepeat = 0
@@ -303,6 +341,13 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
 
   while (budget.consume()) {
+    // Phase 4: Multi-dimensional budget check (iterations, tokens, time, errors).
+    const budgetStatus = budget.exhausted()
+    if (budgetStatus.exhausted) {
+      try { onStatus?.({ kind: 'budget_exhausted', text: `预算耗尽: ${budgetStatus.reason}` }) } catch {}
+      break
+    }
+
     const depth = budget.used
     // Event stream: turn start
     eventStream.turnStart({ sessionId, depth, remaining: budget.remaining })
@@ -421,9 +466,42 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
             }
           }
           // Hooks: PreToolUse — user-defined scripts can block or modify.
+          // Phase 4: Capture shell hook results for permission override.
+          let permissionOverride = null
+          let overrideReason = null
           if (!entry.error) {
-            try { await hooks.runHooks('PreToolUse', { toolName: fn.name, args, sessionId, messageId: tc.id }) } catch (e) {
+            try {
+              const hookResults = await hooks.runHooks('PreToolUse', { toolName: fn.name, args, sessionId, messageId: tc.id })
+              // Check for permission override from shell hooks.
+              for (const hr of hookResults) {
+                if (hr.permission_override) {
+                  permissionOverride = hr.permission_override
+                  if (hr.messages && hr.messages.length > 0) {
+                    overrideReason = hr.messages[0]
+                  }
+                }
+                if (hr.denied) {
+                  entry.error = 'blocked by hook'
+                  entry.failure_kind = 'permission_denied'
+                }
+              }
+            } catch (e) {
               entry.error = `blocked by hook: ${e.message}`
+              entry.failure_kind = 'permission_denied'
+            }
+          }
+          // Phase 4: Permission policy authorization — runs after hooks so
+          // hook overrides (permission_override) are incorporated.
+          if (!entry.error) {
+            try {
+              const context = permissionOverride ? { permissionOverride, overrideReason } : null
+              const outcome = permissionPolicy.authorizeWithContext(fn.name, JSON.stringify(args), context)
+              if (!outcome.allowed) {
+                entry.error = outcome.reason || 'blocked by permission policy'
+                entry.failure_kind = 'permission_denied'
+              }
+            } catch (e) {
+              entry.error = `permission policy error: ${e.message}`
               entry.failure_kind = 'permission_denied'
             }
           }
@@ -437,31 +515,19 @@ If STATUS is COMPLETE and any file-touching tools (write_file, edit_file, apply_
               effectiveMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
             } catch {}
           }
-          // Permission gate
-          if (!entry.error) {
-            if (tool.risk === 'dangerous' && effectiveMode !== 'auto' && effectiveMode !== 'yolo') {
-              if (effectiveMode === 'plan') {
-                entry.error = 'blocked by plan mode (read-only)'
-                entry.failure_kind = 'permission_denied'
-              } else if (effectiveMode === 'ask') {
-                const allowed = await requestPermissionWithTimeout(requestPermission, { name: fn.name, args, risk: tool.risk, sessionId })
-                if (!allowed) {
-                  entry.error = 'denied by user'
-                  entry.failure_kind = 'permission_denied'
-                  // Phase 4: record denial → lower trust.
-                  try {
-                    const trustEngine = require('./trustEngine')
-                    trustEngine.adjustTrust(db, sessionId, -10, fn.name)
-                  } catch {}
-                } else {
-                  // User approved → increase trust.
-                  try {
-                    const trustEngine = require('./trustEngine')
-                    trustEngine.adjustTrust(db, sessionId, 5, fn.name)
-                  } catch {}
-                }
+          // Phase 4: Permission gate replaced by PermissionPolicy above.
+          // Trust engine integration for adaptive permission tracking.
+          if (!entry.error && sessionId && db && tool.risk === 'dangerous' && effectiveMode === 'ask') {
+            try {
+              const trustEngine = require('./trustEngine')
+              const trustMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
+              if (trustMode === 'auto') {
+                // Trust engine auto-approved — proceed.
+              } else {
+                // Record that the tool was used despite trust engine not auto-approving.
+                trustEngine.adjustTrust(db, sessionId, 1, fn.name)
               }
-            }
+            } catch {}
           }
           if (!entry.error) {
             if (tool.risk === 'dangerous') {
