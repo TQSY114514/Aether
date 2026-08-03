@@ -137,7 +137,6 @@ npm start        # 启动 Electron
 - `Beta` **16 个内置工具**(`read_file`、`list_dir`、`glob_find`、`grep_search`、`web_search`、`web_fetch`、`write_file`、`edit_file`、`run_command`、`git_status`、`git_diff`、`memory_save`、`memory_list`、`use_skill`、`ask_user`、`todo_write`),配合 Plan-Act-Observe 循环、实时推理轨迹 + 任务清单、循环检测、逐工具超时、可配置的迭代预算(默认 25 轮)以及上下文压缩。
 - `Experimental` **分层规划** —— 为复杂请求自动生成任务拆解(受 DS4 启发)。
 - `Experimental` **子 Agent 委托** —— 独立子任务通过 `delegate_task` 并行运行。
-- `Experimental` **UltraWork (ULW) 多模型编排** —— 在模型管理页面为每个模型分配 ULW 角色(分析器/规划器/执行器/验证器);触发 ULW 模式后,各角色使用独立的模型并行执行子任务,实现真正的多 Agent 协作。支持中转站等任意 OpenAI 兼容端点。
 - `Stable` **权限模式** —— 风险递增的阶梯:
 
 | 模式 | 说明 | 沙箱 |
@@ -317,4 +316,3 @@ AetherAI 站在这些项目的肩膀上——它们的想法塑造了架构与�
 [⬆ 回到顶部](#aetherai)
 
 </div>
-

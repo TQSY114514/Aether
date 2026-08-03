@@ -30,9 +30,7 @@ the LLM provider as a pluggable backend and keeps all user data on disk.
   handler registration), `preload.js` (contextBridge surface — the IPC contract).
 - **LLM layer** `app/electron/llm/`: `providerAdapter.js` (dispatch by
   `provider.api_format`) → `openaiAdapter.js` (fetch + SSE). `toolLoop.js`
-  (Plan→Act→Observe), `ultraWork.js` (multi-model multi-agent orchestration —
-  discovers user's models, assigns roles by tier, spawns parallel sub-agents),
-  `toolResultMiddleware.js` (redact+truncate tool output),
+  (Plan→Act→Observe), `toolResultMiddleware.js` (redact+truncate tool output),
   `reasoning.js` (thinking-effort param shapes), `toolArgs.js`.
 - **Tools** `app/electron/tools/registry.js` (built-in tools, `risk: safe|dangerous`).
 - **MCP** `app/electron/mcp/`: `client.js` + `manager.js` — external stdio tool
@@ -83,8 +81,6 @@ the LLM provider as a pluggable backend and keeps all user data on disk.
   including `--content-bg`) AND `App.tsx` (background layer + main container).
 - Before changing DB schema → read `database.js` `initDatabase` (CREATE TABLE)
   AND the `addCol` migration block. Add new columns there so old DBs upgrade.
-- Before changing ULW → read `llm/ultraWork.js` AND `llm/toolLoop.js` (the ULW
-  integration section) AND `llm/subAgent.js` (sub-agent spawning for ULW roles).
 
 ## Verification
 

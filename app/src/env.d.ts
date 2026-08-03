@@ -25,7 +25,6 @@ interface Window {
         heuristicScores?: { modelId: number; modelName: string; family: string; heuristic: number; eloScore: number | null; blended: number }[]
         confidence: number
       }>
-      setUlwRole: (id: number, role: string) => Promise<void>
     }
     persona: {
       list: () => Promise<Persona[]>

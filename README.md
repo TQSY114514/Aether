@@ -139,7 +139,6 @@ Or run `start.bat` at the repo root on Windows.
 - `Beta` **16 built-in tools** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) with a Plan-Act-Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, configurable iteration budget (default 25 rounds), and context compaction.
 - `Experimental` **Hierarchical planning** — auto-generates task breakdown for complex requests (DS4-inspired).
 - `Experimental` **Sub-agent delegation** — independent sub-tasks run in parallel via `delegate_task`.
-- `Experimental` **UltraWork (ULW) multi-model orchestration** — assign each model a ULW role (analyzer / planner / implementer / verifier) in the model management page; when ULW mode is triggered, each role spawns a parallel sub-agent with its own model for true multi-agent collaboration. Supports any OpenAI-compatible endpoint including relay stations.
 - `Stable` **Permission modes** — risk-ascending ladder:
 
 | Mode | Description | Sandbox |

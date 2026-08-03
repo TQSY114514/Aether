@@ -162,7 +162,6 @@ interface AppState {
   updateModel: (id: number, data: Partial<Model>) => Promise<void>
   deleteModel: (id: number) => Promise<void>
   loadAllModels: () => Promise<void>
-  setUlwRole: (id: number, role: string) => Promise<void>
 
   // Personas
   personas: Persona[]
@@ -644,13 +643,6 @@ export const useStore = create<AppState>((set, get) => ({
   loadAllModels: async () => {
     const allModels = await window.electronAPI.model.listAll()
     set({ allModels })
-  },
-  setUlwRole: async (id, role) => {
-    await window.electronAPI.model.setUlwRole(id, role)
-    await get().loadAllModels()
-    const { allModels } = get()
-    const updated = allModels.find(m => m.id === id)
-    if (updated) await get().loadModels(updated.provider_id)
   },
 
   // Personas

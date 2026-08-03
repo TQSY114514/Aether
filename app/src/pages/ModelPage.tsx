@@ -14,7 +14,6 @@ export default function ModelPage() {
   const addModel = useStore((s) => s.addModel)
   const deleteModel = useStore((s) => s.deleteModel)
   const loadAllModels = useStore((s) => s.loadAllModels)
-  const setUlwRole = useStore((s) => s.setUlwRole)
 
   const [testingId, setTestingId] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; errorMessage?: string }>>({})
@@ -41,8 +40,8 @@ export default function ModelPage() {
       const existing = (modelsByProvider[providerId] || []).map(m => m.model_name)
       const existingSet = new Set(existing)
       for (const name of modelNames) {
-        if (existingSet.has(name)) continue
-        await addModel({ provider_id: providerId, model_name: name, is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null, ulw_role: 'none' })
+        if (existingSet.has(name)) continue // skip duplicates from re-fetching
+        await addModel({ provider_id: providerId, model_name: name, is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
       }
       await loadModels(providerId)
     } catch {}
@@ -55,14 +54,6 @@ export default function ModelPage() {
     setNewProvider({ name: '', api_url: '', api_key: '', api_format: 'openai' })
     setShowAdd(false)
   }
-
-  const ULW_ROLES = [
-    { value: 'none', label: '无' },
-    { value: 'analyzer', label: '分析器' },
-    { value: 'planner', label: '规划器' },
-    { value: 'implementer', label: '执行器' },
-    { value: 'verifier', label: '验证器' },
-  ] as const
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -208,9 +199,9 @@ export default function ModelPage() {
                   )}
                   {models.map((model) => (
                     <div key={model.id}
-                      className="flex items-center justify-between px-4 py-2 text-sm hover:bg-[var(--bg-secondary)] transition-colors"
+                      className="flex items-center justify-between px-4 py-2.5 text-sm cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors"
                       onClick={() => {}}>
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span className="truncate" style={{ color: 'var(--text-primary)' }}>{model.model_name}</span>
                         {model.is_primary ? <span className="cost-badge" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>{t('models.default')}</span> : null}
                         {model.input_price_per_1k != null && (
@@ -220,23 +211,10 @@ export default function ModelPage() {
                           <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded shrink-0">{t('models.fallback')} #{model.fallback_order}</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <select
-                          value={model.ulw_role || 'none'}
-                          onChange={(e) => { e.stopPropagation(); setUlwRole(model.id, e.target.value) }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-1.5 py-0.5 text-[10px] rounded border outline-none bg-[var(--content-bg)] cursor-pointer"
-                          style={{ borderColor: 'var(--border)', color: model.ulw_role && model.ulw_role !== 'none' ? 'var(--accent)' : 'var(--text-muted)' }}
-                          title="ULW 角色">
-                          {ULW_ROLES.map((r) => (
-                            <option key={r.value} value={r.value}>{r.label}</option>
-                          ))}
-                        </select>
-                        <button onClick={(e) => { e.stopPropagation(); deleteModel(model.id); loadModels(provider.id); loadAllModels() }}
-                          className="p-1 rounded hover:bg-[var(--border)] transition-colors opacity-0 hover:opacity-100 shrink-0">
-                          <Trash2 size={12} className="text-gray-400" />
-                        </button>
-                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); deleteModel(model.id); loadModels(provider.id); loadAllModels() }}
+                        className="p-1 rounded hover:bg-[var(--border)] transition-colors opacity-0 hover:opacity-100 shrink-0">
+                        <Trash2 size={12} className="text-gray-400" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -249,14 +227,14 @@ export default function ModelPage() {
                         className="flex-1 px-2 py-1 text-xs rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }}
                         onKeyDown={async (e) => {
                           if (e.key === 'Enter' && newModelName.trim()) {
-                            await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null, ulw_role: 'none' })
+                            await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
                             setNewModelName(''); setShowAddModel(null)
                           }
                           if (e.key === 'Escape') setShowAddModel(null)
                         }} />
                       <button onClick={async () => {
                         if (newModelName.trim()) {
-                          await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null, ulw_role: 'none' })
+                          await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
                           setNewModelName(''); setShowAddModel(null)
                         }
                       }} className="px-2 py-1 text-xs bg-black text-white rounded-lg">{t('models.add_model')}</button>
