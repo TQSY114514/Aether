@@ -274,6 +274,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: () => ipcRenderer.invoke('cron:list'),
     runNow: (name) => ipcRenderer.invoke('cron:run-now', name),
   },
+  steering: {
+    steer: (params) => ipcRenderer.invoke('steering:steer', params),
+    followUp: (params) => ipcRenderer.invoke('steering:follow-up', params),
+    listSessions: () => ipcRenderer.invoke('steering:list-sessions'),
+  },
+  evolution: {
+    runCycle: (params) => ipcRenderer.invoke('evolution:run-cycle', params),
+    history: () => ipcRenderer.invoke('evolution:history'),
+  },
+  trajectory: {
+    getStats: (sessionId) => ipcRenderer.invoke('trajectory:stats', sessionId),
+  },
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),
     install: () => ipcRenderer.invoke('updater:install'),
