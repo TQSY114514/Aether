@@ -2,6 +2,7 @@
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
+import InputReference from '@/components/chat/InputReference'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
@@ -11,6 +12,7 @@ import { shallow } from 'zustand/shallow'
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
 type SlashCommand = { id: string; name: string; description: string; prompt?: string; action?: () => void }
+type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
@@ -36,6 +38,8 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
 export default function ChatInput() {
   // Slash commands loaded from IPC (scan CMD.md files). Falls back to defaults.
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(DEFAULT_COMMANDS)
+  // Cursor position in the textarea, tracked for the @/#/! reference popup.
+  const [refCursor, setRefCursor] = useState(0)
   useEffect(() => {
     let cancelled = false
     window.electronAPI.commands?.list?.().then((cmds: SlashCommand[]) => {
@@ -283,6 +287,7 @@ export default function ChatInput() {
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setInput(val)
+    setRefCursor(e.target.selectionStart ?? val.length)
     const lastLine = val.split('\n').pop() || ''
     if (lastLine === '/') { setShowSlash(true); setSlashQuery('') }
     else if (lastLine.startsWith('/')) { setShowSlash(true); setSlashQuery(lastLine.slice(1)) }
@@ -301,6 +306,25 @@ export default function ChatInput() {
     setInput(lines.join('\n'))
     setShowSlash(false)
     textareaRef.current?.focus()
+  }
+
+  // Insert an @skill / #tool / !command reference at the cursor, replacing the
+  // partially-typed token (Phase 3.4 input-box references).
+  const handleReferenceSelect = ({ prefix, replacement }: { prefix: string; query: string; replacement: string }) => {
+    const before = input.slice(0, refCursor)
+    const match = before.match(/([@#!])[\w\u4e00-\u9fff_-]*$/)
+    if (!match) return
+    const start = before.length - match[0].length
+    const inserted = prefix + replacement
+    const next = input.slice(0, start) + inserted + input.slice(refCursor)
+    setInput(next)
+    const pos = start + inserted.length
+    setRefCursor(pos)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      el?.focus()
+      el?.setSelectionRange(pos, pos)
+    })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -433,11 +457,12 @@ export default function ChatInput() {
               })}
             </div>
           )}
+          <InputReference value={input} cursorPos={refCursor} visible onSelect={handleReferenceSelect} />
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
           <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
             <Paperclip size={16} className="text-gray-400" />
           </button>
-          <textarea ref={textareaRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
+          <textarea ref={textareaRef} value={input} onChange={handleInputChange} onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)} onKeyDown={handleKeyDown} onPaste={handlePaste}
             placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning || (isStreaming && !isLooping)} />
@@ -519,10 +544,10 @@ function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 
 // Agent mode selector (Claude Code / Cline-style): a compact toggle group in
 // the input bar showing the current permission level. Each mode has a distinct
 // color so the user always knows how much freedom the agent has.
-function AgentModeSelector({ mode, onChange }: { mode: string; onChange: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void }) {
+function AgentModeSelector({ mode, onChange }: { mode: AgentMode; onChange: (v: AgentMode) => void }) {
   // Subscribe to language so t() re-evaluates when the user switches language.
   const language = useStore((s) => s.language)
-  const AGENT_MODES = useMemo(() => [
+  const AGENT_MODES: { value: AgentMode; label: string; color: string; tooltip: string }[] = useMemo(() => [
     { value: 'off', label: t('agent.mode.off'), color: 'var(--text-muted)', tooltip: t('agent.mode.off.desc') },
     { value: 'plan', label: t('agent.mode.plan'), color: '#3b82f6', tooltip: t('agent.mode.plan.desc') },
     { value: 'ask', label: t('agent.mode.ask'), color: 'var(--accent)', tooltip: t('agent.mode.ask.desc') },

@@ -68,8 +68,8 @@ function parsePreload() {
     invokeChannels.add(m[1])
   }
 
-  // ipcRenderer.on('channel', ...) — 主进程主动推送的 channel
-  const onRe = /ipcRenderer\.on\(\s*['"]([^'"]+)['"]/g
+  // ipcRenderer.on('channel', ...) / subscribe('channel', ...) — 主进程主动推送的 channel
+  const onRe = /(?:ipcRenderer\.on|subscribe)\(\s*['"]([^'"]+)['"]/g
   while ((m = onRe.exec(content)) !== null) {
     onChannels.add(m[1])
   }

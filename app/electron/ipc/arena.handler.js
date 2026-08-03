@@ -55,7 +55,7 @@ function registerArenaHandlers(ipcMain, db) {
         return { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
           content: answer, latency_ms: Date.now() - start }
       } catch (err) {
-        const status = err.status || (err.name === 'AbortError' ? 0 : 0)
+        const status = err.status || 0
         db.logUsage({ session_id: sessionId, provider_id: m.provider_id, provider_name: m.provider_name,
           model_name: m.model_name, latency_ms: Date.now() - start, status, source: 'arena' })
         return { model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
@@ -97,14 +97,6 @@ function registerArenaHandlers(ipcMain, db) {
 
   ipcMain.handle('arena:scores', () => {
     try { return db.getModelScores() } catch (e) { log.warn('arena:scores error:', e); return [] }
-  })
-  ipcMain.handle('arena:auto-route', (_e, query) => {
-    const intent = db.classifyIntent(query)
-    const route = db.autoRoute(intent)
-    // Strip api_key before sending to the renderer — the renderer only needs
-    // the model_id/name for display, never the key. Keys stay main-process only.
-    if (route) { const { api_key, ...rest } = route; return { intent, route: rest } }
-    return { intent, route: null }
   })
 }
 
