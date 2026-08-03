@@ -398,8 +398,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       abortControllers.set(msgId, controller)
       const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
+      // Declared outside the try so the abort/error catch can preserve whatever
+      // content accumulated before the stream stopped (scoping bug: referencing
+      // a try-local variable in catch threw ReferenceError, breaking chat:stop).
+      let fullContent = ''
       try {
-        let fullContent = ''
         const wc = getWebContents()
         const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test((m?.model_name || '').toLowerCase())
         let lastThinkingLen = 0
