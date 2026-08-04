@@ -264,6 +264,8 @@ interface AppState {
   tasksOpen: boolean
   setTasksOpen: (v: boolean) => void
   stopGeneration: () => Promise<void>
+  continueMessage: () => Promise<void>
+
   regenerate: () => Promise<void>
   editMessage: (messageId: number, newContent: string) => Promise<void>
   sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[]) => Promise<void>
@@ -888,6 +890,16 @@ export const useStore = create<AppState>((set, get) => ({
     try { window.electronAPI.settings.set('seen_hints', JSON.stringify(seen)) } catch (e) { log.warn('dismissHint persist failed:', e) }
   },
   setEffortLevel: (v) => set({ effortLevel: v }),
+  continueMessage: async () => {
+    const { currentSessionId, messages } = get()
+    if (!currentSessionId) return
+    const lastAborted = [...messages].reverse().find(
+      m => m.session_id === currentSessionId && m.role === 'assistant' && m.status === 'aborted'
+    )
+    if (!lastAborted) return
+    get().sendMessage('继续')
+  },
+
   stopGeneration: async () => {
     const st0 = get()
     const sid0 = st0.currentSessionId
@@ -1194,7 +1206,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Settings
   language: 'en',
   theme: 'light',
-  fallbackTimeout: 30000,
+  fallbackTimeout: FALLBACK_TIMEOUT_DEFAULT,
   fontScale: 1,
   bubbleWidth: 85,
   defaultEffort: 'off',
@@ -1224,7 +1236,7 @@ export const useStore = create<AppState>((set, get) => ({
       const saved = s.language as LangCode | undefined
       const lang: LangCode = saved && LANGS_CODES.includes(saved) ? saved : detectLang()
       const theme = s.theme || 'light'
-      const timeout = parseInt(s.fallback_timeout_ms || '30000', 10)
+      const timeout = parseInt(s.fallback_timeout_ms || String(FALLBACK_TIMEOUT_DEFAULT), 10)
       const bgOpacity = parseInt(s.backgroundOpacity ?? '100', 10)
       const bgBlur = parseInt(s.backgroundBlur ?? '0', 10)
       const fontScale = parseFloat(s.fontScale ?? '1')
@@ -1355,6 +1367,7 @@ let _autoThemeCleanup: (() => void) | null = null
 let _stoppingSessionId: number | null = null
 // Ephemeral set of injected message ids (optimistic bubbles, not persisted to DB).
 const _injectedMsgIds = new Set<number>()
+const FALLBACK_TIMEOUT_DEFAULT = 30000
 
 function ensureToolCallListener() {
   if (_toolCallListenerInstalled) return

@@ -7,6 +7,9 @@ const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
+const DEFAULT_CTX_BUDGET = 32000
+const DEFAULT_FALLBACK_TIMEOUT_MS = 30000
+
 const { computeCost } = require('../utils/cost')
 const { estimateMessagesTokens, estimateTextTokens } = require('../llm/compaction')
 const auditLog = require('../llm/auditLog')
@@ -96,7 +99,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   // Cache rarely-changing settings at handler registration time. Invalidation
   // happens via the settings:changed event emitted by the settings handler.
   const _s = {}
-  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: '30000', agent_max_iterations: '25' }
+  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: String(DEFAULT_FALLBACK_TIMEOUT_MS), agent_max_iterations: '25' }
   ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? SETTING_DEFAULTS[k] })
 
   ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })
@@ -200,7 +203,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // recent window + active tool-call pairs intact. Prevents long chats from
     // 400-ing on context length. Falls back to hard-truncate if summarization
     // fails. `context_window` may be null if the user didn't set it; default 32k.
-    const ctxBudget = (model.context_window && Number(model.context_window) > 0) ? Number(model.context_window) : 32000
+    const ctxBudget = (model.context_window && Number(model.context_window) > 0) ? Number(model.context_window) : DEFAULT_CTX_BUDGET
     const beforeCompact = apiMsgs.length
     let compacted
     try {
@@ -228,7 +231,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     // Prepend a custom system prefix if set (advanced users). Done after compaction
     // so the prefix is never summarized away.
     if (systemPrefix && systemPrefix.trim()) {
-      compacted.unshift({ role: 'system', content: systemPrefix.trim() })
+      compacted.unshift({ role: 'system', content: '<user_system_prefix>
+' + systemPrefix.trim() + '
+</user_system_prefix>' })
     }
     // Auto-memory prefetch (Hermes-style): inject relevant past memories as a
     // system message so the model can recall context from earlier sessions.
@@ -284,7 +289,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       try { habitLearner.proactiveSuggest({ db, provider, model, userMessage: content, signal: controller?.signal, onSuggest: (h) => { try { getWebContents()?.send('chat:habit-suggestion', h) } catch {} } }) } catch {}
     }
 
-    const timeoutMs = parseInt(_s['fallback_timeout_ms'] ?? '30000', 10)
+    const timeoutMs = parseInt(_s['fallback_timeout_ms'] ?? String(DEFAULT_FALLBACK_TIMEOUT_MS), 10)
     let lastError = null
 
     // Set workspace root for this session (from session config or global default).

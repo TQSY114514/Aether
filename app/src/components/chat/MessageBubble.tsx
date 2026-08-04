@@ -2,7 +2,7 @@ import { useState, memo, useMemo, useCallback } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
-import { Copy, Check, RefreshCw, Pencil } from 'lucide-react'
+import { Copy, Check, RefreshCw, Pencil, Play } from 'lucide-react'
 import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
@@ -27,6 +27,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
 
   const regenerate = useStore(s => s.regenerate)
   const editMessage = useStore(s => s.editMessage)
+  const continueMessage = useStore(s => s.continueMessage)
 
   const isUser = message.role === 'user'
   // An assistant turn with a live todo checklist renders as a task card.
@@ -212,6 +213,11 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           {!isUser && !isStreaming && !isError && (
             <button className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.regenerate')} aria-label={t('chat.regenerate')} onClick={() => regenerate()}>
               <RefreshCw size={12} style={{ color: 'var(--text-muted)' }} />
+            </button>
+          )}
+          {!isUser && isAborted && !isStreaming && (
+            <button className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] transition-colors" style={{ backgroundColor: 'var(--accent)', color: '#fff' }} title={t('chat.continue_tooltip')} aria-label={t('chat.continue')} onClick={() => continueMessage()} disabled={sending}>
+              <Play size={11} />{t('chat.continue')}
             </button>
           )}
           {!isUser && isError && !isStreaming && (
