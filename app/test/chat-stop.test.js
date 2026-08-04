@@ -1,4 +1,4 @@
-// Regression test: chat:stop must abort both the plain streaming path and the
+﻿// Regression test: chat:stop must abort both the plain streaming path and the
 // tool-loop path, preserve accumulated content as 'aborted', and leave the
 // session usable for another send. Guards the fullContent-scope crash where
 // the abort catch referenced a try-local variable (ReferenceError).
@@ -36,7 +36,7 @@ const db = {
 const origLoad = Module._load
 function installStubs() {
   Module._load = function (request, parent, isMain) {
-    if (parent && parent.filename && parent.filename.includes('chat.handler.js')) {
+    if (parent && parent.filename && (parent.filename.includes('chat-send.handler.js') || parent.filename.includes('chat.handler.js'))) {
       const stub = {
         '../llm/providerAdapter': {
           completeChat: async () => ({ content: 'x' }),
