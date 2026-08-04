@@ -84,6 +84,7 @@ export interface ArenaResult {
   provider_name: string
   content: string
   latency_ms?: number
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number }
 }
 
 export interface ModelScore {

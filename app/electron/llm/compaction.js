@@ -6,7 +6,7 @@
 // estimated token count grows past a budget, keeping a recent window intact so
 // the model still has the live turn + any active tool-call/result pairing.
 //
-// Design (simplified from OpenClaw's industrial version):
+// Design:
 //   1. estimateMessagesTokens(msgs) — sum content lengths (str | multimodal parts).
 //      Coarse (chars-as-tokens with a CJK multiplier) — we only need a budget
 //      signal, not an exact count. OpenClaw uses a 1.2x safety margin; we do too.
@@ -15,6 +15,13 @@
 //      via the model, prepend the summary as a system message, keep `recent`
 //      verbatim. Keep tool_call ↔ tool_result pairs together (never split them)
 //      — a dangling tool_call with no result, or vice versa, makes providers 400.
+//   3. INCREMENTAL compaction: tracks the last compaction boundary per session.
+//      On subsequent compactions, only summarizes NEW messages since the last
+//      boundary, prepending the new summary to the existing one. This avoids
+//      re-summarizing the same content repeatedly, saving API calls and latency.
+//   4. SMART retention: messages flagged as important (file edits, user decisions,
+//      tool results with high-impact content) are kept verbatim even if they fall
+//      in the older block, preserving critical context.
 //
 // This is best-effort: if the summarization call fails, we fall back to a hard
 // truncate of the oldest messages (still keeping pairs intact) so the request
@@ -30,6 +37,37 @@ const RECENT_WINDOW = 8           // messages always kept verbatim at the tail
 const SUMMARIZATION_OVERHEAD = 2048 // reserve for the summary prompt + system + reply
 const SUMMARIZATION_TIMEOUT_MS = 15000 // guard timeout for the summarization HTTP call
 const FETCH_CONNECT_TIMEOUT_MS = 3000   // short guard: reject before the test framework times out
+
+// ── Incremental compaction state ──────────────────────────────────────────
+// Keyed by sessionId. Tracks the last compaction boundary so subsequent
+// compactions only summarize new messages, reusing the existing summary.
+const compactionState = new Map() // sessionId → { splitIndex: number, summary: string }
+
+// ── Smart retention: which tool names indicate high-impact actions ────────
+const HIGH_IMPACT_TOOLS = new Set([
+  'write_file', 'edit_file', 'apply_patch', 'delete_file',
+  'run_command', 'exec', 'delegate_task',
+])
+
+// Check if a message is "important" and should be kept verbatim.
+function isImportantMessage(msg) {
+  if (!msg) return false
+  // User messages are always important (they contain decisions/feedback)
+  if (msg.role === 'user') return true
+  // Assistant messages with high-impact tool calls
+  if (msg.role === 'assistant' && msg.tool_calls) {
+    return msg.tool_calls.some(tc => {
+      const name = (tc.function && tc.function.name) || ''
+      return HIGH_IMPACT_TOOLS.has(name)
+    })
+  }
+  // Tool results from high-impact calls (substantial content)
+  if (msg.role === 'tool' && msg.tool_call_id) {
+    const c = typeof msg.content === 'string' ? msg.content : ''
+    return c.length > 200
+  }
+  return false
+}
 
 // Estimate token count for a single message. Content may be a string or a
 // multimodal parts array (OpenAI shape). Image parts cost nothing here — we
@@ -97,26 +135,69 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     return messages // hook blocked compaction
   }
 
+  const prev = sessionId ? compactionState.get(sessionId) : null
   const split = safeSplitIndex(messages, RECENT_WINDOW)
   if (split <= 0) return messages
+
+  // ── Smart retention: pull important messages from the older block ──────
   const older = messages.slice(0, split)
   const recent = messages.slice(split)
   const systemMsgs = older.filter(m => m.role === 'system')
-  const nonSystemOlder = older.filter(m => m.role !== 'system')
+  let nonSystemOlder = older.filter(m => m.role !== 'system')
 
-  let summary
-  try {
-    summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal })
-  } catch {
-    const targetRecent = Math.floor(RECENT_WINDOW * 1.5)
-    const split = safeSplitIndex(nonSystemOlder, targetRecent)
-    const keep = nonSystemOlder.slice(split)
-    const dropped = split
-    const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
-    const truncated = `[Earlier conversation truncated — summarization failed. ${keep.length} of ${nonSystemOlder.length} older messages retained.${note}]`
-    return [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
+  // Identify important messages in the older block and move them to recent
+  const important = []
+  const rest = []
+  for (const m of nonSystemOlder) {
+    if (isImportantMessage(m)) important.push(m)
+    else rest.push(m)
   }
+  // If we found important messages, keep them with the recent block
+  if (important.length > 0) {
+    nonSystemOlder = rest
+    recent.unshift(...important)
+  }
+
+  // ── Incremental compaction: only summarize new messages ─────────────────
+  let summary
+  if (prev && prev.summary && nonSystemOlder.length > 0) {
+    // Only summarize messages added since the last compaction boundary
+    const newSinceLast = nonSystemOlder.slice(prev.splitIndex)
+    const alreadySummarized = nonSystemOlder.slice(0, prev.splitIndex)
+    if (newSinceLast.length > 0 && alreadySummarized.length > 0) {
+      try {
+        const newSummary = await summarizeHistory({ provider, model, history: newSinceLast, signal })
+        if (newSummary) {
+          summary = prev.summary + '\n\n[Later]\n' + newSummary
+        }
+      } catch {
+        // Fall through to full summarization
+      }
+    }
+  }
+
+  // Full summarization if incremental didn't produce a result
+  if (!summary) {
+    try {
+      summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal })
+    } catch {
+      const targetRecent = Math.floor(RECENT_WINDOW * 1.5)
+      const fallbackSplit = safeSplitIndex(nonSystemOlder, targetRecent)
+      const keep = nonSystemOlder.slice(fallbackSplit)
+      const dropped = fallbackSplit
+      const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
+      const truncated = `[Earlier conversation truncated — summarization failed. ${keep.length} of ${nonSystemOlder.length} older messages retained.${note}]`
+      return [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
+    }
+  }
+
   if (!summary) return messages
+
+  // Update compaction state for next incremental run
+  if (sessionId) {
+    compactionState.set(sessionId, { splitIndex: nonSystemOlder.length, summary })
+  }
+
   const summaryMsg = { role: 'system', content: `Summary of earlier conversation:\n${summary}` }
   const result = [...systemMsgs, summaryMsg, ...recent]
 
@@ -138,6 +219,7 @@ async function summarizeHistory({ provider, model, history, signal }) {
     const c = typeof m.content === 'string' ? m.content : ''
     return c.trim().length > 0
   })
+  if (realHistory.length === 0) return ''
   const transcript = realHistory.map(m => {
     const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
     if (m.role === 'tool') return `[tool result] ${c}`
@@ -147,14 +229,11 @@ async function summarizeHistory({ provider, model, history, signal }) {
   // Guard against hanging forever when the provider is unreachable (e.g. tests).
   const ctrl = new AbortController()
   const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
-  // Promise.race safety net: AbortController does not abort DNS resolution in
-  // Node.js fetch, so a short Promise.race ensures the call fails fast even
-  // when the signal is ignored at the transport layer.
   const fetchPromise = completeChat({
     provider, model,
     messages: [
       { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
-      { role: 'user', content: transcript.slice(0, 24000) }, // cap the summarizer input
+      { role: 'user', content: transcript.slice(0, 24000) },
     ],
     signal: ctrl.signal,
     options: { max_tokens: 600, temperature: 0.2 },
@@ -173,4 +252,9 @@ async function summarizeHistory({ provider, model, history, signal }) {
   return (text || '').trim()
 }
 
-module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex }
+// Clear compaction state for a session (e.g., when session is deleted).
+function clearCompactionState(sessionId) {
+  if (sessionId) compactionState.delete(sessionId)
+}
+
+module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, clearCompactionState }
