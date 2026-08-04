@@ -35,6 +35,8 @@
   "agent.yolo": "Yolo — full permissions, no sandbox (dangerous!)",
   "app.name": "AetherAI",
   "chat.aborted": "Aborted",
+  "chat.continue": "Continue",
+  "chat.continue_tooltip": "Continue generating from where it stopped",
   "chat.arena.min_models": "Select at least 2 models",
   "chat.arena.placeholder": "Enter a question, multiple models answer at once...",
   "chat.arena.running": "{0} models still running...",

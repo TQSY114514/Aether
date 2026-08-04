@@ -211,6 +211,8 @@
       "chat.copied": "已复制",
       "chat.error_short": "错误",
       "chat.aborted": "已中止",
+      "chat.continue": "继续",
+      "chat.continue_tooltip": "从停止处继续生成",
       "chat.copy": "复制",
       "chat.regenerate": "重新生成",
       "sidebar.nav.tokens": "Token统计",
