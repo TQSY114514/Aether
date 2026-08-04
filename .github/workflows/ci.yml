@@ -17,12 +17,13 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        # --ignore-scripts skips postinstall (electron-rebuild) —
-        # CI only needs to typecheck and build the renderer, not compile native modules.
         run: cd app && npm ci --ignore-scripts
 
       - name: IPC contract check
         run: cd app && node scripts/check-ipc.js
 
-      - name: Build
-        run: cd app && npm run build
+      - name: TypeScript check
+        run: cd app && npx tsc --noEmit
+
+      - name: Build renderer
+        run: cd app && npx vite build
