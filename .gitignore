@@ -58,3 +58,9 @@ release-download/
 # temp files
 export.tmp
 merge_history.*
+
+# ── Dev-only reference material & fix scripts (not part of the app) ──
+references/
+scripts/
+fix_test.js
+.omo/
