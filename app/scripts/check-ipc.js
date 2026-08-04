@@ -74,30 +74,28 @@ function parsePreload() {
     onChannels.add(m[1])
   }
 
-  // 解析 namespace.method 结构
-  // preload 用 2 空格缩进，namespace 顶格，method 缩进 2 空格
-  // 直接用行首缩进判断层级，不依赖括号深度
-  const methods = new Set() // "namespace.method"
+  // 解析 namespace.method 结构（支持嵌套 namespace，如 cron.tasks.list）
+  // 用缩进栈判断层级，支持多层嵌套
+  const methods = new Set() // "namespace.method"（可含多级）
   const lines = content.split('\n')
-  let currentNs = null
+  const nsStack = [] // { indent, name }
   for (const line of lines) {
-    // namespace: 行首（无缩进或 0 缩进）的 "word: {"
-    // preload 里 namespace 缩进 2 空格（在 exposeInMainWorld 内）
-    const nsMatch = line.match(/^\s{2}(\w+):\s*\{/)
-    if (nsMatch) {
-      currentNs = nsMatch[1]
+    const indent = (line.match(/^\s*/)[0] || '').length
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    // 弹出所有层级 ≥ 当前缩进的 namespace
+    while (nsStack.length && nsStack[nsStack.length - 1].indent >= indent) {
+      nsStack.pop()
+    }
+    const nsOpen = trimmed.match(/^(\w+):\s*\{$/)
+    if (nsOpen) {
+      nsStack.push({ indent, name: nsOpen[1] })
       continue
     }
-    // method: 缩进 4 空格的 "word: (args) =>" 或 "word: function" 或 "word: (args)"
-    if (currentNs) {
-      const methodMatch = line.match(/^\s{4}(\w+)\s*:/)
-      if (methodMatch) {
-        methods.add(`${currentNs}.${methodMatch[1]}`)
-      }
-      // 回到 namespace 层级（缩进 2 空格的 }）
-      if (line.match(/^\s{2}\}/)) {
-        currentNs = null
-      }
+    // method: "word: (args) =>" 或 "word: function" 或 "word: (args)"
+    const methodMatch = trimmed.match(/^(\w+)\s*:\s*\(/)
+    if (methodMatch && nsStack.length) {
+      methods.add(nsStack.map(n => n.name).join('.') + '.' + methodMatch[1])
     }
   }
 
@@ -109,31 +107,28 @@ function parseEnvDts() {
   const content = fs.readFileSync(ENV_DTS, 'utf8')
   const methods = new Set()
 
-  // env.d.ts 用 2 空格缩进
-  // electronAPI: {        <- 2 空格
-  //   provider: {          <- 4 空格（namespace）
-  //     list: (...) => ... <- 6 空格（method）
-  //   }
-  // }
+  // env.d.ts 用 2 空格缩进，顶层容器 electronAPI 缩进 2 空格（不进入路径）
+  // 用缩进栈支持嵌套 namespace（如 cron.tasks），路径排除顶层容器
   const lines = content.split('\n')
-  let currentNs = null
+  const nsStack = [] // { indent, name }
   for (const line of lines) {
-    // namespace: 缩进 4 空格的 "word: {"
-    const nsMatch = line.match(/^\s{4}(\w+):\s*\{/)
-    if (nsMatch) {
-      currentNs = nsMatch[1]
+    const indent = (line.match(/^\s*/)[0] || '').length
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    // 弹出所有层级 ≥ 当前缩进的 namespace
+    while (nsStack.length && nsStack[nsStack.length - 1].indent >= indent) {
+      nsStack.pop()
+    }
+    const nsOpen = trimmed.match(/^(\w+):\s*\{$/)
+    if (nsOpen) {
+      nsStack.push({ indent, name: nsOpen[1] })
       continue
     }
-    // method: 缩进 6 空格的 "word: (args) =>"
-    if (currentNs) {
-      const methodMatch = line.match(/^\s{6}(\w+)\s*:\s*\(/)
-      if (methodMatch) {
-        methods.add(`${currentNs}.${methodMatch[1]}`)
-      }
-      // 结束 namespace（缩进 4 空格的 }）
-      if (line.match(/^\s{4}\}/)) {
-        currentNs = null
-      }
+    // method: "word: (args) =>"（缩进 6 空格起）
+    const methodMatch = trimmed.match(/^(\w+)\s*:\s*\(/)
+    if (methodMatch && nsStack.length) {
+      // 去掉顶层容器（electronAPI），路径从第一个真实 namespace 开始
+      methods.add(nsStack.map(n => n.name).slice(1).join('.') + '.' + methodMatch[1])
     }
   }
 

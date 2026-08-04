@@ -104,10 +104,139 @@ function splitCommandSegments(cmd) {
   return segments
 }
 
+// ===== Granular parameter checking for whitelisted commands =====
+
+// Dangerous git subcommand/flag combinations that destroy or rewrite history.
+const GIT_DANGEROUS_PATTERNS = [
+  { re: /\bclean\b[^\n]*\s+-[a-z]*f[a-z]*\b/, msg: 'git clean force (-f) is blocked by sandbox' },
+  { re: /\bpush\b[^\n]*\s+--force\b/, msg: 'git push --force is blocked by sandbox' },
+  { re: /\bpush\b[^\n]*\s+--force-with-lease\b/, msg: 'git push --force-with-lease is blocked by sandbox' },
+  { re: /\bpush\b[^\n]*\s+-[a-z]*f[a-z]*\b/, msg: 'git push -f is blocked by sandbox' },
+  { re: /\breset\b[^\n]*\s+--hard\b/, msg: 'git reset --hard is blocked by sandbox' },
+  { re: /\bbranch\b[^\n]*\s+-D\b/, msg: 'git branch -D is blocked by sandbox' },
+]
+
+// Unsafe constructs inside `python -c "..."` / `python -c '...'`.
+const PYTHON_DYNAMIC_CODE_PATTERNS = [
+  /\bos\.system\s*\(/i,
+  /\b__import__\s*\(\s*['"]os['"]\s*\)/i,
+  /\bimport\s+subprocess\b/i,
+  /\bimport\s+socket\b/i,
+  /\bimport\s+shutil\b/i,
+  /\bshutil\.rmtree\s*\(/i,
+  /\bopen\s*\(\s*['"][^'"]*['"]\s*,\s*['"]w['"]/i,
+  /\beval\s*\(/i,
+  /\bexec\s*\(/i,
+  /\bcompile\s*\(/i,
+]
+
+// Unsafe constructs inside `node -e "..."` / `node -e '...'`.
+const NODE_DYNAMIC_CODE_PATTERNS = [
+  /require\s*\(\s*['"]child_process['"]\s*\)/i,
+  /\bchild_process\b/i,
+  /require\s*\(\s*['"]fs['"]\s*\)/i,
+  /\bprocess\.(exit|kill)\b/i,
+  /\beval\s*\(/i,
+  /\bFunction\s*\(/i,
+  /\bexec(Sync)?\s*\(/i,
+  /\bspawn(Sync)?\s*\(/i,
+  /\bunlinkSync\s*\(/i,
+  /\brmSync\s*\(/i,
+  /\bwriteFileSync\s*\(/i,
+]
+
+// Packages that npx should not be allowed to fetch & execute.
+const NPX_BLOCKED_PACKAGES = new Set([
+  'rimraf', 'del-cli', 'shx', 'shelljs', 'ssh2', 'child_process', 'execa',
+  'open', 'kill-port', 'systeminformation', 'nodemailer', 'portfinder',
+])
+
+function tokenizeCommand(cmd) {
+  const tokens = []
+  let current = '', inQuote = false, quoteChar = ''
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i]
+    if (inQuote) {
+      current += ch
+      if (ch === quoteChar && cmd[i - 1] !== '\\') inQuote = false
+    } else if (ch === '"' || ch === "'") {
+      inQuote = true; quoteChar = ch; current += ch
+    } else if (/\s/.test(ch)) {
+      if (current.trim()) tokens.push(current.trim())
+      current = ''
+    } else { current += ch }
+  }
+  if (current.trim()) tokens.push(current.trim())
+  return tokens
+}
+
+// Return the inline-code argument following a flag like -c / -e / --eval.
+function findCodeArg(args, flags) {
+  for (let i = 0; i < args.length; i++) {
+    if (flags.includes(args[i])) return args[i + 1] || ''
+  }
+  return null
+}
+
+// Extract the package name npx would install/run (first non-flag arg).
+function findNpxPackage(args) {
+  for (const a of args) {
+    if (!a || a.startsWith('-')) continue
+    const bare = a.replace(/^@[^/]+\//, '').split('@')[0].toLowerCase()
+    return bare || null
+  }
+  return null
+}
+
+// Extra review applied to whitelisted commands. Keeps the whitelist itself
+// unchanged while rejecting dangerous flag/argument combinations.
+function checkCommandParams(cmd, base) {
+  const low = base.replace(/\.(exe|cmd|bat|com|ps1)$/i, '').toLowerCase()
+  let tokens
+  let args
+
+  if (low === 'git') {
+    for (const p of GIT_DANGEROUS_PATTERNS) {
+      if (p.re.test(cmd)) return { ok: false, reason: p.msg }
+    }
+  }
+
+  if (low === 'python' || low === 'python3' || low === 'py') {
+    tokens = tokens || tokenizeCommand(cmd)
+    args = args || tokens.slice(1)
+    const codeArg = findCodeArg(args, ['-c', '--command'])
+    if (codeArg != null) {
+      for (const re of PYTHON_DYNAMIC_CODE_PATTERNS) {
+        if (re.test(codeArg)) return { ok: false, reason: 'python -c blocked by sandbox (unsafe code)' }
+      }
+    }
+  }
+
+  if (low === 'node') {
+    tokens = tokens || tokenizeCommand(cmd)
+    args = args || tokens.slice(1)
+    const codeArg = findCodeArg(args, ['-e', '--eval'])
+    if (codeArg != null) {
+      for (const re of NODE_DYNAMIC_CODE_PATTERNS) {
+        if (re.test(codeArg)) return { ok: false, reason: 'node -e blocked by sandbox (unsafe code)' }
+      }
+    }
+  }
+
+  if (low === 'npx') {
+    tokens = tokens || tokenizeCommand(cmd)
+    args = args || tokens.slice(1)
+    const pkg = findNpxPackage(args)
+    if (pkg && NPX_BLOCKED_PACKAGES.has(pkg)) return { ok: false, reason: 'npx blocked by sandbox (unsafe package)' }
+  }
+
+  return { ok: true }
+}
+
 function checkCommand(cmd) {
   const c = String(cmd || '')
   if (!c.trim()) return { ok: false, reason: 'empty command' }
-  if (isWhitelistedCommand(c)) return { ok: true }
+  if (isWhitelistedCommand(c)) return checkCommandParams(c, c.split(/\s+/)[0])
   for (const re of BLOCKED_COMMAND_PATTERNS) {
     if (re.test(c)) return { ok: false, reason: 'blocked by sandbox' }
   }

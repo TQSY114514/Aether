@@ -55,6 +55,19 @@ function createCheckpoint({ sessionId, messageId, toolName, args }) {
     files: captureFiles(affectedPaths),
     gitDiff: captureGitDiff(affectedPaths),
   }
+  // Task 2.2: link checkpoint to git. If the affected paths live in a git repo
+  // and auto-commit is enabled, create a commit so /undo can roll back to this
+  // checkpoint's state. Best-effort — never breaks checkpoint creation.
+  try {
+    const gitAutoCommit = require('./gitAutoCommit')
+    const gitRoot = affectedPaths.length > 0 ? gitAutoCommit.isGitRepo(affectedPaths[0]) : null
+    if (gitRoot && gitAutoCommit.getAutoCommitEnabled(db)) {
+      const res = gitAutoCommit.gitCommitMultiple(affectedPaths, gitRoot, `checkpoint (${toolName}): ${path.basename(affectedPaths[0])}`)
+      snapshot.gitCommit = { success: res.success, message: res.message, root: gitRoot }
+    }
+  } catch (e) {
+    snapshot.gitCommit = { success: false, error: e.message }
+  }
   const row = db.addAgentCheckpoint({ sessionId, messageId, toolName, args, affectedPaths, snapshot })
   return row?.lastInsertRowid || null
 }

@@ -233,5 +233,6 @@ async function completeChatMessageWithRetry({ provider, model, messages, signal,
 
 module.exports = {
   streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage,
+  normalizeMessages, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }

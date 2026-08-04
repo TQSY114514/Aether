@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
@@ -33,6 +33,20 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   { id: 'clear', name: '清空对话', description: '清空当前对话历史', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
   { id: 'regenerate', name: '重新生成', description: '撤销最后一条回复并重新生成', action: () => { useStore.getState().regenerate() } },
   { id: 'compact', name: '压缩上下文', description: '智能压缩对话历史节省 token', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
+  { id: 'undo', name: '撤销提交', description: 'git reset --hard HEAD~1（危险操作，需确认）', action: async () => {
+    try {
+      const cwd = await window.electronAPI.agent.getWorkspace()
+      if (!cwd) { window.alert('未配置工作区，无法撤销提交'); return }
+      const confirmed = window.confirm('⚠️ 危险操作：将执行 git reset --hard HEAD~1，撤销最近一次提交并丢弃其变更。此操作不可恢复。确定继续吗？')
+      if (!confirmed) return
+      const res = await window.electronAPI.git.undo(cwd)
+      if (res.success) {
+        window.alert(`✅ 已撤销提交：${res.undoneCommit || '未知'}`)
+      } else {
+        window.alert(`❌ 撤销失败：${res.error || res.message || '未知错误'}`)
+      }
+    } catch { window.alert('❌ 撤销失败') }
+  } },
 ]
 
 export default function ChatInput() {
@@ -43,7 +57,18 @@ export default function ChatInput() {
   useEffect(() => {
     let cancelled = false
     window.electronAPI.commands?.list?.().then((cmds: SlashCommand[]) => {
-      if (!cancelled && cmds && cmds.length > 0) setSlashCommands(cmds)
+      if (cancelled) return
+      if (cmds && cmds.length > 0) {
+        // Merge: keep the built-in action commands (clear/regenerate/compact/undo)
+        // that are only defined as DEFAULT_COMMANDS, alongside the CMD.md commands
+        // discovered via IPC. Without this, action-only commands would be dropped
+        // as soon as any CMD.md file exists.
+        const actionCmds = DEFAULT_COMMANDS.filter(c => c.action)
+        const merged = [...actionCmds, ...cmds.filter(c => !actionCmds.some(a => a.id === c.id))]
+        setSlashCommands(merged)
+      } else {
+        setSlashCommands(DEFAULT_COMMANDS)
+      }
     }).catch(() => {})
     return () => { cancelled = true }
   }, [])

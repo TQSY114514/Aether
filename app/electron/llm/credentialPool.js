@@ -5,8 +5,9 @@
 // pickCredential(providerId), which returns the least-recently-used viable
 // (not disabled, not in cooldown) key and records its usage.
 //
-// On 429 → mark cooldown (30 s), retry with next key.
-// On 401 → mark invalid, skip forever.
+// On 429 → mark cooldown with exponential backoff (30s → 60s → 120s → … max 600s).
+// On 401 → mark invalid, skip forever (disable_reason distinguishes
+//          'insufficient_quota' vs 'invalid_api_key').
 //
 // This lives as a JS module backed by SQLite rows; no new IPC is needed for
 // basic operation (the adapter calls it internally). A new IPC handler exposes
@@ -15,7 +16,15 @@
 
 let db = null // set by init() from database.js after the DB is opened
 
-const COOLDOWN_SEC = 30
+const COOLDOWN_BASE_SEC = 30
+const COOLDOWN_MAX_SEC = 600
+
+// Exponential backoff cooldown (seconds) based on the credential's error count:
+//   error_count=1 → 30s, 2 → 60s, 3 → 120s, 4 → 240s, 5 → 480s, 6+ → 600s (capped).
+function computeCooldownSec(errorCount) {
+  const n = Math.max(1, Number(errorCount) || 1)
+  return Math.min(COOLDOWN_BASE_SEC * Math.pow(2, n - 1), COOLDOWN_MAX_SEC)
+}
 
 function init(database) { db = database }
 
@@ -28,31 +37,26 @@ function pickCredential(providerId) {
   // First, migrate any legacy key from the provider row.
   _migrateFromProvider(providerId)
 
-  const stmt = db.prepare(
-    'SELECT id, api_key FROM provider_credential WHERE provider_id=? AND enabled=1 AND (cooldown_until IS NULL OR cooldown_until <= ?) ORDER BY last_used_at ASC LIMIT 1'
-  )
-  stmt.bind([providerId, now])
-  let row = null
-  if (stmt.step()) row = stmt.getAsObject()
-  stmt.free()
+  const row = db.prepare(
+    'SELECT id, api_key, cooldown_until FROM provider_credential WHERE provider_id=? AND enabled=1 AND (cooldown_until IS NULL OR cooldown_until <= ?) ORDER BY last_used_at ASC LIMIT 1'
+  ).get(providerId, now)
   if (!row) return null
   // Record usage — bump last_used_at.
   db.run('UPDATE provider_credential SET last_used_at=? WHERE id=?', [now, row.id])
+  // If this key was previously cooled down and its cooldown has just expired,
+  // fire a best-effort /models check to see whether it recovered. Never blocks
+  // the caller — the key is returned immediately either way.
+  if (row.cooldown_until != null) _verifyInBackground(providerId, row.id, row.api_key)
   return { id: row.id, api_key: row.api_key }
 }
 
 // Backward compat: if a provider still has a legacy api_key in the provider
 // table, migrate it into the credential table once.
 function _migrateFromProvider(providerId) {
-  const chk = db.prepare('SELECT count(*) as n FROM provider_credential WHERE provider_id=?')
-  chk.bind([providerId])
-  let n = 0
-  if (chk.step()) n = chk.getAsObject().n; chk.free()
+  const n = db.prepare('SELECT count(*) as n FROM provider_credential WHERE provider_id=?').get(providerId)?.n || 0
   if (n > 0) return
-  const ps = db.prepare('SELECT api_key FROM provider WHERE id=?')
-  ps.bind([providerId])
-  let key = null
-  if (ps.step()) key = ps.getAsObject().api_key; ps.free()
+  const ps = db.prepare('SELECT api_key FROM provider WHERE id=?').get(providerId)
+  const key = ps ? ps.api_key : null
   if (key && typeof key === 'string' && key.trim()) {
     db.run('INSERT INTO provider_credential (provider_id, api_key, label, enabled, last_used_at) VALUES (?,?,?,?,?)',
       [providerId, key.trim(), '原密钥', 1, '2000-01-01T00:00:00.000Z'])
@@ -61,11 +65,53 @@ function _migrateFromProvider(providerId) {
   }
 }
 
-// Mark a specific credential as rate-limited (cool down for COOLDOWN_SEC).
+function _getProviderApiUrl(providerId) {
+  const row = db.prepare('SELECT api_url FROM provider WHERE id=?').get(providerId)
+  return row ? row.api_url : null
+}
+
+// Best-effort background verification of a previously-cooled key. On success
+// resets error_count and clears cooldown; on failure re-applies cooldown.
+// Never throws / never blocks — silent fallback to the estimated cooldown.
+function _verifyInBackground(providerId, credentialId, apiKey) {
+  const apiUrl = _getProviderApiUrl(providerId)
+  if (!apiUrl || !apiKey) return
+  verifyCredential({ api_url: apiUrl, api_key: apiKey })
+    .then(ok => {
+      if (!db) return
+      if (ok) markSuccess(credentialId)
+      else markCooldown(credentialId)
+    })
+    .catch(() => {})
+}
+
+// Verify a credential by GETting {api_url}/models with the key. Returns true on
+// 2xx, false otherwise. Best-effort: never throws, 3s timeout.
+async function verifyCredential(provider) {
+  if (!provider || !provider.api_url || !provider.api_key) return false
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 3000)
+  try {
+    const res = await fetch(`${String(provider.api_url).replace(/\/+$/, '')}/models`, {
+      headers: { Authorization: `Bearer ${provider.api_key}` },
+      signal: controller.signal,
+    })
+    return res.status >= 200 && res.status < 300
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Mark a specific credential as rate-limited (cool down with exponential backoff
+// based on its accumulated error count).
 function markCooldown(credentialId) {
   if (!db) return
-  const until = new Date(Date.now() + COOLDOWN_SEC * 1000).toISOString()
-  db.run('UPDATE provider_credential SET cooldown_until=?, error_count=error_count+1 WHERE id=?', [until, credentialId])
+  const cur = Number(db.prepare('SELECT error_count FROM provider_credential WHERE id=?').get(credentialId)?.error_count) || 0
+  const errCount = cur + 1
+  const until = new Date(Date.now() + computeCooldownSec(errCount) * 1000).toISOString()
+  db.run('UPDATE provider_credential SET cooldown_until=?, error_count=? WHERE id=?', [until, errCount, credentialId])
 }
 
 // Mark the *most recently used* credential for a provider as cooling down.
@@ -73,35 +119,41 @@ function markCooldown(credentialId) {
 // used (the adapter called pickCredential earlier and got one).
 function markCooldownForProvider(providerId) {
   if (!db) return
-  const stmt = db.prepare('SELECT id FROM provider_credential WHERE provider_id=? AND enabled=1 ORDER BY last_used_at DESC LIMIT 1')
-  stmt.bind([providerId])
-  let id = null
-  if (stmt.step()) id = stmt.getAsObject().id; stmt.free()
-  if (id) markCooldown(id)
+  const row = db.prepare('SELECT id FROM provider_credential WHERE provider_id=? AND enabled=1 ORDER BY last_used_at DESC LIMIT 1').get(providerId)
+  if (row && row.id) markCooldown(row.id)
 }
 
-// Mark a specific credential as invalid (401).
-function markInvalid(credentialId) {
+// Reset a credential's error state after a successful use (or cooldown recovery).
+function markSuccess(credentialId) {
   if (!db) return
-  db.run('UPDATE provider_credential SET enabled=0 WHERE id=?', [credentialId])
+  db.run('UPDATE provider_credential SET error_count=0, cooldown_until=NULL WHERE id=?', [credentialId])
+}
+
+// Mark a specific credential as permanently disabled (401) with a reason.
+// detail is 'insufficient_quota' or 'invalid_api_key'; both disable the key.
+function markInvalidDetail(credentialId, detail) {
+  if (!db) return
+  const reason = detail === 'insufficient_quota' ? 'insufficient_quota' : 'invalid_api_key'
+  db.run('UPDATE provider_credential SET enabled=0, disable_reason=? WHERE id=?', [reason, credentialId])
+}
+
+// Mark a specific credential as invalid (401). Backward-compat: treated as
+// invalid_api_key.
+function markInvalid(credentialId) {
+  markInvalidDetail(credentialId, 'invalid_api_key')
 }
 
 // List all credentials for a provider (UI-facing).
 function listCredentials(providerId) {
   if (!db) return []
-  const stmt = db.prepare('SELECT * FROM provider_credential WHERE provider_id=? ORDER BY id')
-  stmt.bind([providerId])
-  const rows = []
-  while (stmt.step()) rows.push(stmt.getAsObject())
-  stmt.free()
-  return rows
+  return db.prepare('SELECT * FROM provider_credential WHERE provider_id=? ORDER BY id').all(providerId)
 }
 
 // Add a new key. Returns { lastInsertRowid }.
 function addCredential(providerId, api_key, label) {
   if (!db) return null
-  db.run('INSERT INTO provider_credential (provider_id, api_key, label, enabled) VALUES (?,?,?,?)', [providerId, api_key, label || '', 1])
-  return { lastInsertRowid: db.lastInsertRowid?.() || db.exec('SELECT last_insert_rowid()')[0]?.values?.[0]?.[0] }
+  const info = db.prepare('INSERT INTO provider_credential (provider_id, api_key, label, enabled) VALUES (?,?,?,?)').run(providerId, api_key, label || '', 1)
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 
 // Remove a credential row.
@@ -110,4 +162,4 @@ function removeCredential(credentialId) {
   db.run('DELETE FROM provider_credential WHERE id=?', [credentialId])
 }
 
-module.exports = { init, pickCredential, markCooldown, markCooldownForProvider, markInvalid, listCredentials, addCredential, removeCredential }
+module.exports = { init, computeCooldownSec, pickCredential, markCooldown, markCooldownForProvider, markSuccess, markInvalid, markInvalidDetail, verifyCredential, listCredentials, addCredential, removeCredential }

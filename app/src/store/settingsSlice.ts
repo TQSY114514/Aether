@@ -29,7 +29,9 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
   backgroundOpacity: 100,
   backgroundBlur: 0,
   modelRoutingPriority: "quality",
+  modelAutoRoute: false,
   autoCommitOnTestPass: false,
+  autoCommitAfterFileChange: true,
   agentWorkspace: "",
   memories: [],
 
@@ -62,14 +64,17 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
       const titleLanguage = s.titleLanguage ?? "auto"
       const titleModelId = parseInt(s.titleModelId ?? "0", 10) || null
       const modelRoutingPriority = ["quality", "speed", "cost"].includes(s.modelRoutingPriority as string) ? (s.modelRoutingPriority as "quality" | "speed" | "cost") : "quality"
+      const modelAutoRoute = (s.modelAutoRoute ?? "0") === "1"
       const autoCommitOnTestPass = (s.autoCommitOnTestPass ?? "0") === "1"
+      let autoCommitAfterFileChange = true
+      try { autoCommitAfterFileChange = (await window.electronAPI.git.getAutoCommit()).enabled } catch {} // eslint-disable-line no-empty
       await setLangAsync(lang)
       applyTheme(theme)
       applyFontScale(fontScale)
       applyLangDir(lang)
       let seenHints: string[] = []
       try { seenHints = JSON.parse(s.seen_hints || "[]") } catch (e) { log.warn("parse seen_hints failed:", e) }
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints, modelRoutingPriority, autoCommitOnTestPass })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints, modelRoutingPriority, modelAutoRoute, autoCommitOnTestPass, autoCommitAfterFileChange })
     } catch (e) { log.warn("loadSettings failed:", e) }
   },
 
@@ -143,9 +148,19 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
     set({ modelRoutingPriority: v })
   },
 
+  setModelAutoRoute: async (v) => {
+    await window.electronAPI.settings.set("modelAutoRoute", v ? "1" : "0")
+    set({ modelAutoRoute: v })
+  },
+
   setAutoCommitOnTestPass: async (v) => {
     await window.electronAPI.settings.set("autoCommitOnTestPass", v ? "1" : "0")
     set({ autoCommitOnTestPass: v })
+  },
+
+  setAutoCommitAfterFileChange: async (v) => {
+    try { await window.electronAPI.git.setAutoCommit(v) } catch {}
+    set({ autoCommitAfterFileChange: v })
   },
 
   setAgentWorkspace: async (dir: string) => {

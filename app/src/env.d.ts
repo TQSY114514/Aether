@@ -1,5 +1,15 @@
 /// <reference types="vite/client" />
 
+interface MarketServer {
+  name: string
+  title: string
+  description: string
+  version: string
+  repositoryUrl: string | null
+  installable: boolean
+  config: { name: string; command: string; args: string[]; env: Record<string, string> } | null
+}
+
 interface Window {
   electronAPI: {
     provider: {
@@ -95,6 +105,11 @@ interface Window {
       connect: (id: number) => Promise<{ success: boolean; tools?: { name: string; description: string; risk: string }[]; error?: string }>
       status: () => Promise<{ connected: string[] }>
     }
+    market: {
+      list: () => Promise<{ servers: MarketServer[] }>
+      search: (query: string) => Promise<{ servers: MarketServer[] }>
+      install: (entry: MarketServer | { name: string; command: string; args?: string[]; env?: Record<string, string> }) => Promise<{ success: boolean; id?: number; error?: string }>
+    }
     settings: {
       get: (key: string) => Promise<string | null>
       set: (key: string, value: string) => Promise<void>
@@ -131,8 +146,14 @@ interface Window {
       deleteCheckpoint: (id: number) => Promise<{ ok: boolean }>
       cleanupCheckpoints: (sessionId: number) => Promise<{ ok: boolean }>
     }
+    git: {
+      undo: (cwd?: string) => Promise<{ success: boolean; message?: string; undoneCommit?: string | null; error?: string }>
+      status: (cwd?: string) => Promise<{ success: boolean; root?: string | null; status?: string; recent?: string; error?: string }>
+      setAutoCommit: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean }>
+      getAutoCommit: () => Promise<{ enabled: boolean }>
+    }
     model: {
-      routeTier: (params: { taskType: string; userMessage: string }) => Promise<{ tier: string; modelName: string | null; modelId: number | null; rationale: string }>
+      routeTier: (params: { taskType: string; userMessage: string }) => Promise<{ tier: string; modelName: string | null; modelId: number | null; rationale: string; eloScore: number | null; autoMode: boolean }>
     }
     skills: {
       list: () => Promise<{ name: string; description: string; filePath: string; metadata?: Record<string, string>; usage?: { count: number; lastUsedAt: string | null } }[]>
@@ -146,6 +167,13 @@ interface Window {
     }
     search: {
       messages: (query: string, sessionId?: number) => Promise<{ id: number; session_id: number; role: string; content: string; model_used: string | null; created_at: string; session_title?: string; terms?: string[] }[]>
+      memories: (query: string) => Promise<{ id: number; content: string; type: string; created_at: string; source_session_id: number | null; confidence: number; terms?: string[] }[]>
+      files: (query: string, root?: string) => Promise<{ relPath: string; absPath: string; size: number; ext: string; modified: number }[]>
+      unified: (query: string, opts?: { sessionId?: number; root?: string; limit?: number }) => Promise<{
+        messages: { id: number; session_id: number; role: string; content: string; model_used: string | null; created_at: string; session_title?: string; terms?: string[] }[]
+        memories: { id: number; content: string; type: string; created_at: string; source_session_id: number | null; confidence: number; terms?: string[] }[]
+        files: { relPath: string; absPath: string; size: number; ext: string; modified: number; terms?: string[] }[]
+      }>
     }
     moa: {
       getPresets: () => Promise<{ id: number; name: string; description: string; references_config: string; aggregator_model_id: number; enabled: number; created_at: string }[]>
@@ -197,6 +225,12 @@ interface Window {
     cron: {
       list: () => Promise<{ name: string; intervalMs: number; running: boolean }[]>
       runNow: (name: string) => Promise<boolean>
+      tasks: {
+        list: () => Promise<{ id: number; name: string; type: 'code-review' | 'dependency-check' | 'backup'; interval_ms: number; enabled: boolean; config: Record<string, unknown>; last_run_at: string | null; created_at: string; running: boolean }[]>
+        add: (data: { name: string; type: 'code-review' | 'dependency-check' | 'backup'; intervalMs: number; enabled?: boolean; config?: Record<string, unknown> }) => Promise<{ ok: boolean; id?: number; error?: string }>
+        remove: (id: number) => Promise<{ ok: boolean; error?: string }>
+        runNow: (id: number) => Promise<{ ok: boolean; error?: string }>
+      }
     }
     steering: {
       steer: (params: { sessionId: number; text: string; priority?: string }) => Promise<{ text: string; priority: string; timestamp: number; processed: boolean }>

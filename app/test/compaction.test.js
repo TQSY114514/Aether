@@ -123,10 +123,14 @@ describe('maybeCompact', () => {
   it('preserves system messages on compaction (hard-truncate fallback)', async () => {
     // The HTTP call to summarizeHistory will fail (no real server).
     // The catch block hard-truncates but keeps system messages.
+    // Smart retention keeps user messages verbatim, so we use a single user
+    // message + many assistant messages to exercise a real reduction, while
+    // still asserting the system message is preserved.
     const big = 'x'.repeat(5000)
     const msgs = [
       { role: 'system', content: 'You are helpful' },
-      ...Array.from({ length: 15 }, () => [m('user', big), m('assistant', big)]).flat(),
+      m('user', big),
+      ...Array.from({ length: 50 }, () => m('assistant', big)),
     ]
     const result = await maybeCompact({
       provider: { api_url: 'http://test', api_format: 'openai' },
@@ -136,6 +140,7 @@ describe('maybeCompact', () => {
     })
     expect(result.length).toBeLessThan(msgs.length)
     expect(result[0].role).toBe('system')
+    expect(result.some(msg => msg.role === 'system' && msg.content === 'You are helpful')).toBe(true)
   }, 20000)
 
   it('keeps tool_call/result pairs intact on hard-truncate', async () => {

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, X, Loader2, MessageSquare, CornerDownLeft } from 'lucide-react'
+import { Search, X, Loader2, MessageSquare, CornerDownLeft, FileText, Brain } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { cjkBigram } from '@/utils/cjkBigram'
 
-interface SearchResult {
+interface MessageResult {
   id: number
   session_id: number
   role: 'user' | 'assistant' | 'system'
@@ -14,23 +14,49 @@ interface SearchResult {
   terms?: string[]
 }
 
+interface MemoryResult {
+  id: number
+  content: string
+  type: string
+  created_at: string
+  source_session_id?: number | null
+  confidence?: number
+  terms?: string[]
+}
+
+interface FileResult {
+  relPath: string
+  absPath?: string
+  size?: number
+  ext?: string
+  modified?: number
+  terms?: string[]
+}
+
+interface UnifiedResults {
+  messages: MessageResult[]
+  memories: MemoryResult[]
+  files: FileResult[]
+}
+
 interface SearchPanelProps {
   open: boolean
   onClose: () => void
   /** Active session id — used to scope a "current session" search. */
   currentSessionId?: number | null
-  /** Called when the user picks a result; the parent jumps to that message. */
+  /** Called when the user picks a message; the parent jumps to that message. */
   onJumpToMessage?: (messageId: number, sessionId: number) => void
+  /** Called when the user picks a memory. */
+  onJumpToMemory?: (memoryId: number) => void
+  /** Called when the user picks a file. */
+  onJumpToFile?: (relPath: string) => void
 }
 
-// The `search:messages` IPC is not yet declared in env.d.ts / preload.js (the
-// main flow wires it up separately), so reach it through a typed cast instead
-// of touching the global electronAPI declaration.
-type SearchMessagesFn = (query: string, sessionId?: number | null) => Promise<SearchResult[]>
-interface ElectronSearchAPI { search?: { messages?: SearchMessagesFn } }
-function getSearchFn(): SearchMessagesFn | undefined {
+type UnifiedSearchFn = (query: string, opts?: { sessionId?: number | null; limit?: number }) => Promise<UnifiedResults>
+interface ElectronSearchAPI { search?: { unified?: UnifiedSearchFn } }
+function getUnifiedFn(): UnifiedSearchFn | undefined {
   const api = (window as unknown as { electronAPI?: ElectronSearchAPI }).electronAPI
-  return api?.search?.messages
+  return api?.search?.unified
 }
 
 function escapeRegex(s: string): string {
@@ -84,10 +110,12 @@ const ROLE_LABEL: Record<string, string> = {
   system: 'System',
 }
 
-export default function SearchPanel({ open, onClose, currentSessionId, onJumpToMessage }: SearchPanelProps) {
+const EMPTY: UnifiedResults = { messages: [], memories: [], files: [] }
+
+export default function SearchPanel({ open, onClose, currentSessionId, onJumpToMessage, onJumpToMemory, onJumpToFile }: SearchPanelProps) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<'current' | 'all'>(currentSessionId ? 'current' : 'all')
-  const [results, setResults] = useState<SearchResult[]>([])
+  const [results, setResults] = useState<UnifiedResults>(EMPTY)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState(0)
@@ -96,7 +124,16 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const listRef = useRef<HTMLDivElement>(null)
 
-  const searchFn = useMemo(() => getSearchFn(), [])
+  const searchFn = useMemo(() => getUnifiedFn(), [])
+
+  // Flatten all results into a single ordered list for keyboard navigation.
+  const flatResults = useMemo(() => {
+    return [
+      ...results.messages.map((r) => ({ kind: 'message' as const, ref: r })),
+      ...results.memories.map((r) => ({ kind: 'memory' as const, ref: r })),
+      ...results.files.map((r) => ({ kind: 'file' as const, ref: r })),
+    ]
+  }, [results])
 
   // Highlight terms: the user's raw query tokens + their CJK bigrams.
   const highlightTerms = useMemo(() => {
@@ -126,7 +163,7 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
   useEffect(() => {
     if (!open) {
       setQuery('')
-      setResults([])
+      setResults(EMPTY)
       setLoading(false)
       setError(null)
       setSelected(0)
@@ -139,14 +176,14 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
     clearTimeout(debounceRef.current)
     const trimmed = query.trim()
     if (!trimmed) {
-      setResults([])
+      setResults(EMPTY)
       setLoading(false)
       setError(null)
       return
     }
     if (!searchFn) {
       setError('search_unavailable') // IPC not wired yet
-      setResults([])
+      setResults(EMPTY)
       setLoading(false)
       return
     }
@@ -154,13 +191,13 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
     debounceRef.current = setTimeout(async () => {
       try {
         const sid = scope === 'current' ? currentSessionId ?? null : null
-        const rows = await searchFn(trimmed, sid)
-        setResults(rows || [])
+        const res = await searchFn(trimmed, { sessionId: sid })
+        setResults(res || EMPTY)
         setError(null)
         setSelected(0)
       } catch (e) {
         setError((e as Error)?.message || 'search_error')
-        setResults([])
+        setResults(EMPTY)
       } finally {
         setLoading(false)
       }
@@ -170,8 +207,8 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
 
   // Keep the selected index in range as results change.
   useEffect(() => {
-    if (selected > results.length - 1) setSelected(Math.max(0, results.length - 1))
-  }, [results.length, selected])
+    if (selected > flatResults.length - 1) setSelected(Math.max(0, flatResults.length - 1))
+  }, [flatResults.length, selected])
 
   // Scroll the active result into view during keyboard navigation.
   useEffect(() => {
@@ -179,8 +216,10 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
     el?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
-  const pick = (r: SearchResult) => {
-    onJumpToMessage?.(r.id, r.session_id)
+  const pick = (item: { kind: 'message' | 'memory' | 'file'; ref: any }) => {
+    if (item.kind === 'message') onJumpToMessage?.(item.ref.id, item.ref.session_id)
+    else if (item.kind === 'memory') onJumpToMemory?.(item.ref.id)
+    else onJumpToFile?.(item.ref.relPath)
     onClose()
   }
 
@@ -190,13 +229,13 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
       onClose()
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      if (results.length) setSelected((i) => (i + 1) % results.length)
+      if (flatResults.length) setSelected((i) => (i + 1) % flatResults.length)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      if (results.length) setSelected((i) => (i - 1 + results.length) % results.length)
+      if (flatResults.length) setSelected((i) => (i - 1 + flatResults.length) % flatResults.length)
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      const r = results[selected]
+      const r = flatResults[selected]
       if (r) pick(r)
     }
   }
@@ -205,6 +244,106 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
 
   const hasQuery = query.trim().length > 0
   const ipcReady = !!searchFn
+  const total = flatResults.length
+
+  const renderMessage = (r: MessageResult, i: number) => (
+    <li key={`m-${r.session_id}-${r.id}`}>
+      <button
+        data-idx={i}
+        onClick={() => pick({ kind: 'message', ref: r })}
+        onMouseEnter={() => setSelected(i)}
+        className="w-full text-left px-3 py-2 transition-colors"
+        style={{ backgroundColor: i === selected ? 'var(--content-secondary, var(--bg-secondary))' : 'transparent' }}
+      >
+        <div className="flex items-center gap-2 mb-0.5">
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
+            style={{
+              color: r.role === 'user' ? 'var(--accent)' : r.role === 'assistant' ? 'var(--success)' : 'var(--text-muted)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {ROLE_LABEL[r.role] || r.role}
+          </span>
+          {r.session_title != null && (
+            <span className="flex items-center gap-1 text-[10px] truncate min-w-0" style={{ color: 'var(--text-secondary)' }}>
+              <MessageSquare size={10} className="shrink-0" />
+              <span className="truncate">{r.session_title || `#${r.session_id}`}</span>
+            </span>
+          )}
+          <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+            {r.model_used || ''}
+          </span>
+        </div>
+        <div className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-primary)' }}>
+          {highlight(makeSnippet(r.content, highlightTerms), highlightTerms)}
+        </div>
+      </button>
+    </li>
+  )
+
+  const renderMemory = (r: MemoryResult, i: number) => (
+    <li key={`mem-${r.id}`}>
+      <button
+        data-idx={i}
+        onClick={() => pick({ kind: 'memory', ref: r })}
+        onMouseEnter={() => setSelected(i)}
+        className="w-full text-left px-3 py-2 transition-colors"
+        style={{ backgroundColor: i === selected ? 'var(--content-secondary, var(--bg-secondary))' : 'transparent' }}
+      >
+        <div className="flex items-center gap-2 mb-0.5">
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
+            style={{ color: 'var(--accent)', border: '1px solid var(--border)' }}
+          >
+            <Brain size={10} className="inline mr-1" />
+            {r.type || 'fact'}
+          </span>
+          <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+            {r.confidence != null ? `σ ${Math.round(r.confidence * 100)}%` : ''}
+          </span>
+        </div>
+        <div className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-primary)' }}>
+          {highlight(makeSnippet(r.content, highlightTerms), highlightTerms)}
+        </div>
+      </button>
+    </li>
+  )
+
+  const renderFile = (r: FileResult, i: number) => (
+    <li key={`f-${r.relPath}`}>
+      <button
+        data-idx={i}
+        onClick={() => pick({ kind: 'file', ref: r })}
+        onMouseEnter={() => setSelected(i)}
+        className="w-full text-left px-3 py-2 transition-colors"
+        style={{ backgroundColor: i === selected ? 'var(--content-secondary, var(--bg-secondary))' : 'transparent' }}
+      >
+        <div className="flex items-center gap-2 mb-0.5">
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
+            style={{ color: 'var(--accent)', border: '1px solid var(--border)' }}
+          >
+            <FileText size={10} className="inline mr-1" />
+            文件
+          </span>
+          {r.ext && (
+            <span className="text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+              {r.ext}
+            </span>
+          )}
+          {r.size != null && (
+            <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+              {(r.size / 1024).toFixed(1)} KB
+            </span>
+          )}
+        </div>
+        <div className="text-xs leading-relaxed truncate" style={{ color: 'var(--text-primary)' }}>
+          {highlight(r.relPath, highlightTerms)}
+        </div>
+      </button>
+    </li>
+  )
 
   return (
     <div
@@ -266,52 +405,35 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
             </div>
           ) : !hasQuery ? (
             <div className="px-4 py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-              输入关键词以搜索消息（支持中文分词）
+              输入关键词以搜索消息、记忆与文件（支持中文分词）
             </div>
-          ) : !loading && results.length === 0 ? (
+          ) : !loading && total === 0 ? (
             <div className="px-4 py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-              {error ? t('chat.search_no_match') : t('chat.search_no_match')}
+              {error ? '搜索出错' : t('chat.search_no_match')}
             </div>
           ) : (
-            <ul className="py-1">
-              {results.map((r, i) => (
-                <li key={`${r.session_id}-${r.id}`}>
-                  <button
-                    data-idx={i}
-                    onClick={() => pick(r)}
-                    onMouseEnter={() => setSelected(i)}
-                    className="w-full text-left px-3 py-2 transition-colors"
-                    style={{
-                      backgroundColor: i === selected ? 'var(--content-secondary, var(--bg-secondary))' : 'transparent',
-                    }}
-                  >
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                        style={{
-                          color: r.role === 'user' ? 'var(--accent)' : r.role === 'assistant' ? 'var(--success)' : 'var(--text-muted)',
-                          border: '1px solid var(--border)',
-                        }}
-                      >
-                        {ROLE_LABEL[r.role] || r.role}
-                      </span>
-                      {r.session_title != null && (
-                        <span className="flex items-center gap-1 text-[10px] truncate min-w-0" style={{ color: 'var(--text-secondary)' }}>
-                          <MessageSquare size={10} className="shrink-0" />
-                          <span className="truncate">{r.session_title || `#${r.session_id}`}</span>
-                        </span>
-                      )}
-                      <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
-                        {r.model_used || ''}
-                      </span>
-                    </div>
-                    <div className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-primary)' }}>
-                      {highlight(makeSnippet(r.content, highlightTerms), highlightTerms)}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="py-1">
+              {results.messages.length > 0 && (
+                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  聊天记录 ({results.messages.length})
+                </div>
+              )}
+              <ul>{results.messages.map((r, i) => renderMessage(r, i))}</ul>
+
+              {results.memories.length > 0 && (
+                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  记忆 ({results.memories.length})
+                </div>
+              )}
+              <ul>{results.memories.map((r, i) => renderMemory(r, results.messages.length + i))}</ul>
+
+              {results.files.length > 0 && (
+                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  文件 ({results.files.length})
+                </div>
+              )}
+              <ul>{results.files.map((r, i) => renderFile(r, results.messages.length + results.memories.length + i))}</ul>
+            </div>
           )}
         </div>
 
@@ -325,7 +447,7 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
           </span>
           <span>↑↓ 选择</span>
           <span>Esc 关闭</span>
-          {results.length > 0 && <span className="ml-auto">{results.length} 条结果</span>}
+          {total > 0 && <span className="ml-auto">{total} 条结果</span>}
         </div>
       </div>
     </div>

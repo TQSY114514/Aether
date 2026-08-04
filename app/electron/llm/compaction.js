@@ -7,9 +7,9 @@
 // the model still has the live turn + any active tool-call/result pairing.
 //
 // Design:
-//   1. estimateMessagesTokens(msgs) — sum content lengths (str | multimodal parts).
-//      Coarse (chars-as-tokens with a CJK multiplier) — we only need a budget
-//      signal, not an exact count. OpenClaw uses a 1.2x safety margin; we do too.
+//   1. estimateMessagesTokens(msgs) — uses js-tiktoken for OpenAI models
+//      (exact cl100k_base count) and falls back to a char-based estimate for
+//      Anthropic / unknown providers. We still apply a 1.2x safety margin.
 //   2. maybeCompact() — if under budget, return msgs unchanged. If over, split
 //      into [system][SUMMARY-PLACEHOLDER]...[older][recent]. Summarize `older`
 //      via the model, prepend the summary as a system message, keep `recent`
@@ -30,6 +30,7 @@
 
 const { completeChat } = require('./providerAdapter')
 const hooks = require('./hooks')
+const tokenizer = require('./tokenizer')
 
 const SAFETY_MARGIN = 1.2          // estimateTokens is rough; pad it
 const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of budget
@@ -72,13 +73,13 @@ function isImportantMessage(msg) {
 // Estimate token count for a single message. Content may be a string or a
 // multimodal parts array (OpenAI shape). Image parts cost nothing here — we
 // can't accurately price them and they're rare in long history.
-function estimateMessageTokens(msg) {
+function estimateMessageTokens(msg, provider, model) {
   const c = msg && msg.content
-  if (typeof c === 'string') return estimateTextTokens(c)
+  if (typeof c === 'string') return tokenizer.countTokens(c, provider, model)
   if (Array.isArray(c)) {
     let t = 0
     for (const part of c) {
-      if (part && typeof part.text === 'string') t += estimateTextTokens(part.text)
+      if (part && typeof part.text === 'string') t += tokenizer.countTokens(part.text, provider, model)
     }
     return t
   }
@@ -87,6 +88,7 @@ function estimateMessageTokens(msg) {
 
 // Char-based estimate: CJK chars ≈ 1.5 tokens (BPE merges them less aggressively),
 // other chars ≈ 0.25 (≈4 chars/token, the common English heuristic).
+// Kept as a standalone fallback for callers that don't have a provider/model.
 function estimateTextTokens(text) {
   if (!text) return 0
   let tokens = 0
@@ -101,8 +103,8 @@ function estimateTextTokens(text) {
   return Math.max(1, Math.ceil(tokens))
 }
 
-function estimateMessagesTokens(messages) {
-  return Math.ceil(messages.reduce((s, m) => s + estimateMessageTokens(m), 0) * SAFETY_MARGIN)
+function estimateMessagesTokens(messages, provider, model) {
+  return Math.ceil(messages.reduce((s, m) => s + estimateMessageTokens(m, provider, model), 0) * SAFETY_MARGIN)
 }
 
 // Find a safe split index: never break a tool_call ↔ tool_result pair. We scan
@@ -126,7 +128,7 @@ function safeSplitIndex(messages, recentCount) {
 async function maybeCompact({ provider, model, messages, budget, signal, sessionId }) {
   if (!budget) return messages
   const threshold = Math.floor(budget * COMPACT_AT_RATIO)
-  const est = estimateMessagesTokens(messages)
+  const est = estimateMessagesTokens(messages, provider, model)
   if (est < threshold) return messages
 
   // Hooks: PreCompact — allow blocking or modification.

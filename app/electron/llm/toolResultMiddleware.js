@@ -51,9 +51,13 @@ function redactMiddleware(content) {
   return redacted
 }
 
+// Prompt-injection defense for external (web) content. Added to the chain so
+// untrusted web_fetch/web_search results are scrubbed before reaching the model.
+const { externalInjectionMiddleware } = require('./promptInjection')
+
 // Ordered chain. Order matters: redact first (so truncated tails don't hide a
-// secret split across the cut), then truncate, then log.
-const CHAIN = [redactMiddleware, truncateMiddleware]
+// secret split across the cut), then sanitize external content, then truncate.
+const CHAIN = [redactMiddleware, externalInjectionMiddleware, truncateMiddleware]
 
 function applyMiddleware(content, ctx) {
   let out = content

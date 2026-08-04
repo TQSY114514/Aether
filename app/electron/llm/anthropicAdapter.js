@@ -107,7 +107,13 @@ function parseToolUses(content) {
 // ({ type: 'thinking', text } for thinking_delta). On content_block_start for
 // a thinking block, yields a sentinel { type: 'thinking_start' } so the caller
 // can surface a "thinking…" indicator. Throws on non-2xx.
-async function* streamChat({ provider, model, messages, signal, options = {} }) {
+//
+// Returns an async generator. Assembled state (thinking blocks and the full
+// tool_use array) is attached to the generator INSTANCE so consumers can read
+// `stream.thinkingBlocks` / `stream.toolCalls` after the loop. (A generator
+// body cannot reference its own instance via `this`, so we build the generator
+// here and attach the properties to it — the fetch runs on first iteration.)
+function streamChat({ provider, model, messages, signal, options = {} }) {
   const { system, messages: aMsgs } = toAnthropicMessages(messages)
   const body = {
     model: model.model_name,
@@ -126,90 +132,119 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     if (b) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
   }
 
-  const res = await fetch(`${baseUrl(provider)}/messages`, {
-    method: 'POST',
-    headers: headers(provider),
-    body: JSON.stringify(body),
-    signal,
-  })
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '')
-    const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
-    err.status = res.status
-    if (res.status === 429 && provider.id != null) { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
-    throw err
-  }
-
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  streamChat.thinkingBlocks = null // collected thinking blocks for this stream
-  let _thinkingText = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-    for (const line of lines) {
-      const delta = parseSSELine(line)
-      if (!delta) continue
-      // Store thinking blocks on the stream object for the consumer to read;
-      // only yield content strings so the plain-chat streaming path (which
-      // concatenates deltas) doesn't get "[object Object]".
-      if (typeof delta === 'string') yield delta
-      else if (delta.type === 'thinking' && delta.text) {
-        _thinkingText += delta.text
-        streamChat.thinkingBlocks = [{ text: _thinkingText, ts: Date.now() }]
-        // Forward accumulated thinking so the renderer can display it live
-        // (chat.handler slices by lastThinkingLen to emit only new text).
-        if (typeof options?.onThinkingDelta === 'function') {
-          try { options.onThinkingDelta(_thinkingText) } catch {}
-        }
-      }
-      // Skip thinking_start/thinking_stop/tool_use_args — control signals only.
+  const gen = (async function* () {
+    const res = await fetch(`${baseUrl(provider)}/messages`, {
+      method: 'POST',
+      headers: headers(provider),
+      body: JSON.stringify(body),
+      signal,
+    })
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
+      err.status = res.status
+      if (res.status === 429 && provider.id != null) { try { _credentialPool.markCooldownForProvider(provider.id) } catch {} }
+      throw err
     }
-  }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let _thinkingText = ''
+    let _thinkingIndex = -1
+    // Per-block accumulator keyed by content_block index. A tool_use block's
+    // name + id arrive at content_block_start, its input arrives as fragments
+    // via input_json_delta, and it is only complete at content_block_stop.
+    const _toolBlocks = new Map() // index -> { id, name, inputJson }
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const evt = parseSSELine(line)
+        if (!evt) continue
+        // content_block_start → begin accumulating a block.
+        if (evt.type === 'content_block_start') {
+          const block = evt.block || {}
+          if (block.type === 'thinking') _thinkingIndex = evt.index
+          else if (block.type === 'tool_use') {
+            _toolBlocks.set(evt.index, { id: block.id, name: block.name, inputJson: '' })
+          }
+          continue
+        }
+        // content_block_delta → append the fragment to the active block.
+        if (evt.type === 'content_block_delta') {
+          const d = evt.delta || {}
+          if (d.type === 'thinking_delta') {
+            _thinkingText += d.thinking || ''
+            gen.thinkingBlocks = [{ text: _thinkingText, ts: Date.now() }]
+            // Forward accumulated thinking so the renderer can display it live
+            // (chat.handler slices by lastThinkingLen to emit only new text).
+            if (typeof options?.onThinkingDelta === 'function') {
+              try { options.onThinkingDelta(_thinkingText) } catch {}
+            }
+          } else if (d.type === 'text_delta') {
+            // Only yield content strings so the plain-chat streaming path (which
+            // concatenates deltas) doesn't get "[object Object]".
+            yield d.text || ''
+          } else if (d.type === 'input_json_delta') {
+            // Append partial JSON to the active tool block. Never overwrite —
+            // fragments MUST be concatenated in order or arguments are lost.
+            const tb = _toolBlocks.get(evt.index)
+            if (tb) tb.inputJson += d.partial_json || ''
+          }
+          continue
+        }
+        // content_block_stop → the block is complete; assemble the full tool_use.
+        if (evt.type === 'content_block_stop') {
+          if (evt.index === _thinkingIndex) { _thinkingIndex = -1; continue }
+          const tb = _toolBlocks.get(evt.index)
+          if (tb) {
+            _toolBlocks.delete(evt.index)
+            let input = {}
+            try { input = tb.inputJson ? JSON.parse(tb.inputJson) : {} } catch {}
+            gen.toolCalls = gen.toolCalls || []
+            gen.toolCalls.push({ id: tb.id, type: 'function', function: { name: tb.name, arguments: JSON.stringify(input) } })
+          }
+          continue
+        }
+        // message_start / other events — no content to yield.
+      }
+    }
+  })()
+
+  // Attach accumulated state to the generator instance so consumers reading
+  // `stream.thinkingBlocks` / `stream.toolCalls` can see them after the loop.
+  gen.thinkingBlocks = null
+  gen.toolCalls = null
+  return gen
 }
 
 // Anthropic SSE: `event: <type>` then `data: {json}`.
-// Handles:
-//   - content_block_start: yields `{ type: 'thinking_start' }` for thinking blocks
-//   - content_block_delta: yields text strings for text_delta, structured objects
-//     for thinking_delta
-//   - content_block_stop: yields `{ type: 'thinking_stop' }` for thinking blocks
+// Returns a structured event so the caller can maintain the content_block
+// state machine (start → delta → stop):
+//   { type:'content_block_start', index, block }   block = parsed.content_block
+//   { type:'content_block_delta', index, delta }   delta = parsed.delta
+//   { type:'content_block_stop', index }
+//   { type:'message_start', usage }
+// Returns null for non-data lines, '[DONE]', or malformed JSON.
 function parseSSELine(line) {
   if (!line.startsWith('data: ')) return null
   const data = line.slice(6).trim()
   if (!data || data === '[DONE]') return null
   try {
     const parsed = JSON.parse(data)
+    const idx = parsed.index != null ? parsed.index : -1
     if (parsed.type === 'content_block_start') {
-      const block = parsed.content_block || {}
-      const idx = parsed.index != null ? parsed.index : -1
-      if (block.type === 'thinking') {
-        _thinkingIndex = idx
-        return { type: 'thinking_start' }
-      }
-      if (block.type === 'tool_use') return { type: 'tool_use_start', id: block.id, name: block.name }
-    }
-    if (parsed.type === 'content_block_stop') {
-      if (parsed.index != null && _thinkingIndex === parsed.index) {
-        _thinkingIndex = -1
-        return { type: 'thinking_stop' }
-      }
+      return { type: 'content_block_start', index: idx, block: parsed.content_block || {} }
     }
     if (parsed.type === 'content_block_delta') {
-      const d = parsed.delta || {}
-      if (d.type === 'thinking_delta') {
-        return { type: 'thinking', text: d.thinking || '' }
-      }
-      if (d.type === 'text_delta') {
-        return d.text || ''
-      }
-      if (d.type === 'input_json_delta') {
-        return { type: 'tool_use_args', id: parsed.id, delta: d.partial_json || '' }
-      }
+      return { type: 'content_block_delta', index: idx, delta: parsed.delta || {} }
+    }
+    if (parsed.type === 'content_block_stop') {
+      return { type: 'content_block_stop', index: idx }
     }
     if (parsed.type === 'message_start') {
       return { type: 'message_start', usage: parsed.usage }
@@ -278,8 +313,6 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   return { content: text, tool_calls, usage, reasoning }
 }
 
-// Tracks which content block index is the current thinking block (for stop detection).
-let _thinkingIndex = -1
 async function listModels() { return [] }
 
 // Connectivity probe: a minimal /messages request with max_tokens:1.
@@ -334,5 +367,6 @@ async function completeChatMessageWithRetry({ provider, model, messages, signal,
 
 module.exports = {
   streamChat, completeChat, completeChatMessage, listModels, testConnection,
+  toAnthropicMessages, parseToolUses, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }

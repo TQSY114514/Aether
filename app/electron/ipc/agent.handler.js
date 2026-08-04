@@ -34,7 +34,11 @@ function registerAgentHandlers(ipcMain, db) {
     setWorkspaceRoot(v || null)
     invalidateCache()
     // Invalidate the project context graph cache for the new workspace.
-    try { require('../context').projectIndexer.invalidateCache(v || null) } catch {}
+    try {
+      const ctx = require('../context')
+      ctx.projectIndexer.invalidateCache(v || null)
+      ctx.repoMap.invalidateCache(v || null)
+    } catch {}
     return { success: true, root: getWorkspaceRoot() }
   })
 
@@ -45,16 +49,18 @@ function registerAgentHandlers(ipcMain, db) {
     return { has, fileName: info?.fileName || null }
   })
 
-  // Manually re-index the project context graph.
+  // Manually re-index the project context graph and repo map.
   ipcMain.handle('agent:project:reindex', async () => {
     const root = getWorkspaceRoot()
     if (!root) return { ok: false, error: 'no workspace configured' }
     try {
-      const { projectIndexer, dependencyGraph } = require('../context')
+      const { projectIndexer, dependencyGraph, repoMap } = require('../context')
       projectIndexer.invalidateCache(root)
+      repoMap.invalidateCache(root)
       const graph = await projectIndexer.indexWorkspace(root)
-      const stats = dependencyGraph.getStats(graph)
-      return { ok: true, stats }
+      const graphStats = dependencyGraph.getStats(graph)
+      const map = repoMap.generateRepoMap(root, { force: true })
+      return { ok: true, stats: graphStats, repoMap: { totalFiles: map.stats.totalFiles, indexedFiles: map.stats.indexedFiles } }
     } catch (e) {
       return { ok: false, error: e.message }
     }

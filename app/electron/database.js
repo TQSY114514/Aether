@@ -71,6 +71,16 @@ function initDatabase() {
   db.exec("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+  db.exec(`CREATE TABLE IF NOT EXISTS scheduled_task (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    interval_ms INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    config TEXT,
+    last_run_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`)
   db.exec('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
   db.exec('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
@@ -124,6 +134,7 @@ function initDatabase() {
   db.exec(`CREATE TABLE IF NOT EXISTS skill_patterns (
     signature TEXT PRIMARY KEY,
     tools TEXT NOT NULL,
+    params_json TEXT,
     count INTEGER NOT NULL DEFAULT 1,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
@@ -151,7 +162,7 @@ function initDatabase() {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  db.exec('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0)')
+  db.exec('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0, disable_reason TEXT)')
 
   db.exec(`CREATE TABLE IF NOT EXISTS usage_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -213,6 +224,8 @@ function initDatabase() {
     message: getTableColumns('message'),
     user_habit: getTableColumns('user_habit'),
     agent_checkpoint: getTableColumns('agent_checkpoint'),
+    provider_credential: getTableColumns('provider_credential'),
+    skill_patterns: getTableColumns('skill_patterns'),
   }
   const addCol = (table, col, def) => {
     if (!cols[table].includes(col)) {
@@ -243,8 +256,10 @@ function initDatabase() {
   addCol('message', 'arena_model', 'TEXT')
   addCol('user_habit', 'proposed', "INTEGER NOT NULL DEFAULT 0")
   addCol('agent_checkpoint', 'rolled_back_at', 'DATETIME')
+  addCol('skill_patterns', 'params_json', 'TEXT')
   addCol('session', 'trust_score', 'INTEGER DEFAULT 50')
   addCol('session', 'last_update', 'DATETIME')
+  addCol('provider_credential', 'disable_reason', 'TEXT')
 
   try {
     const modelIds = db.prepare('SELECT id FROM model').pluck().all()
@@ -254,6 +269,10 @@ function initDatabase() {
   const existingKeys = db.prepare('SELECT key FROM settings').pluck().all()
   if (!existingKeys.includes('fallback_timeout_ms')) db.prepare("INSERT INTO settings (key, value) VALUES ('fallback_timeout_ms', '30000')").run()
   if (!existingKeys.includes('theme')) db.prepare("INSERT INTO settings (key, value) VALUES ('theme', 'light')").run()
+  // Lint/Test auto-repair (Task 2.3): empty by default so the agent auto-detects
+  // the project type; the user can override with explicit commands via Settings.
+  if (!existingKeys.includes('lint_command')) db.prepare("INSERT INTO settings (key, value) VALUES ('lint_command', '')").run()
+  if (!existingKeys.includes('test_command')) db.prepare("INSERT INTO settings (key, value) VALUES ('test_command', '')").run()
 
   return db
 }
@@ -355,13 +374,17 @@ function pinSession(id, pinned = 1) {
   db.prepare('UPDATE session SET pinned = ?, updated_at = ? WHERE id = ?').run(pinned, localNow(), id)
 }
 function deleteSession(id) {
-  try { db.prepare('DELETE FROM messages_fts WHERE session_id = ?').run(id) } catch {}
-  db.prepare('DELETE FROM message WHERE session_id = ?').run(id)
-  try { db.prepare('DELETE FROM agent_checkpoint WHERE session_id = ?').run(id) } catch {}
-  try { db.prepare('DELETE FROM agent_execution_log WHERE session_id = ?').run(id) } catch {}
-  try { db.prepare('DELETE FROM usage_log WHERE session_id = ?').run(id) } catch {}
-  try { db.prepare('UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?').run(id) } catch {}
-  db.prepare('DELETE FROM session WHERE id = ?').run(id)
+  const del = db.transaction((sid) => {
+    try { db.prepare('DELETE FROM messages_fts WHERE session_id = ?').run(sid) } catch {}
+    db.prepare('DELETE FROM message WHERE session_id = ?').run(sid)
+    try { db.prepare('DELETE FROM agent_checkpoint WHERE session_id = ?').run(sid) } catch {}
+    try { db.prepare('DELETE FROM agent_execution_log WHERE session_id = ?').run(sid) } catch {}
+    try { db.prepare('DELETE FROM usage_log WHERE session_id = ?').run(sid) } catch {}
+    try { db.prepare('UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?').run(sid) } catch {}
+    db.prepare('DELETE FROM session WHERE id = ?').run(sid)
+    return sid
+  })
+  del(id)
 }
 function touchSession(id) {
   db.prepare('UPDATE session SET updated_at = ? WHERE id = ?').run(localNow(), id)
@@ -407,6 +430,34 @@ function getAllSettings() {
   return result
 }
 
+// ===== Scheduled Tasks CRUD (Task 4.3) =====
+function getScheduledTasks() {
+  const rows = db.prepare('SELECT * FROM scheduled_task ORDER BY id ASC').all()
+  return rows.map(r => {
+    let config = {}
+    try { config = JSON.parse(r.config || '{}') } catch { config = {} }
+    return { id: Number(r.id), name: r.name, type: r.type, interval_ms: Number(r.interval_ms), enabled: Number(r.enabled) === 1, config, last_run_at: r.last_run_at, created_at: r.created_at }
+  })
+}
+function addScheduledTask({ name, type, interval_ms, enabled = 1, config = {} }) {
+  const info = db.prepare('INSERT INTO scheduled_task (name, type, interval_ms, enabled, config) VALUES (?, ?, ?, ?, ?)')
+    .run(name, type, interval_ms, enabled ? 1 : 0, JSON.stringify(config || {}))
+  return { lastInsertRowid: Number(info.lastInsertRowid) }
+}
+function getScheduledTask(id) {
+  const row = db.prepare('SELECT * FROM scheduled_task WHERE id = ?').get(id)
+  if (!row) return null
+  let config = {}
+  try { config = JSON.parse(row.config || '{}') } catch { config = {} }
+  return { id: Number(row.id), name: row.name, type: row.type, interval_ms: Number(row.interval_ms), enabled: Number(row.enabled) === 1, config, last_run_at: row.last_run_at, created_at: row.created_at }
+}
+function deleteScheduledTask(id) {
+  db.prepare('DELETE FROM scheduled_task WHERE id = ?').run(id)
+}
+function markScheduledTaskRun(id) {
+  db.prepare('UPDATE scheduled_task SET last_run_at = ? WHERE id = ?').run(localNow(), id)
+}
+
 // ===== Arena / ELO =====
 function getModelScores() {
   return db.prepare(`SELECT ms.*, m.model_name, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id=m.id JOIN provider p ON m.provider_id=p.id ORDER BY ms.intent, ms.score DESC`).all()
@@ -426,7 +477,9 @@ function updateElo(winnerModelId, loserModelIds, intent) {
     db.prepare('INSERT OR IGNORE INTO model_score (model_id, intent, score, win_count, total_count) VALUES (?,?,1000,0,0)').run(modelId, intent)
     db.prepare('UPDATE model_score SET score = ?, win_count = win_count + ?, total_count = total_count + 1 WHERE model_id = ? AND intent = ?').run(newScore, incrementWin ? 1 : 0, modelId, intent)
   }
-  const work = async () => {
+  // ELO update is fully synchronous (better-sqlite3 read+write), wrapped in a
+  // single transaction so all losers for one intent are updated atomically.
+  const eloTx = db.transaction(() => {
     for (const loserId of loserModelIds) {
       const ws = readScore(winnerModelId)
       const ls = readScore(loserId)
@@ -436,13 +489,28 @@ function updateElo(winnerModelId, loserModelIds, intent) {
       upsertScore(winnerModelId, newW, true)
       upsertScore(loserId, newL, false)
     }
-  }
+  })
+  // Keep the _eloMutex serialization to prevent lost-update races across calls.
+  const work = () => eloTx()
   return _eloMutex = _eloMutex.catch(() => {}).then(work)
 }
 async function recordArenaVote({ prompt, winnerModelId, winnerModelName, loserModelIds, loserModelNames, intent }) {
   db.prepare('INSERT INTO arena_vote (prompt, intent, winner_model_id, winner_model_name, loser_model_ids, loser_model_names) VALUES (?, ?, ?, ?, ?, ?)')
     .run(prompt, intent, winnerModelId, winnerModelName, JSON.stringify(loserModelIds), JSON.stringify(loserModelNames))
   if (winnerModelId && loserModelIds.length > 0) await updateElo(winnerModelId, loserModelIds, intent)
+}
+// Average observed latency per model_id (from successful usage_log rows).
+// Used by modelRouter's auto mode to blend latency into the model score.
+function getModelLatency() {
+  const rows = db.prepare(`SELECT m.id AS model_id, AVG(u.latency_ms) AS avg_latency
+    FROM usage_log u JOIN model m ON m.model_name = u.model_name AND m.provider_id = u.provider_id
+    WHERE u.status = 200 AND u.latency_ms IS NOT NULL
+    GROUP BY m.id`).all()
+  const out = {}
+  for (const r of rows) {
+    if (r.model_id != null) out[Number(r.model_id)] = Number(r.avg_latency)
+  }
+  return out
 }
 function getPrimaryModel() {
   const row = db.prepare('SELECT m.id, m.provider_id FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.is_primary DESC, m.id ASC LIMIT 1').get()
@@ -475,18 +543,34 @@ function getMemories(limit) {
 }
 function addMemory({ content, type }) {
   const info = db.prepare('INSERT INTO memory (content, type) VALUES (?, ?)').run(content, type || 'fact')
+  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
   return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function addMemoryWithProvenance(content, type, sourceSessionId) {
   const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence) VALUES (?, ?, ?, 1.0)').run(content, type || 'fact', sourceSessionId)
+  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
   return { lastInsertRowid: Number(info.lastInsertRowid) }
+}
+function addMemoriesBatch(entries) {
+  const insert = db.transaction((list) => {
+    const stmt = db.prepare('INSERT INTO memory (content, type, source_session_id) VALUES (?, ?, ?)')
+    const ftsStmt = db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)')
+    for (const e of list) {
+      const info = stmt.run(e.content, e.type || 'fact', e.sourceSessionId || null)
+      try { ftsStmt.run(String(e.content || ''), e.type || 'fact', Number(info.lastInsertRowid)) } catch {}
+    }
+    return list.length
+  })
+  return insert(entries || [])
 }
 function updateMemory(id, { content }) {
   if (!content) return
   db.prepare('UPDATE memory SET content = ? WHERE id = ?').run(content, id)
+  try { db.prepare('UPDATE memories_fts SET content = ? WHERE memory_id = ?').run(String(content || ''), Number(id)) } catch {}
 }
 function deleteMemory(id) {
   db.prepare('DELETE FROM memory WHERE id = ?').run(id)
+  try { db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(id)) } catch {}
 }
 function incrementMemoryAccess(id) {
   try { db.prepare('UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?').run(localNow(), id) } catch {}
@@ -650,6 +734,58 @@ function addMoaPreset({ name, description, references_config, aggregator_model_i
 function deleteMoaPreset(id) { db.prepare('DELETE FROM moa_preset WHERE id = ?').run(id) }
 
 // ===== FTS Full-text Search =====
+// CJK bigram tokenizer (shared with ipc/search.handler.js). FTS5's unicode61
+// tokenizer doesn't split CJK ideographs, so queries are transformed into
+// overlapping bigrams at the app layer.
+function isCJKCodePoint(code) {
+  return (
+    (code >= 0x4e00 && code <= 0x9fff) ||
+    (code >= 0x3400 && code <= 0x4dbf) ||
+    (code >= 0xac00 && code <= 0xd7a3)
+  )
+}
+function cjkBigram(text) {
+  if (!text) return ''
+  const chars = Array.from(text)
+  const tokens = []
+  let cjkBuf = ''
+  let otherBuf = ''
+  const flushCjk = () => {
+    if (!cjkBuf) return
+    if (cjkBuf.length >= 2) {
+      for (let i = 0; i < cjkBuf.length - 1; i++) tokens.push(cjkBuf.slice(i, i + 2))
+    } else {
+      tokens.push(cjkBuf)
+    }
+    cjkBuf = ''
+  }
+  const flushOther = () => {
+    if (!otherBuf) return
+    tokens.push(otherBuf)
+    otherBuf = ''
+  }
+  for (const ch of chars) {
+    if (isCJKCodePoint(ch.codePointAt(0))) {
+      flushOther()
+      cjkBuf += ch
+    } else {
+      flushCjk()
+      otherBuf += ch
+    }
+  }
+  flushCjk()
+  flushOther()
+  return tokens.join(' ')
+}
+function cjkBigramQuery(query) {
+  const bigrammed = cjkBigram(query)
+  if (!bigrammed.trim()) return ''
+  return bigrammed
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((tok) => '"' + tok.replace(/"/g, '""') + '"')
+    .join(' ')
+}
 function searchMessages(ftsQuery, sessionId, rawQuery) {
   try {
     const ftsAvailable = db.prepare("SELECT name FROM sqlite_master WHERE name = 'messages_fts'").all().length > 0
@@ -664,16 +800,34 @@ function searchMessages(ftsQuery, sessionId, rawQuery) {
     return sessionId ? db.prepare(sql).all(like, sessionId) : db.prepare(sql).all(like)
   } catch { return [] }
 }
-function searchMemories(query) {
+function searchMemories(rawQuery) {
   try {
     const ftsAvailable = db.prepare("SELECT name FROM sqlite_master WHERE name = 'memories_fts'").all().length > 0
     if (ftsAvailable) {
+      const query = cjkBigramQuery(rawQuery)
+      if (!query) return []
       const rows = db.prepare('SELECT memory_id FROM memories_fts WHERE memories_fts MATCH ? ORDER BY rowid DESC LIMIT 30').all(query)
       return rows.map(r => db.prepare('SELECT * FROM memory WHERE id = ?').get(r.memory_id) || null).filter(Boolean)
     }
-    if (!query) return []
-    const like = `%${query.replace(/[!%_]/g, '!$&')}%`
+    if (!rawQuery) return []
+    const like = `%${rawQuery.replace(/[!%_]/g, '!$&')}%`
     return db.prepare("SELECT * FROM memory WHERE content LIKE ? ESCAPE '!' ORDER BY id DESC LIMIT 30").all(like)
+  } catch { return [] }
+}
+function searchFiles(query, rootDir, limit = 30) {
+  if (!rootDir || !query || !query.trim()) return []
+  try {
+    const { scanWorkspace } = require('./context/fileScanner')
+    const files = scanWorkspace(rootDir)
+    const q = query.trim().toLowerCase()
+    const results = []
+    for (const f of files) {
+      if (results.length >= limit) break
+      if (f.relPath.toLowerCase().includes(q)) {
+        results.push({ relPath: f.relPath, absPath: f.absPath, size: f.size, ext: f.ext, modified: f.modified })
+      }
+    }
+    return results
   } catch { return [] }
 }
 
@@ -700,9 +854,10 @@ module.exports = {
   getSessions, getSession, createSession, pruneEmptySessions, renameSession, pinSession, deleteSession, touchSession,
   getMessages, addMessage, updateMessage,
   getSetting, setSetting, getAllSettings,
-  getModelScores, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
+  getScheduledTasks, addScheduledTask, getScheduledTask, deleteScheduledTask, markScheduledTaskRun,
+  getModelScores, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
-  getMemories, addMemory, addMemoryWithProvenance, updateMemory, deleteMemory, incrementMemoryAccess,
+  getMemories, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess,
   getMemoryConflicts, resolveMemoryConflict,
   recordSkillResult, getSkillStats,
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
@@ -715,7 +870,7 @@ module.exports = {
   addCheckpoint, getCheckpoints, deleteCheckpoints, deleteCheckpoint,
   addAgentCheckpoint, getAgentCheckpoint, markAgentCheckpointRolledBack, listAgentCheckpoints,
   getMoaPresets, getMoaPreset, addMoaPreset, deleteMoaPreset,
-  searchMessages, searchMemories,
+  searchMessages, searchMemories, searchFiles,
   getSkillUsage, updateSkillState, pinSkill, applySkillTransitions,
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },

@@ -13,6 +13,8 @@ export default function DefaultChatSettings() {
   const defaultPersonaId = useStore((s) => s.defaultPersonaId)
   const modelRoutingPriority = useStore((s) => s.modelRoutingPriority)
   const setModelRoutingPriority = useStore((s) => s.setModelRoutingPriority)
+  const modelAutoRoute = useStore((s) => s.modelAutoRoute)
+  const setModelAutoRoute = useStore((s) => s.setModelAutoRoute)
   const allModels = useStore((s) => s.allModels)
   const personas = useStore((s) => s.personas)
   const setDefaultModel = useStore((s) => s.setDefaultModel)
@@ -70,6 +72,13 @@ export default function DefaultChatSettings() {
             ))}
           </div>
         </div>
+        <label className="flex items-center justify-between cursor-pointer">
+          <div>
+            <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.auto_route')}</span>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('settings.auto_route_desc')}</p>
+          </div>
+          <input type="checkbox" checked={modelAutoRoute} onChange={(e) => setModelAutoRoute(e.target.checked)} className="w-4 h-4 accent-black" />
+        </label>
       </div>
     </div>
   )
