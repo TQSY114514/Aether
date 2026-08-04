@@ -39,6 +39,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:delete', id),
     cleanupCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:cleanup', sessionId),
   },
+  git: {
+    undo: (cwd) => ipcRenderer.invoke('git:undo', cwd),
+    status: (cwd) => ipcRenderer.invoke('git:status', cwd),
+    setAutoCommit: (enabled) => ipcRenderer.invoke('git:setAutoCommit', enabled),
+    getAutoCommit: () => ipcRenderer.invoke('git:getAutoCommit'),
+  },
   model: {
     list: (providerId) => ipcRenderer.invoke('model:list', providerId),
     create: (data) => ipcRenderer.invoke('model:create', data),
@@ -119,6 +125,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     connect: (id) => ipcRenderer.invoke('mcp:connect', id),
     status: () => ipcRenderer.invoke('mcp:status'),
   },
+  market: {
+    list: () => ipcRenderer.invoke('mcp:market:list'),
+    search: (query) => ipcRenderer.invoke('mcp:market:search', query),
+    install: (entry) => ipcRenderer.invoke('mcp:market:install', entry),
+  },
   settings: {
     get: (key) => ipcRenderer.invoke('settings:get', key),
     set: (key, value) => ipcRenderer.invoke('settings:set', key, value),
@@ -157,6 +168,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   search: {
     messages: (query, sessionId) => ipcRenderer.invoke('search:messages', { query, sessionId }),
+    memories: (query) => ipcRenderer.invoke('search:memories', { query }),
+    files: (query, root) => ipcRenderer.invoke('search:files', { query, root }),
+    unified: (query, opts = {}) => ipcRenderer.invoke('search:unified', { query, ...opts }),
   },
   moa: {
     getPresets: () => ipcRenderer.invoke('moa:getPresets'),
@@ -181,6 +195,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cron: {
     list: () => ipcRenderer.invoke('cron:list'),
     runNow: (name) => ipcRenderer.invoke('cron:run-now', name),
+    tasks: {
+      list: () => ipcRenderer.invoke('cron:tasks:list'),
+      add: (data) => ipcRenderer.invoke('cron:tasks:add', data),
+      remove: (id) => ipcRenderer.invoke('cron:tasks:remove', id),
+      runNow: (id) => ipcRenderer.invoke('cron:tasks:runNow', id),
+    },
   },
   steering: {
     steer: (params) => ipcRenderer.invoke('steering:steer', params),

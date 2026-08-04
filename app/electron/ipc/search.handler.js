@@ -99,6 +99,80 @@ function registerSearchHandlers(ipcMain, db) {
       return []
     }
   })
+
+  // Full-text search over memories. Params: { query }.
+  ipcMain.handle('search:memories', (_e, { query } = {}) => {
+    if (!query || !query.trim()) return []
+    try {
+      const rows = db.searchMemories(query) || []
+      const terms = cjkBigram(query).split(/\s+/).filter(Boolean)
+      return rows.map((m) => ({
+        id: m.id,
+        content: m.content,
+        type: m.type,
+        created_at: m.created_at,
+        source_session_id: m.source_session_id,
+        confidence: m.confidence,
+        terms,
+      }))
+    } catch (e) {
+      log.warn('search:memories failed:', e.message || e)
+      return []
+    }
+  })
+
+  // Search files in the agent workspace by filename. Params: { query, root? }.
+  ipcMain.handle('search:files', (_e, { query, root } = {}) => {
+    if (!query || !query.trim()) return []
+    try {
+      const rootDir = root || db.getSetting('agent_workspace_root') || ''
+      return db.searchFiles(query, rootDir) || []
+    } catch (e) {
+      log.warn('search:files failed:', e.message || e)
+      return []
+    }
+  })
+
+  // Unified search across messages + memories + files, categorized. Params:
+  // { query, sessionId?, root?, limit? }. Returns { messages, memories, files }.
+  ipcMain.handle('search:unified', (_e, { query, sessionId, root, limit } = {}) => {
+    if (!query || !query.trim()) return { messages: [], memories: [], files: [] }
+    const lim = Math.max(1, Math.min(Number(limit) || 10, 50))
+    try {
+      const ftsQuery = cjkBigramQuery(query)
+      const terms = cjkBigram(query).split(/\s+/).filter(Boolean)
+      const messages = (ftsQuery ? (db.searchMessages(ftsQuery, sessionId || null, query) || []) : [])
+        .slice(0, lim)
+        .map((m) => ({
+          id: m.id,
+          session_id: m.session_id,
+          role: m.role,
+          content: m.content,
+          created_at: m.created_at,
+          model_used: m.model_used,
+          session_title: sessionTitle(m.session_id),
+          terms,
+        }))
+      const memories = (db.searchMemories(query) || []).slice(0, lim).map((m) => ({
+        id: m.id,
+        content: m.content,
+        type: m.type,
+        created_at: m.created_at,
+        source_session_id: m.source_session_id,
+        confidence: m.confidence,
+        terms,
+      }))
+      const rootDir = root || db.getSetting('agent_workspace_root') || ''
+      const files = (db.searchFiles(query, rootDir, lim) || []).map((f) => ({
+        ...f,
+        terms,
+      }))
+      return { messages, memories, files }
+    } catch (e) {
+      log.warn('search:unified failed:', e.message || e)
+      return { messages: [], memories: [], files: [] }
+    }
+  })
 }
 
 module.exports = { registerSearchHandlers }

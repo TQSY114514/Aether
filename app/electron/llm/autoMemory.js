@@ -295,4 +295,4 @@ function prune(db, maxAgeDays = 90) {
   } catch {}
 }
 
-module.exports = { prefetch, sync, search, prune, keywords, EXTRACTION_PROMPT, detectConflict }
+module.exports = { prefetch, sync, search, prune, keywords, parseEntry, EXTRACTION_PROMPT, detectConflict }

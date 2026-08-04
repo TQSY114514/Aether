@@ -1,4 +1,4 @@
-﻿const { createAllowRulesStore } = require('./toolLoopCallbacks')
+const { createAllowRulesStore } = require('./toolLoopCallbacks')
 const { registerChatSendHandler } = require('./chat-send.handler')
 const auditLog = require('../llm/auditLog')
 const checkpoints = require('../llm/checkpoints')
@@ -125,6 +125,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 
   // Model router (Claude Code-style): pick a model tier for a task type.
   // Returns { tier, suggestedModelName, rationale } for cost-optimized routing.
+  // When the user enables "Auto" mode (modelAutoRoute), the selection blends
+  // Arena ELO + price + latency (Task 3.3).
   ipcMain.handle('model:route-tier', (_e, { taskType, userMessage }) => {
     try {
       const allModels = db.getAllModels().filter(m => {
@@ -132,10 +134,19 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         return p && p.enabled
       })
       const tier = modelRouter.routeTask(taskType, userMessage || '', 0)
-      const suggestion = modelRouter.suggestModelForTier(tier, allModels)
-      return { tier, modelName: suggestion?.modelName || null, modelId: suggestion?.modelId || null, rationale: suggestion?.rationale || '' }
+      const autoMode = db.getSetting('modelAutoRoute') === '1'
+      const priority = db.getSetting('modelRoutingPriority') || 'quality'
+      // Arena ELO keyed by model_id (from the model_score table).
+      const scores = db.getModelScores()
+      const eloData = {}
+      for (const s of scores) {
+        if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 }
+      }
+      const latencyData = db.getModelLatency()
+      const suggestion = modelRouter.suggestModelForTier(tier, allModels, { autoMode, priority, eloData, latencyData })
+      return { tier, modelName: suggestion?.modelName || null, modelId: suggestion?.modelId || null, rationale: suggestion?.rationale || '', eloScore: suggestion?.eloScore ?? null, autoMode }
     } catch {
-      return { tier: 'standard', modelName: null, rationale: 'error' }
+      return { tier: 'standard', modelName: null, rationale: 'error', autoMode: false }
     }
   })
 

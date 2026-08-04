@@ -170,6 +170,145 @@ function searchGraph(db, query, limit = 5) {
   }
 }
 
+// ─── Second-degree neighbours ──────────────────────────────────────────────
+// Given entity A, return indirect entities C reachable through a middle node B
+// (A→B→C). Traversal is undirected per hop (an edge may be traversed incoming or
+// outgoing). Direct neighbours of A are excluded so only genuinely indirect
+// (2-hop) entities are returned.
+function getSecondDegreeNeighbors(db, entity, limit = 10) {
+  try {
+    const a = String(entity || '').trim().toLowerCase()
+    if (!a) return []
+
+    // 1-hop neighbours B (directly connected to A).
+    const oneHop = new Set()
+    const outRows = db.allRows(
+      `SELECT "to" AS node FROM kg_edges WHERE "from" = ? AND confidence >= ?`,
+      [a, MIN_CONFIDENCE]
+    ) || []
+    const inRows = db.allRows(
+      `SELECT "from" AS node FROM kg_edges WHERE "to" = ? AND confidence >= ?`,
+      [a, MIN_CONFIDENCE]
+    ) || []
+    for (const r of outRows) if (r && r.node) oneHop.add(r.node)
+    for (const r of inRows) if (r && r.node) oneHop.add(r.node)
+    if (oneHop.size === 0) return []
+
+    // Exclude A and all direct neighbours from the result set.
+    const excluded = new Set([a, ...oneHop])
+    const results = []
+    const seen = new Set()
+
+    for (const b of oneHop) {
+      const outB = db.allRows(
+        `SELECT "to" AS node, relation FROM kg_edges WHERE "from" = ? AND confidence >= ?`,
+        [b, MIN_CONFIDENCE]
+      ) || []
+      const inB = db.allRows(
+        `SELECT "from" AS node, relation FROM kg_edges WHERE "to" = ? AND confidence >= ?`,
+        [b, MIN_CONFIDENCE]
+      ) || []
+      for (const r of outB) {
+        if (!r || !r.node || excluded.has(r.node) || seen.has(r.node)) continue
+        seen.add(r.node)
+        results.push({ entity: r.node, via: b, relation: r.relation, hop: 2 })
+      }
+      for (const r of inB) {
+        if (!r || !r.node || excluded.has(r.node) || seen.has(r.node)) continue
+        seen.add(r.node)
+        results.push({ entity: r.node, via: b, relation: r.relation, hop: 2 })
+      }
+    }
+    return results.slice(0, limit)
+  } catch (e) {
+    log.warn('getSecondDegreeNeighbors failed:', e && e.message)
+    return []
+  }
+}
+
+// ─── Graph visualization data ──────────────────────────────────────────────
+// Return the full node + edge list for rendering the entity-relationship graph
+// in Settings. Nodes carry { id, label, type }; edges carry { source, target,
+// relation, confidence }.
+function getGraphData(db, opts = {}) {
+  try {
+    const nodeLimit = opts.nodeLimit || 200
+    const edgeLimit = opts.edgeLimit || nodeLimit * 4
+    const nodes = (db.allRows(
+      `SELECT entity, type FROM kg_nodes ORDER BY COALESCE(updated_at, created_at) DESC LIMIT ?`,
+      [nodeLimit]
+    ) || []).map(r => ({ id: r.entity, label: r.entity, type: r.type || 'entity' }))
+    const edges = (db.allRows(
+      `SELECT "from", "to", relation, confidence FROM kg_edges ORDER BY created_at DESC LIMIT ?`,
+      [edgeLimit]
+    ) || []).map(r => ({ source: r.from, target: r.to, relation: r.relation, confidence: r.confidence }))
+    return { nodes, edges }
+  } catch (e) {
+    log.warn('getGraphData failed:', e && e.message)
+    return { nodes: [], edges: [] }
+  }
+}
+
+// ─── Smart context injection ───────────────────────────────────────────────
+// Given the current user query, find entities that match it in the graph and
+// pull in their directly related entities. Returns a list of { entity, type,
+// hop, relation, via } entries (hop 0 = matched seed, hop 1 = related). Callers
+// can inject these as context alongside normal memory prefetch.
+function injectContext(db, userMessage, limit = 5) {
+  try {
+    const q = String(userMessage || '').trim()
+    if (!q) return []
+    const qkws = _keywords(q)
+    if (qkws.length === 0) return []
+
+    // Find entities matching the query keywords.
+    const matched = []
+    for (const kw of qkws) {
+      const rows = db.allRows(
+        `SELECT entity, type FROM kg_nodes WHERE LOWER(entity) LIKE ? LIMIT 5`,
+        [`%${kw}%`]
+      ) || []
+      for (const r of rows) {
+        if (r && r.entity && !matched.some(m => m.entity === r.entity)) matched.push(r)
+      }
+      if (matched.length >= limit) break
+    }
+    if (matched.length === 0) return []
+
+    // Expand to 1-hop related entities for context.
+    const result = []
+    const seen = new Set()
+    for (const m of matched) {
+      result.push({ entity: m.entity, type: m.type || 'entity', hop: 0, relation: null })
+      seen.add(m.entity)
+    }
+    for (const m of matched) {
+      const out = db.allRows(
+        `SELECT "to" AS node, relation FROM kg_edges WHERE "from" = ? AND confidence >= ?`,
+        [m.entity, MIN_CONFIDENCE]
+      ) || []
+      const inE = db.allRows(
+        `SELECT "from" AS node, relation FROM kg_edges WHERE "to" = ? AND confidence >= ?`,
+        [m.entity, MIN_CONFIDENCE]
+      ) || []
+      for (const r of out) {
+        if (!r || !r.node || seen.has(r.node)) continue
+        seen.add(r.node)
+        result.push({ entity: r.node, type: null, hop: 1, relation: r.relation, via: m.entity })
+      }
+      for (const r of inE) {
+        if (!r || !r.node || seen.has(r.node)) continue
+        seen.add(r.node)
+        result.push({ entity: r.node, type: null, hop: 1, relation: r.relation, via: m.entity })
+      }
+    }
+    return result.slice(0, limit)
+  } catch (e) {
+    log.warn('injectContext failed:', e && e.message)
+    return []
+  }
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function _keywords(text) {
   const t = String(text || '').toLowerCase()
@@ -191,4 +330,4 @@ function prune(db, maxAgeDays = 90) {
   } catch {}
 }
 
-module.exports = { buildGraph, searchGraph, prune }
+module.exports = { buildGraph, searchGraph, prune, getSecondDegreeNeighbors, getGraphData, injectContext }

@@ -3,4 +3,5 @@ module.exports = {
   symbolExtractor: require('./symbolExtractor'),
   dependencyGraph: require('./dependencyGraph'),
   projectIndexer: require('./projectIndexer'),
+  repoMap: require('./repoMap'),
 }

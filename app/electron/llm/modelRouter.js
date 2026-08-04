@@ -52,13 +52,26 @@ function routeTask(taskType, userMessage, historyLength) {
  * Suggest a model for a given task tier. Returns the best model name from
  * the provided list, or null if no suitable model exists.
  *
+ * When `options.autoMode` is true, the selection blends three signals into a
+ * single score so Arena ELO data feeds model selection (Task 3.3):
+ *   - Arena ELO (from the model_score table) — quality signal
+ *   - input price (from model.input_price_per_1k) — cost signal
+ *   - observed latency (from usage_log) — speed signal
+ * The relative weights are driven by `priority` ('quality' | 'speed' | 'cost').
+ *
  * @param {string} tier - 'fast' | 'standard' | 'thinking'
- * @param {Array} models - Array of { id, model_name, provider_id, is_primary }
- * @returns {{ modelName: string, modelId: number, rationale: string } | null}
+ * @param {Array} models - Array of { id, model_name, provider_id, is_primary, input_price_per_1k }
+ * @param {object} [options]
+ * @param {boolean} [options.autoMode=false] - enable ELO+price+latency blending
+ * @param {string}  [options.priority='quality'] - 'quality' | 'speed' | 'cost'
+ * @param {object}  [options.eloData] - Map/obj keyed by model_id → { score, win_count, total_count }
+ * @param {object}  [options.latencyData] - Map/obj keyed by model_id → avg latency ms
+ * @returns {{ modelName: string, modelId: number, rationale: string, eloScore: number|null, autoMode: boolean } | null}
  */
-function suggestModelForTier(tier, models) {
+function suggestModelForTier(tier, models, options = {}) {
   if (!models || !models.length) return null
   const pool = models.slice()
+  const { autoMode = false, priority = 'quality', eloData, latencyData } = options
 
   // 1) Find models matching the tier preference
   let candidates = pool
@@ -70,7 +83,48 @@ function suggestModelForTier(tier, models) {
   }
   // 'standard' uses the full pool (no filter)
 
-  // 2) Pick primary, or first enabled model
+  // 2) Auto mode: blend Arena ELO + price + latency into a single score.
+  //    Only kicks in when there are multiple candidates to choose between.
+  if (autoMode && candidates.length > 1) {
+    const weights = { quality: [0.6, 0.2, 0.2], speed: [0.3, 0.1, 0.6], cost: [0.3, 0.6, 0.1] }[priority] || [0.6, 0.2, 0.2]
+    const [wElo, wPrice, wLat] = weights
+
+    const scored = candidates.map(m => {
+      const elo = eloData?.[m.id]
+      // ELO ~1000 baseline; map 600..1400 → 0..100, neutral 50 when unknown.
+      const eloNorm = elo ? Math.max(0, Math.min(100, ((elo.score - 600) / 800) * 100)) : 50
+      // Confidence: only trust ELO after >=5 matches; otherwise pull toward neutral.
+      const conf = elo ? (elo.total_count >= 5 ? 1 : 0.4) : 0
+      const eloEffective = 50 + (eloNorm - 50) * conf
+
+      const price = m.input_price_per_1k ?? 0.003
+      const priceNorm = Math.max(0, Math.min(100, (0.01 / (price + 0.001)) * 10))
+
+      const latency = latencyData?.[m.id]
+      const latNorm = latency != null ? Math.max(0, Math.min(100, 100 - (latency / 5000) * 100)) : 50
+
+      const score = wElo * eloEffective + wPrice * priceNorm + wLat * latNorm
+      return { model: m, score, eloScore: elo?.score ?? null, eloTotal: elo?.total_count ?? 0 }
+    })
+
+    scored.sort((a, b) => (b.score - a.score) || ((b.model.is_primary ? 1 : 0) - (a.model.is_primary ? 1 : 0)))
+    const winner = scored[0]
+
+    const parts = [`auto mode (${priority})`]
+    if (winner.eloScore != null) {
+      parts.push(`ELO ${winner.eloScore.toFixed(0)}${winner.eloTotal >= 5 ? '' : ' (sparse)'}`)
+    }
+    parts.push(`score ${winner.score.toFixed(1)}`)
+    return {
+      modelName: winner.model.model_name,
+      modelId: winner.model.id,
+      rationale: parts.join(' · '),
+      eloScore: winner.eloScore,
+      autoMode: true,
+    }
+  }
+
+  // 3) Legacy path: pick primary, or first enabled model
   const pick = candidates.find(m => m.is_primary) || candidates[0]
   if (!pick) return null
 
@@ -79,7 +133,13 @@ function suggestModelForTier(tier, models) {
     standard: `${pick.model_name} (standard tier — balanced)`,
     thinking: `${pick.model_name} (thinking tier — complex reasoning)`,
   }
-  return { modelName: pick.model_name, modelId: pick.id, rationale: rationaleMap[tier] }
+  return {
+    modelName: pick.model_name,
+    modelId: pick.id,
+    rationale: rationaleMap[tier],
+    eloScore: eloData?.[pick.id]?.score ?? null,
+    autoMode: false,
+  }
 }
 
 /**

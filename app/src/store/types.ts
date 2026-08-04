@@ -330,9 +330,16 @@ export interface AppState {
   // Model routing priority (used by modelAdvisor to pick models).
   modelRoutingPriority: 'quality' | 'speed' | 'cost'
   setModelRoutingPriority: (v: 'quality' | 'speed' | 'cost') => Promise<void>
+  // Auto model routing: when enabled, suggestModelForTier blends Arena ELO +
+  // price + latency instead of only using the tier heuristic (Task 3.3).
+  modelAutoRoute: boolean
+  setModelAutoRoute: (v: boolean) => Promise<void>
   // Auto-commit after test-gate verification passes.
   autoCommitOnTestPass: boolean
   setAutoCommitOnTestPass: (v: boolean) => Promise<void>
+  // Auto-commit after each file change (write_file/edit_file/apply_patch).
+  autoCommitAfterFileChange: boolean
+  setAutoCommitAfterFileChange: (v: boolean) => Promise<void>
 
   // UI
   sidebarOpen: boolean

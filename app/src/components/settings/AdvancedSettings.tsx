@@ -18,6 +18,7 @@ export default function AdvancedSettings() {
   const titleModelId = useStore((s) => s.titleModelId)
   const allModels = useStore((s) => s.allModels)
   const autoCommitOnTestPass = useStore((s) => s.autoCommitOnTestPass)
+  const autoCommitAfterFileChange = useStore((s) => s.autoCommitAfterFileChange)
   const setMaxTokens = useStore((s) => s.setMaxTokens)
   const setTemperature = useStore((s) => s.setTemperature)
   const setTopP = useStore((s) => s.setTopP)
@@ -26,6 +27,7 @@ export default function AdvancedSettings() {
   const setTitleLanguage = useStore((s) => s.setTitleLanguage)
   const setTitleModel = useStore((s) => s.setTitleModel)
   const setAutoCommitOnTestPass = useStore((s) => s.setAutoCommitOnTestPass)
+  const setAutoCommitAfterFileChange = useStore((s) => s.setAutoCommitAfterFileChange)
 
   return (
     <>
@@ -86,6 +88,13 @@ export default function AdvancedSettings() {
               <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('settings.auto_commit_test_desc')}</p>
             </div>
             <input type="checkbox" checked={autoCommitOnTestPass} onChange={(e) => setAutoCommitOnTestPass(e.target.checked)} className="w-4 h-4 accent-black" />
+          </label>
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.auto_commit_file')}</span>
+              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('settings.auto_commit_file_desc')}</p>
+            </div>
+            <input type="checkbox" checked={autoCommitAfterFileChange} onChange={(e) => setAutoCommitAfterFileChange(e.target.checked)} className="w-4 h-4 accent-black" />
           </label>
           <div>
             <p className="text-sm mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.title_language')}</p>

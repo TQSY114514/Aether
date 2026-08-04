@@ -32,15 +32,10 @@ function record({ sessionId, turnId, toolCalls = [], planId = null, planStatus =
 function getRecent(sessionId, limit = 50) {
   if (!db) return []
   try {
-    const stmt = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?')
-    stmt.bind([sessionId, limit])
-    const rows = []
-    while (stmt.step()) {
-      const row = stmt.getAsObject()
+    const rows = db.prepare('SELECT * FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT ?').all(sessionId, limit)
+    for (const row of rows) {
       try { row.payload = JSON.parse(row.payload || '{}') } catch { row.payload = {} }
-      rows.push(row)
     }
-    stmt.free()
     return rows
   } catch { return [] }
 }
@@ -48,9 +43,7 @@ function getRecent(sessionId, limit = 50) {
 function getStats(sessionId) {
   if (!db) return { turns: 0, totalToolCalls: 0, avgLatencyMs: 0 }
   try {
-    const stmt = db.prepare('SELECT COUNT(*) as turns, SUM(json_array_length(payload, 0)) as toolCalls FROM agent_execution_log WHERE session_id = ?')
-    stmt.bind([sessionId])
-    const row = stmt.step() ? stmt.getAsObject() : {}; stmt.free()
+    const row = db.prepare('SELECT COUNT(*) as turns, SUM(json_array_length(payload, 0)) as toolCalls FROM agent_execution_log WHERE session_id = ?').get(sessionId) || {}
     return {
       turns: Number(row.turns) || 0,
       totalToolCalls: Number(row.toolCalls) || 0,

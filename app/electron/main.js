@@ -78,6 +78,7 @@ const { registerBackgroundHandlers } = require('./ipc/background.handler')
 const { registerConfigHandlers } = require('./ipc/config.handler')
 const { registerMcpHandlers } = require('./ipc/mcp.handler')
 const { registerAgentHandlers } = require('./ipc/agent.handler')
+const { registerGitHandlers } = require('./ipc/git.handler')
 const { registerSkillsHandlers } = require('./ipc/skills.handler')
 const { registerTaskHandlers } = require('./ipc/task.handler')
 const { registerCronHandlers } = require('./ipc/cron.handler')
@@ -226,9 +227,10 @@ function setupIpcHandlers() {
   registerConfigHandlers(ipcMain, db)
   registerMcpHandlers(ipcMain, db)
   registerAgentHandlers(ipcMain, db)
+  registerGitHandlers(ipcMain, db)
   registerSkillsHandlers(ipcMain, db)
   registerTaskHandlers(ipcMain, db, () => mainWindow?.webContents)
-  registerCronHandlers(ipcMain)
+  registerCronHandlers(ipcMain, db)
 
   // ── Evolution IPC ──
   ipcMain.handle('evolution:run-cycle', (_e, { strategy }) => {

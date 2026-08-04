@@ -186,6 +186,77 @@ describe('checkCommand', () => {
   })
 })
 
+// ─── checkCommand granular parameter checks (Task 1.3) ──────────────────────
+describe('checkCommand params (Task 1.3)', () => {
+  // git dangerous commands must be rejected
+  it.each([
+    'git clean -fd',
+    'git clean -fdx',
+    'git push --force',
+    'git push --force-with-lease',
+    'git push -f origin main',
+    'git reset --hard HEAD~1',
+    'git branch -D feature/x',
+  ])('rejects dangerous git command: %s', (cmd) => {
+    const r = sandbox.checkCommand(cmd)
+    expect(r.ok).toBe(false)
+  })
+
+  // git legal commands must pass
+  it.each([
+    'git status',
+    'git commit -m "update"',
+    'git diff',
+    'git log --oneline',
+  ])('allows safe git command: %s', (cmd) => {
+    const r = sandbox.checkCommand(cmd)
+    expect(r.ok).toBe(true)
+  })
+
+  // python -c dynamic execution
+  it.each([
+    `python -c "import os; os.system('rm -rf /')"`,
+    `python -c "import subprocess; subprocess.run(['ls'])"`,
+    `python3 -c "import socket"`,
+  ])('rejects python -c with unsafe code: %s', (cmd) => {
+    const r = sandbox.checkCommand(cmd)
+    expect(r.ok).toBe(false)
+  })
+
+  it('allows python -c with safe code', () => {
+    const r = sandbox.checkCommand(`python -c "print('hello')"`)
+    expect(r.ok).toBe(true)
+  })
+
+  // node -e dynamic execution
+  it.each([
+    `node -e "require('child_process').exec('ls')"`,
+    `node -e "process.exit(0)"`,
+  ])('rejects node -e with unsafe code: %s', (cmd) => {
+    const r = sandbox.checkCommand(cmd)
+    expect(r.ok).toBe(false)
+  })
+
+  it('allows node -e with safe code', () => {
+    const r = sandbox.checkCommand(`node -e "console.log('hi')"`)
+    expect(r.ok).toBe(true)
+  })
+
+  // npx packages
+  it('rejects npx with blocked package', () => {
+    const r = sandbox.checkCommand('npx rimraf dist')
+    expect(r.ok).toBe(false)
+  })
+
+  it.each([
+    'npx eslint src',
+    'npx create-next-app my-app',
+  ])('allows npx with safe package: %s', (cmd) => {
+    const r = sandbox.checkCommand(cmd)
+    expect(r.ok).toBe(true)
+  })
+})
+
 // ─── Workspace path validation ───────────────────────────────────────────────
 // defaultWorkspace() = path.join(app.getPath('userData'), 'workspace')
 //   = C:/Users/test/AppData/Aether/workspace

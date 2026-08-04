@@ -86,12 +86,8 @@ async function detectAndLearn({ db, provider, model, userMessage, assistantReply
 // Has this habit already been proposed to the user?
 function isProposed(db, key) {
   try {
-    const stmt = db.prepare('SELECT proposed FROM user_habit WHERE key=?')
-    stmt.bind([key])
-    let v = 0
-    if (stmt.step()) v = Number(stmt.getAsObject().proposed) || 0
-    stmt.free()
-    return v === 1
+    const row = db.prepare('SELECT proposed FROM user_habit WHERE key=?').get(key)
+    return Number(row?.proposed) === 1
   } catch { return false }
 }
 
@@ -104,6 +100,13 @@ function confirmHabit(db, key) {
   // Promote only the confirmed habit; leave others pending for future review.
   try { db.run('UPDATE user_habit SET proposed=2 WHERE key=?', [key]) } catch {}
   promoteToSkill(db)
+  // Task 4.2: bridge to skillSelfCreate — if the confirmed habit relates to any
+  // auto-drafted tool-pattern skill, promote it to the live skills dir so it is
+  // auto-applied (user preference → agent skill → applied).
+  try {
+    const row = readHabit(db, key)
+    if (row && row.imperative) require('./skillSelfCreate').promoteToLiveFromHabit(db, row.imperative)
+  } catch {}
 }
 
 // User dismissed → delete the habit so it never re-proposes.
@@ -126,10 +129,8 @@ function bumpOccurrence(db, key, imperative, reason) {
   } catch {}
   let occ = 0
   try {
-    const stmt = db.prepare('SELECT occurrences FROM user_habit WHERE key=?')
-    stmt.bind([key])
-    if (stmt.step()) occ = Number(stmt.getAsObject().occurrences) || 0
-    stmt.free()
+    const row = db.prepare('SELECT occurrences FROM user_habit WHERE key=?').get(key)
+    occ = Number(row?.occurrences) || 0
   } catch {}
   return occ
 }
@@ -170,13 +171,16 @@ ${body}
 
 function readHabits(db, minOccurrences = 1) {
   try {
-    const stmt = db.prepare('SELECT key, imperative, reason, occurrences FROM user_habit WHERE occurrences >= ? ORDER BY occurrences DESC, last_seen DESC')
-    stmt.bind([minOccurrences])
-    const rows = []
-    while (stmt.step()) rows.push(stmt.getAsObject())
-    stmt.free()
-    return rows
+    return db.prepare('SELECT key, imperative, reason, occurrences FROM user_habit WHERE occurrences >= ? ORDER BY occurrences DESC, last_seen DESC').all(minOccurrences)
   } catch { return [] }
+}
+
+// Read a single habit row by key (for the habitLearner ↔ skillSelfCreate bridge).
+function readHabit(db, key) {
+  try {
+    return db.prepare('SELECT key, imperative, reason, occurrences FROM user_habit WHERE key=?').get(key) || null
+  } catch {}
+  return null
 }
 
 // List all habits (UI-facing, for a future habits viewer).
