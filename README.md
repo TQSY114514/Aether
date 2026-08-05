@@ -4,7 +4,7 @@
 
 # AetherAI
 
-### A local-first, multi-model desktop AI workbench
+### Chat with any model, run a safe coding agent, compare models side-by-side — all on your machine
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -24,7 +24,11 @@
 > edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
 > [SECURITY.md](./SECURITY.md).
 
-Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — into one desktop app. An agent that reads/writes files and runs commands, a workspace sandbox, multi-model arena with ELO voting, skills, and 15 UI languages. Everything stored locally: API keys and conversations never leave your machine except to the providers you configure.
+Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — into one desktop app. Chat, run a coding agent, and compare models head-to-head in a multi-model arena with ELO voting.
+
+**Local-first by design.** API keys and conversations live in a local SQLite database and never leave your machine — except to the providers you configure.
+
+**Safe by default.** The built-in agent runs inside a workspace sandbox with a permission ladder: file and command access is confirmed before it happens, and every tool call is auditable.
 
 ---
 

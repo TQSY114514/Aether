@@ -4,7 +4,7 @@
 
 # AetherAI
 
-### Un atelier IA de bureau local-first et multi-modèles
+### Discutez avec n'importe quel modèle, exécutez un agent de codage sécurisé et comparez les modèles côte à côte — tout sur votre machine
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -22,7 +22,11 @@
 
 > **Statut : Beta.** AetherAI est un projet solo/passion. Il fonctionne, mais attendez-vous à des aspérités. Les rapports de bugs sont les bienvenus — voir [CONTRIBUTING.md](./CONTRIBUTING.md) et [SECURITY.md](./SECURITY.md).
 
-Unifiez plusieurs fournisseurs de LLM — OpenAI / Claude / DeepSeek / modèles locaux / tout point de terminaison compatible OpenAI — au sein d'une seule application de bureau. Un agent qui lit/écrit des fichiers et exécute des commandes, un sandbox d'espace de travail, une arène multi-modèles avec vote ELO, des skills, et 15 langues d'interface. Tout est stocké localement : les clés API et les conversations ne quittent jamais votre machine, sauf vers les fournisseurs que vous configurez.
+Unifiez plusieurs fournisseurs de LLM — OpenAI / Claude / DeepSeek / modèles locaux / tout point de terminaison compatible OpenAI — au sein d'une seule application de bureau. Discutez, exécutez un agent de codage et comparez les modèles en tête-à-tête dans une arène multi-modèles avec vote ELO.
+
+**Local d'abord par conception.** Les clés API et les conversations vivent dans une base de données SQLite locale et ne quittent jamais votre machine — sauf vers les fournisseurs que vous configurez.
+
+**Sécurisé par défaut.** L'agent intégré tourne dans un sandbox de workspace avec une échelle de permissions : l'accès aux fichiers et aux commandes est confirmé avant d'avoir lieu, et chaque appel d'outil est auditable.
 
 ---
 

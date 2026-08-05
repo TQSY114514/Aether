@@ -4,7 +4,7 @@
 
 # AetherAI
 
-### Un workbench de IA de escritorio local-first y multi-modelo
+### Chatea con cualquier modelo, ejecuta un agente de codificación seguro y compara modelos cara a cara — todo en tu máquina
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -24,7 +24,11 @@
 > algunas asperezas. Los informes de errores son bienvenidos — consulta
 > [CONTRIBUTING.md](./CONTRIBUTING.md) y [SECURITY.md](./SECURITY.md).
 
-Unifica múltiples proveedores de LLM — OpenAI / Claude / DeepSeek / modelos locales / cualquier endpoint compatible con OpenAI — en una sola aplicación de escritorio. Un agente que lee/escribe archivos y ejecuta comandos, un sandbox de workspace, arena multi-modelo con votación ELO, skills y 15 idiomas de UI. Todo se almacena localmente: tus claves API y conversaciones nunca salen de tu máquina excepto hacia los proveedores que configures.
+Unifica múltiples proveedores de LLM — OpenAI / Claude / DeepSeek / modelos locales / cualquier endpoint compatible con OpenAI — en una sola aplicación de escritorio. Chatea, ejecuta un agente de codificación y compara modelos cara a cara en una arena multi-modelo con votación ELO.
+
+**Local por diseño.** Las claves API y las conversaciones viven en una base de datos SQLite local y nunca salen de tu máquina, salvo hacia los proveedores que configures.
+
+**Seguro por defecto.** El agente integrado se ejecuta dentro de un sandbox de workspace con una escalera de permisos: el acceso a archivos y comandos se confirma antes de ejecutarse, y cada llamada de herramienta es auditable.
 
 ---
 

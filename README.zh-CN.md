@@ -4,7 +4,7 @@
 
 # AetherAI
 
-### 本地优先的多模型桌面 AI 工作台
+### 任意模型都能聊、安全编写代码 Agent、多模型横向对比——一切都在你的设备本地
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -22,7 +22,11 @@
 
 > **状态:Beta。** AetherAI 是个人/业余项目。它能用,但会有粗糙之处。欢迎提 bug——见 [CONTRIBUTING.md](./CONTRIBUTING.md) 和 [SECURITY.md](./SECURITY.md)。
 
-将多个 LLM 提供商——OpenAI / Claude / DeepSeek / 本地模型 / 任何 OpenAI 兼容端点——统一到一个桌面应用中。包含可读写文件并执行命令的 Agent、工作区沙箱、带 ELO 投票的多模型竞技场、Skills 以及 15 种界面语言。所有数据均存储在本地:API 密钥和对话除了发往你所配置的提供商外,绝不会离开你的电脑。
+将多个 LLM 提供商——OpenAI / Claude / DeepSeek / 本地模型 / 任何 OpenAI 兼容端点——统一到一个桌面应用中。聊天、运行编码 Agent、在带 ELO 投票的多模型竞技场里横向对比模型能力。
+
+**本地优先。** API 密钥和对话存储在本地 SQLite 中,除了发往你所配置的提供商外,绝不会离开你的电脑。
+
+**安全默认。** 内置 Agent 在工作区沙箱内运行并配有权限阶梯:文件和命令访问在执行前需确认,每次工具调用均可审计。
 
 ---
 

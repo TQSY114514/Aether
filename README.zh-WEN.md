@@ -4,7 +4,7 @@
 
 # AetherAI
 
-### A local-first, multi-model desktop AI workbench
+### 凡模型皆可談、可令安全編寫之 Agent、可並列比較諸模型——悉在汝機之上
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -22,7 +22,11 @@
 
 > **狀態：Beta。** AetherAI 乃一人所造之業餘之物，可用，然未盡善。若有闕漏，敬請告之——見 [CONTRIBUTING.md](./CONTRIBUTING.md) 與 [SECURITY.md](./SECURITY.md)。
 
-合諸 LLM 供應商於一器——OpenAI / Claude / DeepSeek / 本地模型 / 凡 OpenAI 相容之端——悉聚一桌面應用之中。所載 Agent 可讀寫檔案、執行指令，復有工作區沙箱、多模型競技場伴 ELO 投票、技能系統及十五種界面語。諸數據悉存本地：汝之 API 鑰與對談，除發往所設供應商外，決不外泄於他處。
+合諸 LLM 供應商於一器——OpenAI / Claude / DeepSeek / 本地模型 / 凡 OpenAI 相容之端——悉聚一桌面應用之中。可相談、可令編寫 Agent 運行、可於伴 ELO 投票之多模型競技場中並列比較諸模型。
+
+**本地為先。** 汝之 API 鑰與對談存於本地 SQLite 庫，除發往所設供應商外，決不外泄於他處。
+
+**安全為本。** 內置 Agent 於工作區沙箱中運行，並設許可階梯：文件與命令之存取，先確認而後行；凡工具之調用，皆可稽考。
 
 ---
 

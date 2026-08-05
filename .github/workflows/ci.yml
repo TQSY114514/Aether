@@ -25,5 +25,8 @@ jobs:
       - name: TypeScript check
         run: cd app && npx tsc --noEmit
 
+      - name: Run tests
+        run: cd app && npm test
+
       - name: Build renderer
         run: cd app && npx vite build
