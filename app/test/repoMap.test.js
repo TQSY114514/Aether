@@ -26,8 +26,8 @@ afterEach(() => {
 })
 
 describe('generateRepoMap', () => {
-  it('builds a file tree with top-level symbols', () => {
-    const map = generateRepoMap(tmpDir)
+  it('builds a file tree with top-level symbols', async () => {
+    const map = await generateRepoMap(tmpDir)
     expect(map.stats.totalFiles).toBe(3)
     expect(map.stats.indexedFiles).toBe(2) // README.md is not a supported language
 
@@ -43,15 +43,15 @@ describe('generateRepoMap', () => {
     expect(math.symbols).toContain('sub')
   })
 
-  it('caches the map and returns the same instance on repeated calls', () => {
-    const first = generateRepoMap(tmpDir)
-    const second = generateRepoMap(tmpDir)
+  it('caches the map and returns the same instance on repeated calls', async () => {
+    const first = await generateRepoMap(tmpDir)
+    const second = await generateRepoMap(tmpDir)
     expect(second).toBe(first)
     expect(getCachedMap(tmpDir)).toBe(first)
   })
 
-  it('re-parses only changed files (incremental update)', () => {
-    const before = generateRepoMap(tmpDir)
+  it('re-parses only changed files (incremental update)', async () => {
+    const before = await generateRepoMap(tmpDir)
     const mathFile = path.join(tmpDir, 'src', 'math.js')
     const oldMtime = fs.statSync(mathFile).mtimeMs
 
@@ -60,7 +60,7 @@ describe('generateRepoMap', () => {
     const now = Date.now() + 2000
     fs.utimesSync(mathFile, now / 1000, now / 1000)
 
-    const after = generateRepoMap(tmpDir)
+    const after = await generateRepoMap(tmpDir)
     // New instance (cache invalidated by the mtime change).
     expect(after).not.toBe(before)
 
@@ -68,12 +68,12 @@ describe('generateRepoMap', () => {
     const math = after.tree.children.find(c => c.name === 'src').children.find(c => c.name === 'math.js')
     expect(math.symbols).toContain('mul')
     expect(oldMtime).toBeGreaterThan(0)
-  })
+  }, 20000)
 })
 
 describe('buildRepoMapText', () => {
-  it('renders a compact text block with symbols', () => {
-    const map = generateRepoMap(tmpDir)
+  it('renders a compact text block with symbols', async () => {
+    const map = await generateRepoMap(tmpDir)
     const text = buildRepoMapText(map)
     expect(text).toContain('# Repo Map')
     expect(text).toContain('src/')

@@ -25,6 +25,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const { spawn, spawnSync } = require('child_process')
 const { runCommand, runCommandSync } = require('./exec')
 const { glob } = require('glob')
 const { checkWritePath, checkCommand } = require('./sandbox')
@@ -33,6 +34,63 @@ const { checkSSRF, checkSSRFHostname, ssrfFetchOptions } = require('./ssrf')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 const MAX_GREP_BYTES = 32 * 1024
+
+// ─── Ripgrep helper ─────────────────────────────────────────────────────────
+// Fast content search backed by `rg` when it's on PATH. Returns matched lines
+// (`path:line:content`) or null so the caller falls back to the sync loop (e.g.
+// rg unavailable, or a JS-only regex rg can't parse — rg exits 2 on that).
+let _rgAvailableCache = null
+function rgAvailable() {
+  if (_rgAvailableCache === null) {
+    try { _rgAvailableCache = spawnSync('rg', ['--version'], { windowsHide: true }).status === 0 } catch { _rgAvailableCache = false }
+  }
+  return _rgAvailableCache
+}
+
+function grepWithRipgrep({ cwd, glob: globPattern, pattern }) {
+  return new Promise((resolve) => {
+    const args = ['--line-number', '--no-heading', '--max-count=50']
+    if (globPattern) args.push('--glob', globPattern)
+    args.push('.')
+    let child
+    try { child = spawn('rg', args, { cwd: cwd || process.cwd(), windowsHide: true }) } catch { resolve(null); return }
+
+    let stdout = ''
+    let stderr = ''
+    let done = false
+    const finish = () => { if (!done) { done = true; resolve(stdout) } }
+    child.stdout.on('data', (d) => {
+      stdout += d.toString()
+      if (stdout.length > MAX_GREP_BYTES) { try { child.kill() } catch {}; finish() }
+    })
+    child.stderr.on('data', (d) => { stderr += d.toString() })
+    child.on('error', () => finish())
+    child.on('close', (code) => {
+      // Exit 2 = rg error (e.g. invalid/incompatible regex) → fall back.
+      if (code === 2 && !stdout) resolve(null)
+      else finish()
+    })
+    setTimeout(() => { if (!done) { try { child.kill() } catch {}; finish() } }, 15000)
+  })
+}
+
+function formatRipgrepLines(output, cwd) {
+  const hits = []
+  for (const line of output.split('\n')) {
+    if (!line) continue
+    const idx = line.indexOf(':')
+    if (idx < 0) { hits.push(line); continue }
+    const rest = line.slice(idx + 1)
+    const idx2 = rest.indexOf(':')
+    const lineno = idx2 >= 0 ? rest.slice(0, idx2) : ''
+    const content = idx2 >= 0 ? rest.slice(idx2 + 1) : ''
+    let rel = line.slice(0, idx)
+    if (cwd) { try { rel = path.relative(cwd, rel) || path.basename(rel) } catch {} }
+    hits.push(`${rel}:${lineno}: ${content.trim().slice(0, 200)}`)
+    if (hits.length >= 200) break
+  }
+  return hits.join('\n') || '(no matches)'
+}
 
 const TOOLS = [
   {
@@ -123,16 +181,25 @@ const TOOLS = [
       if (!pattern) throw new Error('pattern is required')
       let re
       try { re = new RegExp(pattern) } catch (e) { return `invalid regex: ${e.message}` }
+
+      // Fast path: ripgrep when available. Falls back automatically on missing
+      // `rg` or a regex rg can't parse.
+      if (rgAvailable()) {
+        const rgOut = await grepWithRipgrep({ cwd, glob: args.glob, pattern })
+        if (rgOut !== null) return formatRipgrepLines(rgOut, cwd)
+      }
+
+      // Fallback: sync scan (up to 2000 files / 200 hits).
       const files = await glob(args.glob || '**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
       const hits = []
-      outer: for (const f of files.slice(0, 500)) {
+      outer: for (const f of files.slice(0, 2000)) {
         try {
           const text = fs.readFileSync(f, 'utf-8')
           const lines = text.split('\n')
           for (let i = 0; i < lines.length; i++) {
             if (re.test(lines[i])) {
               hits.push(`${path.relative(cwd || path.dirname(f), f)}:${i + 1}: ${lines[i].trim().slice(0, 200)}`)
-              if (hits.length >= 50) break outer
+              if (hits.length >= 200) break outer
             }
           }
         } catch {}

@@ -112,13 +112,13 @@ function buildFileTree(files, rootDir, extractionByAbs) {
  * @param {{ force?: boolean }} [options]
  * @returns {{ rootDir: string, tree: object, files: Array<object>, stats: object, generatedAt: number }}
  */
-function generateRepoMap(rootDir, options = {}) {
-  if (!options.force && !isIndexStale(rootDir)) {
+async function generateRepoMap(rootDir, options = {}) {
+  if (!options.force && !(await isIndexStale(rootDir))) {
     const cached = getCachedMap(rootDir)
     if (cached) return cached
   }
 
-  const files = scanWorkspace(rootDir)
+  const files = await scanWorkspace(rootDir)
   const entry = ensureEntry(rootDir)
   const currentAbs = new Set(files.map(f => f.absPath))
 
@@ -200,11 +200,11 @@ function buildRepoMapText(map) {
  * Build a system-message object for the current workspace, generating the map
  * on first use (cached thereafter). Returns null when no workspace is set.
  */
-function buildRepoMapMessage(options = {}) {
+async function buildRepoMapMessage(options = {}) {
   const { getWorkspaceRoot } = require('../tools/sandbox')
   const root = getWorkspaceRoot()
   if (!root) return null
-  const text = buildRepoMapText(generateRepoMap(root, options))
+  const text = buildRepoMapText(await generateRepoMap(root, options))
   if (!text) return null
   return { role: 'system', content: text }
 }
@@ -222,14 +222,14 @@ function getCachedMap(rootDir) {
   return _cache.get(rootDir)?.map || null
 }
 
-function isIndexStale(rootDir) {
+async function isIndexStale(rootDir) {
   const entry = _cache.get(rootDir)
   if (!entry) return true
   // If git reports no changes, the cached map is still valid.
   const git = getChangedFiles(rootDir)
   if (git && git.changed.size === 0 && git.deleted.size === 0) return false
   try {
-    const files = scanWorkspace(rootDir)
+    const files = await scanWorkspace(rootDir)
     if (files.length === 0 && entry.map.files.length === 0) return false
     const newest = files.reduce((max, f) => Math.max(max, f.modified), 0)
     return newest > entry.mtime

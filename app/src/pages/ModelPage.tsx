@@ -90,6 +90,7 @@ export default function ModelPage() {
                 className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                 <option value="openai">OpenAI (/chat/completions)</option>
                 <option value="anthropic">Anthropic (/messages)</option>
+                <option value="responses">OpenAI Responses (/responses)</option>
               </select>
             </div>
             <div className="flex gap-2">

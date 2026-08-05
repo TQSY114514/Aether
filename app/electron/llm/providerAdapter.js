@@ -20,12 +20,14 @@
 
 const openaiAdapter = require('./openaiAdapter')
 const anthropicAdapter = require('./anthropicAdapter')
+const responsesAdapter = require('./responsesAdapter')
 
 // Dispatch by provider.api_format. Unknown formats fall back to 'openai' since
 // that is the de-facto common protocol most proxies speak.
 const DISPATCH = {
   openai: openaiAdapter,
   anthropic: anthropicAdapter,
+  responses: responsesAdapter,
 }
 
 function adapterFor(provider) {
