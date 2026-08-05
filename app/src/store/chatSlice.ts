@@ -8,6 +8,14 @@ import { ensureChunkListener, ensureToolCallListener, ensureLoopStateListener, s
 
 const _injectedMsgIds = new Set<number>()
 
+function clearStreaming(sid: number | null) {
+  return (s: AppState): Partial<AppState> => {
+    const next = { ...s.streamingBySession }
+    if (sid != null) delete next[sid]
+    return { streamingBySession: next, sending: Object.keys(next).length > 0 }
+  }
+}
+
 export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> = (set, get) => ({
   chatMode: "normal",
   sending: false,
@@ -30,7 +38,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   setChatMode: (mode) => {
     set({ chatMode: mode })
     if (mode !== "arena") {
-      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaResultsSessionId: null, arenaPending: 0, arenaError: null } as any)
+      set({ arenaVoted: false, arenaVoteWinnerId: null, arenaResults: [], arenaResultsSessionId: null, arenaPending: 0, arenaError: null })
     }
     if (mode === "arena" && !get().currentSessionId) {
       get().createSession().catch(() => {})
@@ -122,11 +130,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       if (result?.modelSuggestion) set({ modelSuggestion: result.modelSuggestion })
     } catch (err) {
       log.error("[AetherAI] chat.send FAILED:", err)
-      set((s) => {
-        const next = { ...s.streamingBySession }
-        delete next[currentSessionId]
-        return { streamingBySession: next, sending: Object.keys(next).length > 0 }
-      })
+      set(clearStreaming(currentSessionId))
       log.error("chat error", err)
     }
   },
@@ -175,11 +179,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     } finally {
       setStoppingSessionId(null)
     }
-    set((s) => {
-      const next = { ...s.streamingBySession }
-      if (sid0) delete next[sid0]
-      return { streamingBySession: next, sending: Object.keys(next).length > 0 }
-    })
+    set(clearStreaming(sid0))
   },
 
   continueMessage: async () => {
@@ -232,11 +232,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         systemPrefix,
       })
     } catch (err) {
-      set((s) => {
-        const next = { ...s.streamingBySession }
-        delete next[currentSessionId]
-        return { streamingBySession: next, sending: Object.keys(next).length > 0 }
-      })
+      set(clearStreaming(currentSessionId))
       log.error("regenerate error:", err)
     }
   },
@@ -270,11 +266,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         systemPrefix,
       })
     } catch (err) {
-      set((s) => {
-        const next = { ...s.streamingBySession }
-        delete next[currentSessionId]
-        return { streamingBySession: next, sending: Object.keys(next).length > 0 }
-      })
+      set(clearStreaming(currentSessionId))
       log.error("editMessage error:", err)
     }
   },
