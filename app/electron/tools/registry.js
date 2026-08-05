@@ -1254,32 +1254,17 @@ const TOOLS = [
   },
 ]
 
-// Decode entities left in scraped text. Covers named + numeric (dec/hex)
-// entities in one pass so the decode is complete, not a partial blacklist
-// (partial decodes both garble text and look like incomplete sanitizing).
-const HTML_ENTITIES = {
-  amp: '&', quot: '"', lt: '<', gt: '>', apos: "'", nbsp: ' ',
-  copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–',
-  lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', bull: '•', middot: '·',
-  cent: '¢', pound: '£', yen: '¥', euro: '€', sect: '§', para: '¶',
-  times: '×', divide: '÷', plusmn: '±', deg: '°', micro: 'µ', frac12: '½',
-}
-function decodeEntities(s) {
-  return s.replace(/&(?:([a-z][a-z0-9]+)|#(\d+)|#[xX]([0-9a-fA-F]+));/gi, (m, named, dec, hex) => {
-    if (named) return HTML_ENTITIES[named.toLowerCase()] ?? m
-    const cp = dec !== undefined ? Number(dec) : Number.parseInt(hex, 16)
-    return (cp > 0 && cp <= 0x10ffff) ? String.fromCodePoint(cp) : m
-  })
-}
-
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;
 // DDG markup changes occasionally, so we degrade to raw-text stripping.
+// Note: entities are intentionally left as-is — this text feeds the model via
+// the tool-loop, never the DOM, so decoding (&amp; → &) would only risk
+// re-introducing markup sequences.
 function extractDdgSnippets(html, q) {
   const snippets = []
   const re = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
   let m
   while ((m = re.exec(html)) && snippets.length < 5) {
-    const text = decodeEntities(m[1].replace(/<[^>]+>/g, '')).trim()
+    const text = m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     if (text) snippets.push(`- ${text}`)
   }
   if (snippets.length === 0) return `No snippets extracted for "${q}".`
