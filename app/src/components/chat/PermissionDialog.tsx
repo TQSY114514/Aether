@@ -144,7 +144,7 @@ export default function PermissionDialog() {
 
         {/* Diff preview for file-touching tools (Claude Code / Cline pattern) */}
         {['write_file', 'edit_file', 'apply_patch'].includes(req.name) && (() => {
-          const args = (req as any).args as Record<string, string> | undefined
+          const args = req.args as Record<string, string> | undefined
           if (!args) return null
           const oldLines = req.name === 'write_file' ? [] : (args.old_string || '').split('\n')
           const newLines = req.name === 'apply_patch'

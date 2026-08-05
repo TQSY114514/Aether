@@ -82,7 +82,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     }
     let msgs: Message[] = []
     try { msgs = await window.electronAPI.message.list(id) } catch (e) { log.error("preload", e) }
-    set({ currentSessionId: id, messages: msgs, arenaResults: [] } as any)
+    set({ currentSessionId: id, messages: msgs, arenaResults: [] })
     try {
       let cfg = await window.electronAPI.session.getConfig(id)
       if (!cfg || !cfg.modelId) {

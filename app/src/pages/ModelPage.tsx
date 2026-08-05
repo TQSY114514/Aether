@@ -22,7 +22,7 @@ export default function ModelPage() {
   const [showAddModel, setShowAddModel] = useState<number | null>(null)
   const [newModelName, setNewModelName] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null)
-  const [editData, setEditData] = useState({ name: '', api_url: '', api_key: '' })
+  const [editData, setEditData] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
 
   useEffect(() => { loadProviders() }, [loadProviders])
 
@@ -131,7 +131,7 @@ export default function ModelPage() {
                           <Save size={14} className="text-green-500" />
                         </button>
                       ) : (
-                        <button onClick={() => { setEditingProviderId(provider.id); setEditData({ name: provider.name, api_url: provider.api_url, api_key: provider.api_key }) }}
+                        <button onClick={() => { setEditingProviderId(provider.id); setEditData({ name: provider.name, api_url: provider.api_url, api_key: provider.api_key, api_format: provider.api_format || 'openai' }) }}
                           className="p-1 rounded hover:bg-[var(--border)] transition-colors">
                           <Edit2 size={14} className="text-gray-400" />
                         </button>
@@ -148,7 +148,16 @@ export default function ModelPage() {
                         <input value={editData.api_url} onChange={(e) => setEditData({ ...editData, api_url: e.target.value })}
                           placeholder="API URL" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)] mb-2 font-mono" style={{ borderColor: 'var(--accent)' }} />
                         <input value={editData.api_key} onChange={(e) => setEditData({ ...editData, api_key: e.target.value })}
-                          placeholder="API Key" type="password" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)] font-mono" style={{ borderColor: 'var(--accent)' }} />
+                          placeholder="API Key" type="password" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)] font-mono mb-2" style={{ borderColor: 'var(--accent)' }} />
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>{t('models.api_format')}</label>
+                          <select value={editData.api_format} onChange={(e) => setEditData({ ...editData, api_format: e.target.value })}
+                            className="flex-1 px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }}>
+                            <option value="openai">OpenAI (/chat/completions)</option>
+                            <option value="anthropic">Anthropic (/messages)</option>
+                            <option value="responses">OpenAI Responses (/responses)</option>
+                          </select>
+                        </div>
                       </>
                     ) : (
                       <>
