@@ -1254,12 +1254,22 @@ const TOOLS = [
   },
 ]
 
-// Decode the common HTML entities left in scraped text, one pass (avoids
-// double-decoding artifacts like "&amp;amp;").
-const ENTITY_DECODE_RE = /&(amp|quot|lt|gt|#39|nbsp);/gi
-const ENTITY_MAP = { amp: '&', quot: '"', lt: '<', gt: '>', '#39': "'", nbsp: ' ' }
+// Decode entities left in scraped text. Covers named + numeric (dec/hex)
+// entities in one pass so the decode is complete, not a partial blacklist
+// (partial decodes both garble text and look like incomplete sanitizing).
+const HTML_ENTITIES = {
+  amp: '&', quot: '"', lt: '<', gt: '>', apos: "'", nbsp: ' ',
+  copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–',
+  lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', bull: '•', middot: '·',
+  cent: '¢', pound: '£', yen: '¥', euro: '€', sect: '§', para: '¶',
+  times: '×', divide: '÷', plusmn: '±', deg: '°', micro: 'µ', frac12: '½',
+}
 function decodeEntities(s) {
-  return s.replace(ENTITY_DECODE_RE, (m, e) => ENTITY_MAP[e.toLowerCase()] ?? m)
+  return s.replace(/&(?:([a-z][a-z0-9]+)|#(\d+)|#[xX]([0-9a-fA-F]+));/gi, (m, named, dec, hex) => {
+    if (named) return HTML_ENTITIES[named.toLowerCase()] ?? m
+    const cp = dec !== undefined ? Number(dec) : Number.parseInt(hex, 16)
+    return (cp > 0 && cp <= 0x10ffff) ? String.fromCodePoint(cp) : m
+  })
 }
 
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;
