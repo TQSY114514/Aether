@@ -248,7 +248,9 @@ function runShellHook(hookPath, type, ctx) {
 
     const isWindows = process.platform === 'win32'
     const child = isWindows
-      ? spawn('cmd', ['/C', hookPath], {
+      // Quote the hook path so cmd never interprets metacharacters (&, |, ...)
+      // inside it as extra commands.
+      ? spawn('cmd', ['/C', `"${hookPath}"`], {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
             ...process.env,

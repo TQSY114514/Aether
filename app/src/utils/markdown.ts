@@ -3,6 +3,7 @@
 // 360 unused languages out of the bundle.
 
 import hljsCore from 'highlight.js/lib/core'
+import createDOMPurify from 'dompurify'
 import js from 'highlight.js/lib/languages/javascript'
 import ts from 'highlight.js/lib/languages/typescript'
 import py from 'highlight.js/lib/languages/python'
@@ -108,18 +109,18 @@ const HL_LANGS: Record<string, string> = {
   graphql: 'graphql', wasm: 'wasm', shellscript: 'bash',
 }
 
-// Strip event handler attributes from HTML to prevent XSS via malicious markdown.
-// on\w+ matches onerror, onmouseover, onload, onclick, etc. (the old on[a-z]
-// only matched on + 1 letter, so onerror=... slipped through).
-const EVENT_HANDLER_RE = /\s(on\w+\s*=\s*["'][^"']*["']|on\w+\s*=\s*[^\s>]+)/gi
+// DOMPurify whitelist sanitizer: strips scripts, event handlers, javascript:
+// URIs, and anything outside its tag/attr allowlist in a single parse. A
+// whitelist is far harder to bypass than the old regex blacklist, and keeps
+// every tag the markdown renderer emits (pre/code/table/button/input/...,
+// classes, inline styles and data-* attrs). Lazy-init so this module still
+// loads in non-DOM contexts (unit tests).
+let _purify: ReturnType<typeof createDOMPurify> | null = null
 
 function sanitizeHtml(html: string): string {
-  return html
-    .replace(EVENT_HANDLER_RE, '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<script[^>]*>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<style[^>]*>/gi, '')
+  if (typeof window === 'undefined') return html
+  if (!_purify) _purify = createDOMPurify(window)
+  return _purify.sanitize(html)
 }
 
 // Pre-compiled regexes (created once, reused on every call).
