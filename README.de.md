@@ -4,7 +4,7 @@
 
 # AetherAI
 
-### Eine local-first, multi-model Desktop-AI-Workbench
+### Mit jedem Modell chatten, einen sicheren Coding-Agenten ausführen, Modelle direkt vergleichen — alles auf Ihrem Rechner
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -22,7 +22,11 @@
 
 > **Status: Beta.** AetherAI ist ein Solo-/Hobbyprojekt. Es funktioniert, aber mit Ecken und Kanten. Fehlerberichte sind willkommen — siehe [CONTRIBUTING.md](./CONTRIBUTING.md) und [SECURITY.md](./SECURITY.md).
 
-AetherAI vereint mehrere LLM-Anbieter — OpenAI / Claude / DeepSeek / lokale Modelle / jeden OpenAI-kompatiblen Endpunkt — in einer einzigen Desktop-Anwendung. Ein Agent, der Dateien liest/schreibt und Befehle ausführt, eine Workspace-Sandbox, eine Multi-Model-Arena mit ELO-Abstimmung, Skills und 15 UI-Sprachen. Alles lokal gespeichert: API-Schlüssel und Konversationen verlassen Ihren Rechner nie, außer zu den von Ihnen konfigurierten Anbietern.
+AetherAI vereint mehrere LLM-Anbieter — OpenAI / Claude / DeepSeek / lokale Modelle / jeden OpenAI-kompatiblen Endpunkt — in einer einzigen Desktop-Anwendung. Chatten, einen Coding-Agenten ausführen und Modelle in einer Multi-Model-Arena mit ELO-Abstimmung direkt vergleichen.
+
+**Lokal zuerst.** API-Schlüssel und Konversationen liegen in einer lokalen SQLite-Datenbank und verlassen Ihren Rechner nie — außer zu den von Ihnen konfigurierten Anbietern.
+
+**Sicherheit standardmäßig.** Der integrierte Agent läuft in einer Workspace-Sandbox mit einer Berechtigungsleiter: Datei- und Befehlszugriffe werden vor der Ausführung bestätigt, und jeder Tool-Aufruf ist nachvollziehbar.
 
 ---
 
