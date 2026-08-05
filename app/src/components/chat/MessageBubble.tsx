@@ -72,7 +72,9 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
     const target = (e.target as HTMLElement).closest('.code-copy') as HTMLElement | null
     if (!target) return
     const raw = target.getAttribute('data-code') || ''
-    navigator.clipboard.writeText(raw.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'))
+    // getAttribute() already resolves HTML entities — decoding again here
+    // would corrupt code that literally contains e.g. "&amp;" (double-escape).
+    navigator.clipboard.writeText(raw)
     const prev = target.textContent
     target.textContent = 'Copied!'
     target.classList.add('copied')

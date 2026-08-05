@@ -275,7 +275,9 @@ const TOOLS = [
         if (!res.ok) return `[fetch failed: HTTP ${res.status}]`
         const ct = res.headers.get('content-type') || ''
         const raw = await res.text()
-        const text = ct.includes('html') ? raw.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[^>]*>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<style[^>]*>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
+        // Plain-text extraction: the full tag-strip below already removes
+        // script/style elements, so dedicated regexes for them are redundant.
+        const text = ct.includes('html') ? raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
         const marked = `<!-- EXTERNAL_WEB_FETCH -->\n${text.slice(0, 16384)}${text.length > 16384 ? '\n[truncated]' : ''}`
         return marked
       } catch (e) {
@@ -1252,6 +1254,14 @@ const TOOLS = [
   },
 ]
 
+// Decode the common HTML entities left in scraped text, one pass (avoids
+// double-decoding artifacts like "&amp;amp;").
+const ENTITY_DECODE_RE = /&(amp|quot|lt|gt|#39|nbsp);/gi
+const ENTITY_MAP = { amp: '&', quot: '"', lt: '<', gt: '>', '#39': "'", nbsp: ' ' }
+function decodeEntities(s) {
+  return s.replace(ENTITY_DECODE_RE, (m, e) => ENTITY_MAP[e.toLowerCase()] ?? m)
+}
+
 // Pull <a class="result__snippet"> text out of DDG's HTML results. Best-effort;
 // DDG markup changes occasionally, so we degrade to raw-text stripping.
 function extractDdgSnippets(html, q) {
@@ -1259,7 +1269,7 @@ function extractDdgSnippets(html, q) {
   const re = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
   let m
   while ((m = re.exec(html)) && snippets.length < 5) {
-    const text = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim()
+    const text = decodeEntities(m[1].replace(/<[^>]+>/g, '')).trim()
     if (text) snippets.push(`- ${text}`)
   }
   if (snippets.length === 0) return `No snippets extracted for "${q}".`

@@ -109,9 +109,12 @@ function startStaticServer(distDir) {
       const rawUrl = req.url.split('?')[0]   // strip query string (e.g. HMR hash)
       const reqPath = rawUrl === '/' ? '/index.html' : rawUrl
       const relative = reqPath.startsWith('/') ? reqPath.slice(1) : reqPath
-      const resolved = path.resolve(distDir, relative)
       const base = path.resolve(distDir)
-      if (!resolved.startsWith(base + path.sep) && resolved !== base) {
+      const resolved = path.resolve(base, relative)
+      const rel = path.relative(base, resolved)
+      // rel is relative & not starting with '..' iff resolved stays inside
+      // distDir; path.isAbsolute(rel) also catches cross-drive escapes.
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
         res.writeHead(403); res.end('Forbidden'); return
       }
       const fp = fs.existsSync(resolved) ? resolved : path.join(distDir, 'index.html')
