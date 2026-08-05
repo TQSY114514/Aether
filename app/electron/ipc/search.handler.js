@@ -122,11 +122,11 @@ function registerSearchHandlers(ipcMain, db) {
   })
 
   // Search files in the agent workspace by filename. Params: { query, root? }.
-  ipcMain.handle('search:files', (_e, { query, root } = {}) => {
+  ipcMain.handle('search:files', async (_e, { query, root } = {}) => {
     if (!query || !query.trim()) return []
     try {
       const rootDir = root || db.getSetting('agent_workspace_root') || ''
-      return db.searchFiles(query, rootDir) || []
+      return (await db.searchFiles(query, rootDir)) || []
     } catch (e) {
       log.warn('search:files failed:', e.message || e)
       return []
@@ -135,7 +135,7 @@ function registerSearchHandlers(ipcMain, db) {
 
   // Unified search across messages + memories + files, categorized. Params:
   // { query, sessionId?, root?, limit? }. Returns { messages, memories, files }.
-  ipcMain.handle('search:unified', (_e, { query, sessionId, root, limit } = {}) => {
+  ipcMain.handle('search:unified', async (_e, { query, sessionId, root, limit } = {}) => {
     if (!query || !query.trim()) return { messages: [], memories: [], files: [] }
     const lim = Math.max(1, Math.min(Number(limit) || 10, 50))
     try {
@@ -163,7 +163,7 @@ function registerSearchHandlers(ipcMain, db) {
         terms,
       }))
       const rootDir = root || db.getSetting('agent_workspace_root') || ''
-      const files = (db.searchFiles(query, rootDir, lim) || []).map((f) => ({
+      const files = ((await db.searchFiles(query, rootDir, lim)) || []).map((f) => ({
         ...f,
         terms,
       }))

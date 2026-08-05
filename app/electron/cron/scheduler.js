@@ -81,7 +81,7 @@ const USER_TASK_TYPES = {
     const root = config.root || db.getSetting('agent_workspace_root') || ''
     if (!root) { log.info('cron: code-review skipped (no workspace root configured)'); return }
     const { scanWorkspace } = require('../context/fileScanner')
-    const files = scanWorkspace(root)
+    const files = await scanWorkspace(root)
     log.info(`cron: code-review scanned ${files.length} files in ${root}`)
   },
   // Periodic dependency check: report dependency count from package.json.

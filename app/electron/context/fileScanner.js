@@ -1,5 +1,6 @@
 // ───────────────────────────────────────────────────────────────────────────
-// File Scanner — walks a workspace tree and collects file metadata.
+// File Scanner — asynchronously walks a workspace tree and collects metadata.
+// Async (fs.promises) so indexing a large repo never blocks the main process.
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
@@ -9,20 +10,19 @@ const DEFAULT_IGNORE = [
   'node_modules', '.git', 'dist', 'build', '__pycache__',
   '.next', 'coverage', '.venv', 'venv', 'vendor',
 ]
-const MAX_FILES = 5000
+const MAX_FILES = 20000
 const MAX_FILE_BYTES = 512 * 1024 // skip files > 512KB (binary/large assets)
 
 /**
  * Scan a workspace directory.
  * @param {string} rootDir - Absolute path to the workspace root.
  * @param {{ ignore?: string[], maxFiles?: number }} [options]
- * @returns {{ relPath: string, absPath: string, size: number, ext: string, modified: number }[]}
+ * @returns {Promise<{ relPath: string, absPath: string, size: number, ext: string, modified: number }[]>}
  */
-function scanWorkspace(rootDir, options = {}) {
+async function scanWorkspace(rootDir, options = {}) {
   const ignore = new Set(options.ignore || DEFAULT_IGNORE)
   const maxFiles = options.maxFiles || MAX_FILES
   const results = []
-  let count = 0
 
   // Build a "should skip" function from dir names + file extensions.
   const shouldSkip = (name, isDir) => {
@@ -32,19 +32,19 @@ function scanWorkspace(rootDir, options = {}) {
     return false
   }
 
-  function walk(dir) {
+  async function walk(dir) {
     if (results.length >= maxFiles) return
     let entries
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    try { entries = await fs.promises.readdir(dir, { withFileTypes: true }) } catch { return }
     for (const ent of entries) {
       if (results.length >= maxFiles) break
       if (shouldSkip(ent.name, ent.isDirectory())) continue
       const full = path.join(dir, ent.name)
       if (ent.isDirectory()) {
-        walk(full)
+        await walk(full)
       } else if (ent.isFile()) {
         let stat
-        try { stat = fs.statSync(full) } catch { continue }
+        try { stat = await fs.promises.stat(full) } catch { continue }
         if (stat.size > MAX_FILE_BYTES) continue
         const ext = path.extname(ent.name).toLowerCase()
         results.push({
@@ -58,8 +58,8 @@ function scanWorkspace(rootDir, options = {}) {
     }
   }
 
-  walk(rootDir)
+  await walk(rootDir)
   return results
 }
 
-module.exports = { scanWorkspace, DEFAULT_IGNORE }
+module.exports = { scanWorkspace, MAX_FILES, DEFAULT_IGNORE }

@@ -59,7 +59,7 @@ function registerAgentHandlers(ipcMain, db) {
       repoMap.invalidateCache(root)
       const graph = await projectIndexer.indexWorkspace(root)
       const graphStats = dependencyGraph.getStats(graph)
-      const map = repoMap.generateRepoMap(root, { force: true })
+      const map = await repoMap.generateRepoMap(root, { force: true })
       return { ok: true, stats: graphStats, repoMap: { totalFiles: map.stats.totalFiles, indexedFiles: map.stats.indexedFiles } }
     } catch (e) {
       return { ok: false, error: e.message }

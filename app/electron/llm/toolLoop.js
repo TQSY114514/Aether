@@ -283,7 +283,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Generated on first use and cached; incremental updates re-parse only
   // changed files. Best-effort — never blocks the loop on failure.
   try {
-    const repoMapMsg = buildRepoMapMessage()
+    const repoMapMsg = await buildRepoMapMessage()
     if (repoMapMsg) {
       const sysIdx = convo.findIndex(m => m.role === 'system')
       convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, repoMapMsg)

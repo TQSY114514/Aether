@@ -85,6 +85,7 @@ function initDatabase() {
   db.exec('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.exec("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  db.exec('CREATE TABLE IF NOT EXISTS repo_index_cache (workspace TEXT PRIMARY KEY, mtime_x REAL NOT NULL, graph_json TEXT NOT NULL)')
   try { db.exec("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN relation_entity TEXT") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN relation_type TEXT") } catch {}
@@ -814,11 +815,11 @@ function searchMemories(rawQuery) {
     return db.prepare("SELECT * FROM memory WHERE content LIKE ? ESCAPE '!' ORDER BY id DESC LIMIT 30").all(like)
   } catch { return [] }
 }
-function searchFiles(query, rootDir, limit = 30) {
+async function searchFiles(query, rootDir, limit = 30) {
   if (!rootDir || !query || !query.trim()) return []
   try {
     const { scanWorkspace } = require('./context/fileScanner')
-    const files = scanWorkspace(rootDir)
+    const files = await scanWorkspace(rootDir)
     const q = query.trim().toLowerCase()
     const results = []
     for (const f of files) {
@@ -829,6 +830,25 @@ function searchFiles(query, rootDir, limit = 30) {
     }
     return results
   } catch { return [] }
+}
+
+// ===== Repo Index Cache (persistent) =====
+function getRepoIndexCache(workspace) {
+  if (!db || !workspace) return null
+  try {
+    return db.prepare('SELECT mtime_x, graph_json FROM repo_index_cache WHERE workspace=?').get(workspace) || null
+  } catch { return null }
+}
+function setRepoIndexCache(workspace, mtimeX, graphJson) {
+  if (!db || !workspace) return
+  try {
+    db.prepare('INSERT INTO repo_index_cache (workspace, mtime_x, graph_json) VALUES (?, ?, ?) ON CONFLICT(workspace) DO UPDATE SET mtime_x=excluded.mtime_x, graph_json=excluded.graph_json')
+      .run(workspace, mtimeX, graphJson)
+  } catch {}
+}
+function deleteRepoIndexCache(workspace) {
+  if (!db || !workspace) return
+  try { db.prepare('DELETE FROM repo_index_cache WHERE workspace=?').run(workspace) } catch {}
 }
 
 // ===== Skill Lifecycle =====
@@ -871,6 +891,7 @@ module.exports = {
   addAgentCheckpoint, getAgentCheckpoint, markAgentCheckpointRolledBack, listAgentCheckpoints,
   getMoaPresets, getMoaPreset, addMoaPreset, deleteMoaPreset,
   searchMessages, searchMemories, searchFiles,
+  getRepoIndexCache, setRepoIndexCache, deleteRepoIndexCache,
   getSkillUsage, updateSkillState, pinSkill, applySkillTransitions,
   listCredentials: function(pid) { return require('./llm/credentialPool').listCredentials(pid) },
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },
