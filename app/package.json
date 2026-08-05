@@ -21,7 +21,7 @@
     "start": "electron .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "postinstall": "electron-rebuild -f -w better-sqlite3 || (echo [AetherAI] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.9",
@@ -35,7 +35,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.6.0",
+    "@electron/rebuild": "^4.2.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^5.2.0",
@@ -43,12 +43,20 @@
     "concurrently": "^8.2.0",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
-    "postcss": "^8.4.0",
+    "postcss": "^8.5.23",
     "sharp": "^0.35.3",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.8.0",
     "vite": "^8.1.5",
     "vitest": "^4.1.10",
     "wait-on": "^7.2.0"
+  },
+  "overrides": {
+    "fast-uri": "3.1.5",
+    "tar": "7.5.22",
+    "brace-expansion": "2.1.4",
+    "@electron/get": {
+      "undici": "7.29.0"
+    }
   }
 }
