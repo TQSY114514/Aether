@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
-import { Sparkles, RefreshCw, Search, BookOpen, Clock, Zap, Trophy, Wand2, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Sparkles, RefreshCw, Search, BookOpen, Clock, Zap, Trophy, Wand2, ShieldCheck, ShieldAlert, Power, FolderPlus } from 'lucide-react'
 
 type SkillEntry = { name: string; description: string; filePath: string; metadata?: Record<string, string>; usage?: { count: number; lastUsedAt: string | null } }
 type SkillStat = { name: string; totalUses: number; successes: number; successRate: number; lastResult: boolean }
@@ -13,16 +13,22 @@ export default function SkillsPage() {
   const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState('')
   const [showDrafts, setShowDrafts] = useState(false)
+  const [usageStates, setUsageStates] = useState<Record<string, string>>({})
+  const [stateBusy, setStateBusy] = useState<string | null>(null)
 
   const load = async () => {
     try {
-      const [list, skillStats] = await Promise.all([
+      const [list, skillStats, usage] = await Promise.all([
         window.electronAPI?.skills?.list?.().catch(() => []),
         window.electronAPI?.skills?.stats?.().catch(() => []),
+        window.electronAPI?.skills?.getUsage?.().catch(() => []),
       ])
       setSkills(list || [])
       setStats(skillStats || [])
-    } catch { setSkills([]); setStats([]) }
+      const m: Record<string, string> = {}
+      for (const u of (usage || [])) m[u.name] = u.state
+      setUsageStates(m)
+    } catch { setSkills([]); setStats([]); setUsageStates({}) }
   }
 
   useEffect(() => { load() }, [])
@@ -35,12 +41,33 @@ export default function SkillsPage() {
     } finally { setBusy(false) }
   }
 
+  const importDir = async () => {
+    setBusy(true)
+    try {
+      const res = await window.electronAPI?.skills?.importDir?.()
+      if (res?.ok) { await load(); toast(t('settings.skills.imported', String(res.count ?? 0)), { type: 'success' }) }
+      else if (res?.error) toast(res.error, { type: 'error' })
+    } finally { setBusy(false) }
+  }
+
   const autoDraft = async (name: string, description: string) => {
     setBusy(true)
     try {
       const res = await window.electronAPI?.skills?.autoDraft?.(name, description)
       if (res?.ok) { toast(t('settings.skills.drafted', name), { type: 'success' }); await load() }
     } finally { setBusy(false) }
+  }
+
+  const toggleState = async (name: string, current: string) => {
+    const next = current === 'archived' ? 'active' : 'archived'
+    setStateBusy(name)
+    try {
+      const res = await window.electronAPI?.skills?.updateState?.(name, next)
+      if (res?.ok) {
+        setUsageStates(prev => ({ ...prev, [name]: next }))
+        toast(t('settings.skills.state_updated', name), { type: 'success' })
+      }
+    } finally { setStateBusy(null) }
   }
 
   const statsMap = new Map(stats.map(s => [s.name, s]))
@@ -67,6 +94,12 @@ export default function SkillsPage() {
             style={{ borderColor: 'var(--border)' }}>
             <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
             {t('settings.skills.rescan', '重新扫描')}
+          </button>
+          <button onClick={importDir} disabled={busy}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
+            style={{ borderColor: 'var(--border)' }}>
+            <FolderPlus size={12} />
+            {t('settings.skills.import', '导入目录')}
           </button>
         </div>
 
@@ -129,6 +162,16 @@ export default function SkillsPage() {
                         )}
                       </div>
                     </div>
+                    <button onClick={() => toggleState(s.name, usageStates[s.name] || 'active')} disabled={stateBusy === s.name}
+                      title={usageStates[s.name] === 'archived' ? t('settings.skills.enable') : t('settings.skills.disable')}
+                      className={`flex items-center gap-1 shrink-0 px-2 py-1 text-[10px] rounded-lg border transition-colors disabled:opacity-50 ${stateBusy === s.name ? 'opacity-50' : ''}`}
+                      style={{
+                        borderColor: usageStates[s.name] === 'archived' ? 'var(--border)' : 'var(--accent)',
+                        color: usageStates[s.name] === 'archived' ? 'var(--text-muted)' : 'var(--accent)',
+                      }}>
+                      <Power size={10} />
+                      {usageStates[s.name] === 'archived' ? t('settings.skills.enable') : t('settings.skills.disable')}
+                    </button>
                   </div>
                 </div>
               )
