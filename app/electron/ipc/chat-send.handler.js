@@ -83,12 +83,14 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
 
   ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })
 
-  // ── Synchronous completion for external clients ──────────────────────────
+// ── Synchronous completion for external clients ──────────────────────────
   // Used by the local gateway (VS Code extension, browser/scripts). Unlike
   // chat:send (which streams to the Electron window), this returns the full
   // text as the invoke result. Reuses an existing session when one is given,
   // otherwise creates a short-lived session so the exchange shows up in Aether.
-  ipcMain.handle('chat:complete', async (_e, { content, modelId = null, sessionId = null, context = '', systemPrefix = '' }) => {
+  // Exported as a named function so the local gateway can proxy it directly
+  // (ipcMain.handle channels are invisible to ipcMain.listeners).
+  async function handleChatComplete(_event, { content, modelId = null, sessionId = null, context = '', systemPrefix = '' }) {
     const text = String(content || '').trim()
     if (!text) return { error: 'content is required' }
     try {
@@ -134,7 +136,8 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
     } catch (e) {
       return { error: e && e.message ? e.message : String(e) }
     }
-  })
+  }
+ipcMain.handle('chat:complete', handleChatComplete)
 
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
     // Backstop guard: if a tool loop is active for this session, buffer the message
@@ -544,6 +547,10 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
     }
     try { db.renameSession(sessionId, title) } catch (e) { log.warn('renameSession failed:', e.message) }
   }
+
+  // Expose the synchronous-completion handler so the local gateway can proxy it
+  // directly (ipcMain.handle channels are invisible to ipcMain.listeners).
+  return { handleChatComplete }
 }
 
 module.exports = { registerChatSendHandler }

@@ -17,6 +17,20 @@ const TOKEN_HEADER = 'X-AetherAI-Token'
 let _server = null
 let _token = null
 let _db = null
+// Explicitly registered proxy handlers. ipcMain.handle() channels are NOT
+// visible to ipcMain.listeners(), so channels proxied via the gateway must be
+// registered here by the module that owns them (see main.js setupIpcHandlers).
+const _handlers = new Map()
+
+// Register a handler for a gateway-exposed channel. `handler` has the same
+// shape as an ipcMain.handle listener: (event, ...args) => value | Promise.
+function registerHandler(channel, handler) {
+  _handlers.set(channel, handler)
+}
+
+function unregisterHandler(channel) {
+  _handlers.delete(channel)
+}
 
 // Generate a random token and store it in settings.
 function _ensureToken(db) {
@@ -32,7 +46,9 @@ function _ensureToken(db) {
 
 // Middleware: check auth.
 function _auth(req) {
-  const token = req.headers[TOKEN_HEADER] || req.url.match(/[?&]token=([^&]+)/)?.[1]
+  // Node lowercases all incoming header names, so look up the token header
+  // case-insensitively (TOKEN_HEADER as written would never match).
+  const token = req.headers[TOKEN_HEADER.toLowerCase()] || req.url.match(/[?&]token=([^&]+)/)?.[1]
   return token === _token
 }
 
@@ -65,20 +81,28 @@ function start(db, port = DEFAULT_PORT) {
     req.on('data', (d) => { body += d })
     req.on('end', () => {
       let args = []
-      try { args = body ? JSON.parse(body) : [] } catch { args = [body] }
+      try {
+        const parsed = body ? JSON.parse(body) : null
+        // Normalize the body to an args array: a JSON array maps to positional
+        // args, a JSON object is passed as a single (first) positional arg so
+        // handlers can destructure it — e.g. chat:complete's (event, { content }).
+        args = parsed == null ? [] : (Array.isArray(parsed) ? parsed : [parsed])
+      } catch { args = [body] }
 
       // Map query params to args for GET requests.
       if (req.method === 'GET') {
         args = Array.from(url.searchParams.entries()).map(([k, v]) => v)
       }
 
-      const handler = ipcMain.listeners(channel)?.[0]
+      // Prefer the explicitly-registered proxy handlers (handle() channels are
+      // not visible to ipcMain.listeners), then fall back to .on() listeners.
+      const handler = _handlers.get(channel) || ipcMain.listeners(channel)?.[0]
       if (!handler) {
         // Check for channel:action pattern
         const parts = channel.split(':')
         const act = parts.pop()
         const ch = parts.join(':')
-        const h2 = ipcMain.listeners(`${ch}:${act}`)?.[0]
+        const h2 = _handlers.get(`${ch}:${act}`) || ipcMain.listeners(`${ch}:${act}`)?.[0]
         if (!h2) { res.writeHead(404); res.end(JSON.stringify({ error: `Channel not found: ${channel}` })); return }
         Promise.resolve(h2(null, ...args)).then(r => { res.writeHead(200); res.end(JSON.stringify(r || { ok: true })) }).catch(e => { res.writeHead(500); res.end(JSON.stringify({ error: e.message })) })
         return
@@ -114,4 +138,4 @@ function getOrCreateToken(db) {
 
 function getPort() { return _server?.address()?.port || DEFAULT_PORT }
 
-module.exports = { start, stop, isRunning, getToken, getOrCreateToken, getPort, DEFAULT_PORT }
+module.exports = { start, stop, isRunning, getToken, getOrCreateToken, getPort, registerHandler, unregisterHandler, DEFAULT_PORT }
