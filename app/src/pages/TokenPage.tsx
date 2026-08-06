@@ -36,6 +36,15 @@ export default function TokenPage() {
   const [daily, setDaily] = useState<any[]>([])
   const [log, setLog] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [tlSummary, setTlSummary] = useState<any>(null)
+  const [tlByTool, setTlByTool] = useState<any[]>([])
+
+  useEffect(() => {
+    Promise.all([
+      window.electronAPI.usage.toolLoopSummary(),
+      window.electronAPI.usage.toolLoopByTool(),
+    ]).then(([s, bt]) => { setTlSummary(s); setTlByTool(bt || []) }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const r = rangeToIso(range)
@@ -167,6 +176,40 @@ export default function TokenPage() {
             </div>
           )}
         </Section>
+
+        {/* Agent tool-loop observability */}
+        {tlSummary && tlSummary.runs > 0 && (
+          <Section title="Agent Tool Loop">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <Tile small label="运行次数" value={fmt(tlSummary.runs)} />
+              <Tile small label="平均迭代" value={String(tlSummary.avgIterations)} />
+              <Tile small label="平均耗时" value={`${tlSummary.avgDurationMs}ms`} />
+              <Tile small label="错误率" value={tlSummary.runs ? `${Math.round((tlSummary.errorRuns / tlSummary.runs) * 100)}%` : '0%'} />
+            </div>
+            {tlByTool.length > 0 && (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ color: 'var(--text-muted)' }}>
+                    <th className="text-left px-2 py-1 font-medium">工具</th>
+                    <th className="text-right px-2 py-1 font-medium">调用</th>
+                    <th className="text-right px-2 py-1 font-medium">平均耗时</th>
+                    <th className="text-right px-2 py-1 font-medium">成功率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tlByTool.map((r, i) => (
+                    <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                      <td className="px-2 py-1 font-mono truncate max-w-[160px]" style={{ color: 'var(--text-primary)' }}>{r.tool_name}</td>
+                      <td className="px-2 py-1 text-right" style={{ color: 'var(--text-secondary)' }}>{r.calls}</td>
+                      <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-muted)' }}>{Math.round(r.avg_duration_ms || 0)}ms</td>
+                      <td className="px-2 py-1 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{Math.round(((r.ok || 0) / (r.calls || 1)) * 100)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Section>
+        )}
       </div>
       )}
     </div>

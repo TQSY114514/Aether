@@ -186,7 +186,7 @@ export interface AppState {
   appendArenaResult: (sessionId: number, result: ArenaResult) => void
   // Per-message tool-call invocations, keyed by the assistant messageId the
   // tool belongs to. Each entry is the list of tool calls for that message.
-  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null }[]>
+  toolCallsByMessage: Record<number, { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null }[]>
   // Per-message agent plan steps (the assistant's reasoning each round).
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string; kind?: 'plan' | 'act' | 'observe' }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).

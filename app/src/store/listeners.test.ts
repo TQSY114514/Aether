@@ -136,16 +136,19 @@ describe("tool call listener", () => {
     expect(calls[0].args).toEqual({ a: 2 })
   })
 
-  it("appends when the name differs or a result is present", () => {
+  it("appends when the name differs, and replaces only the matching running placeholder", () => {
     const msgId = 6
     toolCb!({ messageId: msgId, sessionId: 1, tool: { name: "read_file", args: {}, result: null, error: null } })
     // Different name -> append.
     toolCb!({ messageId: msgId, sessionId: 1, tool: { name: "grep", args: {}, result: null, error: null } })
     expect(useStore.getState().toolCallsByMessage[msgId]).toHaveLength(2)
 
-    // Same name but WITH a result -> append (not deduped).
+    // Same name as the current running placeholder (a started placeholder) ->
+    // replace it with the completion entry, not append a duplicate.
     toolCb!({ messageId: msgId, sessionId: 1, tool: { name: "grep", args: {}, result: "found", error: null } })
-    expect(useStore.getState().toolCallsByMessage[msgId]).toHaveLength(3)
+    const calls = useStore.getState().toolCallsByMessage[msgId]
+    expect(calls).toHaveLength(2)
+    expect(calls[1].result).toBe("found")
   })
 })
 

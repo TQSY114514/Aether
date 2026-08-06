@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null; diff?: string | null; afterSnapshot?: { path: string; content: string; truncated: boolean } | null }
+type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; afterSnapshot?: { path: string; content: string; truncated: boolean } | null }
 
 const FAILURE_LABELS: Record<string, string> = {
   timeout: 'tool.failure.timeout',
@@ -54,6 +54,23 @@ function argsCount(args: unknown): number {
 export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const [open, setOpen] = useState(false)
   const [rollbackState, setRollbackState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const running = tool.result == null && tool.error == null
+  // Live elapsed timer while the tool is running (Feature C). Only ticks when a
+  // startedAt timestamp is present; once the tool completes we fall back to the
+  // server-reported latencyMs, so this state is just for the running phase.
+  const [elapsed, setElapsed] = useState<number | null>(null)
+  useEffect(() => {
+    const started = tool.startedAt
+    if (!running || started == null) { setElapsed(null); return }
+    setElapsed(Math.max(0, Date.now() - started))
+    const iv = setInterval(() => setElapsed(Math.max(0, Date.now() - started)), 500)
+    return () => clearInterval(iv)
+  }, [running, tool.startedAt])
+  // Long results default to a collapsed single line with a click-to-expand
+  // toggle (Feature C2). Short results render fully as before.
+  const [collapsed, setCollapsed] = useState(true)
+  const resultText = tool.result ?? ''
+  const isLongResult = resultText.length > 300 || resultText.split('\n').length > 6
   const status = tool.error
     ? { icon: AlertCircle, color: 'var(--error)', label: t('tool.status.failed') }
     : tool.result != null
@@ -87,8 +104,11 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
           <span className="text-[9px] px-1 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: 'rgba(234,179,8,0.15)', color: 'var(--warning)' }}>{t(failureKey)}</span>
         )}
         <span className="ml-auto flex items-center gap-2">
-          {tool.latencyMs != null && tool.result != null && (
+          {tool.result != null && tool.latencyMs != null && (
             <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{tool.latencyMs < 1000 ? `${tool.latencyMs}ms` : `${(tool.latencyMs/1000).toFixed(1)}s`}</span>
+          )}
+          {running && elapsed != null && (
+            <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{(elapsed/1000).toFixed(1)}s</span>
           )}
           <span className="flex items-center gap-1" style={{ color: status.color }}>
             <StatusIcon size={11} />{status.label}
@@ -106,7 +126,33 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
           {tool.result != null && (
             <div>
               <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.result')}</div>
-              <pre className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto" style={{ color: 'var(--text-secondary)' }}>{tool.result}</pre>
+              {isLongResult && collapsed ? (
+                <>
+                  <pre className="text-[11px] font-mono whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: 'var(--text-secondary)' }} title={resultText}>{resultText.split('\n')[0]}</pre>
+                  <button
+                    type="button"
+                    onClick={() => setCollapsed(false)}
+                    className="inline-flex items-center gap-1 mt-1 text-[10px] hover:text-[var(--text-primary)]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    <ChevronDown size={10} />{t('tool.result.expand')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <pre className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto" style={{ color: 'var(--text-secondary)' }}>{tool.result}</pre>
+                  {isLongResult && (
+                    <button
+                      type="button"
+                      onClick={() => setCollapsed(true)}
+                      className="inline-flex items-center gap-1 mt-1 text-[10px] hover:text-[var(--text-primary)]"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      <ChevronRight size={10} />{t('tool.result.collapse')}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
           {/* Diff preview — shown for write_file / edit_file / apply_patch (Claude Code-style) */}
