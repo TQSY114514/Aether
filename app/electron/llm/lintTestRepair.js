@@ -185,6 +185,7 @@ module.exports = {
   FILE_TOOLS,
   shouldRunOnTool,
   check,
+  runOne,
   buildRepairContext,
   runLintAndRepair,
   detectProjectType,
