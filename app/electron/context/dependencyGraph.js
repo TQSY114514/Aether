@@ -17,6 +17,7 @@ function buildGraph(files) {
       imports: f.imports || [],
       exports: f.exports || [],
       symbols: f.symbols || [],
+      symbolLocs: f.symbolLocs || [],
       size: f.size || 0,
       language: f.language || 'unknown',
     })

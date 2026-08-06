@@ -1053,6 +1053,49 @@ const TOOLS = [
     },
   },
   {
+    // ─── Symbol lookup (LSP-lite) ─────────────────────────────────────────────
+    // Dedicated, focused lookup of where a symbol (function/class/const) is
+    // defined across the indexed workspace, with line numbers. Read-only.
+    // ──────────────────────────────────────────────────────────────────────────
+    name: 'find_symbol',
+    description: 'Find where a symbol (function/class/const) is defined and used across the indexed workspace. Returns file paths with line numbers.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The symbol name to find (a function, class, or const).' },
+        language: { type: 'string', description: 'Optional: filter results to a single language (e.g. javascript, python, rust, go, java).' },
+      },
+      required: ['name'],
+    },
+    run: async (args, ctx) => {
+      const { getWorkspaceRoot } = require('./sandbox')
+      const root = getWorkspaceRoot(ctx?.sessionId)
+      if (!root) return 'no workspace configured'
+      const projectIndexer = require('../context/projectIndexer')
+      const graph = await projectIndexer.indexWorkspace(root)
+      const target = String(args.name || '').trim()
+      if (!target) return '(no symbol name provided)'
+      const langFilter = String(args.language || '').trim().toLowerCase()
+
+      const results = []
+      for (const node of graph.files.values()) {
+        if (langFilter && String(node.language || '').toLowerCase() !== langFilter) continue
+        const syms = node.symbols || []
+        const locs = node.symbolLocs || []
+        for (let i = 0; i < syms.length; i++) {
+          if (syms[i] !== target) continue
+          const loc = locs[i]
+          const line = loc && loc.locStart ? loc.locStart : 1
+          results.push(`${node.path}:${line}  ${syms[i]}`)
+        }
+      }
+
+      if (!results.length) return `(no matches for "${target}")`
+      return results.slice(0, 50).join('\n')
+    },
+  },
+  {
     name: 'delegate_task',
     description: 'Delegate one or more independent sub-tasks to sub-agents that run in parallel, each with its own tool loop and iteration budget. Use for: researching multiple files/topics at once, or any set of independent gather/analyze steps. Each sub-task returns a concise result. Dangerous: sub-agents can run tools (read/write/command), so this is permission-gated. Provide focused, self-contained task descriptions.',
     risk: 'dangerous',
@@ -1216,6 +1259,48 @@ const TOOLS = [
       if (result.error) {
         lines.unshift(`错误: ${result.error}`)
       }
+      return lines.join('\n')
+    },
+  },
+  {
+    // Test-first workflow (RED→GREEN). Orchestrates a model-driven test-first
+    // loop: writes a failing test for the goal, then asks the model for the
+    // implementation to make it pass, re-running the test up to MAX_FIX_CYCLES.
+    // Preferred over debug_loop when the goal is to implement a feature. If the
+    // project has no test framework, it returns skipped and the model naturally
+    // falls back to debug_loop for post-write verification.
+    name: 'test_first',
+    description: 'Run a test-first (RED→GREEN) workflow for the current workspace. Writes a failing test targeting the goal, then asks the model for the implementation to make it pass, re-running the project\'s test command up to 3 cycles. Dangerous: writes test/implementation files and executes the test command. Use when the goal is to implement a feature.',
+    risk: 'dangerous',
+    executionMode: 'sequential',
+    parameters: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'The feature or behavior to implement (the user\'s goal).' },
+      },
+      required: ['goal'],
+    },
+    run: async (args, ctx) => {
+      const { runTestFirst } = require('../../electron/llm/testFirst')
+      const goal = String(args.goal || '').trim()
+      const result = await runTestFirst({
+        provider: ctx.provider,
+        model: ctx.model,
+        signal: ctx.signal,
+        sessionId: ctx.sessionId,
+        db: ctx.db,
+        onStatus: ctx.onStatus,
+        goal,
+      })
+      if (result.skipped) {
+        return `⚠ test_first 已跳过: ${result.reason || 'no test framework'}。请改用 debug_loop 进行常规验证。`
+      }
+      if (result.success) {
+        return `✅ test-first 完成: ${result.summary} (${result.cycles} 轮)`
+      }
+      const lines = [`❌ test-first 未完成 (${result.cycles} 轮)`]
+      if (result.error) lines.push(`错误: ${result.error}`)
+      lines.push('可改用 debug_loop 继续调试。')
       return lines.join('\n')
     },
   },
