@@ -12,18 +12,60 @@ let _eloMutex = Promise.resolve()
 
 // ─── API Key Encryption (safeStorage) ─────────────────────────────────────
 
+let _warnedNoEncryption = false
+
 function encryptKey(plain) {
-  if (!plain || !safeStorage.isEncryptionAvailable()) return plain
+  if (!plain) return plain
+  if (!safeStorage.isEncryptionAvailable()) {
+    if (!_warnedNoEncryption) {
+      _warnedNoEncryption = true
+      log.warn('[database] safeStorage 不可用，API Key 将明文存储（系统级加密不可用）')
+    }
+    return plain
+  }
   try {
     return safeStorage.encryptString(String(plain)).toString('base64')
   } catch { return plain }
 }
 
 function decryptKey(encoded) {
-  if (!encoded || !safeStorage.isEncryptionAvailable()) return encoded
+  if (!encoded) return encoded
+  if (!safeStorage.isEncryptionAvailable()) return encoded
   try {
     return safeStorage.decryptString(Buffer.from(encoded, 'base64'))
   } catch { return encoded }
+}
+
+// A safeStorage-encrypted value is pure base64 (alphabet + padding); a legacy
+// plaintext API key almost always contains characters outside that alphabet
+// (e.g. "sk-..."), so this heuristic reliably flags unencrypted leftovers.
+function isBase64String(s) {
+  if (!s || typeof s !== 'string') return false
+  if (s.length % 4 !== 0) return false
+  return /^[A-Za-z0-9+/]*={0,2}$/.test(s)
+}
+
+function isPlaintextKey(stored) {
+  return !!stored && !isBase64String(stored)
+}
+
+// Idempotent startup migration: re-encrypt any legacy plaintext API keys once
+// system-level encryption (safeStorage) is available. Returns how many were
+// migrated. Safe to call repeatedly.
+function migrateLegacyPlaintextKeys() {
+  if (!db || !safeStorage.isEncryptionAvailable()) return 0
+  const rows = db.prepare('SELECT id, api_key FROM provider').all()
+  let migrated = 0
+  for (const r of rows) {
+    if (!r.api_key || !isPlaintextKey(r.api_key)) continue
+    try {
+      const enc = safeStorage.encryptString(String(r.api_key)).toString('base64')
+      db.prepare('UPDATE provider SET api_key = ? WHERE id = ?').run(enc, r.id)
+      migrated++
+    } catch { /* skip un-migratable row */ }
+  }
+  if (migrated) log.info(`[database] 迁移了 ${migrated} 个明文 API Key 到 safeStorage 加密`)
+  return migrated
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -86,6 +128,8 @@ function initDatabase() {
   db.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.exec("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
   db.exec('CREATE TABLE IF NOT EXISTS repo_index_cache (workspace TEXT PRIMARY KEY, mtime_x REAL NOT NULL, graph_json TEXT NOT NULL)')
+  db.exec('CREATE TABLE IF NOT EXISTS tool_loop_run (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, duration_ms INTEGER, iterations INTEGER, input_tokens INTEGER, output_tokens INTEGER, error_kind TEXT)')
+  db.exec('CREATE TABLE IF NOT EXISTS tool_call_sample (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER, tool_name TEXT, duration_ms INTEGER, success INTEGER)')
   try { db.exec("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN relation_entity TEXT") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN relation_type TEXT") } catch {}
@@ -180,16 +224,6 @@ function initDatabase() {
     latency_ms INTEGER,
     status INTEGER,
     source TEXT,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`)
-
-  db.exec(`CREATE TABLE IF NOT EXISTS moa_preset (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    description TEXT,
-    references_config TEXT NOT NULL,
-    aggregator_model_id INTEGER NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
@@ -365,6 +399,7 @@ function createSession({ title = '新会话', persona_id = null }) {
   const info = db.prepare('INSERT INTO session (title, persona_id, updated_at, is_placeholder) VALUES (?, ?, ?, 1)').run(title, persona_id, localNow())
   return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
+
 function pruneEmptySessions() {
   db.prepare(`DELETE FROM session WHERE is_placeholder = 1 AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`).run()
 }
@@ -725,15 +760,6 @@ function updateMcpServer(id, data) {
 }
 function deleteMcpServer(id) { db.prepare('DELETE FROM mcp_server WHERE id = ?').run(id) }
 
-// ===== MoA Presets =====
-function getMoaPresets() { try { return db.prepare('SELECT * FROM moa_preset ORDER BY id ASC').all() } catch { return [] } }
-function getMoaPreset(id) { try { return db.prepare('SELECT * FROM moa_preset WHERE id = ?').get(id) || null } catch { return null } }
-function addMoaPreset({ name, description, references_config, aggregator_model_id }) {
-  const info = db.prepare('INSERT INTO moa_preset (name, description, references_config, aggregator_model_id) VALUES (?, ?, ?, ?)').run(name, description || '', JSON.stringify(references_config), aggregator_model_id)
-  return { lastInsertRowid: Number(info.lastInsertRowid) }
-}
-function deleteMoaPreset(id) { db.prepare('DELETE FROM moa_preset WHERE id = ?').run(id) }
-
 // ===== FTS Full-text Search =====
 // CJK bigram tokenizer (shared with ipc/search.handler.js). FTS5's unicode61
 // tokenizer doesn't split CJK ideographs, so queries are transformed into
@@ -889,7 +915,6 @@ module.exports = {
   addAuditLog, getAuditLog,
   addCheckpoint, getCheckpoints, deleteCheckpoints, deleteCheckpoint,
   addAgentCheckpoint, getAgentCheckpoint, markAgentCheckpointRolledBack, listAgentCheckpoints,
-  getMoaPresets, getMoaPreset, addMoaPreset, deleteMoaPreset,
   searchMessages, searchMemories, searchFiles,
   getRepoIndexCache, setRepoIndexCache, deleteRepoIndexCache,
   getSkillUsage, updateSkillState, pinSkill, applySkillTransitions,
@@ -900,5 +925,5 @@ module.exports = {
   run: (...args) => { if (db) db.prepare(args[0]).run(...args.slice(1)) },
   exec: (...args) => db ? db.exec(...args) : [],
   allRows: (sql, params = []) => { if (!db) return []; return db.prepare(sql).all(...params) },
-  encryptKey, decryptKey,
+  encryptKey, decryptKey, isPlaintextKey, migrateLegacyPlaintextKeys,
 }
