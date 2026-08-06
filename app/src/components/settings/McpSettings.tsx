@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { Plus, Trash2, RefreshCw, Plug, Server } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Plug, Server, Store, Search, Download, ChevronDown, Globe } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 type McpServer = { id: number; name: string; command: string; args: string[]; env: Record<string, string>; enabled: number }
+type MarketServer = { name: string; title: string; description: string; version: string; repositoryUrl: string | null; installable: boolean; config: { name: string; command: string; args: string[]; env: Record<string, string> } | null }
 
 // ───────────────────────────────────────────────────────────────────────────
 // MCP server management UI (settings page card).
@@ -18,6 +19,11 @@ export default function McpSettings() {
   const [showAdd, setShowAdd] = useState(false)
   const [busy, setBusy] = useState<number | 'new' | null>(null)
   const [form, setForm] = useState({ name: '', command: '', args: '', env: '' })
+  const [marketOpen, setMarketOpen] = useState(false)
+  const [marketLoading, setMarketLoading] = useState(false)
+  const [marketServers, setMarketServers] = useState<MarketServer[]>([])
+  const [marketQuery, setMarketQuery] = useState('')
+  const [installing, setInstalling] = useState<string | null>(null)
   const { toast } = useUI()
 
   const load = async () => {
@@ -59,6 +65,34 @@ export default function McpSettings() {
     await window.electronAPI.mcp.delete(id)
     toast(t('mcp.deleted'))
     await load()
+  }
+
+  const loadMarket = async (query?: string) => {
+    setMarketLoading(true)
+    try {
+      const name = (query ?? '').trim()
+      const res = name ? await window.electronAPI.market.search(name) : await window.electronAPI.market.list()
+      setMarketServers(res?.servers || [])
+    } catch { setMarketServers([]) } finally { setMarketLoading(false) }
+  }
+
+  const toggleMarket = () => {
+    const next = !marketOpen
+    setMarketOpen(next)
+    if (next) loadMarket()
+  }
+
+  const handleInstall = async (entry: MarketServer) => {
+    setInstalling(entry.name)
+    try {
+      const res = await window.electronAPI.market.install(entry)
+      if (res.success) {
+        toast(t('mcp.market.installed', entry.title))
+        await load()
+      } else {
+        toast(res.error || t('mcp.market.install_failed'), { type: 'error' })
+      }
+    } finally { setInstalling(null) }
   }
 
   return (
@@ -108,6 +142,61 @@ export default function McpSettings() {
             </div>
           )
         })}
+      </div>
+
+      {/* Browse market */}
+      <div className="mt-4" style={{ borderTop: '1px solid var(--border)' }}>
+        <button onClick={toggleMarket} className="w-full flex items-center justify-between py-3 text-xs font-medium transition-colors" style={{ color: 'var(--text-primary)' }}>
+          <span className="flex items-center gap-2">
+            <Store size={14} className="text-gray-400" />
+            {t('mcp.market.title')}
+          </span>
+          <ChevronDown size={14} className={`text-gray-400 transition-transform ${marketOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {marketOpen && (
+          <div className="space-y-2 pb-1">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+              <Search size={12} className="text-gray-400 shrink-0" />
+              <input value={marketQuery} onChange={(e) => { const v = e.target.value; setMarketQuery(v); loadMarket(v) }} placeholder={t('mcp.market.search_ph')}
+                className="w-full bg-transparent outline-none text-xs" style={{ color: 'var(--text-primary)' }} />
+            </div>
+
+            {marketLoading ? (
+              <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>{t('mcp.market.loading')}</p>
+            ) : marketServers.length === 0 ? (
+              <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>{t('mcp.market.empty')}</p>
+            ) : (
+              marketServers.map((m) => {
+                const isInstalling = installing === m.name
+                return (
+                  <div key={m.name} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{m.title}</span>
+                        {m.version && <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>{t('mcp.market.version', m.version)}</span>}
+                        {!m.installable && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(156,163,175,0.15)', color: 'var(--text-muted)' }}>{t('mcp.market.not_installable')}</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] mt-0.5 line-clamp-2" style={{ color: 'var(--text-secondary)' }}>{m.description}</p>
+                      {m.repositoryUrl && (
+                        <a href={m.repositoryUrl} target="_blank" rel="noreferrer" className="text-[10px] flex items-center gap-1 mt-1 hover:underline" style={{ color: 'var(--accent)' }}>
+                          <Globe size={9} />{t('mcp.market.repository')}
+                        </a>
+                      )}
+                    </div>
+                    {m.installable && (
+                      <button onClick={() => handleInstall(m)} disabled={isInstalling} className="flex items-center gap-1 px-2.5 py-1 text-[10px] rounded-lg bg-black text-white hover:opacity-80 disabled:opacity-40 shrink-0">
+                        <Download size={10} className={isInstalling ? 'animate-spin' : ''} />{t('mcp.market.install')}
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

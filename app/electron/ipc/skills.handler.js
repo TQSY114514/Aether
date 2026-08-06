@@ -1,5 +1,19 @@
+const { dialog, app } = require('electron')
+const fs = require('fs')
+const path = require('path')
 const skills = require('../llm/skills')
 const habitLearner = require('../llm/habitLearner')
+
+// Recursively copy a skill directory into the user-global skills root.
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true })
+  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, ent.name)
+    const d = path.join(dest, ent.name)
+    if (ent.isDirectory()) copyDir(s, d)
+    else fs.copyFileSync(s, d)
+  }
+}
 
 function registerSkillsHandlers(ipcMain, db) {
   // List discovered skills — includes usage stats and metadata from frontmatter.
@@ -54,6 +68,41 @@ function registerSkillsHandlers(ipcMain, db) {
   })
   ipcMain.handle('skills:pin', (_e, name, pinned) => {
     db.pinSkill(name, pinned); return { ok: true }
+  })
+
+  // Import a skill directory selected by the user: copies <name>/SKILL.md into
+  // the user-global skills root, then rescans so it becomes available.
+  ipcMain.handle('skills:importDir', async () => {
+    try {
+      const res = await dialog.showOpenDialog({ properties: ['openDirectory'], title: '选择要导入的技能目录' })
+      if (res.canceled || !res.filePaths || !res.filePaths[0]) return { ok: false, canceled: true }
+      const src = res.filePaths[0]
+      const targetRoot = path.join(app.getPath('userData'), 'skills')
+      fs.mkdirSync(targetRoot, { recursive: true })
+
+      // The selected dir itself may be a skill (<dir>/SKILL.md) or contain
+      // subdirectories each holding a SKILL.md.
+      const candidates = []
+      if (fs.existsSync(path.join(src, 'SKILL.md'))) candidates.push(src)
+      else {
+        let entries = []
+        try { entries = fs.readdirSync(src, { withFileTypes: true }) } catch {}
+        for (const ent of entries) {
+          if (ent.isDirectory() && !ent.name.startsWith('.')) candidates.push(path.join(src, ent.name))
+        }
+      }
+
+      let copied = 0
+      for (const c of candidates) {
+        if (!fs.existsSync(path.join(c, 'SKILL.md'))) continue
+        copyDir(c, path.join(targetRoot, path.basename(c)))
+        copied++
+      }
+      if (copied) skills.scanSkills()
+      return { ok: true, count: copied }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
   })
 
   ipcMain.handle('commands:list', () => {
