@@ -8,8 +8,8 @@ import { serializeGraph, deserializeGraph } from '../electron/context/indexCache
 
 const sampleGraph = () => ({
   files: new Map([
-    ['/repo/a.js', { path: '/repo/a.js', imports: ['b'], exports: ['foo'], symbols: ['foo'], size: 10, language: 'javascript' }],
-    ['/repo/b.js', { path: '/repo/b.js', imports: [], exports: ['bar'], symbols: ['bar'], size: 20, language: 'javascript' }],
+    ['/repo/a.js', { path: '/repo/a.js', imports: ['b'], exports: ['foo'], symbols: ['foo'], symbolLocs: [{ name: 'foo', locStart: 1, locEnd: 3 }], size: 10, language: 'javascript' }],
+    ['/repo/b.js', { path: '/repo/b.js', imports: [], exports: ['bar'], symbols: ['bar'], symbolLocs: [{ name: 'bar', locStart: 4, locEnd: 4 }], size: 20, language: 'javascript' }],
   ]),
   edges: [{ from: '/repo/a.js', to: '/repo/b.js', type: 'imports' }],
 })
@@ -24,6 +24,8 @@ describe('serializeGraph / deserializeGraph', () => {
     expect(revived.files.size).toBe(2)
     expect(revived.files.get('/repo/a.js').exports).toEqual(['foo'])
     expect(revived.files.get('/repo/b.js').language).toBe('javascript')
+    // symbolLocs round-trips through serialization.
+    expect(revived.files.get('/repo/a.js').symbolLocs).toEqual([{ name: 'foo', locStart: 1, locEnd: 3 }])
     // edges preserved.
     expect(revived.edges).toEqual([{ from: '/repo/a.js', to: '/repo/b.js', type: 'imports' }])
   })

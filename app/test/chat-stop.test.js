@@ -1,4 +1,4 @@
-﻿// Regression test: chat:stop must abort both the plain streaming path and the
+// Regression test: chat:stop must abort both the plain streaming path and the
 // tool-loop path, preserve accumulated content as 'aborted', and leave the
 // session usable for another send. Guards the fullContent-scope crash where
 // the abort catch referenced a try-local variable (ReferenceError).
@@ -73,7 +73,6 @@ function installStubs() {
         '../llm/auditLog': { setDb: () => {} },
         '../llm/modelAdvisor': { suggestModelExplained: () => null },
         '../llm/modelRouter': {},
-        '../llm/moa': { maybeRunMoA: async () => null },
         '../logger': { warn: () => {}, debug: () => {}, info: () => {}, error: () => {} },
         '../llm/steering': {},
         '../llm/trajectory': { getStats: () => ({}) },

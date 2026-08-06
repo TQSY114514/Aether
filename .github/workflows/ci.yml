@@ -33,3 +33,17 @@ jobs:
 
       - name: Build renderer
         run: cd app && npx vite build
+
+      - name: E2E launch smoke test
+        # A real check, but kept non-blocking so a flaky environment (native
+        # module / GPU / display issues on the runner) never breaks normal CI.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          cd app
+          # npm ci --ignore-scripts skips Electron's binary download; fetch it
+          # here so the smoke test actually launches the built app.
+          if (-not (Test-Path node_modules\electron\dist\electron.exe)) {
+            node node_modules/electron/install.js
+          }
+          npm run test:e2e
