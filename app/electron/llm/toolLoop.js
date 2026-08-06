@@ -19,6 +19,7 @@ const { safeParseToolCallArgs, validateToolArgs } = require('./toolArgs')
 const { applyMiddleware, enrichWithSummary } = require('./toolResultMiddleware')
 const { classifyError } = require('./errorClassify')
 const toolCache = require('./toolCache')
+const toolMetrics = require('./toolLoopMetrics')
 const checkpointMgr = require('./checkpointManager')
 const { generateDiff, generateAfterSnapshot } = require('../tools/toolImpact')
 const { buildProjectContextMessage, invalidateCache } = require('./projectInstructions')
@@ -257,6 +258,11 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
   const budget = externalBudget || new IterationBudget(maxIterations)
   budget.start()
+
+  // Observability: open a run row up-front so tool samples can reference it,
+  // finalize it with real values on every exit path.
+  const loopStart = Date.now()
+  const metricsRunId = toolMetrics.recordRun({ sessionId })
 
   // Phase 4: Initialize permission policy from agent mode.
   const permissionPolicy = new permissions.PermissionPolicy(
@@ -578,6 +584,13 @@ Reply in this format:
             if (tool.risk === 'dangerous') {
               try { entry.checkpointId = checkpoints.createCheckpoint({ sessionId, messageId: messageId || tc.id, toolName: fn.name, args }) } catch {}
             }
+            // Feature C: emit a "started" placeholder before running the tool so
+            // the UI can render the call immediately with a live elapsed timer.
+            // The renderer replaces this placeholder with the completion entry
+            // below (both carry the same name). Blocked / validation-failed tools
+            // (entry.error already set) are NOT emitted here — they're reported
+            // later in the allExecuted loop.
+            try { onToolCall?.({ name: fn.name, args, result: null, error: null, risk: tool.risk, latencyMs: null, startedAt: Date.now() }) } catch {}
             const t0 = Date.now()
             // Tool cache: skip execution if we already have a result for this
             // exact call in this turn (idempotent read-only tools only).
@@ -590,6 +603,7 @@ Reply in this format:
               if (!r.error) toolCache.set(fn.name, args, r.result)
             }
             entry.latencyMs = cached.hit ? 0 : Date.now() - t0
+            try { toolMetrics.recordTool({ runId: metricsRunId, toolName: fn.name, ms: entry.latencyMs, success: !r.error }) } catch {}
             if (r.error) {
               entry.error = r.error
               entry.failure_kind = classifyToolError(r.error).kind
@@ -751,6 +765,12 @@ Reply in this format:
     // Event stream: agent end
     eventStream.agentEnd({ sessionId, finalStatus, totalIterations: budget.used })
     steering.setRunning(sessionId, false)
+    try {
+      toolMetrics.updateRun(metricsRunId, {
+        iterations: budget.used, durationMs: Date.now() - loopStart,
+        inputTokens: budget.tokens || 0, errorKind: finalStatus === 'success' ? null : finalStatus,
+      })
+    } catch {}
     if (onAudit) {
       try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus, planId: plan?.id, planStatus: plan?.tasks?.map(t => t.status) }) } catch {}
     }
@@ -761,6 +781,12 @@ Reply in this format:
   }
   eventStream.agentEnd({ sessionId, finalStatus: 'budget_exhausted', totalIterations: budget.used })
   steering.setRunning(sessionId, false)
+  try {
+    toolMetrics.updateRun(metricsRunId, {
+      iterations: budget.used, durationMs: Date.now() - loopStart,
+      inputTokens: budget.tokens || 0, errorKind: 'budget_exhausted',
+    })
+  } catch {}
   try { onStatus?.({ kind: 'budget_exhausted', text: `已达到最大迭代次数 ${budget.maxTotal}，已停止` }) } catch {}
   // Audit log: record the complete agent turn.
   if (onAudit) {

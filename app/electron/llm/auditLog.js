@@ -44,10 +44,21 @@ function getStats(sessionId) {
   if (!db) return { turns: 0, totalToolCalls: 0, avgLatencyMs: 0 }
   try {
     const row = db.prepare('SELECT COUNT(*) as turns, SUM(json_array_length(payload, 0)) as toolCalls FROM agent_execution_log WHERE session_id = ?').get(sessionId) || {}
+    // Average tool latency over the most recent turns (best-effort).
+    const recent = db.prepare('SELECT payload FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT 50').all(sessionId)
+    let totalLatency = 0
+    let latencies = 0
+    for (const r of recent) {
+      let p
+      try { p = JSON.parse(r.payload || '{}') } catch { continue }
+      for (const tc of (p.toolCalls || [])) {
+        if (typeof tc.latencyMs === 'number') { totalLatency += tc.latencyMs; latencies++ }
+      }
+    }
     return {
       turns: Number(row.turns) || 0,
       totalToolCalls: Number(row.toolCalls) || 0,
-      avgLatencyMs: 0,
+      avgLatencyMs: latencies ? Math.round(totalLatency / latencies) : 0,
     }
   } catch { return { turns: 0, totalToolCalls: 0, avgLatencyMs: 0 } }
 }
