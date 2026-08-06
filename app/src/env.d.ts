@@ -10,6 +10,22 @@ interface MarketServer {
   config: { name: string; command: string; args: string[]; env: Record<string, string> } | null
 }
 
+// One row of the agent_execution_log audit table as returned by the
+// usage:agent-history IPC (payload parsed into an object).
+interface AgentExecutionTurn {
+  id: number
+  session_id: number
+  turn_id: number
+  created_at: string
+  payload: {
+    toolCalls: { name: string; args: unknown; result?: string; error?: string | null; latencyMs?: number }[]
+    planId?: string | number | null
+    planStatus?: string | null
+    totalIterations?: number
+    finalStatus?: string
+  }
+}
+
 interface Window {
   electronAPI: {
     provider: {
@@ -64,8 +80,9 @@ interface Window {
     }
     chat: {
       send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: { suggestedModelId: number | null; reason: string; confidence: number } | null }>
+      complete: (params: { content: string; modelId?: number | null; sessionId?: number | null; context?: string; systemPrefix?: string }) => Promise<{ content?: string; sessionId?: number; messageId?: number; error?: string }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
-      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null; checkpointId?: number | null; diff?: string | null; after_snapshot?: { path: string; content: string; truncated: boolean } | null } }) => void) => () => void
+      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; after_snapshot?: { path: string; content: string; truncated: boolean } | null } }) => void) => () => void
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string; kind?: 'plan' | 'act' | 'observe' } }) => void) => () => void
       onTodoUpdate: (callback: (payload: { messageId: number; sessionId: number; todos: { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[] }) => void) => () => void
       onStatus: (callback: (payload: { messageId: number; sessionId: number; text: string; kind?: string }) => void) => () => void
@@ -129,6 +146,10 @@ interface Window {
       set: (dataUrl: string | null) => Promise<{ success: boolean; hasImage?: boolean; error?: string }>
       get: () => Promise<string | null>
     }
+    gateway: {
+      info: () => Promise<{ enabled: boolean; port: number; token: string | null; running: boolean }>
+      setEnabled: (enabled: boolean) => Promise<{ ok: boolean; running: boolean }>
+    }
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
       import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
@@ -164,6 +185,7 @@ interface Window {
       getUsage: () => Promise<{ name: string; use_count: number; last_used_at: string | null; state: string; pinned: number; created_by: string; patch_count: number; last_viewed_at: string | null; archived_at: string | null }[]>
       updateState: (name: string, state: string) => Promise<{ ok: boolean }>
       pin: (name: string, pinned: boolean) => Promise<{ ok: boolean }>
+      importDir: () => Promise<{ ok: boolean; count?: number; error?: string }>
     }
     search: {
       messages: (query: string, sessionId?: number) => Promise<{ id: number; session_id: number; role: string; content: string; model_used: string | null; created_at: string; session_title?: string; terms?: string[] }[]>
@@ -174,11 +196,6 @@ interface Window {
         memories: { id: number; content: string; type: string; created_at: string; source_session_id: number | null; confidence: number; terms?: string[] }[]
         files: { relPath: string; absPath: string; size: number; ext: string; modified: number; terms?: string[] }[]
       }>
-    }
-    moa: {
-      getPresets: () => Promise<{ id: number; name: string; description: string; references_config: string; aggregator_model_id: number; enabled: number; created_at: string }[]>
-      addPreset: (name: string, description: string, references: { model_id: number }[], aggregatorModelId: number) => Promise<{ lastInsertRowid: number }>
-      deletePreset: (id: number) => Promise<void>
     }
     commands: {
       list: () => Promise<{ id: string; name: string; description: string; prompt: string }[]>
@@ -200,6 +217,11 @@ interface Window {
       byModel: (range?: { since?: string; until?: string }) => Promise<{ model_name: string; requests: number; total_tokens: number; cost: number }[]>
       daily: (range?: { since?: string; until?: string }) => Promise<{ day: string; requests: number; total_tokens: number; cost: number }[]>
       log: (range?: { since?: string; until?: string; limit?: number }) => Promise<any[]>
+      toolLoopSummary: (limit?: number) => Promise<{ runs: number; avgDurationMs: number; avgIterations: number; totalInputTokens: number; totalOutputTokens: number; errorRuns: number } | null>
+      toolLoopRecent: (limit?: number) => Promise<{ id: number; session_id: number | null; started_at: string; duration_ms: number; iterations: number; input_tokens: number; output_tokens: number; error_kind: string | null }[]>
+      toolLoopByTool: (limit?: number) => Promise<{ tool_name: string; calls: number; avg_duration_ms: number; ok: number }[]>
+      agentHistory: (sessionId: number, limit?: number) => Promise<AgentExecutionTurn[]>
+      agentStats: (sessionId: number) => Promise<{ turns: number; totalToolCalls: number; avgLatencyMs: number }>
     }
     audit: {
       log: (params: { sessionId: number; limit?: number }) => Promise<any[]>

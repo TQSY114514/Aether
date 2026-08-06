@@ -137,10 +137,15 @@ export function ensureToolCallListener() {
   if (_toolCallListenerInstalled) return
   _toolCallListenerInstalled = true
   window.electronAPI.chat.onToolCall(({ messageId, sessionId, tool }) => {
-    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, failureKind: tool.failure_kind ?? null, recoveryHint: tool.recovery_hint ?? null, risk: tool.risk, latencyMs: tool.latencyMs ?? null, checkpointId: tool.checkpointId ?? null, diff: tool.diff ?? null, afterSnapshot: tool.after_snapshot ?? null }
+    const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, failureKind: tool.failure_kind ?? null, recoveryHint: tool.recovery_hint ?? null, risk: tool.risk, latencyMs: tool.latencyMs ?? null, checkpointId: tool.checkpointId ?? null, diff: tool.diff ?? null, afterSnapshot: tool.after_snapshot ?? null, startedAt: tool.startedAt ?? null }
     getStore().setState((s) => {
       const existing = s.toolCallsByMessage[messageId] || []
-      if (existing.length > 0 && existing[existing.length - 1].name === entry.name && entry.result == null && entry.error == null) {
+      // If the last entry is still a "running" placeholder of the same name,
+      // replace it with the incoming entry (completion OR a newer status
+      // placeholder). This carries the placeholder->completion transition so a
+      // completed tool doesn't duplicate its started placeholder.
+      const last = existing[existing.length - 1]
+      if (existing.length > 0 && last.name === entry.name && last.result == null && last.error == null) {
         return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing.slice(0, -1), entry] } }
       }
       return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing, entry] } }

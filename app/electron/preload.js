@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   chat: {
     send: (params) => ipcRenderer.invoke('chat:send', params),
+    complete: (params) => ipcRenderer.invoke('chat:complete', params),
     onChunk: (cb) => subscribe('chat:stream-chunk', cb),
     onToolCall: (cb) => subscribe('chat:tool-call', cb),
     onPlanStep: (cb) => subscribe('chat:plan-step', cb),
@@ -149,6 +150,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     set: (dataUrl) => ipcRenderer.invoke('background:set', dataUrl),
     get: () => ipcRenderer.invoke('background:get'),
   },
+  gateway: {
+    info: () => ipcRenderer.invoke('gateway:info'),
+    setEnabled: (enabled) => ipcRenderer.invoke('gateway:set-enabled', enabled),
+  },
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
@@ -165,17 +170,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getUsage: () => ipcRenderer.invoke('skills:getUsage'),
     updateState: (name, state) => ipcRenderer.invoke('skills:updateState', name, state),
     pin: (name, pinned) => ipcRenderer.invoke('skills:pin', name, pinned),
+    importDir: () => ipcRenderer.invoke('skills:importDir'),
   },
   search: {
     messages: (query, sessionId) => ipcRenderer.invoke('search:messages', { query, sessionId }),
     memories: (query) => ipcRenderer.invoke('search:memories', { query }),
     files: (query, root) => ipcRenderer.invoke('search:files', { query, root }),
     unified: (query, opts = {}) => ipcRenderer.invoke('search:unified', { query, ...opts }),
-  },
-  moa: {
-    getPresets: () => ipcRenderer.invoke('moa:getPresets'),
-    addPreset: (name, description, references, aggregatorModelId) => ipcRenderer.invoke('moa:addPreset', { name, description, references, aggregatorModelId }),
-    deletePreset: (id) => ipcRenderer.invoke('moa:deletePreset', id),
   },
   commands: {
     list: () => ipcRenderer.invoke('commands:list'),
@@ -230,6 +231,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     byModel: (range) => ipcRenderer.invoke('usage:by-model', range),
     daily: (range) => ipcRenderer.invoke('usage:daily', range),
     log: (range) => ipcRenderer.invoke('usage:log', range),
+    toolLoopSummary: (limit) => ipcRenderer.invoke('usage:tool-loop-summary', limit),
+    toolLoopRecent: (limit) => ipcRenderer.invoke('usage:tool-loop-recent', limit),
+    toolLoopByTool: (limit) => ipcRenderer.invoke('usage:tool-loop-by-tool', limit),
+    agentHistory: (sessionId, limit) => ipcRenderer.invoke('usage:agent-history', sessionId, limit),
+    agentStats: (sessionId) => ipcRenderer.invoke('usage:agent-stats', sessionId),
   },
   audit: {
     log: (params) => ipcRenderer.invoke('audit:log', params),

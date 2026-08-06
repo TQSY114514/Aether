@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Download, FolderOpen, Loader2, BookOpen, ListTodo } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Download, FolderOpen, Loader2, BookOpen, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import TaskPanel, { tx } from '@/components/tasks/TaskPanel'
@@ -250,6 +250,7 @@ export default function Sidebar() {
             </button>
           </div>
         )}
+        <AgentHistory />
       </div>
       <div className="p-2 space-y-0.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
@@ -283,5 +284,86 @@ function NavItem({ icon: Icon, label, active, onClick, badge }: { icon: any; lab
         </span>
       ) : null}
     </button>
+  )
+}
+
+// Agent 历史 (Feature E): a collapsible audit-log view for the currently
+// selected session. Reads the agent_execution_log via usage:agent-history.
+function AgentHistory() {
+  const currentSessionId = useStore((s) => s.currentSessionId)
+  const language = useStore((s) => s.language)
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [rows, setRows] = useState<AgentExecutionTurn[]>([])
+
+  useEffect(() => {
+    if (!open || !currentSessionId) return
+    let cancelled = false
+    setLoading(true)
+    window.electronAPI.usage.agentHistory(currentSessionId, 50)
+      .then((d) => { if (!cancelled) setRows(d || []) })
+      .catch(() => { if (!cancelled) setRows([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [open, currentSessionId, language])
+
+  return (
+    <div className="mt-1" style={{ borderTop: '1px solid var(--border)' }}>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--bg-secondary)]" style={{ color: 'var(--text-secondary)' }}>
+        <History size={13} className="shrink-0" />
+        <span className="flex-1 text-left">{t('sidebar.agent_history')}</span>
+        <ChevronDown size={12} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} style={{ color: 'var(--text-muted)' }} />
+      </button>
+      {open && (
+        <div className="px-1.5 pb-2 space-y-1.5">
+          {loading && (
+            <div className="flex items-center gap-1.5 px-1.5 py-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              <Loader2 size={11} className="animate-spin" />…
+            </div>
+          )}
+          {!loading && rows.length === 0 && (
+            <div className="px-1.5 py-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>{t('sidebar.agent_history_empty')}</div>
+          )}
+          {!loading && rows.map((row) => <AgentTurnRow key={row.id} row={row} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const AGENT_STATUS_STYLE: Record<string, { color: string; bg: string; icon: any }> = {
+  success: { color: '#16a34a', bg: 'rgba(22,163,74,0.12)', icon: CheckCircle2 },
+  budget_exhausted: { color: '#d97706', bg: 'rgba(217,119,6,0.12)', icon: AlertTriangle },
+  error: { color: '#dc2626', bg: 'rgba(220,38,38,0.12)', icon: XCircle },
+  loop_detected: { color: '#7c3aed', bg: 'rgba(124,58,237,0.12)', icon: RotateCcw },
+}
+
+function AgentTurnRow({ row }: { row: AgentExecutionTurn }) {
+  const { payload } = row
+  const calls = payload.toolCalls || []
+  const st = AGENT_STATUS_STYLE[payload.finalStatus || ''] || AGENT_STATUS_STYLE.success
+  const Icon = st.icon
+  return (
+    <div className="rounded-lg border px-2.5 py-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+      <div className="flex items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ color: st.color, backgroundColor: st.bg }}>
+          <Icon size={10} />{payload.finalStatus || 'success'}
+        </span>
+        {typeof payload.totalIterations === 'number' && payload.totalIterations > 0 && (
+          <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{payload.totalIterations} it</span>
+        )}
+        <span className="text-[10px] ml-auto tabular-nums" style={{ color: 'var(--text-muted)' }}>{relativeTime(row.created_at)}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {calls.length === 0 && <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>—</span>}
+        {calls.map((c, i) => (
+          <span key={i} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-md" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }} title={c.error ? String(c.error) : undefined}>
+            <Wrench size={9} className="shrink-0" />
+            {c.name}
+            {typeof c.latencyMs === 'number' && <span className="tabular-nums opacity-70">{c.latencyMs}ms</span>}
+          </span>
+        ))}
+      </div>
+    </div>
   )
 }
