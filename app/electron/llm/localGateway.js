@@ -102,6 +102,16 @@ function isRunning() { return !!_server }
 
 function getToken() { return _token }
 
+// Ensure a token exists (generate + persist if missing) and return it. Safe to
+// call before start() so the settings UI can show connection info even when the
+// gateway is currently disabled.
+function getOrCreateToken(db) {
+  if (_token) return _token
+  if (!db) return null
+  _token = _ensureToken(db)
+  return _token
+}
+
 function getPort() { return _server?.address()?.port || DEFAULT_PORT }
 
-module.exports = { start, stop, isRunning, getToken, getPort }
+module.exports = { start, stop, isRunning, getToken, getOrCreateToken, getPort, DEFAULT_PORT }
