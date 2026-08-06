@@ -31,6 +31,7 @@ Options:
   --workspace <dir>       Working directory for tools (default: process.cwd()).
   --max-iterations <n>    Cap the number of tool-loop iterations.
   --json                  Emit machine-readable JSON on stdout.
+  --json-lines            Stream NDJSON events line-by-line (status/plan/tool/text/done).
   --list-models           List available models and exit.
   --list-providers        List configured providers and exit.
   --db <path>             Path to aetherai.db (default: userData/aetherai.db).
@@ -56,7 +57,7 @@ function parseArgs(argv) {
       }
       const key = arg.slice(2)
       // Flags that take no value.
-      if (['json', 'list-models', 'list-providers'].includes(key)) { opts[key] = true; continue }
+      if (['json', 'json-lines', 'list-models', 'list-providers'].includes(key)) { opts[key] = true; continue }
       const next = argv[i + 1]
       if (next !== undefined && !next.startsWith('--')) { opts[key] = next; i++ }
       else { opts[key] = true }
@@ -114,6 +115,8 @@ function main() {
 
   const toolEntries = []
   const statuses = []
+  const jsonLines = !!opts['json-lines']
+  const emit = (obj) => { if (jsonLines) console.log(JSON.stringify(obj)) }
 
   const run = async () => {
     const result = await agent.runAgent({
@@ -123,9 +126,23 @@ function main() {
       workspace,
       agentMode: opts.mode || 'auto',
       maxIterations,
-      onToolCall: (entry) => toolEntries.push(entry),
-      onStatus: (s) => statuses.push(s),
+      onToolCall: (entry) => {
+        toolEntries.push(entry)
+        const isStart = entry.result == null && entry.error == null && entry.startedAt != null
+        emit({
+          type: isStart ? 'tool:start' : 'tool:end',
+          entry: { name: entry.name, args: entry.args, result: entry.result, error: entry.error, risk: entry.risk, latencyMs: entry.latencyMs, startedAt: entry.startedAt || null },
+        })
+      },
+      onStatus: (s) => { statuses.push(s); emit({ type: 'status', kind: s.kind || 'step', text: s.text }) },
+      onPlanStep: (step) => emit({ type: 'plan', step }),
+      onText: (chunk) => emit({ type: 'text', delta: chunk.text, done: !!chunk.done }),
     })
+
+    if (jsonLines) {
+      emit({ type: 'done', text: result.text, toolCalls: toolEntries })
+      return 0
+    }
 
     if (opts.json) {
       const out = {
@@ -147,7 +164,8 @@ function main() {
     process.exitCode = code
   }).catch((err) => {
     const msg = err && err.message ? err.message : String(err)
-    if (opts.json) console.log(JSON.stringify({ error: msg }, null, 2))
+    if (opts['json-lines']) console.log(JSON.stringify({ type: 'error', message: msg }))
+    else if (opts.json) console.log(JSON.stringify({ error: msg }, null, 2))
     else console.error(`error: ${msg}`)
     process.exitCode = 1
   })
