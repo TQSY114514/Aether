@@ -1,4 +1,4 @@
-﻿// chat-send.handler.js — the chat:send processor, extracted from chat.handler.js
+// chat-send.handler.js — the chat:send processor, extracted from chat.handler.js
 // so the main chat handler stays focused on session lifecycle and auxiliary IPC.
 //
 // A factory function receives the shared module state (abort controllers, tool
@@ -16,7 +16,6 @@ const habitLearner = require('../llm/habitLearner')
 const skills = require('../llm/skills')
 const { computeCost } = require('../utils/cost')
 const modelAdvisor = require('../llm/modelAdvisor')
-const moa = require('../llm/moa')
 const log = require('../logger')
 const providerHealth = require('../llm/providerHealth')
 const { buildToolLoopCallbacks } = require('./toolLoopCallbacks')
@@ -83,6 +82,59 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
   ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? SETTING_DEFAULTS[k] })
 
   ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })
+
+  // ── Synchronous completion for external clients ──────────────────────────
+  // Used by the local gateway (VS Code extension, browser/scripts). Unlike
+  // chat:send (which streams to the Electron window), this returns the full
+  // text as the invoke result. Reuses an existing session when one is given,
+  // otherwise creates a short-lived session so the exchange shows up in Aether.
+  ipcMain.handle('chat:complete', async (_e, { content, modelId = null, sessionId = null, context = '', systemPrefix = '' }) => {
+    const text = String(content || '').trim()
+    if (!text) return { error: 'content is required' }
+    try {
+      // Resolve model: explicit id, else primary, else first enabled model.
+      let model = (modelId && db.getModel(modelId)) || null
+      if (!model) {
+        const all = db.getAllModels()
+        model = all.find(m => m.is_primary === 1) || all[0] || null
+      }
+      if (!model) return { error: 'no model configured' }
+      const provider = db.getProvider(model.provider_id)
+      if (!provider) return { error: 'provider not found' }
+
+      // Persist to a session (create a short-lived one when none is provided).
+      let sid = sessionId
+      if (!sid) {
+        sid = db.createSession({ title: text.replace(/\s+/g, ' ').slice(0, 30) }).lastInsertRowid
+      } else {
+        db.touchSession(sid)
+      }
+
+      const messages = []
+      if (systemPrefix && systemPrefix.trim()) messages.push({ role: 'system', content: systemPrefix.trim() })
+      if (context && context.trim()) messages.push({ role: 'system', content: context.trim() })
+      messages.push({ role: 'user', content: text })
+      db.addMessage({ session_id: sid, role: 'user', content: text })
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 120000)
+      let replyText = ''
+      try {
+        const reply = await completeChat({ provider, model, messages, signal: controller.signal, options: { temperature: 0.3 } })
+        replyText = String(reply || '')
+      } finally {
+        clearTimeout(timeout)
+      }
+      const msg = db.addMessage({
+        session_id: sid, role: 'assistant', content: replyText,
+        model_used: model.model_name, provider_used: String(provider.id),
+        status: replyText ? 'success' : 'error',
+      })
+      return { content: replyText, sessionId: sid, messageId: msg.lastInsertRowid }
+    } catch (e) {
+      return { error: e && e.message ? e.message : String(e) }
+    }
+  })
 
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
     // Backstop guard: if a tool loop is active for this session, buffer the message
@@ -234,33 +286,6 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
       const _weekday = ['日','一','二','三','四','五','六'][_now.getDay()]
       compacted.unshift({ role: 'system', content: `当前时间：${_dateStr} (${_tzStr}, 星期${_weekday})` })
     } catch {}
-
-    // MoA (Mixture of Agents): if the selected model is a moa:// virtual model,
-    // run reference fan-out in parallel and inject guidance into the last user
-    // message. The aggregator model replaces the original for the actual turn.
-    try {
-      const moaResult = await moa.maybeRunMoA({
-        modelName: model.model_name, messages: compacted, signal: controller?.signal, db, sessionId,
-      })
-      if (moaResult) {
-        if (moaResult.guidance) {
-          const lastUserIdx = compacted.map(m => m.role).lastIndexOf('user')
-          if (lastUserIdx >= 0) {
-            const u = compacted[lastUserIdx]
-            u.content = typeof u.content === 'string'
-              ? u.content + moaResult.guidance
-              : u.content // multimodal: skip (rare in MoA context)
-          }
-        }
-        if (moaResult.aggregator) {
-          provider = moaResult.aggregator.provider
-          model = moaResult.aggregator.model
-        }
-        try { getWebContents()?.send('chat:status', { messageId: 0, sessionId, text: `🎭 MoA: ${moaResult.aggregator?.model?.model_name || 'aggregator'} (+ references)`, kind: 'moa' }) } catch {}
-      }
-    } catch (e) {
-      log.debug('MoA check failed (non-fatal):', e?.message)
-    }
 
     // Proactive habit suggestions (Hermes-style): fire-and-forget match.
     if (autoMemoryOn) {

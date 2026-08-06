@@ -86,6 +86,7 @@ const { initScheduler } = require('./cron/scheduler')
 const { runEvolutionCycle } = require('./evolution/gep')
 const mcpManager = require('./mcp/manager')
 const { setWorkspaceRoot } = require('./tools/sandbox')
+const localGateway = require('./llm/localGateway')
 
 let mainWindow = null
 let staticServer = null
@@ -256,17 +257,32 @@ function setupIpcHandlers() {
   registerUsageHandlers(ipcMain, db)
   // Search (FTS5) handler
   try { require('./ipc/search.handler').registerSearchHandlers(ipcMain, db) } catch (e) { log.warn('search handler failed:', e.message) }
-  // MoA preset CRUD
-  ipcMain.handle('moa:getPresets', () => { try { return db.getMoaPresets() } catch { return [] } })
-  ipcMain.handle('moa:addPreset', (_e, { name, description, references, aggregatorModelId }) => {
-    try { return db.addMoaPreset({ name, description, references_config: references, aggregator_model_id: aggregatorModelId }) } catch (e) { return { error: e.message } }
+
+  // ── Local gateway (VS Code / browser / external tools) ──────────────────
+  // Connection info for the settings UI. The token is generated + persisted on
+  // first access so it's stable across restarts.
+  ipcMain.handle('gateway:info', () => {
+    const enabled = (db.getSetting('gateway_enabled') ?? '1') === '1'
+    const port = parseInt(db.getSetting('gateway_port') || String(localGateway.DEFAULT_PORT), 10)
+    const token = localGateway.getOrCreateToken(db)
+    return { enabled, port, token, running: !!localGateway.isRunning() }
   })
-  ipcMain.handle('moa:deletePreset', (_e, id) => { try { db.deleteMoaPreset(id) } catch {} })
+  ipcMain.handle('gateway:set-enabled', async (_e, enabled) => {
+    await db.setSetting('gateway_enabled', enabled ? '1' : '0')
+    if (enabled) {
+      const port = parseInt(db.getSetting('gateway_port') || String(localGateway.DEFAULT_PORT), 10)
+      localGateway.start(db, port)
+    } else {
+      localGateway.stop()
+    }
+    return { ok: true, running: !!localGateway.isRunning() }
+  })
 }
 
 app.whenReady().then(async () => {
   initAppReady()
   await db.initDatabase()
+  try { db.migrateLegacyPlaintextKeys() } catch (e) { log.warn('migrateLegacyPlaintextKeys failed:', e.message) }
   // Independent init steps run in parallel after DB is ready.
   await Promise.all([
     (async () => { try { await db.pruneEmptySessions() } catch (e) { log.warn('pruneEmptySessions failed:', e.message) } })(),
@@ -297,6 +313,16 @@ app.whenReady().then(async () => {
   createWindow()
   createTray()
   setupIpcHandlers()
+  // Local gateway: expose the API to the VS Code extension / browser / scripts.
+  // Defaults to enabled so external tools work out of the box; bound to 127.0.0.1
+  // and requires a token. Disable via the "Local Gateway" toggle in Settings.
+  try {
+    if ((db.getSetting('gateway_enabled') ?? '1') === '1') {
+      const port = parseInt(db.getSetting('gateway_port') || String(localGateway.DEFAULT_PORT), 10)
+      localGateway.start(db, port)
+      log.info(`Local gateway on http://127.0.0.1:${localGateway.getPort()}`)
+    }
+  } catch (e) { log.warn('gateway start failed:', e.message) }
   // Cron scheduler: start recurring agent tasks (memory cleanup, skill scan, etc.)
   try { initScheduler(db) } catch (e) { log.warn('cron scheduler init failed:', e.message) }
   // Connect to all enabled MCP servers so their tools are available before any

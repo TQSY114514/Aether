@@ -2,13 +2,83 @@ import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { getThemes } from '@/utils/theme'
-import { Info, Save, Check, ImageIcon, Trash2, Download, Upload } from 'lucide-react'
+import { Info, Save, Check, ImageIcon, Trash2, Download, Upload, Copy, Plug } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
 import McpSettings from '@/components/settings/McpSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 import AgentSettings from '@/components/settings/AgentSettings'
 import SkillsSettings from '@/components/settings/SkillsSettings'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
+
+// "Local Gateway" card — shows the connection info the VS Code extension /
+// browser tools use to reach AetherAI (127.0.0.1:<port> + token). Mirror of
+// the gateway:info IPC; the token is generated once and persisted in settings.
+function GatewayCard() {
+  const { toast } = useUI()
+  const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string | null; running: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = async () => {
+    try { setInfo(await window.electronAPI?.gateway?.info?.()) } catch { setInfo(null) }
+  }
+  useEffect(() => { refresh() }, [])
+
+  const toggle = async () => {
+    if (!info) return
+    setBusy(true)
+    try { await window.electronAPI?.gateway?.setEnabled?.(!info.enabled); await refresh() } catch {}
+    setBusy(false)
+  }
+
+  const copy = async (text: string, label: string) => {
+    try { await navigator.clipboard.writeText(text); toast(`${label} 已复制`, { type: 'success' }) } catch { toast('复制失败', { type: 'error' }) }
+  }
+
+  return (
+    <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Plug size={16} className="text-gray-400 shrink-0" />
+          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Local Gateway / VS Code 集成</h2>
+        </div>
+        <button onClick={toggle} disabled={busy || !info}
+          className={`px-3 py-1 text-xs rounded-lg transition-colors ${info?.enabled ? 'text-white' : 'border'}`}
+          style={info?.enabled ? { backgroundColor: 'var(--accent)' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+          {info?.enabled ? '已启用' : '已停用'} · {busy ? '…' : '切换'}
+        </button>
+      </div>
+      <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+        在 VS Code 里安装 AetherAI 扩展后，填入下面的地址与 Token 即可连接当前桌面 App，复用已配置的模型/记忆/技能。
+      </p>
+      {info ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span style={{ color: 'var(--text-muted)' }}>服务地址</span>
+            <button onClick={() => copy(`http://127.0.0.1:${info.port}`, '地址')}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              http://127.0.0.1:{info.port} <Copy size={11} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span style={{ color: 'var(--text-muted)' }}>访问 Token</span>
+            <button onClick={() => info.token && copy(info.token, 'Token')}
+              disabled={!info.token}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono disabled:opacity-40"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              {info.token ? `${info.token.slice(0, 12)}…` : '—'} <Copy size={11} />
+            </button>
+          </div>
+          <div className="text-[11px]" style={{ color: info.running ? 'var(--text-muted)' : '#c0392b' }}>
+            {info.running ? '● 运行中（仅本机可访问）' : '● 未运行（启用后生效）'}
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>加载中…</p>
+      )}
+    </div>
+  )
+}
 
 // "Check for updates" card — wraps electron-updater. In dev this is a no-op
 // (the updater logs "application is not packed"); in a packaged build it hits
@@ -283,6 +353,9 @@ export default function SettingPage() {
 
           {/* Skills */}
           <SkillsSettings />
+
+          {/* Local Gateway / VS Code integration */}
+          <GatewayCard />
 
           {/* Check for updates */}
           <UpdateCard />
