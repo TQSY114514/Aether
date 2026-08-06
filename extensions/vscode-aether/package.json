@@ -1,0 +1,103 @@
+{
+  "name": "aether-ai",
+  "displayName": "AetherAI",
+  "description": "Connect VS Code to the AetherAI desktop app: ask about code, inline chat, fix errors, and generate code.",
+  "version": "0.1.0",
+  "publisher": "aether",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "aether",
+    "ai",
+    "agent",
+    "chat",
+    "llm"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "aether.chat",
+        "title": "AetherAI: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "aether.askSelection",
+        "title": "AetherAI: Ask About Selection"
+      },
+      {
+        "command": "aether.explainSelection",
+        "title": "AetherAI: Explain Selection"
+      },
+      {
+        "command": "aether.fixProblems",
+        "title": "AetherAI: Fix File Errors"
+      },
+      {
+        "command": "aether.generate",
+        "title": "AetherAI: Generate Code"
+      },
+      {
+        "command": "aether.connect",
+        "title": "AetherAI: Connect"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "aether.askSelection",
+          "when": "editorHasSelection",
+          "group": "aether@1"
+        },
+        {
+          "command": "aether.explainSelection",
+          "when": "editorHasSelection",
+          "group": "aether@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "aether.askSelection",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "aether.explainSelection",
+          "when": "editorHasSelection"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AetherAI",
+      "properties": {
+        "aether.host": {
+          "type": "string",
+          "default": "http://127.0.0.1:35791",
+          "description": "AetherAI local gateway URL (see Settings → Local Gateway in the desktop app)."
+        },
+        "aether.token": {
+          "type": "string",
+          "default": "",
+          "description": "AetherAI gateway access token. Copy it from Settings → Local Gateway in the desktop app."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}
