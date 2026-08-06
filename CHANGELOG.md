@@ -2,6 +2,35 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.6.0] — 2026-08-06
+
+### Agent
+- **Test-first (RED→GREEN) workflow** — new `test_first` tool: asks the model to write a failing test for the goal, runs the project's test command, then loops the model through implementation attempts (up to 3 cycles) until the test passes. Skips cleanly (falls back to debug_loop) when the workspace has no test framework. Sandbox-guarded: writes go through the workspace path check, commands through the sandbox command guard.
+- **Symbol location tracking (LSP-lite)** — `symbolExtractor` now records brace-balanced `locStart`/`locEnd` line ranges for every symbol across JS/TS/Python/Rust/Go/Java; the dependency graph carries them; new `find_symbol` tool resolves where a function/class/const is defined with file:line results.
+- **Tool-loop observability** — new `toolLoopMetrics` module persists one row per agent run (iterations, tokens, duration, error kind) and one per tool call (`tool_loop_run` / `tool_call_sample` tables); TokenPage gains an "Agent Tool Loop" section (run count, avg iterations/duration, error rate, per-tool table); audit log now reports real average tool latency instead of a hardcoded 0.
+- **Live tool-call timer + long-result collapse** — the loop emits a "started" placeholder before each tool runs; ToolCallBlock renders a live elapsed timer (0.1s ticks) while running, and long results collapse to a single click-to-expand line instead of flooding the chat.
+
+### Local Gateway & VS Code
+- **Local Gateway** — HTTP API on 127.0.0.1 (token-protected, enabled by default) exposing `chat:complete` (synchronous completion for external clients) plus connection info in Settings; the gateway auto-starts with the app and its token is generated once and persisted.
+- **CLI `--json-lines`** — headless mode streams NDJSON events (`status` / `plan` / `tool:start` / `tool:end` / `text` / `done`) line-by-line, so external consumers get live status, tool calls and streamed output.
+- **VS Code extension (CLI-backed)** — `extension/`: spawns the Aether CLI (`--json-lines`) as a child process and hosts a chat Webview streaming status, tool calls and code live.
+- **VS Code extension (gateway-backed)** — `extensions/vscode-aether/`: connects to the desktop app's Local Gateway for inline chat, ask/explain selection, fix file errors, and code generation; host/token configured in VS Code settings.
+
+### Backup & Security
+- **Config export/import** — full backup/restore of providers, models, personas, sessions, messages, memory, settings, arena votes, model scores and (optionally) the background image; `merge` mode appends safely, `overwrite` mode rebuilds runtime data; API keys are re-encrypted through the target machine's safeStorage on import.
+- **API key encryption migration** — startup migration re-encrypts any legacy plaintext API keys via safeStorage (base64 heuristic detects leftovers); a one-time warning is logged when system encryption is unavailable.
+
+### Skills & MCP
+- **Skills directory import** — import a skill folder (or a folder of skills) from disk into the user-global skills root; SkillsPage gains the import UI.
+- **MCP market browser** — McpSettings can list, search and install MCP servers from a marketplace registry.
+
+### CI / Chore
+- **E2E launch smoke test** — `npm run test:e2e` spawns the real Electron binary against the built renderer in a throwaway user-data dir and asserts it stays alive; wired into CI as a non-blocking step (electron binary fetched explicitly).
+- Removed the MOA module; i18n base keys extended; `runOne` exported from `lintTestRepair` (test-first RED run previously crashed on the missing export).
+
+### Bug Fixes
+- **testFirst unit tests** — the `providerAdapter` mock now lives at the CJS `Module._load` layer so both the test and `testFirst.js`'s `require('./providerAdapter')` see the same mocked `completeChatMessage` (a `vi.mock` factory output is invisible to native CJS requires, which made RED call the real adapter and fail with a URL parse error).
+
 ## [0.5.0] — 2026-07-23
 
 ### Agent
