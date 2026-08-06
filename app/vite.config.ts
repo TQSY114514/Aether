@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
@@ -59,5 +60,17 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+  },
+  test: {
+    // e2e/launch.test.js is a standalone node script (run via `npm run
+    // test:e2e`); keep vitest from auto-discovering it as a test-suite file.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*',
+      '**/e2e/**',
+    ],
   },
 })

@@ -21,6 +21,7 @@
     "start": "electron .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "node e2e/launch.test.js",
     "postinstall": "electron-rebuild -f -w better-sqlite3 || (echo [AetherAI] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
   },
   "dependencies": {
