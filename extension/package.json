@@ -39,6 +39,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Absolute path to Aether's headless CLI (`app/cli.js`). Leave empty to auto-detect the repo-local CLI."
+        },
+        "aether.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "API key override for the headless CLI. Required when the provider key in the Aether DB is safeStorage-encrypted (headless mode cannot decrypt it). Leave empty to use the stored key."
         }
       }
     }
