@@ -1,0 +1,56 @@
+{
+  "name": "aetherai-vscode",
+  "displayName": "AetherAI",
+  "description": "Chat with the AetherAI agent inside VS Code. Streams status, tool calls and code from the headless Aether CLI.",
+  "version": "0.1.0",
+  "publisher": "tqsy",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:aether.chat",
+    "onCommand:aether.chatWithSelection",
+    "onCommand:aether.generateCode"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aether.chat",
+        "title": "Aether: Open Chat"
+      },
+      {
+        "command": "aether.chatWithSelection",
+        "title": "Aether: Chat with Selection"
+      },
+      {
+        "command": "aether.generateCode",
+        "title": "Aether: Generate Code"
+      }
+    ],
+    "configuration": {
+      "title": "AetherAI",
+      "properties": {
+        "aether.cliPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to Aether's headless CLI (`app/cli.js`). Leave empty to auto-detect the repo-local CLI."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}
