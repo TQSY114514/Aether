@@ -223,7 +223,7 @@ function setupIpcHandlers() {
   registerModelHandlers(ipcMain, db)
   registerPersonaHandlers(ipcMain, db)
   registerSessionHandlers(ipcMain, db)
-  registerChatHandlers(ipcMain, db, () => mainWindow?.webContents)
+  const chatState = registerChatHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerSettingsHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerArenaHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerMemoryHandlers(ipcMain, db)
@@ -261,13 +261,14 @@ function setupIpcHandlers() {
   // ── Local gateway (VS Code / browser / external tools) ──────────────────
   // Connection info for the settings UI. The token is generated + persisted on
   // first access so it's stable across restarts.
-  ipcMain.handle('gateway:info', () => {
+  const gatewayInfo = () => {
     const enabled = (db.getSetting('gateway_enabled') ?? '1') === '1'
     const port = parseInt(db.getSetting('gateway_port') || String(localGateway.DEFAULT_PORT), 10)
     const token = localGateway.getOrCreateToken(db)
     return { enabled, port, token, running: !!localGateway.isRunning() }
-  })
-  ipcMain.handle('gateway:set-enabled', async (_e, enabled) => {
+  }
+  ipcMain.handle('gateway:info', gatewayInfo)
+  const gatewaySetEnabled = async (_e, enabled) => {
     await db.setSetting('gateway_enabled', enabled ? '1' : '0')
     if (enabled) {
       const port = parseInt(db.getSetting('gateway_port') || String(localGateway.DEFAULT_PORT), 10)
@@ -276,7 +277,18 @@ function setupIpcHandlers() {
       localGateway.stop()
     }
     return { ok: true, running: !!localGateway.isRunning() }
-  })
+  }
+  ipcMain.handle('gateway:set-enabled', gatewaySetEnabled)
+
+  // Proxy channels for the HTTP gateway: ipcMain.handle() channels are NOT
+  // visible to ipcMain.listeners(), so every channel the gateway should expose
+  // must be registered explicitly here. Register before start() (called later
+  // in app.whenReady) so the proxy table is populated for the first request.
+  localGateway.registerHandler('gateway:info', gatewayInfo)
+  localGateway.registerHandler('gateway:set-enabled', gatewaySetEnabled)
+  if (chatState && chatState.handleChatComplete) {
+    localGateway.registerHandler('chat:complete', chatState.handleChatComplete)
+  }
 }
 
 app.whenReady().then(async () => {

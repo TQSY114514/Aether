@@ -54,7 +54,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     registerSessionMessages,
     allowRulesStore,
   }
-  registerChatSendHandler({ ipcMain, db, getWebContents, ctx })
+  const chatSendState = registerChatSendHandler({ ipcMain, db, getWebContents, ctx })
 
   ipcMain.handle('chat:stop', (_e, sessionId) => {
     // Abort only controllers for the given session. Each request has a catch
@@ -214,6 +214,10 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { totalCompressed: 0, turnsSinceCompression: 0 }
     }
   })
+
+  // Surface the chat-send handler exports (e.g. handleChatComplete for the
+  // local gateway) so main.js can register them as proxy channels.
+  return chatSendState
 }
 
 // estimateTextTokens is imported from compaction.js in chat-send.handler.js
