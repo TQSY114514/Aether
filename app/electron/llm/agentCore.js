@@ -56,6 +56,16 @@ function decryptApiKey(encoded) {
   return encoded
 }
 
+// A safeStorage-encrypted value is pure base64 (alphabet + padding); a legacy
+// plaintext API key almost always contains characters outside that alphabet
+// (e.g. "sk-..."), so this heuristic flags encrypted values that headless
+// mode cannot decrypt. Mirrors database.js isBase64String.
+function isEncryptedKey(s) {
+  if (!s || typeof s !== 'string') return false
+  if (s.length % 4 !== 0) return false
+  return /^[A-Za-z0-9+/]*={0,2}$/.test(s)
+}
+
 function listProviders(db) {
   if (!db) return []
   try {
@@ -188,4 +198,5 @@ module.exports = {
   listProviders,
   listModels,
   decryptApiKey,
+  isEncryptedKey,
 }

@@ -110,6 +110,17 @@ function main() {
   }
   const model = resolved.model
 
+  // The stored key may be safeStorage-encrypted (pure base64, not decryptable
+  // in headless Node). Fail fast with a clear hint instead of sending the
+  // ciphertext as the API key and getting a confusing 401.
+  if (!opts['api-key'] && provider.api_key && agent.isEncryptedKey(provider.api_key)) {
+    console.error(
+      'error: the stored API key for provider "' + provider.name + '" is encrypted with the desktop app (safeStorage).\n' +
+      'Headless mode cannot decrypt it. Pass --api-key <plaintext> to use this provider.'
+    )
+    return 1
+  }
+
   const maxIterations = opts['max-iterations'] ? parseInt(opts['max-iterations'], 10) : undefined
   const workspace = opts.workspace ? path.resolve(opts.workspace) : process.cwd()
 
@@ -166,9 +177,13 @@ function main() {
     const msg = err && err.message ? err.message : String(err)
     if (opts['json-lines']) console.log(JSON.stringify({ type: 'error', message: msg }))
     else if (opts.json) console.log(JSON.stringify({ error: msg }, null, 2))
-    else console.error(`error: ${msg}`)
+    else     console.error(`error: ${msg}`)
     process.exitCode = 1
   })
 }
 
-main()
+// main() returns a numeric exit code for synchronous error paths (bad args,
+// missing model, encrypted key); the async run() path sets process.exitCode
+// itself when it settles.
+const mainCode = main()
+if (typeof mainCode === 'number') process.exitCode = mainCode
