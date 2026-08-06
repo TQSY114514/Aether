@@ -14,6 +14,7 @@ export class AetherPanel {
     private cliPath: string,
     private workspace: string,
     private model: string | undefined,
+    private apiKey: string | undefined,
     private onDisposed: () => void,
   ) {
     this.panel = vscode.window.createWebviewPanel(
@@ -50,6 +51,7 @@ export class AetherPanel {
   private buildArgs(prompt: string): string[] {
     const args = [this.cliPath, prompt, '--workspace', this.workspace, '--mode', 'auto', '--json-lines']
     if (this.model) args.push('--model', this.model)
+    if (this.apiKey) args.push('--api-key', this.apiKey)
     return args
   }
 

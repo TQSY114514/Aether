@@ -62,12 +62,14 @@ function openChat(context?: string): void {
     vscode.window.showErrorMessage('Aether CLI not found. Set the "aether.cliPath" setting or install the Aether repo locally.')
     return
   }
+  // API key override for the headless CLI (stored keys may be safeStorage-encrypted).
+  const apiKey = vscode.workspace.getConfiguration('aether').get<string>('apiKey') || undefined
   if (currentPanel) {
     currentPanel.reveal(context)
     return
   }
   pickModel(cliPath).then((model) => {
-    currentPanel = new AetherPanel(cliPath, workspaceRoot(), model, () => { currentPanel = undefined })
+    currentPanel = new AetherPanel(cliPath, workspaceRoot(), model, apiKey, () => { currentPanel = undefined })
     if (context) currentPanel.reveal(context)
   })
 }
