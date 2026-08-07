@@ -72,8 +72,47 @@ function start(db, port = DEFAULT_PORT) {
       res.writeHead(200); res.end(JSON.stringify({ status: 'ok', version: '0.5.0' })); return
     }
 
-    // Proxy request to ipcMain
+    // OpenAI-compatible /v1/chat/completions (Wave 4). Reuses the chat:complete
+    // model/provider resolution but answers with the OpenAI response shape so
+    // OpenAI-compatible clients (scripts, SDKs, tools) can talk to AetherAI.
     const url = new URL(req.url, `http://localhost:${port}`)
+    if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {
+      let body = ''
+      req.on('data', (d) => { body += d })
+      req.on('end', async () => {
+        let parsed = null
+        try { parsed = body ? JSON.parse(body) : {} } catch {
+          res.writeHead(400)
+          res.end(JSON.stringify({ error: { message: 'invalid JSON body', type: 'invalid_request_error', code: 400 } }))
+          return
+        }
+        try {
+          const openaiHandler = require('./openaiChatHandler')
+          const providerAdapter = require('./providerAdapter')
+          const out = await openaiHandler.handleChatCompletions({
+            db: _db,
+            body: parsed,
+            completeChatMessage: (args) => providerAdapter.completeChatMessage(args),
+            streamChat: (args) => providerAdapter.streamChat(args),
+          })
+          if (out.status !== 200) { res.writeHead(out.status); res.end(JSON.stringify(out.json)); return }
+          if (out.stream) {
+            res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+            for await (const line of out.stream) res.write(line + '\n\n')
+            res.end()
+            return
+          }
+          res.writeHead(200)
+          res.end(JSON.stringify(out.json))
+        } catch (e) {
+          res.writeHead(500)
+          res.end(JSON.stringify({ error: { message: e && e.message ? e.message : String(e), type: 'internal_error', code: 500 } }))
+        }
+      })
+      return
+    }
+
+    // Proxy request to ipcMain
     const channel = url.pathname.replace(/^\//, '')
     if (!channel) { res.writeHead(404); res.end(JSON.stringify({ error: 'No channel' })); return }
 
