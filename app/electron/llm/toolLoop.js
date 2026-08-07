@@ -296,6 +296,19 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     }
   } catch {}
 
+  // Inject evolution guidance (GEP): if the evolution engine has produced a
+  // capsule for this session (or a manual cycle ran globally), splice its
+  // <evolution_guidance> block into the system context so the learned
+  // strategies actually steer this turn. Best-effort — never blocks.
+  try {
+    const gep = require('../evolution/gep')
+    const g = gep.getActiveGuidance ? gep.getActiveGuidance(sessionId) : null
+    if (g && g.prompt) {
+      const sysIdx = convo.findIndex(m => m.role === 'system')
+      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, { role: 'system', content: g.prompt })
+    }
+  } catch {}
+
   let plan = null
   let planningMode = false
   let planToolsPayload = []
@@ -640,6 +653,14 @@ Reply in this format:
               }
             }
           }
+        }
+        // Skill result feedback loop (P0-1): record success/failure of
+        // use_skill calls so the curator can demote underperforming skills.
+        if (fn.name === 'use_skill' && db && typeof db.recordSkillResult === 'function') {
+          try {
+            const skillName = String(args?.skill_name || '')
+            if (skillName) db.recordSkillResult(skillName, !entry.error)
+          } catch {}
         }
         return { tc, isPlan: false, entry }
       }

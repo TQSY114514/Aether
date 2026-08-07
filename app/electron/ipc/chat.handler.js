@@ -115,9 +115,10 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const result = modelAdvisor.suggestModelExplained({ allModels, userMessage, useTools: true, intent, eloData })
       if (result) {
         return { suggestedModelId: result.suggestedModelId, reason: result.reason,
+          reasonParts: result.reasonParts,
           heuristicScores: result.heuristicScores, confidence: result.confidence }
       }
-      return { suggestedModelId: currentModelId, reason: 'current', confidence: 0 }
+      return { suggestedModelId: currentModelId, reason: 'current', confidence: 0, reasonParts: { noMatch: true } }
     } catch {
       return { suggestedModelId: null, reason: 'error', confidence: 0 }
     }

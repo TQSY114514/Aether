@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, DollarSign, Brain, Cpu, Download, FolderOpen, Loader2, BookOpen, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import TaskPanel, { tx } from '@/components/tasks/TaskPanel'
@@ -256,10 +256,7 @@ export default function Sidebar() {
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
-        <NavItem icon={DollarSign} label={t('sidebar.nav.tokens')} active={currentView === 'tokens'} onClick={() => setCurrentView('tokens')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
-        <NavItem icon={Cpu} label={t('sidebar.nav.learning')} active={currentView === 'learning'} onClick={() => setCurrentView('learning')} />
-        <NavItem icon={BookOpen} label={t('sidebar.nav.skills')} active={currentView === 'skills'} onClick={() => setCurrentView('skills')} />
         {/* Background tasks (功能 A): a drawer toggle, not a view — the page
             switch lives in App.tsx and stays untouched. */}
         <NavItem icon={ListTodo} label={tx('sidebar.nav.tasks', '任务')} active={tasksOpen}

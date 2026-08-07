@@ -102,6 +102,10 @@ function prefetch(db, userMessage) {
         const daysSinceAccess = (Date.now() - lastAccess) / 86400000
         const decayFactor = Math.max(0.1, 1 - daysSinceAccess / 180) // half-life ~180 days
         w = (kwScore + recencyBonus + accessBonus) * decayFactor
+        // Confidence multiplier (Hermes solidify): re-confirmed memories rank
+        // higher; low-confidence entries fade. Clamped to [0.4, 1.4].
+        const conf = Math.max(0.4, Math.min(1.4, Number(m.confidence) || 1))
+        w *= conf
         // Graph expansion bonus: if this memory matched via graph neighbours,
         // give it a small boost so related context surfaces.
         if (graphIds.has(m.id) && kwScore === 0) w = 0.3
@@ -207,7 +211,15 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
 
     for (const entry of entries.slice(0, 5)) {
       const key = `${entry.type}:${entry.content.toLowerCase()}`
-      if (recentKeys.has(key)) continue
+      if (recentKeys.has(key)) {
+        // Solidify (Hermes): the same memory was re-observed in a new session
+        // — bump its confidence (cap 1.0) so prefetch ranks it higher. The
+        // dedup key matches on the 50-char prefix, so update by that prefix.
+        try {
+          db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE type = ? AND content LIKE ?', [entry.type, `${entry.content.slice(0, 50)}%`])
+        } catch {}
+        continue
+      }
       // Conflict detection: if a similar fact already exists in the opposite
       // direction, the older entry is marked as conflicting.
       if (entry.type === 'fact') {
@@ -250,7 +262,7 @@ function search(db, query, limit = 20) {
   const qkw = keywords(query)
   if (qkw.size === 0) return memories.slice(0, limit)
   return memories
-    .map(m => ({ ...m, _score: score(m.content, qkw) }))
+    .map(m => ({ ...m, _score: score(m.content, qkw) * Math.max(0.4, Math.min(1.4, Number(m.confidence) || 1)) }))
     .filter(m => m._score > 0)
     .sort((a, b) => b._score - a._score)
     .slice(0, limit)
@@ -295,4 +307,46 @@ function prune(db, maxAgeDays = 90) {
   } catch {}
 }
 
-module.exports = { prefetch, sync, search, prune, keywords, parseEntry, EXTRACTION_PROMPT, detectConflict }
+// ─── LLM Second-Pass Recall ────────────────────────────────────────────────
+// When keyword/graph prefetch finds nothing, ask the model to pick relevant
+// memories from the recent pool. One cheap completion (max_tokens 60), gated
+// by the caller (chat-send.handler.js) — only runs when keyword recall is
+// empty AND auto memory is enabled. Never throws; returns '' on any failure.
+
+const RECALL_POOL = 30
+const RECALL_PROMPT = `You are a memory retriever. The user's message is below, followed by a numbered list of memories from past conversations. Return ONLY the numbers (comma-separated) of the up to 5 most relevant memories. If none are relevant, reply NONE.
+
+User message: {query}
+
+Memories:
+{list}`
+
+async function recall({ db, provider, model, userMessage, signal }) {
+  try {
+    if (!db || !provider || !model) return ''
+    let memories
+    try { memories = db.getMemories(RECALL_POOL) } catch { return '' }
+    if (!memories || memories.length === 0) return ''
+    const q = String(userMessage || '').slice(0, 500)
+    const list = memories.map((m, i) => `${i + 1}. [${m.type || 'fact'}] ${String(m.content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()}`).join('\n')
+    const text = await completeChat({
+      provider, model,
+      messages: [
+        { role: 'system', content: RECALL_PROMPT.replace('{query}', q).replace('{list}', list) },
+        { role: 'user', content: q },
+      ],
+      signal,
+      options: { max_tokens: 60, temperature: 0 },
+    })
+    if (!text || !text.trim()) return ''
+    if (/^NONE$/i.test(text.trim())) return ''
+    const picks = String(text).split(/[,\s]+/).map(x => parseInt(x, 10)).filter(n => Number.isFinite(n) && n >= 1 && n <= memories.length)
+    if (picks.length === 0) return ''
+    const lines = [...new Set(picks)].slice(0, PREFETCH_TOP_K).map(i =>
+      `- ${String(memories[i - 1].content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()}`
+    )
+    return `Relevant memories from past conversations (use if helpful, ignore if not):\n${lines.join('\n')}`
+  } catch { return '' }
+}
+
+module.exports = { prefetch, recall, sync, search, prune, keywords, parseEntry, EXTRACTION_PROMPT, detectConflict }

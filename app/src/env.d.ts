@@ -26,6 +26,48 @@ interface AgentExecutionTurn {
   }
 }
 
+// One row of the evolution_events table as returned by the evolution:history
+// IPC (genes/signals/blast_radius are JSON-encoded strings).
+interface EvolutionEvent {
+  capsule_id: string
+  genes?: string
+  strategy?: string
+  signals?: string
+  blast_radius?: string
+  created_at?: string
+}
+
+// Structured rationale returned by model:suggest — the renderer localizes
+// these fields (via i18n) instead of showing the raw English `reason` string.
+interface ModelSuggestionReasonParts {
+  task?: string
+  taskLabel?: string
+  confidence?: number
+  lowConfidence?: boolean
+  family?: string
+  heuristic?: number
+  eloScore?: number | null
+  eloWins?: number
+  eloTotal?: number
+  eloReliable?: boolean
+  useTools?: boolean
+  reasonPickUsed?: boolean
+  closeRace?: boolean
+  gap?: number | null
+  runnerUpName?: string | null
+  secondary?: { type: string; label: string }[]
+  ranked?: number
+  noMatch?: boolean
+}
+
+interface ModelSuggestion {
+  suggestedModelId: number | null
+  reason: string
+  reasonParts?: ModelSuggestionReasonParts
+  heuristicScores?: { modelId: number; modelName: string; family: string; heuristic: number; eloScore: number | null; blended: number }[]
+  confidence: number
+}
+
 interface Window {
   electronAPI: {
     provider: {
@@ -45,12 +87,7 @@ interface Window {
       fallbackChain: (providerId: number) => Promise<Model[]>
       listAll: () => Promise<Model[]>
       primary: () => Promise<{ id: number; provider_id: number } | null>
-      suggest: (params: { sessionId: number; userMessage: string }) => Promise<{
-        suggestedModelId: number | null
-        reason: string
-        heuristicScores?: { modelId: number; modelName: string; family: string; heuristic: number; eloScore: number | null; blended: number }[]
-        confidence: number
-      }>
+      suggest: (params: { sessionId: number; userMessage: string }) => Promise<ModelSuggestion>
     }
     persona: {
       list: () => Promise<Persona[]>
@@ -79,7 +116,7 @@ interface Window {
       addNormal: (msg: any) => Promise<{ lastInsertRowid: number }>
     }
     chat: {
-      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: { suggestedModelId: number | null; reason: string; confidence: number } | null }>
+      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; effortLevel?: 'off' | 'low' | 'medium' | 'high'; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: ModelSuggestion | null }>
       complete: (params: { content: string; modelId?: number | null; sessionId?: number | null; context?: string; systemPrefix?: string }) => Promise<{ content?: string; sessionId?: number; messageId?: number; error?: string }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
       onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; after_snapshot?: { path: string; content: string; truncated: boolean } | null } }) => void) => () => void
@@ -260,8 +297,8 @@ interface Window {
       listSessions: () => Promise<number[]>
     }
     evolution: {
-      runCycle: (params: { strategy?: string }) => Promise<{ ok: boolean; result?: unknown; error?: string }>
-      history: () => Promise<unknown[]>
+      runCycle: (params: { strategy?: string; auditTrail?: { name: string; args?: Record<string, unknown>; error?: string | null }[] }) => Promise<{ ok: boolean; result?: unknown; error?: string }>
+      history: () => Promise<EvolutionEvent[]>
     }
     trajectory: {
       getStats: (sessionId: number) => Promise<{ totalCompressed: number; turnsSinceCompression: number }>

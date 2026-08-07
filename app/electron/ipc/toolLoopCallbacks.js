@@ -96,9 +96,30 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
     if (chunk?.text) safeSend('chat:tool-stream', { messageId: msgId, sessionId, text: chunk.text, done: chunk.type === 'done' })
   }
 
-  // Audit log — persists the agent turn trace.
+  // Audit log — persists the agent turn trace. Also feeds the real audit
+  // trail into the GEP evolution engine (previously invoked with `[]` from
+  // the evolution:run-cycle IPC, so signals never fired from real runs).
+  // Throttled: at most one evolution cycle per 10 minutes, only when the
+  // turn actually used tools. Never throws — evolution is best-effort.
+  // The cycle's <evolution_guidance> prompt is stored per-session so
+  // toolLoop.js can inject it into subsequent turns — closing the loop
+  // between "learned strategies" and "applied strategies".
+  let _lastGepFeed = 0
+  const GEP_FEED_MIN_MS = 10 * 60 * 1000
   callbacks.onAudit = (trace) => {
     try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
+    try {
+      const toolCalls = Array.isArray(trace?.toolCalls) ? trace.toolCalls : []
+      if (toolCalls.length === 0) return
+      const now = Date.now()
+      if (now - _lastGepFeed < GEP_FEED_MIN_MS) return
+      _lastGepFeed = now
+      const gep = require('../evolution/gep')
+      const result = gep.runEvolutionCycle(db, toolCalls, 'balanced', [], [])
+      if (result && result.prompt) {
+        try { gep.storeGuidance(sessionId, result.prompt, result.capsule) } catch {}
+      }
+    } catch {}
   }
 
   // AskUserQuestion: surface a structured question dialog and await the user's

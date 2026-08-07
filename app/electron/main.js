@@ -237,9 +237,25 @@ function setupIpcHandlers() {
   registerCronHandlers(ipcMain, db)
 
   // ── Evolution IPC ──
-  ipcMain.handle('evolution:run-cycle', (_e, { strategy }) => {
+  ipcMain.handle('evolution:run-cycle', (_e, { strategy, auditTrail } = {}) => {
     try {
-      const result = runEvolutionCycle(db, [], strategy || 'balanced')
+      // Accept an optional real audit trail (e.g. from the Evolution UI);
+      // fall back to the most recent tool trace persisted by the tool loop.
+      let trail = Array.isArray(auditTrail) ? auditTrail : []
+      if (trail.length === 0) {
+        try {
+          const last = db.allRows('SELECT payload FROM agent_execution_log ORDER BY id DESC LIMIT 1')
+          const parsed = last && last[0] && last[0].payload ? JSON.parse(last[0].payload) : null
+          if (parsed && Array.isArray(parsed.toolCalls)) trail = parsed.toolCalls
+        } catch {}
+      }
+      const result = runEvolutionCycle(db, trail, strategy || 'balanced')
+      // Manual cycles also feed forward: store the generated guidance as the
+      // global fallback so subsequent agent turns inject it (session-scoped
+      // guidance would be preferred when the manual run targets a session).
+      if (result && result.prompt) {
+        try { require('./evolution/gep').storeGuidance(null, result.prompt, result.capsule) } catch {}
+      }
       return { ok: true, result }
     } catch (e) {
       return { ok: false, error: e.message }

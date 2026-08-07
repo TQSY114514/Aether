@@ -173,7 +173,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       return { messageId: 0 }
     }
 
-    // Model suggestion (auto-routing rationale for the renderer).
+        // Model suggestion (auto-routing rationale for the renderer).
     let modelSuggestion = null
     try {
       const allModelsForSuggest = db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
@@ -182,7 +182,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       const eloData = {}
       for (const s of scores) { if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 } }
       const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData })
-      if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, confidence: result.confidence }
+      if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, reasonParts: result.reasonParts, confidence: result.confidence }
     } catch {}
 
     // Build fallback chain — skip providers that are in cooldown or have a
@@ -273,7 +273,15 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // Done once here so BOTH the tool path and the plain streaming path inherit it.
     // Gateable via the auto_memory_enabled setting (default on).
     const autoMemoryOn = _s['auto_memory_enabled'] !== '0'
-    const memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
+    let memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
+    if (!memBlock && autoMemoryOn && provider && model) {
+      // LLM second-pass recall (P1-5): keyword+graph recall found nothing —
+      // ask the model to pick relevant memories from the recent pool. Gated
+      // by the auto-memory setting; one cheap completion, never throws.
+      try {
+        memBlock = (await autoMemory.recall({ db, provider, model, userMessage: content, signal: controller?.signal })) || ''
+      } catch {}
+    }
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
 
     // Inject current date/time so the model knows "today". LLMs have a training

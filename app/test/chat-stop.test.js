@@ -71,7 +71,6 @@ function installStubs() {
         '../llm/skills': { formatSkillsForPrompt: () => '' },
         '../utils/cost': { computeCost: () => 0 },
         '../llm/auditLog': { setDb: () => {} },
-        '../llm/modelAdvisor': { suggestModelExplained: () => null },
         '../llm/modelRouter': {},
         '../logger': { warn: () => {}, debug: () => {}, info: () => {}, error: () => {} },
         '../llm/steering': {},

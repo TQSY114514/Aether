@@ -178,6 +178,9 @@ export default function ChatInput() {
     try {
       setInput(localStorage.getItem(`draft:${currentSessionId ?? 'new'}`) || '')
     } catch { setInput('') }
+    // Refresh the model suggestion (badge on the model selector) for the
+    // newly opened session without waiting for the next send.
+    useStore.getState().refreshModelSuggestion()
   }, [currentSessionId])
 
   // Token estimation for the current input.
@@ -625,12 +628,53 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   )
 }
 
+// Build a multi-line, i18n-localized tooltip from the structured reasonParts
+// returned by model:suggest. Falls back to the raw `reason` string when the
+// parts are missing (older main process) or when there was no match at all.
+function formatSuggestionReason(modelSuggestion: ModelSuggestion | null): string {
+  if (!modelSuggestion) return t('chat.model_switch')
+  const rp = modelSuggestion.reasonParts
+  if (!rp || rp.noMatch) return t('model.suggest.no_match')
+
+  const lines: string[] = []
+  const taskKey = rp.task ? `model.suggest.task.${rp.task}` : null
+  lines.push(t('model.suggest.task', taskKey ? t(taskKey) : rp.taskLabel || ''))
+
+  lines.push(t('model.suggest.heuristic', rp.heuristic ?? 0, rp.family || ''))
+
+  if (rp.eloScore != null) {
+    const elo = Number(rp.eloScore).toFixed(1)
+    lines.push(rp.eloReliable
+      ? t('model.suggest.elo', elo, rp.eloWins ?? 0, rp.eloTotal ?? 0)
+      : t('model.suggest.elo_insufficient', elo))
+  }
+
+  if (rp.useTools) {
+    lines.push(rp.reasonPickUsed ? t('model.suggest.reason_pick') : t('model.suggest.tools'))
+  }
+
+  if (rp.closeRace && rp.gap != null && rp.runnerUpName) {
+    lines.push(t('model.suggest.close_race', rp.gap, rp.runnerUpName))
+  }
+
+  if (rp.secondary && rp.secondary.length) {
+    const labels = rp.secondary
+      .map(s => t(`model.suggest.task.${s.type}`))
+      .filter(l => !l.startsWith('model.suggest.task.'))
+    if (labels.length) lines.push(t('model.suggest.secondary', labels.join(', ')))
+  }
+
+  if (rp.confidence != null) lines.push(t('model.suggest.confidence', rp.confidence))
+
+  return lines.join('\n')
+}
+
 function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion, scoreByModel }: {
   providers: { id: number; name: string }[]
   allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]
   activeModelId: number | null
   onSelect: (modelId: number, providerId: number) => void
-  modelSuggestion: { suggestedModelId: number | null; reason: string; confidence: number } | null
+  modelSuggestion: ModelSuggestion | null
   scoreByModel: Record<number, number>
 }) {
   const groups = useMemo(() => providers.map(p => {
@@ -640,48 +684,50 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
 
   if (groups.length === 0) return null
 
-  const activeModel = allModels.find(m => m.id === activeModelId)
   const isAutoSuggested = modelSuggestion && modelSuggestion.suggestedModelId === activeModelId && activeModelId != null
   const suggestedModel = modelSuggestion && modelSuggestion.suggestedModelId ? allModels.find(m => m.id === modelSuggestion!.suggestedModelId) : null
+  const reasonTitle = formatSuggestionReason(modelSuggestion)
 
+  // The suggestion badge floats on the select's top-right corner so it never
+  // takes document-flow space, squeezes the select, or covers its text.
   return (
-    <div className="flex items-center gap-1.5" title={t('chat.model_switch')}>
+    <div className="flex items-center gap-1.5">
       <Cpu size={13} className="text-gray-400 shrink-0" />
-      <select value={String(activeModelId ?? '')}
-        onChange={(e) => {
-          const mid = Number(e.target.value)
-          const model = allModels.find(m => m.id === mid)
-          if (model) onSelect(mid, model.provider_id)
-        }}
-        className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-[var(--content-bg)]"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-        title={modelSuggestion ? modelSuggestion.reason : t('chat.model_switch')}>
-        <option value="" disabled>{t('chat.select_model')}</option>
-        {groups.map(g => (
-          <optgroup key={g.providerId} label={g.providerName}>
-            {g.models.map(m => (
-              <option key={m.id} value={m.id}>{m.display_name || m.model_name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-      {!isAutoSuggested && suggestedModel && (
-        <button onClick={() => {
-          if (suggestedModel) onSelect(suggestedModel.id, suggestedModel.provider_id)
-        }}
-          className="shrink-0 rounded-full hover:opacity-80 transition-opacity"
-          style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
-          title={modelSuggestion!.reason} aria-label={modelSuggestion!.reason}>
-          <Wand2 size={10} className="px-1 py-0.5" />
-        </button>
-      )}
-      {isAutoSuggested && (
-        <span className="shrink-0 rounded-full"
-          style={{ backgroundColor: 'rgba(99,102,241,0.12)', color: 'var(--accent)' }}
-          title={modelSuggestion!.reason}>
-          <Check size={10} className="px-0.5 py-0.5" />
-        </span>
-      )}
+      <div className="relative shrink-0" title={reasonTitle}>
+        <select value={String(activeModelId ?? '')}
+          onChange={(e) => {
+            const mid = Number(e.target.value)
+            const model = allModels.find(m => m.id === mid)
+            if (model) onSelect(mid, model.provider_id)
+          }}
+          className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-[var(--content-bg)]"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+          <option value="" disabled>{t('chat.select_model')}</option>
+          {groups.map(g => (
+            <optgroup key={g.providerId} label={g.providerName}>
+              {g.models.map(m => (
+                <option key={m.id} value={m.id}>{m.display_name || m.model_name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        {!isAutoSuggested && suggestedModel && (
+          <button
+            onClick={() => onSelect(suggestedModel.id, suggestedModel.provider_id)}
+            className="absolute -right-1.5 -top-1.5 w-4 h-4 rounded-full flex items-center justify-center hover:scale-110 transition-transform z-10"
+            style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+            title={reasonTitle} aria-label={reasonTitle}>
+            <Wand2 size={9} />
+          </button>
+        )}
+        {isAutoSuggested && (
+          <span className="absolute -right-1.5 -top-1.5 w-4 h-4 rounded-full flex items-center justify-center pointer-events-none"
+            style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: 'var(--accent)' }}
+            title={reasonTitle}>
+            <Check size={9} />
+          </span>
+        )}
+      </div>
     </div>
   )
 }
