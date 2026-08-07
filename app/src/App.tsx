@@ -12,17 +12,21 @@ import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
 import LearningGraphPage from '@/pages/LearningGraphPage'
 import SkillsPage from '@/pages/SkillsPage'
+import EvolutionPage from '@/pages/EvolutionPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
 import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import CompletionToasts from '@/components/chat/CompletionToasts'
+import { PanelLeft } from 'lucide-react'
+import { t } from '@/utils/i18n'
 export default function App() {
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
   const createSession = useStore((s) => s.createSession)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
+  const toggleSidebar = useStore((s) => s.toggleSidebar)
   const loadProviders = useStore((s) => s.loadProviders)
   const loadSessions = useStore((s) => s.loadSessions)
   const loadPersonas = useStore((s) => s.loadPersonas)
@@ -208,6 +212,7 @@ export default function App() {
       case 'memory': return <MemoryPage />
       case 'learning': return <LearningGraphPage />
       case 'skills': return <SkillsPage />
+      case 'evolution': return <EvolutionPage />
     }
   }
 
@@ -227,7 +232,18 @@ export default function App() {
               transform: backgroundBlur > 0 ? 'scale(1.05)' : undefined,
             }} />
         )}
-        {sidebarOpen && <Sidebar />}
+        {sidebarOpen ? (
+          <Sidebar />
+        ) : (
+          /* Collapsed: slim expand rail with a single button — visible on every
+             view (chat, settings, memory, ...), not just chat. */
+          <div className="w-10 shrink-0 flex flex-col items-center pt-3" style={{ borderRight: '1px solid var(--border)', backgroundColor: 'var(--bg-primary)' }}>
+            <button onClick={toggleSidebar} aria-label="Open sidebar" title={t('sidebar.nav.expand')}
+              className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
+              <PanelLeft size={16} className="text-[var(--text-muted)]" />
+            </button>
+          </div>
+        )}
         <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
           {renderPage()}
         </main>

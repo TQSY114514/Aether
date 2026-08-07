@@ -32,7 +32,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   loopingSessions: new Set<number>(),
   effortLevel: "off",
   agentMode: "off",
-  modelSuggestion: null as { suggestedModelId: number | null; reason: string; confidence: number } | null,
+  modelSuggestion: null as ModelSuggestion | null,
   messageSearchQuery: "",
 
   setChatMode: (mode) => {
@@ -50,6 +50,23 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   setAgentMode: (v) => set({ agentMode: v }),
 
   setEffortLevel: (v) => set({ effortLevel: v }),
+
+  refreshModelSuggestion: async () => {
+    const { currentSessionId, messages } = get()
+    if (currentSessionId == null) return
+    // Use the latest user message as the routing basis; new sessions with no
+    // user message yet have nothing to route on.
+    const lastUserMsg = [...messages].reverse().find(m => m.role === "user")
+    if (!lastUserMsg) return
+    try {
+      const result = await window.electronAPI.model.suggest({ sessionId: currentSessionId, userMessage: lastUserMsg.content })
+      if (result && result.suggestedModelId != null) {
+        set({ modelSuggestion: { suggestedModelId: result.suggestedModelId, reason: result.reason, reasonParts: result.reasonParts, confidence: result.confidence } })
+      }
+    } catch (err) {
+      log.warn("refreshModelSuggestion failed:", err)
+    }
+  },
 
   sendMessage: async (content, attachments) => {
     const { currentSessionId, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix, chatMode } = get()

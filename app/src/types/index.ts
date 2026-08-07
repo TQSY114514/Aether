@@ -70,7 +70,7 @@ export interface Message {
   attachment?: { name: string; mime: string; kind: 'text' | 'image'; preview?: string } | null
 }
 
-export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning' | 'skills'
+export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning' | 'skills' | 'evolution'
 
 export interface TestConnectionResult {
   success: boolean
@@ -106,3 +106,5 @@ export interface RouteResult {
   api_key?: string
   route_reason: string
 }
+
+

@@ -5,7 +5,7 @@ import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
-import { PanelLeft, Cpu, FlaskConical } from 'lucide-react'
+import { Cpu, FlaskConical } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // Trust badge dot color → tailwind class
@@ -25,8 +25,6 @@ export default function ChatPage() {
   const personas = useStore((s) => s.personas)
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
-  const sidebarOpen = useStore((s) => s.sidebarOpen)
-  const toggleSidebar = useStore((s) => s.toggleSidebar)
   const chatMode = useStore((s) => s.chatMode)
   const setChatMode = useStore((s) => s.setChatMode)
   const arenaModelIds = useStore((s) => s.arenaModelIds)
@@ -99,11 +97,6 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <div className="h-12 border-b flex items-center justify-between px-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
-            {!sidebarOpen && (
-              <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
-                <PanelLeft size={16} className="text-gray-400" />
-              </button>
-            )}
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -159,11 +152,6 @@ export default function ChatPage() {
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }} {...arenaBgStyle}>
       <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2">
-          {!sidebarOpen && (
-            <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors">
-              <PanelLeft size={16} className="text-[var(--text-muted)]" />
-            </button>
-          )}
           {currentModel && currentProvider && (
             <Tooltip text={t('tooltip.model_badge')}>
               <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>

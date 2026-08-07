@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X } from 'lucide-react'
@@ -19,6 +19,8 @@ export default function MemoryPage() {
   const [showConflicts, setShowConflicts] = useState(false)
   const [resolving, setResolving] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deleted, setDeleted] = useState<{ content: string; type: string; source_session_id: number | null } | null>(null)
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { toast } = useUI()
 
   const loadEntries = async () => {
@@ -48,7 +50,28 @@ export default function MemoryPage() {
   }
 
   const handleDelete = async (id: number) => {
+    const target = entries.find(e => e.id === id)
     await window.electronAPI.memory.delete(id)
+    if (target) {
+      setDeleted({ content: target.content, type: target.type, source_session_id: target.source_session_id ?? null })
+      if (undoTimer.current) clearTimeout(undoTimer.current)
+      undoTimer.current = setTimeout(() => setDeleted(null), 8000)
+    }
+    loadEntries()
+  }
+
+  const handleUndo = async () => {
+    if (!deleted) return
+    try {
+      await window.electronAPI.memory.create({
+        content: deleted.content,
+        type: deleted.type,
+        source_session_id: deleted.source_session_id ?? undefined,
+      })
+      toast('已恢复删除的记忆')
+    } catch { toast('恢复失败', { type: 'error' }) }
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    setDeleted(null)
     loadEntries()
   }
 
@@ -115,6 +138,21 @@ export default function MemoryPage() {
             </button>
           </div>
         </div>
+
+        {/* Undo-delete banner */}
+        {deleted && (
+          <div className="w-full mb-4 rounded-xl border p-3 flex items-center justify-between text-sm transition-all"
+            style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+            <span className="truncate mr-3" style={{ color: 'var(--text-secondary)' }}>
+              已删除: "{deleted.content.slice(0, 40)}{deleted.content.length > 40 ? '…' : ''}"
+            </span>
+            <button onClick={handleUndo}
+              className="shrink-0 px-3 py-1 text-xs rounded-lg border transition-colors hover:bg-[var(--bg-primary)]"
+              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+              撤销
+            </button>
+          </div>
+        )}
 
         {/* Conflict banner */}
         {conflicts.length > 0 && (

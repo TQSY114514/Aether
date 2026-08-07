@@ -890,6 +890,10 @@ function applySkillTransitions() {
   try {
     db.prepare("UPDATE skill_usage SET state = 'stale' WHERE state = 'active' AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 30").run()
     db.prepare("UPDATE skill_usage SET state = 'archived', archived_at = datetime('now') WHERE state IN ('active','stale') AND pinned = 0 AND last_used_at IS NOT NULL AND julianday('now') - julianday(last_used_at) > 90").run()
+    // Success-rate demotion (Evolver rollback principle): skills that fail
+    // >= 50% of their last 5+ uses are demoted to stale so the model stops
+    // being offered them. Pinned skills are exempt.
+    db.prepare("UPDATE skill_usage SET state = 'stale' WHERE state = 'active' AND pinned = 0 AND name IN (SELECT name FROM skill_success WHERE total_uses >= 5 AND (successes * 1.0 / total_uses) < 0.5)").run()
   } catch {}
 }
 

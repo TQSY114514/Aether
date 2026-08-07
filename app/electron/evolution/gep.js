@@ -928,6 +928,48 @@ function getEvolutionHistory(db) {
   }
 }
 
+// ─── Evolution Guidance ────────────────────────────────────────────────────
+// The <evolution_guidance> block produced by the latest cycle. Stored
+// per-session (the most recent generation for that session) with a global
+// fallback for manual runs without a session id. Consumed by toolLoop.js to
+// inject the strategies into the agent's system prompt, so the evolution loop
+// actually influences subsequent runs.
+
+const guidanceBySession = new Map(); // sessionId -> { prompt, capsule, ts }
+let globalGuidance = null;           // { prompt, capsule, ts } — manual runs
+
+function storeGuidance(sessionId, prompt, capsule) {
+  if (!prompt || !prompt.trim()) return;
+  var cap = capsule ? { id: capsule.id, name: capsule.name } : null;
+  if (sessionId != null) {
+    guidanceBySession.set(String(sessionId), { prompt: prompt, capsule: cap, ts: Date.now() });
+    // Cap per-session growth — drop the oldest entry past 20 sessions.
+    if (guidanceBySession.size > 20) {
+      var oldestKey = null, oldestTs = Infinity;
+      guidanceBySession.forEach(function (v, k) { if (v.ts < oldestTs) { oldestTs = v.ts; oldestKey = k; } });
+      if (oldestKey != null) guidanceBySession.delete(oldestKey);
+    }
+  } else {
+    globalGuidance = { prompt: prompt, capsule: cap, ts: Date.now() };
+  }
+}
+
+// Resolve the active guidance for a session: session-specific if present,
+// otherwise the global (manual-run) fallback. Returns null when nothing stored.
+function getActiveGuidance(sessionId) {
+  if (sessionId != null) {
+    var s = guidanceBySession.get(String(sessionId));
+    if (s && s.prompt) return s;
+  }
+  return globalGuidance;
+}
+
+// Clear stored guidance (per-session, or global when sessionId is null).
+function clearGuidance(sessionId) {
+  if (sessionId == null) { globalGuidance = null; return; }
+  guidanceBySession.delete(String(sessionId));
+}
+
 // ─── Exports ───────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -955,4 +997,8 @@ module.exports = {
   // Configuration
   setCapsuleDir,
   getCapsuleDir,
+  // Evolution guidance (feed-forward state for toolLoop injection)
+  storeGuidance,
+  getActiveGuidance,
+  clearGuidance,
 };

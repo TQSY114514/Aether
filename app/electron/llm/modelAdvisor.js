@@ -238,11 +238,18 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
       }
     }
 
-    if (useTools) parts.push('Tools active: reasoning-capable family preferred')
+    let reasoningPickUsed = false
+    if (useTools) {
+      parts.push('Tools active: reasoning-capable family preferred')
+      reasoningPickUsed = winner !== ranked[0]
+    }
+    let gap = null
+    let runnerUpName = null
     if (ranked.length > 1) {
       const second = ranked[1]
-      const gap = winner.blended - second.blended
-      if (gap < 5) parts.push(`Close race: +${gap.toFixed(1)} over ${second.model.model_name}`)
+      gap = winner.blended - second.blended
+      runnerUpName = second.model.model_name
+      if (gap < 5) parts.push(`Close race: +${gap.toFixed(1)} over ${runnerUpName}`)
     }
 
     const secondary = task.secondary.filter(t => t !== taskType).slice(0, 2)
@@ -251,6 +258,27 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
     return {
       model: winner.model,
       reason: parts.join(' · '),
+      // Structured rationale for the renderer to localize (i18n) instead of
+      // showing the raw English `reason` string above.
+      reasonParts: {
+        task: taskType,
+        taskLabel,
+        confidence: Math.round(confidence * 100),
+        lowConfidence: confidence < 0.5,
+        family: winner.family,
+        heuristic: winner.hScore,
+        eloScore: winner.eloScore,
+        eloWins: winner.eloWins,
+        eloTotal: winner.eloTotal,
+        eloReliable: winner.eloTotal >= 5,
+        useTools: !!useTools,
+        reasonPickUsed: reasoningPickUsed,
+        closeRace: gap !== null && gap < 5,
+        gap: gap !== null ? Number(gap.toFixed(1)) : null,
+        runnerUpName,
+        secondary: secondary.map(s => ({ type: s, label: s })),
+        ranked: ranked.length,
+      },
       heuristicScores: ranked.map(r => ({ modelId: r.model.id, modelName: r.model.model_name,
         family: r.family, heuristic: r.hScore, eloScore: r.eloScore, blended: r.blended })),
       eloScore: winner.eloScore,
@@ -279,7 +307,7 @@ function suggestModel({ allModels, userMessage, useTools, intent }) {
 /**
  * Enhanced suggest with ELO data and explainable rationale.
  * @param {{ allModels, userMessage, useTools, intent, eloData }}
- * @returns {{ suggestedModelId, reason, heuristicScores, confidence } | null}
+ * @returns {{ suggestedModelId, reason, reasonParts, heuristicScores, confidence } | null}
  */
 function suggestModelExplained({ allModels, userMessage, useTools, intent, eloData }) {
   try {
@@ -288,6 +316,7 @@ function suggestModelExplained({ allModels, userMessage, useTools, intent, eloDa
     return {
       suggestedModelId: result.model.id,
       reason: result.reason,
+      reasonParts: result.reasonParts,
       heuristicScores: result.heuristicScores,
       confidence: result.confidence,
     }

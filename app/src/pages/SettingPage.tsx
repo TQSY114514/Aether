@@ -9,6 +9,24 @@ import AdvancedSettings from '@/components/settings/AdvancedSettings'
 import AgentSettings from '@/components/settings/AgentSettings'
 import SkillsSettings from '@/components/settings/SkillsSettings'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
+import TokenPage from '@/pages/TokenPage'
+import EvolutionPage from '@/pages/EvolutionPage'
+import LearningGraphPage from '@/pages/LearningGraphPage'
+import SkillsPage from '@/pages/SkillsPage'
+import { ChevronLeft, DollarSign, GitBranch, Network as NetworkIcon, BookOpen, ChevronRight } from 'lucide-react'
+
+// Sub-panels reachable from the "Data & tools" card. Kept off the sidebar to
+// stay lean; these full-page views render inside the settings shell.
+type ToolsPanel = 'tokens' | 'evolution' | 'learning' | 'skills' | null
+
+// i18n keys resolved at render time (t() is language-reactive; module-level
+// calls would freeze the strings in the initial language).
+const TOOLS_ENTRIES: { key: Exclude<ToolsPanel, null>; icon: any; titleKey: string; descKey: string }[] = [
+  { key: 'tokens', icon: DollarSign, titleKey: 'settings.tools.tokens', descKey: 'settings.tools.tokens_desc' },
+  { key: 'evolution', icon: GitBranch, titleKey: 'settings.tools.evolution', descKey: 'settings.tools.evolution_desc' },
+  { key: 'learning', icon: NetworkIcon, titleKey: 'settings.tools.learning', descKey: 'settings.tools.learning_desc' },
+  { key: 'skills', icon: BookOpen, titleKey: 'settings.tools.skills', descKey: 'settings.tools.skills_desc' },
+]
 
 // "Local Gateway" card — shows the connection info the VS Code extension /
 // browser tools use to reach AetherAI (127.0.0.1:<port> + token). Mirror of
@@ -173,6 +191,7 @@ export default function SettingPage() {
 
   const [saved, setSaved] = useState(false)
   const [localTimeout, setLocalTimeout] = useState(String(fallbackTimeout))
+  const [toolsPanel, setToolsPanel] = useState<ToolsPanel>(null)
   const { toast } = useUI()
 
   useEffect(() => { setLocalTimeout(String(fallbackTimeout)) }, [fallbackTimeout])
@@ -195,6 +214,33 @@ export default function SettingPage() {
     }
     reader.readAsDataURL(file)
     e.target.value = '' // allow re-uploading the same file
+  }
+
+  if (toolsPanel) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
+        {/* Back bar */}
+        <div className="flex items-center gap-2 px-6 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+          <button onClick={() => setToolsPanel(null)}
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            <ChevronLeft size={14} />{t('settings.tools.back', '返回设置')}
+          </button>
+          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+            {TOOLS_ENTRIES.find(e => e.key === toolsPanel)?.titleKey
+              ? t(TOOLS_ENTRIES.find(e => e.key === toolsPanel)!.titleKey)
+              : toolsPanel}
+          </span>
+        </div>
+        {/* Full page renders inside; its own flex-1 scroll area fills the rest */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {toolsPanel === 'tokens' && <TokenPage />}
+          {toolsPanel === 'evolution' && <EvolutionPage />}
+          {toolsPanel === 'learning' && <LearningGraphPage />}
+          {toolsPanel === 'skills' && <SkillsPage />}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -353,6 +399,29 @@ export default function SettingPage() {
 
           {/* Skills */}
           <SkillsSettings />
+
+          {/* Data & tools — dev-facing views kept off the sidebar */}
+          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+            <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.tools.title')}</h2>
+            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.tools.desc')}</p>
+            <div className="grid grid-cols-1 gap-2">
+              {TOOLS_ENTRIES.map((entry) => {
+                const Icon = entry.icon
+                return (
+                  <button key={entry.key} onClick={() => setToolsPanel(entry.key)}
+                    className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors text-left"
+                    style={{ borderColor: 'var(--border)' }}>
+                    <Icon size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t(entry.titleKey)}</span>
+                      <span className="block text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{t(entry.descKey)}</span>
+                    </span>
+                    <ChevronRight size={14} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           {/* Local Gateway / VS Code integration */}
           <GatewayCard />

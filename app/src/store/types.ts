@@ -241,7 +241,9 @@ export interface AppState {
   effortLevel: 'off' | 'low' | 'medium' | 'high'
   setEffortLevel: (v: 'off' | 'low' | 'medium' | 'high') => void
   // Last model-suggestion rationale from modelAdvisor (shown in ModelSelector).
-  modelSuggestion: { suggestedModelId: number | null; reason: string; confidence: number } | null
+  modelSuggestion: ModelSuggestion | null
+  // Refresh the suggestion on session open (based on the latest user message).
+  refreshModelSuggestion: () => Promise<void>
   // Feature B: mid-turn injection tracking.
   loopingSessions: Set<number>
   setLooping: (sessionId: number, looping: boolean) => void
@@ -327,7 +329,7 @@ export interface AppState {
   setBackgroundOpacity: (v: number) => Promise<void>
   setBackgroundBlur: (v: number) => Promise<void>
 
-  // Model routing priority (used by modelAdvisor to pick models).
+  // Model routing priority (used by modelRouter to pick models).
   modelRoutingPriority: 'quality' | 'speed' | 'cost'
   setModelRoutingPriority: (v: 'quality' | 'speed' | 'cost') => Promise<void>
   // Auto model routing: when enabled, suggestModelForTier blends Arena ELO +
