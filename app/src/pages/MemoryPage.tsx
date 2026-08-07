@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import { parseMemoryImport } from '@/utils/memoryImport'
 
 const TYPE_COLORS: Record<string, string> = {
   entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#9333EA',
@@ -96,15 +97,9 @@ export default function MemoryPage() {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
       try {
-        const data = JSON.parse(await file.text())
-        const items = Array.isArray(data) ? data : data.memories || []
+        const items = parseMemoryImport(await file.text())
         for (const item of items) {
-          if (item.content && item.content.trim()) {
-            await window.electronAPI.memory.create({
-              content: item.content.trim(),
-              type: item.type || 'fact',
-            })
-          }
+          await window.electronAPI.memory.create({ content: item.content, type: item.type })
         }
         loadEntries()
       } catch { toast('Invalid JSON file', { type: 'error' }) }
