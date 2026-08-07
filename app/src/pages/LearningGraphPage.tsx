@@ -20,7 +20,7 @@ const COLORS: Record<Node['type'] | 'default', string> = {
 
 // Build the graph from DB data. Simple keyword overlap (not NLP) so it stays
 // fast and zero-dependency.
-function buildGraph(memories: { id: number; content: string; created_at: string }[], skills: { name: string; description: string }[], sessions: Session[]): GraphData {
+export function buildGraph(memories: { id: number; content: string; created_at: string }[], skills: { name: string; description: string }[], sessions: Session[]): GraphData {
   const nodes: Node[] = []
   const edges: Edge[] = []
   // Nodes
