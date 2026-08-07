@@ -1053,12 +1053,14 @@ const TOOLS = [
     },
   },
   {
-    // ─── Symbol lookup (LSP-lite) ─────────────────────────────────────────────
+    // ─── Symbol lookup (LSP-first, LSP-lite fallback) ────────────────────────
     // Dedicated, focused lookup of where a symbol (function/class/const) is
-    // defined across the indexed workspace, with line numbers. Read-only.
+    // defined across the workspace, with line numbers. Read-only. Uses a local
+    // LSP server (workspace/symbol) for precise locations when one is
+    // available; otherwise degrades to the regex-based symbol indexer.
     // ──────────────────────────────────────────────────────────────────────────
     name: 'find_symbol',
-    description: 'Find where a symbol (function/class/const) is defined and used across the indexed workspace. Returns file paths with line numbers.',
+    description: 'Find where a symbol (function/class/const) is defined and used across the workspace. Returns file paths with line numbers.',
     risk: 'safe',
     parameters: {
       type: 'object',
@@ -1072,12 +1074,22 @@ const TOOLS = [
       const { getWorkspaceRoot } = require('./sandbox')
       const root = getWorkspaceRoot(ctx?.sessionId)
       if (!root) return 'no workspace configured'
-      const projectIndexer = require('../context/projectIndexer')
-      const graph = await projectIndexer.indexWorkspace(root)
       const target = String(args.name || '').trim()
       if (!target) return '(no symbol name provided)'
       const langFilter = String(args.language || '').trim().toLowerCase()
 
+      // LSP first: precise workspace/symbol lookup. searchWorkspace returns
+      // null when no server is available/healthy or the language has none —
+      // only then fall back to the regex indexer below.
+      const lsp = require('../context/lspClient')
+      const lspHits = await lsp.searchWorkspace(root, target, { language: langFilter || 'javascript' })
+      if (lspHits !== null) {
+        if (!lspHits.length) return `(no matches for "${target}")`
+        return lspHits.slice(0, 50).map(h => `${h.file}:${h.line}  ${h.name}`).join('\n')
+      }
+
+      const projectIndexer = require('../context/projectIndexer')
+      const graph = await projectIndexer.indexWorkspace(root)
       const results = []
       for (const node of graph.files.values()) {
         if (langFilter && String(node.language || '').toLowerCase() !== langFilter) continue
