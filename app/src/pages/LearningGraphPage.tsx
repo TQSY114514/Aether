@@ -50,6 +50,27 @@ export function buildGraph(memories: { id: number; content: string; created_at: 
   return { nodes, edges }
 }
 
+// Backend knowledge-graph rows (kg_nodes / kg_edges via kg:graph IPC) arrive in
+// a different shape: nodes { id, label, type } with entity types, edges
+// { source, target, relation }. Map them onto the page's Node/Edge shape so the
+// existing renderer/COLORS/t() keys work unchanged. Entity/fact_entity nodes
+// fall into the 'memory' bucket; anything unknown also falls back to 'memory'.
+export function adaptKgData(data: { nodes: { id: string; label: string; type: string }[]; edges: { source: string; target: string; relation: string }[] } | { nodes: never[]; edges: never[] } | null | undefined): GraphData {
+  if (!data || !Array.isArray(data.nodes) || data.nodes.length === 0) {
+    return { nodes: [], edges: [] }
+  }
+  const nodes: Node[] = data.nodes.map(n => ({
+    id: String(n.id),
+    label: String(n.label || n.id),
+    type: 'memory',
+    extra: String(n.type || 'entity'),
+  }))
+  const edges: Edge[] = (Array.isArray(data.edges) ? data.edges : [])
+    .filter(e => e && e.source && e.target)
+    .map(e => ({ from: String(e.source), to: String(e.target), label: String(e.relation || 'related') }))
+  return { nodes, edges }
+}
+
 export default function LearningGraphPage() {
   const memories = useStore(s => s.memories)
   const loadMemories = useStore(s => s.loadMemories)
@@ -59,9 +80,32 @@ export default function LearningGraphPage() {
   const [graph, setGraph] = useState<GraphData>({ nodes: [], edges: [] })
   const [selected, setSelected] = useState<Node | null>(null)
   const [filter, setFilter] = useState('')
+  const [kgLoaded, setKgLoaded] = useState(false)
 
   useEffect(() => { loadMemories(); loadSessions(); try { window.electronAPI?.skills?.list?.().then(setSkills).catch(() => {}) } catch {} }, [loadMemories, loadSessions])
-  useEffect(() => { setGraph(buildGraph(memories, skills, sessions)) }, [memories, skills, sessions])
+
+  // Backend knowledge-graph data (kg_nodes/kg_edges) takes priority once loaded.
+  // While it is loading — or when the backend returns nothing — the frontend
+  // buildGraph (memories × skills × sessions) remains the visual default, so the
+  // page works identically without a populated kg table.
+  useEffect(() => {
+    let cancelled = false
+    try {
+      window.electronAPI?.kg?.graph?.({ nodeLimit: 200 })
+        .then(data => {
+          if (cancelled) return
+          const adapted = adaptKgData(data)
+          setKgLoaded(true)
+          if (adapted.nodes.length > 0) setGraph(adapted)
+        })
+        .catch(() => { if (!cancelled) setKgLoaded(true) })
+    } catch { if (!cancelled) setKgLoaded(true) }
+    return () => { cancelled = true }
+  }, [])
+  useEffect(() => {
+    if (kgLoaded) return
+    setGraph(buildGraph(memories, skills, sessions))
+  }, [memories, skills, sessions, kgLoaded])
 
   const { nodes, edges } = graph
   const filtered = filter ? nodes.filter(n => n.label.toLowerCase().includes(filter.toLowerCase())) : nodes

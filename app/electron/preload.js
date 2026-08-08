@@ -154,6 +154,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     conflictResolve: (keepId, removeId) => ipcRenderer.invoke('memory:conflict:resolve', keepId, removeId),
     access: (id) => ipcRenderer.invoke('memory:access', id),
   },
+  kg: {
+    graph: (opts) => ipcRenderer.invoke('kg:graph', opts),
+  },
   background: {
     set: (dataUrl) => ipcRenderer.invoke('background:set', dataUrl),
     get: () => ipcRenderer.invoke('background:get'),

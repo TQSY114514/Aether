@@ -26,7 +26,38 @@ All notable changes to AetherAI are documented here.
   (`setFileLogging`, driven by the `debug.fileLog` flag) and an
   `addEntryListener` API that forwards `{level,time,msg}` entries to the
   renderer (`main:log`) when the `debug.logForward` flag is on — the basis
-  for an in-app debug/logs panel. All existing log call sites unchanged.
+  for an in-app debug/log panel. All existing log call sites unchanged.
+
+### Infrastructure — Phase 1 (execution backends & task scheduler)
+
+- **Execution backend registry** — new `app/electron/exec/backend.js`
+  abstracts agent task execution behind one contract
+  (`execute/status/terminate/pause/resume`): `localBackend.js` (spawn),
+  `dockerBackend.js` (docker CLI sandbox), and `sshBackend.js` (remote).
+  Assembled once in `exec/index.js`; unknown backend ids fall back to local.
+- **Queue-based task scheduler** — `app/electron/llm/backgroundTasks.js`
+  rewritten around a real scheduler: tasks get a `priority`-ordered queue
+  with automatic retry up to `maxRetry`, persist to the `agent_task` table,
+  and are crash-recoverable — `restorePendingTasks()` re-queues running/
+  pending tasks on app restart so work survives a kill.
+- **Task IPC contract** — `task:start` forwards `priority`/`maxRetry` to the
+  scheduler in `app/electron/ipc/task.handler.js`, exposed on
+  `window.electronAPI.task` with types in `src/env.d.ts`.
+
+### 记忆 — Wave 5 (knowledge graph 产品化收尾)
+
+- **KG 存取修复(迁移 better-sqlite3)** — `knowledgeGraph.js` 的
+  `buildGraph`/`searchGraph` 原用 sql.js 时代 API(`db.exec()[0].values`),
+  在 better-sqlite3 下永远返回空 → 图从未真正写入/检索。现改用
+  `db.allRows` 参数化查询: buildGraph 以 SELECT-before-INSERT 实现
+  kg_nodes 幂等 upsert(重复构建不产生重复节点), relation 记忆写出
+  kg_edges(INSERT OR REPLACE);searchGraph 经 1-hop 邻接实体扩展关键词,
+  命中图内实体的间接记忆也能被检索。
+- **KG 数据接入可视化** — 新增 `kg:graph` IPC 通道
+  (`ipc/kg.handler.js` → `window.electronAPI.kg.graph`),LearningGraphPage
+  优先渲染后端 kg_nodes/kg_edges 数据(实体/关系节点),后端图为空或不可
+  用时回退到原有 memories×skills×sessions 前端 buildGraph — 页面在无图谱
+  数据时保持原样。新增 `adaptKgData` 适配器(实体类型落入 memory 桶)。
 
 ## [0.6.0] — 2026-08-06
 

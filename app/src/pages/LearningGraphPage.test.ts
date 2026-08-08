@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildGraph } from './LearningGraphPage'
+import { buildGraph, adaptKgData } from './LearningGraphPage'
 import type { Session } from '@/types'
 
 type Mem = { id: number; content: string; created_at: string }
@@ -50,5 +50,49 @@ describe('buildGraph', () => {
   it('reports total node count across all types', () => {
     const g = buildGraph([mem(1, 'x'), mem(2, 'y')], [skill('a'), skill('b')], [sess(1, 's'), sess(2, 't')])
     expect(g.nodes).toHaveLength(6)
+  })
+})
+
+describe('adaptKgData', () => {
+  it('maps backend nodes/edges onto the page Node/Edge shape', () => {
+    const g = adaptKgData({
+      nodes: [
+        { id: 'alice', label: 'alice', type: 'entity' },
+        { id: 'project_x', label: 'project_x', type: 'entity' },
+      ],
+      edges: [
+        { source: 'alice', target: 'project_x', relation: 'works_on' },
+      ],
+    })
+    expect(g.nodes).toHaveLength(2)
+    expect(g.nodes[0]).toMatchObject({ id: 'alice', label: 'alice', type: 'memory' })
+    expect(g.edges).toEqual([{ from: 'alice', to: 'project_x', label: 'works_on' }])
+  })
+
+  it('falls entity/fact_entity nodes into the memory bucket for COLORS/t() keys', () => {
+    const g = adaptKgData({
+      nodes: [{ id: 'e1', label: 'e1', type: 'fact_entity' }],
+      edges: [],
+    })
+    expect(g.nodes[0].type).toBe('memory')
+  })
+
+  it('returns empty graph for null / empty / array-less input (page falls back to buildGraph)', () => {
+    expect(adaptKgData(null)).toEqual({ nodes: [], edges: [] })
+    expect(adaptKgData(undefined)).toEqual({ nodes: [], edges: [] })
+    expect(adaptKgData({ nodes: [], edges: [] })).toEqual({ nodes: [], edges: [] })
+  })
+
+  it('drops malformed edges (missing source or target) but keeps valid ones', () => {
+    const g = adaptKgData({
+      nodes: [{ id: 'a', label: 'a', type: 'entity' }],
+      edges: [
+        { source: 'a', target: 'b', relation: 'uses' },
+        { source: '', target: 'b', relation: 'bad' },
+        { source: 'c', target: '', relation: 'bad' },
+      ],
+    })
+    expect(g.edges).toHaveLength(1)
+    expect(g.edges[0]).toEqual({ from: 'a', to: 'b', label: 'uses' })
   })
 })
