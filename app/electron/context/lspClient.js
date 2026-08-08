@@ -114,6 +114,48 @@ class MessageParser {
   }
 }
 
+// Normalize LSP Location | Location[] | LocationLink[] → { file, line, character }[].
+function normalizeLocations(raw) {
+  if (!raw) return []
+  const list = Array.isArray(raw) ? raw : [raw]
+  const out = []
+  for (const item of list) {
+    const target = item && item.targetUri ? item : item
+    const uri = target.targetUri || target.uri
+    if (!uri) continue
+    const range = target.targetRange || target.range
+    const pos = range && range.start ? range.start : null
+    const file = uriToFilePath(uri)
+    if (!file) continue
+    out.push({ file, line: pos ? pos.line : 0, character: pos ? pos.character : 0 })
+  }
+  return out
+}
+
+// Normalize a WorkspaceEdit { changes: { uri: TextEdit[] } } to a flat
+// per-file edit list. Returns null when the payload is unrecognized.
+function normalizeWorkspaceEdit(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const changes = raw.changes && typeof raw.changes === 'object' ? raw.changes : null
+  if (!changes) return null
+  const out = { changes: [] }
+  for (const [uri, edits] of Object.entries(changes)) {
+    const file = uriToFilePath(uri)
+    if (!file || !Array.isArray(edits)) continue
+    out.changes.push({
+      file,
+      edits: edits.map(e => ({
+        line: e.range && e.range.start ? e.range.start.line : 0,
+        character: e.range && e.range.start ? e.range.start.character : 0,
+        endLine: e.range && e.range.end ? e.range.end.line : 0,
+        endCharacter: e.range && e.range.end ? e.range.end.character : 0,
+        newText: e.newText || '',
+      })),
+    })
+  }
+  return out
+}
+
 class LspClient {
   /**
    * @param {object} opts
@@ -154,6 +196,14 @@ class LspClient {
         reject(err)
       }
     })
+  }
+
+  /** Send a one-way notification (no response expected). */
+  _notify(method, params) {
+    try {
+      this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method, params: params ?? {} }))
+      return true
+    } catch { return false }
   }
 
   /** Reject everything in flight and tear the process down. */
@@ -245,6 +295,108 @@ class LspClient {
     return results.slice(0, limit)
   }
 
+  /**
+   * Open a document so the server tracks it (needed by diagnostics and some
+   * servers before definition/references work on unopened files).
+   * @param {string} uri - file:// URI of the file.
+   */
+  async openDocument(uri) {
+    if (!(await this._ensureStarted())) return false
+    this._notify('textDocument/didOpen', { textDocument: { uri, languageId: 'plaintext', version: 1, text: '' } })
+    return true
+  }
+
+  /**
+   * Go to the definition of the symbol at a position.
+   * @param {string} uri - file:// URI of the file containing the position.
+   * @param {number} line - 0-based line.
+   * @param {number} character - 0-based character.
+   * @returns {Promise<Array<{ file: string, line: number, character: number }>>}
+   */
+  async goToDefinition(uri, line, character) {
+    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
+    const raw = await this._send('textDocument/definition', {
+      textDocument: { uri },
+      position: { line, character },
+    })
+    return normalizeLocations(raw)
+  }
+
+  /**
+   * Find all references to the symbol at a position.
+   * @returns {Promise<Array<{ file: string, line: number, character: number }>>}
+   */
+  async findReferences(uri, line, character, { includeDeclaration = true } = {}) {
+    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
+    const raw = await this._send('textDocument/references', {
+      textDocument: { uri },
+      position: { line, character },
+      context: { includeDeclaration },
+    })
+    return normalizeLocations(raw)
+  }
+
+  /**
+   * Compute a rename WorkspaceEdit for a symbol. Does NOT apply it — the
+   * caller decides (permission gate). 
+   * @returns {Promise<null | { changes: Array<{ file: string, edits: Array<{ line, character, endLine, endCharacter, newText }> }> }>}
+   */
+  async prepareRename(uri, line, character, newName) {
+    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
+    const raw = await this._send('textDocument/rename', {
+      textDocument: { uri },
+      position: { line, character },
+      newName,
+    })
+    return normalizeWorkspaceEdit(raw)
+  }
+
+  /**
+   * List code actions available at a range.
+   * @returns {Promise<Array<{ title: string, kind?: string }>>}
+   */
+  async listCodeActions(uri, line, character, { diagnostics = [], kind } = {}) {
+    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
+    const raw = await this._send('textDocument/codeAction', {
+      textDocument: { uri },
+      range: { start: { line, character: 0 }, end: { line, character: 0 } },
+      context: {
+        diagnostics: diagnostics.map(d => ({
+          range: d.range || { start: { line, character: 0 }, end: { line, character: 0 } },
+          message: d.message || '',
+          severity: d.severity ?? 1,
+        })),
+        only: kind ? [kind] : undefined,
+      },
+    })
+    if (!Array.isArray(raw)) return []
+    return raw
+      .filter(a => a && typeof a.title === 'string')
+      .map(a => ({ title: a.title, kind: a.kind }))
+  }
+
+  /**
+   * Pull-style diagnostics for a file (LSP 3.17 `textDocument/diagnostic`).
+   * Falls back to `[]` on servers that do not support the pull model.
+   * @returns {Promise<Array<{ severity: number, message: string, line: number }>>}
+   */
+  async getDiagnostics(uri) {
+    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
+    const raw = await this._send('textDocument/diagnostic', {
+      textDocument: { uri },
+      identifier: 'aether-lsp',
+    })
+    if (!raw) return []
+    const items = raw.kind === 'full' && Array.isArray(raw.items) ? raw.items : []
+    return items.map(d => ({
+      severity: d.severity ?? 1,
+      message: d.message || '',
+      line: (d.range && d.range.start && d.range.start.line) ?? 0,
+      source: d.source || null,
+      code: d.code ?? null,
+    }))
+  }
+
   dispose() {
     if (this._disposed) return
     this._disposed = true
@@ -308,6 +460,86 @@ function configureServer(language, { command, args }) {
   serverOverrides.set(language, { command, args })
 }
 
+// ─── Full-LSP workspace entry points ────────────────────────────────────────
+// Each mirrors searchWorkspace: resolve a (cached) client, run one request,
+// and return null on failure so callers degrade to their fallback. All are
+// behind the `lsp.full` feature flag at the tool layer.
+
+/** Get a client for a workspace+language (cached), or null when unavailable. */
+function clientFor(root, language = 'javascript') {
+  const server = serverOverrides.get(language) || defaultServerFor(language)
+  if (!server) return null
+  const key = `${root}|${language}`
+  let client = clientCache.get(key)
+  if (!client) {
+    client = createClient({ command: server.command, args: server.args, root })
+    clientCache.set(key, client)
+  }
+  return client
+}
+
+// One-shot wrapper: run fn on the cached client; on ANY error dispose the
+// client, drop the cache entry and return null (never throw).
+async function withClient(root, language, fn) {
+  const client = clientFor(root, language)
+  if (!client) return null
+  try {
+    return await fn(client)
+  } catch {
+    clientCache.delete(`${root}|${language}`)
+    try { client.dispose() } catch { /* already disposed */ }
+    return null
+  }
+}
+
+/**
+ * Definition lookup for a position in a file.
+ * @param {string} root  workspace root
+ * @param {string} file  absolute path to the target file
+ * @param {number} line  1-based line
+ * @param {number} [character] 1-based character
+ * @returns {Promise<null | Array<{ file, line, character }>>}
+ */
+function definitionWorkspace(root, file, { language, line = 1, character = 1 } = {}) {
+  const lang = language || extToLanguage(file) || 'javascript'
+  const uri = pathToFileURL(file).href
+  return withClient(root, lang, async (client) => {
+    const res = await client.goToDefinition(uri, line - 1, character - 1)
+    return res || []
+  })
+}
+
+/** References of the symbol at a position. */
+function referencesWorkspace(root, file, { language, line = 1, character = 1, includeDeclaration = true } = {}) {
+  const lang = language || extToLanguage(file) || 'javascript'
+  const uri = pathToFileURL(file).href
+  return withClient(root, lang, async (client) => {
+    const res = await client.findReferences(uri, line - 1, character - 1, { includeDeclaration })
+    return res || []
+  })
+}
+
+/** Prepared rename edits (NOT applied). */
+function renameWorkspace(root, file, newName, { language, line = 1, character = 1 } = {}) {
+  const lang = language || extToLanguage(file) || 'javascript'
+  const uri = pathToFileURL(file).href
+  return withClient(root, lang, async (client) => client.prepareRename(uri, line - 1, character - 1, newName))
+}
+
+/** Available code actions (titles only). */
+function codeActionsWorkspace(root, file, { language, line = 1 }) {
+  const lang = language || extToLanguage(file) || 'javascript'
+  const uri = pathToFileURL(file).href
+  return withClient(root, lang, async (client) => client.listCodeActions(uri, line - 1, 0))
+}
+
+/** Diagnostics for one file. */
+function diagnosticsWorkspace(root, file, { language } = {}) {
+  const lang = language || extToLanguage(file) || 'javascript'
+  const uri = pathToFileURL(file).href
+  return withClient(root, lang, async (client) => client.getDiagnostics(uri))
+}
+
 /** Dispose every cached client (shutdown / test teardown). */
 function disposeAll() {
   for (const client of clientCache.values()) {
@@ -324,6 +556,11 @@ module.exports = {
   LspClient,
   createClient,
   searchWorkspace,
+  definitionWorkspace,
+  referencesWorkspace,
+  renameWorkspace,
+  codeActionsWorkspace,
+  diagnosticsWorkspace,
   configureServer,
   disposeAll,
   DEFAULT_TIMEOUT_MS,

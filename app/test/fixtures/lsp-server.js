@@ -86,6 +86,69 @@ const handle = (msg) => {
     write({ jsonrpc: '2.0', id: msg.id, result: SYMBOLS })
     return
   }
+  if (msg.method === 'textDocument/definition') {
+    // Canned answer: one location in the workspace.
+    write({
+      jsonrpc: '2.0',
+      id: msg.id,
+      result: { uri: 'file:///workspace/src/app.js', range: { start: { line: 3, character: 1 }, end: { line: 3, character: 7 } } },
+    })
+    return
+  }
+  if (msg.method === 'textDocument/references') {
+    write({
+      jsonrpc: '2.0',
+      id: msg.id,
+      result: [
+        { uri: 'file:///workspace/src/app.js', range: { start: { line: 3, character: 1 } } },
+        { uri: 'file:///workspace/src/util.ts', range: { start: { line: 41, character: 0 } } },
+      ],
+    })
+    return
+  }
+  if (msg.method === 'textDocument/rename') {
+    write({
+      jsonrpc: '2.0',
+      id: msg.id,
+      result: {
+        changes: {
+          'file:///workspace/src/app.js': [
+            { range: { start: { line: 3, character: 1 }, end: { line: 3, character: 7 } }, newText: 'renamedSym' },
+          ],
+          'file:///workspace/src/util.ts': [
+            { range: { start: { line: 41, character: 0 }, end: { line: 41, character: 6 } }, newText: 'renamedSym' },
+          ],
+        },
+      },
+    })
+    return
+  }
+  if (msg.method === 'textDocument/codeAction') {
+    write({
+      jsonrpc: '2.0',
+      id: msg.id,
+      result: [
+        { title: 'Extract function', kind: 'refactor.extract' },
+        { title: 'Quick fix: remove unused variable', kind: 'quickfix' },
+      ],
+    })
+    return
+  }
+  if (msg.method === 'textDocument/diagnostic') {
+    write({
+      jsonrpc: '2.0',
+      id: msg.id,
+      result: {
+        kind: 'full',
+        items: [
+          { severity: 1, message: 'Type X is not assignable to Y', range: { start: { line: 12, character: 0 } } },
+          { severity: 2, message: 'Unused variable foo', range: { start: { line: 30, character: 2 } } },
+        ],
+      },
+    })
+    return
+  }
+  if (msg.method === 'textDocument/didOpen') return // notification
   // Unknown request — reply empty.
   if (msg.id !== undefined && msg.id !== null) {
     write({ jsonrpc: '2.0', id: msg.id, result: null })
