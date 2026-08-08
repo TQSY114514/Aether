@@ -90,10 +90,10 @@ AetherAI unifies chat, agent coding, model comparison, and structured memory —
 
 <div align="center">
 
-| **Welcome & Thinking Effort** | **Multi-provider Chat** | **Agent Plan-Act-Observe** |
+| **Welcome & Model Picker** | **Multi-provider Chat** | **Background Tasks** |
 |:---:|:---:|:---:|
-| <img src="./assets/screenshots/01.png" width="280" alt="Welcome screen with thinking-effort slider" /> | <img src="./assets/screenshots/02.png" width="280" alt="Chat with code rendering" /> | <img src="./assets/screenshots/03.png" width="280" alt="Agent planning panel" /> |
-| Pick any model, adjust thinking effort, start chatting | Code blocks, attachments, long-paste folding | Plan → Act → Observe with live reasoning trace |
+| <img src="./assets/screenshots/01.png" width="280" alt="Welcome screen" /> | <img src="./assets/screenshots/02.png" width="280" alt="Chat with code rendering" /> | <img src="./assets/screenshots/03.png" width="280" alt="Background tasks dialog" /> |
+| Pick any model, adjust thinking effort, start chatting | Streaming responses, code blocks, long-paste folding | Run agent tasks in background with model selection |
 
 | **ELO Arena** | **Structured Memory** | **MCP & Customization** |
 |:---:|:---:|:---:|
