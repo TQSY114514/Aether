@@ -79,12 +79,12 @@ function buildGraph(db) {
     // Upsert nodes.
     for (const [name, info] of nodeSet) {
       try {
-        const existing = db.exec(
+        const existing = db.allRows(
           `SELECT id FROM kg_nodes WHERE entity = ? LIMIT 1`, [name]
-        )[0]?.values?.[0]
+        )[0]
         if (existing) {
           db.run(`UPDATE kg_nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [info.type, existing[0]])
+            [info.type, existing.id])
         } else {
           db.run(`INSERT INTO kg_nodes (entity, type) VALUES (?, ?)`, [name, info.type])
         }
@@ -117,31 +117,32 @@ function searchGraph(db, query, limit = 5) {
     if (qkws.length === 0) return []
 
     // Find entities matching the query.
-    const matchingNodes = db.exec(
+    const matchingNodes = db.allRows(
       `SELECT entity, type FROM kg_nodes WHERE LOWER(entity) LIKE ? LIMIT 20`,
       [`%${qkws[0]}%`]
-    )[0]?.values || []
+    ) || []
 
     if (matchingNodes.length === 0) return []
 
     // Collect 1-hop neighbour entities.
     const neighbours = new Set()
-    for (const [entity, type] of matchingNodes) {
+    for (const node of matchingNodes) {
+      const entity = node.entity
       // Outgoing edges.
-      const out = db.exec(
+      const out = db.allRows(
         `SELECT "to", relation, confidence FROM kg_edges WHERE "from" = ? AND confidence >= ?`,
         [entity, MIN_CONFIDENCE]
-      )[0]?.values || []
-      for (const [toEntity, relation] of out) {
-        neighbours.add(toEntity)
+      ) || []
+      for (const row of out) {
+        neighbours.add(row.to)
       }
       // Incoming edges.
-      const inEdges = db.exec(
+      const inEdges = db.allRows(
         `SELECT "from", relation, confidence FROM kg_edges WHERE "to" = ? AND confidence >= ?`,
         [entity, MIN_CONFIDENCE]
-      )[0]?.values || []
-      for (const [fromEntity] of inEdges) {
-        neighbours.add(fromEntity)
+      ) || []
+      for (const row of inEdges) {
+        neighbours.add(row.from)
       }
     }
 

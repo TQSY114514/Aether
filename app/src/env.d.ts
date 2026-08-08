@@ -187,6 +187,9 @@ interface Window {
       conflictResolve: (keepId: number, removeId: number) => Promise<{ ok: boolean }>
       access: (id: number) => Promise<void>
     }
+    kg: {
+      graph: (opts?: { nodeLimit?: number; edgeLimit?: number }) => Promise<{ nodes: { id: string; label: string; type: string }[]; edges: { source: string; target: string; relation: string; confidence: number }[] }>
+    }
     background: {
       set: (dataUrl: string | null) => Promise<{ success: boolean; hasImage?: boolean; error?: string }>
       get: () => Promise<string | null>
