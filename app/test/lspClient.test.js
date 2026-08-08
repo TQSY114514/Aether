@@ -18,6 +18,11 @@ import {
   uriToFilePath,
   createClient,
   searchWorkspace,
+  definitionWorkspace,
+  referencesWorkspace,
+  renameWorkspace,
+  codeActionsWorkspace,
+  diagnosticsWorkspace,
   configureServer,
   disposeAll,
 } from '../electron/context/lspClient'
@@ -190,5 +195,67 @@ describe('searchWorkspace (module-level, degrade-to-null)', () => {
     pointServerAtFixture()
     const results = await searchWorkspace(tmpDir, 'findMe', { language: 'javascript' })
     expect(results).toHaveLength(2)
+  })
+})
+
+// ─── Full LSP feature set (definition / references / rename / actions / diag) ──
+describe('full LSP workspace API', () => {
+  let SAMPLE
+  beforeEach(() => {
+    pointServerAtFixture()
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true })
+    SAMPLE = path.join(tmpDir, 'src', 'app.js')
+    fs.writeFileSync(SAMPLE, 'export function findMe() {}\n')
+  })
+
+  it('definitionWorkspace returns a single normalized location (1-based)', async () => {
+    const res = await definitionWorkspace(tmpDir, SAMPLE, { line: 1, character: 1 })
+    expect(res).not.toBeNull()
+    expect(res).toHaveLength(1)
+    expect(res[0]).toMatchObject({ line: 3, character: 1 })
+    expect(path.basename(res[0].file)).toBe('app.js')
+  })
+
+  it('referencesWorkspace returns all reference locations', async () => {
+    const res = await referencesWorkspace(tmpDir, SAMPLE, { line: 1, character: 1 })
+    expect(res).toHaveLength(2)
+    expect(res.map(r => r.line)).toEqual([3, 41])
+  })
+
+  it('renameWorkspace prepares edits without applying them', async () => {
+    const res = await renameWorkspace(tmpDir, SAMPLE, 'renamedSym', { line: 1, character: 1 })
+    expect(res).not.toBeNull()
+    expect(res.changes).toHaveLength(2)
+    const appChange = res.changes.find(c => c.file.endsWith('app.js'))
+    expect(appChange.edits[0].newText).toBe('renamedSym')
+    expect(appChange.edits[0].line).toBe(3)
+  })
+
+  it('codeActionsWorkspace lists actionable titles', async () => {
+    const res = await codeActionsWorkspace(tmpDir, SAMPLE, { line: 1 })
+    expect(res).not.toBeNull()
+    const titles = res.map(a => a.title)
+    expect(titles).toContain('Extract function')
+    expect(titles).toContain('Quick fix: remove unused variable')
+  })
+
+  it('diagnosticsWorkspace returns severity/message/line tuples', async () => {
+    const res = await diagnosticsWorkspace(tmpDir, SAMPLE)
+    expect(res).not.toBeNull()
+    expect(res).toHaveLength(2)
+    expect(res[0]).toMatchObject({ severity: 1, line: 12 })
+    expect(res[0].message).toContain('not assignable')
+    expect(res[1].severity).toBe(2)
+  })
+
+  it('full-LSP entry points degrade to null when the language has no server', async () => {
+    const res = await definitionWorkspace(tmpDir, SAMPLE, { language: 'rust', line: 1 })
+    expect(res).toBeNull()
+  })
+
+  it('full-LSP entry points degrade to null when the server is defunct', async () => {
+    pointServerAtFixture('--defunct')
+    const res = await referencesWorkspace(tmpDir, SAMPLE, { line: 1 })
+    expect(res).toBeNull()
   })
 })

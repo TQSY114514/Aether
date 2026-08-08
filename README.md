@@ -39,7 +39,7 @@ AetherAI combines several capabilities that are typically spread across multiple
 | Capability | Description | Maturity |
 |---|---|:---:|
 | **Multi-provider Chat** | Switch between OpenAI, Claude, DeepSeek, and any OpenAI-compatible endpoint mid-conversation. | `Stable` |
-| **Agent Tool Loop** | 37 built-in tools with Plan-Act-Observe loop, sandboxing, permission ladder. | `Beta` |
+| **Agent Tool Loop** | 42 built-in tools with Plan-Act-Observe loop, sandboxing, permission ladder. | `Beta` |
 | **Multi-model Arena** | Send one prompt to multiple models, vote on the best, track ELO rankings. | `Beta` |
 | **Skills & Extensibility** | Drop-in `SKILL.md` files, MCP servers, 10-point hook system. | `Experimental` |
 | **Structured Memory** | Agent recalls preferences and past decisions across sessions. | `Beta` |
@@ -140,7 +140,7 @@ Or run `start.bat` at the repo root on Windows.
 
 ### Agent (Function Calling)
 
-- `Beta` **37 built-in tools** — file ops (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), web (`web_search`, `web_fetch`), shell (`run_command`), git & GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), agent meta (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `find_symbol`, `review_code`, `debug_loop`, `test_first`) — with a Plan-Act-Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, configurable iteration budget (default 25 rounds), and context compaction.
+- `Beta` **42 built-in tools** — file ops (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), web (`web_search`, `web_fetch`), shell (`run_command`), git & GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), code intelligence (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), agent meta (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — with a Plan-Act-Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, configurable iteration budget (default 25 rounds), and context compaction.
 - `Experimental` **Hierarchical planning** — auto-generates task breakdown for complex requests (DS4-inspired).
 - `Experimental` **Sub-agent delegation** — independent sub-tasks run in parallel via `delegate_task`.
 - `Stable` **Permission modes** — risk-ascending ladder:

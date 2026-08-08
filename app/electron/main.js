@@ -345,6 +345,23 @@ app.whenReady().then(async () => {
       try { require('./llm/curator').maybeRunCurator(db) }
       catch (e) { log.warn('curator init failed:', e.message) }
     })(),
+    // Background review queue: flush any pending agent_task review rows at
+    // startup (fire-and-forget — never blocks window creation). Gated by the
+    // agent.backgroundReview feature flag inside enqueueReview/runPendingReviews.
+    (async () => {
+      try {
+        const br = require('./llm/backgroundReview')
+        if (br.isReviewEnabled(db)) {
+          const model = db.getPrimaryModel()
+          const provider = model ? db.getProvider(model.provider_id) : null
+          if (provider && model && typeof br.runPendingReviews === 'function') {
+            br.runPendingReviews(db, { provider, model })
+              .then(() => {})
+              .catch((e) => log.warn('backgroundReview flush failed:', e && e.message))
+          }
+        }
+      } catch (e) { log.warn('backgroundReview init failed:', e && e.message) }
+    })(),
     (async () => {
       try { require('./llm/hooks').scanHooks() }
       catch (e) { log.warn('hooks scan failed:', e.message) }

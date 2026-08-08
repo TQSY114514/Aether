@@ -39,6 +39,11 @@ const FLAG_DEFS = [
   { key: 'agent.worktreeIsolation', default: false, category: 'agent',    description: 'Per-agent git worktree isolation' },
   // Phase 2 — background code intelligence
   { key: 'agent.backgroundReview', default: false, category: 'agent',     description: 'Background code review after file-touching tools' },
+  // Phase 3 — code understanding + orchestration
+  { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
+  { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },
+  // Phase 3 — network safety
+  { key: 'network.policy',        default: false, category: 'agent',      description: 'Network allowlist policy for agent web tools (web_fetch/web_search)' },
   // Phase 4 — self-evolving memory
   { key: 'memory.experienceReplay', default: false, category: 'learning', description: 'Trajectory experience replay into the loop' },
   { key: 'skills.selfEvolution', default: false, category: 'learning',    description: 'Agent-created skill drafts (skill evolution)' },

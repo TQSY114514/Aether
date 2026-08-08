@@ -35,6 +35,20 @@ const { checkSSRF, checkSSRFHostname, ssrfFetchOptions } = require('./ssrf')
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 const MAX_GREP_BYTES = 32 * 1024
 
+// ─── Feature-flag gate for the full LSP tool set ────────────────────────────
+// The lsp_* tools ship behind the `lsp.full` flag (featureFlags.js): when the
+// flag is off (the default) they return a short notice instead of spawning an
+// LSP server, so the capability stays declaratively toggleable. Never throws —
+// a missing/unusable db falls back to the flag default.
+function lspFullEnabled(ctx) {
+  try {
+    const { isEnabled } = require('../featureFlags')
+    return isEnabled(ctx?.db, 'lsp.full')
+  } catch {
+    return false
+  }
+}
+
 // ─── Ripgrep helper ─────────────────────────────────────────────────────────
 // Fast content search backed by `rg` when it's on PATH. Returns matched lines
 // (`path:line:content`) or null so the caller falls back to the sync loop (e.g.
@@ -219,13 +233,23 @@ const TOOLS = [
       },
       required: ['query'],
     },
-    run: async (args) => {
+    run: async (args, ctx) => {
       const q = String(args.query || '')
       if (!q) throw new Error('query is required')
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15000)
       try {
         const url = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q)
+        // Network policy (allowlist) — only when flag on AND whitelist configured.
+        if (ctx?.db) {
+          try {
+            const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
+            if (policyActive(ctx.db)) {
+              const allowed = checkUrlPolicy(ctx.db, url)
+              if (!allowed.ok) return `[blocked: ${allowed.reason}]`
+            }
+          } catch {}
+        }
         // DNS-based SSRF check: resolve hostname before request
         await checkSSRFHostname(new URL(url).hostname)
         const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' }, redirect: 'error' })
@@ -252,9 +276,19 @@ const TOOLS = [
       },
       required: ['url'],
     },
-    run: async (args) => {
+    run: async (args, ctx) => {
       const url = String(args.url || '')
       if (!url) throw new Error('url is required')
+      // Network policy (allowlist) — only when flag on AND whitelist configured.
+      if (ctx?.db) {
+        try {
+          const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
+          if (policyActive(ctx.db)) {
+            const allowed = checkUrlPolicy(ctx.db, url)
+            if (!allowed.ok) return `[blocked: ${allowed.reason}]`
+          }
+        } catch {}
+      }
       // SSRF protection: reject non-http(s), localhost, and cloud metadata
       const ssrf = checkSSRF(url)
       if (!ssrf.ok) return `[blocked: ${ssrf.reason}]`
@@ -640,6 +674,16 @@ const TOOLS = [
         const out = commitResult.stdout + commitResult.stderr
         if (/nothing (to commit|added)/i.test(out)) return 'nothing to commit (working tree clean)'
         throw new Error(commitResult.stderr || `git commit failed (exit ${commitResult.exitCode})`)
+      }
+      // Background review: flag the commit for the async review queue (gated by
+      // the agent.backgroundReview feature flag). Never blocks the tool loop.
+      try {
+        if (ctx?.db) {
+          const { enqueueReview } = require('../llm/backgroundReview')
+          enqueueReview({ db: ctx.db, cwd, sessionId: ctx.sessionId || null, titleSuffix: `@${cwd}` })
+        }
+      } catch (e) {
+        // background review must never break the commit tool
       }
       return commitResult.stdout?.trim() || commitResult.stderr?.trim() || 'committed'
     },
@@ -1105,6 +1149,146 @@ const TOOLS = [
 
       if (!results.length) return `(no matches for "${target}")`
       return results.slice(0, 50).join('\n')
+    },
+  },
+  {
+    // ─── Full LSP tool set (behind the `lsp.full` feature flag) ─────────────
+    // Definition / references / code actions / diagnostics via a real LSP
+    // server, plus a permission-gated rename that APPLIES a WorkspaceEdit.
+    // Every read-only variant returns [] on LSP unavailability (never throws).
+    // lsp_rename mutates files → risk 'dangerous' (blocked in plan mode).
+    // ─────────────────────────────────────────────────────────────────────────
+    name: 'lsp_definition',
+    description: 'Go to the definition of the symbol at a position. Given a file path and line, returns the definition location(s) (file:line:character). Requires a local LSP server (typescript-language-server) — returns empty when unavailable.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Absolute path to the file containing the symbol.' },
+        line: { type: 'number', description: '1-based line number of the symbol occurrence.' },
+        character: { type: 'number', description: '1-based column of the symbol occurrence (default 1).' },
+      },
+      required: ['file', 'line'],
+    },
+    run: async (args, ctx) => {
+      if (!lspFullEnabled(ctx)) return '(LSP feature disabled — enable "Full LSP feature set" in Settings)'
+      const lsp = require('../context/lspClient')
+      const { getWorkspaceRoot } = require('./sandbox')
+      const hits = await lsp.definitionWorkspace(getWorkspaceRoot(ctx?.sessionId), String(args.file), {
+        line: Number(args.line) || 1, character: Number(args.character) || 1,
+      })
+      if (!hits || !hits.length) return '(no definition found)'
+      return hits.slice(0, 20).map(h => `${h.file}:${h.line + 1}:${h.character + 1}`).join('\n')
+    },
+  },
+  {
+    name: 'lsp_references',
+    description: 'Find all references to the symbol at a position. Returns file:line:character locations across the workspace. Requires a local LSP server — empty when unavailable.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Absolute path to the file containing the symbol.' },
+        line: { type: 'number', description: '1-based line number of the symbol occurrence.' },
+        character: { type: 'number', description: '1-based column of the symbol occurrence (default 1).' },
+      },
+      required: ['file', 'line'],
+    },
+    run: async (args, ctx) => {
+      if (!lspFullEnabled(ctx)) return '(LSP feature disabled — enable "Full LSP feature set" in Settings)'
+      const lsp = require('../context/lspClient')
+      const { getWorkspaceRoot } = require('./sandbox')
+      const hits = await lsp.referencesWorkspace(getWorkspaceRoot(ctx?.sessionId), String(args.file), {
+        line: Number(args.line) || 1, character: Number(args.character) || 1,
+      })
+      if (!hits || !hits.length) return '(no references found)'
+      return hits.slice(0, 50).map(h => `${h.file}:${h.line + 1}:${h.character + 1}`).join('\n')
+    },
+  },
+  {
+    name: 'lsp_diagnostics',
+    description: 'Get compiler/linter diagnostics (errors and warnings) for a file from a local LSP server. Returns severity, message and line per issue. Empty when the file is clean or LSP is unavailable.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Absolute path to the file to check.' },
+      },
+      required: ['file'],
+    },
+    run: async (args, ctx) => {
+      if (!lspFullEnabled(ctx)) return '(LSP feature disabled — enable "Full LSP feature set" in Settings)'
+      const lsp = require('../context/lspClient')
+      const { getWorkspaceRoot } = require('./sandbox')
+      const diags = await lsp.diagnosticsWorkspace(getWorkspaceRoot(ctx?.sessionId), String(args.file))
+      if (!diags || !diags.length) return '(no diagnostics)'
+      const sev = { 1: 'ERROR', 2: 'WARNING', 3: 'INFO', 4: 'HINT' }
+      return diags.slice(0, 40).map(d => `[${sev[d.severity] || '?'}] line ${d.line + 1}: ${d.message}`).join('\n')
+    },
+  },
+  {
+    name: 'lsp_code_actions',
+    description: 'List available code actions (quick fixes / refactorings) for the symbol at a position. Read-only: returns action titles only, nothing is applied. Use lsp_rename for renames.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Absolute path to the file.' },
+        line: { type: 'number', description: '1-based line number where the action applies.' },
+      },
+      required: ['file', 'line'],
+    },
+    run: async (args, ctx) => {
+      if (!lspFullEnabled(ctx)) return '(LSP feature disabled — enable "Full LSP feature set" in Settings)'
+      const lsp = require('../context/lspClient')
+      const { getWorkspaceRoot } = require('./sandbox')
+      const actions = await lsp.codeActionsWorkspace(getWorkspaceRoot(ctx?.sessionId), String(args.file), { line: Number(args.line) || 1 })
+      if (!actions || !actions.length) return '(no code actions available)'
+      return actions.slice(0, 20).map(a => `- ${a.title}${a.kind ? ` [${a.kind}]` : ''}`).join('\n')
+    },
+  },
+  {
+    name: 'lsp_rename',
+    description: 'Rename a symbol across the whole project via a local LSP server. Applies the rename to every affected file. DANGEROUS: mutates multiple files at once — confirm before calling.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Absolute path to a file containing the symbol.' },
+        line: { type: 'number', description: '1-based line of the symbol occurrence.' },
+        character: { type: 'number', description: '1-based column of the symbol occurrence (default 1).' },
+        newName: { type: 'string', description: 'The new symbol name.' },
+      },
+      required: ['file', 'line', 'newName'],
+    },
+    run: async (args, ctx) => {
+      if (!lspFullEnabled(ctx)) return '(LSP feature disabled — enable "Full LSP feature set" in Settings)'
+      const lsp = require('../context/lspClient')
+      const { getWorkspaceRoot, checkWritePath } = require('./sandbox')
+      const root = getWorkspaceRoot(ctx?.sessionId)
+      const edits = await lsp.renameWorkspace(root, String(args.file), String(args.newName), {
+        line: Number(args.line) || 1, character: Number(args.character) || 1,
+      })
+      if (!edits || !edits.changes.length) return '(rename produced no edits — symbol not found?)'
+      // Apply each file's edits (multi-file mutation — the danger that gated this).
+      const applied = []
+      for (const change of edits.changes) {
+        const p = change.file
+        // Every touched file must live inside the workspace sandbox.
+        const guard = checkWritePath(p, ctx?.sessionId)
+        if (!guard.ok) return `rename aborted: ${p} is outside the workspace`
+        const orig = fs.readFileSync(p, 'utf8')
+        const lines = orig.split('\n')
+        // Apply edits bottom-up so earlier line numbers stay valid.
+        const sorted = [...change.edits].sort((a, b) => (b.line - a.line) || (b.character - a.character))
+        for (const e of sorted) {
+          const line = lines[e.line] ?? ''
+          lines[e.line] = line.slice(0, e.character) + e.newText + line.slice(e.endCharacter)
+        }
+        fs.writeFileSync(p, lines.join('\n'))
+        applied.push(p)
+      }
+      return `renamed ${args.newName} in ${applied.length} file(s):\n${applied.join('\n')}`
     },
   },
   {

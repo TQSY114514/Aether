@@ -4,8 +4,40 @@ All notable changes to AetherAI are documented here.
 
 ## [Unreleased]
 
-### Infrastructure — Phase 0 (feature flags & observability)
+### 记忆 — Wave 6 (self-evolving memory & code intelligence)
 
+- **LSP workspace API** — new `app/electron/lsp/lspClient.js` exposes a
+  single-project LSP client (`lsp_definition` / `lsp_references` /
+  `lsp_diagnostics` / `lsp_code_actions` / `lsp_rename`), managed by a shared
+  server pool; five `lsp_*` tools wired into the registry behind the `lsp.full`
+  feature flag (42 tools total). Degrades to null on defunct servers.
+- **Background code review** — `app/electron/llm/backgroundReview.js` enqueues
+  a review task into the `agent_task` table after `git_commit`, runs pending
+  reviews at app startup (fire-and-forget) using the existing reviewer, and
+  persists structured findings. Gated by `agent.backgroundReview`.
+- **Code understanding → knowledge graph** — `app/electron/context/
+  codeUnderstanding.js` scans a repo (import/require/symbol extraction),
+  builds a structural graph and persists it into `kg_nodes`/`kg_edges` (same
+  tables as knowledgeGraph.js, SELECT-before-INSERT idempotent upsert).
+  Wired via the `memory.codeUnderstanding` flag.
+- **Experience replay** — `app/electron/llm/replay.js` records successful
+  agent trajectories into the `skill_patterns` pool and injects similar
+  patterns back into context for new tasks (word-similarity ranking). Gated by
+  `memory.experienceReplay`.
+- **Network allowlist policy** — `app/electron/llm/networkPolicy.js` layers a
+  host allowlist (`network.policy` / `network.whitelist` settings) over the
+  existing SSRF guard; `web_fetch` / `web_search` enforce it progressively
+  (only bites once the flag is on AND a whitelist is configured).
+- **Plugin SDK** — `app/electron/plugins/sdk.js` factory with
+  `registerTool` / `registerSkill` / `registerAgent` / `registerProvider` and
+  directory loading (`<dir>/*/plugin.js`, isolation + merge). Gated by
+  `plugin.sdk`.
+- **Manager orchestration** — `app/electron/llm/orchestrator.js` decomposes a
+  complex request via `planning.generatePlan`, executes the plan in
+  dependency-aware parallel batches through `subAgent.runParallel`, and
+  summarizes the results. Gated by `agent.orchestrator`.
+
+### Infrastructure — Phase 0 (feature flags & observability)
 - **Centralized feature-flag registry** — new `app/electron/featureFlags.js`
   is the single source of truth for capability gates: flags are declared once
   (key + default + category + description), persisted in the `settings` table
