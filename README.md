@@ -84,26 +84,6 @@ See [Quick Start](#-quick-start) for the manual step-by-step.
 
 ---
 
-## Screenshots
-
-AetherAI unifies chat, agent coding, model comparison, and structured memory — here's a tour of the main surfaces:
-
-<div align="center">
-
-| **Welcome & Model Picker** | **Multi-provider Chat** | **Background Tasks** |
-|:---:|:---:|:---:|
-| <img src="./assets/screenshots/01.png" width="280" alt="Welcome screen" /> | <img src="./assets/screenshots/02.png" width="280" alt="Chat with code rendering" /> | <img src="./assets/screenshots/03.png" width="280" alt="Background tasks dialog" /> |
-| Pick any model, adjust thinking effort, start chatting | Streaming responses, code blocks, long-paste folding | Run agent tasks in background with model selection |
-
-| **ELO Arena** | **Structured Memory** | **Settings** |
-|:---:|:---:|:---:|
-| <img src="./assets/screenshots/04.png" width="280" alt="Arena ELO leaderboard" /> | <img src="./assets/screenshots/05.png" width="280" alt="Structured memory" /> | <img src="./assets/screenshots/06.png" width="280" alt="Settings" /> |
-| Multi-model voting with per-intent ELO leaderboard | Context / Entity / Fact / Relation — AI remembers | MCP servers, 6 themes, custom background |
-
-</div>
-
----
-
 ## Quick Start
 
 **Prerequisites:** Node.js 18+, npm 9+
