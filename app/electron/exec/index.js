@@ -10,8 +10,9 @@ const { registerBackend, getBackend, listBackends, executeOn } = require('./back
 const { localBackend } = require('./localBackend')
 const { dockerBackend } = require('./dockerBackend')
 const { sshBackend } = require('./sshBackend')
+const { cloudBackend } = require('./cloudBackend')
 
-for (const backend of [localBackend, dockerBackend, sshBackend]) {
+for (const backend of [localBackend, dockerBackend, sshBackend, cloudBackend]) {
   registerBackend(backend)
 }
 
@@ -23,4 +24,5 @@ module.exports = {
   localBackend,
   dockerBackend,
   sshBackend,
+  cloudBackend,
 }
