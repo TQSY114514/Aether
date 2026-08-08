@@ -82,26 +82,6 @@ start.bat        # Windows: 安装依赖、构建前端、启动 Electron
 
 ---
 
-## 截图一览
-
-AetherAI 将聊天、编码 Agent、模型对比和结构化记忆整合在一起——以下是各主要功能界面:
-
-<div align="center">
-
-| **欢迎与模型选择** | **多提供商聊天** | **后台任务** |
-|:---:|:---:|:---:|
-| <img src="./assets/screenshots/01.png" width="280" alt="欢迎屏" /> | <img src="./assets/screenshots/02.png" width="280" alt="代码渲染聊天" /> | <img src="./assets/screenshots/03.png" width="280" alt="后台任务对话框" /> |
-| 选择模型、调节思考强度、开始对话 | 流式响应、代码块、长文本折叠 | 选择模型在后台运行 Agent 任务 |
-
-| **ELO 竞技场** | **结构化记忆** | **设置** |
-|:---:|:---:|:---:|
-| <img src="./assets/screenshots/04.png" width="280" alt="竞技场 ELO 排行榜" /> | <img src="./assets/screenshots/05.png" width="280" alt="结构化记忆" /> | <img src="./assets/screenshots/06.png" width="280" alt="设置" /> |
-| 多模型投票,按意图分类的 ELO 排行榜 | 上下文 / 实体 / 事实 / 关系 — AI 的记忆 | MCP 服务器、6 种主题、自定义背景 |
-
-</div>
-
----
-
 ## 快速开始
 
 **前置要求:** Node.js 18+,npm 9+
