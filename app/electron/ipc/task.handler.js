@@ -19,6 +19,7 @@ const {
   listTasks,
   getTask,
   initBackgroundTasks,
+  restorePendingTasks,
 } = require('../llm/backgroundTasks')
 
 const PROGRESS_TYPES = new Set(['tool-call', 'plan-step', 'status', 'todo-update', 'chunk'])
@@ -31,10 +32,14 @@ function stripRecord(record) {
 function registerTaskHandlers(ipcMain, db, getWebContents) {
   // Wire getWebContents into the TaskManager so dialog events (permission,
   // question) can reach the renderer even from detached task sessions.
-  initBackgroundTasks({ getWebContents })
+  initBackgroundTasks({ getWebContents, db })
+
+  // Resume tasks that were pending/running when the app last exited
+  // (agent_task persistence; only re-dispatches when scheduler.queue is on).
+  restorePendingTasks(db)
 
   // ── task:start ──────────────────────────────────────────────────────────
-  ipcMain.handle('task:start', async (_e, { content, modelId, agentMode = 'ask' }) => {
+  ipcMain.handle('task:start', async (_e, { content, modelId, agentMode = 'ask', priority = 0, maxRetry = 2 }) => {
     try {
       if (!content || typeof content !== 'string' || !content.trim()) {
         return { error: '无效的任务内容' }
@@ -60,10 +65,10 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
         } catch {}
       }
 
-      const result = await startTask({ db, parentSessionId: null, content, modelId, agentMode, emit })
+      const result = await startTask({ db, parentSessionId: null, content, modelId, agentMode, priority, maxRetry, emit })
 
       // Notify the renderer immediately that a new task has been registered.
-      const record = getTask(result.taskId)
+      const record = getTask(result.taskId, db)
       if (record) {
         try {
           const wc = getWebContents()
@@ -79,7 +84,7 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
 
   // ── task:list ───────────────────────────────────────────────────────────
   ipcMain.handle('task:list', () => {
-    return listTasks()
+    return listTasks(db)
   })
 
   // ── task:cancel ─────────────────────────────────────────────────────────
@@ -90,7 +95,7 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
 
   // ── task:get-result ─────────────────────────────────────────────────────
   ipcMain.handle('task:get-result', (_e, taskId) => {
-    const t = getTask(taskId)
+    const t = getTask(taskId, db)
     return t ? { status: t.status, finalContent: t.finalContent ?? null } : null
   })
 }

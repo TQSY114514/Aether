@@ -123,6 +123,22 @@ function initDatabase() {
     last_run_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
+  db.exec(`CREATE TABLE IF NOT EXISTS agent_task (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    model_id INTEGER,
+    agent_mode TEXT NOT NULL DEFAULT 'ask',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','done','cancelled','error')),
+    priority INTEGER NOT NULL DEFAULT 0,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    max_retry INTEGER NOT NULL DEFAULT 2,
+    error TEXT,
+    result TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME
+  )`)
   db.exec('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
   db.exec('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   db.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
@@ -464,6 +480,32 @@ function getAllSettings() {
   const result = {}
   rows.forEach(r => result[r.key] = r.value)
   return result
+}
+
+// ===== Agent Task CRUD (persistent background tasks) =====
+function createAgentTask({ session_id = null, title, content, model_id = null, agent_mode = 'ask', priority = 0, max_retry = 2 }) {
+  const info = db.prepare('INSERT INTO agent_task (session_id, title, content, model_id, agent_mode, priority, max_retry) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(session_id, title, content, model_id, agent_mode, priority, max_retry)
+  return Number(info.lastInsertRowid)
+}
+function getAgentTask(id) {
+  const row = db.prepare('SELECT * FROM agent_task WHERE id = ?').get(id)
+  if (!row) return null
+  return { ...row, id: Number(row.id), session_id: row.session_id ? Number(row.session_id) : null, model_id: row.model_id ? Number(row.model_id) : null, priority: Number(row.priority), attempts: Number(row.attempts), max_retry: Number(row.max_retry) }
+}
+// Whitelisted patch columns only — prevents arbitrary SQL injection via caller.
+const AGENT_TASK_PATCH_COLS = new Set(['status', 'error', 'result', 'attempts', 'priority', 'max_retry'])
+function updateAgentTask(id, patch) {
+  const cols = Object.keys(patch || {}).filter(k => AGENT_TASK_PATCH_COLS.has(k))
+  if (!cols.length) return
+  const sets = cols.map(k => `${k} = ?`).join(', ')
+  const vals = cols.map(k => patch[k])
+  db.prepare(`UPDATE agent_task SET ${sets}, updated_at = datetime('now') WHERE id = ?`).run(...vals, id)
+}
+function listAgentTasks(limit = 100) {
+  return db.prepare('SELECT * FROM agent_task ORDER BY priority DESC, id DESC LIMIT ?')
+    .all(limit)
+    .map(r => ({ ...r, id: Number(r.id), session_id: r.session_id ? Number(r.session_id) : null, model_id: r.model_id ? Number(r.model_id) : null, priority: Number(r.priority), attempts: Number(r.attempts), max_retry: Number(r.max_retry) }))
 }
 
 // ===== Scheduled Tasks CRUD (Task 4.3) =====
@@ -905,6 +947,7 @@ module.exports = {
   getMessages, addMessage, updateMessage,
   getSetting, setSetting, getAllSettings,
   getScheduledTasks, addScheduledTask, getScheduledTask, deleteScheduledTask, markScheduledTaskRun,
+  createAgentTask, getAgentTask, updateAgentTask, listAgentTasks,
   getModelScores, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
   getMemories, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess,

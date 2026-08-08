@@ -170,6 +170,14 @@ interface Window {
       getAll: () => Promise<Record<string, string>>
       onChanged: (callback: (key: string, value: string) => void) => () => void
     }
+    flags: {
+      list: () => Promise<{ key: string; default: boolean; value: string | null; enabled: boolean; category: string; description: string }[]>
+      set: (key: string, value: boolean | string) => Promise<{ ok: boolean; key?: string; value?: string; error?: string }>
+      onChanged: (callback: (key: string, value: string) => void) => () => void
+    }
+    mainLog: {
+      onEntry: (callback: (entry: { level: string; time: string; msg: string }) => void) => () => void
+    }
     memory: {
       list: () => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null }[]>
       create: (data: { content: string; type?: string; source_session_id?: number | null }) => Promise<{ lastInsertRowid: number }>
@@ -271,11 +279,11 @@ interface Window {
       badge: (params: { sessionId?: number; modelId?: number }) => Promise<{ level: string; score: number; reason: string } | null>
     }
     task: {
-      start: (params: { content: string; modelId: number; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' }) => Promise<{ taskId: number; sessionId: number; error?: string }>
-      list: () => Promise<{ id: number; sessionId: number; status: 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; finalContent?: string | null; error?: string | null }[]>
+      start: (params: { content: string; modelId: number; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+      list: () => Promise<{ id: number; sessionId: number; status: 'pending' | 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }[]>
       cancel: (taskId: number) => Promise<{ ok: boolean }>
       getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
-      onStarted: (callback: (payload: { id: number; sessionId: number; status: 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; finalContent?: string | null; error?: string | null }) => void) => () => void
+      onStarted: (callback: (payload: { id: number; sessionId: number; status: 'pending' | 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }) => void) => () => void
       onProgress: (callback: (payload: { taskId: number; type: 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk'; payload: unknown }) => void) => () => void
       onDone: (callback: (payload: { taskId: number; sessionId: number; finalContent: string }) => void) => () => void
       onCancelled: (callback: (payload: { taskId: number }) => void) => () => void

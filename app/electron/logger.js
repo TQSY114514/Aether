@@ -25,6 +25,15 @@ const entries = []
 let _logPath = null
 const MAX_LOG_SIZE = 5 * 1024 * 1024
 
+// File logging can be switched off at runtime (Phase 0: feature-flag driven).
+// Default ON — matches the pre-existing behavior.
+let _fileLogging = true
+
+// Entry-forwarding listeners (main → renderer logs panel). Each listener
+// receives { level, time, msg }. Kept in a Set; addEntryListener returns an
+// unsubscribe function.
+const entryListeners = new Set()
+
 function getLogPath() {
   if (_logPath) return _logPath
   try {
@@ -35,6 +44,7 @@ function getLogPath() {
 }
 
 function appendToFile(level, time, msg) {
+  if (!_fileLogging) return
   const p = getLogPath()
   if (!p) return
   try {
@@ -58,7 +68,8 @@ function ts() {
 function write(level, ...args) {
   const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
   const time = ts()
-  entries.push({ level, time, msg })
+  const entry = { level, time, msg }
+  entries.push(entry)
   if (entries.length > MAX_ENTRIES) entries.shift()
 
   if (isDev || LEVEL_ORDER[level] >= LEVEL_ORDER.warn) {
@@ -68,6 +79,30 @@ function write(level, ...args) {
   // Persist to file for post-crash diagnosis. debug only reaches write() in
   // dev mode (see log.debug below), so prod files contain info+ only.
   appendToFile(level, time, msg)
+  // Forward to subscribers (renderer logs panel, debug tooling). Best-effort:
+  // a throwing listener must never break log.write.
+  if (entryListeners.size > 0) {
+    for (const cb of [...entryListeners]) {
+      try { cb(entry) } catch {}
+    }
+  }
+}
+
+// Phase 0: enable/disable file persistence at runtime (feature-flag driven).
+function setFileLogging(enabled) {
+  _fileLogging = !!enabled
+}
+
+function getFileLogging() {
+  return _fileLogging
+}
+
+// Register a listener for every log entry. Returns an unsubscribe function.
+// Entries are plain { level, time, msg } objects — safe to send over IPC.
+function onEntry(cb) {
+  if (typeof cb !== 'function') return () => {}
+  entryListeners.add(cb)
+  return () => entryListeners.delete(cb)
 }
 
 const log = {
@@ -77,6 +112,9 @@ const log = {
   error: (...args) => write('error', ...args),
   getEntries: () => [...entries],
   clear: () => { entries.length = 0 },
+  setFileLogging,
+  getFileLogging,
+  addEntryListener: onEntry,
 }
 
 module.exports = log
