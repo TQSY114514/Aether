@@ -290,6 +290,10 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 | [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
 | [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
 
+### Comparative analysis
+
+A competitive analysis of AetherAI vs [SonettoHere](https://github.com/Miso2233/SonettoHere) — positioning, architecture, engineering quality, growth potential, and more — is available at [competitive-analysis.md](./docs/competitive-analysis.md).
+
 ---
 
 ## Contributing
