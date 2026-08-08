@@ -137,6 +137,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAll: () => ipcRenderer.invoke('settings:getAll'),
     onChanged: (cb) => subscribe('settings:changed', cb),
   },
+  flags: {
+    list: () => ipcRenderer.invoke('flags:list'),
+    set: (key, value) => ipcRenderer.invoke('flags:set', key, value),
+    onChanged: (cb) => subscribe('flags:changed', cb),
+  },
+  mainLog: {
+    onEntry: (cb) => subscribe('main:log', cb),
+  },
   memory: {
     list: () => ipcRenderer.invoke('memory:list'),
     create: (data) => ipcRenderer.invoke('memory:create', data),

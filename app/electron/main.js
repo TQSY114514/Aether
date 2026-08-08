@@ -82,11 +82,13 @@ const { registerGitHandlers } = require('./ipc/git.handler')
 const { registerSkillsHandlers } = require('./ipc/skills.handler')
 const { registerTaskHandlers } = require('./ipc/task.handler')
 const { registerCronHandlers } = require('./ipc/cron.handler')
+const { registerFlagsHandlers } = require('./ipc/flags.handler')
 const { initScheduler } = require('./cron/scheduler')
 const { runEvolutionCycle } = require('./evolution/gep')
 const mcpManager = require('./mcp/manager')
 const { setWorkspaceRoot } = require('./tools/sandbox')
 const localGateway = require('./llm/localGateway')
+const featureFlags = require('./featureFlags')
 
 let mainWindow = null
 let staticServer = null
@@ -235,6 +237,19 @@ function setupIpcHandlers() {
   registerSkillsHandlers(ipcMain, db)
   registerTaskHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerCronHandlers(ipcMain, db)
+  registerFlagsHandlers(ipcMain, db)
+
+  // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──
+  try {
+    log.setFileLogging(featureFlags.isEnabled(db, 'debug.fileLog'))
+    if (featureFlags.isEnabled(db, 'debug.logForward')) {
+      // Forward main-process log entries to the renderer (logs panel).
+      log.addEntryListener((entry) => {
+        const wc = mainWindow?.webContents
+        try { if (wc && !wc.isDestroyed()) wc.send('main:log', entry) } catch {}
+      })
+    }
+  } catch {}
 
   // ── Evolution IPC ──
   ipcMain.handle('evolution:run-cycle', (_e, { strategy, auditTrail } = {}) => {

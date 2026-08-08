@@ -34,6 +34,12 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   `provider.api_format`) → `openaiAdapter.js` (fetch + SSE). `toolLoop.js`
   (Plan→Act→Observe), `toolResultMiddleware.js` (redact+truncate tool output),
   `reasoning.js` (thinking-effort param shapes), `toolArgs.js`.
+  `backgroundTasks.js` (Feature A task manager: queue/priority/retry, persisted
+  in the `agent_task` table, crash-recoverable via `restorePendingTasks`).
+- **Execution backends** `app/electron/exec/`: `backend.js` (registry +
+  contract `execute/status/terminate/pause/resume`), `localBackend.js` (spawn),
+  `dockerBackend.js` (docker CLI sandbox), `sshBackend.js` (remote). Assembled
+  once in `exec/index.js`; unknown ids fall back to `local`.
 - **Tools** `app/electron/tools/registry.js` (built-in tools, `risk: safe|dangerous`).
 - **MCP** `app/electron/mcp/`: `client.js` + `manager.js` — external stdio tool
   servers; their tools merge with built-ins via `getMergedTool(s)`.
@@ -64,6 +70,14 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   live in `%APPDATA%/aetherai/` at runtime, never in the repo. `.gitignore`
   excludes `*.db`, `background.img`, `.env`, `dist/`, `node_modules/`. Before
   any commit, assume the repo will be public.
+- **Feature flags are centralized**: every capability gate is declared in
+  `app/electron/featureFlags.js` (key + default + category + description).
+  Persistence is the `settings` table under `feature_flag.<key>` — no new
+  tables. Read from main via `featureFlags.isEnabled(db, key)`; from renderer
+  via `useFeatureFlag(key)` in `app/src/utils/featureFlags.ts`. Set via
+  `flags:set` IPC; main-process consumers subscribe to `flags:changed` on
+  ipcMain. Unknown keys and missing DB rows fall back to defaults — flags must
+  never throw, and shipping a new feature means adding one registry entry.
 - **i18n is generated**: base keys live in `app/src/utils/i18n.base.json`;
   `gen-i18n.js` produces `i18n.ts` for all 15 languages. Don't hand-edit
   `i18n.ts`. New user-visible strings → add to `i18n.base.json` (zh + en at

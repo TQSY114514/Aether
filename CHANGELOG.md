@@ -2,6 +2,32 @@
 
 All notable changes to AetherAI are documented here.
 
+## [Unreleased]
+
+### Infrastructure — Phase 0 (feature flags & observability)
+
+- **Centralized feature-flag registry** — new `app/electron/featureFlags.js`
+  is the single source of truth for capability gates: flags are declared once
+  (key + default + category + description), persisted in the `settings` table
+  under `feature_flag.<key>`, and read through `isEnabled(db, key)`. Unknown
+  keys and broken DBs are safe no-ops (defaults apply), so old data and old
+  DB files keep working. Shipped with flags for the roadmap: repo-map,
+  docker/ssh/cloud execution backends, scheduler queue, worktree isolation,
+  background review, full LSP, experience replay, skill self-evolution and the
+  plugin SDK.
+- **Flags IPC contract** — `flags:list` / `flags:set` handlers in
+  `app/electron/ipc/flags.handler.js`, exposed on `window.electronAPI.flags`
+  (preload) with types in `src/env.d.ts`; changes emit `flags:changed` on
+  ipcMain so main-process consumers react without renderer involvement.
+- **Renderer flag hooks** — `app/src/utils/featureFlags.ts` provides
+  `useFeatureFlag(key)` / `getFeatureFlag(key)` / `setFeatureFlag()` with a
+  cached snapshot kept in sync via the `flags:changed` event.
+- **Logger upgrades** — `logger.js` gains a runtime file-logging switch
+  (`setFileLogging`, driven by the `debug.fileLog` flag) and an
+  `addEntryListener` API that forwards `{level,time,msg}` entries to the
+  renderer (`main:log`) when the `debug.logForward` flag is on — the basis
+  for an in-app debug/logs panel. All existing log call sites unchanged.
+
 ## [0.6.0] — 2026-08-06
 
 ### Agent
