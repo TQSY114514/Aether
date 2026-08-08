@@ -3,12 +3,18 @@
 // (created in a temp dir). Skipped automatically when git is not installed.
 // Verifies: create / status / commit-and-merge / conflict detection / remove.
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { spawnSync } from 'child_process'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import worktree from '../electron/worktreeManager'
+
+// These tests exercise real git operations (commit / merge / conflict) on a
+// throwaway repo. Under the full test suite's parallel load a single git run
+// can take several seconds, so use a generous file-wide timeout instead of
+// the 5s default (which flakes intermittently in CI-like runs).
+vi.setConfig({ testTimeout: 30000 })
 
 const GIT_OK = (() => {
   try { return spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0 } catch { return false }
