@@ -6,9 +6,11 @@ hard rules are, and where to look before changing anything.
 
 ## What this is
 
-AetherAI is a local-first, multi-model desktop AI chat client (Electron + React/TS
-+ zustand + Tailwind + sql.js). The product is a single-developer app that treats
-the LLM provider as a pluggable backend and keeps all user data on disk.
+AetherAI is a local-first, multi-model desktop AI workbench (Electron + React/TS
++ zustand + Tailwind + better-sqlite3). The product is a single-developer app
+that treats the LLM provider as a pluggable backend and keeps all user data on
+disk. It is a chat client, an agent workbench, and an extensibility platform
+(skills / MCP / hooks / local gateway / CLI) in one.
 
 ## Start
 
@@ -25,8 +27,8 @@ the LLM provider as a pluggable backend and keeps all user data on disk.
 - **Renderer** `app/src/`: `store/index.ts` (the big zustand store — all state +
   actions), `components/` (chat/sidebar/ui), `pages/` (model/persona/settings/…),
   `utils/` (i18n generated from `gen-i18n.js`, theme, markdown).
-- **Main** `app/electron/`: `database.js` (sql.js wrapper, BigInt-normalized via
-  `allRows`), `ipc/*.js` (one handler module per domain), `main.js` (window +
+- **Main** `app/electron/`: `database.js` (better-sqlite3 data layer, WAL
+  mode), `ipc/*.js` (one handler module per domain), `main.js` (window +
   handler registration), `preload.js` (contextBridge surface — the IPC contract).
 - **LLM layer** `app/electron/llm/`: `providerAdapter.js` (dispatch by
   `provider.api_format`) → `openaiAdapter.js` (fetch + SSE). `toolLoop.js`
@@ -42,10 +44,14 @@ the LLM provider as a pluggable backend and keeps all user data on disk.
   `preload.js`, and its type in `src/env.d.ts`. Changing one means updating all
   three. A handler that takes params the preload doesn't forward, or returns a
   shape `env.d.ts` doesn't declare, is a bug.
-- **BigInt**: sql.js returns BigInt for 64-bit INTEGER. Every read path must go
-  through `allRows()` (which coerces) or coerce manually. `db.exec()` does NOT
-  bind params — use `prepare().bind()` for parameterized reads. We've been bit
-  by both before.
+- **SQLite via better-sqlite3**: native driver, WAL mode, synchronous API
+  running on the main process's single thread (serialized by construction — no
+  cross-handler write races, but long queries block everything: keep hot reads
+  indexed). `db.exec()` is for DDL/migrations only; every parameterized read or
+  write must be `db.prepare(sql).get/all/run(...)` with `?` bindings. The
+  sql.js-era `allRows()` wrapper and `saveDatabase()/flushDatabase()` no-ops
+  still exist as compat shims — new code does not need them. `lastInsertRowid`
+  may come back as a BigInt from better-sqlite3; `Number()` it before persisting.
 - **Main-process changes require full restart**: `electron/` files are not
   hot-reloaded. The renderer rebuilds via `npm run build`, but the main process
   only picks up changes on a clean app restart (including tray). If a fix
@@ -66,7 +72,9 @@ the LLM provider as a pluggable backend and keeps all user data on disk.
 - **Storage is SQLite**: settings, sessions, messages, providers, models,
   personas, memory, arena votes, model scores — all in `aetherai.db`. The only
   file-on-disk exception is `background.img` (too large for a TEXT column).
-  Don't add JSON/JSONL sidecar stores for runtime state.
+  Don't add JSON/JSONL sidecar stores for runtime state (the `memoryGraph.js`
+  JSONL module is dead code and must not be revived that way — graph memory
+  belongs in `kg_nodes`/`kg_edges` tables).
 
 ## Before changing X, read Y
 

@@ -10,7 +10,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-quick-start) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-quick-start) [![Electron 43](https://img.shields.io/badge/Electron-43-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
 `Beta` · `Solo / Hobby Project` · `MIT Licensed`
 
@@ -39,7 +39,7 @@ AetherAI combines several capabilities that are typically spread across multiple
 | Capability | Description | Maturity |
 |---|---|:---:|
 | **Multi-provider Chat** | Switch between OpenAI, Claude, DeepSeek, and any OpenAI-compatible endpoint mid-conversation. | `Stable` |
-| **Agent Tool Loop** | 16 built-in tools with Plan-Act-Observe loop, sandboxing, permission ladder. | `Beta` |
+| **Agent Tool Loop** | 37 built-in tools with Plan-Act-Observe loop, sandboxing, permission ladder. | `Beta` |
 | **Multi-model Arena** | Send one prompt to multiple models, vote on the best, track ELO rankings. | `Beta` |
 | **Skills & Extensibility** | Drop-in `SKILL.md` files, MCP servers, 10-point hook system. | `Experimental` |
 | **Structured Memory** | Agent recalls preferences and past decisions across sessions. | `Beta` |
@@ -140,7 +140,7 @@ Or run `start.bat` at the repo root on Windows.
 
 ### Agent (Function Calling)
 
-- `Beta` **16 built-in tools** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) with a Plan-Act-Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, configurable iteration budget (default 25 rounds), and context compaction.
+- `Beta` **37 built-in tools** — file ops (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), web (`web_search`, `web_fetch`), shell (`run_command`), git & GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), agent meta (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `find_symbol`, `review_code`, `debug_loop`, `test_first`) — with a Plan-Act-Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, configurable iteration budget (default 25 rounds), and context compaction.
 - `Experimental` **Hierarchical planning** — auto-generates task breakdown for complex requests (DS4-inspired).
 - `Experimental` **Sub-agent delegation** — independent sub-tasks run in parallel via `delegate_task`.
 - `Stable` **Permission modes** — risk-ascending ladder:
@@ -199,7 +199,7 @@ Or run `start.bat` at the repo root on Windows.
 ```
 app/
 ├── electron/              # main process (Node)
-│   ├── database.js        # SQLite (sql.js) data layer — 14 tables
+│   ├── database.js        # better-sqlite3 data layer — 25+ tables (WAL)
 │   ├── ipc/               # IPC handlers (chat / arena / session / mcp / ...)
 │   │   ├── chat.handler.js    # THE central handler (540 lines)
 │   │   ├── arena.handler.js   # Multi-model arena with ELO
@@ -245,11 +245,11 @@ app/
 
 | Layer | Technology |
 |---|---|
-| Desktop | Electron 31 |
-| Frontend | React 18.3 + TypeScript 5.5 |
+| Desktop | Electron 43 |
+| Frontend | React 18.3 + TypeScript 5.8 |
 | State | Zustand 4.5 |
-| Build | Vite 5.4 + electron-builder |
-| Database | sql.js (SQLite in-memory, persisted to disk) |
+| Build | Vite 8 + electron-builder |
+| Database | better-sqlite3 (native SQLite, WAL mode) |
 | LLM | OpenAI-compatible + Anthropic Messages API |
 | UI | Tailwind CSS 3.4, lucide-react, highlight.js |
 | MCP | Custom stdio JSON-RPC 2.0 client |
