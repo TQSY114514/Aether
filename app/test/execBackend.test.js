@@ -19,9 +19,10 @@ import {
 import { localBackend } from '../electron/exec/localBackend'
 import { dockerBackend } from '../electron/exec/dockerBackend'
 import { sshBackend } from '../electron/exec/sshBackend'
+import { cloudBackend } from '../electron/exec/cloudBackend'
 
 beforeAll(() => {
-  for (const b of [localBackend, dockerBackend, sshBackend]) registerBackend(b)
+  for (const b of [localBackend, dockerBackend, sshBackend, cloudBackend]) registerBackend(b)
 })
 
 const IS_WIN = process.platform === 'win32'
@@ -31,7 +32,7 @@ const IS_WIN = process.platform === 'win32'
 describe('ExecutionBackend registry', () => {
   it('knows all built-in backends', () => {
     const ids = listBackends().map(b => b.id).sort()
-    expect(ids).toEqual(['docker', 'local', 'ssh'])
+    expect(ids).toEqual(['cloud', 'docker', 'local', 'ssh'])
   })
 
   it('resolves by id and falls back to local for unknown ids', () => {
