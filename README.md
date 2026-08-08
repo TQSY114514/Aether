@@ -194,6 +194,19 @@ Or run `start.bat` at the repo root on Windows.
 
 ---
 
+## VS Code Extension & Headless CLI
+
+Beyond the desktop app, AetherAI ships the same agent as a CLI and an editor extension:
+
+- **Headless CLI** (`app/cli.js`) — run the agent non-interactively, feed NDJSON events to scripts/CI:
+  ```bash
+  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
+  ```
+- **VS Code extension** (`extension/`) — spawns the CLI in a chat panel: live tool-call stream, code-block actions (Insert / Write file), and **file-diff cards**: every `write_file` / `edit_file` / `apply_patch` call renders a line-level diff against the pre-change file content, with one-click **Revert** (restores the snapshot taken before the tool ran). Requires the extension setting `aether.cliPath` (auto-detected when the repo is cloned locally).
+- **Local Gateway** (`127.0.0.1:35791`) — OpenAI-compatible REST API backed by the desktop app (Settings → Local Gateway → token); a second extension (`extensions/vscode-aether/`) connects through it.
+
+---
+
 ## Project Structure
 
 ```
