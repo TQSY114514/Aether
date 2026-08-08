@@ -4,6 +4,33 @@ import { Plus, Trash2, RefreshCw, Check, X, Globe, Key, Wifi, Edit2, Save } from
 import Tooltip from '@/components/Tooltip'
 import { t } from '@/utils/i18n'
 
+// One-click provider presets — the first-run fast path. Clicking a preset
+// prefills the add-provider form (API url + format). Local presets (Ollama,
+// LM Studio) need no key; cloud presets only need the user's API key pasted.
+const PROVIDER_PRESETS: { name: string; api_url: string; api_format: string; local?: boolean }[] = [
+  { name: 'OpenRouter', api_url: 'https://openrouter.ai/api/v1', api_format: 'openai' },
+  { name: 'DeepSeek', api_url: 'https://api.deepseek.com', api_format: 'openai' },
+  { name: 'Anthropic', api_url: 'https://api.anthropic.com', api_format: 'anthropic' },
+  { name: 'SiliconFlow', api_url: 'https://api.siliconflow.cn/v1', api_format: 'openai' },
+  { name: 'Ollama', api_url: 'http://127.0.0.1:11434/v1', api_format: 'openai', local: true },
+  { name: 'LM Studio', api_url: 'http://127.0.0.1:1234/v1', api_format: 'openai', local: true },
+]
+
+function PresetButtons({ onPick }: { onPick: (p: { name: string; api_url: string; api_format: string; local?: boolean }) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {PROVIDER_PRESETS.map((p) => (
+        <button key={p.name} onClick={() => onPick(p)}
+          title={p.local ? t('models.presets.local_hint') : t('models.presets.hint')}
+          className="px-2 py-1 text-xs rounded-lg border hover:bg-[var(--content-bg)] transition-colors"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+          {p.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function ModelPage() {
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
@@ -72,6 +99,10 @@ export default function ModelPage() {
 
         {showAdd && (
           <div className="mb-6 p-4 rounded-xl space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div>
+              <div className="text-xs mb-1.5" style={{ color: 'var(--text-muted)' }}>{t('models.presets')}</div>
+              <PresetButtons onPick={(p) => { setNewProvider({ name: p.name, api_url: p.api_url, api_key: '', api_format: p.api_format }); setShowAdd(true) }} />
+            </div>
             <input value={newProvider.name} onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
               placeholder={t('models.add_provider_name')}
               className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
@@ -102,7 +133,11 @@ export default function ModelPage() {
 
         <div className="space-y-4">
           {providers.length === 0 && (
-            <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>{t('models.no_providers')}</div>
+            <div className="text-center py-12 space-y-4">
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('models.no_providers')}</div>
+              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('models.presets.hint')}</div>
+              <div className="flex justify-center"><PresetButtons onPick={(p) => { setNewProvider({ name: p.name, api_url: p.api_url, api_key: '', api_format: p.api_format }); setShowAdd(true) }} /></div>
+            </div>
           )}
           {providers.map((provider) => {
             const models = modelsByProvider[provider.id] || []
