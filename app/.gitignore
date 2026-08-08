@@ -5,7 +5,6 @@ dist/
 dist-electron/
 out/
 release/
-release*/
 
 # Dependencies
 node_modules/
