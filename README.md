@@ -207,6 +207,49 @@ Beyond the desktop app, AetherAI ships the same agent as a CLI and an editor ext
 
 ---
 
+## Terminal TUI, RPC & SDK
+
+Beyond the desktop app and the plain CLI, AetherAI ships an interactive terminal UI, a machine-callable JSONL RPC mode, and an Electron-free SDK. All three share the same agent core, memory, personas, MCP tools, and permission rules as the desktop.
+
+### Quick start — dual form
+
+```bash
+# Interactive terminal UI (Ink v5; requires Node ≥ 22)
+node app/cli.js tui                # real terminal: type, approve tools, review diffs
+node app/cli.js tui --smoke        # headless state-machine smoke (CI-safe, prints JSON)
+
+# Single-shot prompt (same as before)
+node app/cli.js "fix the failing test" --mode auto --max-iterations 30
+
+# NDJSON event stream for scripts/CI (compat: --json-lines)
+echo "summarize README.md" | node app/cli.js --mode json --model deepseek
+
+# JSONL RPC loop over stdin/stdout
+printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
+  | node app/cli.js --mode rpc --db path\to\aetherai.db
+```
+
+### TUI (`aether tui`)
+
+Interactive terminal agent: message stream, tool-call cards, diff review with **Enter** accept / **r** rollback (pre-write snapshot restore — works in non-git folders; `git restore` fallback in git repos), keyboard permission gate (`y` allow / `n` deny / `a` always-for-this-session), ask/plan/auto mode switching, `/fork` session tree, `/memory` search, `/persona` switch, Ctrl+C mid-run steering (type a follow-up and it injects into the loop). Full keymap: [docs/tui-keys.md](./docs/tui-keys.md).
+
+### RPC (`aether --mode rpc`)
+
+Machine-callable JSONL protocol over stdin/stdout: `request` frames in, `event`/`result`/`error` frames out — one JSON object per line, no human text. Methods: `run` (streams `text`/`tool`/`plan`/`status` events), `listModels`, `listProviders`, `models.default`, `listSessions`, `session.load`, `session.fork`, `task.derive`, `task.status`. Frame reference: [docs/rpc.md](./docs/rpc.md).
+
+### SDK (`require('aetherai/sdk')`)
+
+Electron-free aggregation of the agent core for external Node projects: `runAgent`, `openDatabase`, `resolveProviderModel`, `taskDbAdapter`, `memory` (prefetch/recall/search/…), `classifyAgentMode`, `rpc` frames, `sessionContext` (persona + memory injection). Type declarations included (`app/electron/sdk/index.d.ts`).
+
+```js
+const { runAgent, openDatabase, resolveProviderModel, classifyAgentMode } = require('aetherai/sdk')
+const db = openDatabase('./aetherai.db')
+const { provider, model } = resolveProviderModel(db, { modelName: 'deepseek' })
+console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', reason: ... }
+```
+
+---
+
 ## Project Structure
 
 ```

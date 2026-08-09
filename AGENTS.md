@@ -44,6 +44,26 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
 - **MCP** `app/electron/mcp/`: `client.js` + `manager.js` — external stdio tool
   servers; their tools merge with built-ins via `getMergedTool(s)`.
 
+## Terminal TUI & SDK (aether-evolution)
+
+- **TUI** `app/tui/` — Ink v5 交互终端（`aether tui`）。局部 `package.json`
+  `{"type":"module"}`，组件一律 `react.createElement` 手写（Node 不原生加载
+  `.jsx`，且不引入 bundler/loader 依赖 —— 见 issues/ISSUE-01）。纯逻辑放
+  `reducer.js` / `keymap.js` / `toolCards.js` / `rollback.js` / `allowRules.js` /
+  `sessionCommands.js`，全部可单测；入口 `index.mjs`（Node ≥ 22 自检 + `--smoke`
+  状态机驱动）。TUI 不允许 `require('electron')`。
+- **SDK** `app/electron/sdk/` — Electron-free 聚合（`aetherai/sdk` exports 子路径）：
+  `runAgent` / `openDatabase` / `resolveProviderModel` / `taskDbAdapter` /
+  `memory` / `classifyAgentMode` / `rpc` / `sessionContext`。任何被 SDK 聚合的
+  模块必须保持 Electron-free。
+- **RPC** `app/electron/llm/rpc/` — JSONL 帧协议（`--mode rpc`）。方法宿主显式
+  标注在 `server.js` 文件头，禁止另起炉灶重复实现既有业务。
+- **i18n 刻意例外**：TUI 的 en/zh 双语文案模块**不入 `i18n.base.json` 管道**。
+  理由：终端多语言收益低，为 TUI 全量铺 15 语言管道不划算。桌面/CLI 用户可见
+  字符串仍必须走 i18n base 键（惯例不变）。
+- `app/scripts/smoke-rpc.js` 与 `app/scripts/boot-smoke.js` 是 CI 冒烟入口
+  （scripts/ 目录在 .gitignore 但脚本被 force-add 跟踪，新脚本同款处理）。
+
 ## Hard rules
 
 - **IPC contract is three files**: a handler in `ipc/`, its exposure in
