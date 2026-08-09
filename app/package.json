@@ -23,6 +23,7 @@
     "build": "node scripts/check-ipc.js && tsc --noEmit && vite build && node build-icons.js && electron-builder --publish never",
     "typecheck": "tsc --noEmit",
     "smoke:boot": "node scripts/boot-smoke.js",
+    "smoke:rpc": "node scripts/smoke-rpc.js",
     "build:icon": "node build-icons.js",
     "build:win": "vite build && electron-builder --win --x64",
     "build:ci": "vite build && electron-builder --win nsis portable --x64 --publish always",

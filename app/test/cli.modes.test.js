@@ -151,6 +151,27 @@ describe('cli four-mode routing', () => {
     expect(r.timedOut).toBe(false)
     expect(r.status).toBe(0)
   })
+
+  it('--mode rpc: 2 个请求 → 2 个 result 帧，全部 JSON 可解析（无人类文本）', { timeout: 30000 }, async () => {
+    const input = [
+      JSON.stringify({ type: 'request', reqId: 'm1', method: 'listModels', params: {} }),
+      JSON.stringify({ type: 'request', reqId: 'm2', method: 'listProviders', params: {} }),
+    ].join('\n') + '\n'
+    const r = await runCli(['--mode', 'rpc', ...agentArgs()], input)
+    expect(r.timedOut).toBe(false)
+    expect(r.status).toBe(0)
+    const lines = r.stdout.split('\n').filter((l) => l.trim())
+    expect(lines.length).toBeGreaterThanOrEqual(2)
+    const parsed = lines.map((l) => JSON.parse(l))
+    for (const f of parsed) {
+      expect(['request', 'event', 'result', 'error']).toContain(f.type)
+      expect(f.reqId).toBeDefined()
+    }
+    const results = parsed.filter((f) => f.type === 'result')
+    expect(results).toHaveLength(2)
+    expect(results.some((f) => f.reqId === 'm1' && f.ok)).toBe(true)
+    expect(results.some((f) => f.reqId === 'm2' && f.ok)).toBe(true)
+  })
 })
 
 
