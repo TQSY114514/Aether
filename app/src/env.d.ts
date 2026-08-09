@@ -298,6 +298,8 @@ interface Window {
       onDone: (callback: (payload: { taskId: number; sessionId: number; finalContent: string }) => void) => () => void
       onCancelled: (callback: (payload: { taskId: number }) => void) => () => void
       onError: (callback: (payload: { taskId: number; error: string }) => void) => () => void
+      // todo 16：托盘"新建任务"→ 打开 TaskPanel
+      onOpenTasks: (callback: () => void) => () => void
     }
     cron: {
       list: () => Promise<{ name: string; intervalMs: number; running: boolean }[]>

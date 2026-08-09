@@ -109,6 +109,8 @@ export default function TaskPanel() {
   // before the panel was ever opened, show up.
   useEffect(() => {
     ensureTaskListeners()
+    // todo 16：托盘"新建任务"→ 主进程发 ui:open-tasks → 打开面板
+    const unsub = window.electronAPI?.task?.onOpenTasks?.(() => useStore.getState().setTasksOpen(true))
     const api = taskApi()
     if (!api) return
     let cancelled = false
@@ -119,7 +121,7 @@ export default function TaskPanel() {
         if (item && typeof item.id === 'number') upsert(item)
       }
     }).catch(() => {})
-    return () => { cancelled = true }
+    return () => { cancelled = true; if (typeof unsub === 'function') unsub() }
   }, [])
 
   // Default model = the current session's, else the primary/first known model.

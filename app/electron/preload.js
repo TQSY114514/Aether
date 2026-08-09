@@ -206,6 +206,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onDone: (cb) => subscribe('task:done', cb),
     onCancelled: (cb) => subscribe('task:cancelled', cb),
     onError: (cb) => subscribe('task:error', cb),
+    // todo 16：托盘"新建任务"→ 打开 TaskPanel
+    onOpenTasks: (cb) => subscribe('ui:open-tasks', cb),
   },
   cron: {
     list: () => ipcRenderer.invoke('cron:list'),

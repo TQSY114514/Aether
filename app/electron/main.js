@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, protocol } = require('electron')
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, protocol, globalShortcut } = require('electron')
 const path = require('path')
 const http = require('http')
 const fs = require('fs')
@@ -183,6 +183,26 @@ function createWindow() {
 }
 
 
+// 唤出/创建主窗口（托盘点击、全局快捷键共用；todo 16）。
+function showMainWindow() {
+  if (mainWindow) {
+    mainWindow.show()
+    mainWindow.focus()
+    return
+  }
+  createWindow()
+}
+
+// 全局快捷键（todo 16）：Ctrl+Alt+A 唤出主窗口（未启动则创建）。
+function setupGlobalShortcut() {
+  try {
+    const ok = globalShortcut.register('Ctrl+Alt+A', () => showMainWindow())
+    log.info(`global shortcut Ctrl+Alt+A registered: ${ok}`)
+  } catch (e) {
+    log.warn('global shortcut register failed:', e.message)
+  }
+}
+
 function createTray() {
   if (tray) return
   try {
@@ -210,12 +230,17 @@ function createTray() {
 
 function updateTrayMenu() {
   if (!tray) return
-  const ctx = { show: 'Show AetherAI', hide: 'Hide', newChat: 'New Chat', quit: 'Quit AetherAI' }
+  const ctx = { show: 'Show AetherAI', hide: 'Hide', newChat: 'New Chat', newTask: 'New Task', quit: 'Quit AetherAI' }
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: ctx.show, click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus() } } },
+    { label: ctx.show, click: () => showMainWindow() },
     { label: ctx.hide, click: () => { if (mainWindow) mainWindow.hide() } },
     { type: 'separator' },
-    { label: ctx.newChat, click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus() } } },
+    { label: ctx.newChat, click: () => showMainWindow() },
+    // todo 16：新建任务 → 唤窗 + 打开 TaskPanel（renderer 经 preload 'ui:open-tasks' 订阅）。
+    { label: ctx.newTask, click: () => {
+      showMainWindow()
+      try { mainWindow?.webContents.send('ui:open-tasks') } catch {}
+    } },
     { type: 'separator' },
     { label: ctx.quit, click: () => { app.quit() } },
   ]))
@@ -374,6 +399,7 @@ app.whenReady().then(async () => {
   }
   createWindow()
   createTray()
+  setupGlobalShortcut()
   setupIpcHandlers()
   // Local gateway: expose the API to the VS Code extension / browser / scripts.
   // Defaults to enabled so external tools work out of the box; bound to 127.0.0.1
