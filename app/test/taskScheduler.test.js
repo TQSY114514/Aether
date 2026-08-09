@@ -38,7 +38,7 @@ function makeFakeDb({ queueOn = false } = {}) {
       const id = nextId++
       agentTasks.set(id, {
         id, session_id, title, content, model_id, agent_mode,
-        status: 'pending', priority, max_retry, attempts: 0,
+        status: 'queued', priority, max_retry, attempts: 0,
         error: null, result: null, created_at: new Date().toISOString(),
       })
       return id
@@ -149,12 +149,12 @@ describe('queue mode (scheduler.queue on)', () => {
     const tasks = []
     for (let i = 0; i < 5; i++) tasks.push(await start({ content: `t${i}` }))
 
-    // 3 running, 2 pending.
+    // 3 running, 2 queued (state machine uses `queued` since 7f6e9e5).
     await until(() => {
       const s = statusMap()
       return tasks.filter(t => s[t.taskId] === 'running').length === 3 &&
-             tasks.filter(t => s[t.taskId] === 'pending').length === 2
-    }, 3000, '3 running + 2 pending')
+             tasks.filter(t => s[t.taskId] === 'queued').length === 2
+    }, 3000, '3 running + 2 queued')
 
     // Free one slot → one pending starts.
     openDeferreds[0].resolve('a')
@@ -228,7 +228,7 @@ describe('queue mode (scheduler.queue on)', () => {
     hangMode()
     const running = [await start(), await start(), await start()]
     const pending = await start()
-    await until(() => statusMap()[pending.taskId] === 'pending', 3000, 'pending')
+    await until(() => statusMap()[pending.taskId] === 'queued', 3000, 'queued')
 
     const callsBefore = runToolLoop.mock.calls.length
     bt.cancelTask(pending.taskId)
@@ -283,6 +283,6 @@ describe('persistence & restore', () => {
       return Object.values(s).filter(v => v === 'running').length >= 1
     }, 3000, 'rehydrated tasks dispatched')
     const s = statusMapFor(bt2, queueDb)
-    expect(Object.values(s).filter(v => v === 'pending').length).toBe(0)
+    expect(Object.values(s).filter(v => v === 'queued').length).toBe(0)
   })
 })
