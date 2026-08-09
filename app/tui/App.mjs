@@ -89,6 +89,7 @@ export function App({ dbPath, modelName }) {
         modelName,
         prompt: promptText,
         agentMode: state.mode,
+        personaId: state.currentPersonaId,
         dispatch,
         requestPermission: tuiPermission,
       })
@@ -121,6 +122,10 @@ export function App({ dbPath, modelName }) {
       const { results } = searchMemory(dbPath, cmd.query || '')
       dispatch({ type: 'MEMORY_SET', results })
       dispatch({ type: 'STATUS', text: `memory: ${results.length} hit(s)` })
+    } else if (cmd.type === 'persona') {
+      // todo 13：/persona <id> → 切换人设（runSession 注入）
+      dispatch({ type: 'PERSONA_SET', personaId: cmd.personaId })
+      dispatch({ type: 'STATUS', text: cmd.personaId == null ? 'persona: none' : `persona: #${cmd.personaId}` })
     }
   }, [dbPath, state.currentSessionId])
 

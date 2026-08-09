@@ -146,6 +146,8 @@ async function runAgent({
   workspace = process.cwd(),
   signal,
   sessionId,
+  personaId,
+  db,
   requestPermission,
   onEvent,
   onToolCall,
@@ -160,6 +162,17 @@ async function runAgent({
   const convo = messages && messages.length
     ? messages.slice()
     : [{ role: 'user', content: String(prompt || '') }]
+
+  // todo 13：persona + 记忆注入前缀（CLI/TUI/SDK 贯通）。给定 db 且指定
+  // personaId 时构建 [persona system 块, 记忆 system 块, ...] 并置于最前；
+  // 均缺省时零注入，与既有行为完全等价（无回归）。
+  if (db && (personaId != null)) {
+    try {
+      const { buildSessionContext } = require('./sessionContext')
+      const { prefix } = buildSessionContext({ db, sessionId, personaId, userMessage: String(prompt || '') })
+      if (prefix.length) convo.unshift(...prefix)
+    } catch {}
+  }
 
   const toolCalls = []
   const emit = (entry) => {

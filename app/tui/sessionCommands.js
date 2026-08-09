@@ -18,6 +18,10 @@ export function parseSessionCommand(input) {
       return { type: 'sessions' }
     case '/memory':
       return { type: 'memory', ...(arg ? { query: arg } : {}) }
+    case '/persona': {
+      const id = Number(arg)
+      return { type: 'persona', personaId: Number.isFinite(id) && arg !== '' ? id : null }
+    }
     case '/use': {
       const id = Number(arg)
       return { type: 'use', sessionId: Number.isFinite(id) && arg !== '' ? id : null }
