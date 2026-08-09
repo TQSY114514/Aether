@@ -171,6 +171,8 @@ function createRpcServer({ db, deps = {} }) {
 
 /**
  * CLI 入口（cli.js --mode rpc 调用）：读 stdin 逐行 request → stdout 写帧。
+ * 退出码规范（todo 11）：0 = 正常 EOF 收尾；1 = 致命错误（无 db / 循环异常），
+ * 致命错误仍先向 stdout 发 error 帧（只写帧，不混人类文本）。
  * @param {{ db?: string, deps?: object }} opts  db 为 aetherai.db 路径
  * @returns {Promise<number>} 退出码
  */
@@ -184,10 +186,15 @@ async function main({ db: dbPath, deps = {} } = {}) {
   const readline = require('node:readline')
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity })
   const write = (frame) => process.stdout.write(frames.pushFrame(frame))
-  for await (const line of rl) {
-    const frame = frames.consumeLine(line)
-    if (!frame) continue
-    await server.handleFrame(frame, write)
+  try {
+    for await (const line of rl) {
+      const frame = frames.consumeLine(line)
+      if (!frame) continue
+      await server.handleFrame(frame, write)
+    }
+  } catch (e) {
+    process.stdout.write(frames.pushFrame(frames.errorFrame('0', `rpc server error: ${e && e.message ? e.message : String(e)}`)))
+    return 1
   }
   return 0
 }
