@@ -31,16 +31,20 @@ function initAppReady() {
 
   // ── aetherai:// protocol handler ─────────────────────────────────────────
   // Allows "open in AetherAI" from browser links and other apps.
+  // 动作集（todo 17）：new/chat（既有）、open（路径参数 → 会话 workspace）、tui。
+  // URL 解析在 llm/protocolUrl.js（纯函数，可单测）。
+  const { parseProtocolUrl } = require('./llm/protocolUrl')
+  const relayProtocol = (rawUrl) => {
+    const parsed = parseProtocolUrl(rawUrl)
+    if (!parsed) return
+    const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+    if (wc && !wc.isDestroyed()) {
+      wc.send('protocol:open', parsed)
+    }
+  }
   if (!app.isPackaged) {
     protocol.handle('aetherai', (req) => {
-      const url = new URL(req.url)
-      const action = url.hostname
-      if (action === 'new' || action === 'chat') {
-        const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-        if (wc && !wc.isDestroyed()) {
-          wc.send('protocol:open', { action })
-        }
-      }
+      relayProtocol(req.url)
       return new Response('AetherAI protocol handler', { status: 200 })
     })
   } else {
@@ -48,19 +52,16 @@ function initAppReady() {
     app.setAsDefaultProtocolClient('aetherai')
     app.on('second-instance', (_e, argv) => {
       const url = argv.find(a => a.startsWith('aetherai://'))
-      if (url && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('protocol:open', { action: new URL(url).hostname })
-        mainWindow.show(); mainWindow.focus()
+      if (url) {
+        relayProtocol(url)
+        if (mainWindow) { mainWindow.show(); mainWindow.focus() }
       }
     })
     app.on('open-url', (e, url) => {
       if (url.startsWith('aetherai://')) {
         e.preventDefault()
-        const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-        if (wc && !wc.isDestroyed()) {
-          wc.send('protocol:open', { action: new URL(url).hostname })
-          mainWindow.show(); mainWindow.focus()
-        }
+        relayProtocol(url)
+        if (mainWindow) { mainWindow.show(); mainWindow.focus() }
       }
     })
   }
