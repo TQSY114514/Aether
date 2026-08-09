@@ -230,7 +230,7 @@ export function tuiReducer(state = initialTuiState, action) {
   }
 }
 
-// `aether tui --smoke` 用的状态摘要（纯函数、可 JSON 序列化）
+// `aether tui --smoke` 与交互验收（todo 15）用的状态摘要（纯函数、可 JSON 序列化）
 export function summarizeState(state) {
   return {
     mode: state.mode,
@@ -239,6 +239,10 @@ export function summarizeState(state) {
     messageCount: state.messages.length,
     lastMessageText: state.messages[state.messages.length - 1]?.text ?? '',
     toolCalls: state.toolCalls.map((t) => ({ name: t.name, status: t.status })),
+    pendingPermission: state.pendingPermission ? state.pendingPermission.name : null,
+    expandedTool: state.expandedTool,
+    steeringQueue: state.steeringQueue.length,
+    budget: { ...state.budget },
     quitRequested: state.quitRequested,
   }
 }
