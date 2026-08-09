@@ -1,7 +1,10 @@
 // sandbox.js with whitelist mode
 const fs = require('fs')
 const path = require('path')
-const { app } = require('electron')
+// In headless mode (cli.js) `require('electron')` resolves to a path string,
+// so destructuring `app` yields undefined. Guard the only call site.
+const electron = (() => { try { return require('electron') } catch { return null } })()
+const app = (electron && typeof electron === 'object' && electron.app) ? electron.app : null
 
 let _workspaceRoot = null
 let _sessionWorkspaces = new Map()
@@ -19,7 +22,11 @@ function getWorkspaceRoot(sessionId) {
 }
 
 function defaultWorkspace() {
-  const dir = path.join(app.getPath('userData'), 'workspace')
+  // Headless fallback: cwd-relative .aether-workspace when no Electron userData.
+  const base = app && typeof app.getPath === 'function'
+    ? app.getPath('userData')
+    : path.join(process.cwd(), '.aether-workspace')
+  const dir = path.join(base, 'workspace')
   try { fs.mkdirSync(dir, { recursive: true }) } catch {}
   return dir
 }

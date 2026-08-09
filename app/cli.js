@@ -16,10 +16,13 @@
 const path = require('path')
 const agent = require('./electron/llm/agentCore')
 // CLI 的 task 派发桥：直接加载 TaskEngine（Electron-free —— 引擎全部依赖
-// 已 DI：db 由 openDatabase 提供，getWebContents 为 null 时权限弹窗走 CLI 兜底）。
-// 加载失败时降级为"不支持任务派生"（例如依赖 Electron 的旧版本模块）。
+// 已 DI：db 由 openDatabase + taskDbAdapter 提供，getWebContents 为 null 时
+// 权限弹窗走 CLI 兜底）。加载失败时降级为"不支持任务派生"。
 let taskEngine = null
 try { taskEngine = require('./electron/llm/backgroundTasks') } catch { taskEngine = null }
+// bare better-sqlite3 连接 → database.js 同款业务 API（TaskEngine 需要的
+// createSession/addMessage/createAgentTask/... 十个方法）。
+const { taskDbAdapter } = require('./electron/llm/taskDbAdapter')
 
 const HELP = `AetherAI headless agent
 
@@ -109,11 +112,11 @@ async function runTaskMode(opts) {
 
   // 引擎需要 db 提供 getModel/getProvider/getSetting 等（database.js 的 API）。
   // CLI 没有 Electron 的 WebContents：权限弹窗兜底为空（工具将自动拒绝高危操作）。
-  taskEngine.initBackgroundTasks({ getWebContents: () => null, db, runToolLoop: undefined })
+  taskEngine.initBackgroundTasks({ getWebContents: () => null, db: taskDbAdapter(db), runToolLoop: undefined })
 
   try {
     const r = await taskEngine.startTask({
-      db,
+      db: taskDbAdapter(db),
       parentSessionId: null,
       content,
       modelId: resolved.model.id,
