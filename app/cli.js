@@ -53,6 +53,8 @@ Options:
                           running inline: returns { taskId, sessionId } and exits.
                           The task shows up in the app's task panel and survives
                           restarts (agent_task persistence).
+  --setup-term            Write the AetherAI profile into Windows Terminal settings
+                          (--term-settings <path> overrides the default location).
   --list-models           List available models and exit.
   --list-providers        List configured providers and exit.
   --db <path>             Path to aetherai.db (default: userData/aetherai.db).
@@ -82,7 +84,7 @@ function parseArgs(argv) {
       }
       const key = arg.slice(2)
       // Flags that take no value.
-      if (['json', 'json-lines', 'list-models', 'list-providers', 'task', 'stdin'].includes(key)) { opts[key] = true; continue }
+      if (['json', 'json-lines', 'list-models', 'list-providers', 'task', 'stdin', 'setup-term'].includes(key)) { opts[key] = true; continue }
       const next = argv[i + 1]
       if (next !== undefined && !next.startsWith('--')) { opts[key] = next; i++ }
       else { opts[key] = true }
@@ -172,6 +174,20 @@ function main() {
   const opts = parseArgs(argv)
 
   if (opts.help) { console.log(HELP); return 0 }
+
+  // todo 18：--setup-term → 写 Windows Terminal profile（--term-settings 覆盖路径）。
+  if (opts['setup-term']) {
+    const termProfile = require('./electron/llm/termProfile')
+    const settingsPath = opts['term-settings'] || termProfile.defaultWindowsTerminalSettingsPath()
+    const fragment = termProfile.buildTermProfile()
+    const r = termProfile.updateSettingsJson(settingsPath, fragment)
+    if (!r.ok) {
+      console.error(`error: ${r.error}`)
+      return 1
+    }
+    console.log(JSON.stringify({ ok: true, path: r.path, profiles: r.profiles }, null, 2))
+    return 0
+  }
 
   // 传输/权限模式归一：--mode json|rpc 是传输模式；auto|plan|ask|yolo 是权限模式。
   const transportJson = !!(opts['json-lines'] || opts.mode === 'json')
