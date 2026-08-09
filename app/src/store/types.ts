@@ -22,7 +22,7 @@ export interface SessionConfig {
 // progress and open a task's session to read the full trace.
 // ───────────────────────────────────────────────────────────────────────────
 
-export type TaskStatus = 'running' | 'done' | 'cancelled' | 'error'
+export type TaskStatus = 'queued' | 'running' | 'plan' | 'paused' | 'done' | 'cancelled' | 'error' | 'pending'
 
 export interface TaskInfo {
   id: number
@@ -47,6 +47,9 @@ interface TaskApi {
   start: (params: { content: string; modelId: number; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
   list: () => Promise<TaskInfo[]>
   cancel: (taskId: number) => Promise<{ ok: boolean }>
+  pause: (taskId: number) => Promise<{ ok: boolean }>
+  resume: (taskId: number) => Promise<{ ok: boolean }>
+  derive: (params: { content: string; modelId: number; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
   getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
   onStarted: (cb: (task: TaskInfo) => void) => () => void
   onProgress: (cb: (p: { taskId: number; type: TaskProgressType; payload: unknown }) => void) => () => void

@@ -16,13 +16,17 @@
 const {
   startTask,
   cancelTask,
+  pauseTask,
+  resumeTask,
   listTasks,
   getTask,
   initBackgroundTasks,
   restorePendingTasks,
 } = require('../llm/backgroundTasks')
 
-const PROGRESS_TYPES = new Set(['tool-call', 'plan-step', 'status', 'todo-update', 'chunk'])
+const { TASK_PROGRESS_TYPES } = require('../llm/eventTypes')
+
+const PROGRESS_TYPES = new Set(TASK_PROGRESS_TYPES)
 
 function stripRecord(record) {
   const { controller, emit, ...rest } = record
@@ -91,6 +95,41 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('task:cancel', (_e, taskId) => {
     cancelTask(taskId)
     return { ok: true }
+  })
+
+  // ── task:pause ──────────────────────────────────────────────────────────
+  // 暂停运行中的任务（下一迭代边界生效）。
+  ipcMain.handle('task:pause', (_e, taskId) => {
+    const ok = pauseTask(taskId)
+    return { ok }
+  })
+
+  // ── task:resume ─────────────────────────────────────────────────────────
+  // 恢复暂停的任务；也用于批准 plan 模式任务（plan → 执行）。
+  ipcMain.handle('task:resume', (_e, taskId) => {
+    const ok = resumeTask(taskId)
+    return { ok }
+  })
+
+  // ── task:derive ─────────────────────────────────────────────────────────
+  // CLI / 脚本从外部派生任务：不经窗口直接进 TaskEngine（同 task:start 语义，
+  // 但来源标注为 'cli'，供权限弹窗/审计区分）。
+  ipcMain.handle('task:derive', async (_e, { content, modelId, agentMode = 'ask', priority = 0, maxRetry = 2 }) => {
+    try {
+      const result = await startTask({
+        db,
+        parentSessionId: null,
+        content,
+        modelId,
+        agentMode,
+        priority,
+        maxRetry,
+        emit: () => {}, // CLI 自身从 NDJSON 流获取进度，桌面无需重推
+      })
+      return { taskId: result.taskId, sessionId: result.sessionId }
+    } catch (e) {
+      return { error: e.message || String(e) }
+    }
   })
 
   // ── task:get-result ─────────────────────────────────────────────────────
