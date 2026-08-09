@@ -100,6 +100,17 @@ export function decidePermission({ decision, remember = false, allowRules, sessi
 }
 
 /**
+ * 向运行中的循环注入 follow-up 消息（todo 6）。
+ * 直接写 steering 模块（toolLoop.js:425 每轮消费同 key 的注入），Electron-free。
+ * @param {string} sessionId  与 runSession 的 sessionId 一致（默认 'tui'）
+ * @param {string} text
+ */
+export function injectSteering(sessionId, text) {
+  const steering = require('../electron/llm/steering')
+  return steering.steer(sessionId || 'tui', String(text || '').trim())
+}
+
+/**
  * 跑一轮 agent 会话，把事件流翻译成 reducer action。
  * @param {object} opts
  * @param {string} [opts.dbPath]
@@ -108,6 +119,7 @@ export function decidePermission({ decision, remember = false, allowRules, sessi
  * @param {string} [opts.agentMode]   'auto' | 'plan' | 'ask'（默认 'auto'）
  * @param {number} [opts.maxIterations]
  * @param {string} [opts.workspace]
+ * @param {string} [opts.sessionId]   steering/事件键控（默认 'tui'）
  * @param {(action: object) => void} opts.dispatch   reducer dispatch
  * @param {(result: object) => void} [opts.onEnd]    完成回调（result.text/toolCalls）
  * @param {(perm: object) => Promise<boolean>} [opts.requestPermission]  权限回调（todo 4：createTuiPermissionHandler 产物或自定义）
@@ -122,6 +134,7 @@ export async function runSession({
   agentMode = 'auto',
   maxIterations,
   workspace,
+  sessionId = 'tui',
   dispatch,
   onEnd,
   requestPermission,
@@ -129,6 +142,7 @@ export async function runSession({
   resolveImpl = resolveSessionResources,
 } = {}) {
   const { provider, model } = resolveImpl(dbPath, modelName)
+  dispatch({ type: 'AGENT_START', max: maxIterations })
   const result = await runAgentImpl({
     prompt: String(prompt || ''),
     provider,
@@ -136,6 +150,7 @@ export async function runSession({
     workspace: workspace || process.cwd(),
     agentMode,
     maxIterations,
+    sessionId,
     requestPermission,
     onText: (chunk) => {
       if (chunk && typeof chunk.text === 'string') {
@@ -153,9 +168,18 @@ export async function runSession({
       dispatch({ type: isStart ? 'TOOL_START' : 'TOOL_END', entry: enriched })
     },
     onStatus: (s) => {
-      if (s && typeof s.text === 'string') dispatch({ type: 'STATUS', text: s.text })
+      if (s && typeof s.text === 'string') {
+        dispatch({ type: 'STATUS', text: s.text })
+        // todo 6：注入被循环消费（toolLoop.js:430 '📥 已插入你的新消息'）→ 队列出队
+        if (s.kind === 'injection') dispatch({ type: 'STEER_DEQUEUE' })
+      }
     },
-    onPlanStep: () => { /* todo 6 steering 队列消费 */ },
+    onPlanStep: (step) => {
+      // todo 6：每轮消耗一次迭代 → 预算 used = depth + 1
+      if (step && Number.isFinite(step.depth)) {
+        dispatch({ type: 'BUDGET', used: step.depth + 1 })
+      }
+    },
   })
   dispatch({ type: 'AGENT_END' })
   if (onEnd) onEnd(result)

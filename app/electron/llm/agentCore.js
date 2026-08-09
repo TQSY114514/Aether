@@ -145,6 +145,7 @@ async function runAgent({
   maxIterations,
   workspace = process.cwd(),
   signal,
+  sessionId,
   requestPermission,
   onEvent,
   onToolCall,
@@ -171,6 +172,10 @@ async function runAgent({
     model,
     messages: convo,
     signal,
+    // sessionId（可选，todo 6 steering 键控）：TUI 用固定 'tui' 让 steering 模块
+    // 的注入按此键被循环消费；DB 绑定路径均以 sessionId&&db 双守卫或 try/catch
+    // 包裹（toolLoop.js:582/590/756/766），headless 无 db 时不启用。
+    sessionId,
     // No sessionId / db: the loop's best-effort, DB-bound paths
     // (checkpoints, trust engine, trajectory, auto-commit) are all gated on
     // sessionId and are skipped in headless mode.

@@ -8,7 +8,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { Box, Text, useInput, useApp } from 'ink'
 import { tuiReducer, initialTuiState } from './reducer.js'
 import { keyToAction } from './keymap.js'
-import { runSession, createTuiPermissionHandler, decidePermission, toolToSnapshotPath } from './runSession.js'
+import { runSession, createTuiPermissionHandler, decidePermission, toolToSnapshotPath, injectSteering } from './runSession.js'
 import { createAllowRulesStore } from './allowRules.js'
 import { buildDiff, rollbackChange } from './rollback.js'
 import { parseSessionCommand } from './sessionCommands.js'
@@ -157,7 +157,37 @@ export function App({ dbPath, modelName }) {
       if ((input || '') === 'r') { doRollback(); return }
       return
     }
-    // 3) 普通态：Enter 提交、v 展开最近完成卡、其余走 keymap/输入。
+    // 3) steeringMode（todo 6）：Enter 注入 follow-up，Ctrl+C 取消打断态。
+    if (state.steeringMode) {
+      const ctrlC = key && key.ctrl && key.name === 'c'
+      if (ctrlC) {
+        dispatch({ type: 'STEER_MODE', on: false })
+        dispatch({ type: 'STATUS', text: 'follow-up cancelled' })
+        return
+      }
+      if (key && (key.name === 'return' || key.name === 'enter')) {
+        const text = state.input.trim()
+        if (text) {
+          injectSteering('tui', text)
+          dispatch({ type: 'STEER_ENQUEUE', text })
+          dispatch({ type: 'INPUT', value: '' })
+          dispatch({ type: 'STEER_MODE', on: false })
+          dispatch({ type: 'STATUS', text: 'follow-up queued' })
+        }
+        return
+      }
+      const action = keyToAction(key)
+      if (action) dispatch(action)
+      else if (input) dispatch({ type: 'INPUT', value: state.input + input })
+      return
+    }
+    // 4) Ctrl+C 运行中打断 → 进入 follow-up 输入态（todo 6）。
+    if (state.running && key && key.ctrl && key.name === 'c') {
+      dispatch({ type: 'STATUS', text: 'interrupted — type follow-up + Enter, or Ctrl+C to cancel' })
+      dispatch({ type: 'STEER_MODE', on: true })
+      return
+    }
+    // 5) 普通态：Enter 提交、v 展开最近完成卡、其余走 keymap/输入。
     if (key && (key.name === 'return' || key.name === 'enter')) {
       const text = state.input.trim()
       if (text && !state.running) {
@@ -193,13 +223,22 @@ export function App({ dbPath, modelName }) {
       expanded: state.expandedTool === i,
     })),
     state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
+    state.steeringQueue.length
+      ? h(Box, { marginTop: 1, flexDirection: 'column' },
+        h(Text, { bold: true, color: 'cyan' }, 'steering queue:'),
+        state.steeringQueue.map((q, i) => h(Text, { key: i, color: 'cyan' }, `  ⤷ ${q}`)))
+      : null,
     h(Box, { marginTop: 1 },
       h(Text, { color: 'gray' }, '> '),
       h(Text, {}, state.input),
     ),
     h(Box, { marginTop: 1 },
       h(Text, { color: 'gray' },
-        `[${state.mode}] ${state.statusLine}${state.running ? ' (running)' : ''} tools:${state.toolCalls.length}`),
+        `[${state.mode}] ${state.statusLine}${state.running ? ' (running)' : ''}` +
+        `${state.currentTool ? ` tool:${state.currentTool}` : ''}` +
+        `${state.budget.max > 0 ? ` it:${state.budget.used}/${state.budget.max}` : ''}` +
+        `${state.steeringQueue.length ? ` steer:${state.steeringQueue.length}` : ''}` +
+        ` tools:${state.toolCalls.length}`),
     ),
   )
 }
