@@ -34,6 +34,10 @@ function defaultWorkspace() {
 function resolveInside(target, { mustExist = false } = {}, sessionId) {
   const root = getWorkspaceRoot(sessionId)
   let abs = path.isAbsolute(target) ? target : path.join(root, target)
+  // todo 19：Windows 不安全前缀（\\?\ 原始路径 / UNC 共享）直接拒绝（平台无关判定）
+  if (hasUnsafeWindowsPrefix(abs)) {
+    return { ok: false, reason: 'unsafe Windows path prefix (\\\\?\\ or UNC)', abs }
+  }
   let resolved
   try { resolved = fs.realpathSync(abs) }
   catch {
@@ -53,10 +57,49 @@ function isInsideWorkspace(target, sessionId) {
   return r.ok === true
 }
 
+// ── Windows 路径强化（todo 19）────────────────────────────────────────────
+// \\?\ 长路径前缀 / UNC \\server\share / 重解析点（symlink/junction）逃逸 /
+// 点击即执行的危险扩展名。不减弱既有 3 层防御（root 包含 / realpath / 白名单）。
+
+const DANGEROUS_EXTENSIONS = new Set([
+  '.lnk', '.url', '.pif', '.cpl', '.scr', '.msi', '.msp', '.hta', '.jse', '.wsf',
+])
+
+// \\?\ 原始路径前缀（绕过规范化）与 UNC \\server\share（本地工作区不含远程共享）。
+// 纯字符串判定，跨平台可用。
+function hasUnsafeWindowsPrefix(p) {
+  const s = String(p || '')
+  if (/^\\\\\?\\/.test(s)) return true
+  if (/^\\\\[^\\]+\\[^\\]+/.test(s)) return true
+  return false
+}
+
+function hasDangerousExtension(p) {
+  const ext = path.extname(String(p || '')).toLowerCase()
+  return DANGEROUS_EXTENSIONS.has(ext)
+}
+
+// Windows 上 lstat.isSymbolicLink() 对符号链接与 junction 均返回 true。
+function isReparsePoint(p) {
+  try {
+    return fs.lstatSync(p).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
 function checkWritePath(target, sessionId) {
   const r = resolveInside(target, { mustExist: false }, sessionId)
-  if (r.ok === true) return { ok: true }
-  return { ok: false, reason: 'path outside workspace', abs: r.abs }
+  if (r.ok !== true) return { ok: false, reason: r.reason || 'path outside workspace', abs: r.abs }
+  // todo 19：危险扩展名块（.lnk/.url/.scr/... 点击即执行）
+  if (hasDangerousExtension(target)) {
+    return { ok: false, reason: 'dangerous file extension blocked', abs: r.abs }
+  }
+  // todo 19：最终组件是重解析点（symlink/junction）→ 显式拒绝（realpath 层兜底越界）
+  if (isReparsePoint(r.abs)) {
+    return { ok: false, reason: 'reparse point (symlink/junction) blocked', abs: r.abs }
+  }
+  return { ok: true }
 }
 
 // Command Whitelist
@@ -276,4 +319,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, clearSessionWorkspaces, isInsideWorkspace, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor }
+module.exports = { getWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, clearSessionWorkspaces, isInsideWorkspace, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, DANGEROUS_EXTENSIONS }
