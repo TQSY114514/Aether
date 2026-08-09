@@ -40,7 +40,7 @@ Options:
   --api-key <key>         Override the provider API key (else read from DB).
   --api-url <url>         Override the provider base URL (else read from DB).
   --api-format <fmt>      Provider format: openai | anthropic (default openai).
-  --mode <mode>           Agent permission mode: auto | plan | ask (default auto);
+  --mode <mode>           Agent permission mode: auto | plan | ask | yolo (default auto);
                           or transport mode: json (NDJSON stream) | rpc (JSONL loop).
   -p <prompt>             Explicit single-shot prompt (alternative to positional).
   --stdin                 Read the prompt from stdin (explicit). Also auto-detected
@@ -132,7 +132,7 @@ async function runTaskMode(opts) {
       parentSessionId: null,
       content,
       modelId: resolved.model.id,
-      agentMode: ['auto', 'plan', 'ask'].includes(opts.mode) ? opts.mode : 'ask',
+      agentMode: ['auto', 'plan', 'ask', 'yolo'].includes(opts.mode) ? opts.mode : 'ask',
       emit: () => {},
     })
     if (opts.json || opts['json-lines']) {
@@ -173,9 +173,9 @@ function main() {
 
   if (opts.help) { console.log(HELP); return 0 }
 
-  // 传输/权限模式归一：--mode json|rpc 是传输模式；auto|plan|ask 是权限模式。
+  // 传输/权限模式归一：--mode json|rpc 是传输模式；auto|plan|ask|yolo 是权限模式。
   const transportJson = !!(opts['json-lines'] || opts.mode === 'json')
-  const agentMode = ['auto', 'plan', 'ask'].includes(opts.mode) ? opts.mode : 'auto'
+  const agentMode = ['auto', 'plan', 'ask', 'yolo'].includes(opts.mode) ? opts.mode : 'auto'
 
   // 传输感知的错误发射：--mode json（新传输）把早期错误也打成 NDJSON 错误帧；
   // 其余路径保持既有 console.error 行为（--json-lines 存量字节兼容不动）。
@@ -268,27 +268,39 @@ function main() {
   const emit = (obj) => { if (jsonLines) console.log(JSON.stringify(obj)) }
 
   const run = async () => {
-    const result = await agent.runAgent({
-      prompt,
-      provider,
-      model,
-      workspace,
-      agentMode,
-      maxIterations,
-      db,
-      personaId,
-      onToolCall: (entry) => {
-        toolEntries.push(entry)
-        const isStart = entry.result == null && entry.error == null && entry.startedAt != null
-        emit({
-          type: isStart ? 'tool:start' : 'tool:end',
-          entry: { name: entry.name, args: entry.args, result: entry.result, error: entry.error, risk: entry.risk, latencyMs: entry.latencyMs, startedAt: entry.startedAt || null },
-        })
-      },
-      onStatus: (s) => { statuses.push(s); emit({ type: 'status', kind: s.kind || 'step', text: s.text }) },
-      onPlanStep: (step) => emit({ type: 'plan', step }),
-      onText: (chunk) => emit({ type: 'text', delta: chunk.text, done: !!chunk.done }),
-    })
+    // todo 14：MCP 连接 + SessionStart/SessionEnd hooks（best-effort）。
+    // hooks 目录 = <workspace>/.aetherai/hooks → 先显式落 workspace。
+    const headlessMcp = require('./electron/llm/headlessMcp')
+    try { require('./electron/tools/sandbox').setWorkspaceRoot(workspace) } catch {}
+    try { await headlessMcp.connectMcpServers({ db }) } catch {}
+    try { await headlessMcp.runSessionHooks('SessionStart', { sessionId: null, timestamp: new Date().toISOString() }) } catch {}
+    let result
+    try {
+      result = await agent.runAgent({
+        prompt,
+        provider,
+        model,
+        workspace,
+        agentMode,
+        maxIterations,
+        db,
+        personaId,
+        onToolCall: (entry) => {
+          toolEntries.push(entry)
+          const isStart = entry.result == null && entry.error == null && entry.startedAt != null
+          emit({
+            type: isStart ? 'tool:start' : 'tool:end',
+            entry: { name: entry.name, args: entry.args, result: entry.result, error: entry.error, risk: entry.risk, latencyMs: entry.latencyMs, startedAt: entry.startedAt || null },
+          })
+        },
+        onStatus: (s) => { statuses.push(s); emit({ type: 'status', kind: s.kind || 'step', text: s.text }) },
+        onPlanStep: (step) => emit({ type: 'plan', step }),
+        onText: (chunk) => emit({ type: 'text', delta: chunk.text, done: !!chunk.done }),
+      })
+    } finally {
+      try { await headlessMcp.runSessionHooks('SessionEnd', { sessionId: null, timestamp: new Date().toISOString() }) } catch {}
+      try { await headlessMcp.disconnectMcpServers() } catch {}
+    }
 
     if (jsonLines) {
       emit({ type: 'done', text: result.text, toolCalls: toolEntries })

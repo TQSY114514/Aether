@@ -90,7 +90,20 @@ function connectedServers() {
   return [...clients.keys()]
 }
 
+// Headless bridge injection（todo 14）：外部（CLI/TUI）自行 new McpClient 连接
+// 后，把适配好的工具注册进 mergedTools，让 toolLoop（getMergedTool /
+// getMergedToolsPayload，toolLoop.js:53-55）无差别可见。生命周期由调用方管理。
+function registerTools(tools) {
+  ensureSeeded()
+  let n = 0
+  for (const t of tools || []) {
+    if (t && t.name) { mergedTools.set(t.name, t); n++ }
+  }
+  return n
+}
+
 module.exports = {
   connectServer, connectAll, disconnectServer, disconnectAll,
   getMergedTool, getMergedToolsPayload, connectedServers,
+  registerTools,
 }
