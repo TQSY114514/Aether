@@ -14,6 +14,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const path = require('path')
+const fs = require('fs')
 const agent = require('./electron/llm/agentCore')
 // CLI 的 task 派发桥：直接加载 TaskEngine（Electron-free —— 引擎全部依赖
 // 已 DI：db 由 openDatabase + taskDbAdapter 提供，getWebContents 为 null 时
@@ -27,7 +28,11 @@ const { taskDbAdapter } = require('./electron/llm/taskDbAdapter')
 const HELP = `AetherAI headless agent
 
 Usage:
-  aether <prompt> [options]
+  aether <prompt> [options]      Single-shot prompt (positional or -p).
+  aether tui [--smoke]           Interactive terminal UI.
+  aether --mode json "prompt"    NDJSON event stream (like --json-lines).
+  aether --mode rpc              JSONL request/result loop over stdin/stdout.
+  echo "prompt" | aether         Piped stdin becomes the prompt.
 
 Options:
   --model <name>          Model name (or "provider/model"). Defaults to primary.
@@ -35,7 +40,11 @@ Options:
   --api-key <key>         Override the provider API key (else read from DB).
   --api-url <url>         Override the provider base URL (else read from DB).
   --api-format <fmt>      Provider format: openai | anthropic (default openai).
-  --mode <mode>           Agent permission mode: auto | plan | ask (default auto).
+  --mode <mode>           Agent permission mode: auto | plan | ask (default auto);
+                          or transport mode: json (NDJSON stream) | rpc (JSONL loop).
+  -p <prompt>             Explicit single-shot prompt (alternative to positional).
+  --stdin                 Read the prompt from stdin (explicit). Also auto-detected
+                          when stdin is piped and no prompt is given.
   --workspace <dir>       Working directory for tools (default: process.cwd()).
   --max-iterations <n>    Cap the number of tool-loop iterations.
   --json                  Emit machine-readable JSON on stdout.
@@ -54,14 +63,17 @@ Examples:
   aether "list files" --model deepseek --json
   aether "create a build script" --model deepseek-v4-pro --mode auto
   aether "refactor the loader" --task --model deepseek --priority 5
+  aether tui
+  echo "summarize README.md" | aether
 `
 
-// Minimal argv parser: handles --flag value and --flag=value forms.
+// Minimal argv parser: handles --flag value and --flag=value forms, plus -p.
 function parseArgs(argv) {
   const opts = { _: [] }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--help' || arg === '-h') { opts.help = true; continue }
+    if (arg === '-p') { opts.p = argv[i + 1]; i++; continue }
     if (arg.startsWith('--')) {
       const eq = arg.indexOf('=')
       if (eq !== -1) {
@@ -70,7 +82,7 @@ function parseArgs(argv) {
       }
       const key = arg.slice(2)
       // Flags that take no value.
-      if (['json', 'json-lines', 'list-models', 'list-providers', 'task'].includes(key)) { opts[key] = true; continue }
+      if (['json', 'json-lines', 'list-models', 'list-providers', 'task', 'stdin'].includes(key)) { opts[key] = true; continue }
       const next = argv[i + 1]
       if (next !== undefined && !next.startsWith('--')) { opts[key] = next; i++ }
       else { opts[key] = true }
@@ -91,7 +103,7 @@ async function runTaskMode(opts) {
     console.error('error: task engine unavailable in this build')
     return 1
   }
-  const content = opts._.join(' ')
+  const content = (opts.p !== undefined ? String(opts.p) : opts._.join(' ')).trim()
   if (!content) {
     console.error('error: --task requires a prompt. Usage: aether "<prompt>" --task --model <name>')
     return 1
@@ -120,7 +132,7 @@ async function runTaskMode(opts) {
       parentSessionId: null,
       content,
       modelId: resolved.model.id,
-      agentMode: opts.mode || 'ask',
+      agentMode: ['auto', 'plan', 'ask'].includes(opts.mode) ? opts.mode : 'ask',
       emit: () => {},
     })
     if (opts.json || opts['json-lines']) {
@@ -161,6 +173,36 @@ function main() {
 
   if (opts.help) { console.log(HELP); return 0 }
 
+  // 传输/权限模式归一：--mode json|rpc 是传输模式；auto|plan|ask 是权限模式。
+  const transportJson = !!(opts['json-lines'] || opts.mode === 'json')
+  const agentMode = ['auto', 'plan', 'ask'].includes(opts.mode) ? opts.mode : 'auto'
+
+  // 传输感知的错误发射：--mode json（新传输）把早期错误也打成 NDJSON 错误帧；
+  // 其余路径保持既有 console.error 行为（--json-lines 存量字节兼容不动）。
+  const fail = (msg) => {
+    if (opts.mode === 'json') console.log(JSON.stringify({ type: 'error', message: msg }))
+    else console.error(`error: ${msg}`)
+    return 1
+  }
+
+  // --mode rpc：JSONL 请求/结果循环（RPC server 由 todo 10/11 落地，此处动态接线）。
+  if (opts.mode === 'rpc') {
+    return (async () => {
+      try {
+        const rpc = await import('./electron/llm/rpc/server.js')
+        const code = await rpc.main({ db: opts.db })
+        return typeof code === 'number' ? code : 0
+      } catch (err) {
+        if (err && err.code === 'ERR_MODULE_NOT_FOUND') {
+          console.error('error: --mode rpc server is not built yet.')
+          return 1
+        }
+        console.error(`error: ${err && err.message ? err.message : String(err)}`)
+        return 1
+      }
+    })()
+  }
+
   const db = agent.openDatabase(opts.db)
 
   if (opts['list-providers']) {
@@ -179,17 +221,22 @@ function main() {
 
   if (opts.task) return runTaskMode(opts)
 
-  const prompt = opts._.join(' ')
+  // Prompt 来源优先级：-p > 位置参数 > --stdin > 管道 stdin（非 TTY 自动回退）。
+  let prompt = null
+  if (opts.p !== undefined) prompt = String(opts.p)
+  else if (opts._.length) prompt = opts._.join(' ')
+  if (prompt === null && (opts.stdin || !process.stdin.isTTY)) {
+    try { prompt = fs.readFileSync(0, 'utf8').trim() } catch { prompt = '' }
+  }
+  prompt = (prompt || '').trim()
   if (!prompt) {
-    console.error('error: no prompt given. Use --help for usage.')
-    return 1
+    return fail('no prompt given. Use --help for usage.')
   }
 
   // Resolve provider + model from the DB, unless overridden on the command line.
   let resolved = agent.resolveProviderModel(db, { providerName: opts.provider, modelName: opts.model })
   if (!resolved) {
-    console.error(`error: no enabled model found. Configure one in the app or run --list-models / --list-providers.`)
-    return 1
+    return fail('no enabled model found. Configure one in the app or run --list-models / --list-providers.')
   }
 
   const provider = {
@@ -204,11 +251,10 @@ function main() {
   // in headless Node). Fail fast with a clear hint instead of sending the
   // ciphertext as the API key and getting a confusing 401.
   if (!opts['api-key'] && provider.api_key && agent.isEncryptedKey(provider.api_key)) {
-    console.error(
-      'error: the stored API key for provider "' + provider.name + '" is encrypted with the desktop app (safeStorage).\n' +
+    return fail(
+      'the stored API key for provider "' + provider.name + '" is encrypted with the desktop app (safeStorage).\n' +
       'Headless mode cannot decrypt it. Pass --api-key <plaintext> to use this provider.'
     )
-    return 1
   }
 
   const maxIterations = opts['max-iterations'] ? parseInt(opts['max-iterations'], 10) : undefined
@@ -216,7 +262,7 @@ function main() {
 
   const toolEntries = []
   const statuses = []
-  const jsonLines = !!opts['json-lines']
+  const jsonLines = transportJson
   const emit = (obj) => { if (jsonLines) console.log(JSON.stringify(obj)) }
 
   const run = async () => {
@@ -225,7 +271,7 @@ function main() {
       provider,
       model,
       workspace,
-      agentMode: opts.mode || 'auto',
+      agentMode,
       maxIterations,
       onToolCall: (entry) => {
         toolEntries.push(entry)
@@ -265,7 +311,7 @@ function main() {
     process.exitCode = code
   }).catch((err) => {
     const msg = err && err.message ? err.message : String(err)
-    if (opts['json-lines']) console.log(JSON.stringify({ type: 'error', message: msg }))
+    if (transportJson) console.log(JSON.stringify({ type: 'error', message: msg }))
     else if (opts.json) console.log(JSON.stringify({ error: msg }, null, 2))
     else     console.error(`error: ${msg}`)
     process.exitCode = 1
