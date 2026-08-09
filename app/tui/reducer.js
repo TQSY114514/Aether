@@ -14,9 +14,11 @@ export const initialTuiState = Object.freeze({
   mode: 'ask',
   running: false,
   statusLine: 'idle',
-  toolCalls: [], // { name, status: 'running'|'done'|'error', summary, latencyMs, snapshot, diff, rollbackResult }
+  toolCalls: [], // { name, args, status, summary, latencyMs, snapshot, diff, rollbackResult }
   pendingPermission: null, // { reqId, name, args, risk, snapshot } — awaitingPermission 态
   expandedTool: null,      // 展开的 diff 视图工具卡下标
+  sessions: [],            // todo 5: [{ id, title, parentId, createdAt }]
+  currentSessionId: null,  // todo 5: 活动会话 id（fork 父指针用）
   quitRequested: false,
 })
 
@@ -156,6 +158,29 @@ export function tuiReducer(state = initialTuiState, action) {
 
     case 'QUIT_INTENT':
       return { ...state, quitRequested: true }
+
+    // ── 会话树（todo 5）────────────────────────────────────────────────
+    case 'SESSIONS_SET':
+      return { ...state, sessions: Array.isArray(action.sessions) ? action.sessions : [] }
+
+    case 'SESSION_USE':
+      return { ...state, currentSessionId: action.sessionId ?? null }
+
+    case 'SESSION_FORK': {
+      const sessionId = action.sessionId
+      const parentId = action.parentId ?? null
+      const entry = {
+        id: sessionId,
+        title: action.title || 'fork',
+        parentId,
+        createdAt: action.createdAt || new Date().toISOString(),
+      }
+      return {
+        ...state,
+        sessions: [entry, ...state.sessions.filter((s) => s.id !== sessionId)],
+        currentSessionId: sessionId,
+      }
+    }
 
     case 'RESET':
       return { ...initialTuiState }

@@ -11,6 +11,8 @@ import { keyToAction } from './keymap.js'
 import { runSession, createTuiPermissionHandler, decidePermission, toolToSnapshotPath } from './runSession.js'
 import { createAllowRulesStore } from './allowRules.js'
 import { buildDiff, rollbackChange } from './rollback.js'
+import { parseSessionCommand } from './sessionCommands.js'
+import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
 import { TOOL_STATUS } from './toolCards.js'
 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
@@ -97,6 +99,25 @@ export function App({ dbPath, modelName }) {
     }
   }, [dbPath, modelName, state.mode, tuiPermission])
 
+  // 会话树命令（todo 5）：/sessions /use <id> /fork [title]
+  const handleCommand = useCallback(async (text) => {
+    const cmd = parseSessionCommand(text)
+    if (!cmd) return
+    const db = openSessionDb(dbPath)
+    if (cmd.type === 'sessions') {
+      dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) })
+    } else if (cmd.type === 'use') {
+      dispatch({ type: 'SESSION_USE', sessionId: cmd.sessionId })
+    } else if (cmd.type === 'fork') {
+      try {
+        const r = forkSession(db, { title: cmd.title, parentSessionId: state.currentSessionId })
+        dispatch({ type: 'SESSION_FORK', sessionId: r.lastInsertRowid, parentId: state.currentSessionId, title: cmd.title || 'fork' })
+      } catch (err) {
+        dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
+      }
+    }
+  }, [dbPath, state.currentSessionId])
+
   // 展开 diff 视图：读当前文件内容 + 快照 → buildDiff → 挂到卡。
   const expandDiff = useCallback((index) => {
     dispatch({ type: 'TOOL_EXPAND', index })
@@ -140,6 +161,8 @@ export function App({ dbPath, modelName }) {
     if (key && (key.name === 'return' || key.name === 'enter')) {
       const text = state.input.trim()
       if (text && !state.running) {
+        dispatch({ type: 'INPUT', value: '' })
+        if (text.startsWith('/')) { handleCommand(text); return }
         dispatch({ type: 'SUBMIT' })
         startSession(text)
       }

@@ -310,6 +310,7 @@ function initDatabase() {
   addCol('skill_patterns', 'params_json', 'TEXT')
   addCol('session', 'trust_score', 'INTEGER DEFAULT 50')
   addCol('session', 'last_update', 'DATETIME')
+  addCol('session', 'parent_session_id', 'INTEGER')
   addCol('provider_credential', 'disable_reason', 'TEXT')
 
   // agent_task status CHECK 迁移：旧库 CHECK 只允许 5 态 (pending/running/
@@ -442,8 +443,9 @@ function localNow() {
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
-function createSession({ title = '新会话', persona_id = null }) {
-  const info = db.prepare('INSERT INTO session (title, persona_id, updated_at, is_placeholder) VALUES (?, ?, ?, 1)').run(title, persona_id, localNow())
+function createSession({ title = '新会话', persona_id = null, parentSessionId = null }) {
+  const info = db.prepare('INSERT INTO session (title, persona_id, parent_session_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, 1)')
+    .run(title, persona_id, parentSessionId, localNow())
   return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 
