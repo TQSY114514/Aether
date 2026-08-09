@@ -16,6 +16,8 @@ export function parseSessionCommand(input) {
   switch (cmd) {
     case '/sessions':
       return { type: 'sessions' }
+    case '/memory':
+      return { type: 'memory', ...(arg ? { query: arg } : {}) }
     case '/use': {
       const id = Number(arg)
       return { type: 'use', sessionId: Number.isFinite(id) && arg !== '' ? id : null }

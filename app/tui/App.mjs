@@ -13,6 +13,7 @@ import { createAllowRulesStore } from './allowRules.js'
 import { buildDiff, rollbackChange } from './rollback.js'
 import { parseSessionCommand } from './sessionCommands.js'
 import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
+import { searchMemory } from './memorySearch.js'
 import { TOOL_STATUS } from './toolCards.js'
 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
@@ -115,6 +116,11 @@ export function App({ dbPath, modelName }) {
       } catch (err) {
         dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
       }
+    } else if (cmd.type === 'memory') {
+      // todo 8：/memory <关键词> → autoMemory.search（keyword 兜底）→ 卡片
+      const { results } = searchMemory(dbPath, cmd.query || '')
+      dispatch({ type: 'MEMORY_SET', results })
+      dispatch({ type: 'STATUS', text: `memory: ${results.length} hit(s)` })
     }
   }, [dbPath, state.currentSessionId])
 
@@ -223,6 +229,12 @@ export function App({ dbPath, modelName }) {
       expanded: state.expandedTool === i,
     })),
     state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
+    state.memoryResults.length
+      ? h(Box, { marginTop: 1, flexDirection: 'column' },
+        h(Text, { bold: true, color: 'magenta' }, `memory (${state.memoryResults.length}):`),
+        state.memoryResults.map((m) => h(Text, { key: m.id ?? m.content, color: 'gray' },
+          `  [${m.type || 'fact'}${m.createdAt ? ` · ${String(m.createdAt).slice(0, 16)}` : ''}] ${String(m.content).slice(0, 120)}`)))
+      : null,
     state.steeringQueue.length
       ? h(Box, { marginTop: 1, flexDirection: 'column' },
         h(Text, { bold: true, color: 'cyan' }, 'steering queue:'),
