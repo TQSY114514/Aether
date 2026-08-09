@@ -55,6 +55,8 @@ Options:
                           restarts (agent_task persistence).
   --setup-term            Write the AetherAI profile into Windows Terminal settings
                           (--term-settings <path> overrides the default location).
+  --memory-trace          Report how many memory entries were injected this run.
+  --skills                List habit-derived skill proposals as JSON.
   --list-models           List available models and exit.
   --list-providers        List configured providers and exit.
   --db <path>             Path to aetherai.db (default: userData/aetherai.db).
@@ -84,7 +86,7 @@ function parseArgs(argv) {
       }
       const key = arg.slice(2)
       // Flags that take no value.
-      if (['json', 'json-lines', 'list-models', 'list-providers', 'task', 'stdin', 'setup-term'].includes(key)) { opts[key] = true; continue }
+      if (['json', 'json-lines', 'list-models', 'list-providers', 'task', 'stdin', 'setup-term', 'memory-trace', 'skills'].includes(key)) { opts[key] = true; continue }
       const next = argv[i + 1]
       if (next !== undefined && !next.startsWith('--')) { opts[key] = next; i++ }
       else { opts[key] = true }
@@ -235,6 +237,18 @@ function main() {
     return 0
   }
 
+  // todo 20：--skills → 技能提案 JSON（habitLearner 习惯→技能闭环）。
+  if (opts.skills) {
+    const habitLearner = require('./electron/llm/habitLearner')
+    const rows = db ? habitLearner.listHabits(db) : []
+    const skills = rows.map((h) => ({
+      key: h.key, imperative: h.imperative, reason: h.reason || '',
+      occurrences: Number(h.occurrences) || 0, proposed: Number(h.proposed) || 0,
+    }))
+    console.log(JSON.stringify({ skills }, null, 2))
+    return 0
+  }
+
   if (opts.task) return runTaskMode(opts)
 
   // Prompt 来源优先级：-p > 位置参数 > --stdin > 管道 stdin（非 TTY 自动回退）。
@@ -316,6 +330,13 @@ function main() {
     } finally {
       try { await headlessMcp.runSessionHooks('SessionEnd', { sessionId: null, timestamp: new Date().toISOString() }) } catch {}
       try { await headlessMcp.disconnectMcpServers() } catch {}
+    }
+
+    // todo 20：--memory-trace → 展示注入记忆条目数（json-lines 帧 / 文本 stderr）。
+    if (opts['memory-trace']) {
+      const count = result.memoryTrace ? result.memoryTrace.memoryCount : 0
+      if (jsonLines) emit({ type: 'memory-trace', count })
+      else console.error(`memory: ${count} entry/ies injected`)
     }
 
     if (jsonLines) {

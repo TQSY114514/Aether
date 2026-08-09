@@ -25,6 +25,7 @@ export const initialTuiState = Object.freeze({
   currentSessionId: null,  // todo 5: 活动会话 id（fork 父指针用）
   currentPersonaId: null,  // todo 13: /persona 切换（runSession 注入用）
   memoryResults: [],       // todo 8: /memory 检索命中 [{ id, content, type, createdAt }]
+  skills: [],              // todo 20: /skills 技能提案 [{ key, imperative, occurrences }]
   quitRequested: false,
 })
 
@@ -221,6 +222,10 @@ export function tuiReducer(state = initialTuiState, action) {
     // ── persona 切换（todo 13）─────────────────────────────────────────
     case 'PERSONA_SET':
       return { ...state, currentPersonaId: action.personaId ?? null }
+
+    // ── 技能提案（todo 20）─────────────────────────────────────────────
+    case 'SKILLS_SET':
+      return { ...state, skills: Array.isArray(action.skills) ? action.skills : [] }
 
     case 'RESET':
       return { ...initialTuiState }
