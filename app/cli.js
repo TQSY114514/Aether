@@ -135,8 +135,29 @@ async function runTaskMode(opts) {
   }
 }
 
+// ─── TUI 子命令（aether tui）───────────────────────────────────────────────
+// 动态 import TUI 入口（ESM），不阻塞既有 -p/--json/--json-lines/--task 路径。
+// 非 TTY 且无 --smoke 时提前报错退出 1；--smoke 冒烟开关由 tui/index.mjs 处理。
+async function runTuiMode(argv) {
+  if (!process.stdin.isTTY && !argv.includes('--smoke')) {
+    console.error('error: aether tui requires a TTY. Use `aether tui --smoke` for a headless smoke.')
+    return 1
+  }
+  try {
+    const tui = await import('./tui/index.mjs')
+    const code = await tui.main(argv)
+    return typeof code === 'number' ? code : 0
+  } catch (err) {
+    console.error(`error: failed to start TUI: ${err && err.message ? err.message : String(err)}`)
+    return 1
+  }
+}
+
 function main() {
-  const opts = parseArgs(process.argv.slice(2))
+  const argv = process.argv.slice(2)
+  // `aether tui` 子命令早退分支（放在 argv 分发最前；其余路径字节不动）。
+  if (argv[0] === 'tui') return runTuiMode(argv)
+  const opts = parseArgs(argv)
 
   if (opts.help) { console.log(HELP); return 0 }
 
