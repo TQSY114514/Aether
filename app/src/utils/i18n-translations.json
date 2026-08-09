@@ -531,7 +531,12 @@
       "usage.unpriced": "未定价",
       "task.pause": "暂停",
       "task.resume": "恢复",
-      "task.pause_hint": "暂停（在当前工具步骤结束后生效）"
+      "task.pause_hint": "暂停（在当前工具步骤结束后生效）",
+      "task.mode_ask": "ask",
+      "task.mode_ask_desc": "危险操作弹确认框",
+      "task.mode_plan": "plan",
+      "task.mode_plan_desc": "只读调查 → 计划 → 等批准",
+      "task.mode_plan_hint": "先只读调查并给出计划，批准后才执行"
     }
   },
   {

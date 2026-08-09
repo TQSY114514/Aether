@@ -96,6 +96,7 @@ export default function TaskPanel() {
 
   const [input, setInput] = useState('')
   const [pickedModelId, setPickedModelId] = useState<number | null>(null)
+  const [planMode, setPlanMode] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -162,8 +163,10 @@ export default function TaskPanel() {
     try {
       // agentMode 'ask' — dangerous tools raise the normal permission dialog,
       // which PermissionDialog renders globally (plan A5), so a background task
-      // can be approved from any session.
-      const r = await api.start({ content, modelId, agentMode: 'ask' })
+      // can be approved from any session. planMode queues the task in the
+      // plan state first — the agent investigates read-only, then the task
+      // waits for approval (the ▶ 恢复 button approves it).
+      const r = await api.start({ content, modelId, agentMode: planMode ? 'plan' : 'ask' })
       if (r?.error) { setError(r.error); return }
       // `task:started` is the source of truth for the row; this upsert is only a
       // fallback so the task is visible even if that broadcast is missed. Merge
@@ -273,7 +276,24 @@ export default function TaskPanel() {
           </div>
           <div className="flex items-center gap-1 mt-1.5 text-[10px]" style={{ color: 'var(--text-muted)' }}>
             <Shield size={10} className="shrink-0" />
-            <span>{tx('task.mode_ask', 'ask 模式：危险操作会弹确认框')}</span>
+            <div className="flex items-center gap-0.5 rounded-lg border p-0.5" style={{ borderColor: 'var(--border)' }}>
+              <button onClick={() => setPlanMode(false)}
+                className="px-1.5 py-0.5 rounded-md transition-colors"
+                style={planMode ? { color: 'var(--text-muted)' } : { backgroundColor: 'var(--border)', color: 'var(--text-primary)' }}>
+                {tx('task.mode_ask', 'ask')}
+              </button>
+              <button onClick={() => setPlanMode(true)}
+                className="px-1.5 py-0.5 rounded-md transition-colors"
+                style={planMode ? { backgroundColor: 'var(--border)', color: 'var(--text-primary)' } : { color: 'var(--text-muted)' }}
+                title={tx('task.mode_plan_hint', '先只读调查并给出计划，批准后才执行')}>
+                {tx('task.mode_plan', 'plan')}
+              </button>
+            </div>
+            <span className="flex-1 truncate">
+              {planMode
+                ? tx('task.mode_plan_desc', '只读调查 → 计划 → 等批准')
+                : tx('task.mode_ask_desc', '危险操作弹确认框')}
+            </span>
             <kbd className="ms-auto shrink-0 rounded border px-1 font-mono" style={{ borderColor: 'var(--border)' }}>Ctrl+↵</kbd>
           </div>
         </div>
