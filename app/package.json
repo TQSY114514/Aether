@@ -4,6 +4,14 @@
   "description": "AetherAI - Multi-provider AI aggregation client",
   "author": "TQSY114514",
   "main": "electron/main.js",
+  "exports": {
+    ".": "./electron/main.js",
+    "./sdk": {
+      "types": "./electron/sdk/index.d.ts",
+      "default": "./electron/sdk/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "aether": "./cli.js"
   },
