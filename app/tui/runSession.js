@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { openDatabase, resolveProviderModel, runAgent } from '../electron/llm/agentCore.js'
 import { captureFileSnapshot } from './rollback.js'
+import { connectMcpServers, disconnectMcpServers, runSessionHooks } from '../electron/llm/headlessMcp.js'
 
 /**
  * 从 DB 解析 provider + model（供 runSession 使用）。抛错带人类可读信息。
@@ -145,13 +146,20 @@ export async function runSession({
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
   dispatch({ type: 'AGENT_START', max: maxIterations })
-  const result = await runAgentImpl({
-    prompt: String(prompt || ''),
-    provider,
-    model,
-    db,
-    personaId,
-    workspace: workspace || process.cwd(),
+  const ws = workspace || process.cwd()
+  // todo 14：MCP 连接 + SessionStart/SessionEnd hooks（best-effort，不阻塞 agent）。
+  try { require('../electron/tools/sandbox').setWorkspaceRoot(ws) } catch {}
+  try { await connectMcpServers({ db }) } catch {}
+  try { await runSessionHooks('SessionStart', { sessionId, timestamp: new Date().toISOString() }) } catch {}
+  let result
+  try {
+    result = await runAgentImpl({
+      prompt: String(prompt || ''),
+      provider,
+      model,
+      db,
+      personaId,
+      workspace: ws,
     agentMode,
     maxIterations,
     sessionId,
@@ -184,7 +192,11 @@ export async function runSession({
         dispatch({ type: 'BUDGET', used: step.depth + 1 })
       }
     },
-  })
+    })
+  } finally {
+    try { await runSessionHooks('SessionEnd', { sessionId, timestamp: new Date().toISOString() }) } catch {}
+    try { await disconnectMcpServers() } catch {}
+  }
   dispatch({ type: 'AGENT_END' })
   if (onEnd) onEnd(result)
   return result

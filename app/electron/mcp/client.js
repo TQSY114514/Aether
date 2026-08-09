@@ -75,24 +75,27 @@ class McpClient extends EventEmitter {
   }
 
   // Send a JSON-RPC request and await the response (matched by id).
+  // NOTE: the 30s timeout timer is stored alongside the pending entry and
+  // cleared on settle — otherwise settled requests leak live timers that keep
+  // the process's event loop alive (CLI would hang after done).
   request(method, params) {
     const id = this.nextId++
     const msg = JSON.stringify({ jsonrpc: '2.0', id, method, params })
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      try {
-        this.proc.stdin.write(msg + '\n')
-      } catch (e) {
-        this.pending.delete(id)
-        reject(new Error(`write failed: ${e.message}`))
-      }
-      // Timeout so a hung server doesn't block the loop forever.
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id)
           reject(new Error(`request timed out: ${method}`))
         }
       }, 30000)
+      this.pending.set(id, { resolve, reject, timer })
+      try {
+        this.proc.stdin.write(msg + '\n')
+      } catch (e) {
+        this.pending.delete(id)
+        clearTimeout(timer)
+        reject(new Error(`write failed: ${e.message}`))
+      }
     })
   }
 
@@ -115,8 +118,9 @@ class McpClient extends EventEmitter {
       let msg
       try { msg = JSON.parse(line) } catch { continue }
       if (msg.id != null && this.pending.has(msg.id)) {
-        const { resolve, reject } = this.pending.get(msg.id)
+        const { resolve, reject, timer } = this.pending.get(msg.id)
         this.pending.delete(msg.id)
+        clearTimeout(timer)
         if (msg.error) reject(new Error(msg.error.message || 'rpc error'))
         else resolve(msg.result)
       } else if (msg.method) {
@@ -155,6 +159,11 @@ class McpClient extends EventEmitter {
     try { await this.request('shutdown', {}).catch(() => {}) } catch {}
     try { this.proc.stdin.end() } catch {}
     try { this.proc.kill() } catch {}
+  }
+
+  // 同步强杀（todo 14：进程 exit 清理用，不等待握手）。
+  killSync() {
+    try { this.proc?.kill() } catch {}
   }
 }
 
