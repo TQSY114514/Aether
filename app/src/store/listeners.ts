@@ -267,6 +267,17 @@ export function ensureTaskListeners() {
     upsert({ ...task, lastProgress: null })
   })
   api.onProgress(({ taskId, type, payload }) => {
+    // Pause/resume carry a dedicated event type so the task row's status
+    // stays in sync across every mount (TaskPanel's optimistic flip is a
+    // fallback, not the source of truth).
+    if (type === "paused") {
+      upsert({ id: taskId, status: "paused", lastProgress: taskProgressText(type, payload) })
+      return
+    }
+    if (type === "resumed") {
+      upsert({ id: taskId, status: "running", lastProgress: taskProgressText(type, payload) })
+      return
+    }
     const text = taskProgressText(type, payload)
     if (!text) return
     upsert({ id: taskId, lastProgress: text })

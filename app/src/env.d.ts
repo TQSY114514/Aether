@@ -294,7 +294,7 @@ interface Window {
       derive: (params: { content: string; modelId: number; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
       getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
       onStarted: (callback: (payload: { id: number; sessionId: number; status: TaskStatus7; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }) => void) => () => void
-      onProgress: (callback: (payload: { taskId: number; type: 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk'; payload: unknown }) => void) => () => void
+      onProgress: (callback: (payload: { taskId: number; type: 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk' | 'paused' | 'resumed'; payload: unknown }) => void) => () => void
       onDone: (callback: (payload: { taskId: number; sessionId: number; finalContent: string }) => void) => () => void
       onCancelled: (callback: (payload: { taskId: number }) => void) => () => void
       onError: (callback: (payload: { taskId: number; error: string }) => void) => () => void

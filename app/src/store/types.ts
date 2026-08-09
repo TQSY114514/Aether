@@ -37,7 +37,7 @@ export interface TaskInfo {
   lastProgress?: string | null
 }
 
-export type TaskProgressType = 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk'
+export type TaskProgressType = 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk' | 'paused' | 'resumed'
 
 /** The `task:*` IPC surface (handler + preload + env.d.ts — AGENTS.md hard rule).
  *  Mirrored here so the renderer half type-checks and degrades gracefully when
@@ -126,6 +126,10 @@ export function taskProgressText(type: TaskProgressType, payload: unknown): stri
     }
     case 'chunk':
       return null
+    case 'paused':
+      return '⏸️ ' + (str(payload, 'text') || '已暂停')  // shown as lastProgress
+    case 'resumed':
+      return '▶️ ' + (str(payload, 'text') || '已恢复')
   }
 }
 
