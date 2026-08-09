@@ -130,7 +130,7 @@ function initDatabase() {
     content TEXT NOT NULL,
     model_id INTEGER,
     agent_mode TEXT NOT NULL DEFAULT 'ask',
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','done','cancelled','error')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','queued','running','plan','paused','done','cancelled','error')),
     priority INTEGER NOT NULL DEFAULT 0,
     attempts INTEGER NOT NULL DEFAULT 0,
     max_retry INTEGER NOT NULL DEFAULT 2,
@@ -311,6 +311,37 @@ function initDatabase() {
   addCol('session', 'trust_score', 'INTEGER DEFAULT 50')
   addCol('session', 'last_update', 'DATETIME')
   addCol('provider_credential', 'disable_reason', 'TEXT')
+
+  // agent_task status CHECK 迁移：旧库 CHECK 只允许 5 态 (pending/running/
+  // done/cancelled/error)，Phase 0 状态机扩为 7 态 (queued/plan/paused)。
+  // SQLite 无法 ALTER CHECK，采用标准重建表步骤：建新表 → 拷数据 → 删旧表 → 改名。
+  try {
+    const agentTaskSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_task'").get()
+    if (agentTaskSql && agentTaskSql.sql && !/'(queued|plan|paused)'/.test(agentTaskSql.sql)) {
+      db.exec(`
+        CREATE TABLE agent_task_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          model_id INTEGER,
+          agent_mode TEXT NOT NULL DEFAULT 'ask',
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','queued','running','plan','paused','done','cancelled','error')),
+          priority INTEGER NOT NULL DEFAULT 0,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          max_retry INTEGER NOT NULL DEFAULT 2,
+          error TEXT,
+          result TEXT,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME
+        );
+        INSERT INTO agent_task_new (id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, created_at, updated_at)
+          SELECT id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, created_at, updated_at FROM agent_task;
+        DROP TABLE agent_task;
+        ALTER TABLE agent_task_new RENAME TO agent_task;
+      `)
+    }
+  } catch {}
 
   try {
     const modelIds = db.prepare('SELECT id FROM model').pluck().all()

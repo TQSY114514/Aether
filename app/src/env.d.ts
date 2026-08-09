@@ -26,6 +26,10 @@ interface AgentExecutionTurn {
   }
 }
 
+// Task status enum (7 states + legacy `pending` alias) — shared by task:*
+// IPC shapes below. Mirrors app/electron/llm/eventTypes.js.
+type TaskStatus7 = 'queued' | 'running' | 'plan' | 'paused' | 'done' | 'cancelled' | 'error' | 'pending'
+
 // One row of the evolution_events table as returned by the evolution:history
 // IPC (genes/signals/blast_radius are JSON-encoded strings).
 interface EvolutionEvent {
@@ -283,10 +287,13 @@ interface Window {
     }
     task: {
       start: (params: { content: string; modelId: number; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
-      list: () => Promise<{ id: number; sessionId: number; status: 'pending' | 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }[]>
+      list: () => Promise<{ id: number; sessionId: number; status: TaskStatus7; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }[]>
       cancel: (taskId: number) => Promise<{ ok: boolean }>
+      pause: (taskId: number) => Promise<{ ok: boolean }>
+      resume: (taskId: number) => Promise<{ ok: boolean }>
+      derive: (params: { content: string; modelId: number; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
       getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
-      onStarted: (callback: (payload: { id: number; sessionId: number; status: 'pending' | 'running' | 'done' | 'cancelled' | 'error'; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }) => void) => () => void
+      onStarted: (callback: (payload: { id: number; sessionId: number; status: TaskStatus7; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }) => void) => () => void
       onProgress: (callback: (payload: { taskId: number; type: 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk'; payload: unknown }) => void) => () => void
       onDone: (callback: (payload: { taskId: number; sessionId: number; finalContent: string }) => void) => () => void
       onCancelled: (callback: (payload: { taskId: number }) => void) => () => void

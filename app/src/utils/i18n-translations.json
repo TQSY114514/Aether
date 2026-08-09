@@ -528,7 +528,10 @@
       "usage.total_cost": "总成本",
       "usage.total_requests": "总请求数",
       "usage.trend": "使用趋势",
-      "usage.unpriced": "未定价"
+      "usage.unpriced": "未定价",
+      "task.pause": "暂停",
+      "task.resume": "恢复",
+      "task.pause_hint": "暂停（在当前工具步骤结束后生效）"
     }
   },
   {

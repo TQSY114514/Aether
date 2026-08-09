@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore, ensureTaskListeners, taskApi, type TaskInfo, type TaskStatus } from '@/store'
 import { t } from '@/utils/i18n'
-import { ListTodo, X, Play, Loader2, CheckCircle2, CircleSlash, AlertTriangle, Cpu, Shield, ExternalLink, Trash2 } from 'lucide-react'
+import { ListTodo, X, Play, Pause, ClipboardList, Loader2, CheckCircle2, CircleSlash, AlertTriangle, Cpu, Shield, ExternalLink, Trash2 } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Background-task panel (docs/p0-agent-workbench.md 功能 A / A5).
@@ -44,17 +44,25 @@ export function tx(key: string, fallback: string, ...args: (string | number)[]):
 }
 
 const STATUS_ICON = {
+  queued: Loader2,
+  plan: ClipboardList,
+  paused: Pause,
   running: Loader2,
   done: CheckCircle2,
   cancelled: CircleSlash,
   error: AlertTriangle,
+  pending: Loader2,
 } as const
 
 const STATUS_COLOR: Record<TaskStatus, string> = {
+  queued: 'var(--text-muted)',
+  plan: 'var(--accent)',
+  paused: 'var(--warning)',
   running: 'var(--accent)',
   done: 'var(--success)',
   cancelled: 'var(--text-muted)',
   error: 'var(--error)',
+  pending: 'var(--text-muted)',
 }
 
 // Running tasks pinned to the top, then everything else newest-first.
@@ -129,10 +137,14 @@ export default function TaskPanel() {
   [providers, allModels])
 
   const statusLabel = useMemo<Record<TaskStatus, string>>(() => ({
+    queued: tx('task.status.queued', '排队中'),
+    plan: tx('task.status.plan', '规划中'),
+    paused: tx('task.status.paused', '已暂停'),
     running: tx('task.status.running', '运行中'),
     done: tx('task.status.done', '已完成'),
     cancelled: tx('task.status.cancelled', '已取消'),
     error: tx('task.status.error', '出错'),
+    pending: tx('task.status.pending', '排队中'),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [language])
 
@@ -183,6 +195,23 @@ export default function TaskPanel() {
     if (!api) return
     // Optimistic: the `task:cancelled` event confirms it.
     api.cancel(task.id).catch(() => {})
+  }
+
+  const pauseTask = (task: TaskInfo) => {
+    const api = taskApi()
+    if (!api) return
+    // Optimistic: engine broadcasts a 'status' progress event but no dedicated
+    // task:changed for pause/resume, so flip the row locally first.
+    useStore.getState().upsertTask({ id: task.id, status: 'paused' })
+    api.pause(task.id).catch(() => {})
+  }
+
+  const resumeTask = (task: TaskInfo) => {
+    const api = taskApi()
+    if (!api) return
+    // resume also approves plan-mode tasks (plan → queued/running per engine).
+    useStore.getState().upsertTask({ id: task.id, status: 'running' })
+    api.resume(task.id).catch(() => {})
   }
 
   if (!tasksOpen) return null
@@ -300,11 +329,33 @@ export default function TaskPanel() {
                   <ExternalLink size={9} /> {tx('task.open', '打开')}
                 </button>
                 {running ? (
-                  <button onClick={(e) => { e.stopPropagation(); cancelTask(task) }}
-                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
-                    style={{ borderColor: 'var(--border)', color: 'var(--error)' }}>
-                    <CircleSlash size={9} /> {tx('task.cancel', '取消')}
-                  </button>
+                  <>
+                    <button onClick={(e) => { e.stopPropagation(); pauseTask(task) }}
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      style={{ borderColor: 'var(--border)', color: 'var(--warning)' }}
+                      title={tx('task.pause_hint', '暂停（在当前工具步骤结束后生效）')}>
+                      <Pause size={9} /> {tx('task.pause', '暂停')}
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); cancelTask(task) }}
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      style={{ borderColor: 'var(--border)', color: 'var(--error)' }}>
+                      <CircleSlash size={9} /> {tx('task.cancel', '取消')}
+                    </button>
+                  </>
+                ) : task.status === 'paused' || task.status === 'plan' ? (
+                  <>
+                    <button onClick={(e) => { e.stopPropagation(); resumeTask(task) }}
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      style={{ borderColor: 'var(--border)', color: 'var(--accent)' }}>
+                      <Play size={9} /> {tx('task.resume', '恢复')}
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); removeTask(task.id) }}
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                      title={tx('task.dismiss', '从列表移除（会话保留）')}>
+                      <Trash2 size={9} /> {tx('task.dismiss_short', '移除')}
+                    </button>
+                  </>
                 ) : (
                   <button onClick={(e) => { e.stopPropagation(); removeTask(task.id) }}
                     className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"

@@ -248,7 +248,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
   toolCache.clear()
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
@@ -410,6 +410,12 @@ Reply in this format:
     if (budgetStatus.exhausted) {
       try { onStatus?.({ kind: 'budget_exhausted', text: `预算耗尽: ${budgetStatus.reason}` }) } catch {}
       break
+    }
+
+    // TaskEngine pause gate: when the owning task is paused, wait at this
+    // iteration boundary until resumed (or aborted). No-op when absent.
+    if (waitIfPaused) {
+      try { await waitIfPaused() } catch { break }
     }
 
     const depth = budget.used

@@ -5,15 +5,17 @@
 // detached from any chat turn. Progress is streamed via emit callbacks
 // (which task.handler routes to task:progress IPC events).
 //
-// Statuses: 'pending' | 'running' | 'done' | 'cancelled' | 'error'
+// Statuses（状态机 7 态，见 eventTypes.js）:
+//   queued | running | plan | paused | done | cancelled | error
+// `pending`（DB 存量值）在读取时归一为 `queued`。
 //
 // Two modes (driven by the `scheduler.queue` feature flag):
-//   - queue OFF (default):  tasks run immediately, capped at MAX_CONCURRENT
-//     running tasks (startTask throws when the cap is hit — legacy behavior).
+//   - queue OFF (default):  tasks run immediately, capped at the concurrency
+//     limit (startTask throws when the cap is hit — legacy behavior).
 //   - queue ON: tasks are enqueued with a priority (higher first), a retry
 //     budget (maxRetry), and are persisted to the agent_task table so they
 //     survive app restarts. restorePendingTasks() resumes pending/running
-//     tasks on boot.
+//     tasks on boot (paused tasks stay paused).
 //
 // Every task also writes a row to agent_task (status/result/attempts) so the
 // task history panel can list past tasks after a restart.
@@ -21,10 +23,14 @@
 
 const { runToolLoop: defaultRunToolLoop } = require('./toolLoop')
 const { createAllowRulesStore, buildToolLoopCallbacks } = require('../ipc/toolLoopCallbacks')
+const { isValidTaskTransition, normalizeTaskStatus } = require('./eventTypes')
 const featureFlags = require('../featureFlags')
 const log = require('../logger')
 
-const MAX_CONCURRENT_TASKS = 3
+// Default concurrency cap when the user setting is absent.
+const DEFAULT_CONCURRENT_TASKS = 3
+// Settings key that overrides the concurrency cap (settings table, integer).
+const CONCURRENCY_SETTING_KEY = 'task.concurrency'
 const tasks = new Map()  // taskId (number, = agent_task row id) → record
 let _db = null            // injected lazily by startTask/restorePendingTasks
 
@@ -61,8 +67,9 @@ function stripRecord(record) {
 function persist(record) {
   if (!_db || !record?.rowId) return
   try {
+    // Persist via the DB-safe status name (queued → queued; legacy pending → queued).
     _db.updateAgentTask(record.rowId, {
-      status: record.status,
+      status: record.status === 'pending' ? 'queued' : record.status,
       error: record.error ?? null,
       result: record.finalContent ?? null,
       attempts: record.attempts,
@@ -125,6 +132,19 @@ function runningCount() {
   return n
 }
 
+// Read the configurable concurrency limit: settings `task.concurrency`
+// (integer) wins; falls back to the feature-flagged default.
+function getConcurrencyLimit() {
+  try {
+    if (_db && typeof _db.getSetting === 'function') {
+      const v = _db.getSetting(CONCURRENCY_SETTING_KEY)
+      const n = Number(v)
+      if (Number.isFinite(n) && n >= 1) return n
+    }
+  } catch {}
+  return DEFAULT_CONCURRENT_TASKS
+}
+
 // ─── Scheduler (queue mode) ───────────────────────────────────────────────
 
 let _dispatching = false
@@ -137,8 +157,10 @@ async function maybeDispatch() {
   if (_dispatching) return
   _dispatching = true
   try {
-    while (runningCount() < MAX_CONCURRENT_TASKS) {
-      const pending = Array.from(tasks.values()).filter(t => t.status === 'pending')
+    const cap = getConcurrencyLimit()
+    while (runningCount() < cap) {
+      // Candidates: queued only (plan/paused tasks are not auto-dispatched).
+      const pending = Array.from(tasks.values()).filter(t => t.status === 'queued' || t.status === 'pending')
       if (!pending.length) break
       // Higher priority first; ties go to the older task.
       pending.sort((a, b) => b.priority - a.priority || a.createdAt - b.createdAt)
@@ -153,6 +175,30 @@ async function maybeDispatch() {
 }
 
 // ─── Task execution ───────────────────────────────────────────────────────
+
+// Deferred promise gate used for pause/resume. Settles (resolve) on resume,
+// rejects on abort. Resolves immediately when unlocked.
+function createGate() {
+  let resolveFn = null
+  let rejectFn = null
+  let locked = false
+  const gate = new Promise((res, rej) => { resolveFn = res; rejectFn = rej })
+  return {
+    /** Block callers until release() or fail(). */
+    get promise() { return gate },
+    lock() {
+      if (locked) return gate
+      // (re)create a fresh gate only when unlocked → a single pending gate.
+      locked = true
+      const g = new Promise((res, rej) => { resolveFn = res; rejectFn = rej })
+      Object.defineProperty(this, 'promise', { value: g, configurable: true })
+      return g
+    },
+    release() { if (locked) { locked = false; resolveFn() } },
+    abort()  { if (locked) { locked = false; rejectFn(new Error('aborted')) } },
+    get locked() { return locked },
+  }
+}
 
 /**
  * Actually run the tool loop for a task record. Called from maybeDispatch
@@ -181,6 +227,17 @@ async function runTask(record) {
     return
   }
 
+  // ── plan 模式：先停留在 plan 态，等待批准后才进入执行循环 ─────────────
+  // 批准动作 = resumeTask(id)（IPC task:resume）。计划阶段不消费调度槽位。
+  if (agentMode === 'plan' && record.status === 'queued') {
+    record.status = 'plan'
+    persist(record)
+    record._reentry = false
+    emit(id, { type: 'status', payload: { text: '规划阶段：等待批准后开始执行', kind: 'plan' } })
+    maybeDispatch()
+    return
+  }
+
   // ── Create the initial (empty) assistant message row ─────────────────────
   let msgId
   try {
@@ -197,6 +254,11 @@ async function runTask(record) {
 
   const controller = new AbortController()
   record.controller = controller
+
+  // Pause gate: runToolLoop waits here between iterations when paused.
+  // Resumes on resumeTask, aborts on cancelTask.
+  const gate = createGate()
+  record.gate = gate
 
   let finalContent = ''
   try {
@@ -224,6 +286,11 @@ async function runTask(record) {
       messageId: msgId,
       db,
       autoCommit: false,
+      waitIfPaused: async () => {
+        if (record.status === 'paused') {
+          await gate.promise      // waits until resume (release) or abort (reject)
+        }
+      },
       ...cb,
     })
 
@@ -248,7 +315,7 @@ async function runTask(record) {
       const errMsg = err.message || String(err)
       record.attempts += 1
       if (record.attempts < record.maxRetry) {
-        record.status = 'pending'
+        record.status = 'queued'
         record.error = errMsg
         record._reentry = false // allow the retry runTask to enter
         persist(record)
@@ -289,7 +356,7 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
   const queueOn = queueModeEnabled()
 
   // ── Concurrency guard (legacy mode only; queue mode enqueues instead) ──
-  if (!queueOn && runningCount() >= MAX_CONCURRENT_TASKS) {
+  if (!queueOn && runningCount() >= getConcurrencyLimit() && agentMode !== 'plan') {
     throw new Error('已达最大并发任务数')
   }
 
@@ -320,7 +387,8 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
     rowId,
     db,
     sessionId: childSessionId,
-    status: queueOn ? 'pending' : 'running',
+    // plan 模式先入 plan 态（runTask 首个分支处理）；否则 queued（queue 模式）或 running（legacy）。
+    status: agentMode === 'plan' ? 'plan' : (queueOn ? 'queued' : 'running'),
     title,
     content,
     modelId,
@@ -332,13 +400,16 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
     finalContent: null,
     error: null,
     controller: null,
+    gate: null,
     emit,
   }
   tasks.set(rowId, record)
-  persist(record) // row starts as 'pending' in DB — reflect the true state
+  persist(record) // row 记录初始状态
 
   if (queueOn) {
     maybeDispatch()
+  } else if (agentMode === 'plan') {
+    // plan 模式的任务不直接进入执行循环（等批准），仅广播 started。
   } else {
     runTask(record)
   }
@@ -347,20 +418,62 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
 }
 
 /**
- * Abort a running task (or a pending one — it is cancelled directly).
+ * Abort a running task (or a queued/plan/paused one — it is cancelled directly).
  * The running task's catch block handles status update and the
- * 'cancelled' emit.
+ * 'cancelled' emit. Also fails any open pause gate so a paused task unwinds.
  */
 function cancelTask(taskId) {
   const t = tasks.get(taskId)
   if (!t) return
   if (t.status === 'running' && t.controller) {
-    try { t.controller.abort() } catch {}
-  } else if (t.status === 'pending') {
+    try { t.controller.abort(); if (t.gate) t.gate.abort() } catch {}
+  } else if (t.status === 'queued' || t.status === 'pending' || t.status === 'plan' || t.status === 'paused') {
     t.status = 'cancelled'
+    t.controller = null
+    if (t.gate) { try { t.gate.abort() } catch {} }
     persist(t)
     try { t.emit(taskId, { type: 'cancelled', payload: { taskId } }) } catch {}
   }
+}
+
+/**
+ * Pause a running task. Takes effect at the next iteration boundary of the
+ * tool loop (the waitIfPaused gate); a long single model call is not
+ * interrupted mid-flight.
+ */
+function pauseTask(taskId) {
+  const t = tasks.get(taskId)
+  if (!t) return false
+  if (t.status !== 'running' || !t.controller || !t.gate) return false
+  t.status = 'paused'
+  persist(t)
+  try { t.emit(taskId, { type: 'status', payload: { text: '已暂停', kind: 'info' } }) } catch {}
+  return true
+}
+
+/**
+ * Resume a paused task — or approve a plan-mode task (plan → queued, then
+ * dispatch; the gate uses the same path for a paused run).
+ */
+function resumeTask(taskId) {
+  const t = tasks.get(taskId)
+  if (!t) return false
+  if (t.status === 'paused') {
+    t.status = 'running'
+    persist(t)
+    if (t.gate) { try { t.gate.release() } catch {} }
+    try { t.emit(taskId, { type: 'status', payload: { text: '已恢复', kind: 'info' } }) } catch {}
+    return true
+  }
+  if (t.status === 'plan') {
+    // 批准计划：进入队列（等待调度），或直接运行（legacy queue 关闭时）。
+    t.status = queueModeEnabled() ? 'queued' : 'running'
+    persist(t)
+    if (queueModeEnabled()) { maybeDispatch() } else { t._reentry = false; runTask(t) }
+    try { t.emit(taskId, { type: 'status', payload: { text: '计划已批准，开始执行', kind: 'info' } }) } catch {}
+    return true
+  }
+  return false
 }
 
 /**
@@ -380,7 +493,7 @@ function listTasks(db) {
     out.push({
       id: r.id,
       sessionId: r.session_id,
-      status: r.status,
+      status: normalizeTaskStatus(r.status),
       title: r.title,
       content: r.content,
       priority: r.priority,
@@ -404,7 +517,7 @@ function getTask(taskId, db) {
   if (db && typeof db.getAgentTask === 'function') {
     const r = db.getAgentTask(taskId)
     if (r) return {
-      id: r.id, sessionId: r.session_id, status: r.status, title: r.title,
+      id: r.id, sessionId: r.session_id, status: normalizeTaskStatus(r.status), title: r.title,
       content: r.content, modelId: r.model_id, agentMode: r.agent_mode,
       priority: r.priority, attempts: r.attempts, maxRetry: r.max_retry,
       createdAt: new Date(r.created_at).getTime(),
@@ -415,36 +528,50 @@ function getTask(taskId, db) {
 }
 
 /**
- * Rehydrate pending/running tasks from the agent_task table (crash-safe):
- * anything not finished is reset to pending and re-scheduled if the queue
- * flag is on. Call after the DB is open, before the first list.
+ * 将 DB 行转成内存 record（restorePendingTasks / 持久化回读共用）。
+ * status 归一：pending → queued。
+ */
+function rowToRecord(r) {
+  return {
+    id: r.id,
+    rowId: r.id,
+    db: _db,
+    sessionId: r.session_id,
+    status: normalizeTaskStatus(r.status),
+    title: r.title,
+    content: r.content,
+    modelId: r.model_id,
+    agentMode: r.agent_mode || 'ask',
+    priority: r.priority,
+    maxRetry: Math.max(r.max_retry, 1),
+    attempts: r.attempts,
+    createdAt: new Date(r.created_at).getTime(),
+    finalContent: r.result,
+    error: r.error,
+    controller: null,
+    gate: null,
+    emit: noopEmit,
+  }
+}
+
+/**
+ * Rehydrate queued/running/plan/paused tasks from the agent_task table
+ * (crash-safe): unfinished tasks are re-loaded; queued ones are re-scheduled
+ * if the queue flag is on; paused stays paused; plan stays plan (waits for
+ * approval). Call after the DB is open, before the first list.
  */
 function restorePendingTasks(db) {
   if (!db || typeof db.listAgentTasks !== 'function') return
   _db = db
   let resumed = 0
   for (const r of (db.listAgentTasks(200) || [])) {
-    if (r.status !== 'pending' && r.status !== 'running') continue
+    const st = normalizeTaskStatus(r.status)
+    if (st !== 'queued' && st !== 'running' && st !== 'plan' && st !== 'paused') continue
     if (tasks.has(r.id)) continue
-    tasks.set(r.id, {
-      id: r.id,
-      rowId: r.id,
-      db,
-      sessionId: r.session_id,
-      status: 'pending',
-      title: r.title,
-      content: r.content,
-      modelId: r.model_id,
-      agentMode: r.agent_mode || 'ask',
-      priority: r.priority,
-      maxRetry: Math.max(r.max_retry, 1),
-      attempts: r.attempts,
-      createdAt: new Date(r.created_at).getTime(),
-      finalContent: r.result,
-      error: r.error,
-      controller: null,
-      emit: noopEmit,
-    })
+    const record = rowToRecord(r)
+    // running 恢复成 queued（进程已死，原运行中断——按队列重排重跑）
+    if (st === 'running') record.status = 'queued'
+    tasks.set(r.id, record)
     resumed++
   }
   if (resumed) log.info(`backgroundTasks: resumed ${resumed} task(s) from persistence`)
@@ -454,9 +581,13 @@ function restorePendingTasks(db) {
 module.exports = {
   startTask,
   cancelTask,
+  pauseTask,
+  resumeTask,
   listTasks,
   getTask,
   restorePendingTasks,
-  MAX_CONCURRENT_TASKS,
+  // 兼容别名：旧代码引用 MAX_CONCURRENT_TASKS 仍可用（默认值）。
+  MAX_CONCURRENT_TASKS: DEFAULT_CONCURRENT_TASKS,
+  getConcurrencyLimit,
   initBackgroundTasks,
 }

@@ -15,6 +15,11 @@
 
 const path = require('path')
 const agent = require('./electron/llm/agentCore')
+// CLI 的 task 派发桥：直接加载 TaskEngine（Electron-free —— 引擎全部依赖
+// 已 DI：db 由 openDatabase 提供，getWebContents 为 null 时权限弹窗走 CLI 兜底）。
+// 加载失败时降级为"不支持任务派生"（例如依赖 Electron 的旧版本模块）。
+let taskEngine = null
+try { taskEngine = require('./electron/llm/backgroundTasks') } catch { taskEngine = null }
 
 const HELP = `AetherAI headless agent
 
@@ -27,11 +32,15 @@ Options:
   --api-key <key>         Override the provider API key (else read from DB).
   --api-url <url>         Override the provider base URL (else read from DB).
   --api-format <fmt>      Provider format: openai | anthropic (default openai).
-  --mode <mode>           Agent permission mode: auto | plan | yolo (default auto).
+  --mode <mode>           Agent permission mode: auto | plan | ask (default auto).
   --workspace <dir>       Working directory for tools (default: process.cwd()).
   --max-iterations <n>    Cap the number of tool-loop iterations.
   --json                  Emit machine-readable JSON on stdout.
   --json-lines            Stream NDJSON events line-by-line (status/plan/tool/text/done).
+  --task                  Derive a task into the desktop TaskEngine instead of
+                          running inline: returns { taskId, sessionId } and exits.
+                          The task shows up in the app's task panel and survives
+                          restarts (agent_task persistence).
   --list-models           List available models and exit.
   --list-providers        List configured providers and exit.
   --db <path>             Path to aetherai.db (default: userData/aetherai.db).
@@ -41,6 +50,7 @@ Examples:
   aether "list files" --model deepseek
   aether "list files" --model deepseek --json
   aether "create a build script" --model deepseek-v4-pro --mode auto
+  aether "refactor the loader" --task --model deepseek --priority 5
 `
 
 // Minimal argv parser: handles --flag value and --flag=value forms.
@@ -57,7 +67,7 @@ function parseArgs(argv) {
       }
       const key = arg.slice(2)
       // Flags that take no value.
-      if (['json', 'json-lines', 'list-models', 'list-providers'].includes(key)) { opts[key] = true; continue }
+      if (['json', 'json-lines', 'list-models', 'list-providers', 'task'].includes(key)) { opts[key] = true; continue }
       const next = argv[i + 1]
       if (next !== undefined && !next.startsWith('--')) { opts[key] = next; i++ }
       else { opts[key] = true }
@@ -66,6 +76,60 @@ function parseArgs(argv) {
     opts._.push(arg)
   }
   return opts
+}
+
+// ─── Task 派生模式（--task）───────────────────────────────────────────────
+// 让 CLI 派生的任务进入桌面的 TaskEngine（agent_task 表持久化）：
+//   aether "重构工具注册表" --task --model deepseek
+// 输出 { taskId, sessionId }，任务在桌面 TaskPanel 可见、可暂停/恢复、重启可恢复。
+// 进度不在此模式输出（任务异步执行）；用 --json-lines 的普通模式拿实时流。
+async function runTaskMode(opts) {
+  if (!taskEngine) {
+    console.error('error: task engine unavailable in this build')
+    return 1
+  }
+  const content = opts._.join(' ')
+  if (!content) {
+    console.error('error: --task requires a prompt. Usage: aether "<prompt>" --task --model <name>')
+    return 1
+  }
+
+  const db = agent.openDatabase(opts.db)
+  if (!db) {
+    console.error('error: no database found (run the desktop app once, or pass --db <path>).')
+    return 1
+  }
+
+  // 解析模型（与普通模式同一套 resolver）
+  const resolved = agent.resolveProviderModel(db, { providerName: opts.provider, modelName: opts.model })
+  if (!resolved) {
+    console.error(`error: no enabled model found. Configure one in the app or run --list-models / --list-providers.`)
+    return 1
+  }
+
+  // 引擎需要 db 提供 getModel/getProvider/getSetting 等（database.js 的 API）。
+  // CLI 没有 Electron 的 WebContents：权限弹窗兜底为空（工具将自动拒绝高危操作）。
+  taskEngine.initBackgroundTasks({ getWebContents: () => null, db, runToolLoop: undefined })
+
+  try {
+    const r = await taskEngine.startTask({
+      db,
+      parentSessionId: null,
+      content,
+      modelId: resolved.model.id,
+      agentMode: opts.mode || 'ask',
+      emit: () => {},
+    })
+    if (opts.json || opts['json-lines']) {
+      console.log(JSON.stringify({ type: 'task:derived', taskId: r.taskId, sessionId: r.sessionId }))
+    } else {
+      console.log(`task derived: #${r.taskId} (session ${r.sessionId})`)
+    }
+    return 0
+  } catch (e) {
+    console.error(`error: failed to derive task: ${e.message || String(e)}`)
+    return 1
+  }
 }
 
 function main() {
@@ -88,6 +152,8 @@ function main() {
     for (const r of rows) console.log(`${r.id}\t${r.model_name}\t(${r.provider_name})${r.is_primary ? '\t*' : ''}`)
     return 0
   }
+
+  if (opts.task) return runTaskMode(opts)
 
   const prompt = opts._.join(' ')
   if (!prompt) {
@@ -183,7 +249,12 @@ function main() {
 }
 
 // main() returns a numeric exit code for synchronous error paths (bad args,
-// missing model, encrypted key); the async run() path sets process.exitCode
-// itself when it settles.
+// missing model, encrypted key); the async run()/runTaskMode() paths set
+// process.exitCode themselves when they settle.
 const mainCode = main()
-if (typeof mainCode === 'number') process.exitCode = mainCode
+if (mainCode && typeof mainCode.then === 'function') {
+  mainCode.then((code) => { process.exitCode = typeof code === 'number' ? code : 0 })
+    .catch((err) => { console.error(`error: ${err && err.message ? err.message : String(err)}`); process.exitCode = 1 })
+} else if (typeof mainCode === 'number') {
+  process.exitCode = mainCode
+}
