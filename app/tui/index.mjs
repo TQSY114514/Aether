@@ -25,9 +25,23 @@ export async function main(argv = []) {
 }
 
 // TTY 交互模式：渲染 App，等用户退出（Ctrl+C → QUIT_INTENT → exit()）。
-function runInteractive() {
+// 从 argv 提取 --db/--model 传给 App（与 CLI 其余模式同语义）。
+function parseTuiOpts(argv) {
+  const opts = { dbPath: undefined, modelName: undefined }
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === '--db') { opts.dbPath = argv[i + 1]; i++; continue }
+    if (a === '--model') { opts.modelName = argv[i + 1]; i++; continue }
+    if (a.startsWith('--db=')) { opts.dbPath = a.slice(5); continue }
+    if (a.startsWith('--model=')) { opts.modelName = a.slice(8); continue }
+  }
+  return opts
+}
+
+function runInteractive(argv) {
+  const { dbPath, modelName } = parseTuiOpts(argv)
   return new Promise((resolve) => {
-    const { unmount, waitUntilExit } = render(h(App))
+    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName }))
     waitUntilExit().then(() => { unmount(); resolve(0) })
   })
 }
