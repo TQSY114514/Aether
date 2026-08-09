@@ -447,7 +447,7 @@ function pauseTask(taskId) {
   if (t.status !== 'running' || !t.controller || !t.gate) return false
   t.status = 'paused'
   persist(t)
-  try { t.emit(taskId, { type: 'status', payload: { text: '已暂停', kind: 'info' } }) } catch {}
+  try { t.emit(taskId, { type: 'paused', payload: { taskId, text: '已暂停' } }) } catch {}
   return true
 }
 
@@ -462,7 +462,7 @@ function resumeTask(taskId) {
     t.status = 'running'
     persist(t)
     if (t.gate) { try { t.gate.release() } catch {} }
-    try { t.emit(taskId, { type: 'status', payload: { text: '已恢复', kind: 'info' } }) } catch {}
+    try { t.emit(taskId, { type: 'resumed', payload: { taskId, text: '已恢复' } }) } catch {}
     return true
   }
   if (t.status === 'plan') {
@@ -470,7 +470,7 @@ function resumeTask(taskId) {
     t.status = queueModeEnabled() ? 'queued' : 'running'
     persist(t)
     if (queueModeEnabled()) { maybeDispatch() } else { t._reentry = false; runTask(t) }
-    try { t.emit(taskId, { type: 'status', payload: { text: '计划已批准，开始执行', kind: 'info' } }) } catch {}
+    try { t.emit(taskId, { type: 'resumed', payload: { taskId, text: '计划已批准，开始执行' } }) } catch {}
     return true
   }
   return false
