@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore, ensureTaskListeners, taskApi, type TaskInfo, type TaskStatus } from '@/store'
 import { t } from '@/utils/i18n'
+import { classifyAgentMode } from '../../../electron/llm/modeClassifier'
 import { ListTodo, X, Play, Pause, ClipboardList, Loader2, CheckCircle2, CircleSlash, AlertTriangle, Cpu, Shield, ExternalLink, Trash2 } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -97,6 +98,9 @@ export default function TaskPanel() {
   const [input, setInput] = useState('')
   const [pickedModelId, setPickedModelId] = useState<number | null>(null)
   const [planMode, setPlanMode] = useState(false)
+  // 用户是否显式操作过 ask/plan 切换：一旦手动选择，即以手动为准（「可手覆」）；
+  // 未操作时由 classifyAgentMode 按输入内容兜底判定默认模式。
+  const [modeTouched, setModeTouched] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -166,7 +170,10 @@ export default function TaskPanel() {
       // can be approved from any session. planMode queues the task in the
       // plan state first — the agent investigates read-only, then the task
       // waits for approval (the ▶ 恢复 button approves it).
-      const r = await api.start({ content, modelId, agentMode: planMode ? 'plan' : 'ask' })
+      // Default mode = shared classifier (todo 7); explicit manual toggle wins.
+      const cls = classifyAgentMode({ prompt: content }).mode
+      const effectivePlan = modeTouched ? planMode : cls === 'plan'
+      const r = await api.start({ content, modelId, agentMode: effectivePlan ? 'plan' : 'ask' })
       if (r?.error) { setError(r.error); return }
       // `task:started` is the source of truth for the row; this upsert is only a
       // fallback so the task is visible even if that broadcast is missed. Merge
@@ -277,12 +284,12 @@ export default function TaskPanel() {
           <div className="flex items-center gap-1 mt-1.5 text-[10px]" style={{ color: 'var(--text-muted)' }}>
             <Shield size={10} className="shrink-0" />
             <div className="flex items-center gap-0.5 rounded-lg border p-0.5" style={{ borderColor: 'var(--border)' }}>
-              <button onClick={() => setPlanMode(false)}
+              <button onClick={() => { setPlanMode(false); setModeTouched(true) }}
                 className="px-1.5 py-0.5 rounded-md transition-colors"
                 style={planMode ? { color: 'var(--text-muted)' } : { backgroundColor: 'var(--border)', color: 'var(--text-primary)' }}>
                 {tx('task.mode_ask', 'ask')}
               </button>
-              <button onClick={() => setPlanMode(true)}
+              <button onClick={() => { setPlanMode(true); setModeTouched(true) }}
                 className="px-1.5 py-0.5 rounded-md transition-colors"
                 style={planMode ? { backgroundColor: 'var(--border)', color: 'var(--text-primary)' } : { color: 'var(--text-muted)' }}
                 title={tx('task.mode_plan_hint', '先只读调查并给出计划，批准后才执行')}>
