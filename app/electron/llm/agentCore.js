@@ -148,6 +148,7 @@ async function runAgent({
   sessionId,
   personaId,
   db,
+  injectMemory = true,
   requestPermission,
   onEvent,
   onToolCall,
@@ -163,14 +164,16 @@ async function runAgent({
     ? messages.slice()
     : [{ role: 'user', content: String(prompt || '') }]
 
-  // todo 13：persona + 记忆注入前缀（CLI/TUI/SDK 贯通）。给定 db 且指定
-  // personaId 时构建 [persona system 块, 记忆 system 块, ...] 并置于最前；
-  // 均缺省时零注入，与既有行为完全等价（无回归）。
-  if (db && (personaId != null)) {
+  // todo 13/20：persona + 记忆注入前缀（CLI/TUI/SDK 三端贯通）。
+  // db 在场且 personaId 指定 → persona 块；db 在场且 injectMemory（默认开）→ 记忆块。
+  // memoryTrace 供 --memory-trace 展示注入条目数。
+  const memoryTrace = { memoryCount: 0 }
+  if (db && (personaId != null || injectMemory)) {
     try {
       const { buildSessionContext } = require('./sessionContext')
-      const { prefix } = buildSessionContext({ db, sessionId, personaId, userMessage: String(prompt || '') })
+      const { prefix, memoryCount } = buildSessionContext({ db, sessionId, personaId, userMessage: String(prompt || '') })
       if (prefix.length) convo.unshift(...prefix)
+      memoryTrace.memoryCount = memoryCount
     } catch {}
   }
 
@@ -208,7 +211,7 @@ async function runAgent({
     requestPermission,
   })
 
-  return { text, toolCalls }
+  return { text, toolCalls, memoryTrace }
 }
 
 module.exports = {

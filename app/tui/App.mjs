@@ -126,6 +126,28 @@ export function App({ dbPath, modelName }) {
       // todo 13：/persona <id> → 切换人设（runSession 注入）
       dispatch({ type: 'PERSONA_SET', personaId: cmd.personaId })
       dispatch({ type: 'STATUS', text: cmd.personaId == null ? 'persona: none' : `persona: #${cmd.personaId}` })
+    } else if (cmd.type === 'skills' || cmd.type === 'skill-accept' || cmd.type === 'skill-dismiss') {
+      // todo 20：habitLearner → 技能提案闭环展示 / 接受 / 忽略
+      try {
+        const habitLearner = require('../electron/llm/habitLearner')
+        const db2 = openSessionDb(dbPath)
+        if (!db2) { dispatch({ type: 'STATUS', text: 'error: no database' }); return }
+        if (cmd.type === 'skills') {
+          const habits = habitLearner.listHabits(db2)
+          dispatch({ type: 'SKILLS_SET', skills: habits.map((h) => ({
+            key: h.key, imperative: h.imperative, reason: h.reason || '', occurrences: Number(h.occurrences) || 0,
+          })) })
+          dispatch({ type: 'STATUS', text: `skills: ${habits.length} proposal(s)` })
+        } else if (cmd.type === 'skill-accept') {
+          habitLearner.confirmHabit(db2, cmd.key)
+          dispatch({ type: 'STATUS', text: `skill accepted: ${cmd.key}` })
+        } else {
+          habitLearner.dismissHabit(db2, cmd.key)
+          dispatch({ type: 'STATUS', text: `skill dismissed: ${cmd.key}` })
+        }
+      } catch (err) {
+        dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
+      }
     }
   }, [dbPath, state.currentSessionId])
 
@@ -239,6 +261,12 @@ export function App({ dbPath, modelName }) {
         h(Text, { bold: true, color: 'magenta' }, `memory (${state.memoryResults.length}):`),
         state.memoryResults.map((m) => h(Text, { key: m.id ?? m.content, color: 'gray' },
           `  [${m.type || 'fact'}${m.createdAt ? ` · ${String(m.createdAt).slice(0, 16)}` : ''}] ${String(m.content).slice(0, 120)}`)))
+      : null,
+    state.skills.length
+      ? h(Box, { marginTop: 1, flexDirection: 'column' },
+        h(Text, { bold: true, color: 'cyan' }, `skills (${state.skills.length}):`),
+        state.skills.map((s) => h(Text, { key: s.key, color: 'gray' },
+          `  [${s.key}] ${s.imperative}${s.occurrences > 1 ? ` (×${s.occurrences})` : ''}`)))
       : null,
     state.steeringQueue.length
       ? h(Box, { marginTop: 1, flexDirection: 'column' },

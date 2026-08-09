@@ -22,6 +22,16 @@ export function parseSessionCommand(input) {
       const id = Number(arg)
       return { type: 'persona', personaId: Number.isFinite(id) && arg !== '' ? id : null }
     }
+    case '/skills':
+      return { type: 'skills' }
+    case '/skill': {
+      // /skill accept <key>  |  /skill dismiss <key>
+      const [sub, ...rest] = arg.split(/\s+/)
+      const key = rest.join(' ').trim()
+      if (sub === 'accept' && key) return { type: 'skill-accept', key }
+      if (sub === 'dismiss' && key) return { type: 'skill-dismiss', key }
+      return null
+    }
     case '/use': {
       const id = Number(arg)
       return { type: 'use', sessionId: Number.isFinite(id) && arg !== '' ? id : null }
