@@ -8,6 +8,7 @@ import { Box, Text, useInput, useApp } from 'ink'
 import { tuiReducer, initialTuiState } from './reducer.js'
 import { keyToAction } from './keymap.js'
 import { runSession } from './runSession.js'
+import { TOOL_STATUS } from './toolCards.js'
 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
 const ROLE_COLOR = { user: 'green', assistant: 'white', tool: 'yellow', system: 'gray' }
@@ -19,6 +20,17 @@ function MessageLine({ msg }) {
     return h(Text, { color: 'gray' }, `[${label}] …`)
   }
   return h(Text, { color }, `[${label}] ${msg.text}`)
+}
+
+// 工具调用卡（todo 3）：running 圆框 / done|error 单框，状态色边框 + 标签。
+function ToolCard({ card }) {
+  const meta = TOOL_STATUS[card.status] || TOOL_STATUS.done
+  const borderStyle = card.status === 'running' ? 'round' : 'single'
+  return h(Box, { borderStyle, borderColor: meta.color, paddingX: 1, marginTop: 1, flexDirection: 'column' },
+    h(Text, { color: meta.color },
+      `[${meta.label}] ${card.name}${card.latencyMs != null ? ` (${card.latencyMs}ms)` : ''}`),
+    h(Text, { color: 'gray' }, String(card.summary || '')),
+  )
 }
 
 export function App({ dbPath, modelName }) {
@@ -71,6 +83,7 @@ export function App({ dbPath, modelName }) {
       h(Text, { color: 'gray' }, '  — interactive terminal agent (m: mode, q: quit)'),
     ),
     ...state.messages.map((m) => h(MessageLine, { key: m.id, msg: m })),
+    ...state.toolCalls.map((card, i) => h(ToolCard, { key: `${card.name}-${i}`, card })),
     h(Box, { marginTop: 1 },
       h(Text, { color: 'gray' }, '> '),
       h(Text, {}, state.input),

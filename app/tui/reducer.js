@@ -2,7 +2,9 @@
 // reducer.js — TUI 纯状态机（todo 1 测试目标）
 // 纯函数：(state, action) => nextState。无 IO、无随机、无模块级可变状态。
 // 事件流（todo 2 起）经 runSession 把 agent 事件翻译为下列 action 驱动本 reducer。
+// 工具卡摘要格式化来自 ./toolCards.js（todo 3）。
 // ─────────────────────────────────────────────────────────────────────────────
+import { summarizeArgs, truncateLines } from './toolCards.js'
 
 export const MODES = ['ask', 'plan', 'auto']
 
@@ -75,7 +77,7 @@ export function tuiReducer(state = initialTuiState, action) {
         ...state,
         toolCalls: [
           ...state.toolCalls,
-          { name: entry.name || 'tool', status: 'running', summary: entry.argsSummary || '' },
+          { name: entry.name || 'tool', status: 'running', summary: summarizeArgs(entry.args), latencyMs: null },
         ],
       }
     }
@@ -88,7 +90,10 @@ export function tuiReducer(state = initialTuiState, action) {
         toolCalls[toolCalls.length - 1] = {
           ...last,
           status: entry.error ? 'error' : 'done',
-          summary: entry.error ? String(entry.error) : (entry.resultSummary || ''),
+          summary: entry.error
+            ? truncateLines(String(entry.error), 5)
+            : truncateLines(entry.result, 80),
+          latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : null,
         }
       }
       return { ...state, toolCalls }
