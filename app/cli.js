@@ -259,6 +259,8 @@ function main() {
 
   const maxIterations = opts['max-iterations'] ? parseInt(opts['max-iterations'], 10) : undefined
   const workspace = opts.workspace ? path.resolve(opts.workspace) : process.cwd()
+  // todo 13：--persona <id> → runAgent 注入 persona + 记忆前缀（需 db）
+  const personaId = opts.persona !== undefined ? Number(opts.persona) : undefined
 
   const toolEntries = []
   const statuses = []
@@ -273,6 +275,8 @@ function main() {
       workspace,
       agentMode,
       maxIterations,
+      db,
+      personaId,
       onToolCall: (entry) => {
         toolEntries.push(entry)
         const isStart = entry.result == null && entry.error == null && entry.startedAt != null

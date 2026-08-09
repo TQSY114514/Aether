@@ -16,6 +16,7 @@ import { captureFileSnapshot } from './rollback.js'
 
 /**
  * 从 DB 解析 provider + model（供 runSession 使用）。抛错带人类可读信息。
+ * 返回 { provider, model, db }（db 供 todo 13 persona/记忆注入透传 runAgent）。
  * @param {string} [dbPath]  --db 路径；缺省用 agentCore 默认路径
  * @param {string} [modelName]  模型名或 provider/model；缺省用 primary
  */
@@ -26,7 +27,7 @@ export function resolveSessionResources(dbPath, modelName) {
   if (!resolved) {
     throw new Error('no enabled model found. Configure one in the app or run --list-models / --list-providers.')
   }
-  return resolved
+  return { ...resolved, db }
 }
 
 /**
@@ -135,18 +136,21 @@ export async function runSession({
   maxIterations,
   workspace,
   sessionId = 'tui',
+  personaId,
   dispatch,
   onEnd,
   requestPermission,
   runAgentImpl = runAgent,
   resolveImpl = resolveSessionResources,
 } = {}) {
-  const { provider, model } = resolveImpl(dbPath, modelName)
+  const { provider, model, db } = resolveImpl(dbPath, modelName)
   dispatch({ type: 'AGENT_START', max: maxIterations })
   const result = await runAgentImpl({
     prompt: String(prompt || ''),
     provider,
     model,
+    db,
+    personaId,
     workspace: workspace || process.cwd(),
     agentMode,
     maxIterations,

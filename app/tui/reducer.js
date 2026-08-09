@@ -23,6 +23,7 @@ export const initialTuiState = Object.freeze({
   expandedTool: null,      // 展开的 diff 视图工具卡下标
   sessions: [],            // todo 5: [{ id, title, parentId, createdAt }]
   currentSessionId: null,  // todo 5: 活动会话 id（fork 父指针用）
+  currentPersonaId: null,  // todo 13: /persona 切换（runSession 注入用）
   memoryResults: [],       // todo 8: /memory 检索命中 [{ id, content, type, createdAt }]
   quitRequested: false,
 })
@@ -216,6 +217,10 @@ export function tuiReducer(state = initialTuiState, action) {
     // ── 记忆检索（todo 8）──────────────────────────────────────────────
     case 'MEMORY_SET':
       return { ...state, memoryResults: Array.isArray(action.results) ? action.results : [] }
+
+    // ── persona 切换（todo 13）─────────────────────────────────────────
+    case 'PERSONA_SET':
+      return { ...state, currentPersonaId: action.personaId ?? null }
 
     case 'RESET':
       return { ...initialTuiState }
