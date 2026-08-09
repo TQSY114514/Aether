@@ -64,6 +64,7 @@ Module._load = function (request, parent, isMain) {
       },
       session: { defaultSession: { setSpellCheckLanguages() {} } },
       protocol: { handle() {} },
+      globalShortcut: { register: () => true, unregisterAll: () => {} },
     }
   }
   // Auto-update needs a real packaged app; skip it in the smoke boot so the
