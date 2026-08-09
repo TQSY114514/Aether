@@ -145,11 +145,11 @@ describe('cli four-mode routing', () => {
     expect(lastPrompt).toContain('explicit stdin prompt')
   })
 
-  it('--mode rpc routes to the RPC branch (server lands in todo 10/11)', { timeout: 30000 }, async () => {
-    // spawn 子进程 + 并行负载下可能超过 vitest 默认 5s 超时\n    // eslint-disable-next-line no-constant-condition\n
-    const r = await runCli(['--mode', 'rpc'], '')
-    expect(r.status).toBe(1)
-    expect((r.stderr + r.stdout).toLowerCase()).toContain('rpc')
+  it('--mode rpc routes to the RPC server (todo 10/11): empty stdin → clean exit 0', { timeout: 30000 }, async () => {
+    // todo 10 落地后 --mode rpc 进入活服务器：空 stdin 即 EOF → 干净退出 0，不挂起不崩溃。
+    const r = await runCli(['--mode', 'rpc', ...agentArgs()], '')
+    expect(r.timedOut).toBe(false)
+    expect(r.status).toBe(0)
   })
 })
 

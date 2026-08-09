@@ -36,10 +36,13 @@ describe('aetherai SDK export (todo 12)', () => {
     expect(sdk.classifyAgentMode({ prompt: 'hello' }).mode).toBe('auto')
   })
 
-  it('rpc/sessionContext are lazy-wired (undefined until todo 10/13)', () => {
+  it('rpc wired after todo 10; sessionContext still lazy (undefined until todo 13)', () => {
     const sdk = require('aetherai/sdk')
-    // 未落地前为 undefined 而非抛错（require 不崩）；访问缺失键即 undefined。
-    expect(sdk.rpc).toBeUndefined()
+    // todo 10 落地：rpc 帧模块经懒挂载自动出现
+    expect(sdk.rpc).toBeTruthy()
+    expect(typeof sdk.rpc.pushFrame).toBe('function')
+    expect(typeof sdk.rpc.consumeLine).toBe('function')
+    // sessionContext 待 todo 13：访问缺失键即 undefined，不抛错
     expect(sdk.sessionContext).toBeUndefined()
   })
 })
