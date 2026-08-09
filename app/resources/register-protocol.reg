@@ -1,0 +1,68 @@
+; ─────────────────────────────────────────────────────────────────────────────
+; register-protocol.reg — 注册 aetherai:// 协议 + 右键「用 Aether 打开」(todo 17)
+;
+; 用法（管理员 PowerShell）：
+;   reg import "D:\path\to\aether\app\resources\register-protocol.reg"
+; 或 PowerShell activation：
+;   Start-Process reg -ArgumentList 'import','"D:\path\to\app\resources\register-protocol.reg"' -Verb RunAs
+;
+; ⚠ 手动/打包时执行，应用本身不自动改注册表。
+; ⚠ 将下方 <AETHER_EXE> 替换为实际安装路径（如 C:\Program Files\Aether\Aether.exe）。
+;    协议命令参数用 %%1 转义（reg 文件中的 % 需写成 %%）。
+; ─────────────────────────────────────────────────────────────────────────────
+
+Windows Registry Editor Version 5.00
+
+; ── aetherai:// 协议关联 ───────────────────────────────────────────────────
+[HKEY_CLASSES_ROOT\aetherai]
+@="URL:AetherAI Protocol"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\aetherai\shell\open\command]
+@="\"<AETHER_EXE>\" \"%1\""
+
+; ── 右键「用 Aether 打开」：常见源文件/工程文件 ────────────────────────────
+; 每个扩展都加：HKCR\<ext>\shell\Open with Aether → 命令
+;（用 openwith 子键可获得「打开方式」菜单分组，此处用独立 shell 更直接）
+
+[HKEY_CLASSES_ROOT\.cs\shell\Open with Aether]
+@="用 Aether 打开"
+
+[HKEY_CLASSES_ROOT\.cs\shell\Open with Aether\command]
+@="\"<AETHER_EXE>\" \"--open\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.js\shell\Open with Aether]
+@="用 Aether 打开"
+
+[HKEY_CLASSES_ROOT\.js\shell\Open with Aether\command]
+@="\"<AETHER_EXE>\" \"--open\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.ts\shell\Open with Aether]
+@="用 Aether 打开"
+
+[HKEY_CLASSES_ROOT\.ts\shell\Open with Aether\command]
+@="\"<AETHER_EXE>\" \"--open\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.tsx\shell\Open with Aether]
+@="用 Aether 打开"
+
+[HKEY_CLASSES_ROOT\.tsx\shell\Open with Aether\command]
+@="\"<AETHER_EXE>\" \"--open\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.md\shell\Open with Aether]
+@="用 Aether 打开"
+
+[HKEY_CLASSES_ROOT\.md\shell\Open with Aether\command]
+@="\"<AETHER_EXE>\" \"--open\" \"%1\""
+
+[HKEY_CLASSES_ROOT\.json\shell\Open with Aether]
+@="用 Aether 打开"
+
+[HKEY_CLASSES_ROOT\.json\shell\Open with Aether\command]
+@="\"<AETHER_EXE>\" \"--open\" \"%1\""
+
+[HKEY_CLASSES_ROOT\Directory\shell\Open with Aether]
+@="用 Aether 打开文件夹"
+
+[HKEY_CLASSES_ROOT\Directory\shell\Open with Aether\command]
+@="\"<AETHER_EXE>\" \"--open\" \"%1\""
