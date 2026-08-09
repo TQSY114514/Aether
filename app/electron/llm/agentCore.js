@@ -145,6 +145,7 @@ async function runAgent({
   maxIterations,
   workspace = process.cwd(),
   signal,
+  requestPermission,
   onEvent,
   onToolCall,
   onStatus,
@@ -184,6 +185,9 @@ async function runAgent({
     agentMode,
     maxIterations,
     options: { ...options },
+    // 可选权限回调（B2 接线 a 方案，向后兼容）：TUI 提供键盘应答面板；
+    // 无回调时 runToolLoop 默认拒绝（toolLoop.js:872-880）。
+    requestPermission,
   })
 
   return { text, toolCalls }

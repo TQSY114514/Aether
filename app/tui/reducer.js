@@ -14,7 +14,9 @@ export const initialTuiState = Object.freeze({
   mode: 'ask',
   running: false,
   statusLine: 'idle',
-  toolCalls: [], // { name, status: 'running'|'done'|'error', summary }
+  toolCalls: [], // { name, status: 'running'|'done'|'error', summary, latencyMs, snapshot, diff, rollbackResult }
+  pendingPermission: null, // { reqId, name, args, risk, snapshot } — awaitingPermission 态
+  expandedTool: null,      // 展开的 diff 视图工具卡下标
   quitRequested: false,
 })
 
@@ -77,7 +79,16 @@ export function tuiReducer(state = initialTuiState, action) {
         ...state,
         toolCalls: [
           ...state.toolCalls,
-          { name: entry.name || 'tool', status: 'running', summary: summarizeArgs(entry.args), latencyMs: null },
+          {
+            name: entry.name || 'tool',
+            args: entry.args || {},
+            status: 'running',
+            summary: summarizeArgs(entry.args),
+            latencyMs: null,
+            snapshot: entry.snapshot || null,
+            diff: null,
+            rollbackResult: null,
+          },
         ],
       }
     }
@@ -97,6 +108,50 @@ export function tuiReducer(state = initialTuiState, action) {
         }
       }
       return { ...state, toolCalls }
+    }
+
+    // ── 权限审批（todo 4）──────────────────────────────────────────────
+    case 'PERMISSION_REQUEST': {
+      const p = action.payload || {}
+      return {
+        ...state,
+        pendingPermission: {
+          reqId: p.reqId || `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+          name: p.name || 'tool',
+          args: p.args || {},
+          risk: p.risk || 'unknown',
+          snapshot: p.snapshot || null,
+        },
+      }
+    }
+
+    case 'PERMISSION_DECIDE':
+      return { ...state, pendingPermission: null }
+
+    // ── diff 视图与回滚（todo 4）───────────────────────────────────────
+    case 'TOOL_EXPAND': {
+      const idx = Number(action.index)
+      if (!Number.isInteger(idx) || idx < 0 || idx >= state.toolCalls.length) return state
+      const card = state.toolCalls[idx]
+      // 展开时若快照存在，就地计算 diff（纯函数 buildDiff 由调用方注入结果或此处惰性计算）
+      return { ...state, expandedTool: state.expandedTool === idx ? null : idx }
+    }
+
+    case 'TOOL_DIFF_SET': {
+      // 把 buildDiff 结果挂到卡上（调用方已算好，reducer 只存）
+      const idx = Number(action.index)
+      if (!Number.isInteger(idx) || idx < 0 || idx >= state.toolCalls.length) return state
+      const toolCalls = [...state.toolCalls]
+      toolCalls[idx] = { ...toolCalls[idx], diff: action.diff || null }
+      return { ...state, toolCalls }
+    }
+
+    case 'TOOL_ROLLBACK': {
+      const idx = Number(action.index)
+      if (!Number.isInteger(idx) || idx < 0 || idx >= state.toolCalls.length) return state
+      const toolCalls = [...state.toolCalls]
+      toolCalls[idx] = { ...toolCalls[idx], rollbackResult: action.result || { ok: false, error: 'unknown' } }
+      return { ...state, toolCalls, expandedTool: null }
     }
 
     case 'QUIT_INTENT':
