@@ -15,6 +15,10 @@ export const initialTuiState = Object.freeze({
   running: false,
   statusLine: 'idle',
   toolCalls: [], // { name, args, status, summary, latencyMs, snapshot, diff, rollbackResult }
+  currentTool: null,       // todo 6: 正在执行的工具名（状态栏显示）
+  budget: { used: 0, max: 0 }, // todo 6: 迭代预算 used/max
+  steeringQueue: [],       // todo 6: 待注入 follow-up 队列
+  steeringMode: false,     // todo 6: Ctrl+C 打断后的 follow-up 输入态
   pendingPermission: null, // { reqId, name, args, risk, snapshot } — awaitingPermission 态
   expandedTool: null,      // 展开的 diff 视图工具卡下标
   sessions: [],            // todo 5: [{ id, title, parentId, createdAt }]
@@ -79,6 +83,7 @@ export function tuiReducer(state = initialTuiState, action) {
       const entry = action.entry || {}
       return {
         ...state,
+        currentTool: entry.name || 'tool',
         toolCalls: [
           ...state.toolCalls,
           {
@@ -109,8 +114,33 @@ export function tuiReducer(state = initialTuiState, action) {
           latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : null,
         }
       }
-      return { ...state, toolCalls }
+      return { ...state, toolCalls, currentTool: null }
     }
+
+    // ── 预算 / steering（todo 6）────────────────────────────────────────
+    case 'AGENT_START': {
+      const max = Number.isFinite(action.max) ? action.max : 0
+      return { ...state, running: true, statusLine: 'running', budget: { used: 0, max } }
+    }
+
+    case 'BUDGET': {
+      const used = Number.isFinite(action.used) ? action.used : state.budget.used
+      return { ...state, budget: { ...state.budget, used } }
+    }
+
+    case 'STEER_ENQUEUE': {
+      const text = String(action.text || '').trim()
+      if (!text) return state
+      return { ...state, steeringQueue: [...state.steeringQueue, text] }
+    }
+
+    case 'STEER_DEQUEUE': {
+      if (!state.steeringQueue.length) return state
+      return { ...state, steeringQueue: state.steeringQueue.slice(1) }
+    }
+
+    case 'STEER_MODE':
+      return { ...state, steeringMode: !!action.on }
 
     // ── 权限审批（todo 4）──────────────────────────────────────────────
     case 'PERMISSION_REQUEST': {
