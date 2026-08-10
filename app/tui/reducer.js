@@ -66,6 +66,16 @@ export function tuiReducer(state = initialTuiState, action) {
       return { ...state, messages }
     }
 
+    // 系统消息（会话级错误等可见提示；渲染为 [sys] 行）
+    case 'APPEND_SYSTEM': {
+      const text = String(action.text || '').trim()
+      if (!text) return state
+      return {
+        ...state,
+        messages: [...state.messages, { id: nextMessageId(state), role: 'system', text }],
+      }
+    }
+
     case 'AGENT_END':
       return { ...state, running: false, statusLine: 'idle' }
 

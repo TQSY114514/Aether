@@ -56,6 +56,17 @@ describe('tuiReducer', () => {
     expect(s.statusLine).toBe('idle')
   })
 
+  it('APPEND_SYSTEM adds a visible system message (errors not swallowed)', () => {
+    let s = tuiReducer(initialTuiState, { type: 'APPEND_SYSTEM', text: 'error: no database found' })
+    expect(s.messages).toHaveLength(1)
+    expect(s.messages[0]).toMatchObject({ role: 'system', text: 'error: no database found' })
+    s = tuiReducer(s, { type: 'APPEND_SYSTEM', text: '   ' })
+    expect(s.messages).toHaveLength(1) // 空白不入
+    // 会话结束后错误消息仍在（不随 AGENT_END 消失）
+    s = tuiReducer(s, { type: 'AGENT_END' })
+    expect(s.messages).toHaveLength(1)
+  })
+
   it('MODE_SET switches to any valid mode', () => {
     for (const m of MODES) {
       const s = tuiReducer(initialTuiState, { type: 'MODE_SET', mode: m })

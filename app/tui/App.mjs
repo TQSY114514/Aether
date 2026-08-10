@@ -16,16 +16,19 @@ import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
 import { searchMemory } from './memorySearch.js'
 import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
 
+const ROLE_PREFIX = { user: '> ', assistant: '◆ ', system: '! ', tool: '⛭ ' }
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
 const ROLE_COLOR = { user: 'green', assistant: 'white', tool: 'yellow', system: 'gray' }
 
 function MessageLine({ msg }) {
+  const prefix = ROLE_PREFIX[msg.role] || '• '
   const label = ROLE_LABEL[msg.role] || msg.role
-  const color = ROLE_COLOR[msg.role] || 'white'
+  let color = ROLE_COLOR[msg.role] || 'white'
+  if (msg.role === 'system' && String(msg.text).startsWith('error')) color = 'red'
   if (!msg.text && msg.role === 'assistant') {
-    return h(Text, { color: 'gray' }, `[${label}] …`)
+    return h(Text, { color: 'gray' }, `${prefix}${label} …`)
   }
-  return h(Text, { color }, `[${label}] ${msg.text}`)
+  return h(Text, { color }, `${prefix}${label} ${msg.text}`)
 }
 
 // 工具调用卡（todo 3）：running 圆框 / done|error 单框，状态色边框 + 标签。
@@ -66,6 +69,22 @@ function PermissionPanel({ perm }) {
   )
 }
 
+// 底部状态栏（opencode 式紧凑单行）：mode │ 状态 │ 预算 │ 当前工具 │ steering │ 工具数
+function StatusBar({ state }) {
+  const bits = [
+    `mode:${state.mode}`,
+    state.running ? '● running' : '● idle',
+    state.statusLine && state.statusLine !== 'idle' ? state.statusLine : null,
+    state.budget.max > 0 ? `it:${state.budget.used}/${state.budget.max}` : null,
+    state.currentTool ? `tool:${state.currentTool}` : null,
+    state.steeringQueue.length ? `steer:${state.steeringQueue.length}` : null,
+    `tools:${state.toolCalls.length}`,
+  ].filter(Boolean)
+  return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: 'gray', paddingX: 1 },
+    h(Text, { color: 'gray' }, bits.join(' │ ')),
+  )
+}
+
 export function App({ dbPath, modelName }) {
   const { exit } = useApp()
   const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
@@ -94,7 +113,8 @@ export function App({ dbPath, modelName }) {
         requestPermission: tuiPermission,
       })
     } catch (err) {
-      dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
+      // 错误以 [sys] 消息可见呈现（仅改状态栏会被 AGENT_END 重置吞掉）。
+      dispatch({ type: 'APPEND_SYSTEM', text: `error: ${err && err.message ? err.message : String(err)}` })
       dispatch({ type: 'AGENT_END' })
     } finally {
       sessionBusyRef.current = false
@@ -245,12 +265,12 @@ export function App({ dbPath, modelName }) {
 
   return h(Box, { flexDirection: 'column' },
     h(Box, { borderStyle: 'round', borderColor: 'cyan', paddingX: 1 },
-      h(Text, { bold: true }, 'AetherAI TUI'),
-      h(Text, { color: 'gray' }, '  — interactive terminal agent (m: mode, q: quit, v: diff)'),
+      h(Text, { bold: true }, 'AetherAI'),
+      h(Text, { color: 'gray' }, `  tui · ${state.mode} · m 切模式 · q 退出 · v diff`),
     ),
     ...state.messages.map((m) => h(MessageLine, { key: m.id, msg: m })),
     ...state.toolCalls.map((card, i) => h(ToolCard, {
-      key: `${card.name}-${i}`, card, index: i,
+      key: `${card.name}-${i}`, card,
       expanded: state.expandedTool === i,
     })),
     state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
@@ -272,16 +292,9 @@ export function App({ dbPath, modelName }) {
         state.steeringQueue.map((q, i) => h(Text, { key: i, color: 'cyan' }, `  ⤷ ${q}`)))
       : null,
     h(Box, { marginTop: 1 },
-      h(Text, { color: 'gray' }, '> '),
+      h(Text, { color: state.running ? 'yellow' : 'gray', bold: !state.running }, '❯ '),
       h(Text, {}, state.input),
     ),
-    h(Box, { marginTop: 1 },
-      h(Text, { color: 'gray' },
-        `[${state.mode}] ${state.statusLine}${state.running ? ' (running)' : ''}` +
-        `${state.currentTool ? ` tool:${state.currentTool}` : ''}` +
-        `${state.budget.max > 0 ? ` it:${state.budget.used}/${state.budget.max}` : ''}` +
-        `${state.steeringQueue.length ? ` steer:${state.steeringQueue.length}` : ''}` +
-        ` tools:${state.toolCalls.length}`),
-    ),
+    h(StatusBar, { state }),
   )
 }
