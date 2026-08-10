@@ -19,8 +19,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install dependencies (app)
         run: cd app && npm ci --ignore-scripts
+
+      - name: Install dependencies (app/tui)
+        # app/tui 有独立局部 package.json(Ink v5, todo 1)——必须一起装,
+        # 否则 test/tui/toolCards.test.js 等导入 ink 的测试找不到模块。
+        run: cd app/tui && npm ci --ignore-scripts
 
       - name: IPC contract check
         run: cd app && node scripts/check-ipc.js
