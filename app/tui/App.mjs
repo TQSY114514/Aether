@@ -15,6 +15,7 @@ import { parseSessionCommand, SLASH_COMMANDS } from './sessionCommands.js'
 import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
 import { searchMemory } from './memorySearch.js'
 import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
+import { listModels } from './models.js'
 
 // Tokyo Night 风格配色（克制、低饱和，参考 opencode 现代终端观感）
 const C = {
@@ -148,10 +149,12 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   // 命令历史(↑↓ 回填, 上限 100 条, 去重)
   const historyRef = useRef([])
   const historyIdxRef = useRef(-1)
-  // 斜杠补全 / Ctrl+P 面板（UI 本地状态，不进核心状态机）
+  // 斜杠补全 / Ctrl+P 面板 / 模型选择器（UI 本地状态，不进核心状态机）
   const [slashIdx, setSlashIdx] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteIdx, setPaletteIdx] = useState(0)
+  // 模型选择器: null=关闭, { models, idx }=打开(opencode 风格 ↑↓ 列表)
+  const [modelPicker, setModelPicker] = useState(null)
   const PALETTE_ITEMS = ['New chat', 'History (sessions)', 'Quit']
 
   // todo 4：TUI 键盘应答权限回调（B2 接线 a 方案 → agentCore.runAgent 透传）。
@@ -233,9 +236,21 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
           dispatch({ type: 'STATUS', text: `mode: ${cmd.mode}` })
         }
       } else if (cmd.type === 'model') {
-        // /model <name>：切换后续会话模型（状态栏/运行面板显示）
-        dispatch({ type: 'MODEL_SET', name: cmd.name })
-        dispatch({ type: 'STATUS', text: cmd.name ? `model: ${cmd.name}` : 'usage: /model <name> (或 /model 查看当前)' })
+        if (!cmd.name) {
+          // /model 无参数 → 打开模型选择器(↑↓ 选择, 不手输防打错)
+          const db = openSessionDb(dbPath)
+          let models = []
+          try { models = listModels(db) } catch {}
+          try { db?.close() } catch {}
+          if (!models.length) {
+            dispatch({ type: 'STATUS', text: 'no models configured — 先在桌面版设置中配置' })
+          } else {
+            setModelPicker({ models, idx: 0 })
+          }
+        } else {
+          dispatch({ type: 'MODEL_SET', name: cmd.name })
+          dispatch({ type: 'STATUS', text: `model: ${cmd.name}` })
+        }
       } else if (cmd.type === 'effort') {
         // /effort <low|medium|high>：thinking 力度（reasoning_effort）
         if (!['low', 'medium', 'high'].includes(cmd.level)) {
@@ -278,7 +293,23 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   }, [state.expandedTool, state.toolCalls])
 
   useInput((input, key) => {
-    // 0) Ctrl+P 命令面板（模态，最优先）
+    // 0a) 模型选择器(模态, 最优先): ↑↓ 选择 / Enter 确认 / Esc 取消
+    if (modelPicker) {
+      if (key?.upArrow === true) { setModelPicker((p) => ({ ...p, idx: Math.max(0, p.idx - 1) })); return }
+      if (key?.downArrow === true) { setModelPicker((p) => ({ ...p, idx: Math.min(p.models.length - 1, p.idx + 1) })); return }
+      if (key?.escape === true) { setModelPicker(null); return }
+      if (key?.return === true) {
+        const m = modelPicker.models[modelPicker.idx]
+        setModelPicker(null)
+        if (m) {
+          dispatch({ type: 'MODEL_SET', name: m.model_name })
+          dispatch({ type: 'STATUS', text: `model: ${m.provider_name}/${m.model_name}${m.is_primary ? ' (primary)' : ''}` })
+        }
+        return
+      }
+      return // 模态吞掉其他键
+    }
+    // 0) Ctrl+P 命令面板（模态，次优先）
     if (paletteOpen) {
       if (key?.upArrow === true) { setPaletteIdx((i) => Math.max(0, i - 1)); return }
       if (key?.downArrow === true) { setPaletteIdx((i) => Math.min(PALETTE_ITEMS.length - 1, i + 1)); return }
@@ -385,9 +416,13 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       if (text && !state.running) {
         // 斜杠补全：有选中候选 → 填入完整命令（可补参数后再次 Enter 执行）
         if (slashMatches.length > 0 && slashIdx >= 0 && slashIdx < slashMatches.length) {
-          dispatch({ type: 'INPUT', value: slashMatches[slashIdx] })
-          setSlashIdx(0)
-          return
+          const full = slashMatches[slashIdx]
+          // 已完全匹配时不再重复填入——直接执行（否则 /model 永远只补全不执行）
+          if (state.input !== full) {
+            dispatch({ type: 'INPUT', value: full })
+            setSlashIdx(0)
+            return
+          }
         }
         // 记录历史(去重, 新条目排最前, 上限 100)
         historyRef.current = [...historyRef.current.filter((x) => x !== text), text].slice(-100)
@@ -479,6 +514,15 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
             color: i === paletteIdx ? C.primary : C.dim,
             backgroundColor: i === paletteIdx ? '#24283b' : undefined,
           }, `  ${i === paletteIdx ? '❯ ' : '  '}${item}`)))
+        : null,
+      modelPicker
+        ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: C.primary }, 'Select model — ↑↓ 选择 · Enter 确认 · Esc 取消'),
+          modelPicker.models.map((m, i) => h(Text, {
+            key: `${m.provider_id}-${m.id}`,
+            color: i === modelPicker.idx ? C.primary : C.dim,
+            backgroundColor: i === modelPicker.idx ? '#24283b' : undefined,
+          }, `  ${i === modelPicker.idx ? '❯ ' : '  '}${m.provider_name}/${m.model_name}${m.is_primary ? ' ★' : ''}`)))
         : null,
       // 行内补全: 单匹配时输入框内灰字显示剩余部分(如 /e → /e|ffort)
       h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
