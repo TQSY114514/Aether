@@ -22,6 +22,7 @@
 //   - Pure Node (no electron imports) — unit-testable without an app.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
 
