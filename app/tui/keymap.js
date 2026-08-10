@@ -11,16 +11,18 @@
  */
 export function keyToAction(key, input) {
   if (!key || typeof key !== 'object') return null
-  // 真实终端退格键常发 \x7f(DEL)或 \x08——ink 只认 \x08 为 backspace,
-  // \x7f 会被当普通字符传给 input,表现为"删不了"。
+  // 真实终端退格键常发 \x7f(DEL)。ink 把它解析为 key.delete=true 且把 input 置空
+  // (nonAlphanumericKeys)——所以必须同时认 backspace 和 delete, 否则表现为"删不了"。
   if (input === '\x7f' || input === '\b') return { type: 'INPUT_BACKSPACE' }
   const isCtrlC = key.ctrl === true && (input === 'c' || key.name === 'c')
   if (isCtrlC) return { type: 'QUIT_INTENT' }
   if (key.return === true || key.enter === true || key.name === 'return' || key.name === 'enter') {
     return { type: 'SUBMIT' }
   }
-  if (key.backspace === true || key.name === 'backspace') return { type: 'INPUT_BACKSPACE' }
-  // 注意: m/q 等字母快捷方式不进 keymap——它们会吞掉输入框里的字母。
-  // App 组件层在「输入框为空」时才响应(input 判定), keymap 只归一控制键。
+  if (key.backspace === true || key.name === 'backspace' || key.delete === true || key.name === 'delete') {
+    return { type: 'INPUT_BACKSPACE' }
+  }
+  // 注意: 不用单字母当快捷键(m/q/v 等)——它们会吞掉输入框里的字母。
+  // 需要按键的操作用修饰键组合(Alt+m / Alt+v)或斜杠命令(/mode)。
   return null
 }

@@ -123,6 +123,7 @@ function PermissionPanel({ perm }) {
 function StatusBar({ state, tick }) {
   const bits = [
     `mode:${state.mode}`,
+    state.modelName ? `model:${state.modelName}` : null,
     `effort:${state.effort}`,
     state.running ? `${tick} running` : '● idle',
     state.statusLine && state.statusLine !== 'idle' ? state.statusLine : null,
@@ -165,7 +166,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     try {
       await runSession({
         dbPath,
-        modelName,
+        modelName: state.modelName || modelName,   // /model 优先于 CLI 参数
         apiKey,
         apiUrl,
         apiFormat,
@@ -182,7 +183,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     } finally {
       sessionBusyRef.current = false
     }
-  }, [dbPath, modelName, state.mode, tuiPermission])
+  }, [dbPath, modelName, state.mode, state.modelName, tuiPermission])
 
   // 会话树/记忆/技能命令（todo 5/8/13/20）：解析 → 单次打开 DB → 处理后关闭，
   // 避免每次命令累积 better-sqlite3 连接（长会话内存泄漏）。
@@ -223,6 +224,14 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
           habitLearner.dismissHabit(db, cmd.key)
           dispatch({ type: 'STATUS', text: `skill dismissed: ${cmd.key}` })
         }
+      } else if (cmd.type === 'mode') {
+        // /mode <ask|plan|auto>：切换运行模式
+        if (!['ask', 'plan', 'auto'].includes(cmd.mode)) {
+          dispatch({ type: 'STATUS', text: 'usage: /mode <ask|plan|auto>' })
+        } else {
+          dispatch({ type: 'MODE_SET', mode: cmd.mode })
+          dispatch({ type: 'STATUS', text: `mode: ${cmd.mode}` })
+        }
       } else if (cmd.type === 'model') {
         // /model <name>：切换后续会话模型（状态栏/运行面板显示）
         dispatch({ type: 'MODEL_SET', name: cmd.name })
@@ -238,7 +247,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       } else if (cmd.type === 'quit') {
         dispatch({ type: 'QUIT_INTENT' })
       } else if (cmd.type === 'help') {
-        dispatch({ type: 'APPEND_SYSTEM', text: `commands: ${SLASH_COMMANDS.join(' ')} | 快捷键: m 模式 / v diff / ↑↓ 选消息 / Ctrl+P 面板 / Ctrl+C 退出` })
+        dispatch({ type: 'APPEND_SYSTEM', text: `commands: ${SLASH_COMMANDS.join(' ')} | 快捷键: Alt+m 模式 / Alt+v diff / ↑↓ 历史 / Tab 补全 / Ctrl+P 面板 / Ctrl+C 退出` })
       }
     } catch (err) {
       dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
@@ -335,11 +344,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       dispatch({ type: 'STEER_MODE', on: true })
       return
     }
-    // 5) 普通态：字母快捷方式按 input 判定（ink 对字母键不保证给 key.name，
-    //    只靠 key.name==='m' 会把 m 吞成输入字符）。仅输入框为空时响应，
-    //    否则 'memory'、'quit' 之类的正常输入会被误吞。
-    if (state.input === '' && (input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
-    if (state.input === '' && (input || '').toLowerCase() === 'q') { dispatch({ type: 'QUIT_INTENT' }); return }
+    // 5) 普通态：不用单字母快捷方式(会吞输入字符)。修饰键组合:
+    // Alt+m 切模式 / Alt+v diff / Ctrl+P 面板 / Ctrl+C 退出; 或斜杠命令 /mode
+    if (state.input === '' && key?.alt === true && input === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
     // Ctrl+P 打开命令面板（输入框为空时）
     if (state.input === '' && key?.ctrl === true && input === 'p') { setPaletteOpen(true); setPaletteIdx(0); return }
     // 斜杠补全：输入以 / 开头时 ↑↓ 在候选间移动
@@ -392,8 +399,8 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       }
       return
     }
-    if ((input || '') === 'v' && !state.running && state.input === '' && state.toolCalls.length > 0) {
-      // 输入框为空时才响应 v（避免输入含 v 的文本时误触 diff 展开）
+    if (key?.alt === true && input === 'v' && !state.running && state.input === '' && state.toolCalls.length > 0) {
+      // Alt+v 展开最新工具卡 diff(Alt 修饰键不会与输入冲突)
       const last = state.toolCalls.length - 1
       expandDiff(last)
       return
@@ -416,7 +423,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
 
   return h(Box, { flexDirection: 'column' },
     h(Logo, { tick: state.running ? tick : null }),
-    h(Text, { color: C.dim }, `  ${state.mode} · m 切模式 · q 退出 · v diff · ↑↓ 历史 · Tab 补全 · Ctrl+P 面板 · Ctrl+C 退出`),
+    h(Text, { color: C.dim }, `  ${state.mode} · Alt+m 切模式 · Alt+v diff · ↑↓ 历史 · Tab 补全 · Ctrl+P 面板 · /mode /model /effort · Ctrl+C 退出`),
     ...state.messages.map((m, i) => h(MessageLine, {
       key: m.id, msg: m,
       selected: state.selectedMessage === i,

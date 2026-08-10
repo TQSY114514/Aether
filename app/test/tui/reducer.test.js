@@ -177,6 +177,9 @@ describe('keyToAction', () => {
     expect(keyToAction({}, '\x7f')).toEqual({ type: 'INPUT_BACKSPACE' })
     expect(keyToAction({}, '\b')).toEqual({ type: 'INPUT_BACKSPACE' })
     expect(keyToAction({ name: 'backspace' })).toEqual({ type: 'INPUT_BACKSPACE' })
+    // ink 把 \x7f 解析为 key.delete=true 且 input 置空——必须认 delete
+    expect(keyToAction({ delete: true })).toEqual({ type: 'INPUT_BACKSPACE' })
+    expect(keyToAction({ name: 'delete' })).toEqual({ type: 'INPUT_BACKSPACE' })
   })
 
   it('m is NOT consumed by keymap (App decides: only when input empty)', () => {
