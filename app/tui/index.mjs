@@ -10,6 +10,16 @@ import { keyToAction } from './keymap.js'
 
 const MIN_NODE_MAJOR = 22
 
+// 启动大 logo（block 字体，纯 ASCII 通用终端无 ANSI 依赖）。
+const LOGO = [
+  '██████╗  █████╗  ███████╗███████╗ ██████╗ ██████╗  ██████╗ ██████╗  ██████╗',
+  '██╔══██╗██╔══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔═══██╗██╔═══██╗██╔═══██╗',
+  '██████╔╝███████║█████╗  █████╗  ██║   ██║██████╔╝██║   ██║██║   ██║██║   ██║',
+  '██╔══██╗██╔══██║██╔══╝  ██╔══╝  ██║   ██║██╔══██╗██║   ██║██║   ██║██║   ██║',
+  '██║  ██║██║  ██║███████╗███████╗╚██████╔╝██║  ██║╚██████╔╝╚██████╔╝╚██████╔╝',
+  '╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝  ╚═════╝',
+].join('\n')
+
 export async function main(argv = []) {
   const major = Number(process.versions.node.split('.')[0])
   if (!Number.isFinite(major) || major < MIN_NODE_MAJOR) {
@@ -54,6 +64,8 @@ export function parseTuiOpts(argv = []) {
 }
 
 function runInteractive(argv) {
+  // 启动时打印一次大 logo（帧外输出，不随 ink 重绘）
+  process.stdout.write(`${LOGO}\n\n`)
   const { dbPath, modelName } = parseTuiOpts(argv)
   return new Promise((resolve) => {
     const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName }))
