@@ -10,25 +10,10 @@ import { keyToAction } from './keymap.js'
 
 const MIN_NODE_MAJOR = 22
 
-// 启动大 logo（标准 block 字体，每字母 6 行 × 8 列宽，保证逐行对齐；拼 AETHERAI）
-const _A = ['█████╗  ', '██╔══██╗', '███████║', '██╔══██║', '██║  ██║', '╚═╝  ╚═╝']
-const _E = ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '███████╗', '╚══════╝']
-const _T = ['████████╗', '╚══██╔══╝', '   ██║  ', '   ██║  ', '   ██║  ', '   ╚═╝  ']
-const _H = ['██╗  ██╗', '██║  ██║', '███████║', '██╔══██║', '██║  ██║', '╚═╝  ╚═╝']
-const _R = ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██║  ██║', '╚═╝  ╚═╝']
-const _I = ['██╗    ', '██║    ', '██║    ', '██║    ', '██║    ', '╚═╝    ']
-
-function buildLogo(word) {
-  const glyphs = { A: _A, E: _E, T: _T, H: _H, R: _R, I: _I }
-  const letters = String(word).toUpperCase().split('').map((ch) => glyphs[ch])
-  const rows = []
-  for (let r = 0; r < 6; r++) {
-    rows.push(letters.map((g) => (g ? g[r] || '' : '      ')).join('  ').replace(/\s+$/, ''))
-  }
-  return rows.join('\n')
-}
-
-const LOGO = buildLogo('AetherAI')
+// Alternate Screen Buffer：启动接管整个终端（vim/lazygit/opencode 行为），
+// 退出恢复原 shell 内容。进入序列 + 清屏；退出序列在正常退出与进程退出时都写。
+const ALT_ENTER = '\x1b[?1049h\x1b[2J\x1b[H'
+const ALT_EXIT = '\x1b[?1049l\x1b[0m'
 
 export async function main(argv = []) {
   const major = Number(process.versions.node.split('.')[0])
@@ -41,25 +26,10 @@ export async function main(argv = []) {
     console.error('error: aether tui requires a TTY. Run it from a real terminal, or use `aether tui --smoke` for a headless smoke.')
     return 1
   }
-  // Windows 终端兼容提示：cmd.exe 的 conhost 对 ink 的 ANSI 重绘序列
-  //（\x1b[A / \x1b[2K）支持不完整，帧会堆叠；Windows Terminal 会设置
-  // WT_SESSION 环境变量。提示不阻塞，用户仍可继续（或按 Enter 继续）。
-  if (process.platform === 'win32' && !process.env.WT_SESSION && !process.env.TERM_PROGRAM) {
-    process.stdout.write('提示: 当前终端(cmd)对 ANSI 重绘支持不完整,TUI 帧可能堆叠。\n推荐用 Windows Terminal 运行(wt),体验最佳。按 Enter 继续…\n')
-    await new Promise((resolve) => {
-      const onData = (chunk) => {
-        if (String(chunk).includes('\r') || String(chunk).includes('\n')) {
-          process.stdin.off('data', onData)
-          resolve()
-        }
-      }
-      process.stdin.on('data', onData)
-    })
-  }
   return runInteractive(argv)
 }
 
-// TTY 交互模式：渲染 App，等用户退出（Ctrl+C → QUIT_INTENT → exit()）。
+// TTY 交互模式：接管 alt screen → 渲染全屏 TUI → 退出时恢复。
 // 从 argv 提取 --db/--model 传给 App（与 CLI 其余模式同语义）。
 export function parseTuiOpts(argv = []) {
   const opts = { dbPath: undefined, modelName: undefined }
@@ -74,12 +44,18 @@ export function parseTuiOpts(argv = []) {
 }
 
 function runInteractive(argv) {
-  // 启动时打印一次大 logo（帧外输出，不随 ink 重绘）
-  process.stdout.write(`${LOGO}\n\n`)
   const { dbPath, modelName } = parseTuiOpts(argv)
+  // 进入 alt screen 前不输出任何内容（不留启动日志/横幅）
+  process.stdout.write(ALT_ENTER)
+  // 兜底：任何退出路径都恢复原终端内容
+  process.on('exit', () => { try { process.stdout.write(ALT_EXIT) } catch {} })
   return new Promise((resolve) => {
     const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName }))
-    waitUntilExit().then(() => { unmount(); resolve(0) })
+    waitUntilExit().then(() => {
+      unmount()
+      process.stdout.write(ALT_EXIT)
+      resolve(0)
+    })
   })
 }
 

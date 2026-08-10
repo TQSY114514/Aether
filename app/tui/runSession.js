@@ -146,7 +146,7 @@ export async function runSession({
   resolveImpl = resolveSessionResources,
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
-  dispatch({ type: 'AGENT_START', max: maxIterations })
+  dispatch({ type: 'AGENT_START', max: maxIterations, modelName: model.model_name })
   const ws = workspace || process.cwd()
   // todo 14：MCP 连接 + SessionStart/SessionEnd hooks（best-effort，不阻塞 agent）。
   try { require('../electron/tools/sandbox').setWorkspaceRoot(ws) } catch {}

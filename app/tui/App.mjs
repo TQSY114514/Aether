@@ -20,7 +20,7 @@ const ROLE_PREFIX = { user: '> ', assistant: '◆ ', system: '! ', tool: '⛭ ' 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
 const ROLE_COLOR = { user: 'green', assistant: 'white', tool: 'yellow', system: 'gray' }
 
-// 轻量 ticker：驱动运行指示动画（● ↔ ○ 交替，500ms 一帧）。
+// 轻量 ticker：驱动动画帧（spinner / 运行指示）。
 function useTicker(intervalMs = 500, chars = ['●', '○']) {
   const [i, setI] = useState(0)
   useEffect(() => {
@@ -30,15 +30,39 @@ function useTicker(intervalMs = 500, chars = ['●', '○']) {
   return chars[i]
 }
 
-function MessageLine({ msg }) {
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+// 顶部 Logo：标准 block 字体拼 AETHER（6 行 × 8 列/字母，逐行对齐），居中。
+const _G = {
+  A: ['█████╗  ', '██╔══██╗', '███████║', '██╔══██║', '██║  ██║', '╚═╝  ╚═╝'],
+  E: ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '███████╗', '╚══════╝'],
+  T: ['████████╗', '╚══██╔══╝', '   ██║  ', '   ██║  ', '   ██║  ', '   ╚═╝  '],
+  H: ['██╗  ██╗', '██║  ██║', '███████║', '██╔══██║', '██║  ██║', '╚═╝  ╚═╝'],
+  R: ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██║  ██║', '╚═╝  ╚═╝'],
+}
+const LOGO_WORD = 'AETHER'
+
+function Logo({ tick }) {
+  const rows = []
+  for (let r = 0; r < 6; r++) {
+    rows.push(LOGO_WORD.split('').map((ch) => (_G[ch] ? _G[ch][r] : '        ')).join('  ').replace(/\s+$/, ''))
+  }
+  return h(Box, { flexDirection: 'column', alignItems: 'center' },
+    rows.map((line, i) => h(Text, { key: i, bold: true, color: 'cyan' }, line)),
+    h(Text, { color: 'gray' }, `Terminal AI Workstation${tick ? `  ${tick}` : ''}`),
+  )
+}
+
+function MessageLine({ msg, selected }) {
   const prefix = ROLE_PREFIX[msg.role] || '• '
   const label = ROLE_LABEL[msg.role] || msg.role
   let color = ROLE_COLOR[msg.role] || 'white'
   if (msg.role === 'system' && String(msg.text).startsWith('error')) color = 'red'
+  const bg = selected ? '#1f2430' : undefined
   if (!msg.text && msg.role === 'assistant') {
-    return h(Text, { color: 'gray' }, `${prefix}${label} …`)
+    return h(Text, { color: 'gray', backgroundColor: bg }, `${prefix}${label} …`)
   }
-  return h(Text, { color }, `${prefix}${label} ${msg.text}`)
+  return h(Text, { color, backgroundColor: bg }, `${prefix}${label} ${msg.text}`)
 }
 
 // 工具调用卡（todo 3）：running 圆框 / done|error 单框，状态色边框 + 标签。
@@ -79,7 +103,7 @@ function PermissionPanel({ perm }) {
   )
 }
 
-// 底部状态栏（opencode 式紧凑单行）：mode │ 状态 │ 预算 │ 当前工具 │ steering │ 工具数
+// 底部状态栏（紧凑单行）：mode │ 状态 │ 预算 │ 当前工具 │ steering │ 工具数
 function StatusBar({ state, tick }) {
   const bits = [
     `mode:${state.mode}`,
@@ -95,10 +119,33 @@ function StatusBar({ state, tick }) {
   )
 }
 
+// 右侧实时状态面板（opencode split-view 风格）：Agent / Model / 运行 / 迭代 / 工具 / steering / MCP
+function StatusPanel({ state, modelName, tick }) {
+  const rows = [
+    ['Agent', 'aether'],
+    ['Model', state.modelName || modelName || 'auto'],
+    ['Mode', state.mode],
+    ['Run', state.running ? `${tick} running` : 'idle'],
+    ['Iter', state.budget.max ? `${state.budget.used}/${state.budget.max}` : '—'],
+    ['Tool', state.currentTool || '—'],
+    ['Tools', String(state.toolCalls.length)],
+    ['Steer', String(state.steeringQueue.length)],
+    ['Mem', String(state.memoryResults.length)],
+    ['Skills', String(state.skills.length)],
+  ]
+  return h(Box, { width: '32%', borderStyle: 'single', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1, flexDirection: 'column' },
+    h(Text, { bold: true, color: 'cyan' }, 'STATUS'),
+    rows.map(([k, v]) => h(Box, { key: k, flexDirection: 'row', justifyContent: 'space-between' },
+      h(Text, { color: 'gray' }, k),
+      h(Text, { color: k === 'Run' && state.running ? 'cyan' : 'white' }, v),
+    )),
+  )
+}
+
 export function App({ dbPath, modelName }) {
   const { exit } = useApp()
   const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
-  const tick = useTicker(500, ['●', '○'])
+  const tick = useTicker(120, SPINNER)
   const sessionBusyRef = useRef(false)
   const allowRulesRef = useRef(createAllowRulesStore())
   const resolveRef = useRef(null)
@@ -251,6 +298,9 @@ export function App({ dbPath, modelName }) {
     // 5) 普通态：字母快捷方式按 input 判定（ink 对字母键不保证给 key.name，
     //    只靠 key.name==='m' 会把 m 吞成输入字符）。
     if ((input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
+    // ↑↓ 消息导航（输入框为空时）
+    if (state.input === '' && key?.upArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: -1 }); return }
+    if (state.input === '' && key?.downArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: 1 }); return }
     if (key?.return === true) {
       const text = state.input.trim()
       if (text && !state.running) {
@@ -276,39 +326,43 @@ export function App({ dbPath, modelName }) {
     if (state.quitRequested) exit()
   }, [state.quitRequested, exit])
 
-  return h(Box, { flexDirection: 'column' },
-    h(Box, { borderStyle: 'round', borderColor: 'cyan', paddingX: 1 },
-      h(Text, { bold: true }, 'AetherAI'),
-      h(Text, { color: 'gray' }, `  tui · ${state.mode} · m 切模式 · q 退出 · v diff`),
+  return h(Box, { flexDirection: 'row' },
+    h(Box, { flexDirection: 'column', flexGrow: 3, paddingRight: 1 },
+      h(Logo, { tick: state.running ? tick : null }),
+      h(Text, { color: 'gray' }, `  ${state.mode} · m 切模式 · q/Ctrl+C 退出 · v diff · ↑↓ 选消息`),
+      ...state.messages.map((m, i) => h(MessageLine, {
+        key: m.id, msg: m,
+        selected: state.selectedMessage === i,
+      })),
+      ...state.toolCalls.map((card, i) => h(ToolCard, {
+        key: `${card.name}-${i}`, card,
+        expanded: state.expandedTool === i,
+      })),
+      state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
+      state.memoryResults.length
+        ? h(Box, { marginTop: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: 'magenta' }, `memory (${state.memoryResults.length}):`),
+          state.memoryResults.map((m) => h(Text, { key: m.id ?? m.content, color: 'gray' },
+            `  [${m.type || 'fact'}${m.createdAt ? ` · ${String(m.createdAt).slice(0, 16)}` : ''}] ${String(m.content).slice(0, 120)}`)))
+        : null,
+      state.skills.length
+        ? h(Box, { marginTop: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: 'cyan' }, `skills (${state.skills.length}):`),
+          state.skills.map((s) => h(Text, { key: s.key, color: 'gray' },
+            `  [${s.key}] ${s.imperative}${s.occurrences > 1 ? ` (×${s.occurrences})` : ''}`)))
+        : null,
+      state.steeringQueue.length
+        ? h(Box, { marginTop: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: 'cyan' }, 'steering queue:'),
+          state.steeringQueue.map((q, i) => h(Text, { key: i, color: 'cyan' }, `  ⤷ ${q}`)))
+        : null,
+      h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1 },
+        h(Text, { color: state.running ? 'cyan' : 'gray', bold: !state.running }, '❯ '),
+        h(Text, {}, state.input),
+      ),
+      h(StatusBar, { state, tick: state.running ? tick : '●' }),
     ),
-    ...state.messages.map((m) => h(MessageLine, { key: m.id, msg: m })),
-    ...state.toolCalls.map((card, i) => h(ToolCard, {
-      key: `${card.name}-${i}`, card,
-      expanded: state.expandedTool === i,
-    })),
-    state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
-    state.memoryResults.length
-      ? h(Box, { marginTop: 1, flexDirection: 'column' },
-        h(Text, { bold: true, color: 'magenta' }, `memory (${state.memoryResults.length}):`),
-        state.memoryResults.map((m) => h(Text, { key: m.id ?? m.content, color: 'gray' },
-          `  [${m.type || 'fact'}${m.createdAt ? ` · ${String(m.createdAt).slice(0, 16)}` : ''}] ${String(m.content).slice(0, 120)}`)))
-      : null,
-    state.skills.length
-      ? h(Box, { marginTop: 1, flexDirection: 'column' },
-        h(Text, { bold: true, color: 'cyan' }, `skills (${state.skills.length}):`),
-        state.skills.map((s) => h(Text, { key: s.key, color: 'gray' },
-          `  [${s.key}] ${s.imperative}${s.occurrences > 1 ? ` (×${s.occurrences})` : ''}`)))
-      : null,
-    state.steeringQueue.length
-      ? h(Box, { marginTop: 1, flexDirection: 'column' },
-        h(Text, { bold: true, color: 'cyan' }, 'steering queue:'),
-        state.steeringQueue.map((q, i) => h(Text, { key: i, color: 'cyan' }, `  ⤷ ${q}`)))
-      : null,
-    h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1 },
-      h(Text, { color: state.running ? 'cyan' : 'gray', bold: !state.running }, '❯ '),
-      h(Text, {}, state.input),
-    ),
-    h(StatusBar, { state, tick }),
+    h(StatusPanel, { state, modelName, tick: state.running ? tick : '●' }),
   )
 }
 
