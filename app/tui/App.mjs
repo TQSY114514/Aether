@@ -111,12 +111,20 @@ function DiffView({ diff }) {
   )
 }
 
-// 权限审批面板（todo 4）：awaitingPermission 态，y/n/a 应答。
-function PermissionPanel({ perm }) {
+// 权限审批面板（opencode 风格）：←→ 选择 Allow once / Always / Reject，Enter 确认。
+function PermissionPanel({ perm, permIdx }) {
+  const options = ['Allow once', 'Allow always', 'Reject']
   return h(Box, { borderStyle: 'round', borderColor: 'yellow', paddingX: 1, marginTop: 1, flexDirection: 'column' },
-    h(Text, { bold: true, color: 'yellow' }, `[权限请求] ${perm.name}`),
+    h(Text, { bold: true, color: 'yellow' }, `△ [权限请求] ${perm.name}`),
     h(Text, { color: 'gray' }, `args: ${summarizeArgs(perm.args)} | risk: ${perm.risk}`),
-    h(Text, { color: 'gray' }, 'y: 允许  n: 拒绝  a: 总是允许(本会话)  Ctrl+C: 中止'),
+    h(Box, { flexDirection: 'row', marginTop: 1 },
+      options.map((opt, i) => h(Box, {
+        key: opt,
+        marginRight: 1,
+        paddingX: 1,
+        backgroundColor: i === permIdx ? '#24283b' : undefined,
+      }, h(Text, { color: i === permIdx ? 'yellow' : 'gray', bold: i === permIdx }, ` ${opt} `)))),
+    h(Text, { color: 'gray' }, '←→ 选择 · Enter 确认 · Esc/Ctrl+C 拒绝'),
   )
 }
 
@@ -149,13 +157,20 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   // 命令历史(↑↓ 回填, 上限 100 条, 去重)
   const historyRef = useRef([])
   const historyIdxRef = useRef(-1)
-  // 斜杠补全 / Ctrl+P 面板 / 模型选择器（UI 本地状态，不进核心状态机）
+  // 斜杠补全 / Ctrl+P 面板 / 模型选择器 / leader key（UI 本地状态，不进核心状态机）
   const [slashIdx, setSlashIdx] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [paletteIdx, setPaletteIdx] = useState(0)
-  // 模型选择器: null=关闭, { models, idx }=打开(opencode 风格 ↑↓ 列表)
+  const [paletteFilter, setPaletteFilter] = useState('')
+  // 模型选择器: null=关闭, { models, idx, filter }=打开（opencode DialogSelect 风格）
   const [modelPicker, setModelPicker] = useState(null)
-  const PALETTE_ITEMS = ['New chat', 'History (sessions)', 'Quit']
+  // 权限选项高亮(opencode: Allow once / Always / Reject)
+  const [permIdx, setPermIdx] = useState(0)
+  // leader key（opencode ctrl+x 风格）: 按下后 1.2s 内等待第二个键
+  const [leaderArmed, setLeaderArmed] = useState(false)
+  // 消息区滚动偏移（0 = 跟随最新）
+  const [scrollOffset, setScrollOffset] = useState(0)
+  const PALETTE_ITEMS = ['New chat', 'Model', 'History (sessions)', 'Quit']
 
   // todo 4：TUI 键盘应答权限回调（B2 接线 a 方案 → agentCore.runAgent 透传）。
   const tuiPermission = useCallback(
@@ -187,6 +202,23 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       sessionBusyRef.current = false
     }
   }, [dbPath, modelName, state.mode, state.modelName, tuiPermission])
+
+  // 打开模型选择器(读 DB 启用模型; /model、Ctrl+P Model、leader m 共用)
+  const openModelPicker = useCallback(() => {
+    const db = openSessionDb(dbPath)
+    let models = []
+    try { models = listModels(db) } catch {}
+    try { db?.close() } catch {}
+    if (models.length) setModelPicker({ models, idx: 0, filter: '' })
+    else dispatch({ type: 'STATUS', text: 'no models configured — 先在桌面版设置中配置' })
+  }, [dbPath])
+
+  // leader key 待命计时: 1.2s 无后续按键自动解除
+  useEffect(() => {
+    if (!leaderArmed) return
+    const t = setTimeout(() => setLeaderArmed(false), 1200)
+    return () => clearTimeout(t)
+  }, [leaderArmed])
 
   // 会话树/记忆/技能命令（todo 5/8/13/20）：解析 → 单次打开 DB → 处理后关闭，
   // 避免每次命令累积 better-sqlite3 连接（长会话内存泄漏）。
@@ -238,21 +270,12 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       } else if (cmd.type === 'model') {
         if (!cmd.name) {
           // /model 无参数 → 打开模型选择器(↑↓ 选择, 不手输防打错)
-          const db = openSessionDb(dbPath)
-          let models = []
-          try { models = listModels(db) } catch {}
-          try { db?.close() } catch {}
-          if (!models.length) {
-            dispatch({ type: 'STATUS', text: 'no models configured — 先在桌面版设置中配置' })
-          } else {
-            setModelPicker({ models, idx: 0 })
-          }
+          openModelPicker()
         } else {
           dispatch({ type: 'MODEL_SET', name: cmd.name })
           dispatch({ type: 'STATUS', text: `model: ${cmd.name}` })
         }
-      } else if (cmd.type === 'effort') {
-        // /effort <low|medium|high>：thinking 力度（reasoning_effort）
+      } else if (cmd.type === 'effort') {        // /effort <low|medium|high>：thinking 力度（reasoning_effort）
         if (!['low', 'medium', 'high'].includes(cmd.level)) {
           dispatch({ type: 'STATUS', text: 'usage: /effort <low|medium|high>' })
         } else {
@@ -293,10 +316,16 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   }, [state.expandedTool, state.toolCalls])
 
   useInput((input, key) => {
-    // 0a) 模型选择器(模态, 最优先): ↑↓ 选择 / Enter 确认 / Esc 取消
+    // 0a) 模型选择器(模态, 最优先): ↑↓ 循环 / 直接输入过滤 / Enter 确认 / Esc 取消
     if (modelPicker) {
-      if (key?.upArrow === true) { setModelPicker((p) => ({ ...p, idx: Math.max(0, p.idx - 1) })); return }
-      if (key?.downArrow === true) { setModelPicker((p) => ({ ...p, idx: Math.min(p.models.length - 1, p.idx + 1) })); return }
+      if (key?.upArrow === true || (key?.ctrl === true && input === 'p')) {
+        setModelPicker((p) => ({ ...p, idx: (p.idx - 1 + p.models.length) % p.models.length })); return
+      }
+      if (key?.downArrow === true || (key?.ctrl === true && input === 'n')) {
+        setModelPicker((p) => ({ ...p, idx: (p.idx + 1) % p.models.length })); return
+      }
+      if (key?.pageUp === true) { setModelPicker((p) => ({ ...p, idx: Math.max(0, p.idx - 10) })); return }
+      if (key?.pageDown === true) { setModelPicker((p) => ({ ...p, idx: Math.min(p.models.length - 1, p.idx + 10) })); return }
       if (key?.escape === true) { setModelPicker(null); return }
       if (key?.return === true) {
         const m = modelPicker.models[modelPicker.idx]
@@ -307,18 +336,40 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         }
         return
       }
+      if (key?.backspace === true || input === '\b' || input === '\x7f' || key?.delete === true) {
+        setModelPicker((p) => ({ ...p, filter: p.filter.slice(0, -1), idx: 0 })); return
+      }
+      if (input) { setModelPicker((p) => ({ ...p, filter: (p.filter + input).toLowerCase(), idx: 0 })); return }
       return // 模态吞掉其他键
     }
-    // 0) Ctrl+P 命令面板（模态，次优先）
+    // 0b) leader key 待命: ctrl+x 后第二个键决定动作(opencode 风格)
+    if (leaderArmed) {
+      setLeaderArmed(false)
+      const ch = (input || '').toLowerCase()
+      if (ch === 'm') { openModelPicker(); return }
+      if (ch === 'n') { dispatch({ type: 'RESET' }); dispatch({ type: 'STATUS', text: 'new session' }); return }
+      if (ch === 'l') {
+        const db = openSessionDb(dbPath)
+        try { dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) }) } catch {}
+        try { db?.close() } catch {}
+        return
+      }
+      if (ch === 'q') { dispatch({ type: 'QUIT_INTENT' }); return }
+      return // 未知键: 仅解除待命
+    }
+    // 0c) Ctrl+P 命令面板（模态）: 输入过滤 / ↑↓ 循环 / Enter 执行 / Esc 关闭
     if (paletteOpen) {
-      if (key?.upArrow === true) { setPaletteIdx((i) => Math.max(0, i - 1)); return }
-      if (key?.downArrow === true) { setPaletteIdx((i) => Math.min(PALETTE_ITEMS.length - 1, i + 1)); return }
-      if (key?.escape === true || (key?.ctrl === true && input === 'p')) { setPaletteOpen(false); return }
+      const items = PALETTE_ITEMS.filter((i) => i.toLowerCase().includes(paletteFilter))
+      if (key?.upArrow === true || (key?.ctrl === true && input === 'p')) { setPaletteIdx((i) => (i - 1 + Math.max(1, items.length)) % Math.max(1, items.length)); return }
+      if (key?.downArrow === true || (key?.ctrl === true && input === 'n')) { setPaletteIdx((i) => (i + 1) % Math.max(1, items.length)); return }
+      if (key?.escape === true) { setPaletteOpen(false); setPaletteFilter(''); return }
       if (key?.return === true) {
-        const item = PALETTE_ITEMS[paletteIdx]
-        setPaletteOpen(false)
+        const item = items[paletteIdx]
+        setPaletteOpen(false); setPaletteFilter('')
+        if (!item) return
         if (item === 'New chat') dispatch({ type: 'RESET' })
         else if (item === 'Quit') dispatch({ type: 'QUIT_INTENT' })
+        else if (item === 'Model') { openModelPicker() }
         else if (item === 'History (sessions)') {
           const db = openSessionDb(dbPath)
           try { dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) }) } catch {}
@@ -326,16 +377,29 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         }
         return
       }
+      if (key?.backspace === true || input === '\b' || input === '\x7f' || key?.delete === true) {
+        setPaletteFilter((f) => f.slice(0, -1)); return
+      }
+      if (input) { setPaletteFilter((f) => (f + input).toLowerCase()); return }
       return // 模态吞掉其他键
     }
-    // 1) 权限等待态：y/n/a 应答，Ctrl+C 中止（=拒绝）。
+    // 1) 权限等待态(opencode 风格): ←→ 选择 Allow once/Always/Reject, Enter 确认, Esc 拒绝
     if (state.pendingPermission) {
       const ctrlC = key?.ctrl === true && input === 'c'
       if (ctrlC) { decidePermission({ decision: 'deny', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
-      const ch = (input || '').toLowerCase()
-      if (ch === 'y') { decidePermission({ decision: 'allow', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
-      if (ch === 'n') { decidePermission({ decision: 'deny', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
-      if (ch === 'a') { decidePermission({ decision: 'allow', remember: true, allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
+      if (key?.leftArrow === true || input === 'h') { setPermIdx((i) => (i - 1 + 3) % 3); return }
+      if (key?.rightArrow === true || input === 'l') { setPermIdx((i) => (i + 1) % 3); return }
+      if (key?.escape === true) { setPermIdx(0); decidePermission({ decision: 'deny', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
+      if (key?.return === true) {
+        const decision = ['allow', 'always', 'deny'][permIdx]
+        setPermIdx(0)
+        decidePermission({
+          decision: decision === 'always' ? 'allow' : decision,
+          remember: decision === 'always',
+          allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch,
+        })
+        return
+      }
       return // 等待期吞掉其他键
     }
     // 2) diff 视图态：Enter/Esc 关闭（接受），r 回滚。
@@ -378,19 +442,26 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     // 5) 普通态：不用单字母快捷方式(会吞输入字符)。修饰键组合:
     // Alt+m 切模式 / Alt+v diff / Ctrl+P 面板 / Ctrl+C 退出; 或斜杠命令 /mode
     if (state.input === '' && key?.alt === true && input === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
-    // Ctrl+P 打开命令面板（输入框为空时）
-    if (state.input === '' && key?.ctrl === true && input === 'p') { setPaletteOpen(true); setPaletteIdx(0); return }
-    // 斜杠补全：输入以 / 开头时 ↑↓ 在候选间移动
+    // 2) Ctrl+P 打开命令面板（输入框为空时）
+    if (state.input === '' && key?.ctrl === true && input === 'p') { setPaletteOpen(true); setPaletteIdx(0); setPaletteFilter(''); return }
+    // ctrl+x 待命 leader key(opencode: ctrl+x m 模型 / n 新会话 / l 会话列表 / q 退出)
+    if (state.input === '' && key?.ctrl === true && input === 'x') { setLeaderArmed(true); return }
+    // 斜杠补全：输入以 / 开头时 ↑↓ 循环移动 / Tab·Enter 选择 / Esc 清除 /
     const slashMode = state.input.startsWith('/')
     const slashMatches = slashMode ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input)) : []
-    if (slashMatches.length > 0 && key?.upArrow === true) { setSlashIdx((i) => Math.max(0, i - 1)); return }
-    if (slashMatches.length > 0 && key?.downArrow === true) { setSlashIdx((i) => Math.min(slashMatches.length - 1, i + 1)); return }
-    // Tab: 接受补全(填入第一个匹配, 可再补参数)
+    if (slashMatches.length > 0 && key?.upArrow === true) { setSlashIdx((i) => (i - 1 + slashMatches.length) % slashMatches.length); return }
+    if (slashMatches.length > 0 && key?.downArrow === true) { setSlashIdx((i) => (i + 1) % slashMatches.length); return }
+    // Tab: 选择补全(填入第一个匹配, 可再补参数; opencode 中 Tab=select)
     if (slashMode && slashMatches.length > 0 && (key?.tab === true || key?.name === 'tab')) {
       dispatch({ type: 'INPUT', value: slashMatches[0] })
       setSlashIdx(0)
       return
     }
+    // Esc: 关闭补全并清除输入的 /
+    if (slashMode && key?.escape === true) { dispatch({ type: 'INPUT', value: '' }); setSlashIdx(0); return }
+    // PgUp/PgDn: 消息区翻页滚动(opencode scrollbox 分页)
+    if (state.input === '' && key?.pageUp === true) { setScrollOffset((o) => o + 10); return }
+    if (state.input === '' && key?.pageDown === true) { setScrollOffset((o) => Math.max(0, o - 10)); return }
     // ↑↓ 命令历史回填(输入框为空时); Alt+↑↓ 保留消息选择
     if (state.input === '' && key?.alt === true && key?.upArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: -1 }); return }
     if (state.input === '' && key?.alt === true && key?.downArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: 1 }); return }
@@ -428,6 +499,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         historyRef.current = [...historyRef.current.filter((x) => x !== text), text].slice(-100)
         historyIdxRef.current = -1
         dispatch({ type: 'INPUT', value: '' })
+        setScrollOffset(0)   // 新提交后消息区跟随最新
+        // opencode: exit / quit / :q 直接退出
+        if (text === 'exit' || text === 'quit' || text === ':q') { dispatch({ type: 'QUIT_INTENT' }); return }
         if (text.startsWith('/')) { handleCommand(text); return }
         dispatch({ type: 'SUBMIT' })
         startSession(text)
@@ -449,25 +523,26 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     if (state.quitRequested) exit()
   }, [state.quitRequested, exit])
 
-  // 行内补全后缀: 斜杠单匹配时灰字提示剩余部分(如 /e → /e|ffort)
-  const slashSuffix = state.input.startsWith('/')
-    ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input)).length === 1
-      ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input))[0].slice(state.input.length)
-      : ''
-    : ''
+  // 行内补全后缀已移除(opencode 用垂直列表, 不做行内 ghost text)
+  // 消息区窗口化: 只渲染最近 W 条 + scrollOffset 偏移(PgUp/PgDn 翻页)
+  const MSG_WINDOW = 40
+  const msgTotal = state.messages.length
+  const msgOffset = Math.min(scrollOffset, Math.max(0, msgTotal - MSG_WINDOW))
+  const visibleMessages = msgTotal <= MSG_WINDOW ? state.messages
+    : state.messages.slice(msgTotal - MSG_WINDOW - msgOffset, msgTotal - msgOffset)
 
   return h(Box, { flexDirection: 'column' },
     h(Logo, { tick: state.running ? tick : null }),
     h(Text, { color: C.dim }, `  ${state.mode} · Alt+m 切模式 · Alt+v diff · ↑↓ 历史 · Tab 补全 · Ctrl+P 面板 · /mode /model /effort · Ctrl+C 退出`),
-    ...state.messages.map((m, i) => h(MessageLine, {
+    ...visibleMessages.map((m, i) => h(MessageLine, {
       key: m.id, msg: m,
-      selected: state.selectedMessage === i,
+      selected: state.selectedMessage === (msgTotal - visibleMessages.length + i),
     })),
     ...state.toolCalls.map((card, i) => h(ToolCard, {
       key: `${card.name}-${i}`, card,
       expanded: state.expandedTool === i,
     })),
-    state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
+    state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission, permIdx }) : null,
     state.memoryResults.length
       ? h(Box, { marginTop: 1, flexDirection: 'column' },
         h(Text, { bold: true, color: C.tool }, `memory (${state.memoryResults.length}):`),
@@ -495,41 +570,62 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       (state.input.startsWith('/')
         ? (() => {
           const m = SLASH_COMMANDS.filter((c) => c.startsWith(state.input))
-          // 单匹配: 行内补全(灰色后缀, 见输入框); 多匹配: 垂直候选(最多 5 条)
-          if (m.length > 1) return h(Box, { marginTop: 1, flexDirection: 'column' },
-            m.slice(0, 5).map((c, i) => h(Text, {
+          // opencode: 垂直候选列表(≤10 条), 无行内 ghost text
+          if (m.length === 0) return null
+          return h(Box, { marginTop: 1, flexDirection: 'column' },
+            m.slice(0, 10).map((c, i) => h(Text, {
               key: c,
               color: i === slashIdx ? C.primary : C.dim,
               backgroundColor: i === slashIdx ? '#24283b' : undefined,
             }, `  ${c}`)),
-            h(Text, { color: C.dim }, `  ↑↓ 选择 · Tab/Enter 填入 · 共 ${m.length} 个匹配`))
-          return null
+            h(Text, { color: C.dim }, `  ↑↓ 选择 · Tab/Enter 填入 · Esc 取消 · 共 ${m.length} 个匹配`))
         })()
         : null),
       paletteOpen
         ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
           h(Text, { bold: true, color: C.primary }, 'Ctrl+P — commands'),
-          PALETTE_ITEMS.map((item, i) => h(Text, {
+          h(Text, { color: C.dim }, `  filter: ${paletteFilter || '(all)'}`),
+          PALETTE_ITEMS.filter((i) => i.toLowerCase().includes(paletteFilter)).map((item, i) => h(Text, {
             key: item,
             color: i === paletteIdx ? C.primary : C.dim,
             backgroundColor: i === paletteIdx ? '#24283b' : undefined,
           }, `  ${i === paletteIdx ? '❯ ' : '  '}${item}`)))
         : null,
       modelPicker
-        ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
-          h(Text, { bold: true, color: C.primary }, 'Select model — ↑↓ 选择 · Enter 确认 · Esc 取消'),
-          modelPicker.models.map((m, i) => h(Text, {
-            key: `${m.provider_id}-${m.id}`,
-            color: i === modelPicker.idx ? C.primary : C.dim,
-            backgroundColor: i === modelPicker.idx ? '#24283b' : undefined,
-          }, `  ${i === modelPicker.idx ? '❯ ' : '  '}${m.provider_name}/${m.model_name}${m.is_primary ? ' ★' : ''}`)))
+        ? (() => {
+          const filter = (modelPicker.filter || '').toLowerCase()
+          const flat = modelPicker.models.filter((m) =>
+            !filter || `${m.provider_name} ${m.model_name}`.toLowerCase().includes(filter))
+          const groups = []
+          for (const m of flat) {
+            const last = groups[groups.length - 1]
+            if (!last || last.name !== m.provider_name) groups.push({ name: m.provider_name, items: [m] })
+            else last.items.push(m)
+          }
+          let flatIdx = 0
+          return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
+            h(Text, { bold: true, color: C.primary }, 'Select model — 输入过滤 · ↑↓ 选择 · Enter 确认 · Esc 取消'),
+            h(Text, { color: C.dim }, `  filter: ${modelPicker.filter || '(all)'} · ${flat.length} 个模型`),
+            groups.map((g) => [
+              h(Text, { key: `g-${g.name}`, color: C.sys }, `  ${g.name}:`),
+              ...g.items.map((m) => {
+                const cur = flatIdx
+                flatIdx += 1
+                const isCurrent = state.modelName === m.model_name
+                return h(Text, {
+                  key: `${m.provider_id}-${m.id}`,
+                  color: cur === modelPicker.idx ? C.primary : C.dim,
+                  backgroundColor: cur === modelPicker.idx ? '#24283b' : undefined,
+                }, `  ${cur === modelPicker.idx ? '❯ ' : '  '}${m.model_name}${m.is_primary ? ' ★' : ''}${isCurrent ? ' ●' : ''}`)
+              }),
+            ]))
+        })()
         : null,
-      // 行内补全: 单匹配时输入框内灰字显示剩余部分(如 /e → /e|ffort)
-      h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
+      h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : (leaderArmed ? C.primary : C.dim), paddingX: 1 },
         h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
         h(Text, { color: C.assistant }, state.input),
-        slashSuffix ? h(Text, { color: C.dim }, slashSuffix) : null,
       ),
+      leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 会话列表 · q 退出') : null,
       h(StatusBar, { state, tick: state.running ? tick : '●' }),
   )
 }
