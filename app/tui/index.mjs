@@ -21,6 +21,21 @@ export async function main(argv = []) {
     console.error('error: aether tui requires a TTY. Run it from a real terminal, or use `aether tui --smoke` for a headless smoke.')
     return 1
   }
+  // Windows 终端兼容提示：cmd.exe 的 conhost 对 ink 的 ANSI 重绘序列
+  //（\x1b[A / \x1b[2K）支持不完整，帧会堆叠；Windows Terminal 会设置
+  // WT_SESSION 环境变量。提示不阻塞，用户仍可继续（或按 Enter 继续）。
+  if (process.platform === 'win32' && !process.env.WT_SESSION && !process.env.TERM_PROGRAM) {
+    process.stdout.write('提示: 当前终端(cmd)对 ANSI 重绘支持不完整,TUI 帧可能堆叠。\n推荐用 Windows Terminal 运行(wt),体验最佳。按 Enter 继续…\n')
+    await new Promise((resolve) => {
+      const onData = (chunk) => {
+        if (String(chunk).includes('\r') || String(chunk).includes('\n')) {
+          process.stdin.off('data', onData)
+          resolve()
+        }
+      }
+      process.stdin.on('data', onData)
+    })
+  }
   return runInteractive(argv)
 }
 
