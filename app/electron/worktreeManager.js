@@ -39,14 +39,21 @@ function git(root, args) {
   }
 }
 
+// Windows 路径归一：大小写不敏感（git porcelain 输出的 drive 字母/目录大小写
+// 可能与 path.join 生成的不同，CI runner 上尤其如此——大小写敏感比较会漏匹配）。
+function normPath(p) {
+  const resolved = path.resolve(p).replace(/\//g, path.sep)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
 // Match a porcelain "worktree <path>" line against an expected dir, tolerant
-// of Windows `/` vs `\` separator differences.
+// of Windows `/` vs `\` separator differences and case folding.
 function filenameMatches(porcelain, dir) {
-  const norm = p => path.resolve(p).replace(/\//g, path.sep)
+  const target = normPath(dir)
   for (const line of porcelain.split('\n')) {
     if (!line.startsWith('worktree ')) continue
     const wt = line.slice('worktree '.length).trim()
-    if (norm(wt) === norm(dir)) return true
+    if (normPath(wt) === target) return true
   }
   return false
 }
@@ -104,7 +111,7 @@ function worktreeStatus(root, taskId) {
   for (const block of blocks) {
     const lines = block.split('\n')
     const wtPath = (lines.find(l => l.startsWith('worktree ')) || '').slice('worktree '.length)
-    if (path.resolve(wtPath) !== path.resolve(dir)) continue
+    if (normPath(wtPath) !== normPath(dir)) continue
     const branchLine = lines.find(l => l.startsWith('branch '))
     const branch = branchLine ? branchLine.slice('branch refs/heads/'.length) : null
     const info = { dir: wtPath, branch, detached: !branchLine, exists: true }
