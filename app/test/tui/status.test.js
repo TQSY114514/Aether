@@ -33,7 +33,7 @@ describe('状态栏：agent:start → running + 预算（todo 6）', () => {
       runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
     })
     const state = replay(dispatched)
-    expect(dispatched).toContainEqual({ type: 'AGENT_START', max: 5 })
+    expect(dispatched).toContainEqual({ type: 'AGENT_START', max: 5, modelName: 'mock-model' })
     // 会话结束后 running 归 false，但 AGENT_START 时刻是 running
     const atStart = dispatched.slice(0, dispatched.findIndex((a) => a.type === 'AGENT_START') + 1)
       .reduce(tuiReducer, initialTuiState)

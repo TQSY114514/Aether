@@ -142,6 +142,7 @@ export async function runSession({
   apiKey,
   apiUrl,
   apiFormat,
+  effort,
   dispatch,
   onEnd,
   requestPermission,
@@ -178,6 +179,7 @@ export async function runSession({
     maxIterations,
     sessionId,
     requestPermission,
+    options: effort ? { reasoning_effort: effort } : {},
     onText: (chunk) => {
       if (chunk && typeof chunk.text === 'string') {
         dispatch({ type: 'TEXT_DELTA', delta: chunk.text })

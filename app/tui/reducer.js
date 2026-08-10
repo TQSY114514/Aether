@@ -12,6 +12,7 @@ export const initialTuiState = Object.freeze({
   input: '',
   messages: [], // { id, role: 'user'|'assistant'|'system'|'tool', text }
   mode: 'ask',
+  effort: 'medium',          // /effort：low|medium|high（reasoning_effort）
   running: false,
   statusLine: 'idle',
   toolCalls: [], // { name, args, status, summary, latencyMs, snapshot, diff, rollbackResult }
@@ -92,6 +93,15 @@ export function tuiReducer(state = initialTuiState, action) {
     case 'MODE_CYCLE': {
       const i = MODES.indexOf(state.mode)
       return { ...state, mode: MODES[(i + 1) % MODES.length] }
+    }
+
+    // ── 模型 / effort 切换（/model /effort 命令）────────────────────────
+    case 'MODEL_SET':
+      return { ...state, modelName: action.name || null }
+
+    case 'EFFORT_SET': {
+      if (!['low', 'medium', 'high'].includes(action.level)) return state
+      return { ...state, effort: action.level }
     }
 
     case 'TOOL_START': {

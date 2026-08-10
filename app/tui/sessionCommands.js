@@ -1,11 +1,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// sessionCommands.js — TUI 斜杠命令解析（todo 5，纯函数）
-// /sessions（列表） /use <id>（切换） /fork [title]（创建子会话）
+// sessionCommands.js — TUI 斜杠命令解析 + 补全命令表（todo 5/8/13/20 + 体验）
+// /sessions /use <id> /fork [title] /memory <q> /persona <id> /skills
+// /skill accept|dismiss <key> /model <name> /effort <low|medium|high> /help /quit
 // ─────────────────────────────────────────────────────────────────────────────
+
+// 命令补全候选（斜杠提示用, 按字母序）
+export const SLASH_COMMANDS = [
+  '/effort', '/fork', '/help', '/memory', '/model', '/persona', '/quit',
+  '/sessions', '/skill accept', '/skill dismiss', '/skills', '/use',
+]
 
 /**
  * @param {string} input
- * @returns {{ type: 'sessions' } | { type: 'use', sessionId: number|null } | { type: 'fork', title?: string } | null}
+ * @returns {{...}|null}
  */
 export function parseSessionCommand(input) {
   const text = String(input || '').trim()
@@ -25,13 +32,20 @@ export function parseSessionCommand(input) {
     case '/skills':
       return { type: 'skills' }
     case '/skill': {
-      // /skill accept <key>  |  /skill dismiss <key>
       const [sub, ...rest] = arg.split(/\s+/)
       const key = rest.join(' ').trim()
       if (sub === 'accept' && key) return { type: 'skill-accept', key }
       if (sub === 'dismiss' && key) return { type: 'skill-dismiss', key }
       return null
     }
+    case '/model':
+      return { type: 'model', name: arg || null }
+    case '/effort':
+      return { type: 'effort', level: arg || null }
+    case '/help':
+      return { type: 'help' }
+    case '/quit':
+      return { type: 'quit' }
     case '/use': {
       const id = Number(arg)
       return { type: 'use', sessionId: Number.isFinite(id) && arg !== '' ? id : null }
