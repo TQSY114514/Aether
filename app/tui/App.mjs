@@ -75,7 +75,10 @@ function MessageLine({ msg, selected }) {
   if (!msg.text && msg.role === 'assistant') {
     return h(Text, { color: C.dim, backgroundColor: bg }, `${prefix}${label} …`)
   }
-  return h(Text, { color, backgroundColor: bg }, `${prefix}${label} ${msg.text}`)
+  const text = String(msg.text || '')
+  // 超长回复截断, 避免撑爆终端(全文仍在会话 DB 中, 桌面版可看完整)
+  const display = text.length > 4000 ? `${text.slice(0, 4000)} … (truncated)` : text
+  return h(Text, { color, backgroundColor: bg }, `${prefix}${label} ${display}`)
 }
 
 // 工具调用卡（todo 3）：running 圆框 / done|error 单框，状态色边框 + 标签。
@@ -141,6 +144,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   const allowRulesRef = useRef(createAllowRulesStore())
   const resolveRef = useRef(null)
   const workspaceRef = useRef(process.cwd())
+  // 命令历史(↑↓ 回填, 上限 100 条, 去重)
+  const historyRef = useRef([])
+  const historyIdxRef = useRef(-1)
   // 斜杠补全 / Ctrl+P 面板（UI 本地状态，不进核心状态机）
   const [slashIdx, setSlashIdx] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -330,8 +336,10 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       return
     }
     // 5) 普通态：字母快捷方式按 input 判定（ink 对字母键不保证给 key.name，
-    //    只靠 key.name==='m' 会把 m 吞成输入字符）。
+    //    只靠 key.name==='m' 会把 m 吞成输入字符）。仅输入框为空时响应，
+    //    否则 'memory'、'quit' 之类的正常输入会被误吞。
     if (state.input === '' && (input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
+    if (state.input === '' && (input || '').toLowerCase() === 'q') { dispatch({ type: 'QUIT_INTENT' }); return }
     // Ctrl+P 打开命令面板（输入框为空时）
     if (state.input === '' && key?.ctrl === true && input === 'p') { setPaletteOpen(true); setPaletteIdx(0); return }
     // 斜杠补全：输入以 / 开头时 ↑↓ 在候选间移动
@@ -339,9 +347,32 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     const slashMatches = slashMode ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input)) : []
     if (slashMatches.length > 0 && key?.upArrow === true) { setSlashIdx((i) => Math.max(0, i - 1)); return }
     if (slashMatches.length > 0 && key?.downArrow === true) { setSlashIdx((i) => Math.min(slashMatches.length - 1, i + 1)); return }
-    // ↑↓ 消息导航（输入框为空时）
-    if (state.input === '' && key?.upArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: -1 }); return }
-    if (state.input === '' && key?.downArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: 1 }); return }
+    // Tab: 接受补全(填入第一个匹配, 可再补参数)
+    if (slashMode && slashMatches.length > 0 && (key?.tab === true || key?.name === 'tab')) {
+      dispatch({ type: 'INPUT', value: slashMatches[0] })
+      setSlashIdx(0)
+      return
+    }
+    // ↑↓ 命令历史回填(输入框为空时); Alt+↑↓ 保留消息选择
+    if (state.input === '' && key?.alt === true && key?.upArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: -1 }); return }
+    if (state.input === '' && key?.alt === true && key?.downArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: 1 }); return }
+    if (state.input === '' && key?.upArrow === true) {
+      const hist = historyRef.current
+      if (hist.length === 0) return
+      const next = historyIdxRef.current < 0 ? hist.length - 1 : Math.max(0, historyIdxRef.current - 1)
+      historyIdxRef.current = next
+      dispatch({ type: 'INPUT', value: hist[next] })
+      return
+    }
+    if (state.input === '' && key?.downArrow === true) {
+      const hist = historyRef.current
+      if (historyIdxRef.current < 0) return
+      const next = historyIdxRef.current + 1
+      if (next >= hist.length) { historyIdxRef.current = -1; dispatch({ type: 'INPUT', value: '' }); return }
+      historyIdxRef.current = next
+      dispatch({ type: 'INPUT', value: hist[next] })
+      return
+    }
     if (key?.return === true) {
       const text = state.input.trim()
       if (text && !state.running) {
@@ -351,6 +382,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
           setSlashIdx(0)
           return
         }
+        // 记录历史(去重, 新条目排最前, 上限 100)
+        historyRef.current = [...historyRef.current.filter((x) => x !== text), text].slice(-100)
+        historyIdxRef.current = -1
         dispatch({ type: 'INPUT', value: '' })
         if (text.startsWith('/')) { handleCommand(text); return }
         dispatch({ type: 'SUBMIT' })
@@ -373,9 +407,16 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     if (state.quitRequested) exit()
   }, [state.quitRequested, exit])
 
+  // 行内补全后缀: 斜杠单匹配时灰字提示剩余部分(如 /e → /e|ffort)
+  const slashSuffix = state.input.startsWith('/')
+    ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input)).length === 1
+      ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input))[0].slice(state.input.length)
+      : ''
+    : ''
+
   return h(Box, { flexDirection: 'column' },
     h(Logo, { tick: state.running ? tick : null }),
-    h(Text, { color: C.dim }, `  ${state.mode} · m 切模式 · q/Ctrl+C 退出 · v diff · ↑↓ 选消息`),
+    h(Text, { color: C.dim }, `  ${state.mode} · m 切模式 · q 退出 · v diff · ↑↓ 历史 · Tab 补全 · Ctrl+P 面板 · Ctrl+C 退出`),
     ...state.messages.map((m, i) => h(MessageLine, {
       key: m.id, msg: m,
       selected: state.selectedMessage === i,
@@ -397,19 +438,31 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         state.skills.map((s) => h(Text, { key: s.key, color: C.dim },
           `  [${s.key}] ${s.imperative}${s.occurrences > 1 ? ` (×${s.occurrences})` : ''}`)))
       : null,
+    state.sessions.length
+      ? h(Box, { marginTop: 1, flexDirection: 'column' },
+        h(Text, { bold: true, color: C.primary }, `sessions (${state.sessions.length}):`),
+        state.sessions.slice(0, 10).map((s) => h(Text, { key: s.id, color: C.dim },
+          `  [${s.id}] ${s.title || '(untitled)'}${s.parentId ? ` ← #${s.parentId}` : ''}`)),
+        h(Text, { color: C.tool }, '  /use <id> 切换 · /fork 派生新会话'))
+      : null,
       state.steeringQueue.length
         ? h(Box, { marginTop: 1, flexDirection: 'column' },
           h(Text, { bold: true, color: C.primary }, 'steering queue:'),
           state.steeringQueue.map((q, i) => h(Text, { key: i, color: C.primary }, `  ⤷ ${q}`)))
         : null,
       (state.input.startsWith('/')
-        ? h(Box, { marginTop: 1, flexDirection: 'column' },
-          SLASH_COMMANDS.filter((c) => c.startsWith(state.input))
-            .map((c, i) => h(Text, {
+        ? (() => {
+          const m = SLASH_COMMANDS.filter((c) => c.startsWith(state.input))
+          // 单匹配: 行内补全(灰色后缀, 见输入框); 多匹配: 垂直候选(最多 5 条)
+          if (m.length > 1) return h(Box, { marginTop: 1, flexDirection: 'column' },
+            m.slice(0, 5).map((c, i) => h(Text, {
               key: c,
               color: i === slashIdx ? C.primary : C.dim,
               backgroundColor: i === slashIdx ? '#24283b' : undefined,
-            }, `  ${c}`)))
+            }, `  ${c}`)),
+            h(Text, { color: C.dim }, `  ↑↓ 选择 · Tab/Enter 填入 · 共 ${m.length} 个匹配`))
+          return null
+        })()
         : null),
       paletteOpen
         ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
@@ -420,9 +473,11 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
             backgroundColor: i === paletteIdx ? '#24283b' : undefined,
           }, `  ${i === paletteIdx ? '❯ ' : '  '}${item}`)))
         : null,
+      // 行内补全: 单匹配时输入框内灰字显示剩余部分(如 /e → /e|ffort)
       h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
         h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
         h(Text, { color: C.assistant }, state.input),
+        slashSuffix ? h(Text, { color: C.dim }, slashSuffix) : null,
       ),
       h(StatusBar, { state, tick: state.running ? tick : '●' }),
   )
