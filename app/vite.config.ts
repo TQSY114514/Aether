@@ -72,5 +72,12 @@ export default defineConfig({
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*',
       '**/e2e/**',
     ],
+    // forks pool（独立进程，进程隔离比 threads 更稳）：700+ 测试在 2 核 CI
+    // runner 上 threads 并发会导致 worker 崩溃/超时误报（存量 flaky），
+    // 限制 fork 数为核数并靠 maxWorkers 兜底。
+    pool: 'forks',
+    poolOptions: {
+      forks: { maxForks: 2 },
+    },
   },
 })
