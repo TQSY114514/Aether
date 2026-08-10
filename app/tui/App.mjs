@@ -3,7 +3,7 @@
 // createElement 风格、无 JSX：Node v24 无法加载 .jsx（ISSUE-01 实证），且引入
 // 加载器会违反「新依赖仅限纯 JS」护栏——故组件一律用 react.createElement 手写。
 // ─────────────────────────────────────────────────────────────────────────────
-import { createElement as h, useEffect, useReducer, useRef, useCallback } from 'react'
+import { createElement as h, useEffect, useReducer, useRef, useCallback, useState } from 'react'
 import { readFileSync, existsSync } from 'node:fs'
 import { Box, Text, useInput, useApp } from 'ink'
 import { tuiReducer, initialTuiState } from './reducer.js'
