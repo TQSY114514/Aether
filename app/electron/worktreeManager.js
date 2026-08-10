@@ -40,10 +40,13 @@ function git(root, args) {
   }
 }
 
-// Windows 路径归一：大小写不敏感（git porcelain 输出的 drive 字母/目录大小写
-// 可能与 path.join 生成的不同，CI runner 上尤其如此——大小写敏感比较会漏匹配）。
+// Windows 路径归一：大小写不敏感 + realpath 展开 8.3 短名。
+// git porcelain 输出 realpath 后的长名（C:/Users/runneradmin/...），而
+// os.tmpdir() 可能返回 8.3 短名（C:\Users\RUNNER~1\...）——CI runner 上两者
+// 是同一目录但字符串不同，必须 realpath 归一才能匹配。
 function normPath(p) {
-  const resolved = path.resolve(p).replace(/\//g, path.sep)
+  let resolved = path.resolve(p).replace(/\//g, path.sep)
+  try { resolved = fs.realpathSync(resolved) } catch { /* 路径不存在时保持原样 */ }
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
