@@ -139,4 +139,46 @@ describe('runSession', () => {
     })
     expect(typeof receivedPermissionCb).toBe('function')
   })
+
+  it('relays onPlanStep.assistantText into the message stream (real reply path)', async () => {
+    // toolLoop.js:451 的回复文本经 onPlanStep.assistantText 传递——不转发
+    // 就是"agent 跑完但界面无回复"的根因。锁定此路径。
+    const dispatched = [
+      { type: 'INPUT', value: 'q' },
+      { type: 'SUBMIT' },
+    ]
+    const agentImpl = async ({ onPlanStep }) => {
+      onPlanStep({ step: 0, depth: 0, remaining: 9, assistantText: 'Hello there', kind: 'plan' })
+      return { text: 'Hello there', toolCalls: [] }
+    }
+    await runSession({
+      dbPath: null,
+      prompt: 'q',
+      dispatch: (a) => dispatched.push(a),
+      resolveImpl: stubResolve,
+      runAgentImpl: agentImpl,
+    })
+    expect(dispatched).toContainEqual({ type: 'TEXT_DELTA', delta: 'Hello there' })
+    const state = replay(dispatched)
+    expect(state.messages[state.messages.length - 1].text).toBe('Hello there')
+  })
+
+  it('appends result.text only when no text was relayed (no duplicate)', async () => {
+    const dispatched = [
+      { type: 'INPUT', value: 'q' },
+      { type: 'SUBMIT' },
+    ]
+    await runSession({
+      dbPath: null,
+      prompt: 'q',
+      dispatch: (a) => dispatched.push(a),
+      resolveImpl: stubResolve,
+      runAgentImpl: async ({ onText }) => {
+        onText({ text: 'streamed', done: true })
+        return { text: 'streamed', toolCalls: [] }
+      },
+    })
+    const deltas = dispatched.filter((a) => a.type === 'TEXT_DELTA').map((a) => a.delta)
+    expect(deltas).toEqual(['streamed']) // 兜底不重复追加
+  })
 })

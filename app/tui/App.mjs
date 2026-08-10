@@ -16,9 +16,20 @@ import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
 import { searchMemory } from './memorySearch.js'
 import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
 
+// Tokyo Night 风格配色（克制、低饱和，参考 opencode 现代终端观感）
+const C = {
+  primary: '#7aa2f7',   // 主色：logo / 提示符 / 运行中边框
+  user: '#9ece6a',      // 用户消息
+  assistant: '#c0caf5', // AI 回复
+  tool: '#e0af68',      // 工具
+  sys: '#565f89',       // 系统（灰）
+  error: '#f7768e',     // 错误（红）
+  dim: '#565f89',       // 次要文字
+}
+
 const ROLE_PREFIX = { user: '> ', assistant: '◆ ', system: '! ', tool: '⛭ ' }
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
-const ROLE_COLOR = { user: 'green', assistant: 'white', tool: 'yellow', system: 'gray' }
+const ROLE_COLOR = { user: C.user, assistant: C.assistant, tool: C.tool, system: C.sys }
 
 // 轻量 ticker：驱动动画帧（spinner / 运行指示）。
 function useTicker(intervalMs = 500, chars = ['●', '○']) {
@@ -48,19 +59,19 @@ function Logo({ tick }) {
     rows.push(LOGO_WORD.split('').map((ch) => (_G[ch] ? _G[ch][r] : '        ')).join('  ').replace(/\s+$/, ''))
   }
   return h(Box, { flexDirection: 'column', alignItems: 'center' },
-    rows.map((line, i) => h(Text, { key: i, bold: true, color: 'cyan' }, line)),
-    h(Text, { color: 'gray' }, `Terminal AI Workstation${tick ? `  ${tick}` : ''}`),
+    rows.map((line, i) => h(Text, { key: i, color: C.primary }, line)),
+    h(Text, { color: C.dim }, `Terminal AI Workstation${tick ? `  ${tick}` : ''}`),
   )
 }
 
 function MessageLine({ msg, selected }) {
   const prefix = ROLE_PREFIX[msg.role] || '• '
   const label = ROLE_LABEL[msg.role] || msg.role
-  let color = ROLE_COLOR[msg.role] || 'white'
-  if (msg.role === 'system' && String(msg.text).startsWith('error')) color = 'red'
-  const bg = selected ? '#1f2430' : undefined
+  let color = ROLE_COLOR[msg.role] || C.assistant
+  if (msg.role === 'system' && String(msg.text).startsWith('error')) color = C.error
+  const bg = selected ? '#24283b' : undefined
   if (!msg.text && msg.role === 'assistant') {
-    return h(Text, { color: 'gray', backgroundColor: bg }, `${prefix}${label} …`)
+    return h(Text, { color: C.dim, backgroundColor: bg }, `${prefix}${label} …`)
   }
   return h(Text, { color, backgroundColor: bg }, `${prefix}${label} ${msg.text}`)
 }
@@ -114,31 +125,8 @@ function StatusBar({ state, tick }) {
     state.steeringQueue.length ? `steer:${state.steeringQueue.length}` : null,
     `tools:${state.toolCalls.length}`,
   ].filter(Boolean)
-  return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1 },
-    h(Text, { color: 'gray' }, bits.join(' │ ')),
-  )
-}
-
-// 右侧实时状态面板（opencode split-view 风格）：Agent / Model / 运行 / 迭代 / 工具 / steering / MCP
-function StatusPanel({ state, modelName, tick }) {
-  const rows = [
-    ['Agent', 'aether'],
-    ['Model', state.modelName || modelName || 'auto'],
-    ['Mode', state.mode],
-    ['Run', state.running ? `${tick} running` : 'idle'],
-    ['Iter', state.budget.max ? `${state.budget.used}/${state.budget.max}` : '—'],
-    ['Tool', state.currentTool || '—'],
-    ['Tools', String(state.toolCalls.length)],
-    ['Steer', String(state.steeringQueue.length)],
-    ['Mem', String(state.memoryResults.length)],
-    ['Skills', String(state.skills.length)],
-  ]
-  return h(Box, { width: '32%', borderStyle: 'single', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1, flexDirection: 'column' },
-    h(Text, { bold: true, color: 'cyan' }, 'STATUS'),
-    rows.map(([k, v]) => h(Box, { key: k, flexDirection: 'row', justifyContent: 'space-between' },
-      h(Text, { color: 'gray' }, k),
-      h(Text, { color: k === 'Run' && state.running ? 'cyan' : 'white' }, v),
-    )),
+  return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
+    h(Text, { color: C.dim }, bits.join(' │ ')),
   )
 }
 
@@ -326,43 +314,40 @@ export function App({ dbPath, modelName }) {
     if (state.quitRequested) exit()
   }, [state.quitRequested, exit])
 
-  return h(Box, { flexDirection: 'row' },
-    h(Box, { flexDirection: 'column', flexGrow: 3, paddingRight: 1 },
-      h(Logo, { tick: state.running ? tick : null }),
-      h(Text, { color: 'gray' }, `  ${state.mode} · m 切模式 · q/Ctrl+C 退出 · v diff · ↑↓ 选消息`),
-      ...state.messages.map((m, i) => h(MessageLine, {
-        key: m.id, msg: m,
-        selected: state.selectedMessage === i,
-      })),
-      ...state.toolCalls.map((card, i) => h(ToolCard, {
-        key: `${card.name}-${i}`, card,
-        expanded: state.expandedTool === i,
-      })),
-      state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
-      state.memoryResults.length
-        ? h(Box, { marginTop: 1, flexDirection: 'column' },
-          h(Text, { bold: true, color: 'magenta' }, `memory (${state.memoryResults.length}):`),
-          state.memoryResults.map((m) => h(Text, { key: m.id ?? m.content, color: 'gray' },
-            `  [${m.type || 'fact'}${m.createdAt ? ` · ${String(m.createdAt).slice(0, 16)}` : ''}] ${String(m.content).slice(0, 120)}`)))
-        : null,
-      state.skills.length
-        ? h(Box, { marginTop: 1, flexDirection: 'column' },
-          h(Text, { bold: true, color: 'cyan' }, `skills (${state.skills.length}):`),
-          state.skills.map((s) => h(Text, { key: s.key, color: 'gray' },
-            `  [${s.key}] ${s.imperative}${s.occurrences > 1 ? ` (×${s.occurrences})` : ''}`)))
-        : null,
-      state.steeringQueue.length
-        ? h(Box, { marginTop: 1, flexDirection: 'column' },
-          h(Text, { bold: true, color: 'cyan' }, 'steering queue:'),
-          state.steeringQueue.map((q, i) => h(Text, { key: i, color: 'cyan' }, `  ⤷ ${q}`)))
-        : null,
-      h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1 },
-        h(Text, { color: state.running ? 'cyan' : 'gray', bold: !state.running }, '❯ '),
-        h(Text, {}, state.input),
-      ),
-      h(StatusBar, { state, tick: state.running ? tick : '●' }),
+  return h(Box, { flexDirection: 'column' },
+    h(Logo, { tick: state.running ? tick : null }),
+    h(Text, { color: C.dim }, `  ${state.mode} · m 切模式 · q/Ctrl+C 退出 · v diff · ↑↓ 选消息`),
+    ...state.messages.map((m, i) => h(MessageLine, {
+      key: m.id, msg: m,
+      selected: state.selectedMessage === i,
+    })),
+    ...state.toolCalls.map((card, i) => h(ToolCard, {
+      key: `${card.name}-${i}`, card,
+      expanded: state.expandedTool === i,
+    })),
+    state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission }) : null,
+    state.memoryResults.length
+      ? h(Box, { marginTop: 1, flexDirection: 'column' },
+        h(Text, { bold: true, color: C.tool }, `memory (${state.memoryResults.length}):`),
+        state.memoryResults.map((m) => h(Text, { key: m.id ?? m.content, color: C.dim },
+          `  [${m.type || 'fact'}${m.createdAt ? ` · ${String(m.createdAt).slice(0, 16)}` : ''}] ${String(m.content).slice(0, 120)}`)))
+      : null,
+    state.skills.length
+      ? h(Box, { marginTop: 1, flexDirection: 'column' },
+        h(Text, { bold: true, color: C.primary }, `skills (${state.skills.length}):`),
+        state.skills.map((s) => h(Text, { key: s.key, color: C.dim },
+          `  [${s.key}] ${s.imperative}${s.occurrences > 1 ? ` (×${s.occurrences})` : ''}`)))
+      : null,
+    state.steeringQueue.length
+      ? h(Box, { marginTop: 1, flexDirection: 'column' },
+        h(Text, { bold: true, color: C.primary }, 'steering queue:'),
+        state.steeringQueue.map((q, i) => h(Text, { key: i, color: C.primary }, `  ⤷ ${q}`)))
+      : null,
+    h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
+      h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
+      h(Text, { color: C.assistant }, state.input),
     ),
-    h(StatusPanel, { state, modelName, tick: state.running ? tick : '●' }),
+    h(StatusBar, { state, tick: state.running ? tick : '●' }),
   )
 }
 
