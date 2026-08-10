@@ -17,7 +17,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 22+：vitest 4.1.10 的 forks pool 在 Node 20 上 worker 异常退出
+          #（实测 7 个 fork 崩溃、61/68 文件）；Node 22/24 全绿。同时与
+          # app/tui 的 Ink v5 运行时要求（Node ≥ 22）一致。
+          node-version: 22
 
       - name: Install dependencies (app)
         run: cd app && npm ci --ignore-scripts
