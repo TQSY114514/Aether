@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 <img src="./assets/readme-hero.svg" width="780" alt="AetherAI" />
 
@@ -335,6 +335,8 @@ app/
 | LLM | OpenAI-compatible + Anthropic Messages API |
 | UI | Tailwind CSS 3.4, lucide-react, highlight.js |
 | MCP | Custom stdio JSON-RPC 2.0 client |
+| TUI | Ink 5 + React 18 (createElement, no JSX) |
+| CLI/SDK | Node.js headless CLI (4 modes) + Electron-free SDK |
 
 ---
 
@@ -405,3 +407,4 @@ Built with ❤️ using Electron + React + TypeScript
 [⬆ Back to top](#aetherai)
 
 </div>
+
