@@ -4,7 +4,7 @@
 
 # AetherAI
 
-### Chat with any model, run a safe coding agent, compare models side-by-side — all on your machine
+### Chat with any model, run a safe coding agent, compare models side-by-side — on your desktop or in your terminal
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -47,6 +47,8 @@ AetherAI combines several capabilities that are typically spread across multiple
 | **Context Compaction** | Long conversations auto-summarize without losing tool-call pairs. | `Beta` |
 | **Local-First Privacy** | Conversations, keys, personas in local SQLite. Nothing leaves your machine. | `Stable` |
 | **15 UI Languages** | Including Classical Chinese (文言) and RTL Arabic. | `Beta` |
+| **Terminal TUI** | Ink v5 交互终端：会话流、工具卡、diff 审阅/回滚、键盘权限门、`/fork` 会话树、`/memory`、运行中 steering 回注。 | `Beta` |
+| **Headless CLI · RPC · SDK** | 四模式 CLI（单发 / NDJSON / JSONL RPC / 管道）、Electron-free SDK（`aetherai/sdk`）、机器可调用的 JSONL 协议。 | `Beta` |
 | **MIT Licensed** | Fully open source. | `Stable` |
 
 ---
@@ -97,6 +99,17 @@ npm start        # launch Electron
 ```
 
 Or run `start.bat` at the repo root on Windows.
+
+### Try the terminal (no Electron window needed)
+
+```bash
+cd app && npm install
+node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
+node cli.js "你好"           # 单发 prompt
+echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
+node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
+node cli.js tui --smoke      # headless 状态机冒烟
+```
 
 ### Configure provider
 
@@ -247,6 +260,19 @@ const db = openDatabase('./aetherai.db')
 const { provider, model } = resolveProviderModel(db, { modelName: 'deepseek' })
 console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', reason: ... }
 ```
+
+---
+
+## Windows Native
+
+| 能力 | 说明 |
+|---|---|
+| **托盘菜单** | 显示/隐藏窗口、新建会话、**新建任务**（直接打开 TaskPanel）；托盘点击切换显隐。 |
+| **全局快捷键** | `Ctrl+Alt+A` 唤出主窗口（未启动则创建）；注册结果写入启动日志。 |
+| **`aetherai://` 协议** | `aetherai://new` / `chat` 新建会话；`aetherai://tui` 提示终端形态；`aetherai://open/?path=<编码路径>` 把文件夹设为工作区并新建会话（右键"用 Aether 打开"链路）。 |
+| **右键注册** | `app/resources/register-protocol.reg`（替换 `<AETHER_EXE>` 后管理员导入）：`.cs/.js/.ts/.tsx/.md/.json` + 文件夹 → 右键"用 Aether 打开"。 |
+| **终端引导** | `app/resources/term/aether.ps1`（别名 + 启动 `aether tui`）；`node app/cli.js --setup-term` 写入 Windows Terminal profile（深/浅两套配色）。 |
+| **沙箱强化** | Windows 路径防御：`\\?\` 长路径、UNC `\\server\share`、重解析点/junction 逃逸、`.lnk/.scr/.msi` 等危险扩展名。 |
 
 ---
 
