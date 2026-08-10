@@ -81,15 +81,6 @@ ok('worktree isolation', () => {
 
   it('worktreeStatus reflects uncommitted changes inside the worktree', () => {
     const status = worktree.worktreeStatus(repoRoot, 41)
-    if (status === null) {
-      // CI 临时诊断（定位 porcelain 解析差异，修复后移除）
-      const list = git(['worktree', 'list', '--porcelain'])
-      const expectDir = path.join(repoRoot, '.aether', 'worktrees', 'task-41')
-      console.log('DIAG|porcelain:', JSON.stringify(list.stdout))
-      console.log('DIAG|dir:', JSON.stringify(expectDir))
-      console.log('DIAG|dirExists:', fs.existsSync(expectDir))
-      console.log('DIAG|git:', JSON.stringify(git(['--version']).stdout))
-    }
     expect(status).toMatchObject({ exists: true, branch: 'aether-task-41', dirty: false })
 
     // Make a change INSIDE the worktree
