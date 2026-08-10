@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 const autoMemory = require('./autoMemory')
 
-// 裸 better-sqlite3 → autoMemory.prefetch 需要的 getMemories 面（无则注入跳过）
+// 裸 better-sqlite3 → autoMemory.prefetch 需要的 db 面（无则注入跳过）
 function ensureMemDb(db) {
   if (!db) return null
   if (typeof db.getMemories === 'function') return db
@@ -17,6 +17,11 @@ function ensureMemDb(db) {
         // 与 database.js memory 表列面一致（默认无 confidence 列，不做假设）
         return db.prepare('SELECT id, content, type, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?')
           .all(Number(limit) || 200)
+      },
+      // knowledgeGraph.searchGraph 需要 allRows；kg_nodes/kg_edges 表在裸连接下
+      // 不存在时静默返回 []（graph 增强是 best-effort，缺失不报错、不刷日志）。
+      allRows(sql, params) {
+        try { return db.prepare(sql).all(params || []) } catch { return [] }
       },
     }
   } catch {
