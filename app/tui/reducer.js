@@ -106,10 +106,23 @@ export function tuiReducer(state = initialTuiState, action) {
     case 'TOOL_END': {
       const entry = action.entry || {}
       const toolCalls = [...state.toolCalls]
-      const last = toolCalls[toolCalls.length - 1]
-      if (last && last.name === (entry.name || 'tool')) {
-        toolCalls[toolCalls.length - 1] = {
-          ...last,
+      // toolLoop 支持并行工具调用（MAX_CONCURRENT_TOOLS），start/end 事件会
+      // 交错（A start → B start → A end → B end）。只匹配最后一个卡会漏更/错更，
+      // 导致卡永远卡在 running。改为：优先找最近一个同名的 running 卡，
+      // 找不到再回退最近一个同名卡。
+      const name = entry.name || 'tool'
+      let idx = -1
+      for (let i = toolCalls.length - 1; i >= 0; i--) {
+        if (toolCalls[i].name === name && toolCalls[i].status === 'running') { idx = i; break }
+      }
+      if (idx === -1) {
+        for (let i = toolCalls.length - 1; i >= 0; i--) {
+          if (toolCalls[i].name === name) { idx = i; break }
+        }
+      }
+      if (idx >= 0) {
+        toolCalls[idx] = {
+          ...toolCalls[idx],
           status: entry.error ? 'error' : 'done',
           summary: entry.error
             ? truncateLines(String(entry.error), 5)
