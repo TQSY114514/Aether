@@ -21,12 +21,12 @@ export async function main(argv = []) {
     console.error('error: aether tui requires a TTY. Run it from a real terminal, or use `aether tui --smoke` for a headless smoke.')
     return 1
   }
-  return runInteractive()
+  return runInteractive(argv)
 }
 
 // TTY 交互模式：渲染 App，等用户退出（Ctrl+C → QUIT_INTENT → exit()）。
 // 从 argv 提取 --db/--model 传给 App（与 CLI 其余模式同语义）。
-function parseTuiOpts(argv) {
+export function parseTuiOpts(argv = []) {
   const opts = { dbPath: undefined, modelName: undefined }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]

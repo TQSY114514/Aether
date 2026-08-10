@@ -166,6 +166,8 @@ async function runTuiMode(argv) {
     return typeof code === 'number' ? code : 0
   } catch (err) {
     console.error(`error: failed to start TUI: ${err && err.message ? err.message : String(err)}`)
+    // 启动失败附完整堆栈——真实终端环境差异(ConPTY/编码)只能靠堆栈定位。
+    if (err && err.stack) console.error(err.stack)
     return 1
   }
 }
