@@ -151,11 +151,17 @@ export default function App() {
 
   // Protocol handler: respond to aetherai:// links
   useEffect(() => {
-    // @ts-ignore protocol handler added to preload (not yet in generated types)
-    const off = window.electronAPI?.protocol?.onOpen?.(({ action }: { action: string }) => {
-      if (action === 'new' || action === 'chat') {
+    const off = window.electronAPI?.protocol?.onOpen?.(async (payload: { action: string; workspace?: string }) => {
+      if (payload.action === 'open' && payload.workspace) {
+        // 右键/协议「用 Aether 打开文件夹」→ 设为 agent 工作区 + 新建会话
+        try { await window.electronAPI?.agent?.setWorkspace?.({ dir: payload.workspace }) } catch {}
+        useStore.getState().newChat()
+        return
+      }
+      if (payload.action === 'new' || payload.action === 'chat') {
         useStore.getState().newChat()
       }
+      // 'tui' 动作属终端形态，桌面无对应 UI，忽略
     })
     return () => off?.()
   }, [])
