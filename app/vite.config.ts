@@ -73,11 +73,9 @@ export default defineConfig({
       '**/e2e/**',
     ],
     // forks pool（独立进程，进程隔离比 threads 更稳）：700+ 测试在 2 核 CI
-    // runner 上 threads 并发会导致 worker 崩溃/超时误报（存量 flaky），
-    // 限制 fork 数为核数并靠 maxWorkers 兜底。
+    // runner 上 threads 并发会导致 worker 崩溃/超时误报（存量 flaky）。
+    // vitest 4 已把 poolOptions 提升为顶层选项（maxWorkers）。
     pool: 'forks',
-    poolOptions: {
-      forks: { maxForks: 2 },
-    },
+    maxWorkers: 2,
   },
 })
