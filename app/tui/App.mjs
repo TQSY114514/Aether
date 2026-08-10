@@ -31,13 +31,15 @@ const ROLE_PREFIX = { user: '> ', assistant: '◆ ', system: '! ', tool: '⛭ ' 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
 const ROLE_COLOR = { user: C.user, assistant: C.assistant, tool: C.tool, system: C.sys }
 
-// 轻量 ticker：驱动动画帧（spinner / 运行指示）。
-function useTicker(intervalMs = 500, chars = ['●', '○']) {
+// 轻量 ticker：驱动动画帧（spinner / 运行指示）。active=false 时停表并返回静态字符
+// ——idle 状态不重渲染（否则 120ms 全帧刷新就是"抽搐"）。
+function useTicker(intervalMs = 500, chars = ['●', '○'], active = true) {
   const [i, setI] = useState(0)
   useEffect(() => {
+    if (!active) return
     const t = setInterval(() => setI((x) => (x + 1) % chars.length), intervalMs)
     return () => clearInterval(t)
-  }, [intervalMs, chars.length])
+  }, [intervalMs, chars.length, active])
   return chars[i]
 }
 
@@ -134,7 +136,7 @@ function StatusBar({ state, tick }) {
 export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   const { exit } = useApp()
   const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
-  const tick = useTicker(120, SPINNER)
+  const tick = useTicker(300, SPINNER, state.running)
   const sessionBusyRef = useRef(false)
   const allowRulesRef = useRef(createAllowRulesStore())
   const resolveRef = useRef(null)
@@ -316,7 +318,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         }
         return
       }
-      const action = keyToAction(key)
+      const action = keyToAction(key, input)
       if (action) dispatch(action)
       else if (input) dispatch({ type: 'INPUT', value: state.input + input })
       return
@@ -329,7 +331,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     }
     // 5) 普通态：字母快捷方式按 input 判定（ink 对字母键不保证给 key.name，
     //    只靠 key.name==='m' 会把 m 吞成输入字符）。
-    if ((input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
+    if (state.input === '' && (input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
     // Ctrl+P 打开命令面板（输入框为空时）
     if (state.input === '' && key?.ctrl === true && input === 'p') { setPaletteOpen(true); setPaletteIdx(0); return }
     // 斜杠补全：输入以 / 开头时 ↑↓ 在候选间移动
@@ -362,7 +364,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       expandDiff(last)
       return
     }
-    const action = keyToAction(key)
+    const action = keyToAction(key, input)
     if (action) dispatch(action)
     else if (input) dispatch({ type: 'INPUT', value: state.input + input })
   })
@@ -425,4 +427,5 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       h(StatusBar, { state, tick: state.running ? tick : '●' }),
   )
 }
+
 

@@ -11,6 +11,9 @@
  */
 export function keyToAction(key, input) {
   if (!key || typeof key !== 'object') return null
+  // 真实终端退格键常发 \x7f(DEL)或 \x08——ink 只认 \x08 为 backspace,
+  // \x7f 会被当普通字符传给 input,表现为"删不了"。
+  if (input === '\x7f' || input === '\b') return { type: 'INPUT_BACKSPACE' }
   const isCtrlC = key.ctrl === true && (input === 'c' || key.name === 'c')
   if (isCtrlC) return { type: 'QUIT_INTENT' }
   if (key.return === true || key.enter === true || key.name === 'return' || key.name === 'enter') {
