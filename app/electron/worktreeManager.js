@@ -95,7 +95,13 @@ function createWorktree({ root, taskId }) {
   // -B force-checks out the branch (creating it when missing, re-pointing a
   // stale one), so a single command covers both the fresh and the stale case.
   const r = git(root, ['worktree', 'add', '-B', branch, dir])
-  if (!r.ok) return { ok: false, error: `worktree create failed: ${r.stderr || 'unknown git error'}` }
+  if (!r.ok) {
+    // `git worktree add -B` fails when the directory already exists (e.g. the
+    // porcelain list missed it due to path formatting differences on Windows
+    // runners). If the worktree dir is on disk, treat it as an existing reuse.
+    if (fs.existsSync(dir)) return { ok: true, dir, branch, reused: true }
+    return { ok: false, error: `worktree create failed: ${r.stderr || 'unknown git error'}` }
+  }
   return { ok: true, dir, branch }
 }
 
@@ -110,7 +116,7 @@ function worktreeStatus(root, taskId) {
   const blocks = porcelain.stdout.split('\n\n').filter(Boolean)
   for (const block of blocks) {
     const lines = block.split('\n')
-    const wtPath = (lines.find(l => l.startsWith('worktree ')) || '').slice('worktree '.length)
+    const wtPath = (lines.find(l => l.startsWith('worktree ')) || '').slice('worktree '.length).trim()
     if (normPath(wtPath) !== normPath(dir)) continue
     const branchLine = lines.find(l => l.startsWith('branch '))
     const branch = branchLine ? branchLine.slice('branch refs/heads/'.length) : null
