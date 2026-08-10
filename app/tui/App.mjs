@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // App.mjs — TUI 根组件（todo 1）+ 权限审批面板 + diff/回滚（todo 4）
 // createElement 风格、无 JSX：Node v24 无法加载 .jsx（ISSUE-01 实证），且引入
 // 加载器会违反「新依赖仅限纯 JS」护栏——故组件一律用 react.createElement 手写。
@@ -192,7 +192,7 @@ export function App({ dbPath, modelName }) {
   useInput((input, key) => {
     // 1) 权限等待态：y/n/a 应答，Ctrl+C 中止（=拒绝）。
     if (state.pendingPermission) {
-      const ctrlC = key && key.ctrl && key.name === 'c'
+      const ctrlC = key?.ctrl === true && input === 'c'
       if (ctrlC) { decidePermission({ decision: 'deny', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
       const ch = (input || '').toLowerCase()
       if (ch === 'y') { decidePermission({ decision: 'allow', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
@@ -202,20 +202,20 @@ export function App({ dbPath, modelName }) {
     }
     // 2) diff 视图态：Enter/Esc 关闭（接受），r 回滚。
     if (state.expandedTool != null) {
-      if (key && (key.name === 'return' || key.name === 'enter')) { dispatch({ type: 'TOOL_EXPAND', index: state.expandedTool }); return }
-      if (key && key.name === 'escape') { dispatch({ type: 'TOOL_EXPAND', index: state.expandedTool }); return }
+      if (key?.return === true) { dispatch({ type: 'TOOL_EXPAND', index: state.expandedTool }); return }
+      if (key?.escape === true) { dispatch({ type: 'TOOL_EXPAND', index: state.expandedTool }); return }
       if ((input || '') === 'r') { doRollback(); return }
       return
     }
     // 3) steeringMode（todo 6）：Enter 注入 follow-up，Ctrl+C 取消打断态。
     if (state.steeringMode) {
-      const ctrlC = key && key.ctrl && key.name === 'c'
+      const ctrlC = key?.ctrl === true && input === 'c'
       if (ctrlC) {
         dispatch({ type: 'STEER_MODE', on: false })
         dispatch({ type: 'STATUS', text: 'follow-up cancelled' })
         return
       }
-      if (key && (key.name === 'return' || key.name === 'enter')) {
+      if (key?.return === true) {
         const text = state.input.trim()
         if (text) {
           injectSteering('tui', text)
@@ -232,7 +232,7 @@ export function App({ dbPath, modelName }) {
       return
     }
     // 4) Ctrl+C 运行中打断 → 进入 follow-up 输入态（todo 6）。
-    if (state.running && key && key.ctrl && key.name === 'c') {
+    if (state.running && key?.ctrl === true && input === 'c') {
       dispatch({ type: 'STATUS', text: 'interrupted — type follow-up + Enter, or Ctrl+C to cancel' })
       dispatch({ type: 'STEER_MODE', on: true })
       return
@@ -240,7 +240,7 @@ export function App({ dbPath, modelName }) {
     // 5) 普通态：字母快捷方式按 input 判定（ink 对字母键不保证给 key.name，
     //    只靠 key.name==='m' 会把 m 吞成输入字符）。
     if ((input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
-    if (key && (key.name === 'return' || key.name === 'enter')) {
+    if (key?.return === true) {
       const text = state.input.trim()
       if (text && !state.running) {
         dispatch({ type: 'INPUT', value: '' })
@@ -300,3 +300,4 @@ export function App({ dbPath, modelName }) {
     h(StatusBar, { state }),
   )
 }
+
