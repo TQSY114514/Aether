@@ -153,6 +153,7 @@ export async function runSession({
   try { await connectMcpServers({ db }) } catch {}
   try { await runSessionHooks('SessionStart', { sessionId, timestamp: new Date().toISOString() }) } catch {}
   let result
+  let hasAppendedText = false
   try {
     result = await runAgentImpl({
       prompt: String(prompt || ''),
@@ -168,6 +169,7 @@ export async function runSession({
     onText: (chunk) => {
       if (chunk && typeof chunk.text === 'string') {
         dispatch({ type: 'TEXT_DELTA', delta: chunk.text })
+        hasAppendedText = true
       }
     },
     onToolCall: (entry) => {
@@ -192,11 +194,22 @@ export async function runSession({
       if (step && Number.isFinite(step.depth)) {
         dispatch({ type: 'BUDGET', used: step.depth + 1 })
       }
+      // assistant 回复文本经 onPlanStep.assistantText 传递（toolLoop.js:451）——
+      // 不转发就是"agent 跑完但界面无回复"的根因。
+      if (step && typeof step.assistantText === 'string' && step.assistantText) {
+        dispatch({ type: 'TEXT_DELTA', delta: step.assistantText })
+        hasAppendedText = true
+      }
     },
     })
   } finally {
     try { await runSessionHooks('SessionEnd', { sessionId, timestamp: new Date().toISOString() }) } catch {}
     try { await disconnectMcpServers() } catch {}
+  }
+  // 兜底：若回复文本未经 onPlanStep 送达（纯工具循环等路径），把 result.text 追加到
+  // assistant 消息（TEXT_DELTA 需 running，故放在 AGENT_END 之前）。
+  if (!hasAppendedText && result && result.text) {
+    dispatch({ type: 'TEXT_DELTA', delta: result.text })
   }
   dispatch({ type: 'AGENT_END' })
   if (onEnd) onEnd(result)
