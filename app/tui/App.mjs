@@ -237,7 +237,9 @@ export function App({ dbPath, modelName }) {
       dispatch({ type: 'STEER_MODE', on: true })
       return
     }
-    // 5) 普通态：Enter 提交、v 展开最近完成卡、其余走 keymap/输入。
+    // 5) 普通态：字母快捷方式按 input 判定（ink 对字母键不保证给 key.name，
+    //    只靠 key.name==='m' 会把 m 吞成输入字符）。
+    if ((input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
     if (key && (key.name === 'return' || key.name === 'enter')) {
       const text = state.input.trim()
       if (text && !state.running) {
