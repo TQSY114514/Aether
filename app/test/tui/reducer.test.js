@@ -173,8 +173,15 @@ describe('keyToAction', () => {
     expect(keyToAction({ backspace: true })).toEqual({ type: 'INPUT_BACKSPACE' })
   })
 
-  it('maps m to MODE_CYCLE', () => {
-    expect(keyToAction({ name: 'm' })).toEqual({ type: 'MODE_CYCLE' })
+  it('maps real-terminal DEL (\\x7f) to INPUT_BACKSPACE (root cause of "backspace does nothing")', () => {
+    expect(keyToAction({}, '\x7f')).toEqual({ type: 'INPUT_BACKSPACE' })
+    expect(keyToAction({}, '\b')).toEqual({ type: 'INPUT_BACKSPACE' })
+    expect(keyToAction({ name: 'backspace' })).toEqual({ type: 'INPUT_BACKSPACE' })
+  })
+
+  it('m is NOT consumed by keymap (App decides: only when input empty)', () => {
+    expect(keyToAction({ name: 'm' })).toBeNull()
+    expect(keyToAction({}, 'm')).toBeNull()
   })
 
   it('returns null for ordinary printable input and junk', () => {

@@ -20,6 +20,7 @@ export function keyToAction(key, input) {
     return { type: 'SUBMIT' }
   }
   if (key.backspace === true || key.name === 'backspace') return { type: 'INPUT_BACKSPACE' }
-  if (key.name === 'm' || input === 'm') return { type: 'MODE_CYCLE' }
+  // 注意: m/q 等字母快捷方式不进 keymap——它们会吞掉输入框里的字母。
+  // App 组件层在「输入框为空」时才响应(input 判定), keymap 只归一控制键。
   return null
 }
