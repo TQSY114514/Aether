@@ -113,8 +113,9 @@ function worktreeStatus(root, taskId) {
   const dir = worktreeDirFor(root, taskId)
   const porcelain = git(root, ['worktree', 'list', '--porcelain'])
   if (!porcelain.ok) return null
-  // Parse "worktree <path>\nHEAD <sha>\nbranch refs/heads/<b>\ndetached"
-  const blocks = porcelain.stdout.split('\n\n').filter(Boolean)
+  // Windows git 输出 CRLF 行尾：先剥离 \r，否则 split('\n\n') 失效（整个输出
+  // 成一个块，只匹配到主 worktree 路径 → 返回 null）。
+  const blocks = porcelain.stdout.replace(/\r/g, '').split('\n\n').filter(Boolean)
   for (const block of blocks) {
     const lines = block.split('\n')
     const wtPath = (lines.find(l => l.startsWith('worktree ')) || '').slice('worktree '.length).trim()
