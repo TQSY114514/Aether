@@ -242,9 +242,18 @@ printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
   | node app/cli.js --mode rpc --db path\to\aetherai.db
 ```
 
+Additional headless flags: `--persona <id>`（persona + 记忆注入）、`--memory-trace`（报告注入记忆条目数）、`--skills`（技能提案 JSON）、`--setup-term`（写入 Windows Terminal profile）、`--stdin`（显式管道输入）。
+
 ### TUI (`aether tui`)
 
-Interactive terminal agent: message stream, tool-call cards, diff review with **Enter** accept / **r** rollback (pre-write snapshot restore — works in non-git folders; `git restore` fallback in git repos), keyboard permission gate (`y` allow / `n` deny / `a` always-for-this-session), ask/plan/auto mode switching, `/fork` session tree, `/memory` search, `/persona` switch, Ctrl+C mid-run steering (type a follow-up and it injects into the loop). Full keymap: [docs/tui-keys.md](./docs/tui-keys.md).
+Interactive terminal agent (Ink v5; Node ≥ 22; best experienced in Windows Terminal):
+
+- **会话**：消息流式渲染、`/fork` 会话树（`session.parent_session_id`）、`/sessions`、`/use <id>` 历史切换
+- **工具与权限**：工具调用卡（状态色/耗时/摘要）、diff 审阅（`v` 展开，`Enter` 接受 / `r` 回滚——写前快照还原，非 git 目录也有效）、键盘权限门（`y` 允许 / `n` 拒绝 / `a` 本会话总是允许）
+- **模式**：`m` 切换 ask/plan/auto；`/persona <id>` 切换人设（注入 persona + 记忆前缀）
+- **记忆与技能闭环**：`/memory <关键词>` 检索、`--memory-trace` 注入条目数、`/skills` + `/skill accept|dismiss <key>`（habitLearner → 技能提案）
+- **steering**：运行中 `Ctrl+C` 打断 → 输入下一条 → 注入当前循环（队列显示 `steer:n`）
+- **快捷键**：`q`/`Ctrl+C` 退出（空闲）、`Esc` 关闭 diff、`Backspace` 删字符；完整键位见 [docs/tui-keys.md](./docs/tui-keys.md)
 
 ### RPC (`aether --mode rpc`)
 
