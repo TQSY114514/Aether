@@ -67,6 +67,35 @@ describe('tuiReducer', () => {
     expect(s.messages).toHaveLength(1)
   })
 
+  it('MOVE_SELECT navigates messages with ↑↓ and clamps at bounds', () => {
+    let s = tuiReducer(initialTuiState, { type: 'INPUT', value: 'a' })
+    s = tuiReducer(s, { type: 'SUBMIT' })
+    expect(s.messages).toHaveLength(2)
+    expect(s.selectedMessage).toBeNull()
+    s = tuiReducer(s, { type: 'MOVE_SELECT', dir: 1 }) // ↓ → 0
+    expect(s.selectedMessage).toBe(0)
+    s = tuiReducer(s, { type: 'MOVE_SELECT', dir: 1 }) // ↓ → 1
+    expect(s.selectedMessage).toBe(1)
+    s = tuiReducer(s, { type: 'MOVE_SELECT', dir: 1 }) // 到底 clamp
+    expect(s.selectedMessage).toBe(1)
+    s = tuiReducer(s, { type: 'MOVE_SELECT', dir: -1 }) // ↑ → 0
+    expect(s.selectedMessage).toBe(0)
+    s = tuiReducer(s, { type: 'MOVE_SELECT', dir: -1 }) // 到顶 clamp
+    expect(s.selectedMessage).toBe(0)
+    // 无消息时选择重置
+    s = tuiReducer(s, { type: 'RESET' })
+    expect(tuiReducer(s, { type: 'MOVE_SELECT', dir: 1 }).selectedMessage).toBeNull()
+  })
+
+  it('AGENT_START records modelName and resets selection', () => {
+    let s = tuiReducer(initialTuiState, { type: 'INPUT', value: 'a' })
+    s = tuiReducer(s, { type: 'SUBMIT' })
+    s = tuiReducer(s, { type: 'MOVE_SELECT', dir: 1 })
+    s = tuiReducer(s, { type: 'AGENT_START', max: 5, modelName: 'deepseek-v4-flash' })
+    expect(s.modelName).toBe('deepseek-v4-flash')
+    expect(s.selectedMessage).toBeNull()
+  })
+
   it('MODE_SET switches to any valid mode', () => {
     for (const m of MODES) {
       const s = tuiReducer(initialTuiState, { type: 'MODE_SET', mode: m })

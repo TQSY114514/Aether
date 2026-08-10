@@ -17,6 +17,8 @@ export const initialTuiState = Object.freeze({
   toolCalls: [], // { name, args, status, summary, latencyMs, snapshot, diff, rollbackResult }
   currentTool: null,       // todo 6: 正在执行的工具名（状态栏显示）
   budget: { used: 0, max: 0 }, // todo 6: 迭代预算 used/max
+  modelName: null,           // 最近会话实际使用的模型（AGENT_START 回填，右侧面板显示）
+  selectedMessage: null,     // 导航：↑↓ 选中的消息索引（null = 未选择）
   steeringQueue: [],       // todo 6: 待注入 follow-up 队列
   steeringMode: false,     // todo 6: Ctrl+C 打断后的 follow-up 输入态
   pendingPermission: null, // { reqId, name, args, risk, snapshot } — awaitingPermission 态
@@ -146,7 +148,14 @@ export function tuiReducer(state = initialTuiState, action) {
     // ── 预算 / steering（todo 6）────────────────────────────────────────
     case 'AGENT_START': {
       const max = Number.isFinite(action.max) ? action.max : 0
-      return { ...state, running: true, statusLine: 'running', budget: { used: 0, max } }
+      return {
+        ...state,
+        running: true,
+        statusLine: 'running',
+        budget: { used: 0, max },
+        modelName: action.modelName ?? state.modelName,
+        selectedMessage: null,
+      }
     }
 
     case 'BUDGET': {
@@ -167,6 +176,18 @@ export function tuiReducer(state = initialTuiState, action) {
 
     case 'STEER_MODE':
       return { ...state, steeringMode: !!action.on }
+
+    // ── 消息导航（↑↓ 选择）─────────────────────────────────────────────
+    case 'MOVE_SELECT': {
+      if (!state.messages.length) return { ...state, selectedMessage: null }
+      const delta = action.dir > 0 ? 1 : -1
+      // 未选择时首按直接落首/尾（不加 delta）
+      if (state.selectedMessage == null) {
+        return { ...state, selectedMessage: delta > 0 ? 0 : state.messages.length - 1 }
+      }
+      const next = Math.max(0, Math.min(state.messages.length - 1, state.selectedMessage + delta))
+      return { ...state, selectedMessage: next }
+    }
 
     // ── 权限审批（todo 4）──────────────────────────────────────────────
     case 'PERMISSION_REQUEST': {
