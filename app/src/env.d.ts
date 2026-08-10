@@ -207,7 +207,8 @@ interface Window {
       import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
     }
     protocol: {
-      onOpen: (callback: (payload: { action: string }) => void) => () => void
+      // aetherai:// 协议事件(todo 17): open(workspace 路径) / tui / new / chat
+      onOpen: (callback: (payload: { action: string; workspace?: string; raw?: string }) => void) => () => void
     }
     agent: {
       getWorkspace: (sessionId?: number) => Promise<string>
