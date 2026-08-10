@@ -40,24 +40,35 @@ function git(root, args) {
   }
 }
 
-// Windows 路径归一：大小写不敏感 + realpath 展开 8.3 短名。
-// git porcelain 输出 realpath 后的长名（C:/Users/runneradmin/...），而
-// os.tmpdir() 可能返回 8.3 短名（C:\Users\RUNNER~1\...）——CI runner 上两者
-// 是同一目录但字符串不同，必须 realpath 归一才能匹配。
+// Windows 路径归一：大小写不敏感 + realpath 展开（尽力而为）。
 function normPath(p) {
   let resolved = path.resolve(p).replace(/\//g, path.sep)
   try { resolved = fs.realpathSync(resolved) } catch { /* 路径不存在时保持原样 */ }
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
+// 两个路径是否指向同一目录。win32 上用 stat dev+ino 比较——可靠处理 8.3
+// 短名（C:\Users\RUNNER~1 vs C:/Users/runneradmin）、大小写与符号链接差异
+// （fs.realpathSync 在 CI runner 上实测不展开短名，字符串归一不可靠）；
+// 非 win32 或 stat 失败时回退字符串归一比较。
+function sameDir(a, b) {
+  if (process.platform === 'win32') {
+    try {
+      const sa = fs.statSync(a)
+      const sb = fs.statSync(b)
+      if (sa && sb && sa.dev === sb.dev && sa.ino === sb.ino) return true
+    } catch { /* fallthrough to string compare */ }
+  }
+  return normPath(a) === normPath(b)
+}
+
 // Match a porcelain "worktree <path>" line against an expected dir, tolerant
-// of Windows `/` vs `\` separator differences and case folding.
+// of Windows `/` vs `\` separator differences, case folding and 8.3 short names.
 function filenameMatches(porcelain, dir) {
-  const target = normPath(dir)
   for (const line of porcelain.split('\n')) {
     if (!line.startsWith('worktree ')) continue
     const wt = line.slice('worktree '.length).trim()
-    if (normPath(wt) === target) return true
+    if (sameDir(wt, dir)) return true
   }
   return false
 }
@@ -122,7 +133,7 @@ function worktreeStatus(root, taskId) {
   for (const block of blocks) {
     const lines = block.split('\n')
     const wtPath = (lines.find(l => l.startsWith('worktree ')) || '').slice('worktree '.length).trim()
-    if (normPath(wtPath) !== normPath(dir)) continue
+    if (!sameDir(wtPath, dir)) continue
     const branchLine = lines.find(l => l.startsWith('branch '))
     const branch = branchLine ? branchLine.slice('branch refs/heads/'.length) : null
     const info = { dir: wtPath, branch, detached: !branchLine, exists: true }

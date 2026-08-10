@@ -81,23 +81,6 @@ ok('worktree isolation', () => {
 
   it('worktreeStatus reflects uncommitted changes inside the worktree', () => {
     const status = worktree.worktreeStatus(repoRoot, 41)
-    if (status === null) {
-      // CI 临时诊断 v2（定位 normPath 中间值，修复后移除）
-      const list = git(['worktree', 'list', '--porcelain'])
-      const expectDir = path.join(repoRoot, '.aether', 'worktrees', 'task-41')
-      const norm = (p) => {
-        let r = path.resolve(p).replace(/\//g, path.sep)
-        try { r = fs.realpathSync(r) } catch (e) { return `REALPATH_ERR:${e.code}:${r}` }
-        return process.platform === 'win32' ? r.toLowerCase() : r
-      }
-      console.log('DIAG2|porcelain:', JSON.stringify(list.stdout))
-      console.log('DIAG2|dir:', JSON.stringify(expectDir))
-      console.log('DIAG2|normDir:', JSON.stringify(norm(expectDir)))
-      for (const block of list.stdout.replace(/\r/g, '').split('\n\n')) {
-        const wt = (block.split('\n').find((l) => l.startsWith('worktree ')) || '').slice('worktree '.length).trim()
-        console.log('DIAG2|wt:', JSON.stringify(wt), 'norm:', JSON.stringify(norm(wt)))
-      }
-    }
     expect(status).toMatchObject({ exists: true, branch: 'aether-task-41', dirty: false })
 
     // Make a change INSIDE the worktree
