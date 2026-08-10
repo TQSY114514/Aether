@@ -11,7 +11,7 @@ import { keyToAction } from './keymap.js'
 import { runSession, createTuiPermissionHandler, decidePermission, toolToSnapshotPath, injectSteering } from './runSession.js'
 import { createAllowRulesStore } from './allowRules.js'
 import { buildDiff, rollbackChange } from './rollback.js'
-import { parseSessionCommand } from './sessionCommands.js'
+import { parseSessionCommand, SLASH_COMMANDS } from './sessionCommands.js'
 import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
 import { searchMemory } from './memorySearch.js'
 import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
@@ -118,6 +118,7 @@ function PermissionPanel({ perm }) {
 function StatusBar({ state, tick }) {
   const bits = [
     `mode:${state.mode}`,
+    `effort:${state.effort}`,
     state.running ? `${tick} running` : '● idle',
     state.statusLine && state.statusLine !== 'idle' ? state.statusLine : null,
     state.budget.max > 0 ? `it:${state.budget.used}/${state.budget.max}` : null,
@@ -138,6 +139,11 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   const allowRulesRef = useRef(createAllowRulesStore())
   const resolveRef = useRef(null)
   const workspaceRef = useRef(process.cwd())
+  // 斜杠补全 / Ctrl+P 面板（UI 本地状态，不进核心状态机）
+  const [slashIdx, setSlashIdx] = useState(0)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteIdx, setPaletteIdx] = useState(0)
+  const PALETTE_ITEMS = ['New chat', 'History (sessions)', 'Quit']
 
   // todo 4：TUI 键盘应答权限回调（B2 接线 a 方案 → agentCore.runAgent 透传）。
   const tuiPermission = useCallback(
@@ -193,7 +199,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         // todo 13：/persona <id> → 切换人设（runSession 注入）
         dispatch({ type: 'PERSONA_SET', personaId: cmd.personaId })
         dispatch({ type: 'STATUS', text: cmd.personaId == null ? 'persona: none' : `persona: #${cmd.personaId}` })
-      } else if (cmd.type === 'skills' || cmd.type === 'skill-accept' || cmd.type === 'skill-dismiss') {
+    } else if (cmd.type === 'skills' || cmd.type === 'skill-accept' || cmd.type === 'skill-dismiss') {
         // todo 20：habitLearner → 技能提案闭环展示 / 接受 / 忽略
         const habitLearner = require('../electron/llm/habitLearner')
         if (cmd.type === 'skills') {
@@ -209,6 +215,22 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
           habitLearner.dismissHabit(db, cmd.key)
           dispatch({ type: 'STATUS', text: `skill dismissed: ${cmd.key}` })
         }
+      } else if (cmd.type === 'model') {
+        // /model <name>：切换后续会话模型（状态栏/运行面板显示）
+        dispatch({ type: 'MODEL_SET', name: cmd.name })
+        dispatch({ type: 'STATUS', text: cmd.name ? `model: ${cmd.name}` : 'usage: /model <name> (或 /model 查看当前)' })
+      } else if (cmd.type === 'effort') {
+        // /effort <low|medium|high>：thinking 力度（reasoning_effort）
+        if (!['low', 'medium', 'high'].includes(cmd.level)) {
+          dispatch({ type: 'STATUS', text: 'usage: /effort <low|medium|high>' })
+        } else {
+          dispatch({ type: 'EFFORT_SET', level: cmd.level })
+          dispatch({ type: 'STATUS', text: `effort: ${cmd.level}` })
+        }
+      } else if (cmd.type === 'quit') {
+        dispatch({ type: 'QUIT_INTENT' })
+      } else if (cmd.type === 'help') {
+        dispatch({ type: 'APPEND_SYSTEM', text: `commands: ${SLASH_COMMANDS.join(' ')} | 快捷键: m 模式 / v diff / ↑↓ 选消息 / Ctrl+P 面板 / Ctrl+C 退出` })
       }
     } catch (err) {
       dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
@@ -239,6 +261,25 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   }, [state.expandedTool, state.toolCalls])
 
   useInput((input, key) => {
+    // 0) Ctrl+P 命令面板（模态，最优先）
+    if (paletteOpen) {
+      if (key?.upArrow === true) { setPaletteIdx((i) => Math.max(0, i - 1)); return }
+      if (key?.downArrow === true) { setPaletteIdx((i) => Math.min(PALETTE_ITEMS.length - 1, i + 1)); return }
+      if (key?.escape === true || (key?.ctrl === true && input === 'p')) { setPaletteOpen(false); return }
+      if (key?.return === true) {
+        const item = PALETTE_ITEMS[paletteIdx]
+        setPaletteOpen(false)
+        if (item === 'New chat') dispatch({ type: 'RESET' })
+        else if (item === 'Quit') dispatch({ type: 'QUIT_INTENT' })
+        else if (item === 'History (sessions)') {
+          const db = openSessionDb(dbPath)
+          try { dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) }) } catch {}
+          try { db?.close() } catch {}
+        }
+        return
+      }
+      return // 模态吞掉其他键
+    }
     // 1) 权限等待态：y/n/a 应答，Ctrl+C 中止（=拒绝）。
     if (state.pendingPermission) {
       const ctrlC = key?.ctrl === true && input === 'c'
@@ -289,12 +330,25 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     // 5) 普通态：字母快捷方式按 input 判定（ink 对字母键不保证给 key.name，
     //    只靠 key.name==='m' 会把 m 吞成输入字符）。
     if ((input || '').toLowerCase() === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
+    // Ctrl+P 打开命令面板（输入框为空时）
+    if (state.input === '' && key?.ctrl === true && input === 'p') { setPaletteOpen(true); setPaletteIdx(0); return }
+    // 斜杠补全：输入以 / 开头时 ↑↓ 在候选间移动
+    const slashMode = state.input.startsWith('/')
+    const slashMatches = slashMode ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input)) : []
+    if (slashMatches.length > 0 && key?.upArrow === true) { setSlashIdx((i) => Math.max(0, i - 1)); return }
+    if (slashMatches.length > 0 && key?.downArrow === true) { setSlashIdx((i) => Math.min(slashMatches.length - 1, i + 1)); return }
     // ↑↓ 消息导航（输入框为空时）
     if (state.input === '' && key?.upArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: -1 }); return }
     if (state.input === '' && key?.downArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: 1 }); return }
     if (key?.return === true) {
       const text = state.input.trim()
       if (text && !state.running) {
+        // 斜杠补全：有选中候选 → 填入完整命令（可补参数后再次 Enter 执行）
+        if (slashMatches.length > 0 && slashIdx >= 0 && slashIdx < slashMatches.length) {
+          dispatch({ type: 'INPUT', value: slashMatches[slashIdx] })
+          setSlashIdx(0)
+          return
+        }
         dispatch({ type: 'INPUT', value: '' })
         if (text.startsWith('/')) { handleCommand(text); return }
         dispatch({ type: 'SUBMIT' })
@@ -341,16 +395,34 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         state.skills.map((s) => h(Text, { key: s.key, color: C.dim },
           `  [${s.key}] ${s.imperative}${s.occurrences > 1 ? ` (×${s.occurrences})` : ''}`)))
       : null,
-    state.steeringQueue.length
-      ? h(Box, { marginTop: 1, flexDirection: 'column' },
-        h(Text, { bold: true, color: C.primary }, 'steering queue:'),
-        state.steeringQueue.map((q, i) => h(Text, { key: i, color: C.primary }, `  ⤷ ${q}`)))
-      : null,
-    h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
-      h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
-      h(Text, { color: C.assistant }, state.input),
-    ),
-    h(StatusBar, { state, tick: state.running ? tick : '●' }),
+      state.steeringQueue.length
+        ? h(Box, { marginTop: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: C.primary }, 'steering queue:'),
+          state.steeringQueue.map((q, i) => h(Text, { key: i, color: C.primary }, `  ⤷ ${q}`)))
+        : null,
+      (state.input.startsWith('/')
+        ? h(Box, { marginTop: 1, flexDirection: 'column' },
+          SLASH_COMMANDS.filter((c) => c.startsWith(state.input))
+            .map((c, i) => h(Text, {
+              key: c,
+              color: i === slashIdx ? C.primary : C.dim,
+              backgroundColor: i === slashIdx ? '#24283b' : undefined,
+            }, `  ${c}`)))
+        : null),
+      paletteOpen
+        ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: C.primary }, 'Ctrl+P — commands'),
+          PALETTE_ITEMS.map((item, i) => h(Text, {
+            key: item,
+            color: i === paletteIdx ? C.primary : C.dim,
+            backgroundColor: i === paletteIdx ? '#24283b' : undefined,
+          }, `  ${i === paletteIdx ? '❯ ' : '  '}${item}`)))
+        : null,
+      h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
+        h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
+        h(Text, { color: C.assistant }, state.input),
+      ),
+      h(StatusBar, { state, tick: state.running ? tick : '●' }),
   )
 }
 
