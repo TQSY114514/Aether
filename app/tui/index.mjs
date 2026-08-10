@@ -30,27 +30,33 @@ export async function main(argv = []) {
 }
 
 // TTY 交互模式：接管 alt screen → 渲染全屏 TUI → 退出时恢复。
-// 从 argv 提取 --db/--model 传给 App（与 CLI 其余模式同语义）。
+// 从 argv 提取 --db/--model/--api-key/--api-url/--api-format 传给 App（与 CLI 同语义）。
 export function parseTuiOpts(argv = []) {
-  const opts = { dbPath: undefined, modelName: undefined }
+  const opts = { dbPath: undefined, modelName: undefined, apiKey: undefined, apiUrl: undefined, apiFormat: undefined }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--db') { opts.dbPath = argv[i + 1]; i++; continue }
     if (a === '--model') { opts.modelName = argv[i + 1]; i++; continue }
+    if (a === '--api-key') { opts.apiKey = argv[i + 1]; i++; continue }
+    if (a === '--api-url') { opts.apiUrl = argv[i + 1]; i++; continue }
+    if (a === '--api-format') { opts.apiFormat = argv[i + 1]; i++; continue }
     if (a.startsWith('--db=')) { opts.dbPath = a.slice(5); continue }
     if (a.startsWith('--model=')) { opts.modelName = a.slice(8); continue }
+    if (a.startsWith('--api-key=')) { opts.apiKey = a.slice(10); continue }
+    if (a.startsWith('--api-url=')) { opts.apiUrl = a.slice(10); continue }
+    if (a.startsWith('--api-format=')) { opts.apiFormat = a.slice(13); continue }
   }
   return opts
 }
 
 function runInteractive(argv) {
-  const { dbPath, modelName } = parseTuiOpts(argv)
+  const { dbPath, modelName, apiKey, apiUrl, apiFormat } = parseTuiOpts(argv)
   // 进入 alt screen 前不输出任何内容（不留启动日志/横幅）
   process.stdout.write(ALT_ENTER)
   // 兜底：任何退出路径都恢复原终端内容
   process.on('exit', () => { try { process.stdout.write(ALT_EXIT) } catch {} })
   return new Promise((resolve) => {
-    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName }))
+    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName, apiKey, apiUrl, apiFormat }))
     waitUntilExit().then(() => {
       unmount()
       process.stdout.write(ALT_EXIT)

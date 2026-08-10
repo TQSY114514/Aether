@@ -130,7 +130,7 @@ function StatusBar({ state, tick }) {
   )
 }
 
-export function App({ dbPath, modelName }) {
+export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   const { exit } = useApp()
   const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
   const tick = useTicker(120, SPINNER)
@@ -152,6 +152,9 @@ export function App({ dbPath, modelName }) {
       await runSession({
         dbPath,
         modelName,
+        apiKey,
+        apiUrl,
+        apiFormat,
         prompt: promptText,
         agentMode: state.mode,
         personaId: state.currentPersonaId,

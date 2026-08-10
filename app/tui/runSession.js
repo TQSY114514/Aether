@@ -11,7 +11,7 @@
 //   态，App 捕获 y/n/a 键后调 decidePermission 完成 Promise。
 //   （无回调时 runToolLoop 默认拒绝 toolLoop.js:872-880）
 // ─────────────────────────────────────────────────────────────────────────────
-import { openDatabase, resolveProviderModel, runAgent } from '../electron/llm/agentCore.js'
+import { openDatabase, resolveProviderModel, runAgent, isEncryptedKey } from '../electron/llm/agentCore.js'
 import { captureFileSnapshot } from './rollback.js'
 import { isToolStart } from './toolCards.js'
 import { connectMcpServers, disconnectMcpServers, runSessionHooks } from '../electron/llm/headlessMcp.js'
@@ -139,6 +139,9 @@ export async function runSession({
   workspace,
   sessionId = 'tui',
   personaId,
+  apiKey,
+  apiUrl,
+  apiFormat,
   dispatch,
   onEnd,
   requestPermission,
@@ -146,6 +149,15 @@ export async function runSession({
   resolveImpl = resolveSessionResources,
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
+  // headless 无法解密 safeStorage 加密的 API key——密文直接发 API 会 401/卡住，
+  // 表现为"无回复"。与 CLI 同款检测,提前红字报错;或由 --api-key 明文覆盖。
+  if (!apiKey && provider && provider.api_key && isEncryptedKey(provider.api_key)) {
+    throw new Error(
+      `the stored API key for provider "${provider.name}" is encrypted with the desktop app (safeStorage). ` +
+      'Headless mode cannot decrypt it. Pass --api-key <plaintext> to use this provider.',
+    )
+  }
+  const effectiveProvider = apiKey ? { ...provider, api_key: apiKey, ...(apiUrl ? { api_url: apiUrl } : {}), ...(apiFormat ? { api_format: apiFormat } : {}) } : provider
   dispatch({ type: 'AGENT_START', max: maxIterations, modelName: model.model_name })
   const ws = workspace || process.cwd()
   // todo 14：MCP 连接 + SessionStart/SessionEnd hooks（best-effort，不阻塞 agent）。
@@ -157,7 +169,7 @@ export async function runSession({
   try {
     result = await runAgentImpl({
       prompt: String(prompt || ''),
-      provider,
+      provider: effectiveProvider,
       model,
       db,
       personaId,
