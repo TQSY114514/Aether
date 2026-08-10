@@ -20,6 +20,16 @@ const ROLE_PREFIX = { user: '> ', assistant: '◆ ', system: '! ', tool: '⛭ ' 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
 const ROLE_COLOR = { user: 'green', assistant: 'white', tool: 'yellow', system: 'gray' }
 
+// 轻量 ticker：驱动运行指示动画（● ↔ ○ 交替，500ms 一帧）。
+function useTicker(intervalMs = 500, chars = ['●', '○']) {
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setI((x) => (x + 1) % chars.length), intervalMs)
+    return () => clearInterval(t)
+  }, [intervalMs, chars.length])
+  return chars[i]
+}
+
 function MessageLine({ msg }) {
   const prefix = ROLE_PREFIX[msg.role] || '• '
   const label = ROLE_LABEL[msg.role] || msg.role
@@ -70,17 +80,17 @@ function PermissionPanel({ perm }) {
 }
 
 // 底部状态栏（opencode 式紧凑单行）：mode │ 状态 │ 预算 │ 当前工具 │ steering │ 工具数
-function StatusBar({ state }) {
+function StatusBar({ state, tick }) {
   const bits = [
     `mode:${state.mode}`,
-    state.running ? '● running' : '● idle',
+    state.running ? `${tick} running` : '● idle',
     state.statusLine && state.statusLine !== 'idle' ? state.statusLine : null,
     state.budget.max > 0 ? `it:${state.budget.used}/${state.budget.max}` : null,
     state.currentTool ? `tool:${state.currentTool}` : null,
     state.steeringQueue.length ? `steer:${state.steeringQueue.length}` : null,
     `tools:${state.toolCalls.length}`,
   ].filter(Boolean)
-  return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: 'gray', paddingX: 1 },
+  return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1 },
     h(Text, { color: 'gray' }, bits.join(' │ ')),
   )
 }
@@ -88,6 +98,7 @@ function StatusBar({ state }) {
 export function App({ dbPath, modelName }) {
   const { exit } = useApp()
   const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
+  const tick = useTicker(500, ['●', '○'])
   const sessionBusyRef = useRef(false)
   const allowRulesRef = useRef(createAllowRulesStore())
   const resolveRef = useRef(null)
@@ -293,11 +304,11 @@ export function App({ dbPath, modelName }) {
         h(Text, { bold: true, color: 'cyan' }, 'steering queue:'),
         state.steeringQueue.map((q, i) => h(Text, { key: i, color: 'cyan' }, `  ⤷ ${q}`)))
       : null,
-    h(Box, { marginTop: 1 },
-      h(Text, { color: state.running ? 'yellow' : 'gray', bold: !state.running }, '❯ '),
+    h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? 'cyan' : 'gray', paddingX: 1 },
+      h(Text, { color: state.running ? 'cyan' : 'gray', bold: !state.running }, '❯ '),
       h(Text, {}, state.input),
     ),
-    h(StatusBar, { state }),
+    h(StatusBar, { state, tick }),
   )
 }
 
