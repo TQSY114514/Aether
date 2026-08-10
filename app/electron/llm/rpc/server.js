@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 const agentCore = require('../agentCore')
 const { taskDbAdapter } = require('../taskDbAdapter')
+const { isToolStart } = require('../../tools/toolEntry')
 const frames = require('./frames')
 
 let _engine = null
@@ -135,18 +136,18 @@ function createRpcServer({ db, deps = {} }) {
         provider,
         model,
         messages: params.messages,
-        agentMode: ['auto', 'plan', 'ask'].includes(params.agentMode) ? params.agentMode : 'auto',
+        agentMode: ['auto', 'plan', 'ask', 'yolo'].includes(params.agentMode) ? params.agentMode : 'auto',
         maxIterations: params.maxIterations,
         workspace: params.workspace,
         onText: (chunk) => emit(frames.eventFrame(reqId, 'text', { delta: chunk.text, done: !!chunk.done })),
         onToolCall: (entry) => {
-          const isStart = entry && entry.result == null && entry.error == null && entry.startedAt != null
+          const isStart = isToolStart(entry)
           emit(frames.eventFrame(reqId, isStart ? 'tool:start' : 'tool:end', { entry }))
         },
         onStatus: (s) => emit(frames.eventFrame(reqId, 'status', { kind: s.kind, text: s.text })),
         onPlanStep: (step) => emit(frames.eventFrame(reqId, 'plan', { step })),
       })
-      emit(frames.resultFrame(reqId, { text: result.text, toolCalls: result.toolCalls }))
+      emit(frames.resultFrame(reqId, { text: result.text, toolCalls: result.toolCalls, memoryTrace: result.memoryTrace }))
     },
   }
 

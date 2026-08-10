@@ -81,11 +81,23 @@ describe('tuiReducer', () => {
     let s = tuiReducer(initialTuiState, { type: 'TOOL_START', entry: { name: 'read' } })
     expect(s.toolCalls).toHaveLength(1)
     expect(s.toolCalls[0].status).toBe('running')
-    s = tuiReducer(s, { type: 'TOOL_END', entry: { name: 'read', error: null, resultSummary: 'ok' } })
+    s = tuiReducer(s, { type: 'TOOL_END', entry: { name: 'read', result: 'ok' } })
     expect(s.toolCalls[0].status).toBe('done')
     s = tuiReducer(s, { type: 'TOOL_START', entry: { name: 'write' } })
     s = tuiReducer(s, { type: 'TOOL_END', entry: { name: 'write', error: 'denied' } })
     expect(s.toolCalls[1].status).toBe('error')
+  })
+
+  it('TOOL_END with interleaved parallel tools updates the right card', () => {
+    // toolLoop 并行调用：A start → B start → A end → B end。
+    let s = tuiReducer(initialTuiState, { type: 'TOOL_START', entry: { name: 'read_a' } })
+    s = tuiReducer(s, { type: 'TOOL_START', entry: { name: 'read_b' } })
+    s = tuiReducer(s, { type: 'TOOL_END', entry: { name: 'read_a', result: 'a-ok' } })
+    expect(s.toolCalls[0].status).toBe('done') // A 卡正确收尾
+    expect(s.toolCalls[0].summary).toContain('a-ok')
+    expect(s.toolCalls[1].status).toBe('running') // B 卡仍 running
+    s = tuiReducer(s, { type: 'TOOL_END', entry: { name: 'read_b', result: 'b-ok' } })
+    expect(s.toolCalls[1].status).toBe('done')
   })
 
   it('QUIT_INTENT sets quitRequested', () => {

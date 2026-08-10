@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { openDatabase, resolveProviderModel, runAgent } from '../electron/llm/agentCore.js'
 import { captureFileSnapshot } from './rollback.js'
+import { isToolStart } from './toolCards.js'
 import { connectMcpServers, disconnectMcpServers, runSessionHooks } from '../electron/llm/headlessMcp.js'
 
 /**
@@ -170,7 +171,7 @@ export async function runSession({
       }
     },
     onToolCall: (entry) => {
-      const isStart = entry && entry.result == null && entry.error == null && entry.startedAt != null
+      const isStart = isToolStart(entry)
       let enriched = entry || {}
       // todo 4：TOOL_START 时把权限阶段捕获的写前快照挂到工具卡（回滚/diff 用）。
       if (isStart && requestPermission && typeof requestPermission.takeSnapshot === 'function') {

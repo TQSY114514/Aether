@@ -16,6 +16,7 @@
 const path = require('path')
 const fs = require('fs')
 const agent = require('./electron/llm/agentCore')
+const toolEntry = require('./electron/tools/toolEntry')
 // CLI 的 task 派发桥：直接加载 TaskEngine（Electron-free —— 引擎全部依赖
 // 已 DI：db 由 openDatabase + taskDbAdapter 提供，getWebContents 为 null 时
 // 权限弹窗走 CLI 兜底）。加载失败时降级为"不支持任务派生"。
@@ -317,7 +318,7 @@ function main() {
         personaId,
         onToolCall: (entry) => {
           toolEntries.push(entry)
-          const isStart = entry.result == null && entry.error == null && entry.startedAt != null
+          const isStart = toolEntry.isToolStart(entry)
           emit({
             type: isStart ? 'tool:start' : 'tool:end',
             entry: { name: entry.name, args: entry.args, result: entry.result, error: entry.error, risk: entry.risk, latencyMs: entry.latencyMs, startedAt: entry.startedAt || null },

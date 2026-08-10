@@ -2,7 +2,11 @@
 // toolCards.js — 工具调用卡（todo 3）：纯格式化助手（测试目标）
 // reducer 存卡形 { name, status, summary, latencyMs }；App 渲染时用
 // TOOL_STATUS 的状态色/标签。本模块 Electron-free、无 react 依赖，纯函数。
+// isToolStart 语义收敛自 electron/tools/toolEntry.js（全库单一来源）。
 // ─────────────────────────────────────────────────────────────────────────────
+import { isToolStart } from '../electron/tools/toolEntry.js'
+
+export { isToolStart }
 
 export const TOOL_STATUS = {
   running: { color: 'yellow', label: 'RUN' },
@@ -44,7 +48,7 @@ export function summarizeArgs(args) {
  * @returns {{ name: string, status: 'running'|'done'|'error', color: string, label: string, summary: string, latencyMs: number|null }}
  */
 export function summarizeTool(entry = {}) {
-  const isStart = entry.result == null && entry.error == null && entry.startedAt != null
+  const isStart = isToolStart(entry)
   const status = isStart ? 'running' : entry.error ? 'error' : 'done'
   const meta = TOOL_STATUS[status] || TOOL_STATUS.done
   return {

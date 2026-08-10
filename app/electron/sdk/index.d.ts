@@ -42,6 +42,8 @@ export interface RunAgentOptions {
 export interface RunAgentResult {
   text: string
   toolCalls: unknown[]
+  /** 注入的记忆条目数（--memory-trace 展示用，todo 20）。 */
+  memoryTrace?: { memoryCount: number }
 }
 
 export declare function runAgent(opts: RunAgentOptions): Promise<RunAgentResult>

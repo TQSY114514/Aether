@@ -14,7 +14,7 @@ import { buildDiff, rollbackChange } from './rollback.js'
 import { parseSessionCommand } from './sessionCommands.js'
 import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
 import { searchMemory } from './memorySearch.js'
-import { TOOL_STATUS } from './toolCards.js'
+import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
 const ROLE_COLOR = { user: 'green', assistant: 'white', tool: 'yellow', system: 'gray' }
@@ -30,7 +30,7 @@ function MessageLine({ msg }) {
 
 // 工具调用卡（todo 3）：running 圆框 / done|error 单框，状态色边框 + 标签。
 // 完成态且带快照时标注可审阅（v: diff / r: rollback）。
-function ToolCard({ card, index, expanded, onExpand }) {
+function ToolCard({ card, expanded }) {
   const meta = TOOL_STATUS[card.status] || TOOL_STATUS.done
   const borderStyle = card.status === 'running' ? 'round' : 'single'
   const reviewable = card.status === 'done' && (card.snapshot || card.rollbackResult)
@@ -61,7 +61,7 @@ function DiffView({ diff }) {
 function PermissionPanel({ perm }) {
   return h(Box, { borderStyle: 'round', borderColor: 'yellow', paddingX: 1, marginTop: 1, flexDirection: 'column' },
     h(Text, { bold: true, color: 'yellow' }, `[权限请求] ${perm.name}`),
-    h(Text, { color: 'gray' }, `args: ${JSON.stringify(perm.args)} | risk: ${perm.risk}`),
+    h(Text, { color: 'gray' }, `args: ${summarizeArgs(perm.args)} | risk: ${perm.risk}`),
     h(Text, { color: 'gray' }, 'y: 允许  n: 拒绝  a: 总是允许(本会话)  Ctrl+C: 中止'),
   )
 }
@@ -101,53 +101,50 @@ export function App({ dbPath, modelName }) {
     }
   }, [dbPath, modelName, state.mode, tuiPermission])
 
-  // 会话树命令（todo 5）：/sessions /use <id> /fork [title]
+  // 会话树/记忆/技能命令（todo 5/8/13/20）：解析 → 单次打开 DB → 处理后关闭，
+  // 避免每次命令累积 better-sqlite3 连接（长会话内存泄漏）。
   const handleCommand = useCallback(async (text) => {
     const cmd = parseSessionCommand(text)
     if (!cmd) return
     const db = openSessionDb(dbPath)
-    if (cmd.type === 'sessions') {
-      dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) })
-    } else if (cmd.type === 'use') {
-      dispatch({ type: 'SESSION_USE', sessionId: cmd.sessionId })
-    } else if (cmd.type === 'fork') {
-      try {
+    try {
+      if (cmd.type === 'sessions') {
+        dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) })
+      } else if (cmd.type === 'use') {
+        dispatch({ type: 'SESSION_USE', sessionId: cmd.sessionId })
+      } else if (cmd.type === 'fork') {
         const r = forkSession(db, { title: cmd.title, parentSessionId: state.currentSessionId })
         dispatch({ type: 'SESSION_FORK', sessionId: r.lastInsertRowid, parentId: state.currentSessionId, title: cmd.title || 'fork' })
-      } catch (err) {
-        dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
-      }
-    } else if (cmd.type === 'memory') {
-      // todo 8：/memory <关键词> → autoMemory.search（keyword 兜底）→ 卡片
-      const { results } = searchMemory(dbPath, cmd.query || '')
-      dispatch({ type: 'MEMORY_SET', results })
-      dispatch({ type: 'STATUS', text: `memory: ${results.length} hit(s)` })
-    } else if (cmd.type === 'persona') {
-      // todo 13：/persona <id> → 切换人设（runSession 注入）
-      dispatch({ type: 'PERSONA_SET', personaId: cmd.personaId })
-      dispatch({ type: 'STATUS', text: cmd.personaId == null ? 'persona: none' : `persona: #${cmd.personaId}` })
-    } else if (cmd.type === 'skills' || cmd.type === 'skill-accept' || cmd.type === 'skill-dismiss') {
-      // todo 20：habitLearner → 技能提案闭环展示 / 接受 / 忽略
-      try {
+      } else if (cmd.type === 'memory') {
+        // todo 8：/memory <关键词> → autoMemory.search（keyword 兜底）→ 卡片
+        const { results } = searchMemory(dbPath, cmd.query || '')
+        dispatch({ type: 'MEMORY_SET', results })
+        dispatch({ type: 'STATUS', text: `memory: ${results.length} hit(s)` })
+      } else if (cmd.type === 'persona') {
+        // todo 13：/persona <id> → 切换人设（runSession 注入）
+        dispatch({ type: 'PERSONA_SET', personaId: cmd.personaId })
+        dispatch({ type: 'STATUS', text: cmd.personaId == null ? 'persona: none' : `persona: #${cmd.personaId}` })
+      } else if (cmd.type === 'skills' || cmd.type === 'skill-accept' || cmd.type === 'skill-dismiss') {
+        // todo 20：habitLearner → 技能提案闭环展示 / 接受 / 忽略
         const habitLearner = require('../electron/llm/habitLearner')
-        const db2 = openSessionDb(dbPath)
-        if (!db2) { dispatch({ type: 'STATUS', text: 'error: no database' }); return }
         if (cmd.type === 'skills') {
-          const habits = habitLearner.listHabits(db2)
+          const habits = habitLearner.listHabits(db)
           dispatch({ type: 'SKILLS_SET', skills: habits.map((h) => ({
             key: h.key, imperative: h.imperative, reason: h.reason || '', occurrences: Number(h.occurrences) || 0,
           })) })
           dispatch({ type: 'STATUS', text: `skills: ${habits.length} proposal(s)` })
         } else if (cmd.type === 'skill-accept') {
-          habitLearner.confirmHabit(db2, cmd.key)
+          habitLearner.confirmHabit(db, cmd.key)
           dispatch({ type: 'STATUS', text: `skill accepted: ${cmd.key}` })
         } else {
-          habitLearner.dismissHabit(db2, cmd.key)
+          habitLearner.dismissHabit(db, cmd.key)
           dispatch({ type: 'STATUS', text: `skill dismissed: ${cmd.key}` })
         }
-      } catch (err) {
-        dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
       }
+    } catch (err) {
+      dispatch({ type: 'STATUS', text: `error: ${err && err.message ? err.message : String(err)}` })
+    } finally {
+      try { db?.close() } catch {}
     }
   }, [dbPath, state.currentSessionId])
 
@@ -231,7 +228,8 @@ export function App({ dbPath, modelName }) {
       }
       return
     }
-    if ((input || '') === 'v' && !state.running && state.toolCalls.length > 0) {
+    if ((input || '') === 'v' && !state.running && state.input === '' && state.toolCalls.length > 0) {
+      // 输入框为空时才响应 v（避免输入含 v 的文本时误触 diff 展开）
       const last = state.toolCalls.length - 1
       expandDiff(last)
       return
