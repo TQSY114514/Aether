@@ -181,4 +181,30 @@ describe('runSession', () => {
     const deltas = dispatched.filter((a) => a.type === 'TEXT_DELTA').map((a) => a.delta)
     expect(deltas).toEqual(['streamed']) // 兜底不重复追加
   })
+
+  it('rejects encrypted safeStorage API keys with a clear error (headless)', async () => {
+    const encResolve = () => ({
+      provider: { id: 1, name: 'my-provider', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+      model: { id: 1, model_name: 'm' },
+      db: null,
+    })
+    await expect(runSession({
+      dbPath: null,
+      prompt: 'x',
+      dispatch: () => {},
+      resolveImpl: encResolve,
+      runAgentImpl: async () => ({ text: '', toolCalls: [] }),
+    })).rejects.toThrow(/encrypted with the desktop app/)
+    // 传 --api-key 明文覆盖时不再拦截
+    let called = false
+    await runSession({
+      dbPath: null,
+      prompt: 'x',
+      apiKey: 'sk-plain',
+      dispatch: () => {},
+      resolveImpl: encResolve,
+      runAgentImpl: async (opts) => { called = opts.provider.api_key === 'sk-plain'; return { text: '', toolCalls: [] } },
+    })
+    expect(called).toBe(true)
+  })
 })
