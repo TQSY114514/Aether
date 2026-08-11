@@ -11,6 +11,15 @@ const { baseUrl, normalizeUsage } = require('../utils/llmShared')
 const { retryPromise, retryStream } = require('../utils/retry')
 const _credentialPool = require('./credentialPool')
 
+// 请求总超时: API 挂起(不返回不报错)时显式中止, 避免客户端无限 spinner。
+// 外部 signal 存在时叠加(AbortSignal.any), 任一方中止都生效。
+const REQUEST_TIMEOUT_MS = 60000
+
+function withTimeout(signal) {
+  const t = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  return signal ? AbortSignal.any([signal, t]) : t
+}
+
 function pickKey(provider) {
   if (provider.id != null) {
     const credential = _credentialPool.pickCredential(provider.id)
@@ -50,7 +59,7 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
-    signal,
+    signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
@@ -124,7 +133,7 @@ async function completeChat({ provider, model, messages, signal, options = {} })
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: false, ...options }),
-    signal,
+    signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
@@ -145,7 +154,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: false, ...options }),
-    signal,
+    signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
