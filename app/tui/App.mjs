@@ -18,14 +18,18 @@ import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
 import { listModels } from './models.js'
 
 // Tokyo Night 风格配色（克制、低饱和，参考 opencode 现代终端观感）
+// 语义 tokens（对齐 opencode theme 结构）：组件只引用 token，不写裸色值。
 const C = {
-  primary: '#7aa2f7',   // 主色：logo / 提示符 / 运行中边框
+  primary: '#7aa2f7',   // 主色：logo / 提示符 / 选中项 / 运行中边框
   user: '#9ece6a',      // 用户消息
   assistant: '#c0caf5', // AI 回复
   tool: '#e0af68',      // 工具
   sys: '#565f89',       // 系统（灰）
   error: '#f7768e',     // 错误（红）
   dim: '#565f89',       // 次要文字
+  bgHighlight: '#24283b', // 选中/悬停背景（opencode theme.primary 背景）
+  warning: '#e0af68',   // 权限/警告（△）
+  success: '#9ece6a',   // 成功/primary 标记
 }
 
 const ROLE_PREFIX = { user: '> ', assistant: '◆ ', system: '! ', tool: '⛭ ' }
@@ -67,12 +71,23 @@ function Logo({ tick }) {
   )
 }
 
+// 通用列表行（opencode DialogSelect 行样式）：选中高亮 primary + bgHighlight
+function SelectRow({ label, idx, i, marker = '❯' }) {
+  return h(Text, {
+    color: i === idx ? C.primary : C.dim,
+    backgroundColor: i === idx ? C.bgHighlight : undefined,
+  }, `  ${i === idx ? `${marker} ` : '  '}${label}`)
+}
+
+// 消息区窗口化常量: 最多渲染最近 MSG_WINDOW 条(其余靠 PgUp/PgDn 翻页)
+const MSG_WINDOW = 40
+
 function MessageLine({ msg, selected }) {
   const prefix = ROLE_PREFIX[msg.role] || '• '
   const label = ROLE_LABEL[msg.role] || msg.role
   let color = ROLE_COLOR[msg.role] || C.assistant
   if (msg.role === 'system' && String(msg.text).startsWith('error')) color = C.error
-  const bg = selected ? '#24283b' : undefined
+  const bg = selected ? C.bgHighlight : undefined
   if (!msg.text && msg.role === 'assistant') {
     return h(Text, { color: C.dim, backgroundColor: bg }, `${prefix}${label} …`)
   }
@@ -114,16 +129,16 @@ function DiffView({ diff }) {
 // 权限审批面板（opencode 风格）：←→ 选择 Allow once / Always / Reject，Enter 确认。
 function PermissionPanel({ perm, permIdx }) {
   const options = ['Allow once', 'Allow always', 'Reject']
-  return h(Box, { borderStyle: 'round', borderColor: 'yellow', paddingX: 1, marginTop: 1, flexDirection: 'column' },
-    h(Text, { bold: true, color: 'yellow' }, `△ [权限请求] ${perm.name}`),
+  return h(Box, { borderStyle: 'round', borderColor: C.warning, paddingX: 1, marginTop: 1, flexDirection: 'column' },
+    h(Text, { bold: true, color: C.warning }, `△ [权限请求] ${perm.name}`),
     h(Text, { color: 'gray' }, `args: ${summarizeArgs(perm.args)} | risk: ${perm.risk}`),
     h(Box, { flexDirection: 'row', marginTop: 1 },
       options.map((opt, i) => h(Box, {
         key: opt,
         marginRight: 1,
         paddingX: 1,
-        backgroundColor: i === permIdx ? '#24283b' : undefined,
-      }, h(Text, { color: i === permIdx ? 'yellow' : 'gray', bold: i === permIdx }, ` ${opt} `)))),
+        backgroundColor: i === permIdx ? C.bgHighlight : undefined,
+      }, h(Text, { color: i === permIdx ? C.warning : 'gray', bold: i === permIdx }, ` ${opt} `)))),
     h(Text, { color: 'gray' }, '←→ 选择 · Enter 确认 · Esc/Ctrl+C 拒绝'),
   )
 }
@@ -457,8 +472,15 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       setSlashIdx(0)
       return
     }
-    // Esc: 关闭补全并清除输入的 /
-    if (slashMode && key?.escape === true) { dispatch({ type: 'INPUT', value: '' }); setSlashIdx(0); return }
+    // Esc: 清空输入（opencode prompt.clear：≥20 字符草稿先入历史；斜杠态=取消补全不保留）
+    if (key?.escape === true && state.input) {
+      if (!slashMode && state.input.length >= 20) {
+        historyRef.current = [...historyRef.current.filter((x) => x !== state.input), state.input].slice(-100)
+      }
+      dispatch({ type: 'INPUT', value: '' })
+      setSlashIdx(0)
+      return
+    }
     // PgUp/PgDn: 消息区翻页滚动(opencode scrollbox 分页)
     if (state.input === '' && key?.pageUp === true) { setScrollOffset((o) => o + 10); return }
     if (state.input === '' && key?.pageDown === true) { setScrollOffset((o) => Math.max(0, o - 10)); return }
@@ -576,7 +598,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
             m.slice(0, 10).map((c, i) => h(Text, {
               key: c,
               color: i === slashIdx ? C.primary : C.dim,
-              backgroundColor: i === slashIdx ? '#24283b' : undefined,
+              backgroundColor: i === slashIdx ? C.bgHighlight : undefined,
             }, `  ${c}`)),
             h(Text, { color: C.dim }, `  ↑↓ 选择 · Tab/Enter 填入 · Esc 取消 · 共 ${m.length} 个匹配`))
         })()
@@ -585,11 +607,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
           h(Text, { bold: true, color: C.primary }, 'Ctrl+P — commands'),
           h(Text, { color: C.dim }, `  filter: ${paletteFilter || '(all)'}`),
-          PALETTE_ITEMS.filter((i) => i.toLowerCase().includes(paletteFilter)).map((item, i) => h(Text, {
-            key: item,
-            color: i === paletteIdx ? C.primary : C.dim,
-            backgroundColor: i === paletteIdx ? '#24283b' : undefined,
-          }, `  ${i === paletteIdx ? '❯ ' : '  '}${item}`)))
+          PALETTE_ITEMS.filter((i) => i.toLowerCase().includes(paletteFilter)).map((item, i) => h(SelectRow, {
+            key: item, label: item, idx: paletteIdx, i,
+          })))
         : null,
       modelPicker
         ? (() => {
@@ -612,19 +632,23 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
                 const cur = flatIdx
                 flatIdx += 1
                 const isCurrent = state.modelName === m.model_name
-                return h(Text, {
+                return h(SelectRow, {
                   key: `${m.provider_id}-${m.id}`,
-                  color: cur === modelPicker.idx ? C.primary : C.dim,
-                  backgroundColor: cur === modelPicker.idx ? '#24283b' : undefined,
-                }, `  ${cur === modelPicker.idx ? '❯ ' : '  '}${m.model_name}${m.is_primary ? ' ★' : ''}${isCurrent ? ' ●' : ''}`)
+                  label: `${m.model_name}${m.is_primary ? ' ★' : ''}${isCurrent ? ' ●' : ''}`,
+                  idx: modelPicker.idx, i: cur,
+                })
               }),
             ]))
         })()
         : null,
       h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : (leaderArmed ? C.primary : C.dim), paddingX: 1 },
         h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
-        h(Text, { color: C.assistant }, state.input),
+        state.input
+          ? h(Text, { color: C.assistant }, state.input)
+          : h(Text, { color: C.dim }, 'Ask anything…  Ctrl+X 快捷键 · / 命令 · Ctrl+P 面板'),
       ),
+      // 输入框 meta 行（opencode prompt meta: mode · model · effort · running）
+      h(Text, { color: C.dim }, `  ${state.mode}${state.modelName ? ` · ${state.modelName}` : ''} · effort:${state.effort}${state.running ? ` · ${tick} running` : ''} · PgUp/PgDn 翻页`),
       leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 会话列表 · q 退出') : null,
       h(StatusBar, { state, tick: state.running ? tick : '●' }),
   )
