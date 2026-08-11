@@ -1,6 +1,6 @@
 ﻿{
   "name": "aetherai",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "AetherAI - Multi-provider AI aggregation client",
   "author": "TQSY114514",
   "main": "electron/main.js",
@@ -74,4 +74,5 @@
     }
   }
 }
+
 

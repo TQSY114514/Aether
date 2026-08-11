@@ -4,193 +4,291 @@
 
 # AetherAI
 
-### Общайтесь с любой моделью, запускайте безопасного кодинг-агента и сравнивайте модели — всё на вашем компьютере
+### Локально в первую очередь · Мультимодельный · Встроенный агент
+
+Общайтесь с любой моделью, запускайте безопасного кодирующего агента и сравнивайте модели бок о бок — на рабочем столе или в терминале.
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
-[![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#участие)
+[![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#загрузка) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#быстрый-старт) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#технологический-стек) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#настройка) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#навыки--расширяемость)
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-quick-start) [![Electron 43](https://img.shields.io/badge/Electron-43-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
-`Beta` · `Личный / хобби-проект` · `MIT Licensed`
+`Beta` · `Сольный / хобби-проект` · `Лицензия MIT`
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)<br><sup>Переводы могут отставать от английской / упрощённой китайской версий.</sup>
 
 </div>
 
 ---
 
-> **Статус: Beta.** AetherAI — личный/хобби-проект. Он работает, но возможны
-> шероховатости. О багах сообщайте — см. [CONTRIBUTING.md](./CONTRIBUTING.md) и
-> [SECURITY.md](./SECURITY.md).
+> **Статус: Beta.** AetherAI — сольный/хобби-проект. Он работает, но возможны шероховатости. Отчёты об ошибках приветствуются — см. [CONTRIBUTING.md](./CONTRIBUTING.md) и [SECURITY.md](./SECURITY.md).
 
-Объединяет несколько LLM-провайдеров — OpenAI / Claude / DeepSeek / локальные модели / любую OpenAI-совместимую конечную точку — в одном настольном приложении. Общайтесь, запускайте кодинг-агента и сравнивайте модели в мульти-модельной арене с голосованием ELO.
+**Платформа: только Windows.** Официальные сборки, тестирование и поддержка нацелены на Windows. macOS / Linux могут собираться из исходников, но официально не поддерживаются; подпись кода не планируется — ожидайте предупреждение SmartScreen «неизвестный издатель» при первом запуске (см. [Загрузка](#download)).
 
-**Локальность по замыслу.** API-ключи и переписки хранятся в локальной SQLite-базе и никогда не покидают ваш компьютер — за исключением обращений к настроенным вами провайдерам.
+**Одно приложение для каждой модели.** OpenAI / Claude / DeepSeek / локальные модели / любая OpenAI-совместимая конечная точка — общайтесь, запускайте кодирующего агента и сравнивайте модели друг с другом на мультимодельной арене с голосованием ELO.
 
-**Безопасность по умолчанию.** Встроенный агент работает в песочнице рабочей области с лестницей разрешений: доступ к файлам и командам подтверждается заранее, а каждый вызов инструмента можно проверить.
+**Локальные данные — заложено в дизайне.** Ключи API и разговоры хранятся в локальной базе SQLite и никогда не покидают ваш компьютер — кроме тех провайдеров, которых вы настроили.
+
+**Безопасно по умолчанию.** Встроенный агент работает в песочнице рабочей области с лестницей разрешений: доступ к файлам и командам подтверждается до его выполнения, а каждый вызов инструмента проверяем.
 
 ---
 
-## Что отличает AetherAI
+## Чем AetherAI отличается
 
-AetherAI объединяет несколько возможностей, которые обычно разбросаны по разным инструментам, в одном локальном настольном приложении:
+AetherAI объединяет в одно локальное десктопное приложение несколько возможностей, которые обычно разбросаны по разным инструментам:
 
 | Возможность | Описание | Зрелость |
 |---|---|:---:|
-| **Мульти-провайдер чат** | Переключайтесь между OpenAI, Claude, DeepSeek и любой OpenAI-совместимой конечной точкой прямо во время разговора. | `Stable` |
-| **Цикл инструментов агента** | 16 встроенных инструментов с циклом «План-Действие-Наблюдение», песочница, лестница разрешений. | `Beta` |
-| **Мульти-модельная арена** | Отправьте один промпт нескольким моделям, проголосуйте за лучшую, отслеживайте ELO-рейтинг. | `Beta` |
-| **Навыки и расширяемость** | Drop-in `SKILL.md` файлы, MCP-серверы, 10-точечная система хуков. | `Experimental` |
+| **Мультипровайдерный чат** | Переключайтесь между OpenAI, Claude, DeepSeek и любой OpenAI-совместимой конечной точкой прямо в ходе разговора. | `Stable` |
+| **Цикл инструментов агента** | 42 встроенных инструмента с циклом Plan-Act-Observe, песочницей и лестницей разрешений. | `Beta` |
+| **Мультимодельная арена** | Отправьте один запрос нескольким моделям, голосуйте за лучший ответ, отслеживайте рейтинги ELO. | `Beta` |
+| **Навыки и расширяемость** | Подключаемые файлы `SKILL.md`, серверы MCP, система из 10 хуков. | `Experimental` |
 | **Структурированная память** | Агент вспоминает предпочтения и прошлые решения между сессиями. | `Beta` |
 | **Иерархическое планирование** | Сложные запросы автоматически разбиваются на параллельные подзадачи. | `Experimental` |
-| **Сжатие контекста** | Длинные разговоры автоматически суммируются без потери пар вызовов инструментов. | `Beta` |
-| **Локальная конфиденциальность** | Переписки, ключи, персоны в локальной SQLite. Ничего не покидает ваш компьютер. | `Stable` |
-| **15 языков интерфейса** | Включая классический китайский (文言) и арабский с RTL. | `Beta` |
+| **Сжатие контекста** | Длинные разговоры автоматически резюмируются без потери пар «вызов инструмента — результат». | `Beta` |
+| **Конфиденциальность по умолчанию** | Разговоры, ключи и персоны — в локальной SQLite. Ничего не покидает ваш компьютер. | `Stable` |
+| **15 языков интерфейса** | Включая классический китайский (文言) и арабский RTL. | `Beta` |
+| **Терминальный TUI** | Интерактивный терминал на Ink v5: поток сессий, карточки инструментов, просмотр/откат diff, клавиатурный шлюз разрешений, дерево сессий `/fork`, `/memory`, steering-ввод во время выполнения. | `Beta` |
+| **Headless CLI · RPC · SDK** | CLI в четырёх режимах (разовый / NDJSON / JSONL RPC / конвейер), SDK без Electron (`aetherai/sdk`), машиночитаемый JSONL-протокол. | `Beta` |
 | **Лицензия MIT** | Полностью открытый исходный код. | `Stable` |
 
 ---
 
 ## Загрузка
 
-### Windows — готовый установщик (рекомендуется для большинства пользователей)
+### Windows — готовый установщик (рекомендуется большинству пользователей)
 
-Скачайте последний [Release](https://github.com/TQSY114514/Aether/releases):
+Скачайте последний [Релиз](https://github.com/TQSY114514/Aether/releases):
 
 | Сборка | Описание |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | NSIS-установщик. Для пользователя (без admin), автообновление внутри приложения. **Рекомендуется.** |
-| **`AetherAI-x.y.z.exe`** | Портативный single-exe. Без установки, без автообновления; просто запустите. |
+| **`AetherAI-Setup-x.y.z.exe`** | Установщик NSIS. Для текущего пользователя (без прав администратора), автоматические обновления в приложении. **Рекомендуется.** |
+| **`AetherAI-x.y.z.exe`** | Портативный одиночный exe. Без установки и автообновления; просто запустите. |
 
-> Установщик показывает предупреждение SmartScreen «неизвестный издатель» при первом запуске — это ожидаемо для неподписанного одиночного приложения. Все данные остаются локальными.
+> Установщик показывает предупреждение SmartScreen «неизвестный издатель» при первом запуске — это ожидаемо для неподписанного сольного приложения. Все данные остаются локальными.
 >
-> ⚠️ Некоторые антивирусы могут помещать в карантин распакованный `electron.exe` во время упаковки, поскольку приложение не подписано. Если установщик удалён вашим AV, добавьте исключение или используйте портативную сборку.
+> ⚠️ Некоторые антивирусы могут помещать в карантин распакованный `electron.exe` при упаковке, так как приложение не подписано. Если установщик удалён вашим антивирусом, добавьте исключение или используйте портативную сборку.
 
 ### Запуск из исходников (разработчики / продвинутые пользователи)
 
-Если вы предпочитаете запускать из исходников или хотите изменять код, используйте `start.bat` (требуется [Node.js 18+](https://nodejs.org)):
+Если вы предпочитаете запуск из исходников или хотите изменить код, используйте `start.bat` (требуется [Node.js 18+](https://nodejs.org)):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
 cd AetherAI
-start.bat        # Windows: устанавливает зависимости, собирает фронтенд, запускает Electron
+start.bat        # Windows: installs deps, builds frontend, launches Electron
 ```
 
-См. [Быстрый старт](#быстрый-старт) для ручного пошагового руководства.
+Пошаговая инструкция — в разделе [Быстрый старт](#-quick-start).
 
-> **exe против start.bat** — оба поддерживаются и служат разной аудитории:
-> - **Установщик exe** — для конечных пользователей: двойной клик для установки, пункт в меню «Пуск», автообновление в приложении, Node.js не требуется.
-> - **start.bat** — для разработчиков / тinkerers: прозрачный пайплайн `npm install` → `vite build` → `electron .`, edit-and-run, требует Node.js.
+> **exe vs start.bat** — поддерживаются оба варианта, они рассчитаны на разные аудитории:
+> - **Установщик exe** — для конечных пользователей: установка двойным кликом, пункт в меню «Пуск», автообновление в приложении, Node.js не нужен.
+> - **start.bat** — для разработчиков и любителей покопаться: прозрачный конвейер `npm install` → `vite build` → `electron .`, редактируй и запускай, требуется Node.js.
 
 ---
 
 ## Быстрый старт
 
-**Предварительные требования:** Node.js 18+, npm 9+
+**Требования:** Node.js 18+, npm 9+
 
 ```bash
 cd app
 npm install
-npm run dev      # разработка (горячая перезагрузка)
-npm run build    # продакшен-фронтенд
-npm start        # запуск Electron
+npm run dev      # development (hot reload)
+npm run build    # production frontend
+npm start        # launch Electron
 ```
 
-Или запустите `start.bat` в корне репозитория на Windows.
+Либо запустите `start.bat` в корне репозитория на Windows.
+
+### Попробуйте терминал (окно Electron не требуется)
+
+```bash
+cd app && npm install
+node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
+node cli.js "你好"           # 单发 prompt
+echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
+node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
+node cli.js tui --smoke      # headless 状态机冒烟
+```
 
 ### Настройка провайдера
 
-1. После запуска нажмите **Models** в боковой панели.
-2. Добавьте провайдера (имя / API URL / API Key).
-3. Нажмите **Fetch models**, чтобы получить список доступных моделей.
-4. Вернитесь к чату и начните общение.
+1. После запуска нажмите **Models** на боковой панели.
+2. Добавьте провайдера (название / API URL / API Key).
+3. Нажмите **Fetch models**, чтобы загрузить список доступных моделей.
+4. Вернитесь в чат и начинайте общение.
 
-### Включите режим Ask
+### Включение режима Ask
 
 1. Откройте **Settings - Agent & Safety**.
-2. Установите режим разрешений агента на **Ask**.
-3. Убедитесь, что корень рабочей папки — это папка, в которой агент должен читать/записывать.
-4. Держите **Yolo** выключенным, если вам не нужен неограниченный доступ.
+2. Установите режим разрешений агента **Ask**.
+3. Убедитесь, что корневая папка рабочей области — та, с которой агент должен читать/писать.
+4. Держите **Yolo** отключённым, если не хотите неограниченного доступа.
 
-### Запустите первую задачу агента
+### Первая задача агента
 
 1. Откройте новый чат.
 2. Спросите: `List the files in this project and summarize what the app does.`
-3. Проверяйте каждый предложенный вызов инструмента. Одобряйте безопасные чтения; отклоняйте всё неожиданное.
-4. Проверьте живую трассировку рассуждений и финальный ответ.
+3. Проверяйте каждый предлагаемый вызов инструмента. Одобряйте безопасные чтения; отклоняйте всё неожиданное.
+4. Смотрите живой ход рассуждений и итоговый ответ.
 
 ---
 
 ## Возможности
 
-**Метки статуса:** `Stable` = готово для ежедневного использования, `Beta` = usable с известными шероховатостями, `Experimental` = новое/продвинутое поведение может измениться, `Planned` = задокументированный пункт дорожной карты.
+**Метки статусов:** `Stable` = готово к ежедневному использованию, `Beta` = можно использовать, но есть известные шероховатости, `Experimental` = новое/продвинутое поведение может меняться, `Planned` = пункт задокументированной дорожной карты.
 
 ### Чат
 
-| Возможность | Статус | Описание |
+| Функция | Статус | Описание |
 |---|:---:|---|
-| **Мульти-провайдер** | `Stable` | Единый слой адаптеров; добавление провайдера = один файл. Охватывает OpenRouter, Together, DeepSeek, Ollama, LM Studio, ... |
+| **Мультипровайдерность** | `Stable` | Единый слой адаптеров; добавление провайдера = один файл. Поддерживает OpenRouter, Together, DeepSeek, Ollama, LM Studio, ... |
 | **Параллельный стриминг** | `Stable` | Один чат стримит, пока вы продолжаете общаться в другом. |
-| **Ползунок усилия размышления** | `Beta` | Реальные параметры: OpenAI o-series / gpt-5 / Claude через релей. Эффективно только на reasoning-моделях. |
-| **Вложения** | `Beta` | Текстовые файлы как контекст; изображения для мультимодальности (нужна vision-модель). |
-| **Свёртка длинных вставок** | `Stable` | Сотни строк автоматически сворачиваются в раскрываемый фрагмент (в стиле ChatGPT). |
-| **Редактирование сообщений** | `Stable` | Перезапись + регенерация из любой точки. |
+| **Слайдер усилия мышления** | `Beta` | Настоящие параметры: OpenAI o-series / gpt-5 / Claude через ретранслятор. Эффективно только на рассуждающих моделях (reasoning). |
+| **Вложения** | `Beta` | Текстовые файлы как контекст; изображения для мультимодальности (нужна модель с поддержкой изображений, vision). |
+| **Сворачивание длинной вставки** | `Stable` | Сотни строк автоматически сворачиваются в раскрываемый фрагмент (в стиле ChatGPT). |
+| **Редактирование сообщений** | `Stable` | Перезапись + регенерация с любого места. |
 | **Поиск по сообщениям** | `Stable` | С подсветкой по всем сообщениям. |
 | **Сводки в боковой панели** | `Beta` | Тематические фразы, сгенерированные моделью, а не скопированный текст. |
 
-### Агент (вызов функций)
+### Агент (Function Calling)
 
-- `Beta` **16 встроенных инструментов** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) с циклом «План-Действие-Наблюдение», живой трассировкой рассуждений + чек-листом задач, обнаружением зацикливания, таймаутами на каждый инструмент, настраиваемым бюджетом итераций (по умолчанию 25 раундов) и сжатием контекста.
-- `Experimental` **Иерархическое планирование** — авто-генерация разбивки задач для сложных запросов (вдохновлено DS4).
-- `Experimental` **Делегирование суб-агенту** — независимые подзадачи выполняются параллельно через `delegate_task`.
-- `Stable` **Режимы разрешений** — лестница с возрастающим риском:
+- `Beta` **42 встроенных инструмента** — работа с файлами (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), интернет (`web_search`, `web_fetch`), оболочка (`run_command`), git и GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), интеллект кода (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), метаданные агента (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — с циклом Plan-Act-Observe, живым ходом рассуждений + чек-листом задач, детекцией зацикливания, тайм-аутами для каждого инструмента, настраиваемым бюджетом итераций (по умолчанию 25 раундов) и сжатием контекста.
+- `Experimental` **Иерархическое планирование** — автоматически строит разбиение задач для сложных запросов (вдохновлено DS4).
+- `Experimental` **Делегирование подагентам** — независимые подзадачи выполняются параллельно через `delegate_task`.
+- `Stable` **Режимы разрешений** — лестница по возрастанию риска:
 
 | Режим | Описание | Песочница |
 |---|---|:---:|
 | **Off** | Обычный чат, без инструментов | N/A |
-| **Plan** | Инструменты только для чтения (исследование без изменений) | - |
-| **Ask** | Подтверждать каждое рискованное действие (рекомендуется) | - |
+| **Plan** | Только чтение (исследование без изменений) | - |
+| **Ask** | Подтверждение каждого рискованного действия (рекомендуется) | - |
 | **Auto** | Выполнять всё без подтверждений | Да |
-| **Yolo** | Полные разрешения, без песочницы | Нет |
+| **Yolo** | Полные права, без песочницы | Нет |
 
-- `Stable` **Песочница рабочего пространства** — `write_file`/`edit_file` отклоняются вне настроенного корня рабочего пространства; `run_command` блокирует деструктивные паттерны. Настраивается в Settings - Agent & Safety.
-- `Beta` **Сжатие контекста** — автоматически суммирует старую историю (пары вызов-инструмент/результат сохраняются нетронутыми; идентификаторы сохраняются дословно).
-- `Beta` **Ремонт вызовов инструментов** — автоматически исправляет некорректный JSON, отсутствующие аргументы, незакавыченные ключи и усечённые вызовы.
+- `Stable` **Песочница рабочей области** — `write_file`/`edit_file` отклоняются за пределами настроенной корневой папки; `run_command` блокирует деструктивные паттерны. Настраивается в Settings - Agent & Safety.
+- `Beta` **Сжатие контекста** — автоматически резюмирует более старую историю (пары «вызов инструмента — результат» сохраняются полностью; идентификаторы переносятся дословно).
+- `Beta` **Восстановление вызовов инструментов** — автоматически чинит некорректный JSON, отсутствующие аргументы, ключи без кавычек и обрезанные вызовы.
 
 ### Память и обучение
 
-- `Beta` **Автоматическая долгосрочная память** — релевантные воспоминания внедряются перед каждым ходом; ключевые факты извлекаются и сохраняются автоматически. Включается в Settings - Agent.
-- `Experimental` **Обучатель привычек** — обнаруживает повторяющиеся предпочтения (например, «всегда использовать Claude») и предлагает авто-применяемые навыки.
-- `Beta` **Журнал аудита** — трассировка выполнения агента по ходам для отладки.
+- `Beta` **Автоматическая долговременная память** — релевантные воспоминания внедряются перед каждым ходом; ключевые факты извлекаются и сохраняются автоматически. Включается/отключается в Settings - Agent.
+- `Experimental` **Изучение привычек** — обнаруживает повторяющиеся предпочтения (например, «всегда использовать Claude») и предлагает автоматически применяемые навыки.
+- `Beta` **Журнал аудита** — трассировка выполнения агента по каждому ходу для отладки.
 
 ### Арена
 
-- `Beta` **Мульти-модельная арена** — один промпт, несколько моделей отвечают **одновременно**; голосуйте за лучшую, и **ELO-таблица лидеров** обновляется автоматически. Модели оцениваются **по намерению** (кодинг / математика / перевод / сводка / общее). *Ни одно другое локальное настольное чат-приложение не поставляется со встроенной мульти-модельной ареной с ELO.*
+- `Beta` **Мультимодельная арена** — один запрос, несколько моделей отвечают **одновременно**; голосуйте за лучший ответ, и **таблица лидеров ELO** обновляется автоматически. Модели оцениваются **по намерению** (код / математика / перевод / резюме / общие). *Ни одно другое локальное десктопное чат-приложение не поставляет встроенную мультимодельную арену с ELO.*
 
 ### Навыки и расширяемость
 
 | Компонент | Формат | Статус | Подробности |
 |---|---|:---:|---|
-| **Навыки** | `SKILL.md` | `Experimental` | Перенесите в `<workspace>/.claude/skills/`; поставляется с `release-checklist` и `git-commit` |
-| **Slash-команды** | `CMD.md` | `Stable` | 6 встроенных: `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
-| **Хуки** | Скрипт | `Experimental` | 10 точек жизненного цикла: PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
-| **MCP** | stdio JSON-RPC 2.0 | `Beta` | Внешние MCP-серверы автоматически объединяются со встроенными инструментами |
+| **Навыки** | `SKILL.md` | `Experimental` | Поместите в `<workspace>/.claude/skills/`; в комплекте `release-checklist` и `git-commit` |
+| **Слэш-команды** | `CMD.md` | `Stable` | 6 встроенных: `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
+| **Хуки** | Script | `Experimental` | 10 точек жизненного цикла: PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
+| **MCP** | stdio JSON-RPC 2.0 | `Beta` | Внешние серверы MCP автоматически объединяются со встроенными инструментами |
 
 ### Настройка
 
 | Параметр | Статус | Описание |
 |---|:---:|---|
-| **Расширенные настройки модели** | `Stable` | Max tokens, temperature, top_p, пользовательский системный префикс, автозаголовки по языкам, усилие размышления |
-| **Своё фоновое изображение** | `Stable` | Загрузите изображение с управлением прозрачностью / размытием |
-| **Персоны** | `Stable` | Пресеты системных промптов, переключаемые для каждой сессии |
+| **Расширенные настройки модели** | `Stable` | Max tokens, temperature, top_p, свой системный префикс, авто-заголовки по языкам, усилия мышления |
+| **Пользовательский фон** | `Stable` | Загрузка изображения с контролем прозрачности / размытия |
+| **Персоны** | `Stable` | Пресеты системного промпта, переключаются для каждой сессии |
 | **Темы** | `Stable` | Light / Dark / Blue / Glass / Retro |
 | **15 языков интерфейса** | `Beta` | Английский, китайский (简/繁/文言), японский, испанский, французский, немецкий, португальский, русский, украинский, арабский (RTL), хинди, корейский |
-| **Автообновление** | `Beta` | NSIS-установщик проверяет при запуске; портативная версия тоже (ручная установка) |
-| **Отслеживание использования** | `Beta` | Журнал каждого вызова API с токенами, стоимостью, задержкой, процентом попаданий в кэш |
+| **Автообновление** | `Beta` | Установщик NSIS проверяет при запуске; портативная версия тоже (ручная установка) |
+| **Учёт использования** | `Beta` | Лог каждого вызова API: токены, стоимость, задержка, доля попаданий в кэш |
 
 ### Конфиденциальность
 
-> **Все данные остаются локальными.** AetherAI ничего не собирает и не загружает о вас. Ваши API-ключи, переписки и персоны хранятся в локальной базе SQLite. Единственные исходящие сетевые запросы идут к LLM-провайдерам, которых вы настроили.
+> **Все данные остаются локальными.** AetherAI ничего о вас не собирает и ничего не загружает. Ваши ключи API, разговоры и персоны хранятся в локальной базе SQLite. Единственные исходящие сетевые запросы — к провайдерам LLM, которых вы настроили.
+
+---
+
+## Расширение VS Code и Headless CLI
+
+Помимо десктопного приложения, AetherAI поставляет того же агента в виде CLI и расширения для редактора:
+
+- **Headless CLI** (`app/cli.js`) — запускайте агента без интерактивного режима, передавайте NDJSON-события в скрипты/CI:
+  ```bash
+  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
+  ```
+- **Расширение VS Code** (`extension/`) — запускает CLI в панели чата: живой поток вызовов инструментов, действия с блоками кода (Insert / Write file) и **карточки diff файлов**: каждый вызов `write_file` / `edit_file` / `apply_patch` отображает построчный diff по сравнению с содержимым файла до изменения, с откатом **Revert** в один клик (восстанавливает снимок, сделанный до запуска инструмента). Требуется настройка расширения `aether.cliPath` (определяется автоматически, если репозиторий клонирован локально).
+- **Local Gateway** (`127.0.0.1:35791`) — OpenAI-совместимый REST API на базе десктопного приложения (Settings → Local Gateway → token); через него подключается второе расширение (`extensions/vscode-aether/`).
+
+---
+
+## Терминальный TUI, RPC и SDK
+
+Помимо десктопного приложения и обычного CLI, AetherAI поставляет интерактивный терминальный интерфейс, машиночитаемый режим JSONL RPC и SDK без Electron. Все три используют то же ядро агента, память, персон, MCP-инструменты и правила разрешений, что и десктоп.
+
+### Быстрый старт — двойная форма
+
+```bash
+# Interactive terminal UI (Ink v5; requires Node ≥ 22)
+node app/cli.js tui                # real terminal: type, approve tools, review diffs
+node app/cli.js tui --smoke        # headless state-machine smoke (CI-safe, prints JSON)
+
+# Single-shot prompt (same as before)
+node app/cli.js "fix the failing test" --mode auto --max-iterations 30
+
+# NDJSON event stream for scripts/CI (compat: --json-lines)
+echo "summarize README.md" | node app/cli.js --mode json --model deepseek
+
+# JSONL RPC loop over stdin/stdout
+printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
+  | node app/cli.js --mode rpc --db path\to\aetherai.db
+```
+
+Дополнительные headless-флаги: `--persona <id>` (внедрение persona + памяти), `--memory-trace` (отчёт о количестве внедрённых записей памяти), `--skills` (JSON предложений навыков), `--setup-term` (запись профиля Windows Terminal), `--stdin` (явный ввод из конвейера).
+
+### TUI (`aether tui`)
+
+Интерактивный терминальный агент (Ink v5; Node ≥ 22; лучше всего работает в Windows Terminal):
+
+- **Сессии**：поточный рендеринг сообщений, дерево сессий `/fork` (`session.parent_session_id`), `/sessions`, переключение истории через `/use <id>`
+- **Инструменты и разрешения**：карточки вызовов инструментов (цвет статуса / время / сводка), просмотр diff (`Alt+v` развернуть, `Enter` принять / `r` откатить — восстановление снимка до записи, работает и не в git-каталогах), клавиатурный шлюз разрешений (`y` разрешить один раз / `a` разрешать всегда / `n` отказать, либо `←→` для выбора), автоматический пропуск инструментов только на чтение
+- **Режимы утверждения**：`Shift+Tab` циклирует `manual → auto-edits → plan` (plan = планирование только на чтение; после завершения три варианта определяют, как реализовать)
+- **Режимы**：`Alt+m` переключает ask/plan/auto; `/persona <id>` переключает персону (внедрение persona + префикс памяти)
+- **Горячие клавиши лидера**：`Ctrl+X`, затем `m` — выбор модели / `n` — новая сессия / `l` — список сессий / `g` — таймлайн / `r` — откат к чекпоинту / `q` — выход
+- **Палитра команд**：`Ctrl+P` или `x` (New chat / Model / Timeline / Export JSONL / Help / Quit)
+- **Переназначение клавиш**：`~/.config/aether/keybindings.json` (например, `{ "char:?": null }` отключает клавишу помощи `?`)
+- **Хранение ключей API**：`/apikey <provider> <key>` сохраняет в `auth.json` (ключи, зашифрованные safeStorage в десктопной версии, не могут быть расшифрованы в headless; используйте эту команду или переменную окружения `AETHER_API_KEY`)
+- **Замкнутый цикл памяти и навыков**：`/memory <ключевое слово>` поиск, `--memory-trace` — количество внедрённых записей, `/skills` + `/skill accept|dismiss <key>` (habitLearner → предложения навыков)
+- **steering**：во время работы `Ctrl+C` прерывает → ввод следующей команды → внедрение в текущий цикл (в очереди отображается `steer:n`); во время работы `Tab` ставит следующую команду в очередь
+- **Горячие клавиши**：двойное нажатие `Esc` — выход (или `/quit`), `Esc` — очистка ввода (черновик в историю), `?` — экран помощи, `PgUp/PgDn`/колесо мыши — прокрутка, в статус-баре в реальном времени `approval/mode/model/tok/ctx`; полный список клавиш — в [docs/tui-keys.md](./docs/tui-keys.md)
+
+### RPC (`aether --mode rpc`)
+
+Машиночитаемый JSONL-протокол через stdin/stdout: на вход кадры `request`, на выход кадры `event`/`result`/`error` — по одному JSON-объекту в строке, без человекочитаемого текста. Методы: `run` (стримит события `text`/`tool`/`plan`/`status`), `listModels`, `listProviders`, `models.default`, `listSessions`, `session.load`, `session.fork`, `task.derive`, `task.status`. Справочник кадров: [docs/rpc.md](./docs/rpc.md).
+
+### SDK (`require('aetherai/sdk')`)
+
+Агрегация ядра агента без Electron для внешних Node-проектов: `runAgent`, `openDatabase`, `resolveProviderModel`, `taskDbAdapter`, `memory` (prefetch/recall/search/…), `classifyAgentMode`, кадры `rpc`, `sessionContext` (внедрение persona + памяти). Включены объявления типов (`app/electron/sdk/index.d.ts`).
+
+```js
+const { runAgent, openDatabase, resolveProviderModel, classifyAgentMode } = require('aetherai/sdk')
+const db = openDatabase('./aetherai.db')
+const { provider, model } = resolveProviderModel(db, { modelName: 'deepseek' })
+console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', reason: ... }
+```
+
+---
+
+## Нативная интеграция с Windows
+
+| Возможность | Описание |
+|---|---|
+| **Меню в трее** | Показать/скрыть окно, новая сессия, **новая задача** (открывает TaskPanel напрямую); клик по значку в трее переключает видимость. |
+| **Глобальные горячие клавиши** | `Ctrl+Alt+A` вызывает главное окно (создаёт, если не запущено); результат регистрации записывается в журнал запуска. |
+| **Протокол `aetherai://`** | `aetherai://new` / `chat` — новая сессия; `aetherai://tui` — запуск в терминальном виде; `aetherai://open/?path=<кодированный путь>` — задать папку рабочим пространством и создать сессию (цепочка «Открыть с помощью Aether» в контекстном меню). |
+| **Регистрация в контекстном меню** | `app/resources/register-protocol.reg` (замените `<AETHER_EXE>` и импортируйте от администратора): `.cs/.js/.ts/.tsx/.md/.json` + папки → пункт «Открыть с помощью Aether» в контекстном меню. |
+| **Настройка терминала** | `app/resources/term/aether.ps1` (алиас + запуск `aether tui`); `node app/cli.js --setup-term` записывает профиль Windows Terminal (тёмная/светлая схемы). |
+| **Укрепление песочницы** | Защита Windows-путей: длинные пути `\\?\`, UNC `\\server\share`, выход через точки повторной обработки / junction, опасные расширения `.lnk/.scr/.msi` и т.д. |
 
 ---
 
@@ -199,7 +297,7 @@ npm start        # запуск Electron
 ```
 app/
 ├── electron/              # main process (Node)
-│   ├── database.js        # SQLite (sql.js) data layer — 14 tables
+│   ├── database.js        # better-sqlite3 data layer — 25+ tables (WAL)
 │   ├── ipc/               # IPC handlers (chat / arena / session / mcp / ...)
 │   │   ├── chat.handler.js    # THE central handler (540 lines)
 │   │   ├── arena.handler.js   # Multi-model arena with ELO
@@ -245,14 +343,16 @@ app/
 
 | Слой | Технология |
 |---|---|
-| Desktop | Electron 31 |
-| Frontend | React 18.3 + TypeScript 5.5 |
-| State | Zustand 4.5 |
-| Build | Vite 5.4 + electron-builder |
-| Database | sql.js (SQLite in-memory, persisted to disk) |
-| LLM | OpenAI-compatible + Anthropic Messages API |
+| Десктоп | Electron 43 |
+| Фронтенд | React 18.3 + TypeScript 5.8 |
+| Состояние | Zustand 4.5 |
+| Сборка | Vite 8 + electron-builder |
+| База данных | better-sqlite3 (нативный SQLite, режим WAL) |
+| LLM | OpenAI-совместимый + Anthropic Messages API |
 | UI | Tailwind CSS 3.4, lucide-react, highlight.js |
-| MCP | Custom stdio JSON-RPC 2.0 client |
+| MCP | Пользовательский stdio JSON-RPC 2.0 клиент |
+| TUI | Ink 5 + React 18 (createElement, без JSX) |
+| CLI/SDK | Node.js headless CLI (4 режима) + SDK без Electron |
 
 ---
 
@@ -260,49 +360,49 @@ app/
 
 AetherAI стоит на плечах этих проектов — их идеи сформировали архитектуру и UX:
 
-### Агентские фреймворки
+### Агентные фреймворки
 
-| Проект | Вдохновение |
+| Проект | Что вдохновило |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Модель разрешений агента, ползунок размышления, визуализация вызовов инструментов, делегирование суб-агенту, хуки |
-| [OpenClaw](https://github.com/openclaw/openclaw) | Сжатие контекста, обнаружение зацикливания вызовов инструментов, событийно-потоковая архитектура |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Бюджет итераций, структурированная долгосрочная память, автономные навыки |
-| [OpenAI Codex](https://github.com/openai/codex) | Песочница, сжатие контекста, ремонт вызовов инструментов |
-| [DS4](https://github.com/antirez/ds4) | Иерархическая декомпозиция задач |
+| [Claude Code](https://github.com/anthropics/claude-code) | Модель разрешений агента, слайдер мышления, визуализация вызовов инструментов, делегирование подагентам, хуки |
+| [OpenClaw](https://github.com/openclaw/openclaw) | Сжатие контекста, детекция зацикливания вызовов инструментов, архитектура событийного потока |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Бюджет итераций, структурированная долговременная память, автономные навыки |
+| [OpenAI Codex](https://github.com/openai/codex) | Песочницы, сжатие контекста, восстановление вызовов инструментов |
+| [DS4](https://github.com/antirez/ds4) | Иерархическое разбиение задач |
 
 ### UI и UX
 
-| Проект | Вдохновение |
+| Проект | Что вдохновило |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | Методология копируемых компонентов cn() / cva |
-| [Magic UI](https://github.com/magicuidesign/magicui) | Паттерны анимации (shimmer, blur-fade) |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | Методология компонентов копипастом cn() / cva |
+| [Magic UI](https://github.com/magicuidesign/magicui) | Паттерны анимаций (shimmer, blur-fade) |
 
 ### Инфраструктура
 
-| Проект | Вдохновение |
+| Проект | Что вдохновило |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Нормализация мульти-форматных провайдеров |
+| [Dify](https://github.com/langgenius/dify) | Нормализация провайдеров в разных форматах |
 | [MCP](https://modelcontextprotocol.io) | Спецификация, на которой говорит агент AetherAI |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Макет дашборда usage-статистики |
-| [new-api](https://github.com/QuantumNous/new-api) | Релей reasoning-effort, отслеживание usage/cost |
-| [Continue](https://github.com/continuedev/continue) | Конфиг как источник истины, абстракция провайдеров |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Мульти-ходовое выполнение агента, изолированное выполнение инструментов |
-| [Aider](https://github.com/Aider-AI/aider) | Цикл инструментов LLM-кодинг-ассистента, git-интеграция |
-| [Cline](https://github.com/cline/cline) | IDE-встроенный агент, MCP-интеграция, UX разрешений |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Макет дашборда статистики использования |
+| [new-api](https://github.com/QuantumNous/new-api) | Ретрансляция усилий рассуждения, учёт использования/стоимости |
+| [Continue](https://github.com/continuedev/continue) | Конфигурация как источник истины, абстракция провайдеров |
+| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Многоходовое выполнение агента, выполнение инструментов в песочнице |
+| [Aider](https://github.com/Aider-AI/aider) | Цикл инструментов LLM-ассистента по коду, интеграция с git |
+| [Cline](https://github.com/cline/cline) | Агент, встроенный в IDE, интеграция MCP, UX разрешений |
 
 ---
 
-## Участие
+## Участие в разработке
 
-Приветствуются любые вклады! Будь то исправление бага, запрос функции, улучшение перевода или обновление документации — пожалуйста, откройте issue или отправьте PR.
+Любой вклад приветствуется! Исправление ошибки, запрос функции, улучшение перевода или обновление документации — пожалуйста, откройте issue или отправьте PR.
 
 1. Форкните репозиторий
 2. Создайте ветку функции (`git checkout -b feat/my-feature`)
-3. Зафиксируйте изменения (`git commit -am 'Add feature'`)
-4. Отправьте в ветку (`git push origin feat/my-feature`)
+3. Закоммитьте изменения (`git commit -am 'Add feature'`)
+4. Запушьте в ветку (`git push origin feat/my-feature`)
 5. Откройте Pull Request
 
-См. [CONTRIBUTING.md](./CONTRIBUTING.md) для подробных руководств.
+Подробные правила — в [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ---
 
@@ -314,7 +414,7 @@ AetherAI стоит на плечах этих проектов — их иде�
 
 <div align="center">
 
-Built with ❤️ using Electron + React + TypeScript
+Сделано с ❤️ на Electron + React + TypeScript
 
 [⬆ Наверх](#aetherai)
 

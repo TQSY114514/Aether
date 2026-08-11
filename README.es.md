@@ -4,17 +4,19 @@
 
 # AetherAI
 
-### Chatea con cualquier modelo, ejecuta un agente de codificación seguro y compara modelos cara a cara — todo en tu máquina
+### Local-first · Multi-modelo · Nativo de agentes
+
+Chatea con cualquier modelo, ejecuta un agente de codificación seguro y compara modelos cara a cara — en tu escritorio o en tu terminal.
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-quick-start) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-quick-start) [![Electron 43](https://img.shields.io/badge/Electron-43-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
 `Beta` · `Proyecto solo / hobby` · `Licencia MIT`
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)<br><sup>Las traducciones pueden ir desfasadas respecto a las versiones en inglés / chino simplificado.</sup>
 
 </div>
 
@@ -24,11 +26,13 @@
 > algunas asperezas. Los informes de errores son bienvenidos — consulta
 > [CONTRIBUTING.md](./CONTRIBUTING.md) y [SECURITY.md](./SECURITY.md).
 
-Unifica múltiples proveedores de LLM — OpenAI / Claude / DeepSeek / modelos locales / cualquier endpoint compatible con OpenAI — en una sola aplicación de escritorio. Chatea, ejecuta un agente de codificación y compara modelos cara a cara en una arena multi-modelo con votación ELO.
+**Plataforma: solo Windows.** Los builds oficiales, las pruebas y el soporte se dirigen a Windows. macOS / Linux pueden compilarse desde el código fuente, pero no están soportados oficialmente, y no se planea la firma de código — espera un aviso de SmartScreen "editor desconocido" en el primer lanzamiento (consulta [Descarga](#download)).
 
-**Local por diseño.** Las claves API y las conversaciones viven en una base de datos SQLite local y nunca salen de tu máquina, salvo hacia los proveedores que configures.
+**Una sola app para cada modelo.** OpenAI / Claude / DeepSeek / modelos locales / cualquier endpoint compatible con OpenAI — chatea, ejecuta un agente de codificación y compara modelos cara a cara en una arena multi-modelo con votación ELO.
 
-**Seguro por defecto.** El agente integrado se ejecuta dentro de un sandbox de workspace con una escalera de permisos: el acceso a archivos y comandos se confirma antes de ejecutarse, y cada llamada de herramienta es auditable.
+**Local por diseño.** Las claves API y las conversaciones viven en una base de datos SQLite local y nunca salen de tu máquina — salvo hacia los proveedores que configures.
+
+**Seguro por defecto.** El agente integrado se ejecuta dentro de un sandbox de workspace con una escalera de permisos: el acceso a archivos y comandos se confirma antes de que ocurra, y cada llamada de herramienta es auditable.
 
 ---
 
@@ -39,14 +43,16 @@ AetherAI combina varias capacidades que normalmente se encuentran repartidas ent
 | Capacidad | Descripción | Madurez |
 |---|---|:---:|
 | **Chat multi-proveedor** | Cambia entre OpenAI, Claude, DeepSeek y cualquier endpoint compatible con OpenAI durante la conversación. | `Stable` |
-| **Bucle de herramientas del Agente** | 16 herramientas integradas con bucle Plan-Act-Observe, sandboxing, escalera de permisos. | `Beta` |
-| **Arena multi-modelo** | Envía un prompt a múltiples modelos, vota por el mejor, rastrea rankings ELO. | `Beta` |
-| **Skills y extensibilidad** | Archivos `SKILL.md` plug-and-play, servidores MCP, sistema de 10 puntos de hook. | `Experimental` |
+| **Bucle de herramientas del Agente** | 42 herramientas integradas con bucle Plan-Act-Observe, sandboxing y escalera de permisos. | `Beta` |
+| **Arena multi-modelo** | Envía un prompt a múltiples modelos, vota por el mejor y sigue los rankings ELO. | `Beta` |
+| **Skills y extensibilidad** | Archivos `SKILL.md` plug-and-play, servidores MCP y sistema de 10 puntos de hook. | `Experimental` |
 | **Memoria estructurada** | El agente recuerda preferencias y decisiones pasadas entre sesiones. | `Beta` |
 | **Planificación jerárquica** | Las solicitudes complejas se descomponen automáticamente en subtareas paralelas. | `Experimental` |
-| **Compacción de contexto** | Las conversaciones largas se resumen automáticamente sin perder pares tool-call/result. | `Beta` |
-| **Privacidad local-first** | Conversaciones, claves, personas en SQLite local. Nada sale de tu máquina. | `Stable` |
+| **Compacción de contexto** | Las conversaciones largas se resumen automáticamente sin perder pares de llamadas a herramientas. | `Beta` |
+| **Privacidad local-first** | Conversaciones, claves y personas en SQLite local. Nada sale de tu máquina. | `Stable` |
 | **15 idiomas de UI** | Incluyendo chino clásico (文言) y árabe RTL. | `Beta` |
+| **Terminal TUI** | Terminal interactivo Ink v5: flujo de sesiones, tarjetas de herramientas, revisión/reversión de diff, puerta de permisos por teclado, árbol de sesiones con `/fork`, `/memory` y reinyección de steering en tiempo de ejecución. | `Beta` |
+| **Headless CLI · RPC · SDK** | CLI de cuatro modos (disparo único / NDJSON / JSONL RPC / pipe), SDK sin Electron (`aetherai/sdk`) y protocolo JSONL invocable por máquinas. | `Beta` |
 | **Licencia MIT** | Totalmente open source. | `Stable` |
 
 ---
@@ -59,16 +65,16 @@ Descarga el último [Release](https://github.com/TQSY114514/Aether/releases):
 
 | Build | Descripción |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | Instalador NSIS. Per-user (sin admin), auto-update en-app. **Recomendado.** |
-| **`AetherAI-x.y.z.exe`** | Portable single-exe. Sin install, sin auto-update; solo ejecútalo. |
+| **`AetherAI-Setup-x.y.z.exe`** | Instalador NSIS. Por usuario (sin admin), auto-update en la app. **Recomendado.** |
+| **`AetherAI-x.y.z.exe`** | Portable single-exe. Sin instalación, sin auto-update; solo ejecútalo. |
 
-> El instalador muestra una advertencia de SmartScreen "unknown publisher" en el primer lanzamiento — esperado para una app solo sin firmar. Todos los datos se quedan local.
+> El instalador muestra un aviso de SmartScreen "editor desconocido" en el primer lanzamiento — esperado para una app solo sin firmar. Todos los datos se quedan local.
 >
 > ⚠️ Algunos antivirus pueden poner en cuarentena el `electron.exe` desempaquetado durante el empaquetado porque la app no está firmada. Si el instalador es eliminado por tu AV, agrega una exclusión o usa el build portable.
 
-### Ejecutar desde fuente (desarrolladores / power users)
+### Ejecutar desde el código fuente (desarrolladores / power users)
 
-Si prefieres ejecutar desde fuente, o quieres modificar el código, usa `start.bat` (requiere [Node.js 18+](https://nodejs.org)):
+Si prefieres ejecutar desde el código fuente, o quieres modificar el código, usa `start.bat` (requiere [Node.js 18+](https://nodejs.org)):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -79,8 +85,8 @@ start.bat        # Windows: instala deps, construye frontend, lanza Electron
 Consulta [Inicio rápido](#-quick-start) para el paso a paso manual.
 
 > **exe vs start.bat** — ambos están soportados y sirven a audiencias diferentes:
-> - **Instalador exe** — para usuarios finales: doble clic para instalar, entrada en el menú Inicio, auto-update en-app, no necesita Node.js.
-> - **start.bat** — para desarrolladores / tinkerers: pipeline transparente `npm install` → `vite build` → `electron .`, edita-y-ejecuta, requiere Node.js.
+> - **Instalador exe** — para usuarios finales: doble clic para instalar, entrada en el menú Inicio, auto-update en la app, sin necesidad de Node.js.
+> - **start.bat** — para desarrolladores / aficionados: pipeline transparente `npm install` → `vite build` → `electron .`, editar-y-ejecutar, requiere Node.js.
 
 ---
 
@@ -91,21 +97,32 @@ Consulta [Inicio rápido](#-quick-start) para el paso a paso manual.
 ```bash
 cd app
 npm install
-npm run dev      # desarrollo (hot reload)
-npm run build    # frontend de producción
-npm start        # lanzar Electron
+npm run dev      # development (hot reload)
+npm run build    # production frontend
+npm start        # launch Electron
 ```
 
 O ejecuta `start.bat` en la raíz del repo en Windows.
 
+### Prueba el terminal (no se necesita ventana de Electron)
+
+```bash
+cd app && npm install
+node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
+node cli.js "你好"           # 单发 prompt
+echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
+node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
+node cli.js tui --smoke      # headless 状态机冒烟
+```
+
 ### Configurar proveedor
 
 1. Después del lanzamiento, haz clic en **Models** en la barra lateral.
-2. Agrega un proveedor (nombre / API URL / API Key).
+2. Agrega un proveedor (nombre / URL de API / clave de API).
 3. Haz clic en **Fetch models** para obtener la lista de modelos disponibles.
 4. Vuelve al chat y empieza a hablar.
 
-### Habilitar modo Ask
+### Habilitar el modo Ask
 
 1. Abre **Settings - Agent & Safety**.
 2. Establece el modo de permiso del agente en **Ask**.
@@ -116,14 +133,14 @@ O ejecuta `start.bat` en la raíz del repo en Windows.
 
 1. Abre un nuevo chat.
 2. Pregunta: `List the files in this project and summarize what the app does.`
-3. Revisa cada tool call propuesto. Aprueba lecturas seguras; niega cualquier cosa inesperada.
+3. Revisa cada llamada de herramienta propuesta. Aprueba las lecturas seguras; niega cualquier cosa inesperada.
 4. Revisa la traza de razonamiento en vivo y la respuesta final.
 
 ---
 
 ## Características
 
-**Etiquetas de estado:** `Stable` = listo para uso diario, `Beta` = usable con asperezas conocidas, `Experimental` = comportamiento nuevo/avanzado que puede cambiar, `Planned` = elemento de roadmap documentado.
+**Etiquetas de estado:** `Stable` = listo para uso diario, `Beta` = usable con asperezas conocidas, `Experimental` = comportamiento nuevo/avanzado que puede cambiar, `Planned` = elemento documentado de la hoja de ruta.
 
 ### Chat
 
@@ -131,17 +148,17 @@ O ejecuta `start.bat` en la raíz del repo en Windows.
 |---|:---:|---|
 | **Multi-proveedor** | `Stable` | Capa adaptadora única; agregar un proveedor = un archivo. Cubre OpenRouter, Together, DeepSeek, Ollama, LM Studio, ... |
 | **Streaming concurrente** | `Stable` | Un chat transmite mientras sigues hablando en otro. |
-| **Slider de esfuerzo de pensamiento** | `Beta` | Params reales: OpenAI o-series / gpt-5 / Claude vía relay. Solo efectivo en modelos de razonamiento. |
+| **Deslizador de esfuerzo de pensamiento** | `Beta` | Parámetros reales: OpenAI o-series / gpt-5 / Claude vía relay. Solo efectivo en modelos de razonamiento. |
 | **Adjuntos** | `Beta` | Archivos de texto como contexto; imágenes para multimodal (necesita un modelo de visión). |
 | **Colapso de pegado largo** | `Stable` | Cientos de líneas se colapsan automáticamente en un fragmento expandible (estilo ChatGPT). |
 | **Edición de mensajes** | `Stable` | Sobrescribir + regenerar desde cualquier punto. |
 | **Búsqueda de mensajes** | `Stable` | Con resaltado en todos los mensajes. |
-| **Resúmenes de barra lateral** | `Beta` | Frases temáticas generadas por el modelo, no texto copiado. |
+| **Resúmenes de la barra lateral** | `Beta` | Frases de tema generadas por el modelo, no texto copiado. |
 
 ### Agente (Function Calling)
 
-- `Beta` **16 herramientas integradas** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) con bucle Plan-Act-Observe, traza de razonamiento en vivo + lista de tareas, detección de bucles, timeouts por herramienta, presupuesto de iteraciones configurable (25 rondas por defecto) y compacción de contexto.
-- `Experimental` **Planificación jerárquica** — genera automáticamente descomposición de tareas para solicitudes complejas (inspirado en DS4).
+- `Beta` **42 herramientas integradas** — operaciones de archivos (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), web (`web_search`, `web_fetch`), shell (`run_command`), git y GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), inteligencia de código (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), metainformación de agente (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — con bucle Plan-Act-Observe, traza de razonamiento en vivo + lista de tareas, detección de bucles, timeouts por herramienta, presupuesto de iteraciones configurable (25 rondas por defecto) y compacción de contexto.
+- `Experimental` **Planificación jerárquica** — genera automáticamente el desglose de tareas para solicitudes complejas (inspirado en DS4).
 - `Experimental` **Delegación de sub-agente** — subtareas independientes se ejecutan en paralelo vía `delegate_task`.
 - `Stable` **Modos de permiso** — escalera ascendente de riesgo:
 
@@ -154,43 +171,126 @@ O ejecuta `start.bat` en la raíz del repo en Windows.
 | **Yolo** | Permiso total, sin sandbox | No |
 
 - `Stable` **Sandbox de workspace** — `write_file`/`edit_file` se rechazan fuera del workspace root configurado; `run_command` bloquea patrones destructivos. Configurable en Settings - Agent & Safety.
-- `Beta` **Compacción de contexto** — resume automáticamente el historial más antiguo (pares tool-call/result se mantienen intactos; identificadores preservados verbatim).
-- `Beta` **Reparación de tool call** — repara automáticamente JSON malformado, args faltantes, keys sin comillas y calls truncadas.
+- `Beta` **Compacción de contexto** — resume automáticamente el historial más antiguo (los pares de llamada/resultado de herramienta se mantienen intactos; los identificadores se preservan verbatim).
+- `Beta` **Reparación de llamadas a herramientas** — repara automáticamente JSON malformado, argumentos faltantes, claves sin comillas y llamadas truncadas.
 
 ### Memoria y Aprendizaje
 
-- `Beta` **Memoria automática a largo plazo** — memorias relevantes inyectadas antes de cada turno; hechos clave extraídos y guardados automáticamente. Configurable en Settings - Agent.
-- `Experimental` **Aprendiz de hábitos** — detecta preferencias recurrentes (ej. "siempre usar Claude") y propone skills auto-aplicables.
-- `Beta` **Log de auditoría** — traza de ejecución del agente por turno para debugging.
+- `Beta` **Memoria automática a largo plazo** — memorias relevantes inyectadas antes de cada turno; los hechos clave se extraen y guardan automáticamente. Activable/desactivable en Settings - Agent.
+- `Experimental` **Aprendiz de hábitos** — detecta preferencias recurrentes (p. ej. "usar siempre Claude") y propone skills auto-aplicables.
+- `Beta` **Registro de auditoría** — traza de ejecución del agente por turno para depuración.
 
 ### Arena
 
-- `Beta` **Arena multi-modelo** — un prompt, múltiples modelos responden **concurrentemente**; vota por el mejor y un **leaderboard ELO** se actualiza automáticamente. Los modelos se puntúan **por intención** (coding / math / translation / summary / general). *Ninguna otra app de chat desktop local-first incluye una arena multi-modelo con ELO integrada.*
+- `Beta` **Arena multi-modelo** — un prompt, múltiples modelos responden **de forma concurrente**; vota por el mejor y un **leaderboard ELO** se actualiza automáticamente. Los modelos se puntúan **por intención** (codificación / matemáticas / traducción / resumen / general). *Ninguna otra app de chat de escritorio local-first incluye una arena multi-modelo integrada con ELO.*
 
 ### Skills y Extensibilidad
 
 | Componente | Formato | Estado | Detalles |
 |---|---|:---:|---|
-| **Skills** | `SKILL.md` | `Experimental` | Drop en `<workspace>/.claude/skills/`; incluye `release-checklist` y `git-commit` |
+| **Skills** | `SKILL.md` | `Experimental` | Colócalos en `<workspace>/.claude/skills/`; incluye `release-checklist` y `git-commit` |
 | **Slash Commands** | `CMD.md` | `Stable` | 6 integrados: `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
-| **Hooks** | Script | `Experimental` | 10 puntos de ciclo de vida: PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
-| **MCP** | stdio JSON-RPC 2.0 | `Beta` | Servidores MCP externos se fusionan con las herramientas integradas automáticamente |
+| **Hooks** | Script | `Experimental` | 10 puntos del ciclo de vida: PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
+| **MCP** | stdio JSON-RPC 2.0 | `Beta` | Los servidores MCP externos se fusionan automáticamente con las herramientas integradas |
 
 ### Personalización
 
 | Ajuste | Estado | Descripción |
 |---|:---:|---|
-| **Configuración avanzada de modelo** | `Stable` | Max tokens, temperature, top_p, prefijo de sistema personalizado, títulos auto por idioma, esfuerzo de pensamiento |
-| **Fondo personalizado** | `Stable` | Sube imagen con controles de opacidad / blur |
+| **Configuración avanzada del modelo** | `Stable` | Max tokens, temperature, top_p, prefijo de sistema personalizado, títulos automáticos por idioma, esfuerzo de pensamiento |
+| **Fondo personalizado** | `Stable` | Sube una imagen con controles de opacidad / desenfoque |
 | **Personas** | `Stable` | Preajustes de system prompt, cambiables por sesión |
 | **Temas** | `Stable` | Light / Dark / Blue / Glass / Retro |
 | **15 idiomas de UI** | `Beta` | Inglés, chino (简/繁/文言), japonés, español, francés, alemán, portugués, ruso, ucraniano, árabe (RTL), hindi, coreano |
 | **Auto-update** | `Beta` | El instalador NSIS verifica al inicio; el portable también (instalación manual) |
-| **Seguimiento de uso** | `Beta` | Log por llamada API con tokens, costo, latencia, tasa de cache hit |
+| **Seguimiento de uso** | `Beta` | Registro por llamada a la API con tokens, costo, latencia, tasa de aciertos de caché |
 
 ### Privacidad
 
-> **Todos los datos se quedan local.** AetherAI no recolecta ni sube nada sobre ti. Tus claves API, conversaciones y personas viven en una base de datos SQLite local. Las únicas peticiones de red saliente van hacia los proveedores LLM que configures.
+> **Todos los datos se quedan local.** AetherAI no recolecta ni sube nada sobre ti. Tus claves API, conversaciones y personas viven en una base de datos SQLite local. Las únicas peticiones de red salientes van hacia los proveedores LLM que configures.
+
+---
+
+## Extensión de VS Code y CLI headless
+
+Más allá de la app de escritorio, AetherAI distribuye el mismo agente como CLI y como extensión de editor:
+
+- **CLI headless** (`app/cli.js`) — ejecuta el agente de forma no interactiva, alimenta scripts/CI con eventos NDJSON:
+  ```bash
+  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
+  ```
+- **Extensión de VS Code** (`extension/`) — lanza la CLI en un panel de chat: flujo en vivo de llamadas a herramientas, acciones de bloques de código (Insert / Write file) y **tarjetas de diff de archivos**: cada llamada `write_file` / `edit_file` / `apply_patch` renderiza un diff a nivel de línea contra el contenido del archivo previo al cambio, con **Revert** de un clic (restaura la instantánea tomada antes de que se ejecutara la herramienta). Requiere el ajuste de extensión `aether.cliPath` (se detecta automáticamente cuando el repo se clona localmente).
+- **Local Gateway** (`127.0.0.1:35791`) — API REST compatible con OpenAI respaldada por la app de escritorio (Settings → Local Gateway → token); una segunda extensión (`extensions/vscode-aether/`) se conecta a través de ella.
+
+---
+
+## Terminal TUI, RPC y SDK
+
+Más allá de la app de escritorio y de la CLI simple, AetherAI incluye una interfaz de terminal interactiva, un modo RPC JSONL invocable por máquinas y un SDK sin Electron. Los tres comparten el mismo núcleo de agente, memoria, personas, herramientas MCP y reglas de permiso que la versión de escritorio.
+
+### Inicio rápido — formato dual
+
+```bash
+# Interactive terminal UI (Ink v5; requires Node ≥ 22)
+node app/cli.js tui                # real terminal: type, approve tools, review diffs
+node app/cli.js tui --smoke        # headless state-machine smoke (CI-safe, prints JSON)
+
+# Single-shot prompt (same as before)
+node app/cli.js "fix the failing test" --mode auto --max-iterations 30
+
+# NDJSON event stream for scripts/CI (compat: --json-lines)
+echo "summarize README.md" | node app/cli.js --mode json --model deepseek
+
+# JSONL RPC loop over stdin/stdout
+printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
+  | node app/cli.js --mode rpc --db path\to\aetherai.db
+```
+
+Indicadores adicionales de headless: `--persona <id>` (persona + inyección de memoria), `--memory-trace` (informa del número de entradas de memoria inyectadas), `--skills` (JSON de propuestas de skills), `--setup-term` (escribe el perfil de Windows Terminal) y `--stdin` (entrada explícita por pipe).
+
+### TUI (`aether tui`)
+
+Agente de terminal interactivo (Ink v5; Node ≥ 22; mejor experiencia en Windows Terminal):
+
+- **Sesiones**: renderizado en streaming de mensajes, árbol de sesiones con `/fork` (`session.parent_session_id`), `/sessions`, `/use <id>` para cambiar de historial
+- **Herramientas y permisos**: tarjetas de llamadas de herramienta (color de estado / duración / resumen), revisión de diff (`Alt+v` para expandir, `Enter` para aceptar / `r` para revertir — restaura la instantánea previa a la escritura, funciona también en directorios que no son de git), puerta de permisos por teclado (`y` permite una vez / `a` permite siempre / `n` deniega, o `←→` para elegir), las herramientas de solo lectura se aprueban automáticamente
+- **Modos de aprobación**: `Shift+Tab` recorre `manual → auto-edits → plan` (plan = planificación de solo lectura; al terminar, tres opciones deciden cómo implementarla)
+- **Modo**: `Alt+m` alterna ask/plan/auto; `/persona <id>` cambia la personalidad (inyecta persona + prefijo de memoria)
+- **Atajos de leader**: `Ctrl+X` y luego `m` selector de modelo / `n` nueva sesión / `l` lista de sesiones / `g` línea de tiempo / `r` checkpoint rewind / `q` salir
+- **Paleta de comandos**: `Ctrl+P` o `x` (New chat / Model / Timeline / Export JSONL / Help / Quit)
+- **Teclas reasignables**: `~/.config/aether/keybindings.json` (p. ej. `{ "char:?": null }` desactiva la tecla de ayuda `?`)
+- **Persistencia de claves API**: `/apikey <provider> <key>` guarda en `auth.json` (las claves cifradas con safeStorage en la versión de escritorio no se pueden descifrar en headless; usa este comando o la variable de entorno `AETHER_API_KEY`)
+- **Bucle de memoria y skills**: `/memory <palabra clave>` recupera, `--memory-trace` cuenta las entradas inyectadas, `/skills` + `/skill accept|dismiss <key>` (habitLearner → propuestas de skills)
+- **Steering**: `Ctrl+C` durante la ejecución interrumpe → escribe el siguiente mensaje → se inyecta en el bucle actual (la cola muestra `steer:n`); `Tab` en ejecución pone directamente el siguiente en cola
+- **Atajos de teclado**: doble `Esc` sale (o `/quit`), `Esc` limpia la entrada (el borrador pasa al historial), `?` pantalla de ayuda, `PgUp/PgDn`/rueda del ratón para desplazarse, la barra de estado muestra en tiempo real `approval/mode/model/tok/ctx`; todas las teclas en [docs/tui-keys.md](./docs/tui-keys.md)
+
+### RPC (`aether --mode rpc`)
+
+Protocolo JSONL invocable por máquinas sobre stdin/stdout: tramas `request` de entrada, tramas `event`/`result`/`error` de salida — un objeto JSON por línea, sin texto humano. Métodos: `run` (transmite eventos `text`/`tool`/`plan`/`status`), `listModels`, `listProviders`, `models.default`, `listSessions`, `session.load`, `session.fork`, `task.derive`, `task.status`. Referencia de tramas: [docs/rpc.md](./docs/rpc.md).
+
+### SDK (`require('aetherai/sdk')`)
+
+Agregación del núcleo del agente sin Electron para proyectos Node externos: `runAgent`, `openDatabase`, `resolveProviderModel`, `taskDbAdapter`, `memory` (prefetch/recall/search/…), `classifyAgentMode`, tramas `rpc`, `sessionContext` (inyección de persona + memoria). Incluye declaraciones de tipos (`app/electron/sdk/index.d.ts`).
+
+```js
+const { runAgent, openDatabase, resolveProviderModel, classifyAgentMode } = require('aetherai/sdk')
+const db = openDatabase('./aetherai.db')
+const { provider, model } = resolveProviderModel(db, { modelName: 'deepseek' })
+console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', reason: ... }
+```
+
+---
+
+## Nativo de Windows
+
+| Capacidad | Descripción |
+|---|---|
+| **Menú de bandeja** | Muestra/oculta la ventana, nueva sesión, **nueva tarea** (abre directamente TaskPanel); clic en la bandeja alterna mostrar/ocultar. |
+| **Atajos globales** | `Ctrl+Alt+A` abre la ventana principal (la crea si no está iniciada); el resultado del registro se escribe en el log de inicio. |
+| **Protocolo `aetherai://`** | `aetherai://new` / `chat` crea una sesión; `aetherai://tui` indica la forma de terminal; `aetherai://open/?path=<ruta codificada>` establece la carpeta como workspace y crea una sesión (cadena del menú contextual "Abrir con Aether"). |
+| **Registro en el menú contextual** | `app/resources/register-protocol.reg` (importar como administrador tras sustituir `<AETHER_EXE>`): `.cs/.js/.ts/.tsx/.md/.json` + carpetas → clic derecho "Abrir con Aether". |
+| **Configuración de terminal** | `app/resources/term/aether.ps1` (alias + lanza `aether tui`); `node app/cli.js --setup-term` escribe el perfil de Windows Terminal (esquemas de color oscuro/claro). |
+| **Refuerzo del sandbox** | Defensa de rutas de Windows: rutas largas `\\?\`, UNC `\\server\share`, escape de reparse points/junctions, extensiones peligrosas como `.lnk/.scr/.msi`. |
 
 ---
 
@@ -199,7 +299,7 @@ O ejecuta `start.bat` en la raíz del repo en Windows.
 ```
 app/
 ├── electron/              # main process (Node)
-│   ├── database.js        # SQLite (sql.js) data layer — 14 tables
+│   ├── database.js        # better-sqlite3 data layer — 25+ tables (WAL)
 │   ├── ipc/               # IPC handlers (chat / arena / session / mcp / ...)
 │   │   ├── chat.handler.js    # THE central handler (540 lines)
 │   │   ├── arena.handler.js   # Multi-model arena with ELO
@@ -245,61 +345,63 @@ app/
 
 | Capa | Tecnología |
 |---|---|
-| Desktop | Electron 31 |
-| Frontend | React 18.3 + TypeScript 5.5 |
+| Desktop | Electron 43 |
+| Frontend | React 18.3 + TypeScript 5.8 |
 | State | Zustand 4.5 |
-| Build | Vite 5.4 + electron-builder |
-| Database | sql.js (SQLite in-memory, persistido en disco) |
+| Build | Vite 8 + electron-builder |
+| Database | better-sqlite3 (native SQLite, WAL mode) |
 | LLM | OpenAI-compatible + Anthropic Messages API |
 | UI | Tailwind CSS 3.4, lucide-react, highlight.js |
 | MCP | Custom stdio JSON-RPC 2.0 client |
+| TUI | Ink 5 + React 18 (createElement, no JSX) |
+| CLI/SDK | Node.js headless CLI (4 modes) + Electron-free SDK |
 
 ---
 
 ## Agradecimientos
 
-AetherAI se apoya en los hombros de estos proyectos — sus ideas dieron forma a la arquitectura y la UX:
+AetherAI se apoya en los hombros de estos proyectos — sus ideas dieron forma a la arquitectura y a la UX:
 
-### Agent frameworks
+### Frameworks de agentes
 
-| Project | Inspiration |
+| Proyecto | Inspiración |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Agent permission model, thinking slider, tool-call visualization, sub-agent delegation, hooks |
-| [OpenClaw](https://github.com/openclaw/openclaw) | Context compaction, tool-call loop detection, event-stream architecture |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iteration budget, structured long-term memory, autonomous skills |
-| [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, context compression, tool-call repair |
-| [DS4](https://github.com/antirez/ds4) | Hierarchical task decomposition |
+| [Claude Code](https://github.com/anthropics/claude-code) | Modelo de permisos del agente, deslizador de pensamiento, visualización de llamadas a herramientas, delegación de sub-agentes, hooks |
+| [OpenClaw](https://github.com/openclaw/openclaw) | Compacción de contexto, detección de bucles de llamadas a herramientas, arquitectura de flujo de eventos |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Presupuesto de iteraciones, memoria estructurada a largo plazo, skills autónomas |
+| [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, compresión de contexto, reparación de llamadas a herramientas |
+| [DS4](https://github.com/antirez/ds4) | Descomposición jerárquica de tareas |
 
-### UI & UX
+### UI y UX
 
-| Project | Inspiration |
+| Proyecto | Inspiración |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva copy-paste component methodology |
-| [Magic UI](https://github.com/magicuidesign/magicui) | Animation patterns (shimmer, blur-fade) |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | Metodología de componentes copy-paste cn() / cva |
+| [Magic UI](https://github.com/magicuidesign/magicui) | Patrones de animación (shimmer, blur-fade) |
 
-### Infrastructure
+### Infraestructura
 
-| Project | Inspiration |
+| Proyecto | Inspiración |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Multi-format provider normalization |
-| [MCP](https://modelcontextprotocol.io) | The spec AetherAI's agent speaks |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Usage-stats dashboard layout |
-| [new-api](https://github.com/QuantumNous/new-api) | Reasoning-effort relay, usage/cost tracking |
-| [Continue](https://github.com/continuedev/continue) | Config-as-source-of-truth, provider abstraction |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Multi-turn agent execution, sandboxed tool execution |
-| [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
-| [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
+| [Dify](https://github.com/langgenius/dify) | Normalización de proveedores multi-formato |
+| [MCP](https://modelcontextprotocol.io) | El estándar que habla el agente de AetherAI |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Disposición del panel de estadísticas de uso |
+| [new-api](https://github.com/QuantumNous/new-api) | Relay de esfuerzo de razonamiento, seguimiento de uso/costo |
+| [Continue](https://github.com/continuedev/continue) | Config como fuente de verdad, abstracción de proveedores |
+| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Ejecución de agente multi-turno, ejecución de herramientas con sandbox |
+| [Aider](https://github.com/Aider-AI/aider) | Bucle de herramientas de asistente de codificación LLM, integración con git |
+| [Cline](https://github.com/cline/cline) | Agente integrado en el IDE, integración MCP, UX de permisos |
 
 ---
 
 ## Contribuir
 
-¡Todas las contribuciones son bienvenidas! Ya sea un bug fix, feature request, mejora de traducción o actualización de documentación — abre un issue o envía un PR.
+¡Todas las contribuciones son bienvenidas! Ya sea un bug fix, una petición de función, una mejora de traducción o una actualización de documentación — abre un issue o envía un PR.
 
-1. Fork del repo
-2. Crea una feature branch (`git checkout -b feat/my-feature`)
-3. Commit de tus cambios (`git commit -am 'Add feature'`)
-4. Push a la branch (`git push origin feat/my-feature`)
+1. Haz fork del repo
+2. Crea una rama de función (`git checkout -b feat/my-feature`)
+3. Haz commit de tus cambios (`git commit -am 'Add feature'`)
+4. Haz push a la rama (`git push origin feat/my-feature`)
 5. Abre un Pull Request
 
 Consulta [CONTRIBUTING.md](./CONTRIBUTING.md) para guías detalladas.
@@ -314,7 +416,7 @@ Consulta [CONTRIBUTING.md](./CONTRIBUTING.md) para guías detalladas.
 
 <div align="center">
 
-Built with ❤️ using Electron + React + TypeScript
+Hecho con ❤️ usando Electron + React + TypeScript
 
 [⬆ Volver arriba](#aetherai)
 
