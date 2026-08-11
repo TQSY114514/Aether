@@ -177,10 +177,10 @@ function StatusBar({ state, tick, ctxK, extra }) {
   )
 }
 
-export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd }) {
-  const { exit } = useApp()
+export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, stdin: stdinProp }) {
+  const { stdin, stdout, exit } = useApp()
   const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
-  const tick = useTicker(300, SPINNER, state.running)
+  const tick = useTicker(500, SPINNER, state.running)
   const sessionBusyRef = useRef(false)
   const allowRulesRef = useRef(createAllowRulesStore())
   const resolveRef = useRef(null)
@@ -356,6 +356,25 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     return () => { cancelled = true; clearInterval(timer) }
   }, [statusLineCmd])
 
+  // 鼠标滚轮支持(SGR 1006): 滚轮滚动消息区(与 PgUp/PgDn 同语义)。
+  // 事件由 index 的剥离层 consume 后 emit 'mouse'(不经过 ink parser)。
+  // 开启 1000(按下事件)+1006(SGR 编码); 退出时恢复, 不影响终端选择复制(Shift 拖选)。
+  useEffect(() => {
+    if (!stdin || !stdout) return
+    if (!stdin.isTTY) return
+    stdout.write('\x1b[?1000h\x1b[?1006h')
+    const onMouse = (btn) => {
+      // 64=滚轮上 65=滚轮下 66/67=Shift+滚轮
+      if (btn === 64) setScrollOffset((o) => o + 3)
+      else if (btn === 65) setScrollOffset((o) => Math.max(0, o - 3))
+    }
+    stdin.on('mouse', onMouse)
+    return () => {
+      stdout.write('\x1b[?1000l\x1b[?1006l')
+      stdin.removeListener('mouse', onMouse)
+    }
+  }, [stdin, stdout])
+
   // leader key 待命计时: 1.2s 无后续按键自动解除
   useEffect(() => {
     if (!leaderArmed) return
@@ -519,7 +538,11 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     startSession, handleCommand, expandDiff, doRollback,
     decidePermission, allowRulesRef, resolveRef, injectSteering,
   }
-  useInput((input, key) => { dispatchKey(ctxRef.current, input, key) })
+  useInput((input, key) => {
+    // 鼠标/未知转义序列(如 CSI <...M)不作为字符输入, 直接忽略(鼠标事件走专用 data 监听)
+    if (input && input.includes('\x1b')) return
+    dispatchKey(ctxRef.current, input, key)
+  })
 
   useEffect(() => {
     if (state.quitRequested) exit()

@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { createElement as h } from 'react'
 import { render } from 'ink'
+import { PassThrough } from 'node:stream'
 import { App } from './App.mjs'
 import { tuiReducer, initialTuiState, summarizeState } from './reducer.js'
 import { keyToAction } from './keymap.js'
@@ -50,14 +51,39 @@ export function parseTuiOpts(argv = []) {
   return opts
 }
 
+// 鼠标序列剥离层: SGR 鼠标事件(CSI <b;x;y M)直接 consume 并 emit 'mouse' 事件,
+// 不进入 ink 的键盘解析器——否则 CSI 序列会卡住流式 parser, 后续输入被吞。
+// 非 TTY(--smoke/管道)直接用原始 stdin, 避免包装层在无 TTY 时阻塞。
+export function createTuiStdin(real) {
+  const pt = new PassThrough()
+  pt.isTTY = !!real.isTTY
+  pt.setRawMode = (m) => { if (real.setRawMode) real.setRawMode(m); return pt }
+  pt.setEncoding = (e) => { if (real.setEncoding) real.setEncoding(e); return pt }
+  pt.ref = () => { if (real.ref) real.ref(); return pt }
+  pt.unref = () => { if (real.unref) real.unref(); return pt }
+  const onData = (chunk) => {
+    const s = String(chunk || '')
+    const cleaned = s.replace(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/g, (_m, btn) => {
+      pt.emit('mouse', Number(btn))
+      return ''
+    })
+    if (cleaned) pt.write(cleaned)
+  }
+  real.on('data', onData)
+  if (typeof real.resume === 'function') real.resume()
+  pt._cleanup = () => real.removeListener('data', onData)
+  return pt
+}
+
 function runInteractive(argv) {
   const { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd } = parseTuiOpts(argv)
+  const tuiStdin = process.stdin.isTTY ? createTuiStdin(process.stdin) : process.stdin
   // 进入 alt screen 前不输出任何内容（不留启动日志/横幅）
   process.stdout.write(ALT_ENTER)
   // 兜底：任何退出路径都恢复原终端内容
   process.on('exit', () => { try { process.stdout.write(ALT_EXIT) } catch {} })
   return new Promise((resolve) => {
-    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd }))
+    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, stdin: tuiStdin }), { stdin: tuiStdin })
     waitUntilExit().then(() => {
       unmount()
       process.stdout.write(ALT_EXIT)
