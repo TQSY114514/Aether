@@ -7,15 +7,15 @@ import { createElement as h, useEffect, useReducer, useRef, useCallback, useStat
 import { readFileSync, existsSync } from 'node:fs'
 import { Box, Text, useInput, useApp } from 'ink'
 import { tuiReducer, initialTuiState } from './reducer.js'
-import { keyToAction } from './keymap.js'
 import { runSession, createTuiPermissionHandler, decidePermission, toolToSnapshotPath, injectSteering } from './runSession.js'
 import { createAllowRulesStore } from './allowRules.js'
 import { buildDiff, rollbackChange } from './rollback.js'
 import { parseSessionCommand, SLASH_COMMANDS } from './sessionCommands.js'
-import { openSessionDb, listSessions, forkSession } from './sessionTree.js'
+import { openSessionDb, listSessions, forkSession, getTimeline } from './sessionTree.js'
 import { searchMemory } from './memorySearch.js'
 import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
 import { listModels } from './models.js'
+import { dispatchKey } from './keyHandlers.js'
 
 // Tokyo Night 风格配色（克制、低饱和，参考 opencode 现代终端观感）
 // 语义 tokens（对齐 opencode theme 结构）：组件只引用 token，不写裸色值。
@@ -127,10 +127,21 @@ function DiffView({ diff }) {
 }
 
 // 权限审批面板（opencode 风格）：←→ 选择 Allow once / Always / Reject，Enter 确认。
+// tool-specific 详情(opencode permission body): bash 显命令 / edit·write 显文件 / 读类显路径
+function PermissionDetail({ perm }) {
+  const a = perm.args || {}
+  if (perm.name === 'bash' && a.command) return h(Text, { color: C.tool }, `$ ${a.command}`)
+  if ((perm.name === 'edit' || perm.name === 'write') && (a.filePath || a.path)) return h(Text, { color: C.tool }, `file: ${a.filePath || a.path}`)
+  if ((perm.name === 'read' || perm.name === 'list' || perm.name === 'glob') && (a.path || a.pattern)) return h(Text, { color: C.tool }, `path: ${a.path || a.pattern}`)
+  if (perm.name === 'grep' && (a.pattern || a.path)) return h(Text, { color: C.tool }, `pattern: ${a.pattern}${a.path ? ` in ${a.path}` : ''}`)
+  return null
+}
+
 function PermissionPanel({ perm, permIdx }) {
   const options = ['Allow once', 'Allow always', 'Reject']
   return h(Box, { borderStyle: 'round', borderColor: C.warning, paddingX: 1, marginTop: 1, flexDirection: 'column' },
     h(Text, { bold: true, color: C.warning }, `△ [权限请求] ${perm.name}`),
+    h(PermissionDetail, { perm }),
     h(Text, { color: 'gray' }, `args: ${summarizeArgs(perm.args)} | risk: ${perm.risk}`),
     h(Box, { flexDirection: 'row', marginTop: 1 },
       options.map((opt, i) => h(Box, {
@@ -179,6 +190,8 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   const [paletteFilter, setPaletteFilter] = useState('')
   // 模型选择器: null=关闭, { models, idx, filter }=打开（opencode DialogSelect 风格）
   const [modelPicker, setModelPicker] = useState(null)
+  // 会话时间线(leader g): null=关闭, { sessions, idx }=祖先链
+  const [timeline, setTimeline] = useState(null)
   // 权限选项高亮(opencode: Allow once / Always / Reject)
   const [permIdx, setPermIdx] = useState(0)
   // leader key（opencode ctrl+x 风格）: 按下后 1.2s 内等待第二个键
@@ -227,6 +240,23 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     if (models.length) setModelPicker({ models, idx: 0, filter: '' })
     else dispatch({ type: 'STATUS', text: 'no models configured — 先在桌面版设置中配置' })
   }, [dbPath])
+
+  // 会话列表(Ctrl+P History / leader l 共用)
+  const openSessions = useCallback(() => {
+    const db = openSessionDb(dbPath)
+    try { dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) }) } catch {}
+    try { db?.close() } catch {}
+  }, [dbPath])
+
+  // 会话时间线(leader g / 未来命令): 当前会话的父链
+  const openTimeline = useCallback(() => {
+    const db = openSessionDb(dbPath)
+    let chain = []
+    try { chain = getTimeline(db, state.currentSessionId) } catch {}
+    try { db?.close() } catch {}
+    if (chain.length > 1) setTimeline({ sessions: chain, idx: 0 })
+    else dispatch({ type: 'STATUS', text: 'timeline: 当前会话无父链(仅自身)' })
+  }, [dbPath, state.currentSessionId])
 
   // leader key 待命计时: 1.2s 无后续按键自动解除
   useEffect(() => {
@@ -330,216 +360,25 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     dispatch({ type: 'TOOL_ROLLBACK', index, result })
   }, [state.expandedTool, state.toolCalls])
 
-  useInput((input, key) => {
-    // 0a) 模型选择器(模态, 最优先): ↑↓ 循环 / 直接输入过滤 / Enter 确认 / Esc 取消
-    if (modelPicker) {
-      if (key?.upArrow === true || (key?.ctrl === true && input === 'p')) {
-        setModelPicker((p) => ({ ...p, idx: (p.idx - 1 + p.models.length) % p.models.length })); return
-      }
-      if (key?.downArrow === true || (key?.ctrl === true && input === 'n')) {
-        setModelPicker((p) => ({ ...p, idx: (p.idx + 1) % p.models.length })); return
-      }
-      if (key?.pageUp === true) { setModelPicker((p) => ({ ...p, idx: Math.max(0, p.idx - 10) })); return }
-      if (key?.pageDown === true) { setModelPicker((p) => ({ ...p, idx: Math.min(p.models.length - 1, p.idx + 10) })); return }
-      if (key?.escape === true) { setModelPicker(null); return }
-      if (key?.return === true) {
-        const m = modelPicker.models[modelPicker.idx]
-        setModelPicker(null)
-        if (m) {
-          dispatch({ type: 'MODEL_SET', name: m.model_name })
-          dispatch({ type: 'STATUS', text: `model: ${m.provider_name}/${m.model_name}${m.is_primary ? ' (primary)' : ''}` })
-        }
-        return
-      }
-      if (key?.backspace === true || input === '\b' || input === '\x7f' || key?.delete === true) {
-        setModelPicker((p) => ({ ...p, filter: p.filter.slice(0, -1), idx: 0 })); return
-      }
-      if (input) { setModelPicker((p) => ({ ...p, filter: (p.filter + input).toLowerCase(), idx: 0 })); return }
-      return // 模态吞掉其他键
-    }
-    // 0b) leader key 待命: ctrl+x 后第二个键决定动作(opencode 风格)
-    if (leaderArmed) {
-      setLeaderArmed(false)
-      const ch = (input || '').toLowerCase()
-      if (ch === 'm') { openModelPicker(); return }
-      if (ch === 'n') { dispatch({ type: 'RESET' }); dispatch({ type: 'STATUS', text: 'new session' }); return }
-      if (ch === 'l') {
-        const db = openSessionDb(dbPath)
-        try { dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) }) } catch {}
-        try { db?.close() } catch {}
-        return
-      }
-      if (ch === 'q') { dispatch({ type: 'QUIT_INTENT' }); return }
-      return // 未知键: 仅解除待命
-    }
-    // 0c) Ctrl+P 命令面板（模态）: 输入过滤 / ↑↓ 循环 / Enter 执行 / Esc 关闭
-    if (paletteOpen) {
-      const items = PALETTE_ITEMS.filter((i) => i.toLowerCase().includes(paletteFilter))
-      if (key?.upArrow === true || (key?.ctrl === true && input === 'p')) { setPaletteIdx((i) => (i - 1 + Math.max(1, items.length)) % Math.max(1, items.length)); return }
-      if (key?.downArrow === true || (key?.ctrl === true && input === 'n')) { setPaletteIdx((i) => (i + 1) % Math.max(1, items.length)); return }
-      if (key?.escape === true) { setPaletteOpen(false); setPaletteFilter(''); return }
-      if (key?.return === true) {
-        const item = items[paletteIdx]
-        setPaletteOpen(false); setPaletteFilter('')
-        if (!item) return
-        if (item === 'New chat') dispatch({ type: 'RESET' })
-        else if (item === 'Quit') dispatch({ type: 'QUIT_INTENT' })
-        else if (item === 'Model') { openModelPicker() }
-        else if (item === 'History (sessions)') {
-          const db = openSessionDb(dbPath)
-          try { dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) }) } catch {}
-          try { db?.close() } catch {}
-        }
-        return
-      }
-      if (key?.backspace === true || input === '\b' || input === '\x7f' || key?.delete === true) {
-        setPaletteFilter((f) => f.slice(0, -1)); return
-      }
-      if (input) { setPaletteFilter((f) => (f + input).toLowerCase()); return }
-      return // 模态吞掉其他键
-    }
-    // 1) 权限等待态(opencode 风格): ←→ 选择 Allow once/Always/Reject, Enter 确认, Esc 拒绝
-    if (state.pendingPermission) {
-      const ctrlC = key?.ctrl === true && input === 'c'
-      if (ctrlC) { decidePermission({ decision: 'deny', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
-      if (key?.leftArrow === true || input === 'h') { setPermIdx((i) => (i - 1 + 3) % 3); return }
-      if (key?.rightArrow === true || input === 'l') { setPermIdx((i) => (i + 1) % 3); return }
-      if (key?.escape === true) { setPermIdx(0); decidePermission({ decision: 'deny', allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch }); return }
-      if (key?.return === true) {
-        const decision = ['allow', 'always', 'deny'][permIdx]
-        setPermIdx(0)
-        decidePermission({
-          decision: decision === 'always' ? 'allow' : decision,
-          remember: decision === 'always',
-          allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef, dispatch,
-        })
-        return
-      }
-      return // 等待期吞掉其他键
-    }
-    // 2) diff 视图态：Enter/Esc 关闭（接受），r 回滚。
-    if (state.expandedTool != null) {
-      if (key?.return === true) { dispatch({ type: 'TOOL_EXPAND', index: state.expandedTool }); return }
-      if (key?.escape === true) { dispatch({ type: 'TOOL_EXPAND', index: state.expandedTool }); return }
-      if ((input || '') === 'r') { doRollback(); return }
-      return
-    }
-    // 3) steeringMode（todo 6）：Enter 注入 follow-up，Ctrl+C 取消打断态。
-    if (state.steeringMode) {
-      const ctrlC = key?.ctrl === true && input === 'c'
-      if (ctrlC) {
-        dispatch({ type: 'STEER_MODE', on: false })
-        dispatch({ type: 'STATUS', text: 'follow-up cancelled' })
-        return
-      }
-      if (key?.return === true) {
-        const text = state.input.trim()
-        if (text) {
-          injectSteering('tui', text)
-          dispatch({ type: 'STEER_ENQUEUE', text })
-          dispatch({ type: 'INPUT', value: '' })
-          dispatch({ type: 'STEER_MODE', on: false })
-          dispatch({ type: 'STATUS', text: 'follow-up queued' })
-        }
-        return
-      }
-      const action = keyToAction(key, input)
-      if (action) dispatch(action)
-      else if (input) dispatch({ type: 'INPUT', value: state.input + input })
-      return
-    }
-    // 4) Ctrl+C 运行中打断 → 进入 follow-up 输入态（todo 6）。
-    if (state.running && key?.ctrl === true && input === 'c') {
-      dispatch({ type: 'STATUS', text: 'interrupted — type follow-up + Enter, or Ctrl+C to cancel' })
-      dispatch({ type: 'STEER_MODE', on: true })
-      return
-    }
-    // 5) 普通态：不用单字母快捷方式(会吞输入字符)。修饰键组合:
-    // Alt+m 切模式 / Alt+v diff / Ctrl+P 面板 / Ctrl+C 退出; 或斜杠命令 /mode
-    if (state.input === '' && key?.alt === true && input === 'm') { dispatch({ type: 'MODE_CYCLE' }); return }
-    // 2) Ctrl+P 打开命令面板（输入框为空时）
-    if (state.input === '' && key?.ctrl === true && input === 'p') { setPaletteOpen(true); setPaletteIdx(0); setPaletteFilter(''); return }
-    // ctrl+x 待命 leader key(opencode: ctrl+x m 模型 / n 新会话 / l 会话列表 / q 退出)
-    if (state.input === '' && key?.ctrl === true && input === 'x') { setLeaderArmed(true); return }
-    // 斜杠补全：输入以 / 开头时 ↑↓ 循环移动 / Tab·Enter 选择 / Esc 清除 /
-    const slashMode = state.input.startsWith('/')
-    const slashMatches = slashMode ? SLASH_COMMANDS.filter((c) => c.startsWith(state.input)) : []
-    if (slashMatches.length > 0 && key?.upArrow === true) { setSlashIdx((i) => (i - 1 + slashMatches.length) % slashMatches.length); return }
-    if (slashMatches.length > 0 && key?.downArrow === true) { setSlashIdx((i) => (i + 1) % slashMatches.length); return }
-    // Tab: 选择补全(填入第一个匹配, 可再补参数; opencode 中 Tab=select)
-    if (slashMode && slashMatches.length > 0 && (key?.tab === true || key?.name === 'tab')) {
-      dispatch({ type: 'INPUT', value: slashMatches[0] })
-      setSlashIdx(0)
-      return
-    }
-    // Esc: 清空输入（opencode prompt.clear：≥20 字符草稿先入历史；斜杠态=取消补全不保留）
-    if (key?.escape === true && state.input) {
-      if (!slashMode && state.input.length >= 20) {
-        historyRef.current = [...historyRef.current.filter((x) => x !== state.input), state.input].slice(-100)
-      }
-      dispatch({ type: 'INPUT', value: '' })
-      setSlashIdx(0)
-      return
-    }
-    // PgUp/PgDn: 消息区翻页滚动(opencode scrollbox 分页)
-    if (state.input === '' && key?.pageUp === true) { setScrollOffset((o) => o + 10); return }
-    if (state.input === '' && key?.pageDown === true) { setScrollOffset((o) => Math.max(0, o - 10)); return }
-    // ↑↓ 命令历史回填(输入框为空时); Alt+↑↓ 保留消息选择
-    if (state.input === '' && key?.alt === true && key?.upArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: -1 }); return }
-    if (state.input === '' && key?.alt === true && key?.downArrow === true) { dispatch({ type: 'MOVE_SELECT', dir: 1 }); return }
-    if (state.input === '' && key?.upArrow === true) {
-      const hist = historyRef.current
-      if (hist.length === 0) return
-      const next = historyIdxRef.current < 0 ? hist.length - 1 : Math.max(0, historyIdxRef.current - 1)
-      historyIdxRef.current = next
-      dispatch({ type: 'INPUT', value: hist[next] })
-      return
-    }
-    if (state.input === '' && key?.downArrow === true) {
-      const hist = historyRef.current
-      if (historyIdxRef.current < 0) return
-      const next = historyIdxRef.current + 1
-      if (next >= hist.length) { historyIdxRef.current = -1; dispatch({ type: 'INPUT', value: '' }); return }
-      historyIdxRef.current = next
-      dispatch({ type: 'INPUT', value: hist[next] })
-      return
-    }
-    if (key?.return === true) {
-      const text = state.input.trim()
-      if (text && !state.running) {
-        // 斜杠补全：有选中候选 → 填入完整命令（可补参数后再次 Enter 执行）
-        if (slashMatches.length > 0 && slashIdx >= 0 && slashIdx < slashMatches.length) {
-          const full = slashMatches[slashIdx]
-          // 已完全匹配时不再重复填入——直接执行（否则 /model 永远只补全不执行）
-          if (state.input !== full) {
-            dispatch({ type: 'INPUT', value: full })
-            setSlashIdx(0)
-            return
-          }
-        }
-        // 记录历史(去重, 新条目排最前, 上限 100)
-        historyRef.current = [...historyRef.current.filter((x) => x !== text), text].slice(-100)
-        historyIdxRef.current = -1
-        dispatch({ type: 'INPUT', value: '' })
-        setScrollOffset(0)   // 新提交后消息区跟随最新
-        // opencode: exit / quit / :q 直接退出
-        if (text === 'exit' || text === 'quit' || text === ':q') { dispatch({ type: 'QUIT_INTENT' }); return }
-        if (text.startsWith('/')) { handleCommand(text); return }
-        dispatch({ type: 'SUBMIT' })
-        startSession(text)
-      }
-      return
-    }
-    if (key?.alt === true && input === 'v' && !state.running && state.input === '' && state.toolCalls.length > 0) {
-      // Alt+v 展开最新工具卡 diff(Alt 修饰键不会与输入冲突)
-      const last = state.toolCalls.length - 1
-      expandDiff(last)
-      return
-    }
-    const action = keyToAction(key, input)
-    if (action) dispatch(action)
-    else if (input) dispatch({ type: 'INPUT', value: state.input + input })
-  })
+  // opencode 风格键盘调度: 全部逻辑在 keyHandlers.js(模式表 + 按键归一, 纯函数可测)。
+  // ctx 每次渲染刷新, useInput 只做一行转发——新增模态只需加 handler 表, 不再堆 if/else。
+  const ctxRef = useRef(null)
+  ctxRef.current = {
+    state, dispatch,
+    modelPicker, setModelPicker,
+    timeline, setTimeline,
+    paletteOpen, setPaletteOpen, paletteIdx, setPaletteIdx, paletteFilter, setPaletteFilter,
+    permIdx, setPermIdx,
+    leaderArmed, setLeaderArmed,
+    scrollOffset, setScrollOffset,
+    slashIdx, setSlashIdx,
+    PALETTE_ITEMS,
+    historyRef, historyIdxRef,
+    openModelPicker, openSessions, openTimeline,
+    startSession, handleCommand, expandDiff, doRollback,
+    decidePermission, allowRulesRef, resolveRef, injectSteering,
+  }
+  useInput((input, key) => { dispatchKey(ctxRef.current, input, key) })
 
   useEffect(() => {
     if (state.quitRequested) exit()
@@ -641,6 +480,15 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
             ]))
         })()
         : null,
+      timeline
+        ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: C.primary }, 'Session timeline — ↑↓ · Enter 切换 · Esc 关闭'),
+          timeline.sessions.map((s, i) => h(SelectRow, {
+            key: s.id,
+            label: `#${s.id} ${s.title}${s.parentId ? ` ← #${s.parentId}` : ''}${s.createdAt ? ` · ${String(s.createdAt).slice(0, 16)}` : ''}`,
+            idx: timeline.idx, i,
+          })))
+        : null,
       h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : (leaderArmed ? C.primary : C.dim), paddingX: 1 },
         h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
         state.input
@@ -649,7 +497,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       ),
       // 输入框 meta 行（opencode prompt meta: mode · model · effort · running）
       h(Text, { color: C.dim }, `  ${state.mode}${state.modelName ? ` · ${state.modelName}` : ''} · effort:${state.effort}${state.running ? ` · ${tick} running` : ''} · PgUp/PgDn 翻页`),
-      leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 会话列表 · q 退出') : null,
+      leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 列表 · g 时间线 · q 退出') : null,
       h(StatusBar, { state, tick: state.running ? tick : '●' }),
   )
 }

@@ -28,3 +28,22 @@ export function listSessions(db, limit = 50) {
 export function forkSession(db, { title, parentSessionId }) {
   return taskDbAdapter(db).createSession({ title: title || 'fork', parentSessionId })
 }
+
+/** 会话时间线(opencode session.timeline): 沿 parent_session_id 向上收集祖先链(当前→最老) */
+export function getTimeline(db, sessionId) {
+  if (!db || sessionId == null) return []
+  const chain = []
+  let id = Number(sessionId)
+  const seen = new Set()
+  while (Number.isFinite(id) && !seen.has(id)) {
+    seen.add(id)
+    let row = null
+    try {
+      row = db.prepare('SELECT id, title, parent_session_id AS parentId, created_at AS createdAt FROM session WHERE id = ?').get(id)
+    } catch { break }
+    if (!row) break
+    chain.push({ id: row.id, title: row.title || '(untitled)', parentId: row.parentId, createdAt: row.createdAt })
+    id = row.parentId
+  }
+  return chain
+}
