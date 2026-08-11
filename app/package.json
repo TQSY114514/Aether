@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "aetherai",
   "version": "0.6.0",
   "description": "AetherAI - Multi-provider AI aggregation client",
@@ -20,6 +20,7 @@
     "dev:renderer": "vite",
     "dev:electron": "electron .",
     "dev": "concurrently -k \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",
+    "migrate-keys": "electron scripts/migrate-keys.cjs",
     "build": "node scripts/check-ipc.js && tsc --noEmit && vite build && node build-icons.js && electron-builder --publish never",
     "typecheck": "tsc --noEmit",
     "smoke:boot": "node scripts/boot-smoke.js",
@@ -32,7 +33,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node e2e/launch.test.js",
-    "postinstall": "electron-rebuild -f -w better-sqlite3 || (echo [AetherAI] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
+    "postinstall": "node scripts/patch-brace-expansion.js & electron-rebuild -f -w better-sqlite3 || (echo [AetherAI] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.9",
@@ -73,3 +74,4 @@
     }
   }
 }
+
