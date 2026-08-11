@@ -579,14 +579,14 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   // 帮助屏内容(快捷键表)
   const HELP_ROWS = [
     ['Shift+Tab', '审批模式循环: manual → auto-edits → plan'],
-    ['Ctrl+X 然后 m/n/l/g/q', 'leader: 模型 / 新会话 / 会话列表 / 时间线 / 退出'],
+    ['Ctrl+X 然后 m/n/l/g/r/q', 'leader: 模型 / 新会话 / 会话列表 / 时间线 / rewind / 退出'],
     ['Ctrl+P 或 x', '命令面板(New chat/Model/Timeline/Export/Help/Quit)'],
     ['?', '本帮助屏'],
     ['/命令', '斜杠命令(输入 / 弹出补全, Tab 填入)'],
     ['↑↓', '命令历史回填(空输入) / 斜杠候选(输入 / 时)'],
     ['Tab', '运行中: 排队下一条; 输入 / 时: 填入补全'],
-    ['Esc', '清空输入(草稿入历史); 空输入两次: rewind 检查点'],
-    ['PgUp/PgDn', '消息区翻页'],
+    ['Esc', '清空输入(草稿入历史); 空输入: 再按一次退出(双击 Esc)'],
+    ['PgUp/PgDn / 滚轮', '消息区翻页 / 滚动'],
     ['Alt+m / Alt+v', '切模式 / 展开最新 diff'],
     ['y / a / n', '权限审批: 允许一次 / 总是允许 / 拒绝'],
     ['←→ 或 h/l', '权限/选择器内移动选项'],
@@ -724,7 +724,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       ),
       // 输入框 meta 行（opencode prompt meta: mode · model · effort · running）
       h(Text, { color: C.dim }, `  ${state.mode}${state.modelName ? ` · ${state.modelName}` : ''} · effort:${state.effort}${state.running ? ` · ${tick} running` : ''} · PgUp/PgDn 翻页`),
-      leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 列表 · g 时间线 · q 退出') : null,
+      leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 列表 · g 时间线 · r rewind · q 退出') : null,
       h(StatusBar, { state, tick: state.running ? tick : '●', ctxK, extra: statusBarExtra }),
   )
 }

@@ -358,14 +358,20 @@ describe("'?'/x 面板与 rewind", () => {
     expect(ctx.setRewindOpen).toHaveBeenCalledWith(false)
   })
 
-  it('分层 Esc: 空输入第一次 armed, 第二次 openRewind', () => {
+  it('分层 Esc: 空输入第一次 armed, 第二次退出(双击 Esc)', () => {
     const escArmedRef = { current: false }
-    const ctx = makeCtx({ escArmedRef, openRewind: vi.fn(), setHelpOpen: vi.fn() })
+    const ctx = makeCtx({ escArmedRef, openRewind: vi.fn() })
     press(ctx, { escape: true }, '')
     expect(escArmedRef.current).toBe(true)
-    expect(ctx.openRewind).not.toHaveBeenCalled()
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'QUIT_INTENT' })
     press(ctx, { escape: true }, '')
     expect(escArmedRef.current).toBe(false)
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'QUIT_INTENT' })
+  })
+
+  it('rewind 移到 leader: ctrl+x r', () => {
+    const ctx = makeCtx({ leaderArmed: true, openRewind: vi.fn(), setLeaderArmed: vi.fn() })
+    press(ctx, {}, 'r')
     expect(ctx.openRewind).toHaveBeenCalled()
   })
 
