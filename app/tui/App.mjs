@@ -4,7 +4,9 @@
 // 加载器会违反「新依赖仅限纯 JS」护栏——故组件一律用 react.createElement 手写。
 // ─────────────────────────────────────────────────────────────────────────────
 import { createElement as h, useEffect, useReducer, useRef, useCallback, useState, useMemo } from 'react'
-import { readFileSync, existsSync, writeFileSync } from 'node:fs'
+import { readFileSync, existsSync, writeFileSync, appendFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { Box, Text, useInput, useApp } from 'ink'
 import { tuiReducer, initialTuiState, APPROVAL_MODES, READ_ONLY_TOOLS } from './reducer.js'
 import { runSession, createTuiPermissionHandler, decidePermission, toolToSnapshotPath, injectSteering } from './runSession.js'
@@ -184,10 +186,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   const dispatch = useCallback((a) => {
     if (tuiLog) {
       try {
-        const { appendFileSync } = require('node:fs')
-        const { homedir } = require('node:os')
-        const path = require('node:path')
-        const p = tuiLog === true ? path.join(homedir(), '.aether-tui.log') : tuiLog
+        const p = tuiLog === true ? join(homedir(), '.aether-tui.log') : tuiLog
         appendFileSync(p, JSON.stringify({ t: Date.now(), type: a.type, text: a.text, delta: a.delta, name: a.name }) + '\n')
       } catch {}
     }
