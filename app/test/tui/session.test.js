@@ -4,6 +4,9 @@
 // 渲染消息含 "hi"（App 渲染的正是 reducer state）。
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from 'vitest'
+import { writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { tuiReducer, initialTuiState } from '../../tui/reducer.js'
 import { runSession } from '../../tui/runSession.js'
 
@@ -206,6 +209,33 @@ describe('runSession', () => {
       runAgentImpl: async (opts) => { called = opts.provider.api_key === 'sk-plain'; return { text: '', toolCalls: [] } },
     })
     expect(called).toBe(true)
+  })
+
+  it('falls back to auth.json when stored key is encrypted (persisted via /apikey)', async () => {
+    const oldFile = process.env.AETHER_AUTH_FILE
+    const tmp = join(tmpdir(), `auth-${Date.now()}.json`)
+    process.env.AETHER_AUTH_FILE = tmp
+    writeFileSync(tmp, JSON.stringify({ '新疆': 'sk-from-auth' }), 'utf8')
+    try {
+      let got
+      const encResolve = () => ({
+        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+        model: { id: 1, model_name: 'm' },
+        db: null,
+      })
+      await runSession({
+        dbPath: null,
+        prompt: 'x',
+        dispatch: () => {},
+        resolveImpl: encResolve,
+        runAgentImpl: async (opts) => { got = opts.provider.api_key; return { text: '', toolCalls: [] } },
+      })
+      expect(got).toBe('sk-from-auth')
+    } finally {
+      if (oldFile === undefined) delete process.env.AETHER_AUTH_FILE
+      else process.env.AETHER_AUTH_FILE = oldFile
+      try { rmSync(tmp, { force: true }) } catch {}
+    }
   })
 
   it('falls back to AETHER_API_KEY env when stored key is encrypted (headless)', async () => {

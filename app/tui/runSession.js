@@ -15,6 +15,7 @@ import { openDatabase, resolveProviderModel, runAgent, isEncryptedKey } from '..
 import { captureFileSnapshot } from './rollback.js'
 import { isToolStart } from './toolCards.js'
 import { connectMcpServers, disconnectMcpServers, runSessionHooks } from '../electron/llm/headlessMcp.js'
+import { loadAuthKeys } from './authStore.js'
 
 /**
  * 从 DB 解析 provider + model（供 runSession 使用）。抛错带人类可读信息。
@@ -144,6 +145,18 @@ function envKeyFor(provider) {
   return process.env[`AETHER_API_KEY_${norm}`] || process.env[`${norm}_API_KEY`] || process.env.AETHER_API_KEY || null
 }
 
+// 从 auth.json 持久化存储回退(/apikey 命令写入; 对齐 opencode/Claude Code/Codex 惯例)
+function authKeyFor(provider) {
+  try {
+    const keys = loadAuthKeys()
+    if (!keys) return null
+    const name = provider ? String(provider.name || '').trim() : ''
+    return (name && keys[name]) || keys['*'] || null
+  } catch {
+    return null
+  }
+}
+
 export async function runSession({
   dbPath,
   modelName,
@@ -169,12 +182,13 @@ export async function runSession({
   // 回退顺序: --api-key 显式 > 环境变量(AETHER_API_KEY / <PROVIDER>_API_KEY) > DB 明文。
   let effectiveApiKey = apiKey
   if (!effectiveApiKey && provider && provider.api_key && isEncryptedKey(provider.api_key)) {
-    effectiveApiKey = envKeyFor(provider)
+    // 回退: 环境变量 > auth.json(持久化, /apikey 保存) > 报错
+    effectiveApiKey = envKeyFor(provider) || authKeyFor(provider)
     if (!effectiveApiKey) {
       throw new Error(
         `the stored API key for provider "${provider.name}" is encrypted with the desktop app (safeStorage). ` +
-        'Headless mode cannot decrypt it. Fix: set env AETHER_API_KEY (or <PROVIDER>_API_KEY, e.g. OPENAI_API_KEY), ' +
-        'or pass --api-key <plaintext>.',
+        'Headless mode cannot decrypt it. Fix: run /apikey <provider> <key> once to save it locally, ' +
+        'or set env AETHER_API_KEY, or pass --api-key <plaintext>.',
       )
     }
   }
