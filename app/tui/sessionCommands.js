@@ -6,7 +6,7 @@
 
 // 命令补全候选（斜杠提示用, 按字母序）
 export const SLASH_COMMANDS = [
-  '/effort', '/export', '/fork', '/help', '/memory', '/mode', '/model', '/permissions', '/persona', '/quit', '/status',
+  '/apikey', '/effort', '/export', '/fork', '/help', '/memory', '/mode', '/model', '/permissions', '/persona', '/quit', '/status',
   '/sessions', '/skill accept', '/skill dismiss', '/skills', '/use',
 ]
 
@@ -46,6 +46,13 @@ export function parseSessionCommand(input) {
       return { type: 'effort', level: arg || null }
     case '/status':
       return { type: 'status' }
+    case '/apikey': {
+      // /apikey <key> 存全局 | /apikey <provider> <key> 存指定 provider | /apikey 查看已存
+      const parts = (arg || '').split(/\s+/)
+      if (parts.length >= 2 && parts[1]) return { type: 'apikey', provider: parts[0], key: parts.slice(1).join(' ') }
+      if (parts.length === 1 && parts[0]) return { type: 'apikey', provider: null, key: parts[0] }
+      return { type: 'apikey', provider: null, key: null }
+    }
     case '/permissions':
       return { type: 'permissions' }
     case '/export':

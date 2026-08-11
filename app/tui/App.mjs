@@ -17,6 +17,7 @@ import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
 import { listModels } from './models.js'
 import { dispatchKey } from './keyHandlers.js'
 import { loadKeybindings } from './keybindings.js'
+import { loadAuthKeys, saveAuthKey } from './authStore.js'
 
 // Tokyo Night 风格配色（克制、低饱和，参考 opencode 现代终端观感）
 // 语义 tokens（对齐 opencode theme 结构）：组件只引用 token，不写裸色值。
@@ -452,6 +453,18 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
         // /permissions: 当前会话 allow-rules 列表
         const rules = allowRulesRef.current.list('tui')
         dispatch({ type: 'APPEND_SYSTEM', text: rules.length ? `allow rules (${rules.length}): ${rules.join(' · ')}` : 'allow rules: (none) — 审批时按 a 添加' })
+      } else if (cmd.type === 'apikey') {
+        // /apikey <key> 存全局 | /apikey <provider> <key> | /apikey 查看
+        if (!cmd.key) {
+          const keys = loadAuthKeys() || {}
+          const names = Object.keys(keys)
+          dispatch({ type: 'APPEND_SYSTEM', text: names.length
+            ? `saved keys: ${names.map((n) => (n === '*' ? '(global)' : n)).join(' · ')} (已保存, 打码不显示)`
+            : 'no saved keys — 用法: /apikey <key> 全局 或 /apikey <provider> <key>' })
+        } else {
+          saveAuthKey(cmd.provider || '*', cmd.key)
+          dispatch({ type: 'STATUS', text: `API key saved for "${cmd.provider || '(global)'}" → auth.json (0600)` })
+        }
       } else if (cmd.type === 'help') {
         dispatch({ type: 'APPEND_SYSTEM', text: `commands: ${SLASH_COMMANDS.join(' ')} | 快捷键: Alt+m 模式 / Alt+v diff / ↑↓ 历史 / Tab 补全 / Ctrl+P 面板 / Ctrl+C 退出` })
       }
