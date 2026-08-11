@@ -248,7 +248,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
   toolCache.clear()
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
@@ -413,6 +413,7 @@ Reply in this format:
   // Build tool context with sessionId for sandbox checks.
   const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, db }
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
+  const usageAccum = { input: 0, output: 0 }
 
   while (budget.consume()) {
     // Phase 4: Multi-dimensional budget check (iterations, tokens, time, errors).
@@ -450,6 +451,12 @@ Reply in this format:
       try { onThinkingEnd?.() } catch {}
       if (msg && msg.reasoning) {
         try { onThinkingDelta?.(msg.reasoning) } catch {}
+      }
+      // 实时 token 用量: 累计每次请求 usage 并上报(onUsage → TUI 状态栏显示)
+      if (msg && msg.usage) {
+        usageAccum.input += Number(msg.usage.prompt_tokens || msg.usage.input_tokens || 0)
+        usageAccum.output += Number(msg.usage.completion_tokens || msg.usage.output_tokens || 0)
+        try { onUsage?.({ ...usageAccum }) } catch {}
       }
     } catch (e) {
       try { onThinkingEnd?.() } catch {}
