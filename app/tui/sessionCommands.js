@@ -6,7 +6,7 @@
 
 // 命令补全候选（斜杠提示用, 按字母序）
 export const SLASH_COMMANDS = [
-  '/effort', '/fork', '/help', '/memory', '/mode', '/model', '/persona', '/quit',
+  '/effort', '/export', '/fork', '/help', '/memory', '/mode', '/model', '/permissions', '/persona', '/quit', '/status',
   '/sessions', '/skill accept', '/skill dismiss', '/skills', '/use',
 ]
 
@@ -44,6 +44,12 @@ export function parseSessionCommand(input) {
       return { type: 'mode', mode: arg || null }
     case '/effort':
       return { type: 'effort', level: arg || null }
+    case '/status':
+      return { type: 'status' }
+    case '/permissions':
+      return { type: 'permissions' }
+    case '/export':
+      return { type: 'export', path: arg || null }
     case '/help':
       return { type: 'help' }
     case '/quit':

@@ -27,7 +27,10 @@ export function normalizeKey(input, key) {
   if (key.pageDown === true) return 'pagedown'
   if (key.return === true || key.enter === true || key.name === 'return' || key.name === 'enter') return 'enter'
   if (key.escape === true) return 'esc'
-  if (key.tab === true || key.name === 'tab') return 'tab'
+  if (key.tab === true || key.name === 'tab') {
+    if (key.shift === true) return 'shift-tab'   // Shift+Tab 模式循环(行业标准)
+    return 'tab'
+  }
   if (key.backspace === true || key.name === 'backspace' || key.delete === true || key.name === 'delete' || input === '\x7f' || input === '\b') return 'backspace'
   if (input) return input.length === 1 ? 'char' : 'char'   // 可打印字符(含粘贴)
   return null
@@ -39,6 +42,9 @@ export function resolveMode(ctx) {
   if (ctx.leaderArmed) return 'leader'
   if (ctx.paletteOpen) return 'palette'
   if (ctx.timeline) return 'timeline'
+  if (ctx.helpOpen) return 'help'
+  if (ctx.rewindOpen) return 'rewind'
+  if (ctx.state.planDone) return 'planDone'
   if (ctx.state.pendingPermission) return 'permission'
   if (ctx.state.expandedTool != null) return 'diff'
   if (ctx.state.steeringMode) return 'steering'
@@ -61,6 +67,9 @@ const paletteRun = (ctx, item) => {
   else if (item === 'Quit') ctx.dispatch({ type: 'QUIT_INTENT' })
   else if (item === 'Model') ctx.openModelPicker()
   else if (item === 'History (sessions)') ctx.openSessions()
+  else if (item === 'Timeline') ctx.openTimeline()
+  else if (item === 'Export JSONL') ctx.handleCommand('/export')
+  else if (item === 'Help') ctx.setHelpOpen(true)
 }
 
 // ── 时间线: 祖先链 ↑↓ / Enter 切换 / Esc 关闭 ────────────────────────────────
@@ -147,6 +156,10 @@ export const modeHandlers = {
     'char:h': (ctx) => ctx.setPermIdx((i) => wrap(i, 3, -1)),
     right: (ctx) => ctx.setPermIdx((i) => wrap(i, 3, 1)),
     'char:l': (ctx) => ctx.setPermIdx((i) => wrap(i, 3, 1)),
+    // 单键直达(Codex 模式): y=once / a=always / n=deny
+    'char:y': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'allow') },
+    'char:a': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'allow', true) },
+    'char:n': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'deny') },
     esc: (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'deny') },
     'ctrl-c': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'deny') },
     enter: (ctx) => {
@@ -160,6 +173,42 @@ export const modeHandlers = {
     enter: (ctx) => ctx.dispatch({ type: 'TOOL_EXPAND', index: ctx.state.expandedTool }),
     esc: (ctx) => ctx.dispatch({ type: 'TOOL_EXPAND', index: ctx.state.expandedTool }),
     'char:r': (ctx) => ctx.doRollback(),
+  },
+
+  // plan 模式完成后的三选项(Claude ExitPlanMode / Gemini 双选项 / Codex 三选项)
+  planDone: {
+    up: (ctx) => ctx.setPlanChoice((i) => wrap(i, 3, -1)),
+    'ctrl-p': (ctx) => ctx.setPlanChoice((i) => wrap(i, 3, -1)),
+    down: (ctx) => ctx.setPlanChoice((i) => wrap(i, 3, 1)),
+    'ctrl-n': (ctx) => ctx.setPlanChoice((i) => wrap(i, 3, 1)),
+    enter: (ctx) => {
+      const choice = ['auto', 'manual', 'continue'][ctx.planChoice]
+      ctx.dispatch({ type: 'PLAN_DONE', on: false })
+      if (choice === 'auto') { ctx.dispatch({ type: 'APPROVAL_MODE_SET', mode: 'auto-edits' }); ctx.startPlan() }
+      else if (choice === 'manual') { ctx.dispatch({ type: 'APPROVAL_MODE_SET', mode: 'manual' }); ctx.startPlan() }
+      // 'continue': 留在 plan 模式继续规划
+    },
+    esc: (ctx) => ctx.dispatch({ type: 'PLAN_DONE', on: false }),
+    'char:c': (ctx) => ctx.dispatch({ type: 'PLAN_DONE', on: false }),
+  },
+
+  // rewind 检查点面板(Claude checkpoint / Codex backtrack): 恢复快照 + 截断对话
+  rewind: {
+    up: (ctx) => ctx.setRewindIdx((i) => wrap(i, ctx.rewindPoints.length, -1)),
+    'ctrl-p': (ctx) => ctx.setRewindIdx((i) => wrap(i, ctx.rewindPoints.length, -1)),
+    down: (ctx) => ctx.setRewindIdx((i) => wrap(i, ctx.rewindPoints.length, 1)),
+    'ctrl-n': (ctx) => ctx.setRewindIdx((i) => wrap(i, ctx.rewindPoints.length, 1)),
+    enter: (ctx) => { ctx.doRewind(); ctx.setRewindOpen(false) },
+    esc: (ctx) => ctx.setRewindOpen(false),
+  },
+
+  // 帮助屏: 任意键关闭(lazygit '?' 自动生成式; 我们为静态表)
+  help: {
+    esc: (ctx) => ctx.setHelpOpen(false),
+    enter: (ctx) => ctx.setHelpOpen(false),
+    char: (ctx) => ctx.setHelpOpen(false),
+    up: (ctx) => ctx.setHelpOpen(false),
+    down: (ctx) => ctx.setHelpOpen(false),
   },
 
   steering: {
@@ -192,6 +241,19 @@ export const modeHandlers = {
         ctx.dispatch({ type: 'QUIT_INTENT' })
       }
     },
+    'shift-tab': (ctx) => {
+      // 审批模式循环(全行业标准): manual → auto-edits → plan
+      const modes = ['manual', 'auto-edits', 'plan']
+      const i = modes.indexOf(ctx.state.approvalMode)
+      const next = modes[(i + 1) % modes.length]
+      ctx.dispatch({ type: 'APPROVAL_MODE_SET', mode: next })
+      ctx.dispatch({ type: 'STATUS', text: `approval: ${next}${next === 'plan' ? ' — 只读规划' : ''} (Shift+Tab 循环)` })
+    },
+    'char:?': (ctx) => { if (!ctx.state.input) ctx.setHelpOpen(true) },
+    'char:x': (ctx) => {
+      // x 上下文菜单(打开命令面板; lazygit x 菜单模式)
+      if (!ctx.state.input) { ctx.setPaletteOpen(true); ctx.setPaletteIdx(0); ctx.setPaletteFilter('') }
+    },
     up: (ctx) => {
       const s = ctx.state
       const sm = slashMatches(s)
@@ -222,17 +284,36 @@ export const modeHandlers = {
     pagedown: (ctx) => { if (!ctx.state.input) ctx.setScrollOffset((o) => Math.max(0, o - 10)) },
     esc: (ctx) => {
       const s = ctx.state
-      if (!s.input) return
-      const sm = slashMatches(s)
-      // opencode prompt.clear: ≥20 字符草稿入历史; 斜杠态=取消补全不保留
-      if (sm.length === 0 && s.input.length >= 20) {
-        ctx.historyRef.current = [...ctx.historyRef.current.filter((x) => x !== s.input), s.input].slice(-100)
+      if (s.input) {
+        // 有输入: 清空 + 草稿保留(opencode prompt.clear: ≥20 字符入历史; 斜杠态=取消补全)
+        const sm = slashMatches(s)
+        if (sm.length === 0 && s.input.length >= 20) {
+          ctx.historyRef.current = [...ctx.historyRef.current.filter((x) => x !== s.input), s.input].slice(-100)
+        }
+        ctx.dispatch({ type: 'INPUT', value: '' })
+        ctx.setSlashIdx(0)
+        return
       }
-      ctx.dispatch({ type: 'INPUT', value: '' })
-      ctx.setSlashIdx(0)
+      // 空输入: 分层 Esc(lazygit 式) —— 第一次 armed 提示, 再按打开 rewind 检查点
+      if (ctx.escArmedRef.current) {
+        ctx.escArmedRef.current = false
+        ctx.openRewind()
+        return
+      }
+      ctx.escArmedRef.current = true
+      ctx.dispatch({ type: 'STATUS', text: 'Esc: rewind 检查点 · 再按一次打开' })
     },
     tab: (ctx) => {
-      const sm = slashMatches(ctx.state)
+      const s = ctx.state
+      // 运行中 Tab=排队下一条(Codex 模式, 不打断 agent)
+      if (s.running && s.input) {
+        ctx.injectSteering('tui', s.input)
+        ctx.dispatch({ type: 'STEER_ENQUEUE', text: s.input })
+        ctx.dispatch({ type: 'INPUT', value: '' })
+        ctx.dispatch({ type: 'STATUS', text: `queued follow-up (${s.steeringQueue.length + 1})` })
+        return
+      }
+      const sm = slashMatches(s)
       if (sm.length > 0) { ctx.dispatch({ type: 'INPUT', value: sm[0] }); ctx.setSlashIdx(0) }
     },
     enter: (ctx) => {
@@ -266,17 +347,26 @@ export const modeHandlers = {
   },
 }
 
-// ── 调度入口: 模式 → 归一 → 查表; 模态无匹配则吞键, base 兜底字符输入 ───────
+// ── 调度入口: 模式 → 归一 → keybinding 映射 → 查表; 模态无匹配则吞键 ───────
 export function dispatchKey(ctx, input, key) {
   const mode = resolveMode(ctx)
-  const kid = normalizeKey(input, key)
+  let kid = normalizeKey(input, key)
+  if (kid == null) return
+  // keybindings.json 重绑/禁用: { "shift-tab": "ctrl-t", "char:?": null }
+  // 单字符键用具体键名映射('char:?'), 通用 'char' 不参与映射
+  if (ctx.keybindings) {
+    const specific = kid === 'char' && input ? `char:${input}` : null
+    const mapKey = specific && Object.prototype.hasOwnProperty.call(ctx.keybindings, specific) ? specific : kid
+    if (Object.prototype.hasOwnProperty.call(ctx.keybindings, mapKey)) kid = ctx.keybindings[mapKey]
+  }
   if (kid == null) return
   const table = modeHandlers[mode]
-  let handler = table ? (table[kid] || null) : null
-  // 单字符: 先匹配具体键('char:r' / 'char:h'), 无则落到通用 'char' 兜底
-  if (!handler && kid === 'char' && input) {
-    handler = table ? (table[`char:${input}`] || table.char || null) : null
+  let handler = null
+  // 单字符: 具体键('char:? / char:y / char:r')优先, 通用 'char' 兜底
+  if (kid === 'char' && input) {
+    handler = table ? (table[`char:${input}`] || null) : null
   }
+  if (!handler) handler = table ? (table[kid] || null) : null
   if (handler) { handler(ctx, input); return }
   // 非模态: 未认出的键静默忽略(避免打字丢失)
 }

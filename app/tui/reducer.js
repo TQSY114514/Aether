@@ -30,7 +30,15 @@ export const initialTuiState = Object.freeze({
   memoryResults: [],       // todo 8: /memory 检索命中 [{ id, content, type, createdAt }]
   skills: [],              // todo 20: /skills 技能提案 [{ key, imperative, occurrences }]
   quitRequested: false,
+  // ── 审批模式（Shift+Tab 循环; 对齐 Claude/Codex/Gemini 离散预设）──────
+  approvalMode: 'manual',  // manual | auto-edits | plan
+  planDone: false,         // plan 模式 agent 结束后等待用户选择（实施/继续）
 })
+
+// 审批模式预设（Shift+Tab 循环顺序）; 对齐行业: manual → acceptEdits → plan
+export const APPROVAL_MODES = ['manual', 'auto-edits', 'plan']
+// plan 模式只读工具集（自动放行; 写工具直接拒绝）
+export const READ_ONLY_TOOLS = ['read', 'list', 'grep', 'glob', 'search', 'view']
 
 function nextMessageId(state) {
   return state.messages.reduce((m, x) => Math.max(m, x.id || 0), 0) + 1
@@ -93,6 +101,28 @@ export function tuiReducer(state = initialTuiState, action) {
     case 'MODE_CYCLE': {
       const i = MODES.indexOf(state.mode)
       return { ...state, mode: MODES[(i + 1) % MODES.length] }
+    }
+
+    // ── 审批模式（Shift+Tab 循环; manual → auto-edits → plan）────────────
+    case 'APPROVAL_MODE_SET': {
+      if (!APPROVAL_MODES.includes(action.mode)) return state
+      return { ...state, approvalMode: action.mode, planDone: false }
+    }
+
+    case 'APPROVAL_MODE_CYCLE': {
+      const i = APPROVAL_MODES.indexOf(state.approvalMode)
+      return { ...state, approvalMode: APPROVAL_MODES[(i + 1) % APPROVAL_MODES.length], planDone: false }
+    }
+
+    case 'PLAN_DONE':
+      return { ...state, planDone: !!action.on }
+
+    // rewind: 截断消息与工具卡到指定位置（配合快照恢复实现 checkpoint 回滚）
+    case 'TRUNCATE': {
+      const next = { ...state, planDone: false }
+      if (action.messages != null) next.messages = action.messages
+      if (action.toolCalls != null) next.toolCalls = action.toolCalls
+      return next
     }
 
     // ── 模型 / effort 切换（/model /effort 命令）────────────────────────
