@@ -124,12 +124,26 @@ export function injectSteering(sessionId, text) {
  * @param {string} [opts.workspace]
  * @param {string} [opts.sessionId]   steering/事件键控（默认 'tui'）
  * @param {(action: object) => void} opts.dispatch   reducer dispatch
- * @param {(result: object) => void} [opts.onEnd]    完成回调（result.text/toolCalls）
- * @param {(perm: object) => Promise<boolean>} [opts.requestPermission]  权限回调（todo 4：createTuiPermissionHandler 产物或自定义）
- * @param {Function} [opts.runAgentImpl]  可注入 runAgent（测试用）
- * @param {Function} [opts.resolveImpl]   可注入 resolveSessionResources（测试用）
- * @returns {Promise<{text: string, toolCalls: object[]}>}
- */
+  * @param {(result: object) => void} [opts.onEnd]    完成回调（result.text/toolCalls）
+  * @param {(perm: object) => Promise<boolean>} [opts.requestPermission]  权限回调（todo 4：createTuiPermissionHandler 产物或自定义）
+  * @param {Function} [opts.runAgentImpl]  可注入 runAgent（测试用）
+  * @param {Function} [opts.resolveImpl]   可注入 resolveSessionResources（测试用）
+  * @returns {Promise<{text: string, toolCalls: object[]}>}
+  *
+  * API key 解析优先级: --api-key 显式 > 环境变量(AETHER_API_KEY / <PROVIDER>_API_KEY) > DB 明文 > 报错。
+  * 桌面版 safeStorage 加密的 key headless 无法解密——环境变量回退让 TUI/CLI 无摩擦可用。
+  */
+// 从环境变量回退取 API key(桌面版 safeStorage 加密的 key headless 无法解密):
+//   AETHER_API_KEY(全局兜底) > AETHER_API_KEY_<PROVIDER名> > <PROVIDER名>_API_KEY
+// provider 名非 ASCII(如中文)时, 用 AETHER_API_KEY 全局变量最省事。
+function envKeyFor(provider) {
+  if (!provider) return null
+  const raw = String(provider.name || '').trim()
+  if (!raw) return process.env.AETHER_API_KEY || null
+  const norm = raw.toUpperCase().replace(/[^A-Z0-9_]/g, '_')
+  return process.env[`AETHER_API_KEY_${norm}`] || process.env[`${norm}_API_KEY`] || process.env.AETHER_API_KEY || null
+}
+
 export async function runSession({
   dbPath,
   modelName,
@@ -151,14 +165,20 @@ export async function runSession({
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
   // headless 无法解密 safeStorage 加密的 API key——密文直接发 API 会 401/卡住，
-  // 表现为"无回复"。与 CLI 同款检测,提前红字报错;或由 --api-key 明文覆盖。
-  if (!apiKey && provider && provider.api_key && isEncryptedKey(provider.api_key)) {
-    throw new Error(
-      `the stored API key for provider "${provider.name}" is encrypted with the desktop app (safeStorage). ` +
-      'Headless mode cannot decrypt it. Pass --api-key <plaintext> to use this provider.',
-    )
+  // 表现为"无回复"。与 CLI 同款检测,提前红字报错。
+  // 回退顺序: --api-key 显式 > 环境变量(AETHER_API_KEY / <PROVIDER>_API_KEY) > DB 明文。
+  let effectiveApiKey = apiKey
+  if (!effectiveApiKey && provider && provider.api_key && isEncryptedKey(provider.api_key)) {
+    effectiveApiKey = envKeyFor(provider)
+    if (!effectiveApiKey) {
+      throw new Error(
+        `the stored API key for provider "${provider.name}" is encrypted with the desktop app (safeStorage). ` +
+        'Headless mode cannot decrypt it. Fix: set env AETHER_API_KEY (or <PROVIDER>_API_KEY, e.g. OPENAI_API_KEY), ' +
+        'or pass --api-key <plaintext>.',
+      )
+    }
   }
-  const effectiveProvider = apiKey ? { ...provider, api_key: apiKey, ...(apiUrl ? { api_url: apiUrl } : {}), ...(apiFormat ? { api_format: apiFormat } : {}) } : provider
+  const effectiveProvider = effectiveApiKey ? { ...provider, api_key: effectiveApiKey, ...(apiUrl ? { api_url: apiUrl } : {}), ...(apiFormat ? { api_format: apiFormat } : {}) } : provider
   dispatch({ type: 'AGENT_START', max: maxIterations, modelName: model.model_name })
   const ws = workspace || process.cwd()
   // todo 14：MCP 连接 + SessionStart/SessionEnd hooks（best-effort，不阻塞 agent）。

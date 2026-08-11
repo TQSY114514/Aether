@@ -207,4 +207,28 @@ describe('runSession', () => {
     })
     expect(called).toBe(true)
   })
+
+  it('falls back to AETHER_API_KEY env when stored key is encrypted (headless)', async () => {
+    const old = process.env.AETHER_API_KEY
+    process.env.AETHER_API_KEY = 'sk-from-env'
+    try {
+      let got
+      const encResolve = () => ({
+        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+        model: { id: 1, model_name: 'm' },
+        db: null,
+      })
+      await runSession({
+        dbPath: null,
+        prompt: 'x',
+        dispatch: () => {},
+        resolveImpl: encResolve,
+        runAgentImpl: async (opts) => { got = opts.provider.api_key; return { text: '', toolCalls: [] } },
+      })
+      expect(got).toBe('sk-from-env')
+    } finally {
+      if (old === undefined) delete process.env.AETHER_API_KEY
+      else process.env.AETHER_API_KEY = old
+    }
+  })
 })
