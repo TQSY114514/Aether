@@ -34,5 +34,10 @@ export function createAllowRulesStore() {
     clear(sessionId) {
       allowRules.delete(sessionId)
     },
+    // /permissions 展示: 返回当前会话规则数组 ['name:ruleKey', ...]
+    list(sessionId) {
+      const set = allowRules.get(sessionId)
+      return set ? [...set] : []
+    },
   }
 }

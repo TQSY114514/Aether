@@ -20,6 +20,14 @@ function makeCtx(overrides = {}) {
     leaderArmed: false, setLeaderArmed: vi.fn(),
     scrollOffset: 0, setScrollOffset: vi.fn(),
     slashIdx: 0, setSlashIdx: vi.fn(),
+    helpOpen: false, setHelpOpen: vi.fn(),
+    rewindOpen: false, setRewindOpen: vi.fn(),
+    rewindIdx: 0, setRewindIdx: vi.fn(),
+    rewindPoints: [], rewindOpen2: null,
+    planChoice: 0, setPlanChoice: vi.fn(),
+    escArmedRef: { current: false },
+    keybindings: null,
+    openRewind: vi.fn(), doRewind: vi.fn(), startPlan: vi.fn(),
     PALETTE_ITEMS: ['New chat', 'Model', 'History (sessions)', 'Quit'],
     historyRef: { current: [] },
     historyIdxRef: { current: -1 },
@@ -289,6 +297,95 @@ describe('斜杠补全', () => {
 })
 
 // 防回归: 真实 reducer 链上跑一次 Enter 全流程
+describe('审批模式(Shift+Tab)与 planDone', () => {
+  it('Shift+Tab 循环审批模式 manual → auto-edits → plan', () => {
+    const ctx = makeCtx()
+    press(ctx, { tab: true, shift: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'APPROVAL_MODE_SET', mode: 'auto-edits' })
+  })
+
+  it('审批单键 y/a/n 直达(Codex 模式)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, pendingPermission: { name: 'bash' } } })
+    press(ctx, {}, 'y')
+    expect(ctx.decidePermission).toHaveBeenCalledWith(expect.objectContaining({ decision: 'allow', remember: false }))
+    ctx.decidePermission.mockClear()
+    press(ctx, {}, 'a')
+    expect(ctx.decidePermission).toHaveBeenCalledWith(expect.objectContaining({ decision: 'allow', remember: true }))
+    ctx.decidePermission.mockClear()
+    press(ctx, {}, 'n')
+    expect(ctx.decidePermission).toHaveBeenCalledWith(expect.objectContaining({ decision: 'deny' }))
+  })
+
+  it('planDone 三选项: 自动接受 → auto-edits + startPlan', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, planDone: true }, planChoice: 0, setPlanChoice: vi.fn(), startPlan: vi.fn() })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'PLAN_DONE', on: false })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'APPROVAL_MODE_SET', mode: 'auto-edits' })
+    expect(ctx.startPlan).toHaveBeenCalled()
+  })
+
+  it('planDone Esc = 继续规划(留在 plan 模式)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, planDone: true }, startPlan: vi.fn() })
+    press(ctx, { escape: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'PLAN_DONE', on: false })
+    expect(ctx.startPlan).not.toHaveBeenCalled()
+  })
+})
+
+describe("'?'/x 面板与 rewind", () => {
+  it('空输入 ? 打开帮助屏; 输入中 ? 正常输入', () => {
+    const ctx = makeCtx({ setHelpOpen: vi.fn() })
+    press(ctx, {}, '?')
+    expect(ctx.setHelpOpen).toHaveBeenCalledWith(true)
+    const ctx2 = makeCtx({ state: { ...initialTuiState, input: 'abc' } })
+    press(ctx2, {}, '?')
+    expect(ctx2.setHelpOpen).not.toHaveBeenCalled()
+  })
+
+  it('空输入 x 打开命令面板', () => {
+    const ctx = makeCtx({ setPaletteOpen: vi.fn(), setPaletteIdx: vi.fn(), setPaletteFilter: vi.fn() })
+    press(ctx, {}, 'x')
+    expect(ctx.setPaletteOpen).toHaveBeenCalledWith(true)
+  })
+
+  it('rewind 面板: Enter 触发 doRewind 并关闭', () => {
+    const ctx = makeCtx({
+      rewindOpen: true, rewindPoints: [{ i: 2, card: { name: 'edit' } }], rewindIdx: 0,
+      setRewindOpen: vi.fn(), setRewindIdx: vi.fn(), doRewind: vi.fn(),
+    })
+    press(ctx, { return: true }, '')
+    expect(ctx.doRewind).toHaveBeenCalled()
+    expect(ctx.setRewindOpen).toHaveBeenCalledWith(false)
+  })
+
+  it('分层 Esc: 空输入第一次 armed, 第二次 openRewind', () => {
+    const escArmedRef = { current: false }
+    const ctx = makeCtx({ escArmedRef, openRewind: vi.fn(), setHelpOpen: vi.fn() })
+    press(ctx, { escape: true }, '')
+    expect(escArmedRef.current).toBe(true)
+    expect(ctx.openRewind).not.toHaveBeenCalled()
+    press(ctx, { escape: true }, '')
+    expect(escArmedRef.current).toBe(false)
+    expect(ctx.openRewind).toHaveBeenCalled()
+  })
+
+  it('Tab 运行中排队下一条(Codex 模式)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, running: true, input: 'next task' }, injectSteering: vi.fn() })
+    press(ctx, { tab: true }, '')
+    expect(ctx.injectSteering).toHaveBeenCalledWith('tui', 'next task')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'STEER_ENQUEUE', text: 'next task' })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: '' })
+  })
+
+  it('keybindings 重绑/禁用', () => {
+    const ctx = makeCtx({ keybindings: { 'char:?': null, 'shift-tab': 'ctrl-t' } })
+    press(ctx, {}, '?')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'APPROVAL_MODE_CYCLE' }))
+    // '?' 被禁用 → 无动作
+    expect(ctx.setHelpOpen).not.toHaveBeenCalled()
+  })
+})
+
 describe('集成: dispatchKey + tuiReducer', () => {
   it('输入 → Enter → running → 结束', () => {
     let state = initialTuiState

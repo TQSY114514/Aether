@@ -3,10 +3,10 @@
 // createElement 风格、无 JSX：Node v24 无法加载 .jsx（ISSUE-01 实证），且引入
 // 加载器会违反「新依赖仅限纯 JS」护栏——故组件一律用 react.createElement 手写。
 // ─────────────────────────────────────────────────────────────────────────────
-import { createElement as h, useEffect, useReducer, useRef, useCallback, useState } from 'react'
-import { readFileSync, existsSync } from 'node:fs'
+import { createElement as h, useEffect, useReducer, useRef, useCallback, useState, useMemo } from 'react'
+import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { Box, Text, useInput, useApp } from 'ink'
-import { tuiReducer, initialTuiState } from './reducer.js'
+import { tuiReducer, initialTuiState, APPROVAL_MODES, READ_ONLY_TOOLS } from './reducer.js'
 import { runSession, createTuiPermissionHandler, decidePermission, toolToSnapshotPath, injectSteering } from './runSession.js'
 import { createAllowRulesStore } from './allowRules.js'
 import { buildDiff, rollbackChange } from './rollback.js'
@@ -16,6 +16,7 @@ import { searchMemory } from './memorySearch.js'
 import { TOOL_STATUS, summarizeArgs } from './toolCards.js'
 import { listModels } from './models.js'
 import { dispatchKey } from './keyHandlers.js'
+import { loadKeybindings } from './keybindings.js'
 
 // Tokyo Night 风格配色（克制、低饱和，参考 opencode 现代终端观感）
 // 语义 tokens（对齐 opencode theme 结构）：组件只引用 token，不写裸色值。
@@ -154,11 +155,13 @@ function PermissionPanel({ perm, permIdx }) {
   )
 }
 
-// 底部状态栏（紧凑单行）：mode │ 状态 │ 预算 │ 当前工具 │ steering │ 工具数
-function StatusBar({ state, tick }) {
+// 底部状态栏（紧凑单行）：审批模式 │ mode │ 模型 │ 上下文估算 │ 运行状态 │ 预算 │ 自定义
+function StatusBar({ state, tick, ctxK, extra }) {
   const bits = [
+    `approval:${state.approvalMode}`,
     `mode:${state.mode}`,
     state.modelName ? `model:${state.modelName}` : null,
+    ctxK > 0 ? `ctx:~${ctxK}k` : null,
     `effort:${state.effort}`,
     state.running ? `${tick} running` : '● idle',
     state.statusLine && state.statusLine !== 'idle' ? state.statusLine : null,
@@ -166,13 +169,14 @@ function StatusBar({ state, tick }) {
     state.currentTool ? `tool:${state.currentTool}` : null,
     state.steeringQueue.length ? `steer:${state.steeringQueue.length}` : null,
     `tools:${state.toolCalls.length}`,
+    extra || null,
   ].filter(Boolean)
   return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
     h(Text, { color: C.dim }, bits.join(' │ ')),
   )
 }
 
-export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
+export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd }) {
   const { exit } = useApp()
   const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
   const tick = useTicker(300, SPINNER, state.running)
@@ -192,19 +196,45 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   const [modelPicker, setModelPicker] = useState(null)
   // 会话时间线(leader g): null=关闭, { sessions, idx }=祖先链
   const [timeline, setTimeline] = useState(null)
+  // 帮助屏(lazygit '?' 式): 快捷键表
+  const [helpOpen, setHelpOpen] = useState(false)
+  // rewind 检查点面板(Esc Esc): { points, idx } — 带快照的工具卡(最新在前)
+  const [rewindOpen, setRewindOpen] = useState(false)
+  const [rewindIdx, setRewindIdx] = useState(0)
+  const [rewindPoints, setRewindPoints] = useState([])
+  // plan 模式完成后的三选项高亮(自动接受/手动接受/继续规划)
+  const [planChoice, setPlanChoice] = useState(0)
+  // 分层 Esc: 空输入第一次 Esc 待命(1.5s 超时), 再按打开 rewind
+  const escArmedRef = useRef(false)
+  // 自定义状态栏输出(statusLineCmd 脚本 stdout)
+  const [statusBarExtra, setStatusBarExtra] = useState('')
+  // 用户键位重绑(热加载一次; keybindings.json 修改需重启)
+  const keybindings = useMemo(() => loadKeybindings(), [])
   // 权限选项高亮(opencode: Allow once / Always / Reject)
   const [permIdx, setPermIdx] = useState(0)
   // leader key（opencode ctrl+x 风格）: 按下后 1.2s 内等待第二个键
   const [leaderArmed, setLeaderArmed] = useState(false)
   // 消息区滚动偏移（0 = 跟随最新）
   const [scrollOffset, setScrollOffset] = useState(0)
-  const PALETTE_ITEMS = ['New chat', 'Model', 'History (sessions)', 'Quit']
+  const PALETTE_ITEMS = ['New chat', 'Model', 'History (sessions)', 'Timeline', 'Export JSONL', 'Help', 'Quit']
 
   // todo 4：TUI 键盘应答权限回调（B2 接线 a 方案 → agentCore.runAgent 透传）。
-  const tuiPermission = useCallback(
-    createTuiPermissionHandler({ dispatch, allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef }),
+  // 审批模式包装(opencode 离散预设): manual=询问 / auto-edits=edit·write 自动放行 /
+  // plan=写工具直接拒绝(只读规划)。保留 takeSnapshot 挂载。
+  const basePermission = useMemo(
+    () => createTuiPermissionHandler({ dispatch, allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef }),
     [dispatch],
   )
+  const tuiPermission = useCallback((perm) => {
+    if (state.approvalMode === 'auto-edits' && (perm.name === 'edit' || perm.name === 'write')) {
+      return Promise.resolve(true)
+    }
+    if (state.approvalMode === 'plan' && !READ_ONLY_TOOLS.includes(perm.name)) {
+      return Promise.resolve(false)
+    }
+    return basePermission(perm)
+  }, [basePermission, state.approvalMode])
+  tuiPermission.takeSnapshot = basePermission.takeSnapshot
 
   const startSession = useCallback(async (promptText) => {
     if (sessionBusyRef.current) return
@@ -257,6 +287,73 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     if (chain.length > 1) setTimeline({ sessions: chain, idx: 0 })
     else dispatch({ type: 'STATUS', text: 'timeline: 当前会话无父链(仅自身)' })
   }, [dbPath, state.currentSessionId])
+
+  // rewind 检查点: 列出带快照的工具卡(最新在前), Esc Esc 打开
+  const openRewind = useCallback(() => {
+    const points = state.toolCalls
+      .map((c, i) => ({ i, card: c }))
+      .filter((x) => x.card.snapshot)
+      .reverse()
+    if (!points.length) { dispatch({ type: 'STATUS', text: 'rewind: 暂无检查点(尚无带快照的工具调用)' }); return }
+    setRewindPoints(points)
+    setRewindIdx(0)
+    setRewindOpen(true)
+  }, [state.toolCalls])
+
+  // 执行 rewind: 恢复选中检查点的快照 + 截断对话/工具卡到该点之前
+  const doRewind = useCallback(async () => {
+    const pt = rewindPoints[rewindIdx]
+    if (!pt) return
+    const card = pt.card
+    try {
+      const filePath = toolToSnapshotPath(card.name, card.args) || (card.snapshot ? card.snapshot.path : null)
+      await rollbackChange({ snapshot: card.snapshot, filePath, cwd: workspaceRef.current })
+      dispatch({ type: 'TRUNCATE', messages: state.messages.slice(0, pt.i + 1), toolCalls: state.toolCalls.slice(0, pt.i) })
+      dispatch({ type: 'STATUS', text: `rewound to ${card.name} checkpoint` })
+    } catch (err) {
+      dispatch({ type: 'STATUS', text: `rewind failed: ${err && err.message ? err.message : String(err)}` })
+    }
+  }, [rewindPoints, rewindIdx, state.messages, state.toolCalls])
+
+  // plan 模式完成后用户选择"实施" → 提交实施指令
+  const startPlan = useCallback(() => {
+    dispatch({ type: 'SUBMIT' })
+    startSession('请实施上述计划。')
+  }, [dispatch, startSession])
+
+  // plan 边沿检测: running true→false 且 approvalMode==='plan' → 弹三选项
+  const prevRunningRef = useRef(false)
+  useEffect(() => {
+    if (prevRunningRef.current && !state.running && state.approvalMode === 'plan' && !state.planDone) {
+      dispatch({ type: 'PLAN_DONE', on: true })
+    }
+    prevRunningRef.current = state.running
+  }, [state.running, state.approvalMode, state.planDone])
+
+  // 分层 Esc 超时解除
+  useEffect(() => {
+    if (!escArmedRef.current) return
+    const t = setTimeout(() => { escArmedRef.current = false }, 1500)
+    return () => clearTimeout(t)
+  }, [escArmedRef.current])
+
+  // 自定义状态栏(Claude statusLine 模式): 执行脚本, stdout 显示在状态栏
+  useEffect(() => {
+    if (!statusLineCmd) return
+    let cancelled = false
+    let timer = null
+    const run = async () => {
+      try {
+        const { execFile } = await import('node:child_process')
+        const { promisify } = await import('node:util')
+        const out = await promisify(execFile)(statusLineCmd, [], { timeout: 3000, windowsHide: true })
+        if (!cancelled) setStatusBarExtra(String(out.stdout || '').trim().slice(0, 60))
+      } catch { /* 脚本失败不打扰 */ }
+    }
+    run()
+    timer = setInterval(run, 5000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [statusLineCmd])
 
   // leader key 待命计时: 1.2s 无后续按键自动解除
   useEffect(() => {
@@ -329,6 +426,32 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
         }
       } else if (cmd.type === 'quit') {
         dispatch({ type: 'QUIT_INTENT' })
+      } else if (cmd.type === 'status') {
+        // /status: 终端/环境/会话信息(诊断)
+        const env = {
+          platform: process.platform, node: process.version,
+          term: process.env.TERM || '(none)', colorterm: process.env.COLORTERM || '(none)',
+          db: dbPath || '(default)', model: state.modelName || '(auto)', approval: state.approvalMode,
+          mode: state.mode, session: state.currentSessionId ?? '(new)',
+        }
+        dispatch({ type: 'APPEND_SYSTEM', text: `status: ${JSON.stringify(env)}` })
+      } else if (cmd.type === 'export') {
+        // /export [path]: 会话导出 JSONL(Claude transcript 风格)
+        const target = cmd.path || 'aether-session.jsonl'
+        const lines = [
+          ...state.messages.map((m) => JSON.stringify({ type: 'message', role: m.role, text: m.text, ts: new Date().toISOString() })),
+          ...state.toolCalls.map((c) => JSON.stringify({ type: 'tool_call', name: c.name, status: c.status, summary: c.summary, ts: new Date().toISOString() })),
+        ]
+        try {
+          writeFileSync(target, lines.join('\n') + '\n', 'utf8')
+          dispatch({ type: 'STATUS', text: `exported ${lines.length} events → ${target}` })
+        } catch (err) {
+          dispatch({ type: 'STATUS', text: `export failed: ${err && err.message ? err.message : String(err)}` })
+        }
+      } else if (cmd.type === 'permissions') {
+        // /permissions: 当前会话 allow-rules 列表
+        const rules = allowRulesRef.current.list('tui')
+        dispatch({ type: 'APPEND_SYSTEM', text: rules.length ? `allow rules (${rules.length}): ${rules.join(' · ')}` : 'allow rules: (none) — 审批时按 a 添加' })
       } else if (cmd.type === 'help') {
         dispatch({ type: 'APPEND_SYSTEM', text: `commands: ${SLASH_COMMANDS.join(' ')} | 快捷键: Alt+m 模式 / Alt+v diff / ↑↓ 历史 / Tab 补全 / Ctrl+P 面板 / Ctrl+C 退出` })
       }
@@ -372,9 +495,14 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
     leaderArmed, setLeaderArmed,
     scrollOffset, setScrollOffset,
     slashIdx, setSlashIdx,
+    helpOpen, setHelpOpen,
+    rewindOpen, setRewindOpen, rewindIdx, setRewindIdx, rewindPoints,
+    planChoice, setPlanChoice,
+    escArmedRef,
+    keybindings,
     PALETTE_ITEMS,
     historyRef, historyIdxRef,
-    openModelPicker, openSessions, openTimeline,
+    openModelPicker, openSessions, openTimeline, openRewind, doRewind, startPlan,
     startSession, handleCommand, expandDiff, doRollback,
     decidePermission, allowRulesRef, resolveRef, injectSteering,
   }
@@ -392,9 +520,31 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
   const visibleMessages = msgTotal <= MSG_WINDOW ? state.messages
     : state.messages.slice(msgTotal - MSG_WINDOW - msgOffset, msgTotal - msgOffset)
 
+  // 上下文估算(粗): 消息文本字符/4 ~ tokens, 千分位
+  const ctxK = Math.round(state.messages.reduce((n, m) => n + String(m.text || '').length, 0) / 4 / 1000)
+
+  // 帮助屏内容(快捷键表)
+  const HELP_ROWS = [
+    ['Shift+Tab', '审批模式循环: manual → auto-edits → plan'],
+    ['Ctrl+X 然后 m/n/l/g/q', 'leader: 模型 / 新会话 / 会话列表 / 时间线 / 退出'],
+    ['Ctrl+P 或 x', '命令面板(New chat/Model/Timeline/Export/Help/Quit)'],
+    ['?', '本帮助屏'],
+    ['/命令', '斜杠命令(输入 / 弹出补全, Tab 填入)'],
+    ['↑↓', '命令历史回填(空输入) / 斜杠候选(输入 / 时)'],
+    ['Tab', '运行中: 排队下一条; 输入 / 时: 填入补全'],
+    ['Esc', '清空输入(草稿入历史); 空输入两次: rewind 检查点'],
+    ['PgUp/PgDn', '消息区翻页'],
+    ['Alt+m / Alt+v', '切模式 / 展开最新 diff'],
+    ['y / a / n', '权限审批: 允许一次 / 总是允许 / 拒绝'],
+    ['←→ 或 h/l', '权限/选择器内移动选项'],
+    ['exit / quit / :q', '退出'],
+    ['/export [path]', '会话导出 JSONL'],
+    ['/status · /permissions · /memory · /skills', '诊断与数据查看'],
+  ]
+
   return h(Box, { flexDirection: 'column' },
     h(Logo, { tick: state.running ? tick : null }),
-    h(Text, { color: C.dim }, `  ${state.mode} · Alt+m 切模式 · Alt+v diff · ↑↓ 历史 · Tab 补全 · Ctrl+P 面板 · /mode /model /effort · Ctrl+C 退出`),
+    h(Text, { color: C.dim }, `  ${state.mode} · Shift+Tab 审批模式 · Alt+m 模式 · ? 帮助 · x/Ctrl+P 面板 · Ctrl+C 退出`),
     ...visibleMessages.map((m, i) => h(MessageLine, {
       key: m.id, msg: m,
       selected: state.selectedMessage === (msgTotal - visibleMessages.length + i),
@@ -489,6 +639,30 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
             idx: timeline.idx, i,
           })))
         : null,
+      state.planDone
+        ? (() => {
+          const opts = ['自动接受(切 auto-edits) 并实施', '手动接受 并实施', '继续规划']
+          return h(Box, { marginTop: 1, borderStyle: 'double', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
+            h(Text, { bold: true, color: C.primary }, '▼ 计划完成 — 如何继续?'),
+            opts.map((o, i) => h(SelectRow, { key: o, label: o, idx: planChoice, i })),
+            h(Text, { color: C.dim }, '  ↑↓ 选择 · Enter 确认 · Esc 继续规划'))
+        })()
+        : null,
+      helpOpen
+        ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.dim, paddingX: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: C.primary }, '? 快捷键 — 任意键关闭'),
+          HELP_ROWS.map(([k, d], i) => h(Text, { key: i, color: C.dim }, `  ${k.padEnd(28)}${d}`)))
+        : null,
+      rewindOpen
+        ? h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.warning, paddingX: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: C.warning }, '▼ rewind — 恢复检查点并截断对话'),
+          rewindPoints.map((pt, i) => h(SelectRow, {
+            key: `${pt.card.name}-${pt.i}`,
+            label: `[${pt.i}] ${pt.card.name} ${pt.card.summary || ''}`,
+            idx: rewindIdx, i,
+          })),
+          h(Text, { color: C.dim }, '  ↑↓ 选择 · Enter 恢复 · Esc 取消'))
+        : null,
       h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : (leaderArmed ? C.primary : C.dim), paddingX: 1 },
         h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
         state.input
@@ -498,8 +672,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat }) {
       // 输入框 meta 行（opencode prompt meta: mode · model · effort · running）
       h(Text, { color: C.dim }, `  ${state.mode}${state.modelName ? ` · ${state.modelName}` : ''} · effort:${state.effort}${state.running ? ` · ${tick} running` : ''} · PgUp/PgDn 翻页`),
       leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 列表 · g 时间线 · q 退出') : null,
-      h(StatusBar, { state, tick: state.running ? tick : '●' }),
+      h(StatusBar, { state, tick: state.running ? tick : '●', ctxK, extra: statusBarExtra }),
   )
 }
+
 
 

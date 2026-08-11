@@ -38,6 +38,7 @@ export function parseTuiOpts(argv = []) {
     if (a === '--db') { opts.dbPath = argv[i + 1]; i++; continue }
     if (a === '--model') { opts.modelName = argv[i + 1]; i++; continue }
     if (a === '--api-key') { opts.apiKey = argv[i + 1]; i++; continue }
+    if (a === '--status-line') { opts.statusLineCmd = argv[i + 1]; i++; continue }
     if (a === '--api-url') { opts.apiUrl = argv[i + 1]; i++; continue }
     if (a === '--api-format') { opts.apiFormat = argv[i + 1]; i++; continue }
     if (a.startsWith('--db=')) { opts.dbPath = a.slice(5); continue }
@@ -50,13 +51,13 @@ export function parseTuiOpts(argv = []) {
 }
 
 function runInteractive(argv) {
-  const { dbPath, modelName, apiKey, apiUrl, apiFormat } = parseTuiOpts(argv)
+  const { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd } = parseTuiOpts(argv)
   // 进入 alt screen 前不输出任何内容（不留启动日志/横幅）
   process.stdout.write(ALT_ENTER)
   // 兜底：任何退出路径都恢复原终端内容
   process.on('exit', () => { try { process.stdout.write(ALT_EXIT) } catch {} })
   return new Promise((resolve) => {
-    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName, apiKey, apiUrl, apiFormat }))
+    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd }))
     waitUntilExit().then(() => {
       unmount()
       process.stdout.write(ALT_EXIT)
