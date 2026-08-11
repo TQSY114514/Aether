@@ -2,7 +2,21 @@
 
 All notable changes to AetherAI are documented here.
 
-## [Unreleased]
+## [0.7.0] - 2026-08-11
+
+### TUI — opencode 级交互重构
+
+- 全屏 alt-screen 终端 UI:Logo、Tokyo Night 配色、消息窗口化渲染、PgUp/PgDn 与鼠标滚轮翻页、placeholder/meta 行
+- **opencode 架构对齐**:模式栈键盘调度(`keyHandlers.js`,纯函数可测)、`Shift+Tab` 审批模式循环(`manual → auto-edits → plan`)、plan 模式三选项退出、`Ctrl+X` leader 快捷键(m/n/l/g/r/q)、`Ctrl+P` 命令面板、`?` 帮助屏、`x` 菜单
+- 模型选择器(↑↓ 循环/输入过滤/按 provider 分组/当前模型 ●)、会话时间线(祖先链)、rewind 检查点(恢复快照+截断对话)
+- 交互修复:真实退格(`\x7f`→key.delete)、移除单字母快捷键(m/q/v → Alt+m/Alt+v)、双击 Esc 退出、斜杠补全(Tab 填入)、命令历史回填、Esc 草稿入历史
+- 审批单键 `y/a/n`、只读工具自动放行、`/apikey` 持久化(auth.json, 0600)、键位重绑(`keybindings.json`)、自定义状态栏(`--status-line`)、实时 token 用量(`tok:in/out`)、`/export` JSONL、`/status` 诊断、`/permissions` 规则查看
+
+### 核心可靠性修复
+
+- 三 adapter 请求超时 60s→120s(API 挂起不再无限 spinner)、planning 失败不再静默、推理模型思考过程可见(状态栏)、空回复给出明确提示
+- **safeStorage key 迁移**:headless 回退链(环境变量 `AETHER_API_KEY` → `auth.json` → `provider_credential` 明文表)、`npm run migrate-keys` 一键迁移桌面版 key
+- 鼠标序列剥离层(CSI 不卡 ink parser)、spinner 降频、`--tui-log` 事件诊断
 
 ### 记忆 — Wave 6 (self-evolving memory & code intelligence)
 

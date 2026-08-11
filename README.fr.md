@@ -4,85 +4,93 @@
 
 # AetherAI
 
-### Discutez avec n'importe quel modèle, exécutez un agent de codage sécurisé et comparez les modèles côte à côte — tout sur votre machine
+### Local-first · Multi-model · Agent-native
+
+Discutez avec n'importe quel modèle, exécutez un agent de codage sûr et comparez les modèles côte à côte — sur votre bureau ou dans votre terminal.
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-quick-start) [![Electron 31](https://img.shields.io/badge/Electron-31-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE) [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download) [![Node >= 18](https://img.shields.io/badge/Node-%3E%3D18-green?style=flat-square&logo=node.js)](#-quick-start) [![Electron 43](https://img.shields.io/badge/Electron-43-2b3137?style=flat-square&logo=electron)](#-tech-stack) [![i18n - 15 Languages](https://img.shields.io/badge/i18n-15%20languages-6eeb67?style=flat-square)](#customization) [![MCP Supported](https://img.shields.io/badge/MCP-supported-violet?style=flat-square)](#skills--extensibility)
 
-`Beta` · `Projet solo / passion` · `Licence MIT`
+`Beta` · `Solo / Hobby Project` · `MIT Licensed`
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)<br><sup>Les traductions peuvent être en retard par rapport aux versions anglaise / chinois simplifié.</sup>
 
 </div>
 
 ---
 
-> **Statut : Beta.** AetherAI est un projet solo/passion. Il fonctionne, mais attendez-vous à des aspérités. Les rapports de bugs sont les bienvenus — voir [CONTRIBUTING.md](./CONTRIBUTING.md) et [SECURITY.md](./SECURITY.md).
+> **Statut : Beta.** AetherAI est un projet solo / hobby. Ça fonctionne, mais
+> attendez-vous à des aspérités. Les rapports de bugs sont les bienvenus — voir
+> [CONTRIBUTING.md](./CONTRIBUTING.md) et [SECURITY.md](./SECURITY.md).
 
-Unifiez plusieurs fournisseurs de LLM — OpenAI / Claude / DeepSeek / modèles locaux / tout point de terminaison compatible OpenAI — au sein d'une seule application de bureau. Discutez, exécutez un agent de codage et comparez les modèles en tête-à-tête dans une arène multi-modèles avec vote ELO.
+**Plateforme : Windows uniquement.** Les builds officiels, les tests et le support ciblent Windows. macOS / Linux peuvent être compilés depuis les sources mais ne sont pas officiellement pris en charge, et la signature de code n'est pas prévue — attendez-vous à un avertissement SmartScreen « éditeur inconnu » au premier lancement (voir [Téléchargement](#download)).
 
-**Local d'abord par conception.** Les clés API et les conversations vivent dans une base de données SQLite locale et ne quittent jamais votre machine — sauf vers les fournisseurs que vous configurez.
+**Une application pour chaque modèle.** OpenAI / Claude / DeepSeek / modèles locaux / tout point de terminaison compatible OpenAI — discutez, exécutez un agent de codage et comparez les modèles face à face dans une arène multi-modèles avec vote ELO.
 
-**Sécurisé par défaut.** L'agent intégré tourne dans un sandbox de workspace avec une échelle de permissions : l'accès aux fichiers et aux commandes est confirmé avant d'avoir lieu, et chaque appel d'outil est auditable.
+**Local-first par conception.** Les clés API et les conversations vivent dans une base de données SQLite locale et ne quittent jamais votre machine — sauf vers les fournisseurs que vous configurez.
+
+**Sûr par défaut.** L'agent intégré s'exécute dans un sandbox d'espace de travail avec une échelle de permissions : l'accès aux fichiers et aux commandes est confirmé avant d'avoir lieu, et chaque appel d'outil est auditable.
 
 ---
 
-## Ce qui distingue AetherAI
+## Ce qui rend AetherAI différent
 
-AetherAI combine plusieurs capacités qui sont généralement réparties sur plusieurs outils au sein d'une seule application de bureau locale :
+AetherAI combine plusieurs capacités, habituellement réparties entre plusieurs outils, dans une seule application de bureau locale :
 
 | Capacité | Description | Maturité |
 |---|---|:---:|
-| **Chat multi-fournisseurs** | Basculez entre OpenAI, Claude, DeepSeek et n'importe quel point de terminaison compatible OpenAI en plein milieu d'une conversation. | `Stable` |
-| **Boucle d'outils Agent** | 16 outils intégrés avec boucle Plan-Act-Observe, sandboxing, échelle de permissions. | `Beta` |
-| **Arène multi-modèles** | Envoyez un seul prompt à plusieurs modèles, votez pour le meilleur, suivez les classements ELO. | `Beta` |
-| **Skills & Extensibilité** | Fichiers `SKILL.md` à placer directement, serveurs MCP, système de 10 points d'extension. | `Experimental` |
-| **Mémoire structurée** | L'agent se souvient des préférences et décisions passées entre les sessions. | `Beta` |
+| **Chat multi-fournisseur** | Basculez entre OpenAI, Claude, DeepSeek et tout point de terminaison compatible OpenAI en pleine conversation. | `Stable` |
+| **Boucle d'outils de l'Agent** | 42 outils intégrés avec boucle Plan-Act-Observe, sandbox, échelle de permissions. | `Beta` |
+| **Arène multi-modèles** | Envoyez une invite à plusieurs modèles, votez pour le meilleur, suivez les classements ELO. | `Beta` |
+| **Skills & Extensibilité** | Fichiers `SKILL.md` à déposer, serveurs MCP, système de hooks en 10 points. | `Experimental` |
+| **Mémoire structurée** | L'agent se souvient des préférences et des décisions passées entre les sessions. | `Beta` |
 | **Planification hiérarchique** | Les demandes complexes se décomposent automatiquement en sous-tâches parallèles. | `Experimental` |
-| **Compression de contexte** | Les longues conversations se résument automatiquement sans perdre les paires d'appels d'outils. | `Beta` |
+| **Compaction du contexte** | Les longues conversations se résument automatiquement sans perdre les paires d'appels d'outils. | `Beta` |
 | **Confidentialité local-first** | Conversations, clés, personas dans SQLite local. Rien ne quitte votre machine. | `Stable` |
 | **15 langues d'interface** | Y compris le chinois classique (文言) et l'arabe RTL. | `Beta` |
+| **TUI terminal** | Terminal interactif Ink v5 : flux de sessions, cartes d'outils, revue/rollback de diffs, portes de permissions clavier, `/fork` arbre de sessions, `/memory`, réinjection de steering en cours d'exécution. | `Beta` |
+| **CLI headless · RPC · SDK** | CLI à quatre modes (one-shot / NDJSON / JSONL RPC / pipe), SDK sans Electron (`aetherai/sdk`), protocole JSONL appelable par machine. | `Beta` |
 | **Licence MIT** | Entièrement open source. | `Stable` |
 
 ---
 
 ## Téléchargement
 
-### Windows — Installateur préconstruit (Recommandé pour la plupart des utilisateurs)
+### Windows — Installateur précompilé (recommandé pour la plupart des utilisateurs)
 
 Téléchargez la dernière [Release](https://github.com/TQSY114514/Aether/releases) :
 
 | Build | Description |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | Installateur NSIS. Utilisateur unique (pas d'admin), mises à jour automatiques dans l'app. **Recommandé.** |
-| **`AetherAI-x.y.z.exe`** | Portable mono-exécutable. Pas d'installation, pas de mise à jour automatique ; lancez-le simplement. |
+| **`AetherAI-Setup-x.y.z.exe`** | Installateur NSIS. Par utilisateur (sans admin), mises à jour automatiques dans l'application. **Recommandé.** |
+| **`AetherAI-x.y.z.exe`** | Exécutable portable autonome. Aucune installation, aucune mise à jour automatique ; il suffit de l'exécuter. |
 
 > L'installateur affiche un avertissement SmartScreen « éditeur inconnu » au premier lancement — attendu pour une application solo non signée. Toutes les données restent locales.
 >
-> ⚠️ Certains antivirus peuvent mettre en quarantaine l'`electron.exe` décompacté pendant l'emballage car l'application n'est pas signée. Si l'installateur est supprimé par votre AV, ajoutez une exclusion ou utilisez la version portable.
+> ⚠️ Certains antivirus peuvent mettre en quarantaine le `electron.exe` extrait pendant l'empaquetage car l'application n'est pas signée. Si votre antivirus supprime l'installateur, ajoutez une exclusion ou utilisez le build portable.
 
 ### Exécuter depuis les sources (développeurs / utilisateurs avancés)
 
-Si vous préférez exécuter depuis les sources, ou voulez modifier le code, utilisez `start.bat` (nécessite [Node.js 18+](https://nodejs.org)) :
+Si vous préférez exécuter depuis les sources, ou modifier le code, utilisez `start.bat` (nécessite [Node.js 18+](https://nodejs.org)) :
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
 cd AetherAI
-start.bat        # Windows : installe les deps, construit le frontend, lance Electron
+start.bat        # Windows : installe les dépendances, compile le frontend, lance Electron
 ```
 
-Voir [Démarrage rapide](#-quick-start) pour le guide pas à pas manuel.
+Voir [Quick Start](#-quick-start) pour la procédure manuelle pas à pas.
 
-> **exe vs start.bat** — les deux sont pris en charge et s'adressent à des publics différents :
-> - **Installateur exe** — pour les utilisateurs finaux : double-cliquez pour installer, entrée dans le menu Démarrer, mise à jour auto dans l'app, pas besoin de Node.js.
-> - **start.bat** — pour les développeurs / bricoleurs : pipeline transparent `npm install` → `vite build` → `electron .`, éditer-et-exécuter, nécessite Node.js.
+> **exe vs start.bat** — les deux sont pris en charge et servent des publics différents :
+> - **Installer exe** — pour les utilisateurs finaux : double-clic pour installer, entrée dans le menu Démarrer, mise à jour automatique dans l'application, pas besoin de Node.js.
+> - **start.bat** — pour les développeurs / bricoleurs : pipeline transparent `npm install` → `vite build` → `electron .`, modifier-et-exécuter, nécessite Node.js.
 
 ---
 
-## Démarrage rapide
+## Quick Start
 
 **Prérequis :** Node.js 18+, npm 9+
 
@@ -91,86 +99,97 @@ cd app
 npm install
 npm run dev      # développement (rechargement à chaud)
 npm run build    # frontend de production
-npm start        # lancer Electron
+npm start        # lance Electron
 ```
 
-Ou exécutez `start.bat` à la racine du dépôt sur Windows.
+Ou exécutez `start.bat` à la racine du dépôt sous Windows.
+
+### Essayer le terminal (aucune fenêtre Electron nécessaire)
+
+```bash
+cd app && npm install
+node cli.js tui              # UI terminal interactive (Node ≥ 22 ; expérience optimale dans Windows Terminal)
+node cli.js "你好"           # prompt one-shot
+echo "总结一下" | node cli.js  # stdin en pipe comme prompt
+node cli.js --mode json "x"  # flux d'événements NDJSON (scripts/CI)
+node cli.js tui --smoke      # smoke test de la machine à états headless
+```
 
 ### Configurer le fournisseur
 
-1. Après le lancement, cliquez sur **Models** dans la barre latérale.
-2. Ajoutez un fournisseur (nom / URL d'API / clé API).
-3. Cliquez sur **Fetch models** pour récupérer la liste des modèles disponibles.
+1. Après le lancement, cliquez sur **Modèles** dans la barre latérale.
+2. Ajoutez un fournisseur (nom / URL API / clé API).
+3. Cliquez sur **Récupérer les modèles** pour charger la liste des modèles disponibles.
 4. Revenez au chat et commencez à discuter.
 
 ### Activer le mode Ask
 
 1. Ouvrez **Paramètres - Agent & Sécurité**.
-2. Définissez le mode de permission de l'agent sur **Ask**.
-3. Confirmez que la racine de l'espace de travail est le dossier où vous voulez que l'agent puisse lire/écrire.
-4. Gardez **Yolo** désactivé sauf si vous voulez un accès non restreint.
+2. Réglez le mode de permission de l'agent sur **Ask**.
+3. Vérifiez que la racine de l'espace de travail est le dossier que l'agent doit pouvoir lire/écrire.
+4. Gardez **Yolo** désactivé, sauf si vous voulez un accès sans restriction.
 
-### Exécuter votre première tâche agent
+### Exécuter votre première tâche d'agent
 
 1. Ouvrez un nouveau chat.
-2. Demandez : `Liste les fichiers de ce projet et résume ce que fait l'application.`
-3. Revoyez chaque appel d'outil proposé. Approuvez les lectures sûres ; rejetez toute demande inattendue.
+2. Demandez : `List the files in this project and summarize what the app does.`
+3. Examinez chaque appel d'outil proposé. Approuvez les lectures sûres ; refusez tout ce qui est inattendu.
 4. Consultez la trace de raisonnement en direct et la réponse finale.
 
 ---
 
 ## Fonctionnalités
 
-**Labels de statut :** `Stable` = prêt pour l'usage quotidien, `Beta` = utilisable avec des aspérités connues, `Experimental` = nouveau/comportement avancé pouvant changer, `Planned` = élément documenté du roadmap.
+**Libellés de statut :** `Stable` = prêt pour un usage quotidien, `Beta` = utilisable avec des aspérités connues, `Experimental` = comportement nouveau/avancé susceptible de changer, `Planned` = élément de feuille de route documenté.
 
 ### Chat
 
 | Fonctionnalité | Statut | Description |
 |---|:---:|---|
-| **Multi-fournisseur** | `Stable` | Couche d'adaptation unique ; ajouter un fournisseur = un seul fichier. Couvre OpenRouter, Together, DeepSeek, Ollama, LM Studio, ... |
-| **Streaming concurrent** | `Stable` | Un chat stream pendant que vous continuez dans un autre. |
-| **Curseur d'effort de réflexion** | `Beta` | Paramètres réels : série o d'OpenAI / gpt-5 / Claude via relay. Efficace seulement sur les modèles de raisonnement. |
-| **Pièces jointes** | `Beta` | Fichiers texte en contexte ; images pour le multimodal (nécessite un modèle de vision). |
-| **Repli des longs collés** | `Stable` | Centaines de lignes se replient auto en snippet dépliable (style ChatGPT). |
-| **Édition de messages** | `Stable` | Écraser + régénérer depuis n'importe quel point. |
-| **Recherche de messages** | `Stable` | Avec surlignage sur tous les messages. |
-| **Résumés de la barre latérale** | `Beta` | Phrases thématiques générées par le modèle, pas du texte copié. |
+| **Multi-fournisseur** | `Stable` | Couche d'adaptateur unique ; ajouter un fournisseur = un fichier. Couvre OpenRouter, Together, DeepSeek, Ollama, LM Studio, ... |
+| **Streaming concurrent** | `Stable` | Un chat streame pendant que vous continuez à discuter dans un autre. |
+| **Curseur d'effort de réflexion** | `Beta` | Vrais paramètres : séries OpenAI o / gpt-5 / Claude via relais. Efficace uniquement sur les modèles de raisonnement. |
+| **Pièces jointes** | `Beta` | Fichiers texte comme contexte ; images pour le multimodal (nécessite un modèle de vision). |
+| **Repli des longs collages** | `Stable` | Des centaines de lignes se replient automatiquement en un extrait dépliable (style ChatGPT). |
+| **Édition de messages** | `Stable` | Réécriture + régénération à partir de n'importe quel point. |
+| **Recherche de messages** | `Stable` | Avec mise en évidence dans tous les messages. |
+| **Résumés de la barre latérale** | `Beta` | Phrases de sujet générées par modèle, pas de texte copié. |
 
-### Agent (appel de fonctions)
+### Agent (Function Calling)
 
-- `Beta` **16 outils intégrés** (`read_file`, `list_dir`, `glob_find`, `grep_search`, `web_search`, `web_fetch`, `write_file`, `edit_file`, `run_command`, `git_status`, `git_diff`, `memory_save`, `memory_list`, `use_skill`, `ask_user`, `todo_write`) avec une boucle Plan-Act-Observe, trace de raisonnement en direct + liste de tâches, détection de boucle, timeouts par outil, budget d'itérations configurable (défaut 25 tours), et compression de contexte.
-- `Experimental` **Planification hiérarchique** — génère automatiquement une décomposition de tâches pour les demandes complexes (inspiré de DS4).
-- `Experimental` **Délégation de sous-agents** — sous-tâches indépendantes s'exécutent en parallèle via `delegate_task`.
-- `Stable` **Modes de permission** — échelle ascendante par risque :
+- `Beta` **42 outils intégrés** — opérations fichiers (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), web (`web_search`, `web_fetch`), shell (`run_command`), git & GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), intelligence de code (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), méta-agent (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — avec une boucle Plan-Act-Observe, trace de raisonnement en direct + liste de tâches, détection de boucles, timeouts par outil, budget d'itérations configurable (25 tours par défaut) et compaction du contexte.
+- `Experimental` **Planification hiérarchique** — génère automatiquement la décomposition des tâches pour les demandes complexes (inspirée de DS4).
+- `Experimental` **Délégation de sous-agents** — les sous-tâches indépendantes s'exécutent en parallèle via `delegate_task`.
+- `Stable` **Modes de permission** — échelle ascendante de risque :
 
 | Mode | Description | Sandbox |
 |---|---|:---:|
 | **Off** | Chat simple, pas d'outils | N/A |
-| **Plan** | Outils en lecture seule (enquêter sans modifier) | - |
+| **Plan** | Outils en lecture seule (investiguer sans modifier) | - |
 | **Ask** | Confirmer chaque action risquée (recommandé) | - |
-| **Auto** | Tout exécuter, sans confirmations | Oui |
-| **Yolo** | Permission totale, pas de sandbox | Non |
+| **Auto** | Tout exécuter, sans confirmation | Oui |
+| **Yolo** | Permission totale, sans sandbox | Non |
 
-- `Stable` **Sandbox d'espace de travail** — `write_file`/`edit_file` sont refusés en dehors de la racine de l'espace de travail configuré ; `run_command` bloque les motifs destructifs. Configurable dans Paramètres - Agent & Sécurité.
-- `Beta` **Compression de contexte** — résume auto l'historique plus ancien (paires appel/résultat d'outils préservées ; identifiants conservés à l'identique).
-- `Beta` **Réparation d'appels d'outils** — répare auto JSON malformé, arguments manquants, clés non citées, et appels tronqués.
+- `Stable` **Sandbox d'espace de travail** — `write_file`/`edit_file` sont refusés en dehors de la racine de l'espace de travail configuré ; `run_command` bloque les motifs destructeurs. Configurable dans Paramètres - Agent & Sécurité.
+- `Beta` **Compaction du contexte** — résume automatiquement l'historique plus ancien (paires appel-résultat d'outil conservées intactes ; identifiants préservés à la lettre).
+- `Beta` **Réparation des appels d'outils** — répare automatiquement le JSON malformé, les arguments manquants, les clés non entre guillemets et les appels tronqués.
 
 ### Mémoire & Apprentissage
 
-- `Beta` **Mémoire à long terme auto** — mémoires pertinentes injectées avant chaque tour ; faits clés extraits et sauvegardés automatiquement. Activable dans Paramètres - Agent.
-- `Experimental` **Apprenant d'habitudes** — détecte les préférences récurrentes (ex. « toujours utiliser Claude ») et propose des skills auto-appliqués.
-- `Beta` **Journal d'audit** — trace d'exécution agent par tour pour le débogage.
+- `Beta` **Mémoire à long terme automatique** — les souvenirs pertinents sont injectés avant chaque tour ; les faits clés sont extraits et enregistrés automatiquement. Activable dans Paramètres - Agent.
+- `Experimental` **Apprenant d'habitudes** — détecte les préférences récurrentes (par ex. « toujours utiliser Claude ») et propose des skills appliqués automatiquement.
+- `Beta` **Journal d'audit** — trace d'exécution de l'agent par tour pour le débogage.
 
 ### Arène
 
-- `Beta` **Arène multi-modèles** — un seul prompt, plusieurs modèles répondent **concurrently** ; votez pour le meilleur et un **classement ELO** se met à jour automatiquement. Les modèles sont notés **par intention** (codage / maths / traduction / résumé / général). *Aucune autre application de chat desktop local-first ne propose une arène multi-modèles intégrée avec ELO.*
+- `Beta` **Arène multi-modèles** — une invite, plusieurs modèles répondent **concurremment** ; votez pour le meilleur et un **classement ELO** se met à jour automatiquement. Les modèles sont notés **par intention** (codage / maths / traduction / résumé / général). *Aucune autre application de chat de bureau local-first n'embarque une arène multi-modèles intégrée avec ELO.*
 
 ### Skills & Extensibilité
 
 | Composant | Format | Statut | Détails |
 |---|---|:---:|---|
-| **Skills** | `SKILL.md` | `Experimental` | À placer dans `<workspace>/.claude/skills/` ; livré avec `release-checklist` et `git-commit` |
-| **Slash Commands** | `CMD.md` | `Stable` | 6 intégrés : `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
+| **Skills** | `SKILL.md` | `Experimental` | À déposer dans `<workspace>/.claude/skills/` ; fournit `release-checklist` et `git-commit` |
+| **Commandes Slash** | `CMD.md` | `Stable` | 6 intégrées : `/code`, `/continue`, `/explain`, `/polish`, `/summarize`, `/translate` |
 | **Hooks** | Script | `Experimental` | 10 points du cycle de vie : PreToolUse, PostToolUse, ToolError, PreCompact, PostCompact, PreSend, PostResponse, SessionStart, SessionEnd, SubagentStop |
 | **MCP** | stdio JSON-RPC 2.0 | `Beta` | Les serveurs MCP externes fusionnent automatiquement avec les outils intégrés |
 
@@ -178,17 +197,100 @@ Ou exécutez `start.bat` à la racine du dépôt sur Windows.
 
 | Paramètre | Statut | Description |
 |---|:---:|---|
-| **Paramètres avancés des modèles** | `Stable` | Tokens maximum, température, top_p, préfixe système personnalisé, titres auto par langue, effort de réflexion |
-| **Arrière-plan personnalisé** | `Stable` | Image importée avec contrôles d'opacité / flou |
-| **Personas** | `Stable` | Préréglages de prompts système, changeables par session |
+| **Paramètres avancés du modèle** | `Stable` | Max tokens, température, top_p, préfixe système personnalisé, titres automatiques par langue, effort de réflexion |
+| **Arrière-plan personnalisé** | `Stable` | Importer une image avec contrôles d'opacité / flou |
+| **Personas** | `Stable` | Préréglages de prompt système, commutables par session |
 | **Thèmes** | `Stable` | Clair / Sombre / Bleu / Verre / Rétro |
-| **15 langues d'interface** | `Beta` | Anglais, Chinois (简/繁/文言), Japonais, Espagnol, Français, Allemand, Portugais, Russe, Ukrainien, Arabe (RTL), Hindi, Coréen |
-| **Mise à jour auto** | `Beta` | L'installateur NSIS vérifie au lancement ; le portable aussi (installation manuelle) |
-| **Suivi d'utilisation** | `Beta` | Journal par appel API avec tokens, coût, latence, taux de hit cache |
+| **15 langues d'interface** | `Beta` | Anglais, chinois (简/繁/文言), japonais, espagnol, français, allemand, portugais, russe, ukrainien, arabe (RTL), hindi, coréen |
+| **Mise à jour automatique** | `Beta` | L'installateur NSIS vérifie au lancement ; le portable vérifie aussi (installation manuelle) |
+| **Suivi d'utilisation** | `Beta` | Journal par appel API avec tokens, coût, latence, taux de succès du cache |
 
 ### Confidentialité
 
-> **Toutes les données restent locales.** AetherAI ne collecte rien et ne téléverse rien vous concernant. Vos clés API, conversations et personas vivent dans une base de données SQLite locale. Les seules requêtes réseau sortantes vont vers les fournisseurs LLM que vous configurez.
+> **Toutes les données restent locales.** AetherAI ne collecte rien et ne téléverse rien vous concernant. Vos clés API, conversations et personas vivent dans une base de données SQLite locale. Les seules requêtes réseau sortantes vont aux fournisseurs LLM que vous configurez.
+
+---
+
+## Extension VS Code & CLI Headless
+
+Au-delà de l'application de bureau, AetherAI fournit le même agent en tant que CLI et extension d'éditeur :
+
+- **CLI Headless** (`app/cli.js`) — exécutez l'agent de façon non interactive, envoyez les événements NDJSON aux scripts/CI :
+  ```bash
+  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
+  ```
+- **Extension VS Code** (`extension/`) — lance le CLI dans un panneau de chat : flux d'appels d'outils en direct, actions sur blocs de code (Insert / Write file), et **cartes de diff de fichiers** : chaque appel `write_file` / `edit_file` / `apply_patch` rend un diff ligne par ligne par rapport au contenu du fichier avant modification, avec **Revert** en un clic (restaure l'instantané pris avant l'exécution de l'outil). Nécessite le réglage d'extension `aether.cliPath` (détecté automatiquement quand le dépôt est cloné localement).
+- **Gateway locale** (`127.0.0.1:35791`) — API REST compatible OpenAI adossée à l'application de bureau (Paramètres → Local Gateway → token) ; une seconde extension (`extensions/vscode-aether/`) s'y connecte.
+
+---
+
+## TUI Terminal, RPC & SDK
+
+Au-delà de l'application de bureau et du CLI simple, AetherAI fournit une UI terminal interactive, un mode RPC JSONL appelable par machine et un SDK sans Electron. Les trois partagent le même cœur d'agent, la mémoire, les personas, les outils MCP et les règles de permission que le bureau.
+
+### Démarrage rapide — double forme
+
+```bash
+# UI terminal interactive (Ink v5 ; nécessite Node ≥ 22)
+node app/cli.js tui                # vrai terminal : tapez, approuvez les outils, revoyez les diffs
+node app/cli.js tui --smoke        # smoke test de la machine à états headless (sûr en CI, imprime du JSON)
+
+# Prompt one-shot (comme avant)
+node app/cli.js "fix the failing test" --mode auto --max-iterations 30
+
+# Flux d'événements NDJSON pour scripts/CI (compat : --json-lines)
+echo "summarize README.md" | node app/cli.js --mode json --model deepseek
+
+# Boucle RPC JSONL sur stdin/stdout
+printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
+  | node app/cli.js --mode rpc --db path\to\aetherai.db
+```
+
+Drapeaux headless supplémentaires : `--persona <id>` (injection persona + mémoire), `--memory-trace` (rapporte le nombre d'entrées de mémoire injectées), `--skills` (propositions de skills en JSON), `--setup-term` (écrit un profil Windows Terminal), `--stdin` (entrée en pipe explicite).
+
+### TUI (`aether tui`)
+
+Agent terminal interactif (Ink v5 ; Node ≥ 22 ; meilleure expérience dans Windows Terminal) :
+
+- **Sessions** : rendu de messages en flux, arbre de sessions `/fork` (`session.parent_session_id`), `/sessions`, `/use <id>` pour basculer dans l'historique
+- **Outils et permissions** : cartes d'appels d'outils (couleur de statut / durée / résumé), revue des diffs (`Alt+v` pour déplier, `Enter` pour accepter / `r` pour annuler — restauration de l'instantané pré-écriture, fonctionne aussi hors répertoire git), portes de permissions clavier (`y` autoriser une fois / `a` toujours autoriser / `n` refuser, ou `←→` pour sélectionner), les outils en lecture seule passent automatiquement
+- **Mode d'approbation** : `Shift+Tab` fait défiler `manual → auto-edits → plan` (plan = planification en lecture seule, puis trois options pour décider comment implémenter)
+- **Modes** : `Alt+m` bascule ask/plan/auto ; `/persona <id>` change de persona (injecte le préfixe persona + mémoire)
+- **Raccourcis leader** : `Ctrl+X` puis `m` sélecteur de modèle / `n` nouvelle session / `l` liste des sessions / `g` timeline / `r` point de contrôle rewind / `q` quitter
+- **Palette de commandes** : `Ctrl+P` ou `x` (New chat / Model / Timeline / Export JSONL / Help / Quit)
+- **Raccourcis reconfigurables** : `~/.config/aether/keybindings.json` (par ex. `{ "char:?": null }` désactive la touche d'aide `?`)
+- **Persistance des clés API** : `/apikey <provider> <key>` sauvegarde dans `auth.json` (les clés chiffrées par safeStorage du bureau ne peuvent pas être déchiffrées en headless ; utilisez cette commande ou la variable d'environnement `AETHER_API_KEY`)
+- **Boucle mémoire & skills fermée** : `/memory <mot-clé>` recherche, `--memory-trace` nombre d'entrées injectées, `/skills` + `/skill accept|dismiss <key>` (habitLearner → propositions de skills)
+- **Steering** : en cours d'exécution `Ctrl+C` interrompt → saisissez la suite → injectée dans la boucle en cours (la file affiche `steer:n`) ; en cours d'exécution `Tab` met directement la suite en file
+- **Raccourcis** : double `Esc` pour quitter (ou `/quit`), `Esc` efface la saisie (le brouillon va dans l'historique), `?` écran d'aide, `PgUp/PgDn`/molette de souris pour défiler, la barre d'état affiche en direct `approval/mode/model/tok/ctx` ; toutes les touches dans [docs/tui-keys.md](./docs/tui-keys.md)
+
+### RPC (`aether --mode rpc`)
+
+Protocole JSONL appelable par machine sur stdin/stdout : trames `request` entrantes, trames `event`/`result`/`error` sortantes — un objet JSON par ligne, aucun texte humain. Méthodes : `run` (streame les événements `text`/`tool`/`plan`/`status`), `listModels`, `listProviders`, `models.default`, `listSessions`, `session.load`, `session.fork`, `task.derive`, `task.status`. Référence des trames : [docs/rpc.md](./docs/rpc.md).
+
+### SDK (`require('aetherai/sdk')`)
+
+Agrégation sans Electron du cœur d'agent pour les projets Node externes : `runAgent`, `openDatabase`, `resolveProviderModel`, `taskDbAdapter`, `memory` (prefetch/recall/search/…), `classifyAgentMode`, trames `rpc`, `sessionContext` (injection persona + mémoire). Déclarations de types incluses (`app/electron/sdk/index.d.ts`).
+
+```js
+const { runAgent, openDatabase, resolveProviderModel, classifyAgentMode } = require('aetherai/sdk')
+const db = openDatabase('./aetherai.db')
+const { provider, model } = resolveProviderModel(db, { modelName: 'deepseek' })
+console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', reason: ... }
+```
+
+---
+
+## Natif Windows
+
+| Capacité | Description |
+|---|---|
+| **Menu de la barre d'état** | Afficher/masquer la fenêtre, nouvelle session, **nouvelle tâche** (ouvre directement le TaskPanel) ; clic sur l'icône de la barre d'état pour basculer afficher/masquer. |
+| **Raccourcis globaux** | `Ctrl+Alt+A` fait apparaître la fenêtre principale (la crée si non lancée) ; le résultat de l'enregistrement est écrit dans le journal de démarrage. |
+| **Protocole `aetherai://`** | `aetherai://new` / `chat` nouvelle session ; `aetherai://tui` invite à la forme terminal ; `aetherai://open/?path=<chemin encodé>` définit le dossier comme espace de travail et crée une nouvelle session (chaîne clic droit « Ouvrir avec Aether »). |
+| **Inscription au clic droit** | `app/resources/register-protocol.reg` (après remplacement de `<AETHER_EXE>` puis import en administrateur) : `.cs/.js/.ts/.tsx/.md/.json` + dossier → clic droit « Ouvrir avec Aether ». |
+| **Guide terminal** | `app/resources/term/aether.ps1` (alias + lancement de `aether tui`) ; `node app/cli.js --setup-term` écrit un profil Windows Terminal (deux jeux de couleurs clair/foncé). |
+| **Sandbox renforcé** | Défenses des chemins Windows : `\\?\` chemins longs, UNC `\\server\share`, échappement par points de réanalyse/junctions, extensions dangereuses `.lnk/.scr/.msi` etc. |
 
 ---
 
@@ -197,7 +299,7 @@ Ou exécutez `start.bat` à la racine du dépôt sur Windows.
 ```
 app/
 ├── electron/              # main process (Node)
-│   ├── database.js        # SQLite (sql.js) data layer — 14 tables
+│   ├── database.js        # better-sqlite3 data layer — 25+ tables (WAL)
 │   ├── ipc/               # IPC handlers (chat / arena / session / mcp / ...)
 │   │   ├── chat.handler.js    # THE central handler (540 lines)
 │   │   ├── arena.handler.js   # Multi-model arena with ELO
@@ -239,18 +341,20 @@ app/
 
 ---
 
-## Stack technique
+## Pile technique
 
 | Couche | Technologie |
 |---|---|
-| Bureau | Electron 31 |
-| Frontend | React 18.3 + TypeScript 5.5 |
-| État | Zustand 4.5 |
-| Build | Vite 5.4 + electron-builder |
-| Base de données | sql.js (SQLite en mémoire, persisté sur disque) |
+| Desktop | Electron 43 |
+| Frontend | React 18.3 + TypeScript 5.8 |
+| State | Zustand 4.5 |
+| Build | Vite 8 + electron-builder |
+| Database | better-sqlite3 (native SQLite, WAL mode) |
 | LLM | OpenAI-compatible + Anthropic Messages API |
 | UI | Tailwind CSS 3.4, lucide-react, highlight.js |
-| MCP | Client JSON-RPC 2.0 stdio personnalisé |
+| MCP | Custom stdio JSON-RPC 2.0 client |
+| TUI | Ink 5 + React 18 (createElement, no JSX) |
+| CLI/SDK | Node.js headless CLI (4 modes) + Electron-free SDK |
 
 ---
 
@@ -258,49 +362,49 @@ app/
 
 AetherAI se tient sur les épaules de ces projets — leurs idées ont façonné l'architecture et l'UX :
 
-### Frameworks Agent
+### Frameworks d'agents
 
 | Projet | Inspiration |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Modèle de permission agent, curseur de réflexion, visualisation d'appels d'outils, délégation de sous-agents, hooks |
-| [OpenClaw](https://github.com/openclaw/openclaw) | Compression de contexte, détection de boucle d'appels d'outils, architecture de flux d'événements |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Budget d'itération, mémoire longue structurée, skills autonomes |
-| [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, compression de contexte, réparation d'appels d'outils |
-| [DS4](https://github.com/antirez/ds4) | Décomposition hiérarchique de tâches |
+| [Claude Code](https://github.com/anthropics/claude-code) | Modèle de permission de l'agent, curseur de réflexion, visualisation des appels d'outils, délégation de sous-agents, hooks |
+| [OpenClaw](https://github.com/openclaw/openclaw) | Compaction du contexte, détection de boucles d'appels d'outils, architecture par flux d'événements |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Budget d'itérations, mémoire structurée à long terme, skills autonomes |
+| [OpenAI Codex](https://github.com/openai/codex) | Sandbox, compression du contexte, réparation des appels d'outils |
+| [DS4](https://github.com/antirez/ds4) | Décomposition hiérarchique des tâches |
 
 ### UI & UX
 
 | Projet | Inspiration |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | Méthodologie de composants cn() / cva copy-paste |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | Méthodologie des composants copier-coller cn() / cva |
 | [Magic UI](https://github.com/magicuidesign/magicui) | Motifs d'animation (shimmer, blur-fade) |
 
 ### Infrastructure
 
 | Projet | Inspiration |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Normalisation multi-format fournisseur |
-| [MCP](https://modelcontextprotocol.io) | La spec que parle l'agent d'AetherAI |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Mise en page du tableau de bord de stats d'utilisation |
-| [new-api](https://github.com/QuantumNous/new-api) | Relay d'effort de raisonnement, suivi utilisation/coût |
-| [Continue](https://github.com/continuedev/continue) | Config comme source de vérité, abstraction fournisseur |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Exécution agent multi-tours, exécution d'outils sandboxés |
-| [Aider](https://github.com/Aider-AI/aider) | Boucle d'outils assistant codage LLM, intégration git |
-| [Cline](https://github.com/cline/cline) | Agent intégré IDE, intégration MCP, UX de permissions |
+| [Dify](https://github.com/langgenius/dify) | Normalisation multi-format des fournisseurs |
+| [MCP](https://modelcontextprotocol.io) | La spécification que parle l'agent d'AetherAI |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Mise en page du tableau de bord des statistiques d'utilisation |
+| [new-api](https://github.com/QuantumNous/new-api) | Relais d'effort de raisonnement, suivi d'utilisation/coût |
+| [Continue](https://github.com/continuedev/continue) | Config comme source de vérité, abstraction des fournisseurs |
+| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Exécution d'agent multi-tours, exécution d'outils en sandbox |
+| [Aider](https://github.com/Aider-AI/aider) | Boucle d'outils d'assistant de codage LLM, intégration git |
+| [Cline](https://github.com/cline/cline) | Agent intégré à l'IDE, intégration MCP, UX des permissions |
 
 ---
 
 ## Contribuer
 
-Toutes les contributions sont les bienvenues ! Qu'il s'agisse d'un correctif de bug, d'une demande de fonctionnalité, d'une amélioration de traduction ou d'une mise à jour de documentation — ouvrez un ticket ou soumettez une PR.
+Toutes les contributions sont les bienvenues ! Qu'il s'agisse d'un correctif de bug, d'une demande de fonctionnalité, d'une amélioration de traduction ou d'une mise à jour de documentation — veuillez ouvrir une issue ou soumettre une PR.
 
 1. Forkez le dépôt
-2. Créez une branche de fonctionnalité (`git checkout -b feat/ma-fonctionnalite`)
-3. Committez vos changements (`git commit -am 'Ajouter fonctionnalite'`)
-4. Poussez vers la branche (`git push origin feat/ma-fonctionnalite`)
+2. Créez une branche de fonctionnalité (`git checkout -b feat/my-feature`)
+3. Commitez vos changements (`git commit -am 'Add feature'`)
+4. Poussez vers la branche (`git push origin feat/my-feature`)
 5. Ouvrez une Pull Request
 
-Voir [CONTRIBUTING.md](./CONTRIBUTING.md) pour des directives détaillées.
+Voir [CONTRIBUTING.md](./CONTRIBUTING.md) pour les directives détaillées.
 
 ---
 
