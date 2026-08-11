@@ -1,4 +1,4 @@
-// ───────────────────────────────────────────────────────────────────────────
+﻿// ───────────────────────────────────────────────────────────────────────────
 // OpenAI Responses API adapter.
 //
 // Implements the newer OpenAI Responses protocol (POST /responses via SSE)
@@ -121,13 +121,21 @@ function parseSSEEvent(line) {
   } catch { return null }
 }
 
+// 请求总超时: API 挂起时显式中止(与 openaiAdapter 同策略)
+const REQUEST_TIMEOUT_MS = 60000
+
+function withTimeout(signal) {
+  const t = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  return signal ? AbortSignal.any([signal, t]) : t
+}
+
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
   const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
   const res = await fetch(`${baseUrl(provider)}/responses`, {
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, input: toResponsesInput(messages), stream: true, ...options }),
-    signal,
+    signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
@@ -176,7 +184,7 @@ async function completeChat({ provider, model, messages, signal, options = {} })
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, input: toResponsesInput(messages), stream: false, ...options }),
-    signal,
+    signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
@@ -195,7 +203,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     method: 'POST',
     headers: headers(provider),
     body: JSON.stringify({ model: model.model_name, input: toResponsesInput(messages), stream: false, ...options }),
-    signal,
+    signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')

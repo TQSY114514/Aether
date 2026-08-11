@@ -255,7 +255,12 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       })
     } catch (err) {
       // 错误以 [sys] 消息可见呈现（仅改状态栏会被 AGENT_END 重置吞掉）。
-      dispatch({ type: 'APPEND_SYSTEM', text: `error: ${err && err.message ? err.message : String(err)}` })
+      // 超时/中止转友好文案(adapter 60s 请求超时)
+      const raw = err && err.message ? err.message : String(err)
+      const friendly = /abort|timeout/i.test(raw) && !/HTTP/.test(raw)
+        ? 'API 请求超时(60s) — 请检查网络或 provider 配置'
+        : raw
+      dispatch({ type: 'APPEND_SYSTEM', text: `error: ${friendly}` })
       dispatch({ type: 'AGENT_END' })
     } finally {
       sessionBusyRef.current = false

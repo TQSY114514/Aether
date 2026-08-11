@@ -1,4 +1,4 @@
-// ───────────────────────────────────────────────────────────────────────────
+﻿// ───────────────────────────────────────────────────────────────────────────
 // Anthropic Messages API adapter.
 //
 // For providers that speak the native Claude protocol: POST /messages with
@@ -12,6 +12,14 @@
 const ANTHROPIC_VERSION = '2023-06-01'
 const _credentialPool = require('./credentialPool')
 const { baseUrl, normalizeUsage: _nu } = require('../utils/llmShared')
+
+// 请求总超时: API 挂起时显式中止(与 openaiAdapter/responsesAdapter 同策略)
+const REQUEST_TIMEOUT_MS = 60000
+
+function withTimeout(signal) {
+  const t = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  return signal ? AbortSignal.any([signal, t]) : t
+}
 const { retryPromise, retryStream } = require('../utils/retry')
 const { applyAnthropicCache } = require('./cachePolicy')
 
@@ -137,7 +145,7 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
       method: 'POST',
       headers: headers(provider),
       body: JSON.stringify(body),
-      signal,
+      signal: withTimeout(signal),
     })
     if (!res.ok) {
       const errBody = await res.text().catch(() => '')
@@ -266,7 +274,7 @@ async function completeChat({ provider, model, messages, signal, options = {} })
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
   const res = await fetch(`${baseUrl(provider)}/messages`, {
-    method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal,
+    method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
@@ -295,7 +303,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
   const res = await fetch(`${baseUrl(provider)}/messages`, {
-    method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal,
+    method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal: withTimeout(signal),
   })
   if (!res.ok) {
     const errBody = await res.text().catch(() => '')
@@ -370,3 +378,5 @@ module.exports = {
   toAnthropicMessages, parseToolUses, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }
+
+
