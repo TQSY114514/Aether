@@ -122,7 +122,7 @@ function parseSSEEvent(line) {
 }
 
 // 请求总超时: API 挂起时显式中止(与 openaiAdapter 同策略)
-const REQUEST_TIMEOUT_MS = 60000
+const REQUEST_TIMEOUT_MS = 120000
 
 function withTimeout(signal) {
   const t = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
@@ -288,3 +288,4 @@ module.exports = {
   toResponsesInput, extractText, extractReasoning, extractToolCalls, parseSSEEvent,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }
+

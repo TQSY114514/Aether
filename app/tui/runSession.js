@@ -249,6 +249,12 @@ export async function runSession({
         hasAppendedText = true
       }
     },
+    onThinkingDelta: (reasoning) => {
+      // 推理模型思考进度可见(状态栏显示摘要, 非全文)
+      if (reasoning && typeof reasoning === 'string' && reasoning.length > 2) {
+        dispatch({ type: 'STATUS', text: `thinking: ${reasoning.slice(0, 40)}${reasoning.length > 40 ? '…' : ''}` })
+      }
+    },
     })
   } finally {
     try { await runSessionHooks('SessionEnd', { sessionId, timestamp: new Date().toISOString() }) } catch {}

@@ -258,6 +258,13 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
   const budget = externalBudget || new IterationBudget(maxIterations)
   budget.start()
+  // Surface the 80% iteration/token/time budget warning as a status line.
+  // iterationBudget.js emits `budget:warning` once per dimension at 80%.
+  budget.on('budget:warning', (w) => {
+    try {
+      if (onStatus && w) onStatus({ kind: 'budget_warning', text: `⚠️ 预算已用 ${Math.round((w.ratio || 0) * 100)}% (${w.dimension || 'unknown'})，即将达到上限` })
+    } catch {}
+  })
 
   // Observability: open a run row up-front so tool samples can reference it,
   // finalize it with real values on every exit path.
@@ -397,7 +404,10 @@ Reply in this format:
         convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
         onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)`, kind: 'plan' })
       }
-    } catch {}
+    } catch (e) {
+      // 不静默: plan 生成失败(超时/网络)时告知, 直接进入主循环执行
+      try { onStatus?.({ text: `⚠ 计划生成失败(${e && e.message ? String(e.message).slice(0, 60) : 'error'}), 直接执行`, kind: 'warn' }) } catch {}
+    }
   }
 
   // Build tool context with sessionId for sandbox checks.
@@ -800,6 +810,10 @@ Reply in this format:
     } catch {}
     if (onAudit) {
       try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus, planId: plan?.id, planStatus: plan?.tasks?.map(t => t.status) }) } catch {}
+    }
+    // 推理模型可能全部输出为思考过程(reasoning)而无正文 —— 给出可见说明而非空回复
+    if (!msg.content && msg.reasoning) {
+      return `[模型仅生成了思考过程, 未输出正文回复。可尝试换非推理模型(如 /model 选择), 或重试。]`
     }
     // Always return the model's actual content — never return verification text
     // as the reply. Verification is fire-and-forget: it runs in the background
