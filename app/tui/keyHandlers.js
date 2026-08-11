@@ -116,6 +116,7 @@ export const modeHandlers = {
       else if (ch === 'n') { ctx.dispatch({ type: 'RESET' }); ctx.dispatch({ type: 'STATUS', text: 'new session' }) }
       else if (ch === 'l') ctx.openSessions()
       else if (ch === 'g') ctx.openTimeline()
+      else if (ch === 'r') ctx.openRewind()
       else if (ch === 'q') ctx.dispatch({ type: 'QUIT_INTENT' })
     },
   },
@@ -294,14 +295,14 @@ export const modeHandlers = {
         ctx.setSlashIdx(0)
         return
       }
-      // 空输入: 分层 Esc(lazygit 式) —— 第一次 armed 提示, 再按打开 rewind 检查点
+      // 空输入: 分层 Esc —— 第一次 armed, 1.5s 内再按退出(双击 Esc 退出)
       if (ctx.escArmedRef.current) {
         ctx.escArmedRef.current = false
-        ctx.openRewind()
+        ctx.dispatch({ type: 'QUIT_INTENT' })
         return
       }
       ctx.escArmedRef.current = true
-      ctx.dispatch({ type: 'STATUS', text: 'Esc: rewind 检查点 · 再按一次打开' })
+      ctx.dispatch({ type: 'STATUS', text: 'Esc 再按一次退出 · Ctrl+X r rewind 检查点' })
     },
     tab: (ctx) => {
       const s = ctx.state
