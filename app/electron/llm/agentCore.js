@@ -114,13 +114,26 @@ function resolveProviderModel(db, { providerName, modelName } = {}) {
   if (!target) return null
 
   const provider = providers.find(p => p.id === target.provider_id)
-  const key = provider ? db.prepare('SELECT api_key FROM provider WHERE id = ?').get(provider.id)?.api_key : null
+  // 凭据读取: provider_credential(桌面版现行明文凭据表, 与桌面版一致)优先,
+  // 旧 provider.api_key 兜底(可能为 safeStorage 加密值 → decryptApiKey 处理)。
+  let storedKey = null
+  if (provider) {
+    try {
+      const cred = db.prepare(
+        'SELECT api_key FROM provider_credential WHERE provider_id = ? AND enabled = 1 ORDER BY id DESC LIMIT 1',
+      ).get(provider.id)
+      storedKey = (cred && cred.api_key) || db.prepare('SELECT api_key FROM provider WHERE id = ?').get(provider.id)?.api_key || null
+    } catch {
+      // 旧库/测试库无 provider_credential 表 → 退回 provider.api_key
+      try { storedKey = db.prepare('SELECT api_key FROM provider WHERE id = ?').get(provider.id)?.api_key || null } catch { storedKey = null }
+    }
+  }
   return {
     provider: {
       id: provider ? provider.id : target.provider_id,
       name: provider ? provider.name : target.provider_name,
       api_url: provider ? provider.api_url : null,
-      api_key: decryptApiKey(key),
+      api_key: decryptApiKey(storedKey),
       api_format: (provider ? provider.api_format : target.api_format) || 'openai',
     },
     model: { id: target.id, model_name: target.model_name },
