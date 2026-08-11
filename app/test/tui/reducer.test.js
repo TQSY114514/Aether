@@ -194,8 +194,21 @@ describe('keyToAction', () => {
   })
 })
 
-describe('summarizeState', () => {
-  it('produces a serializable snapshot', () => {
+describe('USAGE — 实时 token 用量', () => {
+  it('累计 input/output 并可在状态栏显示', () => {
+    let s = tuiReducer(initialTuiState, { type: 'USAGE', usage: { input: 100, output: 20 } })
+    expect(s.usage).toEqual({ input: 100, output: 20 })
+    s = tuiReducer(s, { type: 'USAGE', usage: { input: 250, output: 55 } })
+    expect(s.usage).toEqual({ input: 250, output: 55 })
+  })
+
+  it('非法 usage 忽略(保持现值)', () => {
+    const s = tuiReducer(initialTuiState, { type: 'USAGE', usage: { input: NaN, output: 'x' } })
+    expect(s.usage).toEqual({ input: 0, output: 0 })
+  })
+})
+
+describe('summarizeState', () => {  it('produces a serializable snapshot', () => {
     let s = tuiReducer(initialTuiState, { type: 'INPUT', value: 'hello world' })
     s = tuiReducer(s, { type: 'SUBMIT' })
     s = tuiReducer(s, { type: 'TEXT_DELTA', delta: 'answer' })

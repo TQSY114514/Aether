@@ -164,6 +164,7 @@ function StatusBar({ state, tick, ctxK, extra }) {
     `approval:${state.approvalMode}`,
     `mode:${state.mode}`,
     state.modelName ? `model:${state.modelName}` : null,
+    state.usage.input || state.usage.output ? `tok:${state.usage.input}/${state.usage.output}` : null,
     ctxK > 0 ? `ctx:~${ctxK}k` : null,
     `effort:${state.effort}`,
     state.running ? `${tick} running` : '● idle',
@@ -239,6 +240,8 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     [dispatch],
   )
   const tuiPermission = useCallback((perm) => {
+    // 只读工具批量放行(无副作用, 不打断流程); 写/执行类仍按审批模式
+    if (READ_ONLY_TOOLS.includes(perm.name)) return Promise.resolve(true)
     if (state.approvalMode === 'auto-edits' && (perm.name === 'edit' || perm.name === 'write')) {
       return Promise.resolve(true)
     }

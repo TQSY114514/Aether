@@ -33,6 +33,7 @@ export const initialTuiState = Object.freeze({
   // ── 审批模式（Shift+Tab 循环; 对齐 Claude/Codex/Gemini 离散预设）──────
   approvalMode: 'manual',  // manual | auto-edits | plan
   planDone: false,         // plan 模式 agent 结束后等待用户选择（实施/继续）
+  usage: { input: 0, output: 0 }, // 实时 token 用量(状态栏显示)
 })
 
 // 审批模式预设（Shift+Tab 循环顺序）; 对齐行业: manual → acceptEdits → plan
@@ -116,6 +117,17 @@ export function tuiReducer(state = initialTuiState, action) {
 
     case 'PLAN_DONE':
       return { ...state, planDone: !!action.on }
+
+    case 'USAGE': {
+      const u = action.usage || {}
+      return {
+        ...state,
+        usage: {
+          input: Number.isFinite(u.input) ? u.input : state.usage.input,
+          output: Number.isFinite(u.output) ? u.output : state.usage.output,
+        },
+      }
+    }
 
     // rewind: 截断消息与工具卡到指定位置（配合快照恢复实现 checkpoint 回滚）
     case 'TRUNCATE': {

@@ -255,6 +255,12 @@ export async function runSession({
         dispatch({ type: 'STATUS', text: `thinking: ${reasoning.slice(0, 40)}${reasoning.length > 40 ? '…' : ''}` })
       }
     },
+    onUsage: (usage) => {
+      // 实时 token 用量(状态栏 tok: in/out)
+      if (usage && (usage.input || usage.output)) {
+        dispatch({ type: 'USAGE', usage: { input: usage.input || 0, output: usage.output || 0 } })
+      }
+    },
     })
   } finally {
     try { await runSessionHooks('SessionEnd', { sessionId, timestamp: new Date().toISOString() }) } catch {}

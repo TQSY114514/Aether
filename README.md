@@ -4,7 +4,9 @@
 
 # AetherAI
 
-### Chat with any model, run a safe coding agent, compare models side-by-side — on your desktop or in your terminal
+### Local-first · Multi-model · Agent-native
+
+Chat with any model, run a safe coding agent, and compare models side-by-side — on your desktop or in your terminal.
 
 **Electron · React · TypeScript · MCP · Agent · Skills**
 
@@ -14,7 +16,7 @@
 
 `Beta` · `Solo / Hobby Project` · `MIT Licensed`
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [繁體中文](./README.zh-TW.md) · [文言文](./README.zh-WEN.md) · [日本語](./README.ja.md) · [español](./README.es.md) · [français](./README.fr.md) · [Deutsch](./README.de.md) · [português](./README.pt.md) · [русский](./README.ru.md) · [українська](./README.uk.md) · [العربية](./README.ar.md) · [हिन्दी](./README.hi.md) · [한국어](./README.ko.md)<br><sup>Translations may lag the English / simplified-Chinese versions.</sup>
 
 </div>
 
@@ -24,7 +26,9 @@
 > edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
 > [SECURITY.md](./SECURITY.md).
 
-Unify multiple LLM providers — OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — into one desktop app. Chat, run a coding agent, and compare models head-to-head in a multi-model arena with ELO voting.
+**Platform: Windows only.** Official builds, testing, and support target Windows. macOS / Linux may build from source but are not officially supported, and code signing is not planned — expect a SmartScreen "unknown publisher" prompt on first launch (see [Download](#download)).
+
+**One app for every model.** OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — chat, run a coding agent, and compare models head-to-head in a multi-model arena with ELO voting.
 
 **Local-first by design.** API keys and conversations live in a local SQLite database and never leave your machine — except to the providers you configure.
 
@@ -249,11 +253,16 @@ Additional headless flags: `--persona <id>`（persona + 记忆注入）、`--mem
 Interactive terminal agent (Ink v5; Node ≥ 22; best experienced in Windows Terminal):
 
 - **会话**：消息流式渲染、`/fork` 会话树（`session.parent_session_id`）、`/sessions`、`/use <id>` 历史切换
-- **工具与权限**：工具调用卡（状态色/耗时/摘要）、diff 审阅（`v` 展开，`Enter` 接受 / `r` 回滚——写前快照还原，非 git 目录也有效）、键盘权限门（`y` 允许 / `n` 拒绝 / `a` 本会话总是允许）
-- **模式**：`m` 切换 ask/plan/auto；`/persona <id>` 切换人设（注入 persona + 记忆前缀）
+- **工具与权限**：工具调用卡（状态色/耗时/摘要）、diff 审阅（`Alt+v` 展开，`Enter` 接受 / `r` 回滚——写前快照还原，非 git 目录也有效）、键盘权限门（`y` 允许一次 / `a` 总是允许 / `n` 拒绝，或 `←→` 选择）、只读工具自动放行
+- **审批模式**：`Shift+Tab` 循环 `manual → auto-edits → plan`（plan = 只读规划，完成后三选项决定如何实施）
+- **模式**：`Alt+m` 切换 ask/plan/auto；`/persona <id>` 切换人设（注入 persona + 记忆前缀）
+- **leader 快捷键**：`Ctrl+X` 然后 `m` 模型选择器 / `n` 新会话 / `l` 会话列表 / `g` 时间线 / `r` rewind 检查点 / `q` 退出
+- **命令面板**：`Ctrl+P` 或 `x`（New chat / Model / Timeline / Export JSONL / Help / Quit）
+- **键位可重绑**：`~/.config/aether/keybindings.json`（如 `{ "char:?": null }` 禁用 `?` 帮助键）
+- **API key 持久化**：`/apikey <provider> <key>` 保存到 `auth.json`（桌面版 safeStorage 加密的 key 在 headless 无法解密，用此命令或环境变量 `AETHER_API_KEY`）
 - **记忆与技能闭环**：`/memory <关键词>` 检索、`--memory-trace` 注入条目数、`/skills` + `/skill accept|dismiss <key>`（habitLearner → 技能提案）
-- **steering**：运行中 `Ctrl+C` 打断 → 输入下一条 → 注入当前循环（队列显示 `steer:n`）
-- **快捷键**：`q`/`Ctrl+C` 退出（空闲）、`Esc` 关闭 diff、`Backspace` 删字符；完整键位见 [docs/tui-keys.md](./docs/tui-keys.md)
+- **steering**：运行中 `Ctrl+C` 打断 → 输入下一条 → 注入当前循环（队列显示 `steer:n`）；运行中 `Tab` 直接排队下一条
+- **快捷键**：双击 `Esc` 退出（或 `/quit`）、`Esc` 清空输入（草稿入历史）、`?` 帮助屏、`PgUp/PgDn`/鼠标滚轮翻页、状态栏实时显示 `approval/mode/model/tok/ctx`；完整键位见 [docs/tui-keys.md](./docs/tui-keys.md)
 
 ### RPC (`aether --mode rpc`)
 
@@ -382,10 +391,6 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 | [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Multi-turn agent execution, sandboxed tool execution |
 | [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
 | [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
-
-### Comparative analysis
-
-A competitive analysis of AetherAI vs [SonettoHere](https://github.com/Miso2233/SonettoHere) — positioning, architecture, engineering quality, growth potential, and more — is available at [competitive-analysis.md](./docs/competitive-analysis.md).
 
 ---
 
