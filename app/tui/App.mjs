@@ -177,9 +177,22 @@ function StatusBar({ state, tick, ctxK, extra }) {
   )
 }
 
-export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, stdin: stdinProp }) {
+export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, stdin: stdinProp, tuiLog }) {
   const { stdin, stdout, exit } = useApp()
-  const [state, dispatch] = useReducer(tuiReducer, initialTuiState)
+  const [state, realDispatch] = useReducer(tuiReducer, initialTuiState)
+  // 诊断日志(--tui-log <path>): 记录所有 dispatch 动作与时间戳, 排查无输出问题
+  const dispatch = useCallback((a) => {
+    if (tuiLog) {
+      try {
+        const { appendFileSync } = require('node:fs')
+        const { homedir } = require('node:os')
+        const path = require('node:path')
+        const p = tuiLog === true ? path.join(homedir(), '.aether-tui.log') : tuiLog
+        appendFileSync(p, JSON.stringify({ t: Date.now(), type: a.type, text: a.text, delta: a.delta, name: a.name }) + '\n')
+      } catch {}
+    }
+    realDispatch(a)
+  }, [tuiLog])
   const tick = useTicker(500, SPINNER, state.running)
   const sessionBusyRef = useRef(false)
   const allowRulesRef = useRef(createAllowRulesStore())
