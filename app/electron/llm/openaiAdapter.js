@@ -1,4 +1,4 @@
-// ───────────────────────────────────────────────────────────────────────────
+﻿// ───────────────────────────────────────────────────────────────────────────
 // OpenAI-compatible adapter
 //
 // Covers OpenAI itself and any proxy that speaks the /chat/completions +
@@ -13,7 +13,7 @@ const _credentialPool = require('./credentialPool')
 
 // 请求总超时: API 挂起(不返回不报错)时显式中止, 避免客户端无限 spinner。
 // 外部 signal 存在时叠加(AbortSignal.any), 任一方中止都生效。
-const REQUEST_TIMEOUT_MS = 60000
+const REQUEST_TIMEOUT_MS = 120000
 
 function withTimeout(signal) {
   const t = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
@@ -245,3 +245,4 @@ module.exports = {
   normalizeMessages, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }
+
