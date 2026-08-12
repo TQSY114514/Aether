@@ -730,6 +730,14 @@ Reply in this format:
           }
         }
         let rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
+        // 工具失败的错误摘要注入（审查建议: 不只看原始 stderr）:
+        // classifyToolError 已产出 recovery(分类+修复建议), 拼接进 tool 结果,
+        // 模型下一轮直接看到"哪里错了+该怎么做", 而不是自己去猜原始输出。
+        if (entry.error && entry.recovery_hint) {
+          const rh = entry.recovery_hint
+          const hintText = rh.hint ? ` ${rh.hint}` : ''
+          rawContent = `${rawContent}\n[recovery: ${rh.kind || rh.action || 'unknown'}${hintText}]`
+        }
         // Middleware chain (redact, truncate) — never let it break the loop.
         try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args }) } catch {}
         // Enrich structured results with a summary line (OpenClaw-inspired).

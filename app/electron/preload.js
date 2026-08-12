@@ -140,6 +140,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   flags: {
     list: () => ipcRenderer.invoke('flags:list'),
     set: (key, value) => ipcRenderer.invoke('flags:set', key, value),
+    safeMode: () => ipcRenderer.invoke('flags:safe-mode'),
     onChanged: (cb) => subscribe('flags:changed', cb),
   },
   mainLog: {

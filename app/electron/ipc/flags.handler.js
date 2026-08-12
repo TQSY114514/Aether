@@ -22,6 +22,16 @@ function registerFlagsHandlers(ipcMain, db) {
     }
     return result
   })
+
+  // 一键安全默认: 关闭全部 Experimental/Beta 能力(保留 debug 观测与
+  // 已发布 UX), 返回实际写入的清单; 供 Settings 页"安全模式"按钮调用。
+  ipcMain.handle('flags:safe-mode', () => {
+    const written = flags.applySafeMode(db)
+    for (const w of written) {
+      try { ipcMain.emit('flags:changed', w.key, w.value) } catch {}
+    }
+    return { ok: true, written }
+  })
 }
 
 module.exports = { registerFlagsHandlers }

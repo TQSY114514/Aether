@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
-import { Shield, FolderOpen, FileText } from 'lucide-react'
+import { Shield, ShieldCheck, FolderOpen, FileText } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Agent workspace + safety settings.
@@ -78,6 +78,24 @@ export default function AgentSettings() {
 
   const resetToDefault = () => applyWorkspace(null)
 
+  // 一键安全默认（评审建议 #7-1）: 关闭全部 Experimental/Beta 能力。
+  // 走主进程 flags:safe-mode 聚合 IPC —— 只关实验项, 保留 debug 观测与已发布 UX。
+  const [safeBusy, setSafeBusy] = useState(false)
+  const applySafeMode = async () => {
+    setSafeBusy(true)
+    try {
+      const r = await window.electronAPI?.flags?.safeMode?.()
+      if (r?.ok) {
+        toast(r.written.length > 0
+          ? `安全模式已启用: 关闭 ${r.written.length} 个实验功能`
+          : '已是安全模式(无实验功能开启)', { type: 'success' })
+      } else {
+        toast('安全模式应用失败', { type: 'error' })
+      }
+    } catch { toast('安全模式应用失败', { type: 'error' }) }
+    finally { setSafeBusy(false) }
+  }
+
   return (
     <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center gap-2 mb-1">
@@ -111,6 +129,24 @@ export default function AgentSettings() {
             <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.blocklist')}</p>
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.blocklist_hint')}</p>
           </div>
+        </div>
+
+        {/* One-click safe mode — close all experimental capabilities. */}
+        <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(99,102,241,0.05)', border: '1px solid var(--border)' }}>
+          <div className="flex items-start gap-2">
+            <ShieldCheck size={14} className="text-blue-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>一键安全模式</p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                关闭全部实验性功能(子 Agent / 编排器 / 经验回放 / 插件 SDK 等), 保留基础对话与已发布能力。适合稳定使用。
+              </p>
+            </div>
+          </div>
+          <button onClick={applySafeMode} disabled={safeBusy}
+            className="px-3 py-1.5 text-xs rounded-lg text-white disabled:opacity-50 transition-opacity shrink-0"
+            style={{ backgroundColor: 'var(--accent)' }}>
+            {safeBusy ? '应用中…' : '应用'}
+          </button>
         </div>
 
         {/* Project instructions status (CLAUDE.md / .aetherai.md). */}
