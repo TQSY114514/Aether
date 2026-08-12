@@ -253,6 +253,29 @@ describe('modelPicker 模式', () => {
     press(ctx, { return: true }, '')
     expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'MODEL_SET', name: 'claude-3-5-sonnet' })
   })
+
+  it('过滤后 idx 越界 → 钳制到过滤列表末项(不选 undefined)', () => {
+    // 用户先 ↑↓ 到原始列表靠后位置, 再输入过滤词使列表变短——
+    // 旧实现 flat[idx] 可能越界得 undefined → Enter 无效果(模型切换"失灵")。
+    const models = [
+      { id: 1, model_name: 'gpt-4o', provider_id: 1, is_primary: 1, provider_name: 'openai' },
+      { id: 2, model_name: 'gpt-4o-mini', provider_id: 1, is_primary: 0, provider_name: 'openai' },
+      { id: 3, model_name: 'claude-3-5-sonnet', provider_id: 2, is_primary: 0, provider_name: 'anthropic' },
+    ]
+    const ctx = makeCtx({ modelPicker: { models, idx: 3, filter: '' } })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'MODEL_SET', name: 'claude-3-5-sonnet' })
+  })
+
+  it('过滤后 flat 为空 → Enter 安全 no-op(不关闭选择器)', () => {
+    const models = [
+      { id: 1, model_name: 'gpt-4o', provider_id: 1, is_primary: 1, provider_name: 'openai' },
+    ]
+    const ctx = makeCtx({ modelPicker: { models, idx: 0, filter: 'zzz-no-match' } })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'MODEL_SET' }))
+    expect(ctx.setModelPicker).not.toHaveBeenCalledWith(null)
+  })
 })
 
 describe('palette 模式', () => {
@@ -429,6 +452,22 @@ describe("'?'/x 面板与 rewind", () => {
     expect(ctx.injectSteering).toHaveBeenCalledWith('tui', 'next task')
     expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'STEER_ENQUEUE', text: 'next task' })
     expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: '' })
+  })
+
+  it('Enter 运行中排队下一条(不吞输入框, 与 Tab 同语义)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, running: true, input: 'keep going' }, injectSteering: vi.fn() })
+    press(ctx, { return: true }, '')
+    expect(ctx.injectSteering).toHaveBeenCalledWith('tui', 'keep going')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'STEER_ENQUEUE', text: 'keep going' })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: '' })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+  })
+
+  it('Enter 运行中空输入仍无操作(不误触提交)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, running: true, input: '' }, injectSteering: vi.fn() })
+    press(ctx, { return: true }, '')
+    expect(ctx.injectSteering).not.toHaveBeenCalled()
+    expect(ctx.startSession).not.toHaveBeenCalled()
   })
 
   it('keybindings 重绑/禁用', () => {

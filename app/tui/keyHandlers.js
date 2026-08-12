@@ -144,11 +144,14 @@ export const modeHandlers = {
     pagedown: (ctx) => ctx.setModelPicker((p) => ({ ...p, idx: Math.min(p.models.length - 1, p.idx + 10) })),
     esc: (ctx) => ctx.setModelPicker(null),
     enter: (ctx) => {
-      // 确认用过滤后的 flat 列表(与渲染高亮一致)——否则过滤后 Enter 选错模型
+      // 确认用过滤后的 flat 列表(与渲染高亮一致)——否则过滤后 Enter 选错模型。
+      // 守卫: filter 变更/列表为空/idx 越界时安全回落(不再 flat[越界] 得 undefined)。
       const filter = (ctx.modelPicker.filter || '').toLowerCase()
       const flat = ctx.modelPicker.models.filter((m) =>
         !filter || `${m.provider_name} ${m.model_name}`.toLowerCase().includes(filter))
-      const m = flat[ctx.modelPicker.idx]
+      if (!flat.length) return
+      const idx = Math.min(ctx.modelPicker.idx, flat.length - 1)
+      const m = flat[idx]
       ctx.setModelPicker(null)
       if (m) {
         ctx.dispatch({ type: 'MODEL_SET', name: m.model_name })
@@ -458,7 +461,18 @@ export const modeHandlers = {
         ctx.dispatch({ type: 'THINKING_TOGGLE' }); return
       }
       const text = s.input.trim()
-      if (!text || s.running) return
+      if (!text) return
+      // ── 运行中 Enter = 排队下一条（与 Tab 同语义, 不吞输入框）────────────
+      // 修复: 原 `if (!text || s.running) return` 在 running 时静默吞掉回车,
+      // 输入框文字保留, 用户以为"回车没生效"。现改为 running 且有输入时
+      // 走排队路径, 输入框清空并提示。
+      if (s.running) {
+        ctx.injectSteering('tui', s.input)
+        ctx.dispatch({ type: 'STEER_ENQUEUE', text: s.input })
+        ctx.dispatch({ type: 'INPUT', value: '' })
+        ctx.dispatch({ type: 'STATUS', text: `queued follow-up (${s.steeringQueue.length + 1})` })
+        return
+      }
       const sm = slashMatches(s)
       if (sm.length > 0 && ctx.slashIdx >= 0 && ctx.slashIdx < sm.length) {
         const full = sm[ctx.slashIdx]
