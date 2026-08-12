@@ -21,6 +21,7 @@ export const initialTuiState = Object.freeze({
   budget: { used: 0, max: 0 }, // todo 6: 迭代预算 used/max
   modelName: null,           // 最近会话实际使用的模型（AGENT_START 回填，右侧面板显示）
   selectedMessage: null,     // 导航：↑↓ 选中的消息索引（null = 未选择）
+  expandedMessage: null,     // W0-t7: 展开的消息 id（null = 无展开; id 而非索引——截断后 id 稳定）
   steeringQueue: [],       // todo 6: 待注入 follow-up 队列
   steeringMode: false,     // todo 6: Ctrl+C 打断后的 follow-up 输入态
   pendingPermission: null, // { reqId, name, args, risk, snapshot } — awaitingPermission 态
@@ -28,17 +29,25 @@ export const initialTuiState = Object.freeze({
   expandedTool: null,      // 展开的 diff 视图工具卡下标
   sessions: [],            // todo 5: [{ id, title, parentId, createdAt }]
   currentSessionId: null,  // todo 5: 活动会话 id（fork 父指针用）
+  dbSessionId: null,       // W0-t3: DB 会话行 id（runAgent 的 'tui' steering 键 ↔ DB id 映射）
   currentPersonaId: null,  // todo 13: /persona 切换（runSession 注入用）
   memoryResults: [],       // todo 8: /memory 检索命中 [{ id, content, type, createdAt }]
   skills: [],              // todo 20: /skills 技能提案 [{ key, imperative, occurrences }]
   quitRequested: false,
   // ── 审批模式（Shift+Tab 循环; 对齐 Claude/Codex/Gemini 离散预设）──────
-  approvalMode: 'manual',  // manual | auto-edits | plan
+  // W4-t26: dontask 可 SET（/approval-mode dontask）但不在 Shift+Tab 环内
+  approvalMode: 'manual',  // manual | auto-edits | plan | dontask(SET-only)
   planDone: false,         // plan 模式 agent 结束后等待用户选择（实施/继续）
   usage: { input: 0, output: 0 }, // 实时 token 用量(状态栏显示)
+  todos: [], // W1-t9: agent todo 清单 [{content, status: 'pending'|'in_progress'|'completed', activeForm?}]（todo_write 流式更新）
+  // ── W3-t21: 思考过程块（推理模型 onThinkingStart/Delta/End）───────────
+  // open=true → 渲染实时思考（运行中）; END 后 open=false 块仍保留供 Enter 展开;
+  // 下次 THINKING_START 或 RESET 才清除。
+  thinking: { open: false, text: '' },
 })
 
 // 审批模式预设（Shift+Tab 循环顺序）; 对齐行业: manual → acceptEdits → plan
+// W4-t26: 'dontask' 不进循环（SET 单独接受, /approval-mode dontask）
 export const APPROVAL_MODES = ['manual', 'auto-edits', 'plan']
 // plan 模式只读工具集（自动放行; 写工具直接拒绝）
 export const READ_ONLY_TOOLS = ['read', 'list', 'grep', 'glob', 'search', 'view']
@@ -164,6 +173,17 @@ export function tuiReducer(state = initialTuiState, action) {
       }
     }
 
+    // W3-t19: !shell 用户消息追加（非 agent 轮次, 不置 running 不建 assistant 行;
+    // 文本 = 命令 + [shell: !cmd] 上下文块, 作为对话内注入的载体）
+    case 'APPEND_USER': {
+      const text = String(action.text || '').trim()
+      if (!text) return state
+      return {
+        ...state,
+        messages: [...state.messages, { id: nextMessageId(state), role: 'user', text }],
+      }
+    }
+
     case 'AGENT_END':
       return { ...state, running: false, statusLine: 'idle' }
 
@@ -181,8 +201,10 @@ export function tuiReducer(state = initialTuiState, action) {
     }
 
     // ── 审批模式（Shift+Tab 循环; manual → auto-edits → plan）────────────
+    // W4-t26: 'dontask' 可 SET（/approval-mode dontask）但不在循环内——CYCLE 仍
+    // 只走 APPROVAL_MODES 三态; 处于 dontask 时 CYCLE 的 indexOf=-1 → 回落 manual。
     case 'APPROVAL_MODE_SET': {
-      if (!APPROVAL_MODES.includes(action.mode)) return state
+      if (!APPROVAL_MODES.includes(action.mode) && action.mode !== 'dontask') return state
       return { ...state, approvalMode: action.mode, planDone: false }
     }
 
@@ -207,10 +229,18 @@ export function tuiReducer(state = initialTuiState, action) {
 
     // rewind: 截断消息与工具卡到指定位置（配合快照恢复实现 checkpoint 回滚）
     case 'TRUNCATE': {
-      const next = { ...state, planDone: false }
+      const next = { ...state, planDone: false, expandedMessage: null }
       if (action.messages != null) next.messages = action.messages
       if (action.toolCalls != null) next.toolCalls = action.toolCalls
       return next
+    }
+
+    // ── W0-t7: 长消息展开/折叠（选中消息 Enter）────────────────────────
+    // id 而非索引：消息被截断/重排后 id 仍稳定。未知 id 无副作用（no-op）。
+    case 'TOGGLE_EXPAND': {
+      const id = action.messageId
+      if (!state.messages.some((m) => m.id === id)) return state
+      return { ...state, expandedMessage: state.expandedMessage === id ? null : id }
     }
 
     // ── 模型 / effort 切换（/model /effort 命令）────────────────────────
@@ -395,8 +425,20 @@ export function tuiReducer(state = initialTuiState, action) {
     case 'SESSIONS_SET':
       return { ...state, sessions: Array.isArray(action.sessions) ? action.sessions : [] }
 
+    // ── W2-t15: 启动 resume 历史加载 ────────────────────────────────────
+    // messages 原样载入（loadSessionMessages 已映射 {id, role, text}）；
+    // 非数组忽略（防御）。清空选中/展开——历史刚载入时无选中消息。
+    case 'MESSAGES_LOAD':
+      if (!Array.isArray(action.messages)) return state
+      return { ...state, messages: action.messages, selectedMessage: null, expandedMessage: null }
+
+    // W0-t3: 回填实际使用的 DB 会话 id（startSession 从 runSession 结果分发）
+    case 'SESSION_ID_SET':
+      return { ...state, dbSessionId: action.sessionId ?? null }
+
     case 'SESSION_USE':
-      return { ...state, currentSessionId: action.sessionId ?? null }
+      // /use <id> 选中的就是 DB 会话行 → currentSessionId 与 dbSessionId 同值
+      return { ...state, currentSessionId: action.sessionId ?? null, dbSessionId: action.sessionId ?? null }
 
     case 'SESSION_FORK': {
       const sessionId = action.sessionId
@@ -411,6 +453,7 @@ export function tuiReducer(state = initialTuiState, action) {
         ...state,
         sessions: [entry, ...state.sessions.filter((s) => s.id !== sessionId)],
         currentSessionId: sessionId,
+        dbSessionId: sessionId, // W0-t3: fork 出的新会话行即活动 DB 行
       }
     }
 
@@ -425,6 +468,33 @@ export function tuiReducer(state = initialTuiState, action) {
     // ── 技能提案（todo 20）─────────────────────────────────────────────
     case 'SKILLS_SET':
       return { ...state, skills: Array.isArray(action.skills) ? action.skills : [] }
+
+    // ── W1-t9: agent todo 清单（todo_write 全量替换语义, 非数组忽略）─────
+    case 'TODO_SET':
+      if (!Array.isArray(action.todos)) return state
+      return { ...state, todos: action.todos }
+
+    // ── W3-t21: 思考过程块（推理模型思考进度; 纯字符串语义, 非字符串忽略）─
+    case 'THINKING_START':
+      return { ...state, thinking: { open: true, text: '' } }
+
+    case 'THINKING_DELTA': {
+      const delta = action.delta
+      if (typeof delta !== 'string') return state
+      const text = state.thinking.text + delta
+      // 缓冲上限 4000 字符, 保留尾部（头部截断——最新推理最相关）
+      const capped = text.length > THINKING_BUFFER_LIMIT ? text.slice(text.length - THINKING_BUFFER_LIMIT) : text
+      return { ...state, thinking: { open: state.thinking.open, text: capped } }
+    }
+
+    case 'THINKING_END':
+      // 思考结束 → 块折叠但保留全文（供 Enter 展开回顾）; 不随 AGENT_END 清除
+      return { ...state, thinking: { ...state.thinking, open: false } }
+
+    case 'THINKING_TOGGLE':
+      // 展示态切换（折叠 ⇄ 展开）; 无思考内容时 no-op（Enter 回落既有行为）
+      if (!state.thinking.text) return state
+      return { ...state, thinking: { ...state.thinking, open: !state.thinking.open } }
 
     case 'RESET':
       return { ...initialTuiState }
@@ -447,8 +517,25 @@ export function summarizeState(state) {
     toolCalls: state.toolCalls.map((t) => ({ name: t.name, status: t.status })),
     pendingPermission: state.pendingPermission ? state.pendingPermission.name : null,
     expandedTool: state.expandedTool,
+    expandedMessage: state.expandedMessage ?? null, // W0-t7: 展开消息 id（smoke 可断言）
     steeringQueue: state.steeringQueue.length,
     budget: { ...state.budget },
     quitRequested: state.quitRequested,
+    todos: Array.isArray(state.todos) ? state.todos.length : 0, // W1-t9: 计数（smoke JSON 紧凑）
+    thinkingLen: state.thinking ? state.thinking.text.length : 0, // W3-t21: 仅计数, 保持 smoke JSON 紧凑
   }
+}
+
+// ── W3-t21: 思考缓冲上限（THINKING_DELTA 累积尾部保留）──────────────────
+export const THINKING_BUFFER_LIMIT = 4000
+
+// ── W0-t7: 消息渲染文本（截断/展开纯函数, App.mjs MessageLine 共用）──────────
+// expanded=true → 完整文本（无 4000 上限、无提示）;
+// 否则 >limit 截断并附可见的展开提示（Enter 展开）。
+export const MESSAGE_TRUNCATE_LIMIT = 4000
+
+export function messageDisplay(text, expanded, limit = MESSAGE_TRUNCATE_LIMIT) {
+  const s = String(text ?? '')
+  if (expanded || s.length <= limit) return s
+  return `${s.slice(0, limit)} … (truncated, Enter 展开)`
 }

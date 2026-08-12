@@ -43,11 +43,25 @@ export function parseTuiOpts(argv = []) {
     if (a === '--tui-log') { opts.tuiLog = argv[i + 1] !== 'false' ? (argv[i + 1] || true) : false; i++; continue }
     if (a === '--api-url') { opts.apiUrl = argv[i + 1]; i++; continue }
     if (a === '--api-format') { opts.apiFormat = argv[i + 1]; i++; continue }
+    // ── W2-t15: 启动 resume（--continue 最近会话 / --session <id> / --fork 派生）──
+    // --session 值必须为数字；非法值（--session abc / 末尾缺值）静默忽略（不崩溃）。
+    if (a === '--continue') { opts.resumeContinue = true; continue }
+    if (a === '--session') {
+      const v = Number(argv[i + 1])
+      if (Number.isFinite(v)) opts.resumeSessionId = v
+      i++; continue
+    }
+    if (a === '--fork') { opts.resumeFork = true; continue }
     if (a.startsWith('--db=')) { opts.dbPath = a.slice(5); continue }
     if (a.startsWith('--model=')) { opts.modelName = a.slice(8); continue }
     if (a.startsWith('--api-key=')) { opts.apiKey = a.slice(10); continue }
     if (a.startsWith('--api-url=')) { opts.apiUrl = a.slice(10); continue }
     if (a.startsWith('--api-format=')) { opts.apiFormat = a.slice(13); continue }
+    if (a.startsWith('--session=')) {
+      const v = Number(a.slice(10))
+      if (Number.isFinite(v)) opts.resumeSessionId = v
+      continue
+    }
   }
   return opts
 }
@@ -77,14 +91,14 @@ export function createTuiStdin(real) {
 }
 
 function runInteractive(argv) {
-  const { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, tuiLog } = parseTuiOpts(argv)
+  const { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, tuiLog, resumeContinue, resumeSessionId, resumeFork } = parseTuiOpts(argv)
   const tuiStdin = process.stdin.isTTY ? createTuiStdin(process.stdin) : process.stdin
   // 进入 alt screen 前不输出任何内容（不留启动日志/横幅）
   process.stdout.write(ALT_ENTER)
   // 兜底：任何退出路径都恢复原终端内容
   process.on('exit', () => { try { process.stdout.write(ALT_EXIT) } catch {} })
   return new Promise((resolve) => {
-    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, tuiLog, stdin: tuiStdin }), { stdin: tuiStdin })
+    const { unmount, waitUntilExit } = render(h(App, { dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCmd, tuiLog, resumeContinue, resumeSessionId, resumeFork, stdin: tuiStdin }), { stdin: tuiStdin })
     waitUntilExit().then(() => {
       unmount()
       process.stdout.write(ALT_EXIT)
@@ -97,17 +111,38 @@ function runInteractive(argv) {
 // 逐步打印状态机 JSON 序列，退出码 0（F3 冒烟依赖此开关）。
 function runSmoke() {
   const steps = [
-    { chars: 'hi' },                        // INPUT
-    { key: { name: 'return' } },            // SUBMIT → running + user/assistant 消息
-    { key: { name: 'm' } },                 // MODE_CYCLE ask→plan
-    { key: { name: 'm' } },                 // MODE_CYCLE plan→auto
-    { key: { name: 'backspace' } },         // INPUT_BACKSPACE（空输入下无副作用）
-    { key: { ctrl: true, name: 'c' } },     // QUIT_INTENT
+    { chars: 'abc' },                           // INPUT 在光标处插入 + 光标后移
+    { key: { leftArrow: true } },               // INPUT_LEFT 光标 ←
+    { key: { name: 'backspace' } },             // INPUT_BACKSPACE 删光标前字符 → 'ac'
+    { key: { name: 'return', shift: true } },   // Shift+Enter 换行 → 'ac\n'
+    { chars: 'x' },                              // 续行输入 → 'ac\nx'
+    { key: { name: 'return' } },                // SUBMIT → user 消息 'ac\nx'(多行保留)
+    // W0-t7: 长消息注入 → 展开/折叠/未知 id（消息 id 稳定, 与截断无耦合）
+    { action: { type: 'AGENT_END' } },          // 结束首轮运行(SUBMIT 置 running, 需复位)
+    { chars: 'x'.repeat(5000) },                // 5000 字输入
+    { key: { name: 'return' } },                // SUBMIT → user 消息(5000 字, id=1)
+    { action: { type: 'TOGGLE_EXPAND', messageId: 1 } },   // 展开 → expandedMessage=1
+    { action: { type: 'TOGGLE_EXPAND', messageId: 1 } },   // 再按折叠 → null
+    { action: { type: 'TOGGLE_EXPAND', messageId: 999 } }, // 未知 id → no-op
+    { key: { name: 'm' } },                     // MODE_CYCLE ask→plan
+    { key: { name: 'm' } },                     // MODE_CYCLE plan→auto
+    { key: { name: 'backspace' } },             // INPUT_BACKSPACE（空输入下无副作用）
+    // W1-t9: todo 清单（TODO_SET 设置 → 计数; 非数组忽略; RESET 清空）
+    { action: { type: 'TODO_SET', todos: [{ id: 1, title: 'x', status: 'pending' }] } },
+    { action: { type: 'TODO_SET', todos: 'not-an-array' } },
+    // W3-t21: 思考过程块（START 开块清空; DELTA 累积 → thinkingLen; RESET 清除）
+    { action: { type: 'THINKING_START' } },
+    { action: { type: 'THINKING_DELTA', delta: 'abc' } },
+    { action: { type: 'THINKING_END' } },
+    { action: { type: 'RESET' } },
+    { key: { ctrl: true, name: 'c' } },         // QUIT_INTENT
   ]
   let state = initialTuiState
   const snapshots = []
   for (const step of steps) {
-    if (step.chars) state = tuiReducer(state, { type: 'INPUT', value: state.input + step.chars })
+    // chars 走与交互输入一致的语义: 在光标处插入(而非整串替换拼接)
+    if (step.chars) state = tuiReducer(state, { type: 'INPUT', value: step.chars })
+    if (step.action) state = tuiReducer(state, step.action)
     if (step.key) {
       const action = keyToAction(step.key)
       if (action) state = tuiReducer(state, action)

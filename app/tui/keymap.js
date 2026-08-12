@@ -16,12 +16,27 @@ export function keyToAction(key, input) {
   if (input === '\x7f' || input === '\b') return { type: 'INPUT_BACKSPACE' }
   const isCtrlC = key.ctrl === true && (input === 'c' || key.name === 'c')
   if (isCtrlC) return { type: 'QUIT_INTENT' }
+  // Shift+Enter: 插入换行而非提交（todo 5 多行输入）
+  if (key.shift === true && (key.return === true || key.enter === true || key.name === 'return' || key.name === 'enter')) {
+    return { type: 'INPUT', value: '\n' }
+  }
   if (key.return === true || key.enter === true || key.name === 'return' || key.name === 'enter') {
     return { type: 'SUBMIT' }
   }
   if (key.backspace === true || key.name === 'backspace' || key.delete === true || key.name === 'delete') {
     return { type: 'INPUT_BACKSPACE' }
   }
+  // 光标编辑键（todo 4; --smoke 状态机与 keyToAction 测试共用此归一）
+  const ctrl = key.ctrl === true
+  if (ctrl && input === 'w') return { type: 'INPUT_WORD_BACKWARD' }
+  if (ctrl && input === 'u') return { type: 'INPUT_CLEAR_LINE' }
+  if (ctrl && input === 'k') return { type: 'INPUT_TO_LINE_END' }
+  if (ctrl && input === 'a') return { type: 'INPUT_LINE_HOME' }
+  if (ctrl && input === 'e') return { type: 'INPUT_LINE_END' }
+  if (key.leftArrow === true) return { type: 'INPUT_LEFT' }
+  if (key.rightArrow === true) return { type: 'INPUT_RIGHT' }
+  if (key.home === true) return { type: 'INPUT_HOME' }
+  if (key.end === true) return { type: 'INPUT_END' }
   // 注意: 不用单字母当快捷键(m/q/v 等)——它们会吞掉输入框里的字母。
   // 需要按键的操作用修饰键组合(Alt+m / Alt+v)或斜杠命令(/mode)。
   return null
