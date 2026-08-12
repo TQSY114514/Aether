@@ -253,6 +253,15 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   }, [basePermission, state.approvalMode])
   tuiPermission.takeSnapshot = basePermission.takeSnapshot
 
+  // ask_user 工具应答: 结构化提问面板(↑↓ 选择 / Enter 确认 / Esc 取消)
+  const askUserResolveRef = useRef(null)
+  const tuiAskUser = useCallback((questions) => {
+    return new Promise((resolve) => {
+      askUserResolveRef.current = resolve
+      dispatch({ type: 'ASK_USER_SET', questions })
+    })
+  }, [dispatch])
+
   const startSession = useCallback(async (promptText) => {
     if (sessionBusyRef.current) return
     sessionBusyRef.current = true
@@ -266,9 +275,10 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
         prompt: promptText,
         agentMode: state.mode,
         personaId: state.currentPersonaId,
-        dispatch,
-        requestPermission: tuiPermission,
-      })
+      dispatch,
+      requestPermission: tuiPermission,
+      onAskUser: tuiAskUser,
+    })
     } catch (err) {
       // 错误以 [sys] 消息可见呈现（仅改状态栏会被 AGENT_END 重置吞掉）。
       // 超时/中止转友好文案(adapter 60s 请求超时)
@@ -290,7 +300,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     try { models = listModels(db) } catch {}
     try { db?.close() } catch {}
     if (models.length) setModelPicker({ models, idx: 0, filter: '' })
-    else dispatch({ type: 'STATUS', text: 'no models configured — 先在桌面版设置中配置' })
+    else dispatch({ type: 'STATUS', text: '未配置模型 — 运行 /provider add 配置提供方' })
   }, [dbPath])
 
   // 会话列表(Ctrl+P History / leader l 共用)
@@ -564,6 +574,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     PALETTE_ITEMS,
     historyRef, historyIdxRef,
     openModelPicker, openSessions, openTimeline, openRewind, doRewind, startPlan,
+    askUserResolveRef,
     startSession, handleCommand, expandDiff, doRollback,
     decidePermission, allowRulesRef, resolveRef, injectSteering,
   }
@@ -588,9 +599,15 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   // 上下文估算(粗): 消息文本字符/4 ~ tokens, 千分位
   const ctxK = Math.round(state.messages.reduce((n, m) => n + String(m.text || '').length, 0) / 4 / 1000)
 
+  // 输入光标( todo 4): 钳制到 [0, input.length]; 行尾时渲染为空格块
+  const inputCursor = Math.max(0, Math.min(state.inputCursor || 0, state.input.length))
+
   // 帮助屏内容(快捷键表)
   const HELP_ROWS = [
     ['Shift+Tab', '审批模式循环: manual → auto-edits → plan'],
+    ['←→ / Home / End', '光标移动(输入框); Ctrl+A/E 行首尾'],
+    ['Ctrl+W / U / K', '删词 / 清行首至光标 / 删光标至行尾'],
+    ['Shift+Enter', '输入框内换行(多行输入) · Enter 发送'],
     ['Ctrl+X 然后 m/n/l/g/r/q', 'leader: 模型 / 新会话 / 会话列表 / 时间线 / rewind / 退出'],
     ['Ctrl+P 或 x', '命令面板(New chat/Model/Timeline/Export/Help/Quit)'],
     ['?', '本帮助屏'],
@@ -619,6 +636,20 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       expanded: state.expandedTool === i,
     })),
     state.pendingPermission ? h(PermissionPanel, { perm: state.pendingPermission, permIdx }) : null,
+    state.askUser
+      ? (() => {
+        const au = state.askUser
+        const q = au.questions[au.qIdx]
+        return h(Box, { marginTop: 1, borderStyle: 'double', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
+          h(Text, { bold: true, color: C.primary }, `? ${q.header ? `${q.header} — ` : ''}${q.question} (${au.qIdx + 1}/${au.questions.length})`),
+          q.options.map((o, i) => h(SelectRow, {
+            key: i,
+            label: `${o.label}${o.description ? ` — ${o.description}` : ''}`,
+            idx: au.idx, i,
+          })),
+          h(Text, { color: C.dim }, '  ↑↓ 选择 · Enter 确认 · Esc 取消'))
+      })()
+      : null,
     state.memoryResults.length
       ? h(Box, { marginTop: 1, flexDirection: 'column' },
         h(Text, { bold: true, color: C.tool }, `memory (${state.memoryResults.length}):`),
@@ -730,8 +761,11 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : (leaderArmed ? C.primary : C.dim), paddingX: 1 },
         h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
         state.input
-          ? h(Text, { color: C.assistant }, state.input)
-          : h(Text, { color: C.dim }, 'Ask anything…  Ctrl+X 快捷键 · / 命令 · Ctrl+P 面板'),
+          ? h(Text, { color: C.assistant },
+            state.input.slice(0, inputCursor),
+            h(Text, { backgroundColor: C.primary, color: C.bgHighlight }, state.input[inputCursor] || ' '),
+            state.input.slice(inputCursor + 1))
+          : h(Text, { color: C.dim }, 'Ask anything…  Ctrl+X 快捷键 · / 命令 · Ctrl+P 面板 · Shift+Enter 换行'),
       ),
       // 输入框 meta 行（opencode prompt meta: mode · model · effort · running）
       h(Text, { color: C.dim }, `  ${state.mode}${state.modelName ? ` · ${state.modelName}` : ''} · effort:${state.effort}${state.running ? ` · ${tick} running` : ''} · PgUp/PgDn 翻页`),

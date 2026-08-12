@@ -11,7 +11,8 @@
 //   态，App 捕获 y/n/a 键后调 decidePermission 完成 Promise。
 //   （无回调时 runToolLoop 默认拒绝 toolLoop.js:872-880）
 // ─────────────────────────────────────────────────────────────────────────────
-import { openDatabase, resolveProviderModel, runAgent, isEncryptedKey } from '../electron/llm/agentCore.js'
+import { openDatabase, resolveProviderModel, runAgent, isEncryptedKey, defaultDbPath } from '../electron/llm/agentCore.js'
+import { createEmptyDatabase } from '../electron/database.js'
 import { captureFileSnapshot } from './rollback.js'
 import { isToolStart } from './toolCards.js'
 import { connectMcpServers, disconnectMcpServers, runSessionHooks } from '../electron/llm/headlessMcp.js'
@@ -24,11 +25,20 @@ import { loadAuthKeys } from './authStore.js'
  * @param {string} [modelName]  模型名或 provider/model；缺省用 primary
  */
 export function resolveSessionResources(dbPath, modelName) {
-  const db = openDatabase(dbPath)
-  if (!db) throw new Error('no database found (run the desktop app once, or pass --db <path>)')
+  let db = openDatabase(dbPath)
+  if (!db) {
+    // 全新机器无 aetherai.db → Electron-free 自动建库（W0-B3a）：
+    // 不再要求先跑桌面版。建库失败（目录不可写等）→ 明确报错，不崩溃。
+    const target = dbPath || defaultDbPath()
+    try {
+      db = createEmptyDatabase(target)
+    } catch (err) {
+      throw new Error(`unable to create database at ${target}: ${err && err.message ? err.message : String(err)}`)
+    }
+  }
   const resolved = resolveProviderModel(db, { modelName })
   if (!resolved) {
-    throw new Error('no enabled model found. Configure one in the app or run --list-models / --list-providers.')
+    throw new Error('未配置模型 — 运行 /provider add 配置提供方')
   }
   return { ...resolved, db }
 }
@@ -175,6 +185,7 @@ export async function runSession({
   requestPermission,
   runAgentImpl = runAgent,
   resolveImpl = resolveSessionResources,
+  onAskUser,
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
   // headless 无法解密 safeStorage 加密的 API key——密文直接发 API 会 401/卡住，
@@ -255,6 +266,7 @@ export async function runSession({
         dispatch({ type: 'STATUS', text: `thinking: ${reasoning.slice(0, 40)}${reasoning.length > 40 ? '…' : ''}` })
       }
     },
+    onAskUser, // ask_user 工具: TUI 面板应答(结构化提问)
     onUsage: (usage) => {
       // 实时 token 用量(状态栏 tok: in/out)
       if (usage && (usage.input || usage.output)) {

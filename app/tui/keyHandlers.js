@@ -15,6 +15,11 @@ export function normalizeKey(input, key) {
   if (ctrl && input === 'x') return 'ctrl-x'
   if (ctrl && input === 'p') return 'ctrl-p'
   if (ctrl && input === 'n') return 'ctrl-n'
+  if (ctrl && input === 'w') return 'ctrl-w'
+  if (ctrl && input === 'u') return 'ctrl-u'
+  if (ctrl && input === 'k') return 'ctrl-k'
+  if (ctrl && input === 'a') return 'ctrl-a'
+  if (ctrl && input === 'e') return 'ctrl-e'
   if (key.alt === true && input === 'm') return 'alt-m'
   if (key.alt === true && input === 'v') return 'alt-v'
   if (key.alt === true && key.upArrow === true) return 'alt-up'
@@ -23,8 +28,12 @@ export function normalizeKey(input, key) {
   if (key.downArrow === true) return 'down'
   if (key.leftArrow === true) return 'left'
   if (key.rightArrow === true) return 'right'
+  if (key.home === true) return 'home'
+  if (key.end === true) return 'end'
   if (key.pageUp === true) return 'pageup'
   if (key.pageDown === true) return 'pagedown'
+  // Shift+Enter: 换行(多行输入)而非提交
+  if (key.shift === true && (key.return === true || key.enter === true || key.name === 'return' || key.name === 'enter')) return 'shift-enter'
   if (key.return === true || key.enter === true || key.name === 'return' || key.name === 'enter') return 'enter'
   if (key.escape === true) return 'esc'
   if (key.tab === true || key.name === 'tab') {
@@ -44,6 +53,7 @@ export function resolveMode(ctx) {
   if (ctx.timeline) return 'timeline'
   if (ctx.helpOpen) return 'help'
   if (ctx.rewindOpen) return 'rewind'
+  if (ctx.state.askUser) return 'askUser'
   if (ctx.state.planDone) return 'planDone'
   if (ctx.state.pendingPermission) return 'permission'
   if (ctx.state.expandedTool != null) return 'diff'
@@ -176,6 +186,35 @@ export const modeHandlers = {
     'char:r': (ctx) => ctx.doRollback(),
   },
 
+  // ask_user 结构化提问(Claude Code 式): ↑↓ 选择选项 / Enter 确认(多问依次) / Esc 取消
+  askUser: {
+    up: (ctx) => ctx.dispatch({ type: 'ASK_USER_MOVE', dir: -1 }),
+    'ctrl-p': (ctx) => ctx.dispatch({ type: 'ASK_USER_MOVE', dir: -1 }),
+    down: (ctx) => ctx.dispatch({ type: 'ASK_USER_MOVE', dir: 1 }),
+    'ctrl-n': (ctx) => ctx.dispatch({ type: 'ASK_USER_MOVE', dir: 1 }),
+    enter: (ctx) => {
+      const au = ctx.state.askUser
+      if (!au) return
+      const q = au.questions[au.qIdx]
+      const answers = [...au.answers, q && q.options[au.idx] ? q.options[au.idx].label : '']
+      if (au.qIdx + 1 >= au.questions.length) {
+        // 全部回答完 → resolve 给 agent
+        ctx.dispatch({ type: 'ASK_USER_DONE' })
+        const resolve = ctx.askUserResolveRef.current
+        ctx.askUserResolveRef.current = null
+        if (resolve) resolve(answers)
+      } else {
+        ctx.dispatch({ type: 'ASK_USER_NEXT' })
+      }
+    },
+    esc: (ctx) => {
+      ctx.dispatch({ type: 'ASK_USER_DONE' })
+      const resolve = ctx.askUserResolveRef.current
+      ctx.askUserResolveRef.current = null
+      if (resolve) resolve(null)
+    },
+  },
+
   // plan 模式完成后的三选项(Claude ExitPlanMode / Gemini 双选项 / Codex 三选项)
   planDone: {
     up: (ctx) => ctx.setPlanChoice((i) => wrap(i, 3, -1)),
@@ -224,7 +263,11 @@ export const modeHandlers = {
       ctx.dispatch({ type: 'STATUS', text: 'follow-up queued' })
     },
     backspace: (ctx) => ctx.dispatch({ type: 'INPUT_BACKSPACE' }),
-    char: (ctx, input) => ctx.dispatch({ type: 'INPUT', value: ctx.state.input + input }),
+    char: (ctx, input) => {
+      // 光标先置行尾 → 逐字符追加(与既有 steering 行为一致; todo 4 光标感知后)
+      ctx.dispatch({ type: 'INPUT_LINE_END' })
+      ctx.dispatch({ type: 'INPUT', value: input })
+    },
   },
 
   base: {
@@ -237,6 +280,8 @@ export const modeHandlers = {
     'ctrl-c': (ctx) => {
       if (ctx.state.running) {
         ctx.dispatch({ type: 'STATUS', text: 'interrupted — type follow-up + Enter, or Ctrl+C to cancel' })
+        // 光标置行尾: steering 输入按"逐字符追加"既有语义工作(todo 4 光标感知后)
+        ctx.dispatch({ type: 'INPUT_LINE_END' })
         ctx.dispatch({ type: 'STEER_MODE', on: true })
       } else {
         ctx.dispatch({ type: 'QUIT_INTENT' })
@@ -265,7 +310,7 @@ export const modeHandlers = {
       if (hist.length === 0) return
       const next = ctx.historyIdxRef.current < 0 ? hist.length - 1 : Math.max(0, ctx.historyIdxRef.current - 1)
       ctx.historyIdxRef.current = next
-      ctx.dispatch({ type: 'INPUT', value: hist[next] })
+      ctx.dispatch({ type: 'INPUT', value: hist[next], replace: true })
     },
     down: (ctx) => {
       const s = ctx.state
@@ -277,7 +322,7 @@ export const modeHandlers = {
       const next = ctx.historyIdxRef.current + 1
       if (next >= hist.length) { ctx.historyIdxRef.current = -1; ctx.dispatch({ type: 'INPUT', value: '' }); return }
       ctx.historyIdxRef.current = next
-      ctx.dispatch({ type: 'INPUT', value: hist[next] })
+      ctx.dispatch({ type: 'INPUT', value: hist[next], replace: true })
     },
     'alt-up': (ctx) => { if (!ctx.state.input) ctx.dispatch({ type: 'MOVE_SELECT', dir: -1 }) },
     'alt-down': (ctx) => { if (!ctx.state.input) ctx.dispatch({ type: 'MOVE_SELECT', dir: 1 }) },
@@ -315,7 +360,7 @@ export const modeHandlers = {
         return
       }
       const sm = slashMatches(s)
-      if (sm.length > 0) { ctx.dispatch({ type: 'INPUT', value: sm[0] }); ctx.setSlashIdx(0) }
+      if (sm.length > 0) { ctx.dispatch({ type: 'INPUT', value: sm[0], replace: true }); ctx.setSlashIdx(0) }
     },
     enter: (ctx) => {
       const s = ctx.state
@@ -324,7 +369,7 @@ export const modeHandlers = {
       const sm = slashMatches(s)
       if (sm.length > 0 && ctx.slashIdx >= 0 && ctx.slashIdx < sm.length) {
         const full = sm[ctx.slashIdx]
-        if (s.input !== full) { ctx.dispatch({ type: 'INPUT', value: full }); ctx.setSlashIdx(0); return }
+        if (s.input !== full) { ctx.dispatch({ type: 'INPUT', value: full, replace: true }); ctx.setSlashIdx(0); return }
       }
       ctx.historyRef.current = [...ctx.historyRef.current.filter((x) => x !== text), text].slice(-100)
       ctx.historyIdxRef.current = -1
@@ -340,9 +385,22 @@ export const modeHandlers = {
       const s = ctx.state
       if (!s.running && !s.input && s.toolCalls.length > 0) ctx.expandDiff(s.toolCalls.length - 1)
     },
+    // ── 输入编辑(todo 4): 光标移动/删词/清行/行首尾; 仅输入非空时捕获(不吞键) ──
+    left: (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_LEFT' }) },
+    right: (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_RIGHT' }) },
+    home: (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_HOME' }) },
+    end: (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_END' }) },
+    'ctrl-w': (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_WORD_BACKWARD' }) },
+    'ctrl-u': (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_CLEAR_LINE' }) },
+    'ctrl-k': (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_TO_LINE_END' }) },
+    'ctrl-a': (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_LINE_HOME' }) },
+    'ctrl-e': (ctx) => { if (ctx.state.input) ctx.dispatch({ type: 'INPUT_LINE_END' }) },
+    // Shift+Enter: 多行输入换行(todo 5), 不提交
+    'shift-enter': (ctx) => { ctx.dispatch({ type: 'INPUT', value: '\n' }) },
     char: (ctx, input) => {
       if (input === backspaceChar) { ctx.dispatch({ type: 'INPUT_BACKSPACE' }); return }
-      ctx.dispatch({ type: 'INPUT', value: ctx.state.input + input })
+      // 在光标处插入(含粘贴的多字符/换行; reducer 处理光标推进)
+      ctx.dispatch({ type: 'INPUT', value: input })
     },
     backspace: (ctx) => ctx.dispatch({ type: 'INPUT_BACKSPACE' }),
   },
