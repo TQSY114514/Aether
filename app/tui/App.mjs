@@ -91,6 +91,13 @@ function SelectRow({ label, idx, i, marker = '❯' }) {
   }, `  ${i === idx ? `${marker} ` : '  '}${label}`)
 }
 
+// 会话标题显示截断（纯展示层, 不改 DB）: DB 存完整首条消息(上限 200 字),
+// 列表/时间线只显示前 60 字——终端面板宽度有限, 防长标题撑爆布局。
+function displayTitle(title) {
+  const s = String(title || '(untitled)')
+  return s.length > 60 ? `${s.slice(0, 60)}…` : s
+}
+
 // 消息区窗口化常量: 最多渲染最近 MSG_WINDOW 条(其余靠 PgUp/PgDn 翻页)
 const MSG_WINDOW = 40
 
@@ -1412,7 +1419,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       ? h(Box, { marginTop: 1, flexDirection: 'column' },
         h(Text, { bold: true, color: C.primary }, `sessions (${state.sessions.length}):`),
         state.sessions.slice(0, 10).map((s) => h(Text, { key: s.id, color: C.dim },
-          `  [${s.id}] ${s.title || '(untitled)'}${s.parentId ? ` ← #${s.parentId}` : ''}`)),
+          `  [${s.id}] ${displayTitle(s.title)}${s.parentId ? ` ← #${s.parentId}` : ''}`)),
         h(Text, { color: C.tool }, '  /use <id> 切换 · /fork 派生新会话'))
       : null,
       state.steeringQueue.length
@@ -1495,7 +1502,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
           h(Text, { bold: true, color: C.primary }, 'Session timeline — ↑↓ · Enter 切换 · Esc 关闭'),
           timeline.sessions.map((s, i) => h(SelectRow, {
             key: s.id,
-            label: `#${s.id} ${s.title}${s.parentId ? ` ← #${s.parentId}` : ''}${s.createdAt ? ` · ${String(s.createdAt).slice(0, 16)}` : ''}`,
+            label: `#${s.id} ${displayTitle(s.title)}${s.parentId ? ` ← #${s.parentId}` : ''}${s.createdAt ? ` · ${String(s.createdAt).slice(0, 16)}` : ''}`,
             idx: timeline.idx, i,
           })))
         : null,

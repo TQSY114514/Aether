@@ -127,9 +127,9 @@ describe('runSession 会话落库（W0-t3）', () => {
   })
 })
 
-// ── W2-t17: 自动标题（首条 prompt 前 40 字; 超长截断加 …; 空 prompt 回退 'tui'）──
-describe('runSession 自动标题（W2-t17）', () => {
-  it('首条 prompt ≤40 字 → 标题 = prompt 原样', async () => {
+// ── 自动标题（首条 prompt 完整保留, 上限 200 字; 空 prompt 回退 'tui'）──
+describe('runSession 自动标题', () => {
+  it('首条 prompt ≤200 字 → 标题 = prompt 原样(不再 40 字截断)', async () => {
     const result = await runSession({
       dbPath: null,
       prompt: '修复这个 bug 并写测试',
@@ -141,8 +141,22 @@ describe('runSession 自动标题（W2-t17）', () => {
     expect(row.title).toBe('修复这个 bug 并写测试')
   })
 
-  it('首条 prompt >40 字 → 标题 = 前 40 字 + …', async () => {
-    const longPrompt = 'a'.repeat(50)
+  it('首条 prompt 100 字 → 完整保留(寒暄开头不丢主题)', async () => {
+    const prompt = '你好，谢谢你的帮助！' + '请问生产部署失败的问题如何排查。'.repeat(5)
+    expect(prompt.length).toBeGreaterThan(40)
+    const result = await runSession({
+      dbPath: null,
+      prompt,
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
+    })
+    const row = db.prepare('SELECT title FROM session WHERE id = ?').get(result.dbSessionId)
+    expect(row.title).toBe(prompt)
+  })
+
+  it('首条 prompt >200 字(粘贴代码/日志) → 标题 = 前 200 字 + …', async () => {
+    const longPrompt = 'a'.repeat(250)
     const result = await runSession({
       dbPath: null,
       prompt: longPrompt,
@@ -151,8 +165,8 @@ describe('runSession 自动标题（W2-t17）', () => {
       runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
     })
     const row = db.prepare('SELECT title FROM session WHERE id = ?').get(result.dbSessionId)
-    expect(row.title).toBe(`${'a'.repeat(40)}…`)
-    expect(row.title).toHaveLength(41)
+    expect(row.title).toBe(`${'a'.repeat(200)}…`)
+    expect(row.title).toHaveLength(201)
   })
 
   it('空 prompt（仅空白）→ 标题回退占位 tui', async () => {

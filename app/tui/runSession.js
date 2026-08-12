@@ -249,9 +249,10 @@ export async function runSession({
     const adapter = taskDbAdapter(db)
     try {
       if (dbSessionId == null) {
-        // W2-t17 自动标题: 首条 prompt 前 40 字（超长截断加 …）; 空 prompt 回退 'tui' 占位
-        const p = String(prompt || '').trim()
-        const title = p ? (p.length > 40 ? `${p.slice(0, 40)}…` : p) : 'tui'
+        // 自动标题: 首条 prompt 完整内容(空白折叠), 上限 200 字防粘贴膨胀;
+        // 渲染端负责显示截断, DB 保留完整首行供搜索/重命名。空 prompt 回退 'tui'。
+        const p = String(prompt || '').replace(/\s+/g, ' ').trim()
+        const title = p ? (p.length > 200 ? `${p.slice(0, 200)}…` : p) : 'tui'
         sessionRowId = Number(adapter.createSession({ title, parentSessionId: null }).lastInsertRowid)
       } else {
         sessionRowId = Number(dbSessionId)
