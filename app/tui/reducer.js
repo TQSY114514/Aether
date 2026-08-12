@@ -488,8 +488,9 @@ export function tuiReducer(state = initialTuiState, action) {
     }
 
     case 'THINKING_END':
-      // 思考结束 → 块折叠但保留全文（供 Enter 展开回顾）; 不随 AGENT_END 清除
-      return { ...state, thinking: { ...state.thinking, open: false } }
+      // 思考结束 → 保持展开（用户要求默认展开查看全文）; Enter 可手动折叠;
+      // 不随 AGENT_END 清除（供回顾）
+      return { ...state, thinking: { ...state.thinking, open: true } }
 
     case 'THINKING_TOGGLE':
       // 展示态切换（折叠 ⇄ 展开）; 无思考内容时 no-op（Enter 回落既有行为）

@@ -537,11 +537,11 @@ describe('W3-t21 thinking block', () => {
     expect(s.thinking.text).toHaveLength(4000)
   })
 
-  it('THINKING_END: 折叠但保留全文（块持久到下一次 START/RESET）', () => {
+  it('THINKING_END: 保持展开（默认展开查看全文; Enter 可手动折叠）', () => {
     let s = tuiReducer(initialTuiState, { type: 'THINKING_START' })
     s = tuiReducer(s, { type: 'THINKING_DELTA', delta: 'reasoning...' })
     s = tuiReducer(s, { type: 'THINKING_END' })
-    expect(s.thinking).toEqual({ open: false, text: 'reasoning...' })
+    expect(s.thinking).toEqual({ open: true, text: 'reasoning...' })
   })
 
   it('AGENT_END 不触碰思考块（运行结束块仍在, 供 Enter 展开回顾）', () => {
@@ -551,15 +551,15 @@ describe('W3-t21 thinking block', () => {
     expect(s.thinking).toEqual({ open: true, text: 'deep' })
   })
 
-  it('THINKING_TOGGLE: 折叠 ⇄ 展开', () => {
+  it('THINKING_TOGGLE: 展开 ⇄ 折叠', () => {
     let s = tuiReducer(initialTuiState, { type: 'THINKING_START' })
     s = tuiReducer(s, { type: 'THINKING_DELTA', delta: 'x' })
     s = tuiReducer(s, { type: 'THINKING_END' })
-    expect(s.thinking.open).toBe(false)
-    s = tuiReducer(s, { type: 'THINKING_TOGGLE' })
     expect(s.thinking.open).toBe(true)
     s = tuiReducer(s, { type: 'THINKING_TOGGLE' })
     expect(s.thinking.open).toBe(false)
+    s = tuiReducer(s, { type: 'THINKING_TOGGLE' })
+    expect(s.thinking.open).toBe(true)
   })
 
   it('THINKING_TOGGLE 无思考文本时 no-op（Enter 回落既有行为）', () => {
@@ -579,7 +579,7 @@ describe('W3-t21 thinking block', () => {
     s = tuiReducer(s, { type: 'THINKING_DELTA', delta: 'keep me' })
     s = tuiReducer(s, { type: 'THINKING_END' })
     s = tuiReducer(s, { type: 'TRUNCATE', messages: [], toolCalls: [] })
-    expect(s.thinking).toEqual({ open: false, text: 'keep me' })
+    expect(s.thinking).toEqual({ open: true, text: 'keep me' })
   })
 
   it('summarizeState 输出 thinkingLen 计数（smoke JSON 紧凑）', () => {
