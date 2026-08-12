@@ -19,6 +19,8 @@ import CommandPalette from '@/components/CommandPalette'
 import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import CompletionToasts from '@/components/chat/CompletionToasts'
+import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
+import { useFeatureFlag } from '@/utils/featureFlags'
 import { PanelLeft } from 'lucide-react'
 import { t } from '@/utils/i18n'
 export default function App() {
@@ -41,10 +43,24 @@ export default function App() {
   const shortcutsOpenRef = useRef(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const backgroundOpacity = useStore((s) => s.backgroundOpacity)
   const backgroundBlur = useStore((s) => s.backgroundBlur)
   const hasBg = backgroundImage !== null
+  const providers = useStore((s) => s.providers)
+  // Onboarding wizard: first-run only (no providers + not completed). The flag
+  // default is on; fallback=true so it shows before the flags snapshot loads.
+  const showWizard = useFeatureFlag('ux.firstRunWizard', true)
+
+  // Read whether onboarding was completed/dismissed (persisted in settings).
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI.settings.get('onboarding_done').then((v) => {
+      if (!cancelled) setOnboardingDone(v === '1')
+    }).catch(() => { if (!cancelled) setOnboardingDone(false) })
+    return () => { cancelled = true }
+  }, [])
 
   // Keep shortcutsOpenRef in sync with state so the keyboard handler (empty dep
   // array) can read the current value without re-binding on every toggle.
@@ -258,6 +274,9 @@ export default function App() {
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        {showWizard && onboardingDone === false && providers.length === 0 && (
+          <FirstRunWizard onDone={() => setOnboardingDone(true)} />
+        )}
       </div>
     </ErrorBoundary>
   )

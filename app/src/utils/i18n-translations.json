@@ -536,7 +536,26 @@
       "task.mode_ask_desc": "危险操作弹确认框",
       "task.mode_plan": "plan",
       "task.mode_plan_desc": "只读调查 → 计划 → 等批准",
-      "task.mode_plan_hint": "先只读调查并给出计划，批准后才执行"
+      "task.mode_plan_hint": "先只读调查并给出计划，批准后才执行",
+      "error.boundary.title": "出错了",
+      "error.boundary.message": "应用遇到了意外错误。请复制下面的详情并粘贴到 bug 报告中。",
+      "error.boundary.copy": "复制错误详情",
+      "error.boundary.copied": "已复制",
+      "error.boundary.details": "详细信息",
+      "error.boundary.stack": "堆栈信息",
+      "onboarding.title": "欢迎使用 AetherAI",
+      "onboarding.subtitle": "一分钟内添加你的第一个供应商——也可以先跳过，四处看看。",
+      "onboarding.skip": "暂时跳过",
+      "onboarding.next": "下一步",
+      "onboarding.complete": "开始使用 AetherAI",
+      "onboarding.template": "选择供应商模板",
+      "onboarding.name": "供应商名称",
+      "onboarding.url": "API 地址",
+      "onboarding.key": "API 密钥",
+      "onboarding.fetch": "获取模型",
+      "onboarding.permission": "Agent 权限",
+      "onboarding.ask_recommended": "Ask —— 每个风险操作执行前都会先确认。安全起见推荐此模式。",
+      "onboarding.error": "保存时出错，请检查 API 地址和密钥。"
     }
   },
   {

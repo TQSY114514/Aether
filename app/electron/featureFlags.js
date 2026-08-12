@@ -49,6 +49,8 @@ const FLAG_DEFS = [
   { key: 'skills.selfEvolution', default: false, category: 'learning',    description: 'Agent-created skill drafts (skill evolution)' },
   // Phase 6 — ecosystem
   { key: 'plugin.sdk',           default: false, category: 'ecosystem',   description: 'Third-party plugin SDK (registerTool/Skill/Agent/Provider)' },
+  // Phase 6 — UX / onboarding
+  { key: 'ux.firstRunWizard',   default: true,  category: 'ux',          description: 'First-run onboarding wizard (provider setup + permission recommendation)' },
 ]
 
 const DEFS = Object.freeze(FLAG_DEFS.map(d => Object.freeze({ ...d })))
