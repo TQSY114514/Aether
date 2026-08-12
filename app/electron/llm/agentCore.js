@@ -169,6 +169,7 @@ async function runAgent({
   onPlanStep,
   onText,
   onUsage,
+  onAskUser,
 }) {
   // Initialize the sandbox workspace so read/write tools resolve against the
   // working directory instead of falling back to Electron's userData.
@@ -213,6 +214,7 @@ async function runAgent({
     onStatus,
     onPlanStep,
     onUsage,
+    onAskUser,
     // Relay streamed tool output (stdout of run_command, etc.) so headless
     // consumers (CLI --json-lines, the VS Code extension) can show live text.
     onStream: (chunk) => {

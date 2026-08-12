@@ -529,7 +529,10 @@ const TOOLS = [
         options: Array.isArray(q.options) ? q.options.slice(0, 4).map(o => ({ label: String(o.label || ''), description: o.description ? String(o.description) : undefined })) : [],
       })).filter(q => q.options.length >= 2) : []
       if (questions.length === 0) throw new Error('ask_user needs 1-4 questions, each with ≥2 options')
-      if (typeof ctx?.onAskUser !== 'function') throw new Error('ask_user not available in this context')
+      if (typeof ctx?.onAskUser !== 'function') {
+        // headless/无对话框上下文: 不抛错卡死 agent——引导直接以文本提问
+        return '[ask_user 无交互对话框 — 请直接在回复正文中向用户提问, 并等待用户回答后再继续]'
+      }
       return ctx.onAskUser(questions)
     },
   },

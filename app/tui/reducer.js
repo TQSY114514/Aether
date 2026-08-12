@@ -10,6 +10,7 @@ export const MODES = ['ask', 'plan', 'auto']
 
 export const initialTuiState = Object.freeze({
   input: '',
+  inputCursor: 0,          // todo 4: 光标位置，恒在 0..input.length（越界钳制）
   messages: [], // { id, role: 'user'|'assistant'|'system'|'tool', text }
   mode: 'ask',
   effort: 'medium',          // /effort：low|medium|high（reasoning_effort）
@@ -23,6 +24,7 @@ export const initialTuiState = Object.freeze({
   steeringQueue: [],       // todo 6: 待注入 follow-up 队列
   steeringMode: false,     // todo 6: Ctrl+C 打断后的 follow-up 输入态
   pendingPermission: null, // { reqId, name, args, risk, snapshot } — awaitingPermission 态
+  askUser: null,        // ask_user 工具: { questions: [{question, header, options}], idx } — 等待用户选择
   expandedTool: null,      // 展开的 diff 视图工具卡下标
   sessions: [],            // todo 5: [{ id, title, parentId, createdAt }]
   currentSessionId: null,  // todo 5: 活动会话 id（fork 父指针用）
@@ -45,13 +47,86 @@ function nextMessageId(state) {
   return state.messages.reduce((m, x) => Math.max(m, x.id || 0), 0) + 1
 }
 
+// 光标钳制：任何输入/光标变更后 cursor 恒在 [0, input.length]（todo 4 越界防护）
+function clampCursor(state, input = state.input) {
+  const c = Number.isInteger(state.inputCursor) ? state.inputCursor : 0
+  return Math.max(0, Math.min(input.length, c))
+}
+
 export function tuiReducer(state = initialTuiState, action) {
   switch (action.type) {
-    case 'INPUT':
-      return { ...state, input: String(action.value ?? '') }
+    // INPUT: 在光标处插入（todo 4）。兼容既有语义：
+    //  - value === '' → 清空输入（enter/esc/tab/steering 清空路径）
+    //  - replace === true → 整体替换（历史回填/斜杠补全），光标置尾
+    case 'INPUT': {
+      const value = String(action.value ?? '')
+      if (action.replace === true) return { ...state, input: value, inputCursor: value.length }
+      if (value === '') return { ...state, input: '', inputCursor: 0 }
+      const cursor = clampCursor(state)
+      return {
+        ...state,
+        input: state.input.slice(0, cursor) + value + state.input.slice(cursor),
+        inputCursor: cursor + value.length,
+      }
+    }
 
-    case 'INPUT_BACKSPACE':
-      return { ...state, input: state.input.slice(0, -1) }
+    // 删除光标前一个字符（原语义为删末尾；现在光标感知，光标在末尾时行为不变）
+    case 'INPUT_BACKSPACE': {
+      const cursor = clampCursor(state)
+      if (cursor === 0) return state
+      return {
+        ...state,
+        input: state.input.slice(0, cursor - 1) + state.input.slice(cursor),
+        inputCursor: cursor - 1,
+      }
+    }
+
+    // ── 光标移动（todo 4）───────────────────────────────────────────────
+    case 'INPUT_LEFT': {
+      const cursor = clampCursor(state)
+      return cursor === 0 ? state : { ...state, inputCursor: cursor - 1 }
+    }
+
+    case 'INPUT_RIGHT': {
+      const cursor = clampCursor(state)
+      return cursor >= state.input.length ? state : { ...state, inputCursor: cursor + 1 }
+    }
+
+    case 'INPUT_HOME':
+    case 'INPUT_LINE_HOME': // Ctrl+A
+      return { ...state, inputCursor: 0 }
+
+    case 'INPUT_END':
+    case 'INPUT_LINE_END': // Ctrl+E
+      return { ...state, inputCursor: state.input.length }
+
+    // Ctrl+W: 删除光标前一个词（先跳空格再跳词，行编辑标准语义）
+    case 'INPUT_WORD_BACKWARD': {
+      const cursor = clampCursor(state)
+      let start = cursor
+      while (start > 0 && state.input[start - 1] === ' ') start--
+      while (start > 0 && state.input[start - 1] !== ' ') start--
+      if (start === cursor) return state
+      return {
+        ...state,
+        input: state.input.slice(0, start) + state.input.slice(cursor),
+        inputCursor: start,
+      }
+    }
+
+    // Ctrl+U: 删除从行首到光标
+    case 'INPUT_CLEAR_LINE': {
+      const cursor = clampCursor(state)
+      if (cursor === 0) return state
+      return { ...state, input: state.input.slice(cursor), inputCursor: 0 }
+    }
+
+    // Ctrl+K: 删除从光标到行尾
+    case 'INPUT_TO_LINE_END': {
+      const cursor = clampCursor(state)
+      if (cursor >= state.input.length) return state
+      return { ...state, input: state.input.slice(0, cursor) }
+    }
 
     case 'SUBMIT': {
       const text = state.input.trim()
@@ -59,6 +134,7 @@ export function tuiReducer(state = initialTuiState, action) {
       return {
         ...state,
         input: '',
+        inputCursor: 0,
         running: true,
         statusLine: 'running',
         messages: [
@@ -259,6 +335,33 @@ export function tuiReducer(state = initialTuiState, action) {
     case 'PERMISSION_DECIDE':
       return { ...state, pendingPermission: null }
 
+    // ask_user 工具(Claude Code 式结构化提问): 面板打开/移动/下一问/关闭
+    case 'ASK_USER_SET': {
+      const qs = Array.isArray(action.questions) ? action.questions : []
+      if (!qs.length) return state
+      return { ...state, askUser: { questions: qs, qIdx: 0, idx: 0, answers: [] } }
+    }
+    case 'ASK_USER_MOVE': {
+      if (!state.askUser) return state
+      const q = state.askUser.questions[state.askUser.qIdx]
+      const len = q && Array.isArray(q.options) ? q.options.length : 0
+      if (!len) return state
+      const idx = (state.askUser.idx + (action.dir > 0 ? 1 : -1) + len) % len
+      return { ...state, askUser: { ...state.askUser, idx } }
+    }
+    case 'ASK_USER_NEXT': {
+      // Enter: 记录当前答案, 进入下一问题(最后一问由 App 层 resolve 后 ASK_USER_DONE)
+      const au = state.askUser
+      if (!au) return state
+      const q = au.questions[au.qIdx]
+      const label = q && q.options[au.idx] ? q.options[au.idx].label : ''
+      const answers = [...au.answers, label]
+      if (au.qIdx + 1 >= au.questions.length) return { ...state, askUser: { ...au, answers } }
+      return { ...state, askUser: { ...au, qIdx: au.qIdx + 1, idx: 0, answers } }
+    }
+    case 'ASK_USER_DONE':
+      return { ...state, askUser: null }
+
     // ── diff 视图与回滚（todo 4）───────────────────────────────────────
     case 'TOOL_EXPAND': {
       const idx = Number(action.index)
@@ -337,6 +440,8 @@ export function summarizeState(state) {
     mode: state.mode,
     running: state.running,
     statusLine: state.statusLine,
+    input: state.input,
+    inputCursor: state.inputCursor ?? 0,
     messageCount: state.messages.length,
     lastMessageText: state.messages[state.messages.length - 1]?.text ?? '',
     toolCalls: state.toolCalls.map((t) => ({ name: t.name, status: t.status })),

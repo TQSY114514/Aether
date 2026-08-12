@@ -392,6 +392,141 @@ describe("'?'/x 面板与 rewind", () => {
   })
 })
 
+describe('askUser 模式(ask_user 工具结构化提问)', () => {
+  const mkAsk = (over = {}) => {
+    const state = {
+      ...initialTuiState,
+      askUser: { questions: [{ question: 'Q1', options: [{ label: 'A' }, { label: 'B' }] }], qIdx: 0, idx: 0, answers: [] },
+    }
+    return makeCtx({ state, askUserResolveRef: { current: null }, ...over })
+  }
+
+  it('Enter 回答唯一问题 → resolve 选项数组并关闭面板', () => {
+    const ctx = mkAsk()
+    let resolved = null
+    ctx.askUserResolveRef.current = (a) => { resolved = a }
+    ctx.dispatch({ type: 'ASK_USER_SET', questions: ctx.state.askUser.questions })
+    press(ctx, { return: true }, '')
+    expect(resolved).toEqual(['A'])
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'ASK_USER_DONE' })
+  })
+
+  it('多问题依次回答, 最后一个 resolve 全部答案', () => {
+    const ctx = makeCtx({
+      state: {
+        ...initialTuiState,
+        askUser: {
+          questions: [
+            { question: 'Q1', options: [{ label: 'A' }, { label: 'B' }] },
+            { question: 'Q2', options: [{ label: 'X' }, { label: 'Y' }] },
+          ],
+          qIdx: 0, idx: 1, answers: [],
+        },
+      },
+      askUserResolveRef: { current: null },
+    })
+    let resolved = null
+    ctx.askUserResolveRef.current = (a) => { resolved = a }
+    press(ctx, { return: true }, '')   // 第一问(选 B) → NEXT
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'ASK_USER_NEXT' })
+    ctx.state.askUser = { ...ctx.state.askUser, qIdx: 1, idx: 0, answers: ['B'] }
+    press(ctx, { return: true }, '')   // 第二问(选 X) → resolve
+    expect(resolved).toEqual(['B', 'X'])
+  })
+
+  it('Esc 取消 → resolve null', () => {
+    const ctx = mkAsk()
+    let resolved = 'unset'
+    ctx.askUserResolveRef.current = (a) => { resolved = a }
+    press(ctx, { escape: true }, '')
+    expect(resolved).toBeNull()
+  })
+
+  it('↑↓ 移动选项(循环)', () => {
+    const ctx = mkAsk()
+    press(ctx, { downArrow: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'ASK_USER_MOVE', dir: 1 })
+  })
+})
+
+describe('cursor editing + multiline keys (W0-B2 todo 4/5)', () => {
+  it('normalizeKey: home/end/ctrl-w/u/k/a/e/shift-enter 归一', () => {
+    expect(normalizeKey('', { home: true })).toBe('home')
+    expect(normalizeKey('', { end: true })).toBe('end')
+    expect(normalizeKey('w', { ctrl: true })).toBe('ctrl-w')
+    expect(normalizeKey('u', { ctrl: true })).toBe('ctrl-u')
+    expect(normalizeKey('k', { ctrl: true })).toBe('ctrl-k')
+    expect(normalizeKey('a', { ctrl: true })).toBe('ctrl-a')
+    expect(normalizeKey('e', { ctrl: true })).toBe('ctrl-e')
+    expect(normalizeKey('', { return: true, shift: true })).toBe('shift-enter')
+    expect(normalizeKey('', { name: 'return', shift: true })).toBe('shift-enter')
+    expect(normalizeKey('', { return: true })).toBe('enter') // 无 Shift 仍是提交
+  })
+
+  it('base: ←→/Home/End 移动光标(仅输入非空时捕获)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'abc', inputCursor: 2 } })
+    press(ctx, { leftArrow: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_LEFT' })
+    press(ctx, { rightArrow: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_RIGHT' })
+    press(ctx, { home: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_HOME' })
+    press(ctx, { end: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_END' })
+    // 空输入不捕获(不吞键)
+    const empty = makeCtx()
+    press(empty, { leftArrow: true }, '')
+    press(empty, { home: true }, '')
+    expect(empty.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('base: Ctrl+W/U/K/A/E 编辑键(空输入不捕获)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'hello world', inputCursor: 6 } })
+    press(ctx, { ctrl: true }, 'w')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_WORD_BACKWARD' })
+    press(ctx, { ctrl: true }, 'u')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_CLEAR_LINE' })
+    press(ctx, { ctrl: true }, 'k')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_TO_LINE_END' })
+    press(ctx, { ctrl: true }, 'a')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_LINE_HOME' })
+    press(ctx, { ctrl: true }, 'e')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_LINE_END' })
+    const empty = makeCtx()
+    press(empty, { ctrl: true }, 'w')
+    expect(empty.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('base: Shift+Enter 插入换行而非提交', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'line1', inputCursor: 5 } })
+    press(ctx, { return: true, shift: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: '\n' })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'SUBMIT' })
+  })
+
+  it('base: 单字符与多字符粘贴都经 INPUT 在光标处插入, 换行不剥离', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'abc', inputCursor: 1 } })
+    press(ctx, {}, 'x')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'x' })
+    press(ctx, {}, 'line1\nline2')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'line1\nline2' })
+  })
+
+  it('steering 模式仍逐字符追加(先把光标移到行尾, 兼容既有行为)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, steeringMode: true, input: 'ab', inputCursor: 0 } })
+    press(ctx, {}, 'x')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_LINE_END' })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'x' })
+  })
+
+  it('Enter 提交后历史/斜杠补全走 replace 语义(不重复拼接)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: '/m', inputCursor: 2 } })
+    press(ctx, { tab: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: '/memory', replace: true })
+  })
+})
+
 describe('集成: dispatchKey + tuiReducer', () => {
   it('输入 → Enter → running → 结束', () => {
     let state = initialTuiState
