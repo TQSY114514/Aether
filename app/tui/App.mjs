@@ -20,6 +20,7 @@ import { listModels } from './models.js'
 import { dispatchKey } from './keyHandlers.js'
 import { loadKeybindings } from './keybindings.js'
 import { loadAuthKeys, saveAuthKey } from './authStore.js'
+import { isLegacyConsole } from './terminal.js'
 
 // Tokyo Night 风格配色（克制、低饱和，参考 opencode 现代终端观感）
 // 语义 tokens（对齐 opencode theme 结构）：组件只引用 token，不写裸色值。
@@ -350,6 +351,14 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     }
     prevRunningRef.current = state.running
   }, [state.running, state.approvalMode, state.planDone])
+
+  // 终端检测: cmd/ConHost 下 ink 渲染会残留/抽搐/错位(用户实测),
+  // 启动时提示一次建议 Windows Terminal(不刷屏)。
+  useEffect(() => {
+    if (isLegacyConsole()) {
+      dispatch({ type: 'STATUS', text: '终端: cmd/ConHost — 建议使用 Windows Terminal(渲染更稳定)' })
+    }
+  }, [])
 
   // 分层 Esc 超时解除
   useEffect(() => {
