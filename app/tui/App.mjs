@@ -40,7 +40,7 @@ const ROLE_PREFIX = { user: '> ', assistant: '◆ ', system: '! ', tool: '⛭ ' 
 const ROLE_LABEL = { user: 'you', assistant: 'aether', tool: 'tool', system: 'sys' }
 const ROLE_COLOR = { user: C.user, assistant: C.assistant, tool: C.tool, system: C.sys }
 
-// 轻量 ticker：驱动动画帧（spinner / 运行指示）。active=false 时停表并返回静态字符
+  // 轻量 ticker：驱动动画帧（spinner / 运行指示）。active=false 时停表并返回静态字符
 // ——idle 状态不重渲染（否则 120ms 全帧刷新就是"抽搐"）。
 function useTicker(intervalMs = 500, chars = ['●', '○'], active = true) {
   const [i, setI] = useState(0)
@@ -357,6 +357,17 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     const t = setTimeout(() => { escArmedRef.current = false }, 1500)
     return () => clearTimeout(t)
   }, [escArmedRef.current])
+
+  // 面板开/关强制全量重绘: ink 差分渲染在 Windows ConPTY 上面板切换会残留旧帧
+  // (用户实测: 模型选择器关闭后 logo/帮助行重复出现)。切换时清屏一次, 下一帧全量输出。
+  const prevPanelRef = useRef('')
+  useEffect(() => {
+    const key = `${!!modelPicker}|${paletteOpen}|${helpOpen}|${rewindOpen}|${!!timeline}|${state.planDone}|${!!state.pendingPermission}`
+    if (prevPanelRef.current && prevPanelRef.current !== key) {
+      try { process.stdout.write('\x1b[2J\x1b[H') } catch {}
+    }
+    prevPanelRef.current = key
+  }, [modelPicker, paletteOpen, helpOpen, rewindOpen, timeline, state.planDone, state.pendingPermission])
 
   // 自定义状态栏(Claude statusLine 模式): 执行脚本, stdout 显示在状态栏
   useEffect(() => {

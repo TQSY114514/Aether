@@ -50,9 +50,9 @@ AetherAI combines several capabilities that are typically spread across multiple
 | **Hierarchical Planning** | Complex requests auto-decompose into parallel sub-tasks. | `Experimental` |
 | **Context Compaction** | Long conversations auto-summarize without losing tool-call pairs. | `Beta` |
 | **Local-First Privacy** | Conversations, keys, personas in local SQLite. Nothing leaves your machine. | `Stable` |
-| **15 UI Languages** | Including Classical Chinese (文言) and RTL Arabic. | `Beta` |
-| **Terminal TUI** | Ink v5 交互终端：会话流、工具卡、diff 审阅/回滚、键盘权限门、`/fork` 会话树、`/memory`、运行中 steering 回注。 | `Beta` |
-| **Headless CLI · RPC · SDK** | 四模式 CLI（单发 / NDJSON / JSONL RPC / 管道）、Electron-free SDK（`aetherai/sdk`）、机器可调用的 JSONL 协议。 | `Beta` |
+| **15 UI Languages** | Including Classical Chinese and RTL Arabic. | `Beta` |
+| **Terminal TUI** | Ink v5 interactive terminal: session streaming, tool cards, diff review/rollback, keyboard permission gate, `/fork` session tree, `/memory`, in-flight steering. | `Beta` |
+| **Headless CLI · RPC · SDK** | Four-mode CLI (one-shot / NDJSON / JSONL RPC / pipe), Electron-free SDK (`aetherai/sdk`), machine-callable JSONL protocol. | `Beta` |
 | **MIT Licensed** | Fully open source. | `Stable` |
 
 ---
@@ -108,11 +108,11 @@ Or run `start.bat` at the repo root on Windows.
 
 ```bash
 cd app && npm install
-node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
-node cli.js "你好"           # 单发 prompt
-echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
-node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
-node cli.js tui --smoke      # headless 状态机冒烟
+node cli.js tui              # interactive terminal UI (Node ≥ 22; best in Windows Terminal)
+node cli.js "hi"             # one-shot prompt
+echo "summarize this" | node cli.js  # piped stdin as prompt
+node cli.js --mode json "x"  # NDJSON event stream (scripts/CI)
+node cli.js tui --smoke      # headless state-machine smoke
 ```
 
 ### Configure provider
@@ -201,7 +201,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 | **Custom background** | `Stable` | Upload image with opacity / blur controls |
 | **Personas** | `Stable` | System-prompt presets, switchable per session |
 | **Themes** | `Stable` | Light / Dark / Blue / Glass / Retro |
-| **15 UI languages** | `Beta` | English, Chinese (简/繁/文言), Japanese, Spanish, French, German, Portuguese, Russian, Ukrainian, Arabic (RTL), Hindi, Korean |
+| **15 UI languages** | `Beta` | English, Chinese (Simplified / Traditional / Classical), Japanese, Spanish, French, German, Portuguese, Russian, Ukrainian, Arabic (RTL), Hindi, Korean |
 | **Auto-update** | `Beta` | NSIS installer checks on launch; portable checks too (manual install) |
 | **Usage tracking** | `Beta` | Per-API-call log with tokens, cost, latency, cache hit rate |
 
@@ -246,23 +246,23 @@ printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
   | node app/cli.js --mode rpc --db path\to\aetherai.db
 ```
 
-Additional headless flags: `--persona <id>`（persona + 记忆注入）、`--memory-trace`（报告注入记忆条目数）、`--skills`（技能提案 JSON）、`--setup-term`（写入 Windows Terminal profile）、`--stdin`（显式管道输入）。
+Additional headless flags: `--persona <id>` (persona + memory injection), `--memory-trace` (report injected memory entries), `--skills` (skill proposals JSON), `--setup-term` (write Windows Terminal profile), `--stdin` (explicit piped input).
 
 ### TUI (`aether tui`)
 
 Interactive terminal agent (Ink v5; Node ≥ 22; best experienced in Windows Terminal):
 
-- **会话**：消息流式渲染、`/fork` 会话树（`session.parent_session_id`）、`/sessions`、`/use <id>` 历史切换
-- **工具与权限**：工具调用卡（状态色/耗时/摘要）、diff 审阅（`Alt+v` 展开，`Enter` 接受 / `r` 回滚——写前快照还原，非 git 目录也有效）、键盘权限门（`y` 允许一次 / `a` 总是允许 / `n` 拒绝，或 `←→` 选择）、只读工具自动放行
-- **审批模式**：`Shift+Tab` 循环 `manual → auto-edits → plan`（plan = 只读规划，完成后三选项决定如何实施）
-- **模式**：`Alt+m` 切换 ask/plan/auto；`/persona <id>` 切换人设（注入 persona + 记忆前缀）
-- **leader 快捷键**：`Ctrl+X` 然后 `m` 模型选择器 / `n` 新会话 / `l` 会话列表 / `g` 时间线 / `r` rewind 检查点 / `q` 退出
-- **命令面板**：`Ctrl+P` 或 `x`（New chat / Model / Timeline / Export JSONL / Help / Quit）
-- **键位可重绑**：`~/.config/aether/keybindings.json`（如 `{ "char:?": null }` 禁用 `?` 帮助键）
-- **API key 持久化**：`/apikey <provider> <key>` 保存到 `auth.json`（桌面版 safeStorage 加密的 key 在 headless 无法解密，用此命令或环境变量 `AETHER_API_KEY`）
-- **记忆与技能闭环**：`/memory <关键词>` 检索、`--memory-trace` 注入条目数、`/skills` + `/skill accept|dismiss <key>`（habitLearner → 技能提案）
-- **steering**：运行中 `Ctrl+C` 打断 → 输入下一条 → 注入当前循环（队列显示 `steer:n`）；运行中 `Tab` 直接排队下一条
-- **快捷键**：双击 `Esc` 退出（或 `/quit`）、`Esc` 清空输入（草稿入历史）、`?` 帮助屏、`PgUp/PgDn`/鼠标滚轮翻页、状态栏实时显示 `approval/mode/model/tok/ctx`；完整键位见 [docs/tui-keys.md](./docs/tui-keys.md)
+- **Sessions**: streaming message rendering, `/fork` session tree (`session.parent_session_id`), `/sessions`, `/use <id>` history switching
+- **Tools & permissions**: tool-call cards (status color / latency / summary), diff review (`Alt+v` expand, `Enter` accept / `r` rollback — pre-write snapshot restore, works outside git repos), keyboard permission gate (`y` allow once / `a` allow always / `n` deny, or `←→` to select), read-only tools auto-approved
+- **Approval modes**: `Shift+Tab` cycles `manual → auto-edits → plan` (plan = read-only planning; three options decide how to proceed when done)
+- **Modes**: `Alt+m` cycles ask/plan/auto; `/persona <id>` switches persona (persona + memory prefix injection)
+- **Leader keys**: `Ctrl+X` then `m` model picker / `n` new session / `l` session list / `g` timeline / `r` rewind checkpoint / `q` quit
+- **Command palette**: `Ctrl+P` or `x` (New chat / Model / Timeline / Export JSONL / Help / Quit)
+- **Rebindable keys**: `~/.config/aether/keybindings.json` (e.g. `{ "char:?": null }` disables the `?` help key)
+- **API key persistence**: `/apikey <provider> <key>` saves to `auth.json` (desktop safeStorage-encrypted keys cannot be decrypted headless — use this command or the `AETHER_API_KEY` env var)
+- **Memory & skill loop**: `/memory <keyword>` search, `--memory-trace` injected entry count, `/skills` + `/skill accept|dismiss <key>` (habitLearner → skill proposals)
+- **Steering**: `Ctrl+C` while running → type next instruction → injected into the current loop (queue shown as `steer:n`); `Tab` while running queues the next message directly
+- **Shortcuts**: double-`Esc` quits (or `/quit`), `Esc` clears input (draft kept in history), `?` help screen, `PgUp/PgDn`/mouse wheel paging, status bar shows `approval/mode/model/tok/ctx` live; full keymap in [docs/tui-keys.md](./docs/tui-keys.md)
 
 ### RPC (`aether --mode rpc`)
 
@@ -283,14 +283,14 @@ console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', 
 
 ## Windows Native
 
-| 能力 | 说明 |
+| Feature | Description |
 |---|---|
-| **托盘菜单** | 显示/隐藏窗口、新建会话、**新建任务**（直接打开 TaskPanel）；托盘点击切换显隐。 |
-| **全局快捷键** | `Ctrl+Alt+A` 唤出主窗口（未启动则创建）；注册结果写入启动日志。 |
-| **`aetherai://` 协议** | `aetherai://new` / `chat` 新建会话；`aetherai://tui` 提示终端形态；`aetherai://open/?path=<编码路径>` 把文件夹设为工作区并新建会话（右键"用 Aether 打开"链路）。 |
-| **右键注册** | `app/resources/register-protocol.reg`（替换 `<AETHER_EXE>` 后管理员导入）：`.cs/.js/.ts/.tsx/.md/.json` + 文件夹 → 右键"用 Aether 打开"。 |
-| **终端引导** | `app/resources/term/aether.ps1`（别名 + 启动 `aether tui`）；`node app/cli.js --setup-term` 写入 Windows Terminal profile（深/浅两套配色）。 |
-| **沙箱强化** | Windows 路径防御：`\\?\` 长路径、UNC `\\server\share`、重解析点/junction 逃逸、`.lnk/.scr/.msi` 等危险扩展名。 |
+| **Tray menu** | Show/hide window, new session, **new task** (opens TaskPanel directly); tray click toggles visibility. |
+| **Global hotkey** | `Ctrl+Alt+A` summons the main window (creates it if not running); registration result logged at startup. |
+| **`aetherai://` protocol** | `aetherai://new` / `chat` opens a new session; `aetherai://tui` hints the terminal form; `aetherai://open/?path=<encoded>` sets a folder as workspace and opens a new session (right-click "Open with Aether" flow). |
+| **Context-menu registration** | `app/resources/register-protocol.reg` (replace `<AETHER_EXE>`, import as admin): `.cs/.js/.ts/.tsx/.md/.json` + folders → right-click "Open with Aether". |
+| **Terminal onboarding** | `app/resources/term/aether.ps1` (alias + launches `aether tui`); `node app/cli.js --setup-term` writes a Windows Terminal profile (dark/light palettes). |
+| **Sandbox hardening** | Windows path defenses: `\\?\` long paths, UNC `\\server\share`, reparse point/junction escapes, dangerous extensions (`.lnk/.scr/.msi`). |
 
 ---
 
