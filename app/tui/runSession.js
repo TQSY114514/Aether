@@ -266,10 +266,15 @@ export async function runSession({
     try { await runSessionHooks('SessionEnd', { sessionId, timestamp: new Date().toISOString() }) } catch {}
     try { await disconnectMcpServers() } catch {}
   }
-  // 兜底：若回复文本未经 onPlanStep 送达（纯工具循环等路径），把 result.text 追加到
-  // assistant 消息（TEXT_DELTA 需 running，故放在 AGENT_END 之前）。
-  if (!hasAppendedText && result && result.text) {
-    dispatch({ type: 'TEXT_DELTA', delta: result.text })
+  // 兜底: 若回复文本未经 onPlanStep/onText 送达(纯工具循环等路径), 把 result.text 追加到
+  // assistant 消息(TEXT_DELTA 需 running, 故放在 AGENT_END 之前)。
+  // 若连 result.text 都为空且全程无输出 → 明确提示(推理模型仅思考/空回复不再静默)。
+  if (!hasAppendedText) {
+    if (result && result.text) {
+      dispatch({ type: 'TEXT_DELTA', delta: result.text })
+    } else {
+      dispatch({ type: 'APPEND_SYSTEM', text: 'agent 未返回文本回复——模型可能仅输出思考过程, 请重试或换非推理模型' })
+    }
   }
   dispatch({ type: 'AGENT_END' })
   if (onEnd) onEnd(result)
