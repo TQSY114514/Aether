@@ -99,6 +99,30 @@ describe('cli four-mode routing', () => {
   beforeAll(() => seedDb())
   afterAll(() => { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }) })
 
+  it('--version prints aether <semver> and exits 0 (W5-t27)', { timeout: 30000 }, async () => {
+    const r = await runCli(['--version'])
+    expect(r.status).toBe(0)
+    expect(r.stdout.trim()).toMatch(/^aether \d+\.\d+\.\d+$/)
+  })
+
+  it('completion bash prints a script with flags + tui + completion + --mode values (W5-t29)', { timeout: 30000 }, async () => {
+    const r = await runCli(['completion', 'bash'])
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('complete -F _aether aether')
+    expect(r.stdout).toContain('--model')
+    expect(r.stdout).toContain('--resume')
+    expect(r.stdout).toContain('--fork')
+    // tui 与 completion 是独立 token（回归：曾因数组插值打成 "tui,completion"）
+    expect(r.stdout).toMatch(/\stui completion\b/)
+    expect(r.stdout).toMatch(/auto plan ask yolo json rpc/)
+  })
+
+  it('completion bogus exits 1 with a clear error (W5-t29)', { timeout: 30000 }, async () => {
+    const r = await runCli(['completion', 'bogus'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('unknown shell: bogus')
+  })
+
   it('--help lists the four modes (tui / json / rpc / -p / stdin)', { timeout: 30000 }, async () => {
     const r = await runCli(['--help'])
     expect(r.status).toBe(0)
