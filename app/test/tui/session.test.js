@@ -48,6 +48,9 @@ describe('runSession', () => {
       prompt: 'hello',
       dispatch: (a) => dispatched.push(a),
       resolveImpl: stubResolve,
+      // 节流注入 0: 同步 dispatch（生产默认 60ms 合并 chunk 防抽搐, 见 runSession）
+      textThrottleMs: 0,
+      thinkThrottleMs: 0,
       runAgentImpl: scriptedRunAgent([
         { type: 'text', delta: 'hi', done: false },
         { type: 'text', delta: '!', done: true },
@@ -260,5 +263,89 @@ describe('runSession', () => {
       if (old === undefined) delete process.env.AETHER_API_KEY
       else process.env.AETHER_API_KEY = old
     }
+  })
+
+  it('throttles TEXT_DELTA by default (60ms window merges chunks) and flushes at end', async () => {
+    // 生产默认 textThrottleMs=60: onText 的 chunk 不逐条 dispatch,
+    // 而是在结束时合并为一次（防 ConPTY 抽搐）。最终文本必须完整。
+    const dispatched = [
+      { type: 'INPUT', value: 'hi' },
+      { type: 'SUBMIT' },
+    ]
+    await runSession({
+      dbPath: null,
+      prompt: 'hi',
+      dispatch: (a) => dispatched.push(a),
+      resolveImpl: stubResolve,
+      runAgentImpl: scriptedRunAgent([
+        { type: 'text', delta: 'He', done: false },
+        { type: 'text', delta: 'llo', done: false },
+        { type: 'text', delta: ' world', done: true },
+      ]),
+    })
+    const deltas = dispatched.filter((a) => a.type === 'TEXT_DELTA')
+    // 节流窗口内所有 chunk 合并 → 只 flush 一次（或极少数窗口）, 且最终文本完整
+    const joined = deltas.map((a) => a.delta).join('')
+    expect(joined).toBe('Hello world')
+    const state = replay(dispatched)
+    expect(state.messages[state.messages.length - 1].text).toBe('Hello world')
+    expect(state.running).toBe(false)
+  })
+
+  it('renders [agent error: ...] as a red system line, not an assistant reply', async () => {
+    // toolLoop 把 API 错误包成 '[agent error: HTTP 503 ...]' 返回——必须转成
+    // [sys] 错误行（渲染为红色）, 而非 assistant 气泡（用户以为有输出实为错误）。
+    const dispatched = []
+    await runSession({
+      dbPath: null,
+      prompt: 'x',
+      dispatch: (a) => dispatched.push(a),
+      resolveImpl: stubResolve,
+      runAgentImpl: async () => ({ text: '[agent error: HTTP 503: model_not_found ...]', toolCalls: [] }),
+    })
+    const sys = dispatched.filter((a) => a.type === 'APPEND_SYSTEM')
+    expect(sys.some((a) => String(a.text).startsWith('[agent error'))).toBe(true)
+    // 不产生 assistant TEXT_DELTA（错误不是回复）
+    expect(dispatched.some((a) => a.type === 'TEXT_DELTA')).toBe(false)
+    const state = replay(dispatched)
+    expect(state.messages.some((m) => m.role === 'assistant' && m.text)).toBe(false)
+  })
+
+  it('renders agent error text relayed via onText as a system error line', async () => {
+    // 流中途错误（streamChatWithRetry 提前终止）也走错误呈现路径
+    const dispatched = []
+    await runSession({
+      dbPath: null,
+      prompt: 'x',
+      dispatch: (a) => dispatched.push(a),
+      resolveImpl: stubResolve,
+      textThrottleMs: 0,
+      runAgentImpl: async ({ onText }) => {
+        onText({ text: '[agent error: HTTP 401: invalid api key]', done: true })
+        return { text: '', toolCalls: [] }
+      },
+    })
+    expect(dispatched.some((a) => a.type === 'APPEND_SYSTEM' && String(a.text).startsWith('[agent error'))).toBe(true)
+    expect(dispatched.filter((a) => a.type === 'TEXT_DELTA').length).toBe(0)
+  })
+
+  it('keeps empty text chunks from falsely marking output (placeholder-suffix providers)', async () => {
+    // 部分中转站开头发空 content chunk: 不能把空串当成"有输出"
+    const dispatched = []
+    await runSession({
+      dbPath: null,
+      prompt: 'x',
+      dispatch: (a) => dispatched.push(a),
+      resolveImpl: stubResolve,
+      textThrottleMs: 0,
+      runAgentImpl: async ({ onText }) => {
+        onText({ text: '', done: false })
+        onText({ text: '', done: true })
+        return { text: 'real answer', toolCalls: [] }
+      },
+    })
+    const deltas = dispatched.filter((a) => a.type === 'TEXT_DELTA')
+    // 空 chunk 不标记 hasAppendedText → 最终 result.text 走兜底追加
+    expect(deltas.map((a) => a.delta)).toEqual(['real answer'])
   })
 })

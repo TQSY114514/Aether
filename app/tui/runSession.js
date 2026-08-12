@@ -19,6 +19,22 @@ import { isToolStart } from './toolCards.js'
 import { connectMcpServers, disconnectMcpServers, runSessionHooks } from '../electron/llm/headlessMcp.js'
 import { loadAuthKeys } from './authStore.js'
 
+// ── 流式节流常量（模块级: 参数默认值引用, 不能定义在函数体内）──────────────
+// TEXT_DELTA 节流: 模型每 token 一个 chunk, 逐 chunk dispatch 会高频全量
+// 重渲染 → ConPTY 下抽搐。定时器合并（TEXT_DELTA_THROTTLE_MS）+ 结束 flush。
+// 参考 codex-cli frame_requester（帧合并调度）与 aichat gather_events（50ms
+// 批量）的成熟做法。
+const TEXT_DELTA_THROTTLE_MS = 60
+// 思考增量节流: 推理模型每 token 一个 reasoning chunk, 合并后一次 dispatch。
+const THINK_DELTA_THROTTLE_MS = 100
+
+// 判定 agent 错误文本（toolLoop.js 把 API/工具错误包成 '[agent error: ...]'
+// 字符串返回, 若直接当 assistant 文本渲染, 用户看到"有输出"实为错误——
+// 这是"输出不可用"体验的根因。此处统一识别并转为 [sys] 错误行呈现。）
+export function isAgentErrorText(s) {
+  return typeof s === 'string' && /^\[agent error:/.test(s.trim())
+}
+
 /**
  * 从 DB 解析 provider + model（供 runSession 使用）。抛错带人类可读信息。
  * 返回 { provider, model, db }（db 供 todo 13 persona/记忆注入透传 runAgent）。
@@ -202,6 +218,10 @@ export async function runSession({
   onThinkingDelta,
   onThinkingEnd,
   dbSessionId = null,
+  // 节流间隔（ms）: 生产默认 60ms 合并流式 chunk 防 ConPTY 抽搐;
+  // 测试注入 0 → 立即 dispatch（同步语义, 便于断言）。
+  textThrottleMs = TEXT_DELTA_THROTTLE_MS,
+  thinkThrottleMs = THINK_DELTA_THROTTLE_MS,
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
   // headless 无法解密 safeStorage 加密的 API key——密文直接发 API 会 401/卡住，
@@ -243,12 +263,55 @@ export async function runSession({
     }
   }
   const ws = workspace || process.cwd()
+  // 流式节流态: textBuf/textTimer 合并 TEXT_DELTA（textThrottleMs 可注入,
+  // 测试传 0 → 立即 dispatch）; thinkBuf/thinkTimer 合并思考增量。
+  let textBuf = ''
+  let textTimer = null
+  let thinkBuf = ''
+  let thinkTimer = null
+
+  // 节流文本入队: 0 → 同步 dispatch（测试/小窗口）; >0 → 定时器合并一次 dispatch。
+  const flushText = () => {
+    const payload = textBuf
+    textBuf = ''
+    if (payload) {
+      dispatch({ type: 'TEXT_DELTA', delta: payload })
+      hasAppendedText = true
+    }
+  }
+  const queueText = (s) => {
+    textBuf += s
+    if (textThrottleMs <= 0) { flushText(); return }
+    if (!textTimer) {
+      textTimer = setTimeout(() => {
+        textTimer = null
+        flushText()
+      }, textThrottleMs)
+    }
+  }
+  // 思考增量入队（同上语义）
+  const queueThink = (s) => {
+    thinkBuf += s
+    if (thinkThrottleMs <= 0) { flushThink(); return }
+    if (!thinkTimer) {
+      thinkTimer = setTimeout(() => {
+        thinkTimer = null
+        flushThink()
+      }, thinkThrottleMs)
+    }
+  }
+  const flushThink = () => {
+    const payload = thinkBuf
+    thinkBuf = ''
+    if (payload) dispatch({ type: 'THINKING_DELTA', delta: payload })
+  }
   // todo 14：MCP 连接 + SessionStart/SessionEnd hooks（best-effort，不阻塞 agent）。
   try { require('../electron/tools/sandbox').setWorkspaceRoot(ws) } catch {}
   try { await connectMcpServers({ db }) } catch {}
   try { await runSessionHooks('SessionStart', { sessionId, timestamp: new Date().toISOString() }) } catch {}
   let result
   let hasAppendedText = false
+  let hasAppendedError = false
   try {
     result = await runAgentImpl({
       prompt: String(prompt || ''),
@@ -263,9 +326,21 @@ export async function runSession({
     requestPermission,
     options: effort ? { reasoning_effort: effort } : {},
     onText: (chunk) => {
-      if (chunk && typeof chunk.text === 'string') {
-        dispatch({ type: 'TEXT_DELTA', delta: chunk.text })
-        hasAppendedText = true
+      // 空串也算"收到文本"会让 hasAppendedText 误置位 → 兜底提示被跳过。
+      // 只有非空 content 才算真实输出（部分中转站开头发空 content chunk）。
+      if (chunk && typeof chunk.text === 'string' && chunk.text.length > 0) {
+        // agent 错误文本（HTTP 503 / 401 等）→ 以 [sys] 错误行呈现, 不进 assistant
+        // 气泡——否则"有输出"其实是错误（"输出不可用"根因）。
+        if (isAgentErrorText(chunk.text)) {
+          if (!hasAppendedError) {
+            dispatch({ type: 'APPEND_SYSTEM', text: chunk.text.trim() })
+            hasAppendedError = true
+          }
+          // 错误文本不标记"有文本"：让结束时的兜底逻辑判断是否显示提示
+          return
+        }
+        // 流式文本节流: 合并 textThrottleMs 窗口内的 chunk, 一次 dispatch
+        queueText(chunk.text)
       }
     },
     onToolCall: (entry) => {
@@ -292,9 +367,17 @@ export async function runSession({
       }
       // assistant 回复文本经 onPlanStep.assistantText 传递（toolLoop.js:451）——
       // 不转发就是"agent 跑完但界面无回复"的根因。
+      // 节流: 与 onText 共用 textBuf/textTimer 合并 dispatch, 防 ConPTY 抽搐。
       if (step && typeof step.assistantText === 'string' && step.assistantText) {
-        dispatch({ type: 'TEXT_DELTA', delta: step.assistantText })
-        hasAppendedText = true
+        if (isAgentErrorText(step.assistantText)) {
+          if (!hasAppendedError) {
+            dispatch({ type: 'APPEND_SYSTEM', text: step.assistantText.trim() })
+            hasAppendedError = true
+          }
+          return
+        }
+        // 节流: 与 onText 共用 textBuf/textTimer 合并 dispatch, 防 ConPTY 抽搐。
+        queueText(step.assistantText)
       }
     },
     onThinkingStart: () => {
@@ -304,14 +387,19 @@ export async function runSession({
     },
     onThinkingDelta: (reasoning) => {
       // 推理模型思考增量 → 累积进 thinking 缓冲（reducer 尾部保留 4000 上限）。
-      // 非字符串忽略（toolLoop 传 msg.reasoning, 防御性过滤）。
+      // 节流（thinkThrottleMs 合并）: 推理模型每 token 一个 chunk,
+      // 逐 chunk dispatch 会高频全量重渲染 → ConPTY 下抽搐。定时器合并 +
+      // 结束时 flush（不丢尾部）。
       if (reasoning && typeof reasoning === 'string') {
-        dispatch({ type: 'THINKING_DELTA', delta: reasoning })
+        queueThink(reasoning)
       }
       if (onThinkingDelta && typeof onThinkingDelta === 'function') onThinkingDelta(reasoning)
     },
     onThinkingEnd: () => {
-      // 思考结束 → 块折叠保留全文（Enter 展开回顾）
+      // 思考结束 → flush 残留缓冲（<thinkThrottleMs 的短思考不丢）+ 保持展开
+      // （默认展开, Enter 可折叠; 不随 AGENT_END 清除供回顾）
+      if (thinkTimer) { clearTimeout(thinkTimer); thinkTimer = null }
+      flushThink()
       dispatch({ type: 'THINKING_END' })
       if (onThinkingEnd && typeof onThinkingEnd === 'function') onThinkingEnd()
     },
@@ -337,10 +425,18 @@ export async function runSession({
   // 兜底: 若回复文本未经 onPlanStep/onText 送达(纯工具循环等路径), 把 result.text 追加到
   // assistant 消息(TEXT_DELTA 需 running, 故放在 AGENT_END 之前)。
   // 若连 result.text 都为空且全程无输出 → 明确提示(推理模型仅思考/空回复不再静默)。
+  // flush 流式节流缓冲（<textThrottleMs 的短回复不丢尾部）。
+  if (textTimer) { clearTimeout(textTimer); textTimer = null }
+  flushText()
   if (!hasAppendedText) {
-    if (result && result.text) {
-      dispatch({ type: 'TEXT_DELTA', delta: result.text })
-    } else {
+    const finalText = result && result.text ? String(result.text) : ''
+    if (finalText && !isAgentErrorText(finalText)) {
+      dispatch({ type: 'TEXT_DELTA', delta: finalText })
+    } else if (isAgentErrorText(finalText) && !hasAppendedError) {
+      // agent 错误文本（toolLoop 返回）→ [sys] 错误行, 不渲染成 assistant 回复
+      dispatch({ type: 'APPEND_SYSTEM', text: finalText.trim() })
+      hasAppendedError = true
+    } else if (!hasAppendedError) {
       dispatch({ type: 'APPEND_SYSTEM', text: 'agent 未返回文本回复——模型可能仅输出思考过程, 请重试或换非推理模型' })
     }
   }
