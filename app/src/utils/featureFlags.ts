@@ -19,6 +19,12 @@ export interface FeatureFlagEntry {
 
 // ─── Snapshot store (useSyncExternalStore-compatible) ───────────────────────
 
+// ⚠️ useSyncExternalStore 硬性要求: getSnapshot 必须返回稳定引用——
+// 否则 React 判定 store 每帧都在变 → 无限重渲染 → "Maximum update depth
+// exceeded" (React error #185, 实测崩溃)。cache 为 null(初始/加载失败)时
+// 必须返回同一个 EMPTY_FLAGS 常量, 绝不能 `?? []`(每次新数组 = 不稳定引用)。
+const EMPTY_FLAGS: FeatureFlagEntry[] = []
+
 let cache: FeatureFlagEntry[] | null = null
 const listeners = new Set<() => void>()
 
@@ -46,7 +52,16 @@ function subscribe(cb: () => void) {
 }
 
 function getSnapshot(): FeatureFlagEntry[] {
-  return cache ?? []
+  return cache ?? EMPTY_FLAGS
+}
+
+// Internal: exposed for regression tests. Contract: consecutive calls MUST
+// return the same reference while the store hasn't changed — a violation here
+// is exactly what causes React error #185 ("Maximum update depth exceeded").
+export const _getSnapshotForTest = getSnapshot
+export const _resetForTest = () => {
+  cache = null
+  started = false
 }
 
 // Trigger an initial load exactly once.
@@ -69,7 +84,7 @@ export function getFeatureFlags(): FeatureFlagEntry[] {
 // Effective value of one flag. Unknown flags / pre-load resolve to `fallback`.
 export function getFeatureFlag(key: string, fallback = false): boolean {
   ensureLoaded()
-  const entry = (cache ?? []).find(f => f.key === key)
+  const entry = (cache ?? EMPTY_FLAGS).find(f => f.key === key)
   return entry ? entry.enabled : fallback
 }
 
