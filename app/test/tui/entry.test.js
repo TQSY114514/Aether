@@ -73,3 +73,41 @@ describe('parseTuiOpts（todo 1）', () => {
     expect(parseTuiOpts(['--foo', 'bar', '--db', 'x.db'])).toMatchObject({ dbPath: 'x.db' })
   })
 })
+
+describe('parseTuiOpts — W2-t15 启动 resume（--continue/--session/--fork）', () => {
+  it('--continue → resumeContinue true（无值 flag）', () => {
+    expect(parseTuiOpts(['--continue'])).toMatchObject({ resumeContinue: true })
+  })
+
+  it('--session <id> → resumeSessionId 数字', () => {
+    expect(parseTuiOpts(['--session', '42'])).toMatchObject({ resumeSessionId: 42 })
+  })
+
+  it('--fork → resumeFork true', () => {
+    expect(parseTuiOpts(['--fork'])).toMatchObject({ resumeFork: true })
+  })
+
+  it('--session=<id> 等号形式', () => {
+    expect(parseTuiOpts(['--session=7'])).toMatchObject({ resumeSessionId: 7 })
+  })
+
+  it('三 flag 组合（--session 优先 + fork 派生）', () => {
+    expect(parseTuiOpts(['--continue', '--session', '5', '--fork']))
+      .toMatchObject({ resumeContinue: true, resumeSessionId: 5, resumeFork: true })
+  })
+
+  it('--session 非法值（--session abc）静默忽略，不崩溃', () => {
+    expect(parseTuiOpts(['--session', 'abc']).resumeSessionId).toBeUndefined()
+    expect(parseTuiOpts(['--session']).resumeSessionId).toBeUndefined() // 末尾缺值
+    expect(parseTuiOpts(['--session=abc']).resumeSessionId).toBeUndefined()
+    // 非法值后的其余 flag 仍正常解析
+    expect(parseTuiOpts(['--session', 'abc', '--continue']).resumeContinue).toBe(true)
+  })
+
+  it('无 resume flag → 字段缺失（默认不 resume）', () => {
+    const opts = parseTuiOpts(['--db', 'x.db'])
+    expect(opts.resumeContinue).toBeUndefined()
+    expect(opts.resumeSessionId).toBeUndefined()
+    expect(opts.resumeFork).toBeUndefined()
+  })
+})

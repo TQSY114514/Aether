@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // keyHandlers.test.js — opencode 风格键盘架构单测（模式解析 + 按键归一 + 命令表）
 // 重构核心收益: useInput 的 if/else 金字塔 → 纯函数命令表, 可直接断言。
 // ─────────────────────────────────────────────────────────────────────────────
@@ -16,6 +16,7 @@ function makeCtx(overrides = {}) {
     paletteOpen: false, setPaletteOpen: vi.fn(),
     paletteIdx: 0, setPaletteIdx: vi.fn(),
     paletteFilter: '', setPaletteFilter: vi.fn(),
+    todoOpen: false, setTodoOpen: vi.fn(),
     permIdx: 0, setPermIdx: vi.fn(),
     leaderArmed: false, setLeaderArmed: vi.fn(),
     scrollOffset: 0, setScrollOffset: vi.fn(),
@@ -64,6 +65,7 @@ describe('normalizeKey — 按键归一', () => {
     expect(normalizeKey('c', { ctrl: true })).toBe('ctrl-c')
     expect(normalizeKey('x', { ctrl: true })).toBe('ctrl-x')
     expect(normalizeKey('n', { ctrl: true })).toBe('ctrl-n')
+    expect(normalizeKey('t', { ctrl: true })).toBe('ctrl-t') // W1-t9
     expect(normalizeKey('m', { alt: true })).toBe('alt-m')
     expect(normalizeKey('v', { alt: true })).toBe('alt-v')
     expect(normalizeKey('', { alt: true, upArrow: true })).toBe('alt-up')
@@ -92,6 +94,52 @@ describe('resolveMode — 模式优先级', () => {
     expect(resolveMode(makeCtx({ state: { ...initialTuiState, expandedTool: 0 } }))).toBe('diff')
     expect(resolveMode(makeCtx({ state: { ...initialTuiState, steeringMode: true } }))).toBe('steering')
     expect(resolveMode(makeCtx())).toBe('base')
+  })
+})
+
+describe('todo 面板 (W1-t9, Ctrl+T)', () => {
+  it('resolveMode: todoOpen 时返回 todo 模态（优先于 base）', () => {
+    expect(resolveMode(makeCtx({ todoOpen: true }))).toBe('todo')
+  })
+
+  it('base: 空输入 Ctrl+T 切换打开 todoOpen', () => {
+    const ctx = makeCtx({ todoOpen: false })
+    press(ctx, { ctrl: true }, 't')
+    expect(ctx.setTodoOpen).toHaveBeenCalledWith(true)
+  })
+
+  it('base: 输入非空时 Ctrl+T 忽略（不打断打字）', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'abc' }, setTodoOpen: vi.fn() })
+    press(ctx, { ctrl: true }, 't')
+    expect(ctx.setTodoOpen).not.toHaveBeenCalled()
+  })
+
+  it('todo 模态: Esc 关闭', () => {
+    const ctx = makeCtx({ todoOpen: true })
+    press(ctx, { escape: true }, '')
+    expect(ctx.setTodoOpen).toHaveBeenCalledWith(false)
+  })
+
+  it('todo 模态: Enter/字符关闭（不吞后续打字, 面板即关）', () => {
+    const ctx = makeCtx({ todoOpen: true })
+    press(ctx, { return: true }, '')
+    expect(ctx.setTodoOpen).toHaveBeenCalledWith(false)
+    ctx.setTodoOpen.mockClear()
+    press(ctx, {}, 'x')
+    expect(ctx.setTodoOpen).toHaveBeenCalledWith(false)
+  })
+
+  it('todo 模态打开时 Ctrl+T 也关闭（toggle 语义）', () => {
+    const ctx = makeCtx({ todoOpen: true })
+    press(ctx, { ctrl: true }, 't')
+    expect(ctx.setTodoOpen).toHaveBeenCalledWith(false)
+  })
+
+  it('其他 ctrl 键语义不变（Ctrl+C 空闲退出）', () => {
+    const ctx = makeCtx()
+    press(ctx, { ctrl: true }, 'c')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'QUIT_INTENT' })
+    expect(ctx.setTodoOpen).not.toHaveBeenCalled()
   })
 })
 
@@ -152,7 +200,7 @@ describe('base 模式 — 普通输入态', () => {
   it('空输入 ↑ 回填历史, ↓ 回空', () => {
     const ctx = makeCtx({ historyRef: { current: ['first', 'second'] } })
     press(ctx, { upArrow: true }, '')
-    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'second' })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'second', replace: true })
     press(ctx, { downArrow: true }, '')
     expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: '' })
   })
@@ -506,9 +554,10 @@ describe('cursor editing + multiline keys (W0-B2 todo 4/5)', () => {
   })
 
   it('base: 单字符与多字符粘贴都经 INPUT 在光标处插入, 换行不剥离', () => {
+    // 注意: 'x'/'?' 是空输入专用面板键(既有 gating), 测试用普通字母 'z'
     const ctx = makeCtx({ state: { ...initialTuiState, input: 'abc', inputCursor: 1 } })
-    press(ctx, {}, 'x')
-    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'x' })
+    press(ctx, {}, 'z')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'z' })
     press(ctx, {}, 'line1\nline2')
     expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'line1\nline2' })
   })
@@ -540,5 +589,339 @@ describe('集成: dispatchKey + tuiReducer', () => {
     press(ctx, { return: true }, '')
     expect(state.input).toBe('')
     expect(state.running).toBe(false)
+  })
+})
+
+// ── W0-t7: 选中消息 + Enter 展开/折叠长消息 ─────────────────────────────────
+describe('base 模式 — Enter 展开长消息 (W0-t7)', () => {
+  const selState = (extra = {}) => ({
+    ...initialTuiState,
+    messages: [
+      { id: 1, role: 'user', text: 'hi' },
+      { id: 7, role: 'assistant', text: 'x'.repeat(5000) },
+    ],
+    selectedMessage: 1,
+    ...extra,
+  })
+
+  it('选中消息 + 空输入 + 非运行: Enter 派发 TOGGLE_EXPAND(消息 id)', () => {
+    const ctx = makeCtx({ state: selState() })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'TOGGLE_EXPAND', messageId: 7 })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'SUBMIT' })
+  })
+
+  it('选中消息 + 输入非空: Enter 走原提交路径(不展开)', () => {
+    const ctx = makeCtx({ state: selState({ input: 'hi' }) })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'TOGGLE_EXPAND' })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: '' })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'SUBMIT' })
+    expect(ctx.startSession).toHaveBeenCalledWith('hi')
+  })
+
+  it('选中消息但 running: Enter 忽略(不展开不提交)', () => {
+    const ctx = makeCtx({ state: selState({ running: true }) })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'TOGGLE_EXPAND' })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+  })
+
+  it('无选中消息 + 空输入: Enter 无操作(行为不变)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, messages: [{ id: 1, role: 'user', text: 'hi' }], selectedMessage: null } })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'TOGGLE_EXPAND' })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'SUBMIT' })
+  })
+
+  it('选中消息索引越界(消息已被截断): Enter 安全返回不崩溃', () => {
+    const ctx = makeCtx({ state: selState({ selectedMessage: 5 }) }) // 只有 2 条消息
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'TOGGLE_EXPAND' })
+  })
+})
+
+// ── W3-t21: 思考块折叠/展开（无选中 + 空输入 + 思考存在 → Enter 切换）──────
+describe('base 模式 — Enter 切换思考块 (W3-t21)', () => {
+  const thinkState = (extra = {}) => ({
+    ...initialTuiState,
+    thinking: { open: false, text: 'reasoning...' },
+    ...extra,
+  })
+
+  it('无选中 + 空输入 + 思考块存在: Enter 派发 THINKING_TOGGLE（不提交）', () => {
+    const ctx = makeCtx({ state: thinkState() })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'THINKING_TOGGLE' })
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'SUBMIT' })
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'TOGGLE_EXPAND' })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+  })
+
+  it('无选中 + 思考块存在 + 输入非空: Enter 走原提交路径（不切换思考块）', () => {
+    const ctx = makeCtx({ state: thinkState({ input: 'hi' }) })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'THINKING_TOGGLE' })
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'SUBMIT' })
+    expect(ctx.startSession).toHaveBeenCalledWith('hi')
+  })
+
+  it('选中消息 + 思考块存在: TOGGLE_EXPAND 优先（W0-t7 行为不变）', () => {
+    const ctx = makeCtx({
+      state: thinkState({
+        messages: [{ id: 1, role: 'user', text: 'hi' }, { id: 7, role: 'assistant', text: 'x'.repeat(5000) }],
+        selectedMessage: 1,
+      }),
+    })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'TOGGLE_EXPAND', messageId: 7 })
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'THINKING_TOGGLE' })
+  })
+
+  it('无选中 + 思考块存在 + running: Enter 忽略（不切换不提交）', () => {
+    const ctx = makeCtx({ state: thinkState({ running: true }) })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'THINKING_TOGGLE' })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+  })
+
+  it('无思考文本 + 空输入 + 无选中: Enter 无操作（回落既有行为）', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, selectedMessage: null } })
+    press(ctx, { return: true }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'THINKING_TOGGLE' })
+    expect(ctx.startSession).not.toHaveBeenCalled()
+  })
+})
+
+// ── W0-t8: PgUp/PgDn 逐行滚动(±1, 空输入 gate) ─────────────────────────────
+describe('base 模式 — PgUp/PgDn 逐行滚动 (W0-t8)', () => {
+  it('空输入 PgUp: setScrollOffset 步进 +1(逐行滚动)', () => {
+    const ctx = makeCtx()
+    press(ctx, { pageUp: true }, '')
+    expect(ctx.setScrollOffset).toHaveBeenCalledTimes(1)
+    const updater = ctx.setScrollOffset.mock.calls[0][0]
+    expect(updater(5)).toBe(6)
+    expect(updater(0)).toBe(1)
+  })
+
+  it('空输入 PgDn: setScrollOffset 步进 -1 且钳制 ≥0', () => {
+    const ctx = makeCtx()
+    press(ctx, { pageDown: true }, '')
+    expect(ctx.setScrollOffset).toHaveBeenCalledTimes(1)
+    const updater = ctx.setScrollOffset.mock.calls[0][0]
+    expect(updater(5)).toBe(4)
+    expect(updater(0)).toBe(0)
+    expect(updater(1)).toBe(0)
+  })
+
+  it('输入非空 PgUp/PgDn: 不滚动(不吞键, 与既有 gate 一致)', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'abc' } })
+    press(ctx, { pageUp: true }, '')
+    press(ctx, { pageDown: true }, '')
+    expect(ctx.setScrollOffset).not.toHaveBeenCalled()
+  })
+})
+
+// ���� W3-t18: @�ļ���ѡ��壨filePick ģ̬, resolveMode ������ base��������������������������
+describe('filePick ģ̬ (W3-t18)', () => {
+  const pickCtx = (overrides = {}) => makeCtx({
+    filePick: { items: [{ path: 'src/main.ts', isDir: false }, { path: 'src/math.ts', isDir: false }], idx: 0, tokenStart: 3, partial: 'ma' },
+    setFilePick: vi.fn(),
+    acceptFilePick: vi.fn(),
+    syncFilePick: vi.fn(),
+    ...overrides,
+  })
+
+  it('resolveMode: filePick ��ʱ������ base��Tab ����ͻб�ܲ�ȫ��', () => {
+    const ctx = pickCtx()
+    expect(resolveMode(ctx)).toBe('filePick')
+  })
+
+  it('����/Tab ������ѡ��wrap ѭ����', () => {
+    const ctx = pickCtx()
+    press(ctx, { downArrow: true }, '')
+    const updater = ctx.setFilePick.mock.calls[0][0]
+    expect(updater({ items: ctx.filePick.items, idx: 0, tokenStart: 3, partial: 'ma' }).idx).toBe(1)
+    press(ctx, { tab: true }, '')
+    const updater2 = ctx.setFilePick.mock.calls[1][0]
+    expect(updater2({ items: ctx.filePick.items, idx: 1, tokenStart: 3, partial: 'ma' }).idx).toBe(0)
+  })
+
+  it('Enter: acceptFilePick�����ܲ�����, ���ύ��', () => {
+    const ctx = pickCtx()
+    press(ctx, { return: true }, '')
+    expect(ctx.acceptFilePick).toHaveBeenCalledTimes(1)
+    expect(ctx.dispatch).not.toHaveBeenCalledWith({ type: 'SUBMIT' })
+  })
+
+  it('Esc: �ر����', () => {
+    const ctx = pickCtx()
+    press(ctx, { escape: true }, '')
+    expect(ctx.setFilePick).toHaveBeenCalledWith(null)
+  })
+
+  it('char: ������� + �����ѡ��syncFilePick��', () => {
+    const ctx = pickCtx()
+    press(ctx, {}, 't')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 't' })
+    expect(ctx.syncFilePick).toHaveBeenCalled()
+  })
+
+  it('backspace: ɾ�� + �����ѡ', () => {
+    const ctx = pickCtx()
+    press(ctx, { backspace: true }, '')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT_BACKSPACE' })
+    expect(ctx.syncFilePick).toHaveBeenCalled()
+  })
+})
+
+// ���� W3-t18: base ̬����ͬ�� @��ѡ��� ����������������������������������������������������������������������������
+describe('base ģʽ @���� (W3-t18)', () => {
+  it('char �������� syncFilePick������ @ �� / �� @ �رգ�', () => {
+    const syncFilePick = vi.fn()
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'a' }, syncFilePick })
+    press(ctx, {}, 'b')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'b' })
+    expect(syncFilePick).toHaveBeenCalledTimes(1)
+  })
+
+  it('backspace �������� syncFilePick', () => {
+    const syncFilePick = vi.fn()
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'ab' }, syncFilePick })
+    press(ctx, { backspace: true }, '')
+    expect(syncFilePick).toHaveBeenCalledTimes(1)
+  })
+
+  it('�� syncFilePick �� ctx���ɲ�����̬��������', () => {
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'a' } })
+    press(ctx, {}, 'b')
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'INPUT', value: 'b' })
+  })
+})
+
+// ── W3-t22: Ctrl+F 收藏 / F2 最近模型循环 ────────────────────────────────────
+describe('normalizeKey — ctrl-f / f2 (W3-t22)', () => {
+  it('Ctrl+F → ctrl-f; F2 双形态 → f2', () => {
+    expect(normalizeKey('f', { ctrl: true })).toBe('ctrl-f')
+    expect(normalizeKey('', { name: 'f2' })).toBe('f2')
+    expect(normalizeKey('', { f2: true })).toBe('f2')
+  })
+})
+
+describe('base 模式 — Ctrl+F / F2 (W3-t22)', () => {
+  it('空输入 Ctrl+F → toggleModelFavorite（不吞键）', () => {
+    const toggleModelFavorite = vi.fn()
+    const ctx = makeCtx({ toggleModelFavorite, cycleRecentModel: vi.fn() })
+    press(ctx, { ctrl: true }, 'f')
+    expect(toggleModelFavorite).toHaveBeenCalledTimes(1)
+  })
+
+  it('输入非空 Ctrl+F → 不触发（不干扰输入）', () => {
+    const toggleModelFavorite = vi.fn()
+    const ctx = makeCtx({ state: { ...initialTuiState, input: 'abc' }, toggleModelFavorite })
+    press(ctx, { ctrl: true }, 'f')
+    expect(toggleModelFavorite).not.toHaveBeenCalled()
+  })
+
+  it('空输入 F2 → cycleRecentModel', () => {
+    const cycleRecentModel = vi.fn()
+    const ctx = makeCtx({ cycleRecentModel, toggleModelFavorite: vi.fn() })
+    press(ctx, { name: 'f2' }, '')
+    expect(cycleRecentModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('无 handler 的 ctx 不崩溃（旧测试形态）', () => {
+    const ctx = makeCtx()
+    press(ctx, { ctrl: true }, 'f')
+    press(ctx, { name: 'f2' }, '')
+    expect(ctx.dispatch).not.toHaveBeenCalled()
+  })
+})
+
+// ── W4-t25: /permissions 对话框模态（permDialog）────────────────────────────
+describe('permDialog 模态 (W4-t25)', () => {
+  const RULES = [
+    { key: 'run_command:git', name: 'run_command', ruleKey: 'git', decision: 'allow', source: 'session' },
+    { key: 'run_command:rm', name: 'run_command', ruleKey: 'rm', decision: 'deny', source: 'persisted' },
+    { key: 'write_file:src', name: 'write_file', ruleKey: 'src', decision: 'ask', source: 'persisted' },
+  ]
+  const dlg = (over = {}) => ({ rules: RULES, idx: 0, filter: '', ...over })
+
+  it('resolveMode: permDialog 打开时返回 permDialog（优先于 base/todo）', () => {
+    expect(resolveMode(makeCtx({ permDialog: dlg() }))).toBe('permDialog')
+    expect(resolveMode(makeCtx({ permDialog: dlg(), todoOpen: true }))).toBe('permDialog')
+  })
+
+  it('↑↓ 按过滤后列表循环导航', () => {
+    const setPermDialog = vi.fn()
+    const ctx = makeCtx({ permDialog: dlg(), setPermDialog })
+    press(ctx, { downArrow: true }, '')
+    // handler 用 updater 函数形式（与 pickerMove 同款）; 调用 updater 断言结果
+    const updater = setPermDialog.mock.calls[0][0]
+    expect(updater(dlg())).toMatchObject({ idx: 1 })
+    const ctx2 = makeCtx({ permDialog: dlg({ filter: 'deny' }), setPermDialog })
+    setPermDialog.mockClear()
+    press(ctx2, { downArrow: true }, '')
+    // 过滤后仅 1 条 → wrap 回 0
+    expect(setPermDialog.mock.calls[0][0](dlg({ filter: 'deny' }))).toMatchObject({ idx: 0 })
+  })
+
+  it("'d' 删除选中规则（调用 permDialogDelete; 不进入过滤）", () => {
+    const permDialogDelete = vi.fn()
+    const setPermDialog = vi.fn()
+    const ctx = makeCtx({ permDialog: dlg(), permDialogDelete, setPermDialog })
+    press(ctx, {}, 'd')
+    expect(permDialogDelete).toHaveBeenCalledTimes(1)
+    expect(setPermDialog).not.toHaveBeenCalled()
+  })
+
+  it('字符过滤（palette 式, idx 归零）; backspace 删过滤字符', () => {
+    const setPermDialog = vi.fn()
+    const ctx = makeCtx({ permDialog: dlg(), setPermDialog })
+    press(ctx, {}, 'r')
+    expect(setPermDialog.mock.calls[0][0](dlg())).toMatchObject({ filter: 'r', idx: 0 })
+    const ctx2 = makeCtx({ permDialog: dlg({ filter: 'run', idx: 2 }), setPermDialog })
+    setPermDialog.mockClear()
+    press(ctx2, { backspace: true }, '')
+    expect(setPermDialog.mock.calls[0][0](dlg({ filter: 'run', idx: 2 }))).toMatchObject({ filter: 'ru', idx: 0 })
+  })
+
+  it('Esc 关闭', () => {
+    const setPermDialog = vi.fn()
+    const ctx = makeCtx({ permDialog: dlg(), setPermDialog })
+    press(ctx, { escape: true }, '')
+    expect(setPermDialog).toHaveBeenCalledWith(null)
+  })
+
+  it('无 permDialogDelete 时 d 键不崩溃（防御）', () => {
+    const ctx = makeCtx({ permDialog: dlg() })
+    press(ctx, {}, 'd')
+    expect(ctx.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('permDecide remember=true 先触发 persistPendingAllow（W4-t24 #4）', () => {
+    const persistPendingAllow = vi.fn()
+    const decidePermission = vi.fn()
+    const ctx = makeCtx({
+      state: { ...initialTuiState, pendingPermission: { name: 'bash' } },
+      persistPendingAllow, decidePermission,
+    })
+    press(ctx, {}, 'a')
+    expect(persistPendingAllow).toHaveBeenCalledTimes(1)
+    expect(decidePermission).toHaveBeenCalledWith(expect.objectContaining({ decision: 'allow', remember: true }))
+  })
+
+  it('permDecide remember=false（y 键）不触发持久化', () => {
+    const persistPendingAllow = vi.fn()
+    const decidePermission = vi.fn()
+    const ctx = makeCtx({
+      state: { ...initialTuiState, pendingPermission: { name: 'bash' } },
+      persistPendingAllow, decidePermission,
+    })
+    press(ctx, {}, 'y')
+    expect(persistPendingAllow).not.toHaveBeenCalled()
+    expect(decidePermission).toHaveBeenCalledWith(expect.objectContaining({ decision: 'allow', remember: false }))
   })
 })
