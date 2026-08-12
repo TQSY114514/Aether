@@ -39,6 +39,8 @@ const FLAG_DEFS = [
   { key: 'agent.worktreeIsolation', default: false, category: 'agent',    description: 'Per-agent git worktree isolation' },
   // Phase 2 — background code intelligence
   { key: 'agent.backgroundReview', default: false, category: 'agent',     description: 'Background code review after file-touching tools' },
+  // Phase 2 — agent quality (external review P0-1)
+  { key: 'agent.toolRouter',     default: true,  category: 'agent',      description: 'Inject only task-relevant tools per turn (core always, github/lsp/agent/memory/git on keyword match)' },
   // Phase 3 — code understanding + orchestration
   { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
   { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },
