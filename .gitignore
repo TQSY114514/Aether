@@ -59,6 +59,12 @@ release-download/
 export.tmp
 merge_history.*
 
+# OpenCode / agent-tool stray build artifacts that sometimes land in the repo root
+index.html
+index-*.js
+opencode.json.bak*
+opencode.jsonc.bak*
+
 # ── Dev-only reference material & fix scripts (not part of the app) ──
 references/
 scripts/
