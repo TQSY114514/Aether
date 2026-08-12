@@ -51,7 +51,7 @@ AetherAI combines several capabilities that are typically spread across multiple
 | **Context Compaction** | Long conversations auto-summarize without losing tool-call pairs. | `Beta` |
 | **Local-First Privacy** | Conversations, keys, personas in local SQLite. Nothing leaves your machine. | `Stable` |
 | **15 UI Languages** | Including Classical Chinese and RTL Arabic. | `Beta` |
-| **Terminal TUI** | Ink v5 interactive terminal: session streaming, tool cards, diff review/rollback, keyboard permission gate, `/fork` session tree, `/memory`, in-flight steering. | `Beta` |
+| **Terminal TUI** | Ink v5 interactive terminal: session streaming, tool cards, diff review/rollback, keyboard permission gate, `/fork` session tree, `/memory`, todo panel, `@` file refs, `!` shell, in-flight steering, session resume. | `Beta` |
 | **Headless CLI · RPC · SDK** | Four-mode CLI (one-shot / NDJSON / JSONL RPC / pipe), Electron-free SDK (`aetherai/sdk`), machine-callable JSONL protocol. | `Beta` |
 | **MIT Licensed** | Fully open source. | `Stable` |
 
@@ -246,23 +246,29 @@ printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
   | node app/cli.js --mode rpc --db path\to\aetherai.db
 ```
 
-Additional headless flags: `--persona <id>` (persona + memory injection), `--memory-trace` (report injected memory entries), `--skills` (skill proposals JSON), `--setup-term` (write Windows Terminal profile), `--stdin` (explicit piped input).
+Additional headless flags: `--persona <id>` (persona + memory injection), `--memory-trace` (report injected memory entries), `--skills` (skill proposals JSON), `--setup-term` (write Windows Terminal profile), `--stdin` (explicit piped input), `--resume` / `--session <id>` / `--fork [<id>]` (continue a session; context-only — this run's turns are not written back), `-o` / `--output-last-message <file>` (write the final answer to a file), `--version`, `--list-models` / `--list-providers`, and `aether completion bash|zsh|powershell` (shell completion scripts).
+
+Defaults come from `~/.config/aether/config.json` (`model` / `mode` / `workspace` / `maxIterations`) and the `AETHER_MODEL` / `AETHER_MODE` / `AETHER_WORKSPACE` / `AETHER_MAX_ITERATIONS` / `AETHER_CONFIG` environment variables. Precedence: CLI flag > env > config file > DB default. The JSON `done` frame carries `estimatedCost` (USD) when a pricing table is available.
 
 ### TUI (`aether tui`)
 
 Interactive terminal agent (Ink v5; Node ≥ 22; best experienced in Windows Terminal):
 
-- **Sessions**: streaming message rendering, `/fork` session tree (`session.parent_session_id`), `/sessions`, `/use <id>` history switching
+- **Sessions**: streaming message rendering, every turn persisted to SQLite (survives exit), resume with `--continue` / `--session <id>` / `--fork`, auto-titles from the first prompt, `/fork` session tree (`session.parent_session_id`), `/sessions`, `/use <id>` history switching
 - **Tools & permissions**: tool-call cards (status color / latency / summary), diff review (`Alt+v` expand, `Enter` accept / `r` rollback — pre-write snapshot restore, works outside git repos), keyboard permission gate (`y` allow once / `a` allow always / `n` deny, or `←→` to select), read-only tools auto-approved
-- **Approval modes**: `Shift+Tab` cycles `manual → auto-edits → plan` (plan = read-only planning; three options decide how to proceed when done)
+- **Approval modes**: `Shift+Tab` cycles `manual → auto-edits → plan` (plan = read-only planning; three options decide how to proceed when done); `/approval-mode dontask` runs rule-only approvals (write tools need an allow rule)
 - **Modes**: `Alt+m` cycles ask/plan/auto; `/persona <id>` switches persona (persona + memory prefix injection)
-- **Leader keys**: `Ctrl+X` then `m` model picker / `n` new session / `l` session list / `g` timeline / `r` rewind checkpoint / `q` quit
-- **Command palette**: `Ctrl+P` or `x` (New chat / Model / Timeline / Export JSONL / Help / Quit)
+- **Leader keys**: `Ctrl+X` then `m` model picker / `n` new session / `l` session list / `g` timeline / `r` rewind checkpoint / `q` quit / `e` external editor
+- **Command palette**: `Ctrl+P` or `x` (New chat / Model / History (sessions) / Timeline / Export JSONL / Help / Quit)
 - **Rebindable keys**: `~/.config/aether/keybindings.json` (e.g. `{ "char:?": null }` disables the `?` help key)
 - **API key persistence**: `/apikey <provider> <key>` saves to `auth.json` (desktop safeStorage-encrypted keys cannot be decrypted headless — use this command or the `AETHER_API_KEY` env var)
 - **Memory & skill loop**: `/memory <keyword>` search, `--memory-trace` injected entry count, `/skills` + `/skill accept|dismiss <key>` (habitLearner → skill proposals)
+- **Todos & favorites**: `Ctrl+T` toggles the live agent todo checklist, `Ctrl+F` favorites/unfavorites the current model (persisted), `F2` cycles recent models
+- **`@` files & `!` shell**: type `@` for a file picker (file content injected on submit, ≤50KB), `!command` runs a shell command through the sandbox and feeds its output to the model
+- **Session context commands**: `/compact` / `/compress-fast` (compress history), `/context` (usage), `/clear` (new session), `/undo` (rollback the last turn + file snapshots), `/recap` (one-line summary), `/rename` / `/delete`, `/diff` (uncommitted-changes viewer), `/permissions add <name> <ruleKey> <allow|deny|ask>`, `/provider add|list`
+- **First-run bootstrap**: no desktop run needed — `aether tui` auto-creates the database and points you to `/provider add` for provider configuration
 - **Steering**: `Ctrl+C` while running → type next instruction → injected into the current loop (queue shown as `steer:n`); `Tab` while running queues the next message directly
-- **Shortcuts**: double-`Esc` quits (or `/quit`), `Esc` clears input (draft kept in history), `?` help screen, `PgUp/PgDn`/mouse wheel paging, status bar shows `approval/mode/model/tok/ctx` live; full keymap in [docs/tui-keys.md](./docs/tui-keys.md)
+- **Shortcuts**: double-`Esc` quits (or `/quit`), `Esc` clears input (draft kept in history), `?` help screen, `PgUp/PgDn` or mouse wheel scroll the message area line-by-line, `Alt+↑/↓` select messages, `Shift+Enter` newline in the input; status bar shows `approval/mode/model/tok/ctx` live; full keymap in [docs/tui-keys.md](./docs/tui-keys.md)
 
 ### RPC (`aether --mode rpc`)
 

@@ -49,7 +49,7 @@ AetherAI 把通常分散在多个工具里的能力集中到一个本地桌面�
 | **上下文压缩** | 长对话自动摘要且不丢工具调用对。 | `Beta` |
 | **本地优先隐私** | 对话、密钥、人设都在本地 SQLite。数据不离开你的机器。 | `Stable` |
 | **15 种界面语言** | 含文言文与 RTL 阿拉伯语。 | `Beta` |
-| **终端 TUI** | Ink v5 交互终端:会话流、工具卡、diff 审阅/回滚、键盘权限门、`/fork` 会话树、`/memory`、运行中 steering 回注。 | `Beta` |
+| **终端 TUI** | Ink v5 交互终端:会话流、工具卡、diff 审阅/回滚、键盘权限门、`/fork` 会话树、`/memory`、todo 面板、`@` 文件引用、`!` shell、运行中 steering 回注、会话 resume。 | `Beta` |
 | **无头 CLI · RPC · SDK** | 四模式 CLI(单发 / NDJSON / JSONL RPC / 管道)、Electron-free SDK(`aetherai/sdk`)、机器可调用的 JSONL 协议。 | `Beta` |
 | **MIT 许可** | 完全开源。 | `Stable` |
 
@@ -244,23 +244,29 @@ printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
   | node app/cli.js --mode rpc --db path\to\aetherai.db
 ```
 
-其他无头参数:`--persona <id>`(人设 + 记忆注入)、`--memory-trace`(报告注入记忆条目数)、`--skills`(技能提案 JSON)、`--setup-term`(写入 Windows Terminal profile)、`--stdin`(显式管道输入)。
+其他无头参数:`--persona <id>`(人设 + 记忆注入)、`--memory-trace`(报告注入记忆条目数)、`--skills`(技能提案 JSON)、`--setup-term`(写入 Windows Terminal profile)、`--stdin`(显式管道输入)、`--resume` / `--session <id>` / `--fork [<id>]`(续跑会话;context-only,本轮消息不回写 DB)、`-o` / `--output-last-message <file>`(把最终答案写入文件)、`--version`、`--list-models` / `--list-providers`,以及 `aether completion bash|zsh|powershell`(shell 补全脚本)。
+
+默认值来自 `~/.config/aether/config.json`(`model` / `mode` / `workspace` / `maxIterations`)与环境变量 `AETHER_MODEL` / `AETHER_MODE` / `AETHER_WORKSPACE` / `AETHER_MAX_ITERATIONS` / `AETHER_CONFIG`。优先级:CLI 参数 > 环境变量 > 配置文件 > DB 默认。JSON 的 `done` 帧在定价表可用时携带 `estimatedCost`(USD)。
 
 ### TUI(`aether tui`)
 
 交互式终端 Agent(Ink v5;Node ≥ 22;Windows Terminal 体验最佳):
 
-- **会话**:消息流式渲染、`/fork` 会话树(`session.parent_session_id`)、`/sessions`、`/use <id>` 历史切换
+- **会话**:消息流式渲染、每轮对话落库 SQLite(退出不丢)、`--continue` / `--session <id>` / `--fork` 恢复会话、首条 prompt 自动标题、`/fork` 会话树(`session.parent_session_id`)、`/sessions`、`/use <id>` 历史切换
 - **工具与权限**:工具调用卡(状态色/耗时/摘要)、diff 审阅(`Alt+v` 展开,`Enter` 接受 / `r` 回滚——写前快照还原,非 git 目录也有效)、键盘权限门(`y` 允许一次 / `a` 总是允许 / `n` 拒绝,或 `←→` 选择)、只读工具自动放行
-- **审批模式**:`Shift+Tab` 循环 `manual → auto-edits → plan`(plan = 只读规划,完成后三选项决定如何实施)
+- **审批模式**:`Shift+Tab` 循环 `manual → auto-edits → plan`(plan = 只读规划,完成后三选项决定如何实施);`/approval-mode dontask` 走纯规则审批(写/执行工具需 allow 规则)
 - **模式**:`Alt+m` 切换 ask/plan/auto;`/persona <id>` 切换人设(注入 persona + 记忆前缀)
-- **leader 快捷键**:`Ctrl+X` 然后 `m` 模型选择器 / `n` 新会话 / `l` 会话列表 / `g` 时间线 / `r` rewind 检查点 / `q` 退出
-- **命令面板**:`Ctrl+P` 或 `x`(New chat / Model / Timeline / Export JSONL / Help / Quit)
+- **leader 快捷键**:`Ctrl+X` 然后 `m` 模型选择器 / `n` 新会话 / `l` 会话列表 / `g` 时间线 / `r` rewind 检查点 / `q` 退出 / `e` 外部编辑器
+- **命令面板**:`Ctrl+P` 或 `x`(New chat / Model / History (sessions) / Timeline / Export JSONL / Help / Quit)
+- **todo 与收藏**:`Ctrl+T` 开关 agent 实时 todo 清单;`Ctrl+F` 收藏/取消当前模型(持久化);`F2` 循环最近模型
+- **`@` 文件与 `!` shell**:输入 `@` 弹文件候选(提交时内容注入,≤50KB);`!命令` 走 sandbox 拦截执行并把输出喂给模型
+- **会话上下文命令**:`/compact` / `/compress-fast`(压缩历史)、`/context`(用量)、`/clear`(新会话)、`/undo`(撤销上一轮 + 文件快照)、`/recap`(一行摘要)、`/rename` / `/delete`、`/diff`(未提交变更查看器)、`/permissions add <name> <ruleKey> <allow|deny|ask>`、`/provider add|list`
+- **首次运行自举**:无需先跑桌面版——`aether tui` 自动建库并提示用 `/provider add` 配置 provider
 - **键位可重绑**:`~/.config/aether/keybindings.json`(如 `{ "char:?": null }` 禁用 `?` 帮助键)
 - **API key 持久化**:`/apikey <provider> <key>` 保存到 `auth.json`(桌面版 safeStorage 加密的 key 在 headless 无法解密,用此命令或环境变量 `AETHER_API_KEY`)
 - **记忆与技能闭环**:`/memory <关键词>` 检索、`--memory-trace` 注入条目数、`/skills` + `/skill accept|dismiss <key>`(habitLearner → 技能提案)
 - **steering**:运行中 `Ctrl+C` 打断 → 输入下一条 → 注入当前循环(队列显示 `steer:n`);运行中 `Tab` 直接排队下一条
-- **快捷键**:双击 `Esc` 退出(或 `/quit`)、`Esc` 清空输入(草稿入历史)、`?` 帮助屏、`PgUp/PgDn`/鼠标滚轮翻页、状态栏实时显示 `approval/mode/model/tok/ctx`;完整键位见 [docs/tui-keys.md](./docs/tui-keys.md)
+- **快捷键**:双击 `Esc` 退出(或 `/quit`)、`Esc` 清空输入(草稿入历史)、`?` 帮助屏、`PgUp/PgDn` 或鼠标滚轮逐行滚动消息区、`Alt+↑↓` 选中消息、`Shift+Enter` 输入框内换行;状态栏实时显示 `approval/mode/model/tok/ctx`;完整键位见 [docs/tui-keys.md](./docs/tui-keys.md)
 
 ### RPC(`aether --mode rpc`)
 
