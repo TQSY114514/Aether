@@ -100,20 +100,30 @@ function allRows(stmt) {
   return stmt.all()
 }
 
-function initDatabase() {
-  dbPath = path.join(app.getPath('userData'), 'aetherai.db')
-  db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = OFF')
+// ─── Schema bootstrap (Electron-free) ───────────────────────────────────────
+// The pure CREATE TABLE / CREATE VIRTUAL TABLE set from initDatabase, extracted
+// so the TUI/CLI can bootstrap a fresh DB headlessly — no Electron app / path /
+// safeStorage here, the target path comes from the argument. Every statement is
+// idempotent (IF NOT EXISTS / guarded try-catch): running this against an
+// already-initialized DB is a safe no-op and never wipes data. Versioned /
+// conditional migrations (addCol block, agent_task CHECK rebuild, memory/skill
+// ALTERs, seed rows, checkpointManager table) stay in initDatabase, layered on
+// top of this base schema — single DDL source, no duplicated SQL.
+function createEmptyDatabase(dbPath) {
+  const dir = path.dirname(String(dbPath))
+  if (dir) fs.mkdirSync(dir, { recursive: true })
+  const target = new Database(dbPath)
+  target.pragma('journal_mode = WAL')
+  target.pragma('foreign_keys = OFF')
 
-  db.exec("CREATE TABLE IF NOT EXISTS provider (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_url TEXT NOT NULL, api_key TEXT, api_format TEXT NOT NULL DEFAULT 'openai', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.exec("CREATE TABLE IF NOT EXISTS model (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, model_name TEXT NOT NULL, display_name TEXT, is_primary INTEGER NOT NULL DEFAULT 0, fallback_order INTEGER, context_window INTEGER, input_price_per_1k REAL, output_price_per_1k REAL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.exec("CREATE TABLE IF NOT EXISTS persona (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prompt TEXT NOT NULL, avatar TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.exec("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)")
-  db.exec("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  target.exec("CREATE TABLE IF NOT EXISTS provider (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_url TEXT NOT NULL, api_key TEXT, api_format TEXT NOT NULL DEFAULT 'openai', enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  target.exec("CREATE TABLE IF NOT EXISTS model (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, model_name TEXT NOT NULL, display_name TEXT, is_primary INTEGER NOT NULL DEFAULT 0, fallback_order INTEGER, context_window INTEGER, input_price_per_1k REAL, output_price_per_1k REAL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  target.exec("CREATE TABLE IF NOT EXISTS persona (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prompt TEXT NOT NULL, avatar TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  target.exec("CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, parent_session_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)")
+  target.exec("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
-  db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-  db.exec(`CREATE TABLE IF NOT EXISTS scheduled_task (
+  target.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+  target.exec(`CREATE TABLE IF NOT EXISTS scheduled_task (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
@@ -123,7 +133,7 @@ function initDatabase() {
     last_run_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
-  db.exec(`CREATE TABLE IF NOT EXISTS agent_task (
+  target.exec(`CREATE TABLE IF NOT EXISTS agent_task (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER,
     title TEXT NOT NULL,
@@ -139,36 +149,24 @@ function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME
   )`)
-  db.exec('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
-  db.exec('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-  db.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-  db.exec("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-  db.exec('CREATE TABLE IF NOT EXISTS repo_index_cache (workspace TEXT PRIMARY KEY, mtime_x REAL NOT NULL, graph_json TEXT NOT NULL)')
-  db.exec('CREATE TABLE IF NOT EXISTS tool_loop_run (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, duration_ms INTEGER, iterations INTEGER, input_tokens INTEGER, output_tokens INTEGER, error_kind TEXT)')
-  db.exec('CREATE TABLE IF NOT EXISTS tool_call_sample (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER, tool_name TEXT, duration_ms INTEGER, success INTEGER)')
-  try { db.exec("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN relation_entity TEXT") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN relation_type TEXT") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN relation_target TEXT") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN source_session_id INTEGER") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN source_turn_id INTEGER") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN confidence REAL DEFAULT 1.0") } catch {}
-  try { db.exec("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
+  target.exec('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
+  target.exec('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  target.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  target.exec("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+  target.exec('CREATE TABLE IF NOT EXISTS repo_index_cache (workspace TEXT PRIMARY KEY, mtime_x REAL NOT NULL, graph_json TEXT NOT NULL)')
+  target.exec('CREATE TABLE IF NOT EXISTS tool_loop_run (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, duration_ms INTEGER, iterations INTEGER, input_tokens INTEGER, output_tokens INTEGER, error_kind TEXT)')
+  target.exec('CREATE TABLE IF NOT EXISTS tool_call_sample (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER, tool_name TEXT, duration_ms INTEGER, success INTEGER)')
 
-  db.exec('CREATE TABLE IF NOT EXISTS kg_nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL UNIQUE, type TEXT DEFAULT "entity", created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
-  db.exec('CREATE TABLE IF NOT EXISTS kg_edges (id INTEGER PRIMARY KEY AUTOINCREMENT, "from" TEXT NOT NULL, "to" TEXT NOT NULL, relation TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 0.8, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges("from")') } catch {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges("to")') } catch {}
+  target.exec('CREATE TABLE IF NOT EXISTS kg_nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL UNIQUE, type TEXT DEFAULT "entity", created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
+  target.exec('CREATE TABLE IF NOT EXISTS kg_edges (id INTEGER PRIMARY KEY AUTOINCREMENT, "from" TEXT NOT NULL, "to" TEXT NOT NULL, relation TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 0.8, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
 
-  db.exec(`CREATE TABLE IF NOT EXISTS skill_usage (
+  target.exec(`CREATE TABLE IF NOT EXISTS skill_usage (
     name TEXT PRIMARY KEY,
     use_count INTEGER NOT NULL DEFAULT 0,
     last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  db.exec(`CREATE TABLE IF NOT EXISTS agent_execution_log (
+  target.exec(`CREATE TABLE IF NOT EXISTS agent_execution_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
     turn_id INTEGER NOT NULL,
@@ -176,7 +174,7 @@ function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  db.exec(`CREATE TABLE IF NOT EXISTS agent_checkpoint (
+  target.exec(`CREATE TABLE IF NOT EXISTS agent_checkpoint (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
     message_id INTEGER NOT NULL,
@@ -188,23 +186,20 @@ function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  try { require('./llm/checkpointManager').createTable(db) } catch {}
-  initSkillSuccessTable()
-
-  db.exec('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
-  db.exec(`CREATE TABLE IF NOT EXISTS skill_patterns (
+  target.exec('CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)')
+  target.exec(`CREATE TABLE IF NOT EXISTS skill_patterns (
     signature TEXT PRIMARY KEY,
     tools TEXT NOT NULL,
     params_json TEXT,
     count INTEGER NOT NULL DEFAULT 1,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
-  db.exec(`CREATE TABLE IF NOT EXISTS skill_drafts (
+  target.exec(`CREATE TABLE IF NOT EXISTS skill_drafts (
     signature TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     drafted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
-  db.exec(`CREATE TABLE IF NOT EXISTS evolution_events (
+  target.exec(`CREATE TABLE IF NOT EXISTS evolution_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     capsule_id TEXT NOT NULL,
     genes TEXT NOT NULL,
@@ -213,9 +208,8 @@ function initDatabase() {
     blast_radius TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
-  try { db.exec("ALTER TABLE evolution_events ADD COLUMN blast_radius TEXT"); } catch (e) {}
 
-  db.exec(`CREATE TABLE IF NOT EXISTS skill_success (
+  target.exec(`CREATE TABLE IF NOT EXISTS skill_success (
     name TEXT PRIMARY KEY,
     total_uses INTEGER NOT NULL DEFAULT 0,
     successes INTEGER NOT NULL DEFAULT 0,
@@ -223,9 +217,9 @@ function initDatabase() {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  db.exec('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0, disable_reason TEXT)')
+  target.exec('CREATE TABLE IF NOT EXISTS provider_credential (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id INTEGER NOT NULL, api_key TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL DEFAULT 1, last_used_at DATETIME DEFAULT "2000-01-01T00:00:00.000Z", cooldown_until DATETIME, error_count INTEGER NOT NULL DEFAULT 0, disable_reason TEXT)')
 
-  db.exec(`CREATE TABLE IF NOT EXISTS usage_log (
+  target.exec(`CREATE TABLE IF NOT EXISTS usage_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER,
     provider_id INTEGER,
@@ -243,15 +237,8 @@ function initDatabase() {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`)
 
-  try { db.exec("ALTER TABLE skill_usage ADD COLUMN state TEXT NOT NULL DEFAULT 'active'") } catch {}
-  try { db.exec("ALTER TABLE skill_usage ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") } catch {}
-  try { db.exec("ALTER TABLE skill_usage ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'") } catch {}
-  try { db.exec("ALTER TABLE skill_usage ADD COLUMN patch_count INTEGER NOT NULL DEFAULT 0") } catch {}
-  try { db.exec("ALTER TABLE skill_usage ADD COLUMN last_viewed_at DATETIME") } catch {}
-  try { db.exec("ALTER TABLE skill_usage ADD COLUMN archived_at DATETIME") } catch {}
-
   try {
-    db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+    target.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
       content,
       session_id UNINDEXED,
       message_id UNINDEXED,
@@ -259,13 +246,46 @@ function initDatabase() {
     )`)
   } catch {}
   try {
-    db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+    target.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       content,
       type UNINDEXED,
       memory_id UNINDEXED,
       tokenize = 'unicode61'
     )`)
   } catch {}
+
+  return target
+}
+
+function initDatabase() {
+  dbPath = path.join(app.getPath('userData'), 'aetherai.db')
+  db = createEmptyDatabase(dbPath)
+
+  try { db.exec("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN relation_entity TEXT") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN relation_type TEXT") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN relation_target TEXT") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN source_session_id INTEGER") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN source_turn_id INTEGER") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN confidence REAL DEFAULT 1.0") } catch {}
+  try { db.exec("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
+
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges("from")') } catch {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges("to")') } catch {}
+
+  try { require('./llm/checkpointManager').createTable(db) } catch {}
+  initSkillSuccessTable()
+
+  try { db.exec("ALTER TABLE evolution_events ADD COLUMN blast_radius TEXT"); } catch (e) {}
+
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN state TEXT NOT NULL DEFAULT 'active'") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN patch_count INTEGER NOT NULL DEFAULT 0") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN last_viewed_at DATETIME") } catch {}
+  try { db.exec("ALTER TABLE skill_usage ADD COLUMN archived_at DATETIME") } catch {}
 
   const cols = {
     provider: getTableColumns('provider'),
@@ -972,8 +992,16 @@ function applySkillTransitions() {
   } catch {}
 }
 
+// Close the underlying database handle (used by tests / clean shutdown). Safe
+// to call when not initialized.
+function closeDatabase() {
+  try { if (db) db.close() } catch {}
+  db = null
+  dbPath = null
+}
+
 module.exports = {
-  initDatabase, getProviders, getProvider, addProvider, updateProvider, deleteProvider,
+  initDatabase, createEmptyDatabase, closeDatabase, getProviders, getProvider, addProvider, updateProvider, deleteProvider,
   getModels, getAllModels, getModel, addModel, updateModel, deleteModel, getFallbackChain,
   getPersonas, getPersona, addPersona, updatePersona, deletePersona,
   getSessions, getSession, createSession, pruneEmptySessions, renameSession, pinSession, deleteSession, touchSession,
