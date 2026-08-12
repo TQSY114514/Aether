@@ -29,6 +29,31 @@ function taskDbAdapter(raw) {
       return { lastInsertRowid: Number(info.lastInsertRowid) }
     },
 
+    // Mirror database.js renameSession — no-op silently if id is null/undefined
+    // (better-sqlite3 throws on undefined bind parameters).
+    renameSession(id, title) {
+      if (id == null) return
+      raw.prepare('UPDATE session SET title = ?, updated_at = ? WHERE id = ?').run(title, localNow(), id)
+    },
+
+    // Mirror database.js deleteSession: cascade-delete the session and its
+    // messages in one transaction. Optional tables are wrapped in try/catch so
+    // older DB files (missing newer tables) still delete cleanly.
+    deleteSession(id) {
+      if (id == null) return
+      const del = raw.transaction((sid) => {
+        try { raw.prepare('DELETE FROM messages_fts WHERE session_id = ?').run(sid) } catch {}
+        raw.prepare('DELETE FROM message WHERE session_id = ?').run(sid)
+        try { raw.prepare('DELETE FROM agent_checkpoint WHERE session_id = ?').run(sid) } catch {}
+        try { raw.prepare('DELETE FROM agent_execution_log WHERE session_id = ?').run(sid) } catch {}
+        try { raw.prepare('DELETE FROM usage_log WHERE session_id = ?').run(sid) } catch {}
+        try { raw.prepare('UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?').run(sid) } catch {}
+        raw.prepare('DELETE FROM session WHERE id = ?').run(sid)
+        return sid
+      })
+      del(id)
+    },
+
     // ── Message ────────────────────────────────────────────────────────────
     addMessage({ session_id, role, content, model_used = null, provider_used = null }) {
       const info = raw.prepare('INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model) VALUES (?, ?, ?, ?, ?, NULL, NULL, \'success\', NULL, NULL)')
@@ -45,6 +70,24 @@ function taskDbAdapter(raw) {
         .run(...keys.map((k) => data[k]), id)
     },
 
+    // Delete a single message by id. database.js has no by-id delete; this is
+    // the adapter's own (idempotent, null-safe). Returns { changes } so callers
+    // can distinguish "deleted 1" from "already gone" without throwing.
+    deleteMessage(id) {
+      if (id == null) return { changes: 0 }
+      const info = raw.prepare('DELETE FROM message WHERE id = ?').run(id)
+      return { changes: Number(info.changes) }
+    },
+
+    // Truncate-by-idx parity with database.js deleteMessagesAfter: remove every
+    // message after a given message id in a session. Like database.js, FTS rows
+    // are left untouched.
+    deleteMessagesAfter(sessionId, afterId) {
+      if (sessionId == null) return { changes: 0 }
+      const info = raw.prepare('DELETE FROM message WHERE session_id = ? AND id > ?').run(sessionId, afterId)
+      return { changes: Number(info.changes) }
+    },
+
     // ── Model / Provider / Settings (read-only) ───────────────────────────
     getModel(id) {
       const row = raw.prepare('SELECT * FROM model WHERE id = ?').get(id)
@@ -56,9 +99,42 @@ function taskDbAdapter(raw) {
       return row ? { ...row, id: Number(row.id) } : null
     },
 
+    // Providers read-only list (W0-t6): mirrors database.js getProviders minus
+    // api_key — headless surfaces must never expose stored keys. Returns
+    // id/name/api_url/api_format/enabled only.
+    listProviders() {
+      return raw.prepare('SELECT id, name, api_url, api_format, enabled FROM provider ORDER BY id')
+        .all()
+        .map((r) => ({ id: Number(r.id), name: r.name, api_url: r.api_url, api_format: r.api_format, enabled: Number(r.enabled) }))
+    },
+
+    // Upsert a provider by name. Deliberately NOT literal `INSERT OR REPLACE`:
+    // provider.name has no UNIQUE constraint (database.js:109), so OR REPLACE
+    // would silently create duplicate rows. If a provider with the same name
+    // exists it is updated, otherwise inserted. No safeStorage headless, so the
+    // key is stored as given (same stance as agentCore.decryptApiKey).
+    upsertProvider({ name, api_url, api_key = null, api_format = 'openai', enabled = 1 }) {
+      if (name == null || name === '') throw new Error('upsertProvider: name is required')
+      const existing = raw.prepare('SELECT id FROM provider WHERE name = ?').get(name)
+      if (existing) {
+        raw.prepare('UPDATE provider SET api_url = ?, api_key = ?, api_format = ?, enabled = ? WHERE id = ?')
+          .run(api_url, api_key, api_format, enabled, Number(existing.id))
+        return { lastInsertRowid: Number(existing.id), upserted: false }
+      }
+      const info = raw.prepare('INSERT INTO provider (name, api_url, api_key, api_format, enabled) VALUES (?, ?, ?, ?, ?)')
+        .run(name, api_url, api_key, api_format, enabled)
+      return { lastInsertRowid: Number(info.lastInsertRowid), upserted: true }
+    },
+
     getSetting(key) {
       const row = raw.prepare('SELECT value FROM settings WHERE key = ?').get(key)
       return row ? row.value : null
+    },
+
+    // Mirror database.js setSetting. INSERT OR REPLACE is safe here because
+    // settings.key is PRIMARY KEY (database.js:115).
+    setSetting(key, value) {
+      raw.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value)
     },
 
     // ── Agent task CRUD ─────────────────────────────────────────────────────
