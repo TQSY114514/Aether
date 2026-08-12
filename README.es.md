@@ -50,7 +50,7 @@ AetherAI combina varias capacidades que normalmente se encuentran repartidas ent
 | **Planificación jerárquica** | Las solicitudes complejas se descomponen automáticamente en subtareas paralelas. | `Experimental` |
 | **Compacción de contexto** | Las conversaciones largas se resumen automáticamente sin perder pares de llamadas a herramientas. | `Beta` |
 | **Privacidad local-first** | Conversaciones, claves y personas en SQLite local. Nada sale de tu máquina. | `Stable` |
-| **15 idiomas de UI** | Incluyendo chino clásico (文言) y árabe RTL. | `Beta` |
+| **15 idiomas de UI** | Incluyendo chino clásico (chino clásico) y árabe RTL. | `Beta` |
 | **Terminal TUI** | Terminal interactivo Ink v5: flujo de sesiones, tarjetas de herramientas, revisión/reversión de diff, puerta de permisos por teclado, árbol de sesiones con `/fork`, `/memory` y reinyección de steering en tiempo de ejecución. | `Beta` |
 | **Headless CLI · RPC · SDK** | CLI de cuatro modos (disparo único / NDJSON / JSONL RPC / pipe), SDK sin Electron (`aetherai/sdk`) y protocolo JSONL invocable por máquinas. | `Beta` |
 | **Licencia MIT** | Totalmente open source. | `Stable` |
@@ -108,11 +108,11 @@ O ejecuta `start.bat` en la raíz del repo en Windows.
 
 ```bash
 cd app && npm install
-node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
-node cli.js "你好"           # 单发 prompt
-echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
-node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
-node cli.js tui --smoke      # headless 状态机冒烟
+node cli.js tui              # UI de terminal interactivo (Node ≥ 22; mejor en Windows Terminal)
+node cli.js "hola"           # prompt de disparo único
+echo "resume esto" | node cli.js  # stdin en pipe como prompt
+node cli.js --mode json "x"  # flujo de eventos NDJSON (scripts/CI)
+node cli.js tui --smoke      # smoke de la máquina de estados headless
 ```
 
 ### Configurar proveedor
@@ -201,7 +201,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 | **Fondo personalizado** | `Stable` | Sube una imagen con controles de opacidad / desenfoque |
 | **Personas** | `Stable` | Preajustes de system prompt, cambiables por sesión |
 | **Temas** | `Stable` | Light / Dark / Blue / Glass / Retro |
-| **15 idiomas de UI** | `Beta` | Inglés, chino (简/繁/文言), japonés, español, francés, alemán, portugués, ruso, ucraniano, árabe (RTL), hindi, coreano |
+| **15 idiomas de UI** | `Beta` | Inglés, chino (simplificado / tradicional / clásico), japonés, español, francés, alemán, portugués, ruso, ucraniano, árabe (RTL), hindi, coreano |
 | **Auto-update** | `Beta` | El instalador NSIS verifica al inicio; el portable también (instalación manual) |
 | **Seguimiento de uso** | `Beta` | Registro por llamada a la API con tokens, costo, latencia, tasa de aciertos de caché |
 

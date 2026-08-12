@@ -50,7 +50,7 @@ AetherAI combine plusieurs capacités, habituellement réparties entre plusieurs
 | **Planification hiérarchique** | Les demandes complexes se décomposent automatiquement en sous-tâches parallèles. | `Experimental` |
 | **Compaction du contexte** | Les longues conversations se résument automatiquement sans perdre les paires d'appels d'outils. | `Beta` |
 | **Confidentialité local-first** | Conversations, clés, personas dans SQLite local. Rien ne quitte votre machine. | `Stable` |
-| **15 langues d'interface** | Y compris le chinois classique (文言) et l'arabe RTL. | `Beta` |
+| **15 langues d'interface** | Y compris le chinois classique (chinois classique) et l'arabe RTL. | `Beta` |
 | **TUI terminal** | Terminal interactif Ink v5 : flux de sessions, cartes d'outils, revue/rollback de diffs, portes de permissions clavier, `/fork` arbre de sessions, `/memory`, réinjection de steering en cours d'exécution. | `Beta` |
 | **CLI headless · RPC · SDK** | CLI à quatre modes (one-shot / NDJSON / JSONL RPC / pipe), SDK sans Electron (`aetherai/sdk`), protocole JSONL appelable par machine. | `Beta` |
 | **Licence MIT** | Entièrement open source. | `Stable` |
@@ -109,8 +109,8 @@ Ou exécutez `start.bat` à la racine du dépôt sous Windows.
 ```bash
 cd app && npm install
 node cli.js tui              # UI terminal interactive (Node ≥ 22 ; expérience optimale dans Windows Terminal)
-node cli.js "你好"           # prompt one-shot
-echo "总结一下" | node cli.js  # stdin en pipe comme prompt
+node cli.js "salut"           # prompt one-shot
+echo "résume ça" | node cli.js  # stdin en pipe comme prompt
 node cli.js --mode json "x"  # flux d'événements NDJSON (scripts/CI)
 node cli.js tui --smoke      # smoke test de la machine à états headless
 ```
@@ -201,7 +201,7 @@ node cli.js tui --smoke      # smoke test de la machine à états headless
 | **Arrière-plan personnalisé** | `Stable` | Importer une image avec contrôles d'opacité / flou |
 | **Personas** | `Stable` | Préréglages de prompt système, commutables par session |
 | **Thèmes** | `Stable` | Clair / Sombre / Bleu / Verre / Rétro |
-| **15 langues d'interface** | `Beta` | Anglais, chinois (简/繁/文言), japonais, espagnol, français, allemand, portugais, russe, ukrainien, arabe (RTL), hindi, coréen |
+| **15 langues d'interface** | `Beta` | Anglais, chinois (simplifié / traditionnel / classique), japonais, espagnol, français, allemand, portugais, russe, ukrainien, arabe (RTL), hindi, coréen |
 | **Mise à jour automatique** | `Beta` | L'installateur NSIS vérifie au lancement ; le portable vérifie aussi (installation manuelle) |
 | **Suivi d'utilisation** | `Beta` | Journal par appel API avec tokens, coût, latence, taux de succès du cache |
 
