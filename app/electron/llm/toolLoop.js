@@ -312,6 +312,20 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     permissions.PermissionMode[agentModeToPermissionMode(agentMode) || 'Prompt']
   )
 
+  // Capability axis policies（评审 P0-2）: 从 settings 读取持久化配置
+  //   capability.filesystem / capability.shell / capability.network
+  //   = 'allow' | 'ask' | 'deny'（缺省不设置 → 轴策略不生效, 纯 5 档行为）。
+  try {
+    if (db && typeof db.getSetting === 'function') {
+      const axes = {}
+      for (const axis of ['filesystem', 'shell', 'network']) {
+        const v = db.getSetting(`capability.${axis}`)
+        if (v === 'allow' || v === 'ask' || v === 'deny') axes[axis] = v
+      }
+      if (Object.keys(axes).length) permissionPolicy.withAxisPolicies(axes)
+    }
+  } catch {}
+
   let totalChars = 0
   let lastSig = ''
   let sigRepeat = 0

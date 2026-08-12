@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
-import { Shield, ShieldCheck, FolderOpen, FileText } from 'lucide-react'
+import { Shield, ShieldCheck, FolderOpen, FileText, HardDrive, TerminalSquare, Globe } from 'lucide-react'
+
+// Capability axis options（与 capabilityPolicy.js 三态对齐）
+const AXIS_OPTIONS = ['allow', 'ask', 'deny'] as const
+type AxisPolicy = typeof AXIS_OPTIONS[number]
+const AXES: { key: string; label: string; desc: string; icon: any; hint: string }[] = [
+  { key: 'filesystem', label: '文件系统', desc: '文件读写 / 目录操作 / git 本地操作', icon: HardDrive, hint: 'allow 放行所有文件操作; ask 每次确认; deny 禁止' },
+  { key: 'shell', label: 'Shell 命令', desc: 'run_command / 调试循环 / 测试循环', icon: TerminalSquare, hint: '命令执行是最高风险轴, 建议 ask 或 deny' },
+  { key: 'network', label: '网络访问', desc: 'web 搜索/抓取 / GitHub 操作', icon: Globe, hint: 'allow 直连; ask 每次确认; deny 断网' },
+]
 
 // ───────────────────────────────────────────────────────────────────────────
 // Agent workspace + safety settings.
@@ -19,6 +28,8 @@ export default function AgentSettings() {
   const [maxIter, setMaxIter] = useState(25)
   const [autoMemory, setAutoMemory] = useState(true)
   const [projectInst, setProjectInst] = useState<{ has: boolean; fileName: string | null }>({ has: false, fileName: null })
+  // Capability axis policies（评审 P0-2）: null = 未配置(纯 5 档行为)
+  const [axes, setAxes] = useState<Record<string, AxisPolicy | null>>({ filesystem: null, shell: null, network: null })
 
   useEffect(() => {
     // Guard: agent IPC may be absent on an older preload build.
@@ -27,7 +38,22 @@ export default function AgentSettings() {
     try { window.electronAPI?.settings?.get?.('auto_memory_enabled').then((v) => setAutoMemory(v !== '0')).catch(() => {}) } catch {}
     // Check for project instruction file (CLAUDE.md / .aetherai.md) in workspace.
     try { window.electronAPI?.agent?.hasProjectInstructions?.().then(setProjectInst).catch(() => {}) } catch {}
+    // Load capability axis policies
+    try {
+      window.electronAPI?.settings?.get?.('capability.filesystem').then((v) => setAxes((p) => ({ ...p, filesystem: (AXIS_OPTIONS as readonly string[]).includes(v || '') ? v as AxisPolicy : null }))).catch(() => {})
+      window.electronAPI?.settings?.get?.('capability.shell').then((v) => setAxes((p) => ({ ...p, shell: (AXIS_OPTIONS as readonly string[]).includes(v || '') ? v as AxisPolicy : null }))).catch(() => {})
+      window.electronAPI?.settings?.get?.('capability.network').then((v) => setAxes((p) => ({ ...p, network: (AXIS_OPTIONS as readonly string[]).includes(v || '') ? v as AxisPolicy : null }))).catch(() => {})
+    } catch {}
   }, [])
+
+  const saveAxis = async (axis: string, v: AxisPolicy | null) => {
+    setAxes((p) => ({ ...p, [axis]: v }))
+    try {
+      if (v) await window.electronAPI?.settings?.set?.(`capability.${axis}`, v)
+      else await window.electronAPI?.settings?.set?.(`capability.${axis}`, '')
+      toast(`能力轴 ${axis} → ${v || '默认(5档模式)'}`, { type: 'success' })
+    } catch { toast('能力轴设置失败', { type: 'error' }) }
+  }
 
   const saveMaxIter = async (v: number) => {
     const clamped = Math.max(1, Math.min(200, Math.floor(v)))
@@ -147,6 +173,43 @@ export default function AgentSettings() {
             style={{ backgroundColor: 'var(--accent)' }}>
             {safeBusy ? '应用中…' : '应用'}
           </button>
+        </div>
+
+        {/* Capability axis policies — filesystem / shell / network */}
+        <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldCheck size={13} className="text-gray-400" />
+            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>能力轴权限(Capability-based)</p>
+          </div>
+          <p className="text-[10px] mb-2.5" style={{ color: 'var(--text-muted)' }}>
+            按能力轴独立控制 Agent 权限, 覆盖既有 5 档模式。allow 放行 · ask 每次确认 · deny 禁止; 留空则回落到档位模式。
+          </p>
+          <div className="space-y-2">
+            {AXES.map((a) => {
+              const Icon = a.icon
+              const cur = axes[a.key] || ''
+              return (
+                <div key={a.key} className="flex items-center justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <Icon size={13} className="text-gray-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{a.label}</p>
+                      <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{a.desc}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {AXIS_OPTIONS.map((opt) => (
+                      <button key={opt} onClick={() => saveAxis(a.key, cur === opt ? null : opt)}
+                        className={`px-2 py-1 text-[10px] rounded-md border transition-colors ${cur === opt ? 'text-white' : ''}`}
+                        style={cur === opt ? { backgroundColor: opt === 'deny' ? 'var(--error)' : opt === 'ask' ? '#d97706' : 'var(--accent)', borderColor: 'transparent' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                        {opt === 'allow' ? '放行' : opt === 'ask' ? '确认' : '禁止'}{cur === opt ? ' ✓' : ''}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         {/* Project instructions status (CLAUDE.md / .aetherai.md). */}

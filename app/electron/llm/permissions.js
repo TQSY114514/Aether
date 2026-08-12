@@ -184,6 +184,7 @@ class PermissionPolicy {
     this.denyRules = []                 // _PermissionRule[]
     this.askRules = []                  // _PermissionRule[]
     this.deniedTools = []               // unconditional deny list
+    this.axisPolicies = null            // { filesystem|shell|network: 'allow'|'ask'|'deny' }
   }
 
   /**
@@ -191,6 +192,17 @@ class PermissionPolicy {
    */
   withToolRequirement(toolName, requiredMode) {
     this.toolRequirements.set(toolName, requiredMode)
+    return this
+  }
+
+  /**
+   * Enable capability axis policies (review P0-2).
+   *   policies = { filesystem: 'allow'|'ask'|'deny', shell: ..., network: ... }
+   * Only valid axes/policies are kept; unknown keys ignored.
+   */
+  withAxisPolicies(policies) {
+    const { normalizeAxisPolicies } = require('./capabilityPolicy')
+    this.axisPolicies = normalizeAxisPolicies(policies)
     return this
   }
 
@@ -269,6 +281,24 @@ class PermissionPolicy {
     if (askRule) {
       const reason = `tool '${toolName}' requires approval due to ask rule`
       return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+    }
+
+    // ── Capability axis policy（外部评审 P0-2）───────────────────────────
+    // 规则引擎未命中时, 按轴级策略决策: filesystem/shell/network 三轴各
+    // allow|ask|deny, 作为显式政策覆盖 —— deny 轴压过 Allow 模式,
+    // allow 轴放行 ReadOnly 模式; 未注入/未知工具轴 → 回落既有 5 档判断。
+    if (this.axisPolicies) {
+      try {
+        const { decideAxisPolicy } = require('./capabilityPolicy')
+        const ax = decideAxisPolicy(toolName, this.axisPolicies)
+        if (ax.matched) {
+          if (ax.policy === 'allow') return PermissionOutcome.allow()
+          if (ax.policy === 'deny') return PermissionOutcome.deny(`capability policy: ${ax.axis} axis denies ${toolName}`)
+          if (ax.policy === 'ask') {
+            return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${ax.axis} axis requires approval`, prompter)
+          }
+        }
+      } catch {}
     }
 
     if (allowRule || currentMode === PermissionMode.Allow || currentMode >= requiredMode) {
