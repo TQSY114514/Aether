@@ -144,6 +144,29 @@ function list(db) {
   })
 }
 
+// ─── Safe-mode (one-click conservative defaults) ────────────────────────────
+// "一键安全默认": 把所有 Experimental / Beta 能力强制关闭并持久化, 只保留
+// debug 观测与已发布的稳定能力(repoMap / firstRunWizard)。
+// 返回 [{ key, value }] 实际写入的清单; 无 db 时返回空数组(不抛错)。
+// category 约定: 'debug' 与 'ux' 视为稳定; 其余(exec/agent/code-intel/
+// learning/ecosystem 下的实验项)全部关。
+function applySafeMode(db) {
+  const written = []
+  if (!db || typeof db.setSetting !== 'function') return written
+  for (const d of DEFS) {
+    // 稳定保留: debug 观测 + 首次运行向导(已发布 UX)
+    if (d.category === 'debug' || d.key === 'ux.firstRunWizard') continue
+    try {
+      const cur = isEnabled(db, d.key)
+      if (cur !== false) {
+        db.setSetting(PREFIX + d.key, '0')
+        written.push({ key: d.key, value: '0' })
+      }
+    } catch {}
+  }
+  return written
+}
+
 module.exports = {
   PREFIX,
   FLAG_DEFS: DEFS,
@@ -153,5 +176,6 @@ module.exports = {
   isEnabled,
   set,
   list,
+  applySafeMode,
   normalizeValue,
 }

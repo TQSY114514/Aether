@@ -118,4 +118,30 @@ describe('featureFlags registry', () => {
     db._store.set('feature_flag.debug.fileLog', 'banana')
     expect(flags.isEnabled(db, 'debug.fileLog')).toBe(true) // default, not crash
   })
+
+  it('applySafeMode disables every experimental flag but keeps debug + shipped UX', () => {
+    // 先故意打开几个实验项, 再一键安全模式 → 全部回落
+    flags.set(db, 'exec.docker', true)
+    flags.set(db, 'agent.orchestrator', true)
+    flags.set(db, 'memory.experienceReplay', true)
+    flags.set(db, 'plugin.sdk', true)
+    const written = flags.applySafeMode(db)
+    // 写入了 4 个被打开的实验项
+    expect(written.length).toBeGreaterThanOrEqual(4)
+    // 全部变关
+    for (const key of ['exec.docker', 'agent.orchestrator', 'memory.experienceReplay', 'plugin.sdk']) {
+      expect(flags.isEnabled(db, key)).toBe(false)
+    }
+    // 稳定项保留: debug 观测 + 已发布 UX
+    expect(flags.isEnabled(db, 'debug.fileLog')).toBe(true)
+    expect(flags.isEnabled(db, 'ux.firstRunWizard')).toBe(true)
+  })
+
+  it('applySafeMode is idempotent and never throws without db', () => {
+    flags.set(db, 'exec.ssh', true)
+    flags.applySafeMode(db)
+    const again = flags.applySafeMode(db)
+    expect(again.length).toBe(0) // 已全部关闭, 第二次无事可写
+    expect(flags.applySafeMode(null)).toEqual([]) // 无 db → 空, 不抛错
+  })
 })

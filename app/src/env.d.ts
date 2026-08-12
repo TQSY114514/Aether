@@ -177,6 +177,7 @@ interface Window {
     flags: {
       list: () => Promise<{ key: string; default: boolean; value: string | null; enabled: boolean; category: string; description: string }[]>
       set: (key: string, value: boolean | string) => Promise<{ ok: boolean; key?: string; value?: string; error?: string }>
+      safeMode: () => Promise<{ ok: boolean; written: { key: string; value: string }[] }>
       onChanged: (callback: (key: string, value: string) => void) => () => void
     }
     mainLog: {
