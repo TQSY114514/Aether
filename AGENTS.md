@@ -110,6 +110,12 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   JSONL module is dead code and must not be revived that way — graph memory
   belongs in `kg_nodes`/`kg_edges` tables).
 
+## Known pitfalls (condensed)
+
+- `.js` under `app/electron` is plain CommonJS. No TS type annotations (`: string`, `as X`) and no `import`/`export`: Node's CJS loader throws `SyntaxError`. Deleting a trailing `module.exports` turns `require()` into `{}` and kills LLM/IPC paths.
+- Electron APIs (`protocol.handle`, `session.defaultSession`) only after `app.whenReady()`. `nativeImage.createFromDataURL` is removed in Electron 43, use `createFromBuffer`. One IPC channel = one `ipcMain.handle`; a duplicate throws and aborts the whole registration chain in `main.js`.
+- DB: `db.exec()` is DDL-only; parameterize every query with `prepare()...` and `?` bindings. `CURRENT_TIMESTAMP` is UTC, use `localNow()`. `lastInsertRowid` BigInt, `Number()` it. Windows Defender can lock the .exe during electron-builder (EPERM), retry or build portable.
+
 ## Before changing X, read Y
 
 - Before changing chat send/stream → read `ipc/chat.handler.js` AND
