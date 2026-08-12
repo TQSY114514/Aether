@@ -661,29 +661,32 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
           const filter = (modelPicker.filter || '').toLowerCase()
           const flat = modelPicker.models.filter((m) =>
             !filter || `${m.provider_name} ${m.model_name}`.toLowerCase().includes(filter))
-          const groups = []
-          for (const m of flat) {
-            const last = groups[groups.length - 1]
-            if (!last || last.name !== m.provider_name) groups.push({ name: m.provider_name, items: [m] })
-            else last.items.push(m)
+          // 窗口化(opencode DialogSelect 风格): 最多显示 W 行, 选中项保持在视口内
+          const W = 10
+          const safeIdx = Math.min(modelPicker.idx, Math.max(0, flat.length - 1))
+          const start = Math.max(0, Math.min(safeIdx - Math.floor(W / 2), Math.max(0, flat.length - W)))
+          const visible = flat.slice(start, start + W)
+          const current = flat[safeIdx]
+          // 分组标题: 同 provider 连续段的首行前插入(文件夹样式 ▾)
+          const rows = []
+          for (let vi = 0; vi < visible.length; vi++) {
+            const m = visible[vi]
+            if (vi === 0 || visible[vi - 1].provider_name !== m.provider_name) {
+              rows.push(h(Text, { key: `g-${m.provider_id}-${start + vi}`, color: C.sys }, `  ▾ ${m.provider_name}:`))
+            }
+            const isCurrent = state.modelName === m.model_name
+            rows.push(h(SelectRow, {
+              key: `${m.provider_id}-${m.id}`,
+              label: `${m.model_name}${m.is_primary ? ' ★' : ''}${isCurrent ? ' ●' : ''}`,
+              idx: modelPicker.idx, i: start + vi,
+            }))
           }
-          let flatIdx = 0
           return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
-            h(Text, { bold: true, color: C.primary }, 'Select model — 输入过滤 · ↑↓ 选择 · Enter 确认 · Esc 取消'),
-            h(Text, { color: C.dim }, `  filter: ${modelPicker.filter || '(all)'} · ${flat.length} 个模型`),
-            groups.map((g) => [
-              h(Text, { key: `g-${g.name}`, color: C.sys }, `  ${g.name}:`),
-              ...g.items.map((m) => {
-                const cur = flatIdx
-                flatIdx += 1
-                const isCurrent = state.modelName === m.model_name
-                return h(SelectRow, {
-                  key: `${m.provider_id}-${m.id}`,
-                  label: `${m.model_name}${m.is_primary ? ' ★' : ''}${isCurrent ? ' ●' : ''}`,
-                  idx: modelPicker.idx, i: cur,
-                })
-              }),
-            ]))
+            // 供应商/模型面包屑固定在面板顶部(文件夹式导航)
+            h(Text, { bold: true, color: C.primary }, `Select model — ${current ? `${current.provider_name} / ${current.model_name}` : '(no match)'}`),
+            h(Text, { color: C.dim }, `  filter: ${modelPicker.filter || '(all)'} · ${flat.length} 个模型 · ↑↓ 滚动 · Enter 确认 · Esc 取消`),
+            rows,
+            flat.length > W ? h(Text, { color: C.dim }, `  … 共 ${flat.length} 个, 显示 ${start + 1}-${start + W}`) : null)
         })()
         : null,
       timeline
