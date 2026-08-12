@@ -255,6 +255,42 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   steering.setRunning(sessionId, true)
   const toolPayload = tools ? toolsPayload(agentMode) : []
 
+  // ── Tool Router（外部评审 P0-1）─────────────────────────────────────────
+  // 默认全量注入既有行为; 当 feature flag 'agent.toolRouter' 开启时, 基于
+  // 用户消息做按需过滤: 核心工具(文件/shell/web/检索)恒在, github/lsp/
+  // agent/memory/git 类按关键词命中才注入。被过滤的工具模型请求时仍可用
+  // （getMergedTool 不拦截）, 路由只控制"出现在 payload 里"——失败 ≠ 任务失败。
+  // plan 模式: 路由在只读过滤之后应用（toolsPayload 已按 mode 过滤）。
+  let routedPayload = toolPayload
+  const convo0 = messages || []
+  const userText = convo0
+    .filter(m => m.role === 'user' && typeof m.content === 'string')
+    .map(m => m.content)
+    .join('\n')
+  if (tools && toolPayload.length) {
+    try {
+      const flag = db && typeof db.getSetting === 'function'
+        ? db.getSetting('feature_flag.agent.toolRouter')
+        : null
+      const routerOn = flag == null ? true : flag === '1'
+      if (routerOn && userText) {
+        const { routeTools, routerEnabled } = require('./toolRouter')
+        if (routerEnabled(routerOn)) {
+          const want = routeTools({
+            mode: agentMode === 'plan' ? 'plan' : undefined,
+            prompt: userText,
+            allToolNames: toolPayload.map(p => p.function.name),
+            safeNames: new Set(toolPayload.map(p => p.function.name)), // plan 已过滤
+          })
+          if (want.size > 0 && want.size < toolPayload.length) {
+            routedPayload = toolPayload.filter(p => want.has(p.function.name))
+            try { onStatus?.({ kind: 'tool_router', text: `工具路由: 注入 ${routedPayload.length}/${toolPayload.length} 个工具` }) } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
   const budget = externalBudget || new IterationBudget(maxIterations)
   budget.start()
@@ -441,8 +477,9 @@ Reply in this format:
       try { onStatus?.({ text: '📥 已插入你的新消息', kind: 'injection' }) } catch {}
     }
     const opts = { ...options }
-    if (toolPayload.length) { opts.tools = toolPayload; opts.tool_choice = 'auto' }
-    if (planToolsPayload.length) { opts.tools = [...toolPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
+    // Tool Router: 用路由后的 payload（未路由时 routedPayload === toolPayload）
+    if (routedPayload.length) { opts.tools = routedPayload; opts.tool_choice = 'auto' }
+    if (planToolsPayload.length) { opts.tools = [...routedPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
 
     let msg
     try {
