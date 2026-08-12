@@ -60,6 +60,28 @@ const PLACEHOLDER_TITLES = new Set([
   'Nowy czat',
 ])
 
+// Quick fallback title: the full first user message, whitespace-collapsed,
+// capped at 200 chars to stop pathological pastes (code dumps, logs) from
+// bloating the title column. The renderer truncates for display (ellipsis);
+// the DB keeps the complete first line so search/rename see everything.
+function quickTitleOf(content) {
+  return String(content || '').replace(/\s+/g, ' ').trim().slice(0, 200)
+}
+
+// Pure decision helpers (exported for unit tests):
+//   shouldWriteQuickTitle(...) — first message of a placeholder-titled session
+//   shouldTryAiSummary(...)    — placeholder OR still the quick-cut shape, so
+//                                an aborted/failed first turn can upgrade later
+function shouldWriteQuickTitle({ autoTitleOn, sessionTitle, msgsLen }) {
+  return !!autoTitleOn && PLACEHOLDER_TITLES.has(String(sessionTitle || '').trim()) && msgsLen === 1
+}
+function shouldTryAiSummary({ autoTitleOn, sessionTitle, content }) {
+  if (!autoTitleOn) return false
+  const t = String(sessionTitle || '').trim()
+  if (!t) return false // 空标题不视为待摘要（无占位符/quick 形态）
+  return PLACEHOLDER_TITLES.has(t) || t === quickTitleOf(content)
+}
+
 /**
  * Register the chat:send handler. `ctx` carries the shared live state owned by
  * chat.handler.js (abortControllers, activeToolLoops, pendingInjections,
@@ -107,7 +129,7 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
       // Persist to a session (create a short-lived one when none is provided).
       let sid = sessionId
       if (!sid) {
-        sid = db.createSession({ title: text.replace(/\s+/g, ' ').slice(0, 30) }).lastInsertRowid
+        sid = db.createSession({ title: quickTitleOf(text) }).lastInsertRowid
       } else {
         db.touchSession(sid)
       }
@@ -204,7 +226,23 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // Respect the autoTitle setting (default on) and only summarize the first exchange.
     const autoTitleOn = (_s['autoTitle'] ?? '1') === '1'
     const titleLanguage = _s['titleLanguage'] || 'auto'
-    const needsTitle = autoTitleOn && session0 && PLACEHOLDER_TITLES.has((session0.title || '').trim()) && msgs.length === 1
+    const needsTitle = shouldWriteQuickTitle({ autoTitleOn, sessionTitle: session0 && session0.title, msgsLen: msgs.length })
+    // 立即兜底标题（不等 AI 摘要）: 首条消息发送时就同步截取输入前 30 字写入,
+    // 保证"标题永远可见"——此前只有 AI 摘要成功后才有标题, 若首轮被中止
+    // (aborted) 或上游拒绝摘要请求 (429), 会话标题就永久停留在占位符,
+    // 且之后 msgs>=2 导致 needsTitle 永远不再成立（"不自动生成标题"根因）。
+    // AI 摘要成功后会异步覆盖为精炼标题（generateSummaryTitle, 见下）。
+    if (needsTitle) {
+      const quick = quickTitleOf(content)
+      if (quick) {
+        try { db.renameSession(sessionId, quick) } catch (e) { log.warn('quick title failed:', e.message) }
+      }
+    }
+    // AI 摘要的触发条件: 标题仍是 quick 兜底形态（= 首条输入截断, 特征:
+    // 非占位符但可被下面的 quickTitleOf 重新识别）时, 后续成功回复也尝试
+    // 用 AI 精炼覆盖。这样首轮中止/失败后, 只要标题还是截断形态,
+    // 下一次成功回合仍有机会升级为 AI 摘要——不再受 msgs.length===1 单窗口限制。
+    const needsAiSummary = shouldTryAiSummary({ autoTitleOn, sessionTitle: session0 && session0.title, content })
     const apiMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }))
     // Attach images to the latest user message as OpenAI-compatible multimodal content.
     if (attachments.length > 0) {
@@ -376,7 +414,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         const tokens = estimateTokens(finalContent)
         db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
-        if (needsTitle) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
+        if (needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
         if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent, sessionId })
@@ -475,7 +513,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
           token_count: tokens,
         })
         // Auto-title: summarize the first exchange instead of copy-pasting raw input.
-        if (needsTitle) {
+        // 条件用 needsAiSummary（首条占位符 或 仍是 quick 截断形态）——
+        // 首轮中止/失败后, 后续成功回合仍有机会升级为 AI 精炼标题。
+        if (needsAiSummary) {
           await generateSummaryTitle({ sessionId, content, fullContent, model: m, provider: p, titleLanguage, db })
         }
         // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
@@ -524,7 +564,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
   // → "新约能天使抽取建议"). Falls back to a truncated version of the user's input
   // if the summary call fails or returns nothing useful. Never throws.
   async function generateSummaryTitle({ sessionId, content, fullContent, model, provider, titleLanguage = 'auto', db }) {
-    const fallback = (content || '新对话').replace(/\s+/g, ' ').trim().slice(0, 30)
+    // 摘要失败时的降级标题与发送时的 quick 标题一致（首条输入截断）。
+    const fallback = quickTitleOf(content) || '新对话'
     let title = fallback
     // Resolve the language the title should be written in. 'auto' defers to a
     // setting; we just pick a prompt variant per language family.
@@ -538,6 +579,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15000)
+      // max_tokens 必须给足: 中转站/中继可能把模型路由到推理模型(如 agnes-2.5-flash),
+      // 推理模型的 reasoning_content 会先消耗 token——30 上限时思考过程把额度全吃掉,
+      // content 返回空串 → 标题退化为输入截断（"不生成摘要标题"实测根因）。
+      // 200 给思考+输出留出余量; reasoning_effort=low 压低思考长度、加快返回。
       const text = await completeChat({
         provider, model,
         messages: [
@@ -545,11 +590,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
           { role: 'user', content: `用户：${content}\n\n助手：${(fullContent || '').slice(0, 800)}` },
         ],
         signal: controller.signal,
-        options: { max_tokens: 30, temperature: 0.2 },
+        options: { max_tokens: 200, temperature: 0.2, reasoning_effort: 'low' },
       })
       clearTimeout(timeout)
+      // 推理模型的 content 可能带前导换行/空白, 清理后取首行有效短语
       const cleaned = (text || '').trim().replace(/^[“”『]|[“”』]$/g, '').replace(/[。.!！？?]/g, '').trim()
       if (cleaned) title = cleaned.slice(0, 20)
+      else log.warn('title summary returned empty content (reasoning model consumed tokens?)')
     } catch (e) {
       log.warn('title summary failed:', e.message)
     }
@@ -561,4 +608,4 @@ ipcMain.handle('chat:complete', handleChatComplete)
   return { handleChatComplete }
 }
 
-module.exports = { registerChatSendHandler }
+module.exports = { registerChatSendHandler, shouldWriteQuickTitle, shouldTryAiSummary, quickTitleOf }
