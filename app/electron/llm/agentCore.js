@@ -170,6 +170,12 @@ async function runAgent({
   onText,
   onUsage,
   onAskUser,
+  onTodoUpdate,
+  // W3-t21: 推理模型思考过程事件透传（toolLoop 已在消息循环内发出; 此前 runAgent
+  // 不接收也不转发 → runSession 的 onThinkingDelta 一直是死代码）。
+  onThinkingStart,
+  onThinkingDelta,
+  onThinkingEnd,
 }) {
   // Initialize the sandbox workspace so read/write tools resolve against the
   // working directory instead of falling back to Electron's userData.
@@ -223,6 +229,12 @@ async function runAgent({
     agentMode,
     maxIterations,
     options: { ...options },
+    // W1-t9: todo_write 清单事件源透传（registry.js todo_write → toolLoop toolCtx → 此处原样转发）
+    onTodoUpdate,
+    // W3-t21: 思考事件原样转发（toolLoop 回调名一致: onThinkingStart/Delta/End）
+    onThinkingStart,
+    onThinkingDelta,
+    onThinkingEnd,
     // 可选权限回调（B2 接线 a 方案，向后兼容）：TUI 提供键盘应答面板；
     // 无回调时 runToolLoop 默认拒绝（toolLoop.js:872-880）。
     requestPermission,
