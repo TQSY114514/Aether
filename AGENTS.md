@@ -24,6 +24,7 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
 
 ## Architecture map
 
+- **Roadmap / 方向**：见 `docs/roadmap.md`（2026-08 外部评审提炼，含 P0/P1/P2 优先级与"明确不做"清单；改动前先对齐优先级）。
 - **Renderer** `app/src/`: `store/index.ts` (the big zustand store — all state +
   actions), `components/` (chat/sidebar/ui), `pages/` (model/persona/settings/…),
   `utils/` (i18n generated from `gen-i18n.js`, theme, markdown).
