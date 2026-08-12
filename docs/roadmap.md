@@ -40,6 +40,7 @@
 - 现状：并发回答、投票、ELO、按 intent 分类
 - 升级：用户可建**个人 benchmark**（自己的任务集），模型更新后一键重跑 →
   **"你的工作负载的模型排行榜"**（准确率 / 延迟 / 成本 / 工具成功率）
+- 增强细节：同模型多温度 / 多 system prompt 对比、匿名投票后揭示、导出对比报告
 - 这是 OpenCode / Claude Code 都没有的差异化，直接支撑"Aether 替你决定"定位
 
 ## P1 — 下一阶段
@@ -56,6 +57,14 @@
 - 现状：记忆是"记得你喜欢 Claude"
 - 升级：记录项目级知识（架构 / 约定 / 决策 / 已知问题，即 AGENTS.md 语义化），
   Agent 进入项目不再从零开始；记忆注入时显示"为什么注入这条"
+- 细节：用户可手动编辑/删除记忆与 KG 节点；会话级 vs 全局记忆明确切换
+
+### 5.5 Context 与 Compaction 增强
+
+- 按 provider/model 切换 tokenizer（不同模型 token 算法差异大）
+- Compaction 保留"关键决策 / 用户偏好 / 当前计划"显式摘要，而非只留工具对
+- GUI 补长对话"手动压缩 / 分叉会话"入口（TUI 已有 `/fork`）
+- `run_command` / `web_fetch` / `grep` 长结果智能截断 + 摘要注入（减少 token 浪费）
 
 ### 6. Skills 生态化 + 权限声明
 
@@ -77,6 +86,21 @@
 - 依赖升级**分批**（React 19 / Zustand 5 / Tailwind 4）：先建 CI 门禁再逐个升，
   **不吞 Dependabot 16 包大 PR**
 - 长会话/记忆/KG 列表虚拟滚动（复用 `@tanstack/react-virtual`）
+- **启动性能**：延迟加载非核心模块（evolution / cron / backgroundTasks / LSP pool）
+- **高频写入批量事务**（tool metrics / audit log）
+- **成本可见性**：聊天界面实时显示本轮预估 token + 累计成本 + 预算上限（达到停止 Agent）
+- **全局并发上限**（API 请求数 / 子 Agent 数，防打爆本机或 API 限额）
+- **可回滚 migration** + Settings 导出配置 / 重置到安全默认
+- **状态栏统一**：Agent 运行中显示当前迭代 / 预算剩余 / 已用 token / 最近工具耗时
+- **工具失败自动注入错误摘要**到下一轮（而非只显示原始 stderr）
+- **导出/导入配置**时提示 API Key 加密状态与目标机器 safeStorage 差异
+- **TUI/GUI 快捷键与命令对齐**（减少两套心智）
+
+## P2 — 开发者体验与社区
+
+- 文档：单独维护「Agent 安全与权限最佳实践」「从 Claude Code / Cursor 迁移指南」「FAQ（杀软 / SmartScreen / MCP 安装）」
+- 贡献门槛：最小可复现环境、如何只跑某个模块的单元测试、feature flag 开发约定
+- README 放精简版公开 Roadmap + 当前重点（稳定 > 新功能）
 
 ## 明确不做（用户约束 + 评审共识）
 
