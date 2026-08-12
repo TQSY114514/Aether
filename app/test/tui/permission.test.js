@@ -3,14 +3,16 @@
 // 验收：mock makeTool write → reducer 进入 awaitingPermission；y→true；n→false；
 // a→会话 allowRules 命中下次免问；非 git 工作区回滚仍成功（走写前快照还原）。
 // ─────────────────────────────────────────────────────────────────────────────
-import { describe, it, expect, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { tuiReducer, initialTuiState } from '../../tui/reducer.js'
-import { createAllowRulesStore } from '../../tui/allowRules.js'
+import { createAllowRulesStore, decideTuiPermission } from '../../tui/allowRules.js'
 import { createTuiPermissionHandler, decidePermission } from '../../tui/runSession.js'
 import { captureFileSnapshot, restoreSnapshot, rollbackChange, isGitRepo, buildDiff } from '../../tui/rollback.js'
+import { createEmptyDatabase } from '../../electron/database.js'
+import { taskDbAdapter } from '../../electron/llm/taskDbAdapter.js'
 
 const tmpDirs = []
 function makeTempDir(prefix = 'perm-') {
@@ -118,6 +120,174 @@ describe('权限审批流程（todo 4）', () => {
 function handlerOf(h) {
   return h.handler
 }
+
+// ── W4-t24/t26: App.mjs tuiPermission 包装的镜像（决策核心收敛在纯函数
+// decideTuiPermission, 与生产代码同一实现; null → basePermission 询问流程）──
+function makeTuiWrapper(approvalMode, h) {
+  const handler = createTuiPermissionHandler({
+    dispatch: h.dispatched.push.bind(h.dispatched),
+    allowRules: h.allowRules, sessionId: 'tui', resolveRef: h.resolveRef,
+  })
+  return (perm) => {
+    const d = h.allowRules.decision('tui', perm.name, perm.args)
+    const r = decideTuiPermission({ decision: d, name: perm.name, approvalMode })
+    if (r == null) return handler(perm)
+    return Promise.resolve(r)
+  }
+}
+
+describe('W4-t24: deny 规则流（持久化 deny → 直接拒绝, 不弹窗）', () => {
+  // 独立临时 db: 持久化层种子（settings 表, 与 allowRules.test.js 同款）
+  let dbPath = ''
+  let db = null
+  beforeAll(() => {
+    dbPath = join(tmpdir(), `tui-perm-deny-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.db`)
+    db = createEmptyDatabase(dbPath)
+  })
+  afterAll(() => {
+    try { db?.close() } catch {}
+    for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) { try { rmSync(f, { force: true }) } catch {} }
+  })
+
+  function denyHarness() {
+    const h = { dispatched: [], allowRules: null, resolveRef: { current: null } }
+    h.allowRules = createAllowRulesStore({ db }) // 载入持久化 deny
+    return h
+  }
+
+  it('持久化 deny:run_command:rm → wrapper 直接 false, 无 PERMISSION_REQUEST', async () => {
+    taskDbAdapter(db).setSetting('permission_rule.run_command.rm', 'deny')
+    const h = denyHarness()
+    const wrapper = makeTuiWrapper('manual', h)
+    const result = await wrapper({ name: 'run_command', args: { command: 'rm -rf x' }, risk: 'dangerous' })
+    expect(result).toBe(false)
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+  })
+
+  it('deny 命中时不写快照、不悬挂（promise 立即落定）', async () => {
+    const h = denyHarness()
+    const wrapper = makeTuiWrapper('manual', h)
+    let settled = false
+    wrapper({ name: 'run_command', args: { command: 'rm -rf x' } }).then(() => { settled = true })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(settled).toBe(true)
+    // 清场
+    db.prepare('DELETE FROM settings WHERE key = ?').run('permission_rule.run_command.rm')
+  })
+
+  it('runAgent 透传流: agent 收到 false（denied 文本）, 全程无 PERMISSION_REQUEST', async () => {
+    taskDbAdapter(db).setSetting('permission_rule.run_command.rm', 'deny')
+    const h = denyHarness()
+    const wrapper = makeTuiWrapper('manual', h)
+    const agentImpl = async ({ requestPermission }) => {
+      const ok = await requestPermission({ name: 'run_command', args: { command: 'rm -rf x' }, risk: 'dangerous' })
+      return { text: ok ? 'ran' : 'denied', toolCalls: [] }
+    }
+    const { runSession } = await import('../../tui/runSession.js')
+    const runP = runSession({
+      dbPath: null, prompt: 'x',
+      requestPermission: wrapper,
+      dispatch: h.dispatched.push.bind(h.dispatched),
+      resolveImpl: () => ({ provider: { name: 'm' }, model: { model_name: 'm' } }),
+      runAgentImpl: agentImpl,
+    })
+    expect(await runP).toMatchObject({ text: 'denied' })
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+    db.prepare('DELETE FROM settings WHERE key = ?').run('permission_rule.run_command.rm')
+  })
+
+  it('持久化 allow 命中 → 直接 true, 无 PERMISSION_REQUEST', async () => {
+    taskDbAdapter(db).setSetting('permission_rule.run_command.git_status', 'allow')
+    const h = denyHarness()
+    const wrapper = makeTuiWrapper('manual', h)
+    const result = await wrapper({ name: 'run_command', args: { command: 'git_status --short' } })
+    expect(result).toBe(true)
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+    db.prepare('DELETE FROM settings WHERE key = ?').run('permission_rule.run_command.git_status')
+  })
+})
+
+describe('W4-t26: dontask 模式流（静默拒绝, 无弹窗）', () => {
+  let dbPath = ''
+  let db = null
+  beforeAll(() => {
+    dbPath = join(tmpdir(), `tui-perm-dontask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.db`)
+    db = createEmptyDatabase(dbPath)
+  })
+  afterAll(() => {
+    try { db?.close() } catch {}
+    for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) { try { rmSync(f, { force: true }) } catch {} }
+  })
+
+  it('dontask + 只读工具（read_file）→ 自动放行, 无 PERMISSION_REQUEST', async () => {
+    const h = { dispatched: [], allowRules: createAllowRulesStore({ db }), resolveRef: { current: null } }
+    const wrapper = makeTuiWrapper('dontask', h)
+    expect(await wrapper({ name: 'read_file', args: { path: 'a.txt' } })).toBe(true)
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+  })
+
+  it('dontask + 持久化 deny:run_command:rm → false, 无 PERMISSION_REQUEST', async () => {
+    taskDbAdapter(db).setSetting('permission_rule.run_command.rm', 'deny')
+    const h = { dispatched: [], allowRules: createAllowRulesStore({ db }), resolveRef: { current: null } }
+    const wrapper = makeTuiWrapper('dontask', h)
+    expect(await wrapper({ name: 'run_command', args: { command: 'rm -rf x' } })).toBe(false)
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+    db.prepare('DELETE FROM settings WHERE key = ?').run('permission_rule.run_command.rm')
+  })
+
+  it('dontask + 持久化 allow:run_command:git → true（allow 规则放行）, 无 PERMISSION_REQUEST', async () => {
+    taskDbAdapter(db).setSetting('permission_rule.run_command.git', 'allow')
+    const h = { dispatched: [], allowRules: createAllowRulesStore({ db }), resolveRef: { current: null } }
+    const wrapper = makeTuiWrapper('dontask', h)
+    expect(await wrapper({ name: 'run_command', args: { command: 'git status' } })).toBe(true)
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+    db.prepare('DELETE FROM settings WHERE key = ?').run('permission_rule.run_command.git')
+  })
+
+  it('dontask + 无规则写工具（write_file）→ false, 无 PERMISSION_REQUEST（安全红线）', async () => {
+    const h = { dispatched: [], allowRules: createAllowRulesStore({ db }), resolveRef: { current: null } }
+    const wrapper = makeTuiWrapper('dontask', h)
+    expect(await wrapper({ name: 'write_file', args: { path: 'x.js' } })).toBe(false)
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+  })
+
+  it('dontask + ask 规则（write_file:src ask）→ 仍拒绝, 无 PERMISSION_REQUEST（ask_user 类不弹窗）', async () => {
+    taskDbAdapter(db).setSetting('permission_rule.write_file.src', 'ask')
+    const h = { dispatched: [], allowRules: createAllowRulesStore({ db }), resolveRef: { current: null } }
+    const wrapper = makeTuiWrapper('dontask', h)
+    expect(await wrapper({ name: 'write_file', args: { path: 'src/a.js' } })).toBe(false)
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+    db.prepare('DELETE FROM settings WHERE key = ?').run('permission_rule.write_file.src')
+  })
+
+  it('dontask → manual 切回: 无规则写工具回到询问流程（规则不残留）', async () => {
+    const h = { dispatched: [], allowRules: createAllowRulesStore({ db }), resolveRef: { current: null } }
+    const wrapperManual = makeTuiWrapper('manual', h)
+    const pending = wrapperManual({ name: 'write_file', args: { path: 'y.js' } })
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(true) // manual 弹窗
+    decidePermission({ decision: 'deny', allowRules: h.allowRules, sessionId: 'tui', resolveRef: h.resolveRef, dispatch: h.dispatched.push.bind(h.dispatched) })
+    expect(await pending).toBe(false)
+  })
+
+  it('runAgent 透传流: dontask 下 agent 收到 false, 全程无 PERMISSION_REQUEST', async () => {
+    const h = { dispatched: [], allowRules: createAllowRulesStore({ db }), resolveRef: { current: null } }
+    const wrapper = makeTuiWrapper('dontask', h)
+    const agentImpl = async ({ requestPermission }) => {
+      const ok = await requestPermission({ name: 'write_file', args: { path: 'x.js' } })
+      return { text: ok ? 'ran' : 'denied', toolCalls: [] }
+    }
+    const { runSession } = await import('../../tui/runSession.js')
+    const runP = runSession({
+      dbPath: null, prompt: 'x',
+      requestPermission: wrapper,
+      dispatch: h.dispatched.push.bind(h.dispatched),
+      resolveImpl: () => ({ provider: { name: 'm' }, model: { model_name: 'm' } }),
+      runAgentImpl: agentImpl,
+    })
+    expect(await runP).toMatchObject({ text: 'denied' })
+    expect(h.dispatched.some((a) => a.type === 'PERMISSION_REQUEST')).toBe(false)
+  })
+})
 
 describe('回滚双路径（todo 4 / M2）', () => {
   it('非 git 工作区：写前快照还原成功（无需 git）', async () => {
