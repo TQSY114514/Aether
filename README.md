@@ -255,6 +255,7 @@ Defaults come from `~/.config/aether/config.json` (`model` / `mode` / `workspace
 Interactive terminal agent (Ink v5; Node ≥ 22; best experienced in Windows Terminal):
 
 - **Sessions**: streaming message rendering, every turn persisted to SQLite (survives exit), resume with `--continue` / `--session <id>` / `--fork`, auto-titles from the first prompt, `/fork` session tree (`session.parent_session_id`), `/sessions`, `/use <id>` history switching
+- **One runtime, many clients**: the desktop GUI and the TUI share the same SQLite sessions — a chat started in the GUI can be continued in the terminal with `aether tui --session <id>` (list ids via `aether tui --continue` or the GUI sidebar), and vice versa. Headless CLI (`--resume`/`--fork`) reads the same sessions.
 - **Tools & permissions**: tool-call cards (status color / latency / summary), diff review (`Alt+v` expand, `Enter` accept / `r` rollback — pre-write snapshot restore, works outside git repos), keyboard permission gate (`y` allow once / `a` allow always / `n` deny, or `←→` to select), read-only tools auto-approved
 - **Approval modes**: `Shift+Tab` cycles `manual → auto-edits → plan` (plan = read-only planning; three options decide how to proceed when done); `/approval-mode dontask` runs rule-only approvals (write tools need an allow rule)
 - **Modes**: `Alt+m` cycles ask/plan/auto; `/persona <id>` switches persona (persona + memory prefix injection)

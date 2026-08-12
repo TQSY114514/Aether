@@ -98,6 +98,17 @@ export interface ModelScore {
   provider_name: string
 }
 
+// Arena 2.0: personal benchmark suite (review P0-3)
+export interface ArenaBenchmark {
+  id: number
+  name: string
+  tasks: string[]
+  model_ids: number[]
+  last_run: string | null
+  results: Record<number, { wins: number; runs: number; total_ms: number; total_cost: number }> | null
+  created_at: string
+}
+
 export interface RouteResult {
   model_id: number
   model_name: string

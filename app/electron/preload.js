@@ -116,6 +116,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     vote: (data) => ipcRenderer.invoke('arena:vote', data),
     scores: () => ipcRenderer.invoke('arena:scores'),
     stop: (sessionId) => ipcRenderer.invoke('arena:stop', sessionId),
+    benchmarkList: () => ipcRenderer.invoke('arena:benchmark-list'),
+    benchmarkSave: (data) => ipcRenderer.invoke('arena:benchmark-save', data),
+    benchmarkDelete: (id) => ipcRenderer.invoke('arena:benchmark-delete', id),
+    benchmarkRun: (data) => ipcRenderer.invoke('arena:benchmark-run', data),
+    benchmarkStop: (id) => ipcRenderer.invoke('arena:benchmark-stop', id),
     onModelDone: (cb) => subscribe('arena:model-done', cb),
   },
   mcp: {

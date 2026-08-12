@@ -153,6 +153,11 @@ interface Window {
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
       stop: (sessionId?: number) => Promise<void>
+      benchmarkList: () => Promise<ArenaBenchmark[]>
+      benchmarkSave: (data: { id?: number | null; name: string; tasks: string[]; modelIds: number[] }) => Promise<{ id: number; error?: string }>
+      benchmarkDelete: (id: number) => Promise<{ ok: boolean; error?: string }>
+      benchmarkRun: (data: { id: number; modelIds: number[] }) => Promise<{ lastRun: string; models: Record<number, { model_name: string; provider_name: string }>; results: Record<number, { wins: number; runs: number; total_ms: number; total_cost: number }>; error?: string }>
+      benchmarkStop: (id: number) => Promise<void>
       onModelDone: (callback: (payload: { sessionId: number; result: ArenaResult }) => void) => () => void
     }
     mcp: {

@@ -179,6 +179,40 @@ describe('prefetch', () => {
     expect(out.startsWith('Relevant memories from past conversations')).toBe(true)
     expect(out).toContain('python for data analysis')
   })
+
+  it('injects project memories ALWAYS, even with no keywords (project brain)', () => {
+    const db = mkDb({
+      memories: [
+        { id: 1, content: 'Architecture: Electron + React + Zustand + better-sqlite3', created_at: new Date().toISOString(), access_count: 0, type: 'project' },
+        { id: 2, content: 'Convention: semicolons yes, Vitest for tests', created_at: new Date().toISOString(), access_count: 0, type: 'project' },
+      ],
+    })
+    // 查询词无实际关键词(停用词) → 普通记忆不会注入, 但 project 恒在
+    const out = autoMemory.prefetch(db, 'the')
+    expect(out.startsWith('Project knowledge')).toBe(true)
+    expect(out).toContain('Electron + React')
+    expect(out).toContain('Vitest')
+  })
+
+  it('merges project block on top of keyword memories', () => {
+    const db = mkDb({
+      memories: [
+        { id: 1, content: 'Architecture: Electron + React', created_at: new Date().toISOString(), access_count: 0, type: 'project' },
+        { id: 2, content: 'user prefers python for data analysis', created_at: new Date().toISOString(), access_count: 0, type: 'fact' },
+      ],
+    })
+    const out = autoMemory.prefetch(db, 'python data analysis')
+    expect(out.startsWith('Project knowledge')).toBe(true)
+    expect(out).toContain('Relevant memories from past conversations')
+    expect(out.indexOf('Project knowledge')).toBeLessThan(out.indexOf('Relevant memories'))
+  })
+
+  it('non-project memories without keywords still return empty (regression)', () => {
+    const db = mkDb({
+      memories: [{ id: 1, content: 'user prefers python', created_at: new Date().toISOString(), access_count: 0, type: 'fact' }],
+    })
+    expect(autoMemory.prefetch(db, 'the')).toBe('')
+  })
 })
 
 // ─── prune ─────────────────────────────────────────────────────────────────
