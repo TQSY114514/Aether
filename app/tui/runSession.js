@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { openDatabase, resolveProviderModel, runAgent, isEncryptedKey, defaultDbPath } from '../electron/llm/agentCore.js'
 import { createEmptyDatabase } from '../electron/database.js'
+import { taskDbAdapter } from '../electron/llm/taskDbAdapter.js'
 import { captureFileSnapshot } from './rollback.js'
 import { isToolStart } from './toolCards.js'
 import { connectMcpServers, disconnectMcpServers, runSessionHooks } from '../electron/llm/headlessMcp.js'
@@ -133,13 +134,21 @@ export function injectSteering(sessionId, text) {
  * @param {string} [opts.agentMode]   'auto' | 'plan' | 'ask'（默认 'auto'）
  * @param {number} [opts.maxIterations]
  * @param {string} [opts.workspace]
- * @param {string} [opts.sessionId]   steering/事件键控（默认 'tui'）
+ * @param {string} [opts.sessionId]   steering/事件键控（默认 'tui'；W0-t3：保持 'tui' 不变，不承载 DB id）
+ * @param {number|null} [opts.dbSessionId]  DB 会话行 id（/use /fork 后由 reducer 持有；null → runSession 建新行）
  * @param {(action: object) => void} opts.dispatch   reducer dispatch
   * @param {(result: object) => void} [opts.onEnd]    完成回调（result.text/toolCalls）
   * @param {(perm: object) => Promise<boolean>} [opts.requestPermission]  权限回调（todo 4：createTuiPermissionHandler 产物或自定义）
   * @param {Function} [opts.runAgentImpl]  可注入 runAgent（测试用）
   * @param {Function} [opts.resolveImpl]   可注入 resolveSessionResources（测试用）
-  * @returns {Promise<{text: string, toolCalls: object[]}>}
+  * @returns {Promise<{text: string, toolCalls: object[], dbSessionId: number|null}>}
+  *
+  * W0-t3 落库语义（按 turn 聚合单次写入，绝不逐 chunk 写）：
+  *   - db 存在时：dbSessionId 为 null → createSession({title:'tui'}) 建行；
+  *    非 null → 复用该行（不重复建）。用户消息在运行前落库；
+  *    agent 成功后才落 assistant 行；抛错轮次不落 assistant（用户行保留）。
+  *   - 任一次落库失败 → 抛错（App 侧呈现 [sys]），turn 中止，不半写。
+  *   - 返回 dbSessionId 供 App dispatch SESSION_ID_SET 回填 reducer。
   *
   * API key 解析优先级: --api-key 显式 > 环境变量(AETHER_API_KEY / <PROVIDER>_API_KEY) > DB 明文 > 报错。
   * 桌面版 safeStorage 加密的 key headless 无法解密——环境变量回退让 TUI/CLI 无摩擦可用。
@@ -186,6 +195,13 @@ export async function runSession({
   runAgentImpl = runAgent,
   resolveImpl = resolveSessionResources,
   onAskUser,
+  onTodoUpdate,
+  // W3-t21: 思考过程事件链式转发（runSession 内部 dispatch THINKING_* 之后
+  // 原样透传给调用方, 与 onTodoUpdate 链式模式一致）
+  onThinkingStart,
+  onThinkingDelta,
+  onThinkingEnd,
+  dbSessionId = null,
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
   // headless 无法解密 safeStorage 加密的 API key——密文直接发 API 会 401/卡住，
@@ -205,6 +221,27 @@ export async function runSession({
   }
   const effectiveProvider = effectiveApiKey ? { ...provider, api_key: effectiveApiKey, ...(apiUrl ? { api_url: apiUrl } : {}), ...(apiFormat ? { api_format: apiFormat } : {}) } : provider
   dispatch({ type: 'AGENT_START', max: maxIterations, modelName: model.model_name })
+  // ── W0-t3 会话落库（按 turn 聚合单次写入；失败即中止，不半写）────────────
+  // dbSessionId == null → 建新会话行（W2-t17 自动标题: 首条 prompt 前 40 字）;
+  // 非 null（/use /fork 置入）→ 复用既有行，不重复建。
+  let sessionRowId = null
+  if (db) {
+    const adapter = taskDbAdapter(db)
+    try {
+      if (dbSessionId == null) {
+        // W2-t17 自动标题: 首条 prompt 前 40 字（超长截断加 …）; 空 prompt 回退 'tui' 占位
+        const p = String(prompt || '').trim()
+        const title = p ? (p.length > 40 ? `${p.slice(0, 40)}…` : p) : 'tui'
+        sessionRowId = Number(adapter.createSession({ title, parentSessionId: null }).lastInsertRowid)
+      } else {
+        sessionRowId = Number(dbSessionId)
+      }
+      // 用户消息在运行前落库：agent 抛错也保留该行（中断轮次 = 合法的"无回复"态）
+      adapter.addMessage({ session_id: sessionRowId, role: 'user', content: String(prompt || '') })
+    } catch (err) {
+      throw new Error(`session persistence failed: ${err && err.message ? err.message : String(err)}`)
+    }
+  }
   const ws = workspace || process.cwd()
   // todo 14：MCP 连接 + SessionStart/SessionEnd hooks（best-effort，不阻塞 agent）。
   try { require('../electron/tools/sandbox').setWorkspaceRoot(ws) } catch {}
@@ -260,11 +297,23 @@ export async function runSession({
         hasAppendedText = true
       }
     },
+    onThinkingStart: () => {
+      // W3-t21: 思考开始 → 新块（清空旧块; 运行中实时渲染 open=true）
+      dispatch({ type: 'THINKING_START' })
+      if (onThinkingStart && typeof onThinkingStart === 'function') onThinkingStart()
+    },
     onThinkingDelta: (reasoning) => {
-      // 推理模型思考进度可见(状态栏显示摘要, 非全文)
-      if (reasoning && typeof reasoning === 'string' && reasoning.length > 2) {
-        dispatch({ type: 'STATUS', text: `thinking: ${reasoning.slice(0, 40)}${reasoning.length > 40 ? '…' : ''}` })
+      // 推理模型思考增量 → 累积进 thinking 缓冲（reducer 尾部保留 4000 上限）。
+      // 非字符串忽略（toolLoop 传 msg.reasoning, 防御性过滤）。
+      if (reasoning && typeof reasoning === 'string') {
+        dispatch({ type: 'THINKING_DELTA', delta: reasoning })
       }
+      if (onThinkingDelta && typeof onThinkingDelta === 'function') onThinkingDelta(reasoning)
+    },
+    onThinkingEnd: () => {
+      // 思考结束 → 块折叠保留全文（Enter 展开回顾）
+      dispatch({ type: 'THINKING_END' })
+      if (onThinkingEnd && typeof onThinkingEnd === 'function') onThinkingEnd()
     },
     onAskUser, // ask_user 工具: TUI 面板应答(结构化提问)
     onUsage: (usage) => {
@@ -272,6 +321,13 @@ export async function runSession({
       if (usage && (usage.input || usage.output)) {
         dispatch({ type: 'USAGE', usage: { input: usage.input || 0, output: usage.output || 0 } })
       }
+    },
+    // W1-t9: todo_write 清单（runAgent 转发 → TODO_SET → 状态栏计数 + Ctrl+T 面板）。
+    // 转发原样（{content, status, activeForm?}[]，registry.js todo_write 规范化后的形状），
+    // 不转换；非数组防御由 reducer TODO_SET 兜底。
+    onTodoUpdate: (todos) => {
+      if (Array.isArray(todos)) dispatch({ type: 'TODO_SET', todos })
+      if (onTodoUpdate && typeof onTodoUpdate === 'function') onTodoUpdate(todos)
     },
     })
   } finally {
@@ -289,6 +345,14 @@ export async function runSession({
     }
   }
   dispatch({ type: 'AGENT_END' })
+  // ── W0-t3：仅成功后落 assistant 回复（抛错轮次已在上面抛出，不落残缺行）──
+  if (db && sessionRowId != null && result) {
+    try {
+      taskDbAdapter(db).addMessage({ session_id: sessionRowId, role: 'assistant', content: String(result.text || '') })
+    } catch (err) {
+      throw new Error(`session persistence failed: ${err && err.message ? err.message : String(err)}`)
+    }
+  }
   if (onEnd) onEnd(result)
-  return result
+  return result && typeof result === 'object' ? { ...result, dbSessionId: sessionRowId } : result
 }

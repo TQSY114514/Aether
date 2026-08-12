@@ -6,6 +6,7 @@
 // 纯函数、可单测; 新模态只需加一个 handler 表, 不再堆 if/else。
 // ─────────────────────────────────────────────────────────────────────────────
 import { SLASH_COMMANDS } from './sessionCommands.js'
+import { filterRules } from './permDialog.js' // W4-t25: 权限对话框过滤
 
 // ── 按键归一: ink 的 (input, key) → 稳定 keyId ──────────────────────────────
 export function normalizeKey(input, key) {
@@ -13,6 +14,8 @@ export function normalizeKey(input, key) {
   const ctrl = key.ctrl === true
   if (ctrl && input === 'c') return 'ctrl-c'
   if (ctrl && input === 'x') return 'ctrl-x'
+  if (ctrl && input === 't') return 'ctrl-t'   // W1-t9: todo 清单面板
+  if (ctrl && input === 'f') return 'ctrl-f'   // W3-t22: 模型收藏切换
   if (ctrl && input === 'p') return 'ctrl-p'
   if (ctrl && input === 'n') return 'ctrl-n'
   if (ctrl && input === 'w') return 'ctrl-w'
@@ -26,6 +29,8 @@ export function normalizeKey(input, key) {
   if (key.alt === true && key.downArrow === true) return 'alt-down'
   if (key.upArrow === true) return 'up'
   if (key.downArrow === true) return 'down'
+  // W3-t22: F2 最近模型循环（ink 5.2 解析 F2 为 key.name==='f2'; 双防御）
+  if (key.f2 === true || key.name === 'f2') return 'f2'
   if (key.leftArrow === true) return 'left'
   if (key.rightArrow === true) return 'right'
   if (key.home === true) return 'home'
@@ -47,6 +52,13 @@ export function normalizeKey(input, key) {
 
 // ── 模式解析: 优先级 = 模态栈(UI 状态 > reducer 状态) ───────────────────────
 export function resolveMode(ctx) {
+  // W3-t18: @文件候选面板优先于一切(base 打字继续编辑输入; Tab 归候选导航,
+  // 不再走斜杠补全——本模态必须最先解析, 否则 tab 冲突)
+  if (ctx.filePick) return 'filePick'
+  // W4-t25: /permissions 对话框（模态, 优先于 base 与 todo）
+  if (ctx.permDialog) return 'permDialog'
+  // W1-t9: todo 面板优先于 base（App 本地状态, 与 paletteOpen 同级）
+  if (ctx.todoOpen) return 'todo'
   if (ctx.modelPicker) return 'modelPicker'
   if (ctx.leaderArmed) return 'leader'
   if (ctx.paletteOpen) return 'palette'
@@ -56,6 +68,8 @@ export function resolveMode(ctx) {
   if (ctx.state.askUser) return 'askUser'
   if (ctx.state.planDone) return 'planDone'
   if (ctx.state.pendingPermission) return 'permission'
+  // W3-t23: /diff 聚合查看器（App 本地状态, 与 timeline 同级）
+  if (ctx.diffView) return 'diffView'
   if (ctx.state.expandedTool != null) return 'diff'
   if (ctx.state.steeringMode) return 'steering'
   return 'base'
@@ -86,13 +100,41 @@ const paletteRun = (ctx, item) => {
 const timelineMove = (ctx, d) => ctx.setTimeline((t) => ({ ...t, idx: wrap(t.idx, t.sessions.length, d) }))
 
 // ── 权限: ←→ 或 h/l 选择, Enter 确认, Esc/Ctrl+C 拒绝 ───────────────────────
-const permDecide = (ctx, decision, remember = false) => ctx.decidePermission({
-  decision, remember,
-  allowRules: ctx.allowRulesRef.current, sessionId: 'tui', resolveRef: ctx.resolveRef, dispatch: ctx.dispatch,
-})
+const permDecide = (ctx, decision, remember = false) => {
+  // W4-t24 #4: 'a'（always allow）在写入会话规则前, 先同步落持久化层
+  // （persistPendingAllow 从 resolveRef 读取待决 perm; 必须在 decidePermission
+  // 消费前调用, 否则 pending 已清空）
+  if (remember && ctx.persistPendingAllow) ctx.persistPendingAllow()
+  ctx.decidePermission({
+    decision, remember,
+    allowRules: ctx.allowRulesRef.current, sessionId: 'tui', resolveRef: ctx.resolveRef, dispatch: ctx.dispatch,
+  })
+}
 
 // ── 模式命令表 ──────────────────────────────────────────────────────────────
 export const modeHandlers = {
+  // W3-t18: @文件候选面板（opencode/Claude Code @mention 风格）。
+  // 与 modelPicker 同构: ↑↓/Tab 导航, Enter 插入完整 @path（替换部分 token,
+  // 不提交——候选态 Enter 语义写死为"接受并继续编辑"）, Esc 取消, 打字继续
+  // 过滤（经 syncFilePick 重算候选）。Tab 在此时归候选导航, 不冲突斜杠补全
+  // （resolveMode 中 filePick 优先于 base）。
+  filePick: {
+    up: (ctx) => ctx.setFilePick((p) => ({ ...p, idx: wrap(p.idx, p.items.length, -1) })),
+    'ctrl-p': (ctx) => ctx.setFilePick((p) => ({ ...p, idx: wrap(p.idx, p.items.length, -1) })),
+    down: (ctx) => ctx.setFilePick((p) => ({ ...p, idx: wrap(p.idx, p.items.length, 1) })),
+    'ctrl-n': (ctx) => ctx.setFilePick((p) => ({ ...p, idx: wrap(p.idx, p.items.length, 1) })),
+    tab: (ctx) => ctx.setFilePick((p) => ({ ...p, idx: wrap(p.idx, p.items.length, 1) })),
+    'shift-tab': (ctx) => ctx.setFilePick((p) => ({ ...p, idx: wrap(p.idx, p.items.length, -1) })),
+    enter: (ctx) => ctx.acceptFilePick(),
+    esc: (ctx) => ctx.setFilePick(null),
+    backspace: (ctx) => { ctx.dispatch({ type: 'INPUT_BACKSPACE' }); ctx.syncFilePick() },
+    char: (ctx, input) => {
+      if (input === backspaceChar) { ctx.dispatch({ type: 'INPUT_BACKSPACE' }); ctx.syncFilePick(); return }
+      ctx.dispatch({ type: 'INPUT', value: input })
+      ctx.syncFilePick()
+    },
+  },
+
   modelPicker: {
     up: (ctx) => pickerMove(ctx, -1),
     'ctrl-p': (ctx) => pickerMove(ctx, -1),
@@ -128,6 +170,8 @@ export const modeHandlers = {
       else if (ch === 'g') ctx.openTimeline()
       else if (ch === 'r') ctx.openRewind()
       else if (ch === 'q') ctx.dispatch({ type: 'QUIT_INTENT' })
+      // W3-t20: 外部编辑器（opencode ctrl+x e; $EDITOR/$VISUAL 回退 notepad）
+      else if (ch === 'e') { if (ctx.openEditor) ctx.openEditor() }
     },
   },
 
@@ -180,10 +224,35 @@ export const modeHandlers = {
     },
   },
 
+  // W4-t25: /permissions 交互对话框（Claude Code 同款）:
+  // ↑↓/Ctrl+P/N 导航（按过滤后列表）; 'd' 删除选中规则; backspace 删过滤字符;
+  // 其余字符过滤（palette 式）; Esc 关闭。
+  permDialog: {
+    up: (ctx) => ctx.setPermDialog((p) => ({ ...p, idx: wrap(p.idx, filterRules(p.rules, p.filter).length, -1) })),
+    'ctrl-p': (ctx) => ctx.setPermDialog((p) => ({ ...p, idx: wrap(p.idx, filterRules(p.rules, p.filter).length, -1) })),
+    down: (ctx) => ctx.setPermDialog((p) => ({ ...p, idx: wrap(p.idx, filterRules(p.rules, p.filter).length, 1) })),
+    'ctrl-n': (ctx) => ctx.setPermDialog((p) => ({ ...p, idx: wrap(p.idx, filterRules(p.rules, p.filter).length, 1) })),
+    esc: (ctx) => ctx.setPermDialog(null),
+    'char:d': (ctx) => { if (ctx.permDialogDelete) ctx.permDialogDelete() },
+    backspace: (ctx) => ctx.setPermDialog((p) => ({ ...p, filter: p.filter.slice(0, -1), idx: 0 })),
+    char: (ctx, input) => ctx.setPermDialog((p) => ({ ...p, filter: (p.filter + input).toLowerCase(), idx: 0 })),
+  },
+
   diff: {
     enter: (ctx) => ctx.dispatch({ type: 'TOOL_EXPAND', index: ctx.state.expandedTool }),
     esc: (ctx) => ctx.dispatch({ type: 'TOOL_EXPAND', index: ctx.state.expandedTool }),
     'char:r': (ctx) => ctx.doRollback(),
+  },
+
+  // W3-t23: /diff 查看器模态: ↑↓ 切文件 · ←→ 切"全部/当前文件"视图 · Esc 关闭
+  diffView: {
+    up: (ctx) => ctx.setDiffView((v) => ({ ...v, idx: wrap(v.idx, v.files.length, -1) })),
+    'ctrl-p': (ctx) => ctx.setDiffView((v) => ({ ...v, idx: wrap(v.idx, v.files.length, -1) })),
+    down: (ctx) => ctx.setDiffView((v) => ({ ...v, idx: wrap(v.idx, v.files.length, 1) })),
+    'ctrl-n': (ctx) => ctx.setDiffView((v) => ({ ...v, idx: wrap(v.idx, v.files.length, 1) })),
+    left: (ctx) => ctx.setDiffView((v) => ({ ...v, mode: v.mode === 'all' ? 'file' : 'all' })),
+    right: (ctx) => ctx.setDiffView((v) => ({ ...v, mode: v.mode === 'all' ? 'file' : 'all' })),
+    esc: (ctx) => ctx.setDiffView(null),
   },
 
   // ask_user 结构化提问(Claude Code 式): ↑↓ 选择选项 / Enter 确认(多问依次) / Esc 取消
@@ -251,6 +320,14 @@ export const modeHandlers = {
     down: (ctx) => ctx.setHelpOpen(false),
   },
 
+  // W1-t9: todo 清单面板（只读展示, 任意键关闭——不吞后续打字）
+  todo: {
+    esc: (ctx) => ctx.setTodoOpen(false),
+    enter: (ctx) => ctx.setTodoOpen(false),
+    char: (ctx) => ctx.setTodoOpen(false),
+    'ctrl-t': (ctx) => ctx.setTodoOpen(false),
+  },
+
   steering: {
     'ctrl-c': (ctx) => { ctx.dispatch({ type: 'STEER_MODE', on: false }); ctx.dispatch({ type: 'STATUS', text: 'follow-up cancelled' }) },
     enter: (ctx) => {
@@ -272,9 +349,15 @@ export const modeHandlers = {
 
   base: {
     'alt-m': (ctx) => { if (!ctx.state.input) ctx.dispatch({ type: 'MODE_CYCLE' }) },
+    // W1-t9: Ctrl+T todo 清单面板（Claude Code 同款; 空输入才响应）
+    'ctrl-t': (ctx) => { if (!ctx.state.input) ctx.setTodoOpen(!ctx.todoOpen) },
     'ctrl-p': (ctx) => {
       if (!ctx.state.input) { ctx.setPaletteOpen(true); ctx.setPaletteIdx(0); ctx.setPaletteFilter('') }
     },
+    // W3-t22: Ctrl+F 收藏/取消当前模型（空输入才响应, 不吞输入框打字）
+    'ctrl-f': (ctx) => { if (!ctx.state.input && ctx.toggleModelFavorite) ctx.toggleModelFavorite() },
+    // W3-t22: F2 循环最近使用模型（空输入才响应）
+    f2: (ctx) => { if (!ctx.state.input && ctx.cycleRecentModel) ctx.cycleRecentModel() },
     'ctrl-x': (ctx) => { if (!ctx.state.input) ctx.setLeaderArmed(true) },
     // Ctrl+C: 运行中 → 打断进入 follow-up; 空闲 → 退出
     'ctrl-c': (ctx) => {
@@ -326,8 +409,8 @@ export const modeHandlers = {
     },
     'alt-up': (ctx) => { if (!ctx.state.input) ctx.dispatch({ type: 'MOVE_SELECT', dir: -1 }) },
     'alt-down': (ctx) => { if (!ctx.state.input) ctx.dispatch({ type: 'MOVE_SELECT', dir: 1 }) },
-    pageup: (ctx) => { if (!ctx.state.input) ctx.setScrollOffset((o) => o + 10) },
-    pagedown: (ctx) => { if (!ctx.state.input) ctx.setScrollOffset((o) => Math.max(0, o - 10)) },
+    pageup: (ctx) => { if (!ctx.state.input) ctx.setScrollOffset((o) => o + 1) },
+    pagedown: (ctx) => { if (!ctx.state.input) ctx.setScrollOffset((o) => Math.max(0, o - 1)) },
     esc: (ctx) => {
       const s = ctx.state
       if (s.input) {
@@ -364,6 +447,16 @@ export const modeHandlers = {
     },
     enter: (ctx) => {
       const s = ctx.state
+      // W0-t7: 选中消息 + 空输入 + 非运行 → Enter 展开/折叠长消息（不提交）
+      if (!s.input && !s.running && s.selectedMessage != null) {
+        const m = s.messages[s.selectedMessage]
+        if (m) { ctx.dispatch({ type: 'TOGGLE_EXPAND', messageId: m.id }); return }
+      }
+      // W3-t21: 无选中消息 + 空输入 + 思考块存在 → Enter 切换思考块折叠/展开（不提交）。
+      // 优先级: 选中消息展开 > 思考块展开 > 提交（无内容/运行中回落既有行为）。
+      if (!s.input && !s.running && s.selectedMessage == null && s.thinking && s.thinking.text) {
+        ctx.dispatch({ type: 'THINKING_TOGGLE' }); return
+      }
       const text = s.input.trim()
       if (!text || s.running) return
       const sm = slashMatches(s)
@@ -378,6 +471,8 @@ export const modeHandlers = {
       // opencode: exit / quit / :q 直接退出
       if (text === 'exit' || text === 'quit' || text === ':q') { ctx.dispatch({ type: 'QUIT_INTENT' }); return }
       if (text.startsWith('/')) { ctx.handleCommand(text); return }
+      // W3-t19: !shell 模式（'!' 开头且非 '!!' 转义）→ 不提交 agent, 执行命令
+      if (text.startsWith('!') && !text.startsWith('!!') && ctx.runShell) { ctx.runShell(text); return }
       ctx.dispatch({ type: 'SUBMIT' })
       ctx.startSession(text)
     },
@@ -398,11 +493,13 @@ export const modeHandlers = {
     // Shift+Enter: 多行输入换行(todo 5), 不提交
     'shift-enter': (ctx) => { ctx.dispatch({ type: 'INPUT', value: '\n' }) },
     char: (ctx, input) => {
-      if (input === backspaceChar) { ctx.dispatch({ type: 'INPUT_BACKSPACE' }); return }
+      if (input === backspaceChar) { ctx.dispatch({ type: 'INPUT_BACKSPACE' }); if (ctx.syncFilePick) ctx.syncFilePick(); return }
       // 在光标处插入(含粘贴的多字符/换行; reducer 处理光标推进)
       ctx.dispatch({ type: 'INPUT', value: input })
+      // W3-t18: 输入变化后同步 @候选面板（词首 @ 打开, 否则关闭）
+      if (ctx.syncFilePick) ctx.syncFilePick()
     },
-    backspace: (ctx) => ctx.dispatch({ type: 'INPUT_BACKSPACE' }),
+    backspace: (ctx) => { ctx.dispatch({ type: 'INPUT_BACKSPACE' }); if (ctx.syncFilePick) ctx.syncFilePick() },
   },
 }
 
