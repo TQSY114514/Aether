@@ -70,24 +70,16 @@ function useTicker(intervalMs = 500, chars = ['●', '○'], active = true) {
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-// 顶部 Logo：标准 block 字体拼 AETHER（6 行 × 8 列/字母，逐行对齐），居中。
-const _G = {
-  A: ['█████╗  ', '██╔══██╗', '███████║', '██╔══██║', '██║  ██║', '╚═╝  ╚═╝'],
-  E: ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '███████╗', '╚══════╝'],
-  T: ['████████╗', '╚══██╔══╝', '   ██║  ', '   ██║  ', '   ██║  ', '   ╚═╝  '],
-  H: ['██╗  ██╗', '██║  ██║', '███████║', '██╔══██║', '██║  ██║', '╚═╝  ╚═╝'],
-  R: ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██║  ██║', '╚═╝  ╚═╝'],
-}
-const LOGO_WORD = 'AETHER'
-
+// 紧凑品牌头（单行, 替代原 6 行 ASCII Logo）：
+// 渲染成本 O(1) 且不再每次 tick 重建整帧——运行中仅 spinner 字符变化,
+// 避免了"动画驱动全帧重绘"的抽搐源。徽标语对齐产品调性（工程终端工作台）。
 function Logo({ tick }) {
-  const rows = []
-  for (let r = 0; r < 6; r++) {
-    rows.push(LOGO_WORD.split('').map((ch) => (_G[ch] ? _G[ch][r] : '        ')).join('  ').replace(/\s+$/, ''))
-  }
-  return h(Box, { flexDirection: 'column', alignItems: 'center' },
-    rows.map((line, i) => h(Text, { key: i, color: C.primary }, line)),
-    h(Text, { color: C.dim }, `Terminal AI Workstation${tick ? `  ${tick}` : ''}`),
+  return h(Box, { justifyContent: 'space-between' },
+    h(Box, { flexDirection: 'row' },
+      h(Text, { bold: true, color: C.primary }, 'AETHER'),
+      h(Text, { color: C.dim }, '  terminal ai workstation'),
+    ),
+    tick ? h(Text, { color: C.primary }, tick) : null,
   )
 }
 
@@ -102,14 +94,18 @@ function SelectRow({ label, idx, i, marker = '❯' }) {
 // 消息区窗口化常量: 最多渲染最近 MSG_WINDOW 条(其余靠 PgUp/PgDn 翻页)
 const MSG_WINDOW = 40
 
-function MessageLine({ msg, selected, expanded }) {
+// 消息行：role 前缀 + 颜色层次（用户绿 / assistant 浅蓝 / 工具黄 / 系统灰）。
+// 流式进行中的 assistant 空消息显示 spinner（tick 由父组件传入, 不新开定时器）。
+// 错误文本（[sys] error: …）整行标红——agent 错误不再伪装成普通回复。
+function MessageLine({ msg, selected, expanded, tick }) {
   const prefix = ROLE_PREFIX[msg.role] || '• '
   const label = ROLE_LABEL[msg.role] || msg.role
   let color = ROLE_COLOR[msg.role] || C.assistant
-  if (msg.role === 'system' && String(msg.text).startsWith('error')) color = C.error
+  const isError = msg.role === 'system' && /^error/i.test(String(msg.text))
+  if (isError) color = C.error
   const bg = selected ? C.bgHighlight : undefined
   if (!msg.text && msg.role === 'assistant') {
-    return h(Text, { color: C.dim, backgroundColor: bg }, `${prefix}${label} …`)
+    return h(Text, { color: C.dim, backgroundColor: bg }, `${prefix}${label} ${tick || '…'}`)
   }
   // W0-t7: 展开态渲染完整文本（无 4000 上限）; 截断态附可见展开提示（Enter 展开）。
   // 截断/展开逻辑为纯函数 messageDisplay（reducer.js）, 单测覆盖。
@@ -174,24 +170,31 @@ function PermissionPanel({ perm, permIdx }) {
   )
 }
 
-// 底部状态栏（紧凑单行）：审批模式 │ mode │ 模型 │ 上下文估算 │ 运行状态 │ 预算 │ 自定义
-function StatusBar({ state, tick, ctxK, extra }) {
+// 运行时长格式化（codex-cli fmt_elapsed_compact 同款）: 0-59s → '42s'; 分钟 → '1m 05s'
+function fmtElapsed(sec) {
+  const s = Number.isFinite(sec) ? sec : 0
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  if (m < 60) return `${m}m ${String(r).padStart(2, '0')}s`
+  const h = Math.floor(m / 60)
+  return `${h}h ${String(m % 60).padStart(2, '0')}m`
+}
+
+// 底部状态栏（紧凑单行）: 只留用户真正关心的 bits——
+// 模式 │ 模型 │ 运行(时长) │ 上下文估算 │ 自定义脚本输出。
+// 其余（approval/effort/budget/tool/steer/todos/think/tools）从行内移到
+// 输入框 meta 行（下方 App 渲染处保留 effort 等高频项）。
+function StatusBar({ state, tick, ctxK, extra, elapsedSec }) {
   const bits = [
-    `approval:${state.approvalMode}`,
-    `mode:${state.mode}`,
+    state.running ? `${tick} running ${fmtElapsed(elapsedSec)}` : '● idle',
     state.modelName ? `model:${state.modelName}` : null,
-    state.usage.input || state.usage.output ? `tok:${state.usage.input}/${state.usage.output}` : null,
     ctxK > 0 ? `ctx:~${ctxK}k` : null,
-    `effort:${state.effort}`,
-    state.running ? `${tick} running` : '● idle',
-    state.statusLine && state.statusLine !== 'idle' ? state.statusLine : null,
-    state.budget.max > 0 ? `it:${state.budget.used}/${state.budget.max}` : null,
+    state.statusLine && state.statusLine !== 'idle' && state.statusLine !== 'running' ? state.statusLine : null,
+    state.approvalMode !== 'manual' ? `approval:${state.approvalMode}` : null,
     state.currentTool ? `tool:${state.currentTool}` : null,
-    state.steeringQueue.length ? `steer:${state.steeringQueue.length}` : null,
-    state.todos.length ? `todos:${state.todos.length}` : null, // W1-t9: 清单计数（Ctrl+T 查看）
-    // W3-t21: 思考状态: 打开(运行中/用户展开)显示 think:on; 关闭但块存在显示长度 think:N
+    state.todos.length ? `todos:${state.todos.length}` : null,
     state.thinking && state.thinking.text ? (state.thinking.open ? 'think:on' : `think:${state.thinking.text.length}`) : null,
-    `tools:${state.toolCalls.length}`,
     extra || null,
   ].filter(Boolean)
   return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
@@ -208,7 +211,7 @@ function ThinkingBlock({ thinking }) {
   const body = collapsed
     ? `${thinking.text.slice(0, 80)}${thinking.text.length > 80 ? '…' : ''}`
     : (thinking.text.length >= THINKING_BUFFER_LIMIT ? `…${thinking.text}（已截断）` : thinking.text)
-  const hint = collapsed ? ' · Enter 展开思考' : ''
+  const hint = collapsed ? ' · Enter 展开思考' : ' · Enter 折叠'
   return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.dim, paddingX: 1, flexDirection: 'column' },
     h(Text, { bold: true, color: C.dim }, `思考过程${collapsed ? ` · ${thinking.text.length}字` : '（运行中/展开）'}`),
     h(Text, { color: C.dim }, `${body}${hint}`),
@@ -229,6 +232,15 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     realDispatch(a)
   }, [tuiLog])
   const tick = useTicker(500, SPINNER, state.running)
+  // 运行时长（codex-cli StatusIndicator 同款）: running 起计时, 结束清零。
+  // 独立 1s ticker 只更新这个数字, 避免拖累整帧重绘。
+  const [elapsedSec, setElapsedSec] = useState(0)
+  useEffect(() => {
+    if (!state.running) { setElapsedSec(0); return }
+    const t0 = Date.now()
+    const t = setInterval(() => setElapsedSec(Math.floor((Date.now() - t0) / 1000)), 1000)
+    return () => clearInterval(t)
+  }, [state.running])
   const sessionBusyRef = useRef(false)
   // W2-t16: /delete 两步确认——pendingDeleteRef 持有待确认删除的 dbSessionId;
   // 任何其他命令/普通输入都会清除（见 handleCommand 入口与 startSession）。
@@ -743,10 +755,12 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     }
   }, [stdin, stdout])
 
-  // leader key 待命计时: 1.2s 无后续按键自动解除
+  // leader key 待命超时: 3s（原 1.2s 太短——Ctrl+X 后稍犹豫 m 就变普通打字,
+  // 表现为"模型选择器打不开/选择不了"）
+  const LEADER_TIMEOUT_MS = 3000
   useEffect(() => {
     if (!leaderArmed) return
-    const t = setTimeout(() => setLeaderArmed(false), 1200)
+    const t = setTimeout(() => setLeaderArmed(false), LEADER_TIMEOUT_MS)
     return () => clearTimeout(t)
   }, [leaderArmed])
 
@@ -1359,6 +1373,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     h(Text, { color: C.dim }, `  ${state.mode} · Shift+Tab 审批模式 · Alt+m 模式 · ? 帮助 · x/Ctrl+P 面板 · Ctrl+C 退出`),
     ...visibleMessages.map((m, i) => h(MessageLine, {
       key: m.id, msg: m,
+      tick,
       selected: state.selectedMessage === (msgTotal - visibleMessages.length + i),
       expanded: state.expandedMessage === m.id, // W0-t7: 展开态渲染全文
     })),
@@ -1574,9 +1589,9 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
           : h(Text, { color: C.dim }, 'Ask anything…  Ctrl+X 快捷键 · / 命令 · Ctrl+P 面板 · Shift+Enter 换行'),
       ),
       // 输入框 meta 行（opencode prompt meta: mode · model · effort · running）
-      h(Text, { color: C.dim }, `  ${state.mode}${state.modelName ? ` · ${state.modelName}` : ''} · effort:${state.effort}${state.running ? ` · ${tick} running` : ''} · PgUp/PgDn 逐行滚动 · 滚轮滚动`),
+      h(Text, { color: C.dim }, `  ${state.mode}${state.modelName ? ` · ${state.modelName}` : ''} · effort:${state.effort}${state.running ? ` · ${tick}` : ''} · PgUp/PgDn 滚动`),
       leaderArmed ? h(Text, { color: C.primary }, '  ctrl+x leader: m 模型 · n 新会话 · l 列表 · g 时间线 · r rewind · e 编辑器 · q 退出') : null,
-      h(StatusBar, { state, tick: state.running ? tick : '●', ctxK, extra: statusBarExtra }),
+      h(StatusBar, { state, tick: state.running ? tick : '●', ctxK, extra: statusBarExtra, elapsedSec }),
   )
 }
 
