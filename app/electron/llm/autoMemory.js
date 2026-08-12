@@ -64,6 +64,10 @@ function score(memoryText, qkw) {
 let _memCache = null
 let _memV = 0
 
+// ── Project Intelligence (review P1-5) ──────────────────────────────────────
+// type='project' 的记忆是项目级知识(架构/约定/决策), 不依赖关键词匹配,
+// 每轮都注入 —— "项目大脑"让 agent 进入项目不再从零开始。
+// 项目块置顶; 关键词记忆仍按需合并(_prefetchKeywords); 无关键词时仅注入项目块。
 function prefetch(db, userMessage) {
   const memories = _memCache && _memCache.v === _memV ? _memCache.data : (() => {
     let m
@@ -72,6 +76,22 @@ function prefetch(db, userMessage) {
     return m
   })()
   if (!memories || memories.length === 0) return ''
+
+  const projectMem = memories.filter(m => m.type === 'project')
+  if (projectMem.length > 0) {
+    const projLines = projectMem.slice(0, 5).map(m => {
+      try { db.incrementMemoryAccess(m.id) } catch {}
+      return `- ${String(m.content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()}`
+    })
+    const projBlock = `Project knowledge (architecture/conventions/decisions — follow these):\n${projLines.join('\n')}`
+    const normal = _prefetchKeywords(db, userMessage, memories)
+    if (normal) return `${projBlock}\n\n${normal}`
+    return projBlock
+  }
+  return _prefetchKeywords(db, userMessage, memories)
+}
+
+function _prefetchKeywords(db, userMessage, memories) {
   const qkw = keywords(userMessage)
   if (qkw.size === 0) return ''
 

@@ -102,6 +102,93 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   ipcMain.handle('arena:scores', () => {
     try { return db.getModelScores() } catch (e) { log.warn('arena:scores error:', e); return [] }
   })
+
+  // ── Arena 2.0: personal benchmark (review P0-3) ─────────────────────────
+  // 用户自建任务集, 一键对选中模型重跑; 每任务每模型独立计分:
+  //   - 结果非错误 → 记 1 胜(wins)
+  //   - 聚合 总延迟/总成本/任务数
+  // 汇总后写入 arena_benchmark.results, 前端渲染"你的工作负载的模型排行榜"。
+  ipcMain.handle('arena:benchmark-list', () => {
+    try { return db.listArenaBenchmarks() } catch (e) { log.warn('arena:benchmark-list error:', e); return [] }
+  })
+
+  ipcMain.handle('arena:benchmark-save', (_e, { id = null, name, tasks, modelIds }) => {
+    try { return db.saveArenaBenchmark({ id, name: String(name || 'benchmark').slice(0, 60), tasks, modelIds }) } catch (e) { return { error: e.message } }
+  })
+
+  ipcMain.handle('arena:benchmark-delete', (_e, id) => {
+    try { db.deleteArenaBenchmark(id); return { ok: true } } catch (e) { return { ok: false, error: e.message } }
+  })
+
+  ipcMain.handle('arena:benchmark-run', async (_e, { id, modelIds }) => {
+    const bench = db.listArenaBenchmarks().find(b => b.id === id)
+    if (!bench) return { error: 'benchmark not found' }
+    const allModels = db.getAllModels()
+    const selected = allModels.filter(m => modelIds.includes(m.id))
+    if (!selected.length) return { error: 'no models selected' }
+
+    const results = {}   // model_id -> { wins, runs, total_ms, total_cost }
+    for (const m of selected) results[m.id] = { wins: 0, runs: 0, total_ms: 0, total_cost: 0 }
+
+    const controller = new AbortController()
+    abortControllers.set(`bench:${id}`, controller)
+
+    try {
+      for (const task of bench.tasks) {
+        const content = String(task || '').trim()
+        if (!content) continue
+        // 并行跑该任务下所有模型(复用 arena 并发语义), 等待全部完成
+        const round = await Promise.all(selected.map(async (m) => {
+          const start = Date.now()
+          const perModel = new AbortController()
+          const timeout = setTimeout(() => perModel.abort(), 60000)
+          const onOuterAbort = () => perModel.abort()
+          controller.signal.addEventListener('abort', onOuterAbort, { once: true })
+          try {
+            const { content: answer, usage } = await completeChatMessage({
+              provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
+              model: m,
+              messages: [{ role: 'user', content }],
+              signal: perModel.signal,
+            })
+            const u = normalizeUsage(usage)
+            const cost = u ? computeCost(m, u) : 0
+            return { modelId: m.id, ok: !!answer && !String(answer).startsWith('[Error'), latency: Date.now() - start, cost }
+          } catch (err) {
+            return { modelId: m.id, ok: false, latency: Date.now() - start, cost: 0 }
+          } finally {
+            clearTimeout(timeout)
+            controller.signal.removeEventListener('abort', onOuterAbort)
+          }
+        }))
+        for (const r of round) {
+          const acc = results[r.modelId]
+          if (!acc) continue
+          acc.runs += 1
+          acc.total_ms += r.latency
+          acc.total_cost += r.cost
+          if (r.ok) acc.wins += 1
+        }
+      }
+    } finally {
+      abortControllers.delete(`bench:${id}`)
+    }
+
+    const lastRun = new Date().toISOString()
+    db.updateArenaBenchmarkResults(id, results, lastRun)
+    // 附带模型名, 前端直接渲染
+    const out = { lastRun, models: {}, results: {} }
+    for (const m of selected) {
+      out.models[m.id] = { model_name: m.model_name, provider_name: m.provider_name }
+      out.results[m.id] = results[m.id]
+    }
+    return out
+  })
+
+  ipcMain.handle('arena:benchmark-stop', (_e, id) => {
+    const c = abortControllers.get(`bench:${id}`)
+    if (c) { c.abort(); abortControllers.delete(`bench:${id}`) }
+  })
 }
 
 module.exports = { registerArenaHandlers }

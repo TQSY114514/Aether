@@ -151,6 +151,19 @@ function createEmptyDatabase(dbPath) {
   )`)
   target.exec('CREATE TABLE IF NOT EXISTS model_score (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id INTEGER NOT NULL, intent TEXT NOT NULL, score REAL NOT NULL DEFAULT 1000, win_count INTEGER NOT NULL DEFAULT 0, total_count INTEGER NOT NULL DEFAULT 0, UNIQUE(model_id, intent))')
   target.exec('CREATE TABLE IF NOT EXISTS arena_vote (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT NOT NULL, intent TEXT, winner_model_id INTEGER, winner_model_name TEXT, loser_model_ids TEXT NOT NULL, loser_model_names TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+  // Arena 2.0 (review P0-3): personal benchmark suite — user-defined task set
+  // run against chosen models, results aggregated per model (win/latency/cost).
+  // `tasks` = JSON array of prompts; `last_run` = ISO timestamp; `results` =
+  // JSON map model_id -> { wins, runs, total_ms, total_cost }.
+  target.exec(`CREATE TABLE IF NOT EXISTS arena_benchmark (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    tasks TEXT NOT NULL,
+    model_ids TEXT NOT NULL,
+    last_run TEXT,
+    results TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`)
   target.exec('CREATE TABLE IF NOT EXISTS mcp_server (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, command TEXT NOT NULL, args TEXT, env TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
   target.exec("CREATE TABLE IF NOT EXISTS memory (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, type TEXT DEFAULT 'fact', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
   target.exec('CREATE TABLE IF NOT EXISTS repo_index_cache (workspace TEXT PRIMARY KEY, mtime_x REAL NOT NULL, graph_json TEXT NOT NULL)')
@@ -630,6 +643,28 @@ async function recordArenaVote({ prompt, winnerModelId, winnerModelName, loserMo
     .run(prompt, intent, winnerModelId, winnerModelName, JSON.stringify(loserModelIds), JSON.stringify(loserModelNames))
   if (winnerModelId && loserModelIds.length > 0) await updateElo(winnerModelId, loserModelIds, intent)
 }
+
+// ── Arena 2.0: personal benchmark suite (review P0-3) ───────────────────────
+function listArenaBenchmarks() {
+  return db.prepare('SELECT * FROM arena_benchmark ORDER BY created_at DESC').all()
+    .map(r => ({ ...r, tasks: JSON.parse(r.tasks || '[]'), model_ids: JSON.parse(r.model_ids || '[]'), results: r.results ? JSON.parse(r.results) : null }))
+}
+function saveArenaBenchmark({ id = null, name, tasks, modelIds }) {
+  const t = JSON.stringify(Array.isArray(tasks) ? tasks : [])
+  const m = JSON.stringify(Array.isArray(modelIds) ? modelIds : [])
+  if (id != null) {
+    db.prepare('UPDATE arena_benchmark SET name = ?, tasks = ?, model_ids = ? WHERE id = ?').run(name, t, m, id)
+    return { id }
+  }
+  const info = db.prepare('INSERT INTO arena_benchmark (name, tasks, model_ids) VALUES (?, ?, ?)').run(name, t, m)
+  return { id: Number(info.lastInsertRowid) }
+}
+function deleteArenaBenchmark(id) {
+  db.prepare('DELETE FROM arena_benchmark WHERE id = ?').run(id)
+}
+function updateArenaBenchmarkResults(id, results, lastRun) {
+  db.prepare('UPDATE arena_benchmark SET results = ?, last_run = ? WHERE id = ?').run(JSON.stringify(results), lastRun, id)
+}
 // Average observed latency per model_id (from successful usage_log rows).
 // Used by modelRouter's auto mode to blend latency into the model score.
 function getModelLatency() {
@@ -1009,7 +1044,9 @@ module.exports = {
   getSetting, setSetting, getAllSettings,
   getScheduledTasks, addScheduledTask, getScheduledTask, deleteScheduledTask, markScheduledTaskRun,
   createAgentTask, getAgentTask, updateAgentTask, listAgentTasks,
-  getModelScores, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, saveDatabase, flushDatabase,
+  getModelScores, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute,
+listArenaBenchmarks, saveArenaBenchmark, deleteArenaBenchmark, updateArenaBenchmarkResults,
+saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
   getMemories, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess,
   getMemoryConflicts, resolveMemoryConflict,

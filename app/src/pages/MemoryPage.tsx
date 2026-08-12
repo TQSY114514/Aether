@@ -6,7 +6,7 @@ import { t } from '@/utils/i18n'
 import { parseMemoryImport } from '@/utils/memoryImport'
 
 const TYPE_COLORS: Record<string, string> = {
-  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#9333EA',
+  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#9333EA', project: '#7C3AED',
 }
 
 export default function MemoryPage() {
@@ -217,6 +217,7 @@ export default function MemoryPage() {
             <option value="fact">Fact</option>
             <option value="context">Context</option>
             <option value="relation">Relation</option>
+            <option value="project">Project 🧠</option>
           </select>
           <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)}
             placeholder={t('memory.add_placeholder')}

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { scoresToCsv, scoresToMarkdown, downloadText } from '@/utils/arenaExport'
+import BenchmarkPanel from '@/components/arena/BenchmarkPanel'
 
 export default function ScoresPage() {
   const scores = useStore((s) => s.scores)
@@ -109,6 +110,9 @@ export default function ScoresPage() {
           </div>
         ))}
       </div>
+
+      {/* Arena 2.0: personal benchmark (review P0-3) */}
+      <BenchmarkPanel />
     </div>
   )
 }
