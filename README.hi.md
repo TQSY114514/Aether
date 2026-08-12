@@ -50,7 +50,7 @@ AetherAI कई क्षमताओं को एक ही स्थानी
 | **Hierarchical Planning** | जटिल अनुरोध स्वतः समानांतर उप-कार्यों में विघटित होते हैं। | `Experimental` |
 | **Context Compaction** | लंबे वार्तालाप बिना टूल-कॉल जोड़े खोए स्वतः सारांशित होते हैं। | `Beta` |
 | **Local-First Privacy** | वार्तालाप, कुंजियाँ, personas स्थानीय SQLite में। कुछ भी आपकी मशीन से बाहर नहीं जाता। | `Stable` |
-| **15 UI Languages** | क्लासिकल चाइनीज़ (文言) और RTL अरबी सहित। | `Beta` |
+| **15 UI Languages** | क्लासिकल चाइनीज़ (शास्त्रीय चीनी) और RTL अरबी सहित। | `Beta` |
 | **Terminal TUI** | Ink v5 इंटरैक्टिव टर्मिनल: सत्र स्ट्रीम, टूल कार्ड, diff समीक्षा/रोलबैक, कीबोर्ड अनुमति द्वार, `/fork` सत्र ट्री, `/memory`, चलते-चलते steering इंजेक्शन। | `Beta` |
 | **Headless CLI · RPC · SDK** | चार-मोड CLI (सिंगल-शॉट / NDJSON / JSONL RPC / पाइप), Electron-free SDK (`aetherai/sdk`), मशीन-कॉल करने योग्य JSONL प्रोटोकॉल। | `Beta` |
 | **MIT Licensed** | पूर्ण रूप से ओपन सोर्स। | `Stable` |
@@ -108,11 +108,11 @@ npm start        # launch Electron
 
 ```bash
 cd app && npm install
-node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
-node cli.js "你好"           # 单发 prompt
-echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
-node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
-node cli.js tui --smoke      # headless 状态机冒烟
+node cli.js tui              # इंटरैक्टिव टर्मिनल UI (Node ≥ 22; Windows Terminal में सर्वोत्तम)
+node cli.js "नमस्ते"           # एकल-शॉट prompt
+echo "इसका सारांश दें" | node cli.js  # stdin को prompt के रूप में पाइप करें
+node cli.js --mode json "x"  # NDJSON इवेंट स्ट्रीम (स्क्रिप्ट/CI)
+node cli.js tui --smoke      # headless स्टेट-मशीन स्मोक
 ```
 
 ### प्रदाता कॉन्फ़िगर करें
@@ -201,7 +201,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 | **Custom background** | `Stable` | opacity / blur नियंत्रण के साथ छवि अपलोड करें |
 | **Personas** | `Stable` | System-prompt presets, प्रति सत्र स्विच करने योग्य |
 | **Themes** | `Stable` | Light / Dark / Blue / Glass / Retro |
-| **15 UI languages** | `Beta` | English, Chinese (简/繁/文言), Japanese, Spanish, French, German, Portuguese, Russian, Ukrainian, Arabic (RTL), Hindi, Korean |
+| **15 UI languages** | `Beta` | English, Chinese (सरलीकृत / पारंपरिक / शास्त्रीय), Japanese, Spanish, French, German, Portuguese, Russian, Ukrainian, Arabic (RTL), Hindi, Korean |
 | **Auto-update** | `Beta` | NSIS इंस्टॉलर लॉन्च पर जाँच करता है; पोर्टेबल भी जाँच करता है (मैनुअल इंस्टॉल) |
 | **Usage tracking** | `Beta` | tokens, cost, latency, cache hit rate के साथ प्रति-API-कॉल लॉग |
 

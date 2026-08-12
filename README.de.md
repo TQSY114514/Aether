@@ -50,7 +50,7 @@ AetherAI bündelt mehrere Fähigkeiten, die normalerweise über verschiedene Too
 | **Hierarchische Planung** | Komplexe Anfragen werden automatisch in parallele Unteraufgaben zerlegt. | `Experimental` |
 | **Kontext-Kompaktierung** | Lange Unterhaltungen werden automatisch zusammengefasst, ohne Tool-Call-Paare zu verlieren. | `Beta` |
 | **Local-First-Datenschutz** | Unterhaltungen, Schlüssel, Personas in lokaler SQLite. Nichts verlässt Ihren Rechner. | `Stable` |
-| **15 UI-Sprachen** | Einschließlich klassischem Chinesisch (文言) und RTL-Arabisch. | `Beta` |
+| **15 UI-Sprachen** | Einschließlich klassischem Chinesisch (klassisches Chinesisch) und RTL-Arabisch. | `Beta` |
 | **Terminal-TUI** | Ink-v5-Interaktivterminal: Sitzungsstream, Tool-Karten, Diff-Review/Rollback, Tastatur-Berechtigungsgate, `/fork`-Sitzungsbaum, `/memory`, Live-Steering-Einspeisung. | `Beta` |
 | **Headless-CLI · RPC · SDK** | Vier-Modus-CLI (Einzelausführung / NDJSON / JSONL-RPC / Pipe), Electron-freies SDK (`aetherai/sdk`), maschinenaufrufbares JSONL-Protokoll. | `Beta` |
 | **MIT-Lizenz** | Vollständig Open Source. | `Stable` |
@@ -108,11 +108,11 @@ Oder führen Sie `start.bat` im Repository-Stammverzeichnis auf Windows aus.
 
 ```bash
 cd app && npm install
-node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
-node cli.js "你好"           # 单发 prompt
-echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
-node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
-node cli.js tui --smoke      # headless 状态机冒烟
+node cli.js tui              # interaktive Terminal-UI (Node ≥ 22; am besten in Windows Terminal)
+node cli.js "hallo"           # Einmal-Prompt
+echo "fasse zusammen" | node cli.js  # stdin per Pipe als Prompt
+node cli.js --mode json "x"  # NDJSON-Ereignisstrom (Skripte/CI)
+node cli.js tui --smoke      # Headless-Zustandsmaschinen-Smoke-Test
 ```
 
 ### Anbieter konfigurieren
@@ -201,7 +201,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 | **Benutzerdefinierter Hintergrund** | `Stable` | Bild mit Deckkraft-/Unschärfe-Reglern hochladen |
 | **Personas** | `Stable` | System-Prompt-Voreinstellungen, pro Sitzung umschaltbar |
 | **Themes** | `Stable` | Hell / Dunkel / Blau / Glas / Retro |
-| **15 UI-Sprachen** | `Beta` | Englisch, Chinesisch (简/繁/文言), Japanisch, Spanisch, Französisch, Deutsch, Portugiesisch, Russisch, Ukrainisch, Arabisch (RTL), Hindi, Koreanisch |
+| **15 UI-Sprachen** | `Beta` | Englisch, Chinesisch (Vereinfacht / Traditionell / Klassisch), Japanisch, Spanisch, Französisch, Deutsch, Portugiesisch, Russisch, Ukrainisch, Arabisch (RTL), Hindi, Koreanisch |
 | **Auto-Update** | `Beta` | Der NSIS-Installer prüft beim Start; der portable Build ebenfalls (manuelle Installation) |
 | **Nutzungsverfolgung** | `Beta` | Protokoll pro API-Aufruf mit Tokens, Kosten, Latenz, Cache-Trefferquote |
 

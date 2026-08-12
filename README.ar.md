@@ -50,7 +50,7 @@
 | **تخطيط هرميّ** | الطلبات المعقّدة تُفكَّك تلقائيًا إلى مهام فرعية متوازية. | `Experimental` |
 | **انكماش السياق** | المحادثات الطويلة تُلخَّص تلقائيًا بدون فقدان أزواج استدعاء الأداة. | `Beta` |
 | **خصوصية محلّية أولاً** | المحادثات والمفاتيح والشخصيات في SQLite محلّي. لا شيء يغادر جهازك. | `Stable` |
-| **15 لغة واجهة** | بما فيها الصينية الكلاسيكية (文言) والعربية RTL. | `Beta` |
+| **15 لغة واجهة** | بما فيها الصينية الكلاسيكية (الصينية الكلاسيكية) والعربية RTL. | `Beta` |
 | **طرفية TUI** | طرفية تفاعلية Ink v5: تدفق الجلسات، بطاقات الأدوات، مراجعة/تراجع diff، بوابة أذونات بلوحة المفاتيح، شجرة جلسات `/fork`، `/memory`، حقن steering أثناء التشغيل. | `Beta` |
 | **CLI بدون واجهة · RPC · SDK** | CLI بأربعة أوضاع (إطلاق مفرد / NDJSON / JSONL RPC / أنابيب)، وSDK بدون Electron (`aetherai/sdk`)، وبروتوكول JSONL قابل للاستدعاء آليًا. | `Beta` |
 | **مرخّص MIT** | مفتوح المصدر بالكامل. | `Stable` |
@@ -109,8 +109,8 @@ npm start        # launch Electron
 ```bash
 cd app && npm install
 node cli.js tui              # interactive terminal UI (Node ≥ 22; best in Windows Terminal)
-node cli.js "你好"           # single-shot prompt
-echo "总结一下" | node cli.js  # pipe stdin as prompt
+node cli.js "مرحبا"           # single-shot prompt
+echo "لخّص هذا" | node cli.js  # pipe stdin as prompt
 node cli.js --mode json "x"  # NDJSON event stream (scripts/CI)
 node cli.js tui --smoke      # headless state-machine smoke
 ```

@@ -50,7 +50,7 @@ AetherAI는 일반적으로 여러 도구에 분산되어 있는 기능들을 �
 | **계층적 플래닝** | 복잡한 요청을 병렬 하위 작업으로 자동 분해합니다. | `Experimental` |
 | **컨텍스트 압축** | 도구 호출 쌍을 잃지 않으면서 긴 대화를 자동 요약합니다. | `Beta` |
 | **로컬 우선 프라이버시** | 대화, 키, 페르소나가 로컬 SQLite에 저장됩니다. 어떤 것도 머신을 벗어나지 않습니다. | `Stable` |
-| **15개 UI 언어** | 문언 중국어(文言) 및 RTL 아랍어 포함. | `Beta` |
+| **15개 UI 언어** | 문언 중국어(고전 중국어) 및 RTL 아랍어 포함. | `Beta` |
 | **터미널 TUI** | Ink v5 인터랙티브 터미널: 세션 스트림, 도구 카드, diff 검토/롤백, 키보드 권한 게이트, `/fork` 세션 트리, `/memory`, 실행 중 steering 재주입. | `Beta` |
 | **Headless CLI · RPC · SDK** | 4모드 CLI(단발 / NDJSON / JSONL RPC / 파이프), Electron-free SDK(`aetherai/sdk`), 머신 호출 가능한 JSONL 프로토콜. | `Beta` |
 | **MIT 라이선스** | 완전한 오픈소스. | `Stable` |
@@ -107,11 +107,11 @@ npm start        # launch Electron
 
 ```bash
 cd app && npm install
-node cli.js tui              # 交互终端 UI（Node ≥ 22；Windows Terminal 体验最佳）
-node cli.js "你好"           # 单发 prompt
-echo "总结一下" | node cli.js  # 管道 stdin 作为 prompt
-node cli.js --mode json "x"  # NDJSON 事件流（脚本/CI）
-node cli.js tui --smoke      # headless 状态机冒烟
+node cli.js tui              # 인터랙티브 터미널 UI(Node ≥ 22; Windows Terminal에서 최상의 경험)
+node cli.js "안녕하세요"           # 단발 prompt
+echo "이것을 요약해 주세요" | node cli.js  # stdin을 prompt로 파이프
+node cli.js --mode json "x"  # NDJSON 이벤트 스트림(스크립트/CI)
+node cli.js tui --smoke      # headless 상태 머신 스모크
 ```
 
 ### 프로바이더 설정
