@@ -358,17 +358,6 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     return () => clearTimeout(t)
   }, [escArmedRef.current])
 
-  // 面板开/关强制全量重绘: ink 差分渲染在 Windows ConPTY 上面板切换会残留旧帧
-  // (用户实测: 模型选择器关闭后 logo/帮助行重复出现)。切换时清屏一次, 下一帧全量输出。
-  const prevPanelRef = useRef('')
-  useEffect(() => {
-    const key = `${!!modelPicker}|${paletteOpen}|${helpOpen}|${rewindOpen}|${!!timeline}|${state.planDone}|${!!state.pendingPermission}`
-    if (prevPanelRef.current && prevPanelRef.current !== key) {
-      try { process.stdout.write('\x1b[2J\x1b[H') } catch {}
-    }
-    prevPanelRef.current = key
-  }, [modelPicker, paletteOpen, helpOpen, rewindOpen, timeline, state.planDone, state.pendingPermission])
-
   // 自定义状态栏(Claude statusLine 模式): 执行脚本, stdout 显示在状态栏
   useEffect(() => {
     if (!statusLineCmd) return
@@ -678,20 +667,16 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
           const start = Math.max(0, Math.min(safeIdx - Math.floor(W / 2), Math.max(0, flat.length - W)))
           const visible = flat.slice(start, start + W)
           const current = flat[safeIdx]
-          // 分组标题: 同 provider 连续段的首行前插入(文件夹样式 ▾)
-          const rows = []
-          for (let vi = 0; vi < visible.length; vi++) {
-            const m = visible[vi]
-            if (vi === 0 || visible[vi - 1].provider_name !== m.provider_name) {
-              rows.push(h(Text, { key: `g-${m.provider_id}-${start + vi}`, color: C.sys }, `  ▾ ${m.provider_name}:`))
-            }
+          // 固定 10 行纯模型行(组标题由顶部面包屑承担): ↑↓ 移动只变高亮行,
+          // 行数恒定 → 无重排 → Windows ConPTY 不再抽搐
+          const rows = visible.map((m, vi) => {
             const isCurrent = state.modelName === m.model_name
-            rows.push(h(SelectRow, {
+            return h(SelectRow, {
               key: `${m.provider_id}-${m.id}`,
               label: `${m.model_name}${m.is_primary ? ' ★' : ''}${isCurrent ? ' ●' : ''}`,
               idx: modelPicker.idx, i: start + vi,
-            }))
-          }
+            })
+          })
           return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.primary, paddingX: 1, flexDirection: 'column' },
             // 供应商/模型面包屑固定在面板顶部(文件夹式导航)
             h(Text, { bold: true, color: C.primary }, `Select model — ${current ? `${current.provider_name} / ${current.model_name}` : '(no match)'}`),
