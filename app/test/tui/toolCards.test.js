@@ -5,7 +5,9 @@
 // 状态标签出现在输出帧中。
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from 'vitest'
-import { createElement as h } from 'react'
+// h 必须与 ink 同源（tui/node_modules 的 React 18）——根目录已升 React 19,
+// 若混用两个 React 实例, ink 的 reconciler 会报 "Objects are not valid as a React child"。
+import { createElement as h } from '../../tui/node_modules/react/index.js'
 // ink 仅安装在 app/tui/node_modules（TUI 局部依赖），测试从相对路径直引入口。
 import { render, Box, Text } from '../../tui/node_modules/ink/build/index.js'
 import { summarizeTool, truncateLines, summarizeArgs, TOOL_STATUS } from '../../tui/toolCards.js'
