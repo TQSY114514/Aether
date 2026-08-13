@@ -201,7 +201,7 @@ function StatusBar({ state, tick, ctxK, extra, elapsedSec }) {
     state.approvalMode !== 'manual' ? `approval:${state.approvalMode}` : null,
     state.currentTool ? `tool:${state.currentTool}` : null,
     state.todos.length ? `todos:${state.todos.length}` : null,
-    state.thinking && state.thinking.text ? (state.thinking.open ? 'think:on' : `think:${state.thinking.text.length}`) : null,
+    state.thinking && state.thinking.text ? (state.thinking.open ? (state.running ? 'think:on' : 'think:end') : `think:${state.thinking.text.length}`) : null,
     extra || null,
   ].filter(Boolean)
   return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: state.running ? C.primary : C.dim, paddingX: 1 },
@@ -212,15 +212,17 @@ function StatusBar({ state, tick, ctxK, extra, elapsedSec }) {
 // ── W3-t21: 思考过程块（推理模型; 输入框上方固定渲染）────────────────────
 // 折叠态: 首 80 字符 + 展开提示; 展开态: 全文（reducer 已限 4000 尾部保留,
 // 超限附加截断标注）。空文本不渲染。
-function ThinkingBlock({ thinking }) {
+function ThinkingBlock({ thinking, running }) {
   if (!thinking || !thinking.text) return null
   const collapsed = !thinking.open
   const body = collapsed
     ? `${thinking.text.slice(0, 80)}${thinking.text.length > 80 ? '…' : ''}`
     : (thinking.text.length >= THINKING_BUFFER_LIMIT ? `…${thinking.text}（已截断）` : thinking.text)
   const hint = collapsed ? ' · Enter 展开思考' : ' · Enter 折叠'
+  // 展开态状态文案随 running 区分: 运行中=实时推理; 结束后=可回顾
+  const stateLabel = collapsed ? ` · ${thinking.text.length}字` : (running ? '（运行中）' : '（已结束 · 回顾）')
   return h(Box, { marginTop: 1, borderStyle: 'single', borderColor: C.dim, paddingX: 1, flexDirection: 'column' },
-    h(Text, { bold: true, color: C.dim }, `思考过程${collapsed ? ` · ${thinking.text.length}字` : '（运行中/展开）'}`),
+    h(Text, { bold: true, color: C.dim }, `思考过程${stateLabel}`),
     h(Text, { color: C.dim }, `${body}${hint}`),
   )
 }
@@ -1585,7 +1587,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
             h(Text, { color: C.dim }, `  filter: ${permDialog.filter || '(all)'}${filtered.length ? ` · ${filtered.length} 条` : ''} · ↑↓ 选择 · d 删除 · 字符过滤 · Esc 关闭`))
         })()
         : null,
-      h(ThinkingBlock, { thinking: state.thinking }),
+      h(ThinkingBlock, { thinking: state.thinking, running: state.running }),
       h(Box, { marginTop: 1, borderStyle: 'round', borderColor: state.running ? C.primary : (leaderArmed ? C.primary : C.dim), paddingX: 1 },
         h(Text, { color: state.running ? C.primary : C.dim, bold: !state.running }, '❯ '),
         state.input
