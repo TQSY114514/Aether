@@ -135,7 +135,7 @@ export default function LearningGraphPage() {
 
         {/* Search filter */}
         <div className="mb-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--content-bg)] border text-sm" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-(--content-bg) border text-sm" style={{ borderColor: 'var(--border)' }}>
             <Search size={14} className="text-gray-400 shrink-0" />
             <input value={filter} onChange={e => setFilter(e.target.value)} placeholder={t('learning_graph.filter')} className="w-full bg-transparent outline-none text-sm" />
           </div>
@@ -152,7 +152,7 @@ export default function LearningGraphPage() {
               return (
                 <button key={node.id}
                   onClick={() => setSelected(node)}
-                  className="w-full text-left flex items-start gap-3 p-2.5 rounded-xl border hover:bg-[var(--bg-secondary)] transition-colors"
+                  className="w-full text-left flex items-start gap-3 p-2.5 rounded-xl border hover:bg-(--bg-secondary) transition-colors"
                   style={{ borderColor: selected?.id === node.id ? 'var(--accent)' : 'var(--border)', backgroundColor: selected?.id === node.id ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}>
                   <span className="w-3 h-3 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: COLORS[node.type] || COLORS.default }} />
                   <div className="flex-1 min-w-0">

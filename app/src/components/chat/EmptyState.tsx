@@ -78,7 +78,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         {activeModel && (
           <div className="flex items-center justify-center gap-2.5 mb-8">
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-              <Cpu size={11} className="text-[var(--text-muted)]" />{activeModel.display_name || activeModel.model_name}
+              <Cpu size={11} className="text-(--text-muted)" />{activeModel.display_name || activeModel.model_name}
             </span>
             {effortLevel !== 'off' && (
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
@@ -93,7 +93,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
           <div className="grid grid-cols-2 gap-3 mb-8 text-left">
             {examples.map((ex, i) => (
               <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}
-                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
+                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-(--accent) animate-blur-fade"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `${i * 50}ms` }}>
                 <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">{ex.icon}</span>
                 <div className="min-w-0 flex-1">

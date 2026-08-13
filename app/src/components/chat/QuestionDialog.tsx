@@ -77,7 +77,7 @@ export default function QuestionDialog() {
         </div>
         <div className="flex justify-end gap-2">
           <button onClick={() => { resolve(req.reqId, req.questions.map(q => ({ question: q.question, answer: '(cancelled)' }))); setCustom({}) }}
-            className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             <span className="flex items-center gap-1"><X size={11} />{t('agent.question.cancel')}</span>
           </button>
           <button onClick={submit} disabled={req.questions.some((_, i) => !selections[i])}

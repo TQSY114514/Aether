@@ -78,7 +78,7 @@ export default function BenchmarkPanel() {
         </div>
         {!editing && (
           <button onClick={() => setEditing(true)}
-            className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+            className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-(--bg-secondary) transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             <Plus size={12} />新建套件
           </button>
@@ -91,11 +91,11 @@ export default function BenchmarkPanel() {
       {editing && (
         <div className="p-4 rounded-xl mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="套件名称(如: 我的编码任务)"
-            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)]"
+            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-(--bg-primary)"
             style={{ borderColor: 'var(--border)' }} />
           <textarea value={tasksText} onChange={(e) => setTasksText(e.target.value)} rows={5}
             placeholder={'每行一个任务, 例如:\n修复这个 React 组件的 TypeScript 报错\n写一个二分查找并解释\n总结这段代码的架构'}
-            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
+            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-(--bg-primary) font-mono"
             style={{ borderColor: 'var(--border)' }} />
           <div>
             <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>选择参与评测的模型({modelIds.length} 个)</p>
@@ -148,7 +148,7 @@ export default function BenchmarkPanel() {
                     <Play size={11} />{runningId === b.id ? '运行中…' : '重跑'}
                   </button>
                   <button onClick={() => del(b.id)}
-                    className="p-1.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+                    className="p-1.5 rounded-lg border hover:bg-(--bg-secondary) transition-colors"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }} title="删除">
                     <Trash2 size={12} />
                   </button>

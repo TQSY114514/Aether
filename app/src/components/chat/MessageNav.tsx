@@ -145,7 +145,7 @@ export default function MessageNav({
         {/* hover 预览气泡 — 相对点条定位,显示在右侧,宽度随内容自适应 */}
         {hoverMsg && (
           <div
-            className="absolute z-50 bg-[var(--content-bg)] border border-[var(--border)] rounded-xl shadow-elevated p-2.5 text-xs pointer-events-none transition-opacity duration-100"
+            className="absolute z-50 bg-(--content-bg) border border-(--border) rounded-xl shadow-elevated p-2.5 text-xs pointer-events-none transition-opacity duration-100"
             style={{
               top: mouseY,
               left: '100%',

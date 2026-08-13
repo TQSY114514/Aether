@@ -1,6 +1,10 @@
 module.exports = {
   plugins: {
-    // Tailwind 4 改用 @tailwindcss/vite 插件（vite.config.ts），postcss 不再需要 tailwindcss。
+    // Tailwind 4 via PostCSS (not the vite plugin — the vite plugin's content
+    // scanner silently drops arbitrary-value classes like text-[11px] and
+    // fractional spacing like gap-1.5; the PostCSS pipeline shares the CLI
+    // core which generates them correctly).
+    '@tailwindcss/postcss': {},
     autoprefixer: {},
   },
 }

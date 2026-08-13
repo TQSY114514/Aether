@@ -177,18 +177,18 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
             <div className="space-y-2">
               <textarea value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit() } if (e.key === 'Escape') setEditing(false) }}
-                rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg border outline-none resize-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }} />
+                rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg border outline-none resize-none bg-(--content-bg)" style={{ borderColor: 'var(--accent)' }} />
               <div className="flex gap-2">
                 <button onClick={submitEdit} disabled={sending || !draft.trim()} className="px-3 py-1 text-xs rounded-lg text-white disabled:opacity-40 transition-opacity" style={{ backgroundColor: 'var(--accent)' }}>{t('chat.edit.submit')}</button>
-                <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('chat.cancel')}</button>
+                <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('chat.cancel')}</button>
               </div>
             </div>
           ) : renderContent(message.content)}
           {isStreaming && (
             <span className="inline-flex items-center gap-0.5 ml-0.5 mt-1">
-              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+              <span className="w-1 h-1 rounded-full bg-(--text-muted) typing-dot" />
+              <span className="w-1 h-1 rounded-full bg-(--text-muted) typing-dot" />
+              <span className="w-1 h-1 rounded-full bg-(--text-muted) typing-dot" />
             </span>
           )}
           {isError && message.error_message && (
@@ -204,16 +204,16 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
               {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors" title={t('chat.copy')} aria-label={t('chat.copy')}>
+          <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-(--bg-secondary) transition-colors" title={t('chat.copy')} aria-label={t('chat.copy')}>
             {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} style={{ color: 'var(--text-muted)' }} />}
           </button>
           {isUser && !isStreaming && !editing && (
-            <button onClick={startEdit} disabled={sending} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-30" title={t('chat.edit')} aria-label={t('chat.edit')}>
+            <button onClick={startEdit} disabled={sending} className="p-1.5 rounded-md hover:bg-(--bg-secondary) transition-colors disabled:opacity-30" title={t('chat.edit')} aria-label={t('chat.edit')}>
               <Pencil size={12} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}
           {!isUser && !isStreaming && !isError && (
-            <button className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.regenerate')} aria-label={t('chat.regenerate')} onClick={() => regenerate()}>
+            <button className="p-1.5 rounded-md hover:bg-(--border) transition-colors" title={t('chat.regenerate')} aria-label={t('chat.regenerate')} onClick={() => regenerate()}>
               <RefreshCw size={12} style={{ color: 'var(--text-muted)' }} />
             </button>
           )}

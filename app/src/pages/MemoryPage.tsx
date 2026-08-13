@@ -125,10 +125,10 @@ export default function MemoryPage() {
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>AI 会记住这些信息并在对话中参考 · 来源追踪 · 冲突检测</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)]" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary)" style={{ borderColor: 'var(--border)' }}>
               <Upload size={12} />导入
             </button>
-            <button onClick={handleExport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)]" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={handleExport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary)" style={{ borderColor: 'var(--border)' }}>
               <Download size={12} />导出
             </button>
           </div>
@@ -142,7 +142,7 @@ export default function MemoryPage() {
               已删除: "{deleted.content.slice(0, 40)}{deleted.content.length > 40 ? '…' : ''}"
             </span>
             <button onClick={handleUndo}
-              className="shrink-0 px-3 py-1 text-xs rounded-lg border transition-colors hover:bg-[var(--bg-primary)]"
+              className="shrink-0 px-3 py-1 text-xs rounded-lg border transition-colors hover:bg-(--bg-primary)"
               style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
               撤销
             </button>
@@ -170,13 +170,13 @@ export default function MemoryPage() {
                 <div className="flex gap-2">
                   <button onClick={() => handleResolveConflict(c.memoryId, c.conflictingId)}
                     disabled={resolving === c.conflictingId}
-                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors hover:bg-[var(--bg-primary)]"
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors hover:bg-(--bg-primary)"
                     style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
                     <Check size={10} /> 保留较新
                   </button>
                   <button onClick={() => handleResolveConflict(c.conflictingId, c.memoryId)}
                     disabled={resolving === c.conflictingId}
-                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors hover:bg-[var(--bg-primary)]"
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border transition-colors hover:bg-(--bg-primary)"
                     style={{ borderColor: 'var(--text-muted)', color: 'var(--text-secondary)' }}>
                     <X size={10} /> 保留较旧
                   </button>
@@ -199,7 +199,7 @@ export default function MemoryPage() {
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--content-bg)] border text-sm mb-4" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-(--content-bg) border text-sm mb-4" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-gray-400 shrink-0" />
           <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索记忆..." className="w-full bg-transparent outline-none text-sm" />
           {searchQuery && (
@@ -212,7 +212,7 @@ export default function MemoryPage() {
         {/* Add new memory */}
         <div className="flex gap-2 mb-6">
           <select value={newType} onChange={e => setNewType(e.target.value)}
-            className="text-xs border rounded-lg px-2 py-2 outline-none bg-[var(--content-bg)] shrink-0" style={{ borderColor: 'var(--border)' }}>
+            className="text-xs border rounded-lg px-2 py-2 outline-none bg-(--content-bg) shrink-0" style={{ borderColor: 'var(--border)' }}>
             <option value="entity">Entity</option>
             <option value="fact">Fact</option>
             <option value="context">Context</option>
@@ -222,7 +222,7 @@ export default function MemoryPage() {
           <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)}
             placeholder={t('memory.add_placeholder')}
             rows={2}
-            className="flex-1 px-3 py-2 text-sm rounded-lg border outline-none resize-none bg-[var(--content-bg)]"
+            className="flex-1 px-3 py-2 text-sm rounded-lg border outline-none resize-none bg-(--content-bg)"
             style={{ borderColor: 'var(--border)' }}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAdd() } }} />
           <button onClick={handleAdd} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80 shrink-0 self-end">添加</button>
@@ -240,7 +240,7 @@ export default function MemoryPage() {
               {editingId === entry.id ? (
                 <div className="space-y-2">
                   <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
-                    rows={2} className="w-full px-2 py-1 text-sm rounded border outline-none resize-none bg-[var(--content-bg)]"
+                    rows={2} className="w-full px-2 py-1 text-sm rounded border outline-none resize-none bg-(--content-bg)"
                     style={{ borderColor: 'var(--accent)' }} />
                   <div className="flex gap-2">
                     <button onClick={() => handleEdit(entry.id)} className="px-3 py-1 bg-black text-white text-xs rounded-lg">保存</button>
@@ -275,11 +275,11 @@ export default function MemoryPage() {
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button onClick={() => { setEditingId(entry.id); setEditContent(entry.content) }}
-                      className="p-1 rounded hover:bg-[var(--border)] transition-colors">
+                      className="p-1 rounded hover:bg-(--border) transition-colors">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
                     <button onClick={() => handleDelete(entry.id)}
-                      className="p-1 rounded hover:bg-[var(--border)] transition-colors">
+                      className="p-1 rounded hover:bg-(--border) transition-colors">
                       <Trash2 size={12} className="text-gray-400" />
                     </button>
                   </div>

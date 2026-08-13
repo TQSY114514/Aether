@@ -53,17 +53,17 @@ export default function ScoresPage() {
             <div className="flex flex-col items-end gap-1.5 shrink-0">
               <div className="flex gap-1.5">
                 <button onClick={exportCsv} title={t('scores.export_hint')}
-                  className="text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+                  className="text-[11px] px-2.5 py-1 rounded-lg border hover:bg-(--bg-secondary) transition-colors"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                   {t('scores.export_csv')}
                 </button>
                 <button onClick={exportJson} title={t('scores.export_hint')}
-                  className="text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+                  className="text-[11px] px-2.5 py-1 rounded-lg border hover:bg-(--bg-secondary) transition-colors"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                   {t('scores.export_json')}
                 </button>
                 <button onClick={copyMarkdown} title={t('scores.export_hint')}
-                  className="text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+                  className="text-[11px] px-2.5 py-1 rounded-lg border hover:bg-(--bg-secondary) transition-colors"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                   {t('scores.copy_md')}
                 </button>
@@ -90,7 +90,7 @@ export default function ScoresPage() {
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
                   {rows.map((s) => (
-                    <tr key={s.id} className="hover:bg-[var(--bg-secondary)] transition-colors">
+                    <tr key={s.id} className="hover:bg-(--bg-secondary) transition-colors">
                       <td className="px-4 py-2.5">
                         <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{s.model_name}</span>
                         <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>{s.provider_name}</span>

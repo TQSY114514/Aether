@@ -29,7 +29,7 @@ export default function ThinkingBlock({ text, collapsed: initialCollapsed = true
     <div className="mb-2 rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs hover:bg-[var(--border)] transition-colors"
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs hover:bg-(--border) transition-colors"
       >
         {open
           ? <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} />

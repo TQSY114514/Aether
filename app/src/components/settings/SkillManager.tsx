@@ -154,7 +154,7 @@ export default function SkillManager() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('skills.search_placeholder', '搜索 skill 名称…')}
-          className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-lg border outline-none bg-[var(--content-bg)]"
+          className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-lg border outline-none bg-(--content-bg)"
           style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         />
       </div>
@@ -225,7 +225,7 @@ export default function SkillManager() {
                         onClick={() => handlePin(s.name, !isPinned)}
                         disabled={busy === s.name}
                         title={isPinned ? t('skills.unpin', '取消固定') : t('skills.pin', '固定')}
-                        className="p-1 rounded hover:bg-[var(--bg-secondary)] disabled:opacity-40 transition-colors"
+                        className="p-1 rounded hover:bg-(--bg-secondary) disabled:opacity-40 transition-colors"
                         style={{ color: isPinned ? 'var(--accent)' : 'var(--text-muted)' }}
                       >
                         {isPinned ? <PinOff size={12} /> : <Pin size={12} />}
@@ -234,7 +234,7 @@ export default function SkillManager() {
                         onClick={() => handleRestore(s.name)}
                         disabled={busy === s.name || st !== 'archived'}
                         title={t('skills.restore', '恢复为 active')}
-                        className="p-1 rounded hover:bg-[var(--bg-secondary)] disabled:opacity-30 transition-colors"
+                        className="p-1 rounded hover:bg-(--bg-secondary) disabled:opacity-30 transition-colors"
                         style={{ color: 'var(--text-secondary)' }}
                       >
                         <RotateCcw size={12} />

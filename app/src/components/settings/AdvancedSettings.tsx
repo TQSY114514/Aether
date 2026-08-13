@@ -68,7 +68,7 @@ export default function AdvancedSettings() {
             <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>{t('settings.system_prefix_desc')}</p>
             <textarea value={systemPrefix} onChange={(e) => setSystemPrefix(e.target.value)}
               rows={3} placeholder="You are a meticulous senior engineer..."
-              className="w-full px-2.5 py-1.5 text-xs rounded-lg border outline-none resize-none font-mono bg-[var(--content-bg)]"
+              className="w-full px-2.5 py-1.5 text-xs rounded-lg border outline-none resize-none font-mono bg-(--content-bg)"
               style={{ borderColor: 'var(--border)' }} />
           </div>
         </div>

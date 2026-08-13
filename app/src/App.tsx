@@ -261,8 +261,8 @@ export default function App() {
              view (chat, settings, memory, ...), not just chat. */
           <div className="w-10 shrink-0 flex flex-col items-center pt-3" style={{ borderRight: '1px solid var(--border)', backgroundColor: 'var(--bg-primary)' }}>
             <button onClick={toggleSidebar} aria-label="Open sidebar" title={t('sidebar.nav.expand')}
-              className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
-              <PanelLeft size={16} className="text-[var(--text-muted)]" />
+              className="p-1.5 rounded-md hover:bg-(--border) transition-colors">
+              <PanelLeft size={16} className="text-(--text-muted)" />
             </button>
           </div>
         )}
