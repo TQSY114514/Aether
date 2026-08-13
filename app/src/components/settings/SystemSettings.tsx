@@ -49,7 +49,14 @@ export default function SystemSettings() {
         <Rocket size={15} style={{ color: 'var(--accent)' }} />
         <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>系统集成</h2>
       </div>
-      <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Windows 原生能力：开机自启、系统通知。仅桌面形态可用。</p>
+      <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Windows 原生能力：开机自启、系统通知、剪贴板、文件关联。仅桌面形态可用。</p>
+      <div className="mb-4 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+          💡 <span className="font-medium">终端续会话</span> —— 在侧边栏任意会话悬停, 点终端图标复制{' '}
+          <code className="font-mono text-[10px]" style={{ color: 'var(--accent)' }}>aether tui --session &lt;id&gt;</code>{' '}
+          命令, 在终端粘贴即无缝继续。全局快捷键 <code className="font-mono text-[10px]" style={{ color: 'var(--accent)' }}>Ctrl+Alt+A</code> 随时唤出。
+        </p>
+      </div>
 
       <div className="space-y-3">
         {/* 开机自启 */}
