@@ -53,6 +53,8 @@ export default function TaskCard({ todos, planSteps, statusLines }: { todos: Tod
   const summaryKind = lastStep?.kind || 'plan'
   const summaryColor = STEP_COLORS[summaryKind] || 'var(--accent)'
   const summaryLabel = summaryKind === 'plan' ? 'Plan' : summaryKind === 'act' ? 'Act' : 'Observe'
+  // Desktop polish #2: iteration counter — last planStep's depth + 1 = rounds done.
+  const round = lastStep && typeof lastStep.depth === 'number' ? lastStep.depth + 1 : null
 
   const accent = allDone ? 'var(--success)' : 'var(--accent)'
   const HeaderIcon = allDone ? CheckCircle2 : ListChecks
@@ -67,6 +69,11 @@ export default function TaskCard({ todos, planSteps, statusLines }: { todos: Tod
         <HeaderIcon size={12} style={{ color: accent }} />
         <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{title}</span>
         <span className="text-[10px] px-1.5 py-0.5 rounded-full tabular-nums shrink-0" style={{ backgroundColor: accent, color: '#fff' }}>{completed}/{total}</span>
+        {round != null && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full tabular-nums shrink-0" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }} title="Agent 迭代轮次">
+            ⚙ {round}
+          </span>
+        )}
         {!open && focus && (
           <span className="ml-auto truncate max-w-[45%] text-[10px]" style={{ color: 'var(--text-muted)' }}>{focusLabel}</span>
         )}
