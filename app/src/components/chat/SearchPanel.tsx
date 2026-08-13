@@ -121,7 +121,7 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
   const [selected, setSelected] = useState(0)
   const [shown, setShown] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const searchFn = useMemo(() => getUnifiedFn(), [])
@@ -173,7 +173,7 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
   // Debounced search — fires 250ms after the user stops typing.
   useEffect(() => {
     if (!open) return
-    clearTimeout(debounceRef.current)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     const trimmed = query.trim()
     if (!trimmed) {
       setResults(EMPTY)
@@ -202,7 +202,7 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
         setLoading(false)
       }
     }, 250)
-    return () => clearTimeout(debounceRef.current)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query, scope, open, currentSessionId, searchFn])
 
   // Keep the selected index in range as results change.

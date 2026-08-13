@@ -317,15 +317,15 @@ export default function ChatWindow() {
   // Search: debounce the query used for filtering so typing doesn't trigger
   // a filter + scrollIntoView on every keystroke.
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const debounceTimer = useRef<ReturnType<typeof setTimeout>>()
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
     setSearchQuery(q)
-    clearTimeout(debounceTimer.current)
+    if (debounceTimer.current) clearTimeout(debounceTimer.current)
     debounceTimer.current = setTimeout(() => setDebouncedQuery(q), 200)
   }
   // Cleanup timer on unmount.
-  useEffect(() => () => clearTimeout(debounceTimer.current), [])
+  useEffect(() => () => { if (debounceTimer.current) clearTimeout(debounceTimer.current) }, [])
 
   // Search: don't filter — keep the full conversation visible and highlight
   // matches (prev/next jumps to each). Uses debouncedQuery so filtering only
