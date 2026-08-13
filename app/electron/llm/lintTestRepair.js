@@ -157,26 +157,76 @@ async function check({ db, sessionId, onStatus } = {}) {
 
 // Build the context block to inject into the conversation so the model can fix
 // the reported errors. `round` is the current repair attempt (1-based).
-function buildRepairContext({ errors, round }, maxRounds = MAX_REPAIR_ROUNDS) {
+// Desktop polish #3: when `changedFiles` is provided, narrow the injected
+// output to lines mentioning those files — the model sees only errors relevant
+// to what it just touched, not the whole test run.
+function buildRepairContext({ errors, round, changedFiles }, maxRounds = MAX_REPAIR_ROUNDS) {
   if (!errors || !errors.length) return null
   const lines = []
+  const narrow = Array.isArray(changedFiles) && changedFiles.length > 0
   lines.push(`[自动检查发现 ${errors.length} 个 lint/test 错误 (第 ${round}/${maxRounds} 轮修复)]`)
+  if (narrow) {
+    lines.push(`[仅显示与本次修改文件相关的错误: ${changedFiles.slice(0, 8).join(', ')}${changedFiles.length > 8 ? ' …' : ''}]`)
+  }
   for (const e of errors) {
     lines.push(`\n--- ${e.kind === 'lint' ? 'Lint' : 'Test'} 失败: ${e.command}${e.timedOut ? ' (超时)' : ''} ---`)
-    lines.push(e.output || '(无输出)')
+    const raw = e.output || '(无输出)'
+    if (!narrow) {
+      lines.push(raw)
+    } else {
+      // 只保留命中 changedFiles 的行(±1 行上下文), 其余折叠计数
+      const rows = raw.split('\n')
+      const kept = []
+      let skipped = 0
+      const isErrorLine = (l) => /^\s*(FAIL|PASS|ERROR|error|Error|npm ERR|×|✗|✓|\d+ error|\d+ warning)/.test(l)
+      for (let i = 0; i < rows.length; i++) {
+        const hit = changedFiles.some((f) => rows[i].includes(f))
+        if (hit) {
+          if (skipped > 0) { kept.push(`… (省略 ${skipped} 行无关输出)`); skipped = 0 }
+          kept.push(rows[i])
+          // 带上下一行详情(常见于 "file:line:col: error" 后跟说明), 但跳过
+          // 以错误标记开头的行(它们是下一处错误, 不应被吞)
+          if (i + 1 < rows.length && !isErrorLine(rows[i + 1])) kept.push(rows[i + 1])
+        } else {
+          skipped++
+        }
+      }
+      if (skipped > 0 && kept.length > 0) kept.push(`… (省略 ${skipped} 行无关输出)`)
+      if (kept.length === 0) {
+        lines.push(`(无命中修改文件的错误行 — 全量输出 ${rows.length} 行已折叠)`)
+      } else {
+        lines.push(kept.join('\n'))
+      }
+    }
   }
   lines.push('\n请根据以上错误信息修复相关文件（使用 edit_file / write_file）。修复后会自动重新运行 lint/test 验证。')
   return lines.join('\n')
 }
 
+// 获取当前 git 工作区已修改的文件列表（相对路径）。非 git 仓库 → []。
+function getChangedFiles(root) {
+  try {
+    const { execFileSync } = require('child_process')
+    const out = execFileSync('git', ['-C', root, 'diff', '--name-only'], { encoding: 'utf8', timeout: 10000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
+    return String(out || '').split('\n').map(s => s.trim()).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 // Orchestrates a single lint/test check and returns the context to inject
 // (or null if clean). This is the entry toolLoop calls after file changes.
+//
+// Desktop polish #3: the repair context is narrowed to errors mentioning the
+// currently-modified files (git diff --name-only), so the model sees only what
+// it touched. Non-git workspaces fall back to the full output.
 //
 // Returns: { repaired: boolean, context: string|null, errors, round }
 async function runLintAndRepair({ db, sessionId, round = 1, onStatus } = {}) {
   const result = await check({ db, sessionId, onStatus })
   if (result.ok) return { repaired: true, context: null, errors: [], round }
-  const context = buildRepairContext({ errors: result.errors, round })
+  const changedFiles = getChangedFiles(getWorkspaceRoot(sessionId))
+  const context = buildRepairContext({ errors: result.errors, round, changedFiles })
   return { repaired: false, context, errors: result.errors, round }
 }
 
@@ -192,4 +242,5 @@ module.exports = {
   resolveLintCommand,
   resolveTestCommand,
   splitCmd,
+  getChangedFiles,
 }
