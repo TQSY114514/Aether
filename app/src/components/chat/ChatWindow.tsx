@@ -186,6 +186,7 @@ export default function ChatWindow() {
     toolCallsByMessage, arenaResults, arenaResultsSessionId, arenaPending, arenaError,
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
+    lastUsage,
   } = useStore((s) => ({
     messages: s.messages,
     currentSessionId: s.currentSessionId,
@@ -204,6 +205,7 @@ export default function ChatWindow() {
     arenaVote: s.arenaVote,
     arenaVoted: s.arenaVoted,
     arenaVoteWinnerId: s.arenaVoteWinnerId,
+    lastUsage: s.lastUsage,
   }), shallow)
 
   // Memoize the messages array for referential stability. Streaming chunks
@@ -474,6 +476,17 @@ export default function ChatWindow() {
             <div className="text-[11px] px-1 py-1 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
               <span>{t('chat.arena.running', String(arenaPending))}</span>
+            </div>
+          )}
+
+          {/* Desktop polish #1: per-turn token/cost usage (hidden during streaming) */}
+          {lastUsage && currentSessionId != null && !streamingBySession[currentSessionId] && (
+            <div className="text-[10px] px-1 pt-1 flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+              <span className="font-mono">{lastUsage.total_tokens.toLocaleString()} tokens</span>
+              <span>·</span>
+              <span className="font-mono">{lastUsage.cost > 0 ? `$${lastUsage.cost.toFixed(4)}` : 'cost —'}</span>
+              <span>·</span>
+              <span>{lastUsage.model_name} @ {lastUsage.provider_name}</span>
             </div>
           )}
 

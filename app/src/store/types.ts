@@ -251,6 +251,9 @@ export interface AppState {
   modelSuggestion: ModelSuggestion | null
   // Refresh the suggestion on session open (based on the latest user message).
   refreshModelSuggestion: () => Promise<void>
+  // Desktop polish #1: usage of the most recent chat turn (tokens + cost).
+  lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number; model_name: string; provider_name: string } | null
+  setLastUsage: (u: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number; model_name: string; provider_name: string } | null) => void
   // Feature B: mid-turn injection tracking.
   loopingSessions: Set<number>
   setLooping: (sessionId: number, looping: boolean) => void

@@ -526,7 +526,18 @@ ipcMain.handle('chat:complete', handleChatComplete)
         providerHealth.recordError(p.id, null)
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
 
-        return { messageId: msgId }
+        // 实时用量回传（桌面版打磨 #1）: tokens + 成本, 供 UI 显示本轮开销。
+        return {
+          messageId: msgId,
+          usage: {
+            prompt_tokens: u.prompt_tokens,
+            completion_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens,
+            cost: computeCost(m, u),
+            model_name: m.model_name,
+            provider_name: p.name,
+          },
+        }
 
       } catch (err) {
         clearTimeout(timeout)
