@@ -7,7 +7,7 @@ import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield 
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/react/shallow'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
@@ -106,7 +106,7 @@ export default function ChatInput() {
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
     loopingSessions,
-  } = useStore((s) => ({
+  } = useStore(useShallow((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
     streamingBySession: s.streamingBySession,
@@ -119,7 +119,7 @@ export default function ChatInput() {
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
     sessionConfigs: s.sessionConfigs, scores: s.scores,
     loopingSessions: s.loopingSessions,
-  }), shallow)
+  })))
 
   // ELO score map for model selector display
   const scoreByModel = useMemo(() => {

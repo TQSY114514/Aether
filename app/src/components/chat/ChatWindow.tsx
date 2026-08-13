@@ -7,7 +7,7 @@ import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
-import { shallow } from 'zustand/shallow'
+import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 // Arena results display component with streaming-like animation
@@ -187,7 +187,7 @@ export default function ChatWindow() {
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
     lastUsage,
-  } = useStore((s) => ({
+  } = useStore(useShallow((s) => ({
     messages: s.messages,
     currentSessionId: s.currentSessionId,
     streamingBySession: s.streamingBySession,
@@ -206,7 +206,7 @@ export default function ChatWindow() {
     arenaVoted: s.arenaVoted,
     arenaVoteWinnerId: s.arenaVoteWinnerId,
     lastUsage: s.lastUsage,
-  }), shallow)
+  })))
 
   // Memoize the messages array for referential stability. Streaming chunks
   // update streamingBySession (also in the selector above) which triggers a
