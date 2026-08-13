@@ -331,4 +331,39 @@ function prune(db, maxAgeDays = 90) {
   } catch {}
 }
 
-module.exports = { buildGraph, searchGraph, prune, getSecondDegreeNeighbors, getGraphData, injectContext }
+// ── Desktop polish #7: manual KG node editing ──────────────────────────────
+// Delete a node by entity, along with all edges touching it.
+function deleteNode(db, entity) {
+  const name = String(entity || '').trim()
+  if (!name) return { ok: false, error: 'empty entity' }
+  try {
+    const node = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(name)
+    if (!node) return { ok: false, error: 'node not found' }
+    db.prepare('DELETE FROM kg_edges WHERE "from" = ? OR "to" = ?').run(name, name)
+    const info = db.prepare('DELETE FROM kg_nodes WHERE entity = ?').run(name)
+    return { ok: true, removed: Number(info.changes), entity: name }
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) }
+  }
+}
+
+// Rename a node's entity, updating edges that reference the old name.
+function renameNode(db, entity, newEntity) {
+  const oldName = String(entity || '').trim()
+  const name = String(newEntity || '').trim()
+  if (!oldName || !name) return { ok: false, error: 'empty entity' }
+  try {
+    const node = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(oldName)
+    if (!node) return { ok: false, error: 'node not found' }
+    const dup = db.prepare('SELECT id FROM kg_nodes WHERE entity = ? AND id != ?').get(name, node.id)
+    if (dup) return { ok: false, error: `entity already exists: ${name}` }
+    db.prepare('UPDATE kg_nodes SET entity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(name, node.id)
+    db.prepare('UPDATE kg_edges SET "from" = ? WHERE "from" = ?').run(name, oldName)
+    db.prepare('UPDATE kg_edges SET "to" = ? WHERE "to" = ?').run(name, oldName)
+    return { ok: true, entity: name }
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) }
+  }
+}
+
+module.exports = { buildGraph, searchGraph, prune, getSecondDegreeNeighbors, getGraphData, injectContext, deleteNode, renameNode }

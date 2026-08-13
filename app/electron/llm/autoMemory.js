@@ -109,6 +109,7 @@ function _prefetchKeywords(db, userMessage, memories) {
   const scored = memories
     .map(m => {
       const kwScore = score(m.content, qkw)
+      let isGraph = false
       // Weighted score: base keyword hits + recency bonus + access_count bonus
       // + time-decay factor (memories not accessed recently fade in priority).
       let w = kwScore
@@ -128,19 +129,32 @@ function _prefetchKeywords(db, userMessage, memories) {
         w *= conf
         // Graph expansion bonus: if this memory matched via graph neighbours,
         // give it a small boost so related context surfaces.
-        if (graphIds.has(m.id) && kwScore === 0) w = 0.3
+        if (graphIds.has(m.id) && kwScore === 0) {
+          w = 0.3
+          isGraph = true
+        }
         // Record access for decay tracking.
         try { db.incrementMemoryAccess(m.id) } catch {}
       }
-      return { m, s: w }
+      return { m, s: w, graph: isGraph }
     })
     .filter(x => x.s >= MIN_HITS * 0.3) // lower threshold for graph hits
     .sort((a, b) => b.s - a.s)
     .slice(0, PREFETCH_TOP_K)
   if (scored.length === 0) return ''
-  const lines = scored.map(x =>
-    `- ${String(x.m.content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()}`
-  )
+  // Desktop polish #6: explainable injection — each memory line carries why it
+  // was pulled (matching keyword / graph link / recency), so the user can judge
+  // relevance instead of trusting an opaque block.
+  const lines = scored.map(x => {
+    const content = String(x.m.content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()
+    let why = 'recent'
+    if (x.graph) why = `graph:${x.graph}`
+    else {
+      const hits = [...qkw].filter(k => x.m.content.toLowerCase().includes(k)).slice(0, 2)
+      if (hits.length) why = `kw:${hits.join(',')}`
+    }
+    return `- ${content} [${why}]`
+  })
   return `Relevant memories from past conversations (use if helpful, ignore if not):\n${lines.join('\n')}`
 }
 

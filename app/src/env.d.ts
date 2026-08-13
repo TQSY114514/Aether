@@ -199,6 +199,8 @@ interface Window {
     }
     kg: {
       graph: (opts?: { nodeLimit?: number; edgeLimit?: number }) => Promise<{ nodes: { id: string; label: string; type: string }[]; edges: { source: string; target: string; relation: string; confidence: number }[] }>
+      deleteNode: (entity: string) => Promise<{ ok: boolean; removed?: number; entity?: string; error?: string }>
+      renameNode: (entity: string, newEntity: string) => Promise<{ ok: boolean; entity?: string; error?: string }>
     }
     background: {
       set: (dataUrl: string | null) => Promise<{ success: boolean; hasImage?: boolean; error?: string }>
