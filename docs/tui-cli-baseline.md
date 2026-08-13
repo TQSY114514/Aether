@@ -1,6 +1,6 @@
 # TUI / CLI / SDK — DB capability baseline
 
-Capability inventory of the AetherAI data layer as of 2026-08-12, covering the
+Capability inventory of the Aether data layer as of 2026-08-12, covering the
 electron-bound wrapper (`app/electron/database.js`) and the Electron-free
 adapter (`app/electron/llm/taskDbAdapter.js`). The TUI / headless CLI / SDK must
 never `require('electron')`; any DB method they need must exist on

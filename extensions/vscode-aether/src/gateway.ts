@@ -16,10 +16,10 @@ export interface CompleteResult {
 }
 
 /**
- * Thin HTTP client for AetherAI's local gateway (127.0.0.1:<port>).
+ * Thin HTTP client for Aether's local gateway (127.0.0.1:<port>).
  * The gateway proxies every path to the matching IPC channel, so a POST to
  * /chat:complete invokes the main-process `chat:complete` handler and returns
- * the full text synchronously. Auth is a static token via the X-AetherAI-Token
+ * the full text synchronously. Auth is a static token via the X-Aether-Token
  * header (see the desktop app's Settings → Local Gateway).
  *
  * The gateway binds to 127.0.0.1 only, so this always talks to the local app.
@@ -41,7 +41,7 @@ export class Gateway {
   }
 
   private headers(): Record<string, string> {
-    return { 'X-AetherAI-Token': this.token() };
+    return { 'X-Aether-Token': this.token() };
   }
 
   /** Reachability + auth check. ok=false means unreachable; status 401 means wrong/missing token. */
@@ -64,20 +64,20 @@ export class Gateway {
         body: JSON.stringify(params),
       });
     } catch (e) {
-      return { error: `无法连接 AetherAI（${this.baseUrl()}）：${(e as Error).message}` };
+      return { error: `无法连接 Aether（${this.baseUrl()}）：${(e as Error).message}` };
     }
 
     if (res.status === 401) {
-      return { error: '认证失败：请检查 AetherAI 设置里的 Token（Settings → Local Gateway）' };
+      return { error: '认证失败：请检查 Aether 设置里的 Token（Settings → Local Gateway）' };
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      return { error: `AetherAI 返回 HTTP ${res.status}${body ? `：${body}` : ''}` };
+      return { error: `Aether 返回 HTTP ${res.status}${body ? `：${body}` : ''}` };
     }
     try {
       return (await res.json()) as CompleteResult;
     } catch {
-      return { error: 'AetherAI 返回了无法解析的响应' };
+      return { error: 'Aether 返回了无法解析的响应' };
     }
   }
 }

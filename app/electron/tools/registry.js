@@ -252,7 +252,7 @@ const TOOLS = [
         }
         // DNS-based SSRF check: resolve hostname before request
         await checkSSRFHostname(new URL(url).hostname)
-        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' }, redirect: 'error' })
+        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Aether/0.1' }, redirect: 'error' })
         if (!res.ok) return `[search failed: HTTP ${res.status}]`
         const html = await res.text()
         const snippets = extractDdgSnippets(html, q)
@@ -305,7 +305,7 @@ const TOOLS = [
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 20000)
       try {
-        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'AetherAI/0.1' }, redirect: 'error' })
+        const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Aether/0.1' }, redirect: 'error' })
         if (!res.ok) return `[fetch failed: HTTP ${res.status}]`
         const ct = res.headers.get('content-type') || ''
         const raw = await res.text()

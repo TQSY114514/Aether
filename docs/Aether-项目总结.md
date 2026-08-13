@@ -1,7 +1,7 @@
 ---
 title: Aether 项目总结
 aliases:
-  - AetherAI 项目总结
+  - Aether 项目总结
 tags:
   - aether
   - electron
@@ -16,7 +16,7 @@ source: Trae 会话总结（非聊天记录照搬）
 # Aether 项目总结
 
 > [!info] 一句话定位
-> Aether（前身 AetherAI）是一个 **local-first、多模型** 的桌面 AI 聊天客户端。把 LLM provider 当作可插拔后端，所有用户数据落地本地 SQLite，主进程 Electron + 渲染层 React/TS + Zustand + Tailwind + sql.js。
+> Aether（前身 Aether）是一个 **local-first、多模型** 的桌面 AI 聊天客户端。把 LLM provider 当作可插拔后端，所有用户数据落地本地 SQLite，主进程 Electron + 渲染层 React/TS + Zustand + Tailwind + sql.js。
 
 ---
 

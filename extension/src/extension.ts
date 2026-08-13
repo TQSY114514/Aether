@@ -1,4 +1,4 @@
-// AetherAI — VS Code extension entry point.
+// Aether — VS Code extension entry point.
 // Spawns the headless Aether CLI (app/cli.js --json-lines) as a child process
 // and hosts a chat Webview that streams status / tool calls / text live.
 

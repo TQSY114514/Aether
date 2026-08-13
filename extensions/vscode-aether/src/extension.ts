@@ -8,8 +8,8 @@ let statusBar: vscode.StatusBarItem;
 export function activate(context: vscode.ExtensionContext): void {
   // statusBar item showing connection state; click to connect.
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 80);
-  statusBar.text = '$(plug) AetherAI';
-  statusBar.tooltip = 'AetherAI: 检查/配置连接';
+  statusBar.text = '$(plug) Aether';
+  statusBar.tooltip = 'Aether: 检查/配置连接';
   statusBar.command = 'aether.connect';
   statusBar.show();
   void refreshConnection();
@@ -71,7 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       if (res.error) return;
       const code = extractCodeBlock(res.content || '');
-      if (!code) { void vscode.window.showInformationMessage('AetherAI 未返回代码'); return; }
+      if (!code) { void vscode.window.showInformationMessage('Aether 未返回代码'); return; }
       const pick = await vscode.window.showQuickPick([
         { label: '插入到当前光标处', detail: '插入提取出的代码块', id: 'insert' },
         { label: '插入到文件末尾', detail: '', id: 'append' },
@@ -93,7 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
 function connect(): void {
   const warnIfMissing = () => {
     void vscode.window.showWarningMessage(
-      '无法连接 AetherAI。请先启动桌面 App，并在 设置 → Local Gateway 中复制 Token 填入扩展设置（aether.token）。',
+      '无法连接 Aether。请先启动桌面 App，并在 设置 → Local Gateway 中复制 Token 填入扩展设置（aether.token）。',
       { modal: false },
       '打开设置'
     ).then((choice) => { if (choice === '打开设置') void vscode.commands.executeCommand('workbench.action.openSettings', 'aether'); });
@@ -101,18 +101,18 @@ function connect(): void {
   void refreshConnection().then((health) => {
     if (!health.ok) { warnIfMissing(); return; }
     if (health.status === 401) {
-      void vscode.window.showWarningMessage('AetherAI Token 无效或未填写。请在设置里填入正确的 Token。').then((choice) => {
+      void vscode.window.showWarningMessage('Aether Token 无效或未填写。请在设置里填入正确的 Token。').then((choice) => {
         if (choice === 'OK') void vscode.commands.executeCommand('workbench.action.openSettings', 'aether');
       });
       return;
     }
-    void vscode.window.showInformationMessage('已连接 AetherAI ✅');
+    void vscode.window.showInformationMessage('已连接 Aether ✅');
   });
 }
 
 function ensureConnected(action: string): boolean {
   // Fast path: assume connected; real errors surface as assistant messages.
-  void vscode.window.showInformationMessage(`已发送到 AetherAI（${action}）`, { modal: false });
+  void vscode.window.showInformationMessage(`已发送到 Aether（${action}）`, { modal: false });
   return true;
 }
 
@@ -120,14 +120,14 @@ async function refreshConnection(): Promise<{ ok: boolean; status?: number }> {
   const gateway = new Gateway(vscode.workspace.getConfiguration('aether'));
   const health = await gateway.health();
   if (health.status === 401) {
-    statusBar.text = '$(plug) AetherAI: 需 Token';
-    statusBar.tooltip = 'AetherAI: Token 无效，点击配置';
+    statusBar.text = '$(plug) Aether: 需 Token';
+    statusBar.tooltip = 'Aether: Token 无效，点击配置';
   } else if (health.ok) {
-    statusBar.text = '$(plug) AetherAI: 已连接';
-    statusBar.tooltip = 'AetherAI: 点击重新检查';
+    statusBar.text = '$(plug) Aether: 已连接';
+    statusBar.tooltip = 'Aether: 点击重新检查';
   } else {
-    statusBar.text = '$(plug) AetherAI: 未连接';
-    statusBar.tooltip = 'AetherAI: 未检测到桌面 App，点击检查';
+    statusBar.text = '$(plug) Aether: 未连接';
+    statusBar.tooltip = 'Aether: 未检测到桌面 App，点击检查';
   }
   return health;
 }

@@ -1,7 +1,7 @@
 {
   "name": "aetherai",
   "version": "0.7.0",
-  "description": "AetherAI - Multi-provider AI aggregation client",
+  "description": "Aether - Multi-provider AI aggregation client",
   "author": "TQSY114514",
   "main": "electron/main.js",
   "exports": {
@@ -33,7 +33,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node e2e/launch.test.js",
-    "postinstall": "node scripts/patch-brace-expansion.js & electron-rebuild -f -w better-sqlite3 || (echo [AetherAI] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
+    "postinstall": "node scripts/patch-brace-expansion.js & electron-rebuild -f -w better-sqlite3 || (echo [Aether] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",

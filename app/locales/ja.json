@@ -1,5 +1,5 @@
 {
-  "app.name": "AetherAI",
+  "app.name": "Aether",
   "chat.new": "新しいチャット",
   "chat.placeholder": "メッセージを入力...（Shift+Enterで改行）",
   "chat.arena.placeholder": "質問を入力すると、複数のモデルが同時に回答します...",

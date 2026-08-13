@@ -6,7 +6,7 @@
 
 type Level = 'debug' | 'info' | 'warn' | 'error'
 const LEVEL_ORDER: Record<Level, number> = { debug: 0, info: 1, warn: 2, error: 3 }
-const PREFIX = '[AetherAI]'
+const PREFIX = '[Aether]'
 const MAX_ENTRIES = 300
 
 const entries: { level: Level; time: string; msg: string }[] = []

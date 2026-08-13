@@ -1,8 +1,8 @@
 # Security Policy
 
-AetherAI is a local-first desktop application. All your data (API keys, chat
+Aether is a local-first desktop application. All your data (API keys, chat
 history, personas, background image) stays on your machine in
-`%APPDATA%/aetherai/` — nothing is uploaded to any AetherAI-operated server.
+`%APPDATA%/aetherai/` — nothing is uploaded to any Aether-operated server.
 The only outbound network requests are to the LLM providers **you** configure.
 
 ## Reporting a vulnerability
@@ -17,14 +17,14 @@ Instead, report it privately via GitHub's advisory feature:
 Please include:
 - A clear description of the issue and its impact.
 - Steps to reproduce (minimal if possible).
-- The AetherAI version (from Settings → About).
+- The Aether version (from Settings → About).
 
 We will acknowledge within 72 hours and aim for a fix within 30 days for
 high-severity issues.
 
 ## Agent safety model
 
-AetherAI ships an agent that can read/write files and run shell commands. This
+Aether ships an agent that can read/write files and run shell commands. This
 is powerful but inherently risky. The defenses, in order of strength:
 
 1. **Permission modes** (Settings + chat bar): `off` · `plan` (read-only) ·

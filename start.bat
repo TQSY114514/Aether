@@ -1,5 +1,5 @@
 @echo off
-title AetherAI Launcher
+title Aether Launcher
 chcp 65001 >nul
 cd /d "%~dp0"
 
@@ -10,7 +10,7 @@ set VERSION=%VERSION: =%
 if "%VERSION%"=="" set VERSION=0.5.21
 
 echo.
-echo   AetherAI v%VERSION%
+echo   Aether v%VERSION%
 echo   =================
 echo.
 
@@ -47,5 +47,5 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo   Starting AetherAI...
+echo   Starting Aether...
 call npx electron .

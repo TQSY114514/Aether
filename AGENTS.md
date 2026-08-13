@@ -6,7 +6,7 @@ hard rules are, and where to look before changing anything.
 
 ## What this is
 
-AetherAI is a local-first, multi-model desktop AI workbench (Electron + React/TS
+Aether is a local-first, multi-model desktop AI workbench (Electron + React/TS
 + zustand + Tailwind + better-sqlite3). The product is a single-developer app
 that treats the LLM provider as a pluggable backend and keeps all user data on
 disk. It is a chat client, an agent workbench, and an extensibility platform

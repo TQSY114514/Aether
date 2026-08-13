@@ -1,5 +1,5 @@
 ﻿# ─────────────────────────────────────────────────────────────────────────────
-# aether.ps1 — AetherAI 终端引导脚本（todo 18）
+# aether.ps1 — Aether 终端引导脚本（todo 18）
 # 用途：Windows Terminal profile 的启动命令 + 交互式 `aether tui` 常用别名/环境变量。
 # 用法：
 #   & "path\to\aether.ps1"            # 启动 aether tui
@@ -21,7 +21,7 @@ function Invoke-Aether {
 Set-Alias -Name aether -Value Invoke-Aether
 
 if (-not $NoTui) {
-  Write-Host "AetherAI TUI (Ctrl+C 打断 / m 切模式 / q 退出)"
+  Write-Host "Aether TUI (Ctrl+C 打断 / m 切模式 / q 退出)"
   & node $env:AETHER_CLI tui
   exit $LASTEXITCODE
 }

@@ -11,7 +11,7 @@
 //   - 'standard'  -> Sonnet-class (normal chat, code, reasoning)
 //   - 'thinking'  -> Opus-class   (complex analysis, multi-step planning)
 //
-// AetherAI-specific additions:
+// Aether-specific additions:
 //   - tool classification: decide whether a tool call needs full reasoning
 //   - verification routing: cheap checks use fast model, deep review uses standard
 // ───────────────────────────────────────────────────────────────────────────

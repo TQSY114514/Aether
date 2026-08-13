@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Local Gateway — lightweight HTTP server exposing AetherAI's API for
+// Local Gateway — lightweight HTTP server exposing Aether's API for
 // external tools (browser extensions, web apps, scripts).
 //
 // Listens on 127.0.0.1:<port> (default 35791) and proxies calls to the
@@ -12,7 +12,7 @@ const { ipcMain } = require('electron')
 const crypto = require('crypto')
 
 const DEFAULT_PORT = 35791
-const TOKEN_HEADER = 'X-AetherAI-Token'
+const TOKEN_HEADER = 'X-Aether-Token'
 
 let _server = null
 let _token = null
@@ -61,7 +61,7 @@ function start(db, port = DEFAULT_PORT) {
   _server = http.createServer((req, res) => {
     // CORS for browser extensions
     res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-AetherAI-Token')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Aether-Token')
     res.setHeader('Content-Type', 'application/json')
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
@@ -74,7 +74,7 @@ function start(db, port = DEFAULT_PORT) {
 
     // OpenAI-compatible /v1/chat/completions (Wave 4). Reuses the chat:complete
     // model/provider resolution but answers with the OpenAI response shape so
-    // OpenAI-compatible clients (scripts, SDKs, tools) can talk to AetherAI.
+    // OpenAI-compatible clients (scripts, SDKs, tools) can talk to Aether.
     const url = new URL(req.url, `http://localhost:${port}`)
     if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {
       let body = ''

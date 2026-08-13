@@ -3,7 +3,7 @@
 //
 // Maps a user-facing effort level ('off'|'low'|'medium'|'high') to the correct
 // request parameter shape for the model's provider family. Names are detected
-// by prefix because AetherAI stores raw provider model ids, not capability flags.
+// by prefix because Aether stores raw provider model ids, not capability flags.
 //
 // Shapes (verified against QuantumNous/new-api relay conversion logic):
 //   OpenAI o-series / gpt-5  ->  { reasoning_effort: 'minimal'|'low'|'medium'|'high' }
@@ -46,7 +46,7 @@ function buildReasoningParams(modelName, effort) {
     return e ? { reasoning_effort: e } : {}
   }
   if (fam === 'claude') {
-    // AetherAI only ships an OpenAI-compatible adapter, so Claude models are
+    // Aether only ships an OpenAI-compatible adapter, so Claude models are
     // reached through a relay/shim. Most relays (new-api, OpenRouter) accept
     // `reasoning_effort` for Claude and translate it; sending a native Claude
     // `thinking` block to an OpenAI-shape endpoint usually 400s. So we use the

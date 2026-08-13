@@ -5,7 +5,7 @@
 // understands project conventions, coding standards, and constraints.
 //
 // Scan order (first match wins):
-//   1. <workspace>/.aetherai.md        ← AetherAI-native
+//   1. <workspace>/.aetherai.md        ← Aether-native
 //   2. <workspace>/CLAUDE.md           ← Claude Code compat
 //   3. <workspace>/AGENT.md            ← OpenClaw compat
 //   4. <workspace>/GEMINI.md           ← Gemini CLI compat

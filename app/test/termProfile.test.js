@@ -22,7 +22,7 @@ function makeTmp(prefix = 'term-') {
 afterAll(() => { for (const d of tmpDirs) { try { rmSync(d, { recursive: true, force: true }) } catch {} } })
 
 describe('buildTermProfile（todo 18）', () => {
-  it('生成 AetherAI TUI profile + 深/浅两套配色', () => {
+  it('生成 Aether TUI profile + 深/浅两套配色', () => {
     const f = buildTermProfile()
     expect(f.profiles).toHaveLength(1)
     expect(f.profiles[0]).toMatchObject({ name: PROFILE_NAME, colorScheme: SCHEME_DARK })

@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="./assets/readme-hero.svg" width="780" alt="AetherAI" />
+<img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
-# AetherAI
+# Aether
 
 ### Local-first · Multi-model · Agent-native
 
@@ -22,7 +22,7 @@ Converse com qualquer modelo, execute um agente de codificação seguro e compar
 
 ---
 
-> **Status: Beta.** AetherAI é um projeto solo/hobby. Ele funciona, mas espere
+> **Status: Beta.** Aether é um projeto solo/hobby. Ele funciona, mas espere
 > arestas ásperas. Relatórios de bugs são bem-vindos — veja [CONTRIBUTING.md](./CONTRIBUTING.md) e
 > [SECURITY.md](./SECURITY.md).
 
@@ -36,9 +36,9 @@ Converse com qualquer modelo, execute um agente de codificação seguro e compar
 
 ---
 
-## O que torna AetherAI diferente
+## O que torna Aether diferente
 
-AetherAI combina várias capacidades que normalmente estão espalhadas por múltiplas ferramentas em um único app desktop local:
+Aether combina várias capacidades que normalmente estão espalhadas por múltiplas ferramentas em um único app desktop local:
 
 | Capacidade | Descrição | Maturidade |
 |---|---|:---:|
@@ -65,8 +65,8 @@ Baixe a [Release](https://github.com/TQSY114514/Aether/releases) mais recente:
 
 | Build | Descrição |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | Instalador NSIS. Por usuário (sem admin), atualizações automáticas no app. **Recomendado.** |
-| **`AetherAI-x.y.z.exe`** | Exe único portátil. Sem instalação, sem atualização automática; basta executá-lo. |
+| **`aetherai-setup-x.y.z.exe`** | Instalador NSIS. Por usuário (sem admin), atualizações automáticas no app. **Recomendado.** |
+| **`aetherai-x.y.z.exe`** | Exe único portátil. Sem instalação, sem atualização automática; basta executá-lo. |
 
 > O instalador mostra um aviso do SmartScreen "publicador desconhecido" no primeiro lançamento — esperado para um app solo não assinado. Todos os dados permanecem locais.
 >
@@ -78,7 +78,7 @@ Se você prefere executar a partir do código-fonte, ou deseja modificar o códi
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
-cd AetherAI
+cd Aether
 start.bat        # Windows: installs deps, builds frontend, launches Electron
 ```
 
@@ -207,13 +207,13 @@ node cli.js tui --smoke      # teste de fumaça headless da máquina de estados
 
 ### Privacidade
 
-> **Todos os dados permanecem locais.** AetherAI não coleta nada e não envia nada sobre você. Suas chaves de API, conversas e personas ficam em um banco de dados SQLite local. As únicas requisições de rede de saída vão para os provedores de LLM que você configurar.
+> **Todos os dados permanecem locais.** Aether não coleta nada e não envia nada sobre você. Suas chaves de API, conversas e personas ficam em um banco de dados SQLite local. As únicas requisições de rede de saída vão para os provedores de LLM que você configurar.
 
 ---
 
 ## Extensão VS Code e CLI headless
 
-Além do app desktop, AetherAI entrega o mesmo agente como CLI e como extensão de editor:
+Além do app desktop, Aether entrega o mesmo agente como CLI e como extensão de editor:
 
 - **CLI headless** (`app/cli.js`) — execute o agente de forma não interativa, alimente scripts/CI com eventos NDJSON:
   ```bash
@@ -226,7 +226,7 @@ Além do app desktop, AetherAI entrega o mesmo agente como CLI e como extensão 
 
 ## TUI de terminal, RPC e SDK
 
-Além do app desktop e da CLI simples, AetherAI entrega uma interface de terminal interativa, um modo JSONL RPC invocável por máquina e um SDK sem Electron. Todos os três compartilham o mesmo núcleo de agente, memória, personas, ferramentas MCP e regras de permissão do desktop.
+Além do app desktop e da CLI simples, Aether entrega uma interface de terminal interativa, um modo JSONL RPC invocável por máquina e um SDK sem Electron. Todos os três compartilham o mesmo núcleo de agente, memória, personas, ferramentas MCP e regras de permissão do desktop.
 
 ### Início rápido — forma dupla
 
@@ -360,7 +360,7 @@ app/
 
 ## Agradecimentos
 
-AetherAI se apoia nos ombros destes projetos — suas ideias moldaram a arquitetura e a UX:
+Aether se apoia nos ombros destes projetos — suas ideias moldaram a arquitetura e a UX:
 
 ### Frameworks de agentes
 
@@ -384,7 +384,7 @@ AetherAI se apoia nos ombros destes projetos — suas ideias moldaram a arquitet
 | Projeto | Inspiração |
 |---|---|
 | [Dify](https://github.com/langgenius/dify) | Normalização de provedores multi-formato |
-| [MCP](https://modelcontextprotocol.io) | O padrão que o agente do AetherAI fala |
+| [MCP](https://modelcontextprotocol.io) | O padrão que o agente do Aether fala |
 | [cc-switch](https://github.com/farion1231/cc-switch) | Layout do dashboard de estatísticas de uso |
 | [new-api](https://github.com/QuantumNous/new-api) | Relay de esforço de raciocínio, rastreamento de uso/custo |
 | [Continue](https://github.com/continuedev/continue) | Configuração como fonte de verdade, abstração de provedor |
@@ -410,7 +410,7 @@ Veja [CONTRIBUTING.md](./CONTRIBUTING.md) para diretrizes detalhadas.
 
 ## Licença
 
-[MIT](./LICENSE) © 2025 AetherAI
+[MIT](./LICENSE) © 2025 Aether
 
 ---
 
@@ -418,6 +418,6 @@ Veja [CONTRIBUTING.md](./CONTRIBUTING.md) para diretrizes detalhadas.
 
 Construído com ❤️ usando Electron + React + TypeScript
 
-[⬆ Voltar ao topo](#aetherai)
+[⬆ Voltar ao topo](#aether)
 
 </div>

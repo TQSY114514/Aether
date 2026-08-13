@@ -36,7 +36,7 @@ export class AetherPanel {
   ) {
     this.panel = vscode.window.createWebviewPanel(
       'aetherChat',
-      'AetherAI',
+      'Aether',
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
     )
@@ -293,12 +293,12 @@ function getWebviewHtml(): string {
 <body>
 <header>
   <span class="dot" id="dot"></span>
-  <span>AetherAI</span>
+  <span>Aether</span>
   <span class="model" id="model"></span>
 </header>
 <div id="log"></div>
 <div id="inputbar">
-  <textarea id="input" rows="2" placeholder="Ask AetherAI…"></textarea>
+  <textarea id="input" rows="2" placeholder="Ask Aether…"></textarea>
   <button id="send">Send</button>
   <button id="stop" disabled>Stop</button>
 </div>

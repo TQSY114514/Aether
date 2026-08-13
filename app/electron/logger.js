@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// AetherAI centralized logger — replaces scattered console.* calls.
+// Aether centralized logger — replaces scattered console.* calls.
 //
 // Levels:  debug < info < warn < error
 // In dev  : everything passes through to console.
@@ -13,7 +13,7 @@ const path = require('path')
 
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || process.env.NODE_ENV !== 'production'
 
-const PREFIX = '[AetherAI]'
+const PREFIX = '[Aether]'
 
 // In-memory ring buffer for the last N log entries (used by Settings -> Logs).
 const MAX_ENTRIES = 500

@@ -4,7 +4,7 @@ import { Gateway, type CompleteResult as GatewayResult } from './gateway';
 let current: ChatPanel | undefined;
 
 /**
- * A single, persistent chat panel. It keeps one `sessionId` so AetherAI holds
+ * A single, persistent chat panel. It keeps one `sessionId` so Aether holds
  * conversation context across turns. All top-level commands funnel into this
  * panel (askSelection / explainSelection / fixProblems seed a message, and the
  * user can keep chatting inline).
@@ -28,7 +28,7 @@ export class ChatPanel {
     this.gateway = new Gateway(cfg);
     this.panel = vscode.window.createWebviewPanel(
       'aetherChat',
-      'AetherAI',
+      'Aether',
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [] }
     );
@@ -112,7 +112,7 @@ export class ChatPanel {
 <body>
 <div id="msgs"></div>
 <div id="inputbar">
-  <textarea id="box" rows="2" placeholder="问 AetherAI…（Ctrl+Enter / ⊞ 发送）"></textarea>
+  <textarea id="box" rows="2" placeholder="问 Aether…（Ctrl+Enter / ⊞ 发送）"></textarea>
   <button id="send">发送</button>
 </div>
 <script>

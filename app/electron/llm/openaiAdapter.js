@@ -3,7 +3,7 @@
 //
 // Covers OpenAI itself and any proxy that speaks the /chat/completions +
 // /models protocol (OpenRouter, Together, DeepSeek, local LM Studio / Ollama's
-// OpenAI shim, etc.). This is the format AetherAI has always used; this file
+// OpenAI shim, etc.). This is the format Aether has always used; this file
 // extracts that logic out of the handlers so it lives in one place.
 // ───────────────────────────────────────────────────────────────────────────
 

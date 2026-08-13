@@ -1,12 +1,12 @@
-# Contributing to AetherAI
+# Contributing to Aether
 
-AetherAI is a personal/hobby project, currently in early beta. Contributions
+Aether is a personal/hobby project, currently in early beta. Contributions
 are welcome but the bar is "it works and doesn't break existing features" —
 not "production-grade review process".
 
 ## Before you start
 
-- AetherAI is **Electron + React/TypeScript + zustand + Tailwind + sql.js**.
+- Aether is **Electron + React/TypeScript + zustand + Tailwind + sql.js**.
   Read `README.md` → Project structure first.
 - All runtime data (API keys, chat history) lives in `%APPDATA%/aetherai/`,
   **not** in the repo. `.gitignore` excludes `*.db`, `background.img`, `.env`,
@@ -48,7 +48,7 @@ for the tone. Keep the subject ≤72 chars; explain *why* in the body.
 ## Reporting bugs
 
 Open a GitHub issue with:
-- AetherAI version (Settings → About).
+- Aether version (Settings → About).
 - OS.
 - Steps to reproduce.
 - Expected vs actual behavior.

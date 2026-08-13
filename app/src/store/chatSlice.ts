@@ -146,7 +146,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         })
       if (result?.modelSuggestion) set({ modelSuggestion: result.modelSuggestion })
     } catch (err) {
-      log.error("[AetherAI] chat.send FAILED:", err)
+      log.error("[Aether] chat.send FAILED:", err)
       set(clearStreaming(currentSessionId))
       log.error("chat error", err)
     }
@@ -305,7 +305,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         set({ messages: allMessages })
       }
     } catch (err) {
-      log.error("[AetherAI] loadMessages error:", err)
+      log.error("[Aether] loadMessages error:", err)
     }
   },
 

@@ -30,7 +30,7 @@ function initAppReady() {
   }
 
   // ── aetherai:// protocol handler ─────────────────────────────────────────
-  // Allows "open in AetherAI" from browser links and other apps.
+  // Allows "open in Aether" from browser links and other apps.
   // 动作集（todo 17）：new/chat（既有）、open（路径参数 → 会话 workspace）、tui。
   // URL 解析在 llm/protocolUrl.js（纯函数，可单测）。
   const { parseProtocolUrl } = require('./llm/protocolUrl')
@@ -45,7 +45,7 @@ function initAppReady() {
   if (!app.isPackaged) {
     protocol.handle('aetherai', (req) => {
       relayProtocol(req.url)
-      return new Response('AetherAI protocol handler', { status: 200 })
+      return new Response('Aether protocol handler', { status: 200 })
     })
   } else {
     // Production: register OS protocol association AND listen for incoming URLs.
@@ -218,7 +218,7 @@ function createTray() {
       trayImg = nativeImage.createFromBuffer(Buffer.from(b64, 'base64'))
     }
     tray = new Tray(trayImg)
-    tray.setToolTip('AetherAI')
+    tray.setToolTip('Aether')
     updateTrayMenu()
     tray.on('click', () => {
       if (!mainWindow) return
@@ -231,7 +231,7 @@ function createTray() {
 
 function updateTrayMenu() {
   if (!tray) return
-  const ctx = { show: 'Show AetherAI', hide: 'Hide', newChat: 'New Chat', newTask: 'New Task', quit: 'Quit AetherAI' }
+  const ctx = { show: 'Show Aether', hide: 'Hide', newChat: 'New Chat', newTask: 'New Task', quit: 'Quit Aether' }
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: ctx.show, click: () => showMainWindow() },
     { label: ctx.hide, click: () => { if (mainWindow) mainWindow.hide() } },

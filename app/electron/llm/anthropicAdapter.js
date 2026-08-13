@@ -5,7 +5,7 @@
 // x-api-key + anthropic-version headers, system as a top-level field, and a
 // messages array of {role, content} where content may be string or blocks.
 //
-// We translate the OpenAI-style message shape AetherAI uses internally into
+// We translate the OpenAI-style message shape Aether uses internally into
 // Anthropic's shape, and translate the streaming SSE events back into deltas.
 // ───────────────────────────────────────────────────────────────────────────
 

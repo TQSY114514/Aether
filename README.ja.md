@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="./assets/readme-hero.svg" width="780" alt="AetherAI" />
+<img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
-# AetherAI
+# Aether
 
 ### ローカルファースト · マルチモデル · エージェントネイティブ
 
@@ -22,7 +22,7 @@
 
 ---
 
-> **ステータス: Beta。** AetherAI はソロ / 趣味のプロジェクトです。動作しますが、粗い部分があることを想定してください。
+> **ステータス: Beta。** Aether はソロ / 趣味のプロジェクトです。動作しますが、粗い部分があることを想定してください。
 > バグ報告は歓迎します — [CONTRIBUTING.md](./CONTRIBUTING.md) と
 > [SECURITY.md](./SECURITY.md) を参照してください。
 
@@ -36,9 +36,9 @@
 
 ---
 
-## AetherAI の特長
+## Aether の特長
 
-AetherAI は、通常は複数のツールに分散している機能を、1 つのローカルデスクトップアプリに統合しています:
+Aether は、通常は複数のツールに分散している機能を、1 つのローカルデスクトップアプリに統合しています:
 
 | 機能 | 説明 | 成熟度 |
 |---|---|:---:|
@@ -65,8 +65,8 @@ AetherAI は、通常は複数のツールに分散している機能を、1 つ
 
 | ビルド | 説明 |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | NSIS インストーラー。ユーザー単位（管理者不要）、アプリ内自動更新。**推奨。** |
-| **`AetherAI-x.y.z.exe`** | ポータブル単一 EXE。インストール不要、自動更新なし。実行するだけ。 |
+| **`aetherai-setup-x.y.z.exe`** | NSIS インストーラー。ユーザー単位（管理者不要）、アプリ内自動更新。**推奨。** |
+| **`aetherai-x.y.z.exe`** | ポータブル単一 EXE。インストール不要、自動更新なし。実行するだけ。 |
 
 > インストーラーは初回起動時に SmartScreen の「発行元不明」警告を表示します — 署名のない個人アプリとしては想定どおりです。すべてのデータはローカルに留まります。
 >
@@ -78,7 +78,7 @@ AetherAI は、通常は複数のツールに分散している機能を、1 つ
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
-cd AetherAI
+cd Aether
 start.bat        # Windows: installs deps, builds frontend, launches Electron
 ```
 
@@ -207,13 +207,13 @@ node cli.js tui --smoke      # headless 状态机冒烟
 
 ### プライバシー
 
-> **すべてのデータはローカルに留まります。** AetherAI はあなたに関する情報を収集もアップロードもしません。API キー、会話、ペルソナはローカルの SQLite データベースに保存されます。送信されるネットワークリクエストは、設定した LLM プロバイダーへのものだけです。
+> **すべてのデータはローカルに留まります。** Aether はあなたに関する情報を収集もアップロードもしません。API キー、会話、ペルソナはローカルの SQLite データベースに保存されます。送信されるネットワークリクエストは、設定した LLM プロバイダーへのものだけです。
 
 ---
 
 ## VS Code 拡張機能とヘッドレス CLI
 
-デスクトップアプリに加えて、AetherAI は同じエージェントを CLI とエディタ拡張機能として提供します:
+デスクトップアプリに加えて、Aether は同じエージェントを CLI とエディタ拡張機能として提供します:
 
 - **ヘッドレス CLI** (`app/cli.js`) — エージェントを非対話的に実行し、NDJSON イベントをスクリプト / CI に渡す:
   ```bash
@@ -226,7 +226,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 
 ## ターミナル TUI、RPC、SDK
 
-デスクトップアプリと通常の CLI に加えて、AetherAI は対話型ターミナル UI、機械から呼び出し可能な JSONL RPC モード、Electron 不要の SDK を提供します。3 つすべてがデスクトップと同じエージェントコア、メモリ、ペルソナ、MCP ツール、権限ルールを共有します。
+デスクトップアプリと通常の CLI に加えて、Aether は対話型ターミナル UI、機械から呼び出し可能な JSONL RPC モード、Electron 不要の SDK を提供します。3 つすべてがデスクトップと同じエージェントコア、メモリ、ペルソナ、MCP ツール、権限ルールを共有します。
 
 ### クイックスタート — 2 つの形態
 
@@ -360,7 +360,7 @@ app/
 
 ## 謝辞
 
-AetherAI は以下のプロジェクトの上に成り立っています — そのアイデアがアーキテクチャと UX を形作りました:
+Aether は以下のプロジェクトの上に成り立っています — そのアイデアがアーキテクチャと UX を形作りました:
 
 ### エージェントフレームワーク
 
@@ -384,7 +384,7 @@ AetherAI は以下のプロジェクトの上に成り立っています — そ
 | プロジェクト | 着想 |
 |---|---|
 | [Dify](https://github.com/langgenius/dify) | マルチフォーマットのプロバイダー正規化 |
-| [MCP](https://modelcontextprotocol.io) | AetherAI のエージェントが話す仕様 |
+| [MCP](https://modelcontextprotocol.io) | Aether のエージェントが話す仕様 |
 | [cc-switch](https://github.com/farion1231/cc-switch) | 使用量統計ダッシュボードのレイアウト |
 | [new-api](https://github.com/QuantumNous/new-api) | 推論量（reasoning-effort）のリレー、使用量 / コストの追跡 |
 | [Continue](https://github.com/continuedev/continue) | 設定を信頼できる唯一の情報源とするアプローチ、プロバイダー抽象化 |
@@ -410,7 +410,7 @@ AetherAI は以下のプロジェクトの上に成り立っています — そ
 
 ## ライセンス
 
-[MIT](./LICENSE) © 2025 AetherAI
+[MIT](./LICENSE) © 2025 Aether
 
 ---
 
@@ -418,6 +418,6 @@ AetherAI は以下のプロジェクトの上に成り立っています — そ
 
 Electron + React + TypeScript で ❤️ を込めて作られました
 
-[⬆ 先頭に戻る](#aetherai)
+[⬆ 先頭に戻る](#aether)
 
 </div>

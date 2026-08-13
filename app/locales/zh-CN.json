@@ -1,5 +1,5 @@
 {
-  "app.name": "AetherAI",
+  "app.name": "Aether",
   "chat.new": "新建对话",
   "chat.placeholder": "输入消息…（Shift+Enter 换行）",
   "chat.arena.placeholder": "输入一个问题，多个模型同时作答…",
@@ -223,7 +223,7 @@
   "settings.bg_blur": "模糊",
   "settings.bg_clear": "清除",
   "settings.about": "关于",
-  "settings.about_desc": "AetherAI 是本地优先的多模型桌面 AI 聊天客户端，所有数据保留在你的设备上。",
+  "settings.about_desc": "Aether 是本地优先的多模型桌面 AI 聊天客户端，所有数据保留在你的设备上。",
   "settings.background": "背景图片",
   "settings.background.desc": "上传图片作为聊天背景。留空则使用纯色。",
   "settings.background.upload": "上传图片",

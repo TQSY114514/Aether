@@ -8,11 +8,11 @@ import './index.css'
 class AppBoundary extends Component<{children:React.ReactNode},{error?:Error}> {
   state:{error?:Error}={}
   static getDerivedStateFromError(e:Error){return{error:e}}
-  componentDidCatch(e:Error){console.error('[AetherAI] CRASH:',e)}
+  componentDidCatch(e:Error){console.error('[Aether] CRASH:',e)}
   render(){
     if(this.state.error)return(
       <div style={{padding:40,fontFamily:'Inter,sans-serif'}}>
-        <h2 style={{color:'#DC2626'}}>AetherAI Crashed</h2>
+        <h2 style={{color:'#DC2626'}}>Aether Crashed</h2>
         <pre style={{marginTop:12,padding:16,background:'#F8F9FA',borderRadius:8,fontSize:13,overflow:'auto',whiteSpace:'pre-wrap'}}>
           {this.state.error.message}
           {'\n\n'}
