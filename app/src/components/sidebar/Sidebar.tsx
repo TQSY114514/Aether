@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import TaskPanel, { tx } from '@/components/tasks/TaskPanel'
@@ -201,6 +201,19 @@ export default function Sidebar() {
                     )}
                   </div>
                 )}
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  // 双形态缝合: 复制 aether tui --session <id> 命令, 用户在终端粘贴即续会话
+                  const cmd = `aether tui --session ${session.id}`
+                  try {
+                    await window.electronAPI?.system?.clipboardWrite?.(cmd)
+                    await window.electronAPI?.system?.notify?.({ title: '已复制终端命令', body: cmd })
+                  } catch {}
+                }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all shrink-0"
+                  title="在终端继续此会话(复制命令)">
+                  <TerminalSquare size={12} className="text-[var(--text-muted)]" />
+                </button>
                 <button onClick={async (e) => {
                   e.stopPropagation()
                   const pinned = session.pinned ? 0 : 1
