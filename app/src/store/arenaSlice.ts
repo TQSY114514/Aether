@@ -11,6 +11,10 @@ export const createArenaSlice: StateCreator<AppState, [], [], Partial<AppState>>
   arenaError: null,
   arenaVoted: false,
   arenaVoteWinnerId: null as number | null,
+  // Arena 2.0 (review P0-3): same-model multi-temperature comparison.
+  // null = single run per model; [0.2, 0.8] = two variants per model.
+  arenaTemperatures: null as number[] | null,
+  setArenaTemperatures: (temps) => set({ arenaTemperatures: temps }),
 
   setArenaModelIds: (ids) => set({ arenaModelIds: ids }),
 
@@ -32,7 +36,7 @@ export const createArenaSlice: StateCreator<AppState, [], [], Partial<AppState>>
     get().loadSessions()
     ensureArenaListener()
     try {
-      const { results } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, personaId })
+      const { results } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, personaId, temperatures: get().arenaTemperatures || undefined })
       if (!results || results.length === 0) {
         set({ arenaError: "没有返回结果，请检查模型/网络" })
         set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n, sending: Object.keys(n).length > 0, arenaPending: 0 } })

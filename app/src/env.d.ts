@@ -149,7 +149,7 @@ interface Window {
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void
     }
     arena: {
-      send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null }) => Promise<{ results: ArenaResult[] }>
+      send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
       stop: (sessionId?: number) => Promise<void>

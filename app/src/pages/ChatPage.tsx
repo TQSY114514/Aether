@@ -29,6 +29,8 @@ export default function ChatPage() {
   const setChatMode = useStore((s) => s.setChatMode)
   const arenaModelIds = useStore((s) => s.arenaModelIds)
   const setArenaModelIds = useStore((s) => s.setArenaModelIds)
+  const arenaTemperatures = useStore((s) => s.arenaTemperatures)
+  const setArenaTemperatures = useStore((s) => s.setArenaTemperatures)
   const sessionConfigs = useStore((s) => s.sessionConfigs)
   const saveSessionConfig = useStore((s) => s.saveSessionConfig)
   const allModels = useStore((s) => s.allModels)
@@ -190,6 +192,17 @@ export default function ChatPage() {
                 {allArenaModels.map(m => (
                   <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                 ))}
+              </select>
+              {/* Arena 2.0: same-model multi-temperature comparison */}
+              <select value={arenaTemperatures ? arenaTemperatures.join(',') : ''} onChange={(e) => {
+                const v = e.target.value
+                setArenaTemperatures(v ? v.split(',').map(Number) : null)
+              }}
+                title="同模型多温度对比"
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
+                <option value="">单次</option>
+                <option value="0.2,0.8">温度 0.2/0.8</option>
+                <option value="0.2,0.5,0.8">温度 0.2/0.5/0.8</option>
               </select>
             </div>
           ) : null}

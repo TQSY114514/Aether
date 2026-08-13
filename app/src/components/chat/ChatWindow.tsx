@@ -9,15 +9,17 @@ import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
 
 // Arena results display component with streaming-like animation
-function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown }: {
-  results: { model_id: number; model_name: string; provider_name: string; content: string }[]
+function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, prompt }: {
+  results: { model_id: number; model_name: string; provider_name: string; content: string; variant?: string | null; latency_ms?: number; usage?: { total_tokens: number; cost: number } }[]
   voted: boolean
   winnerId: number | null
   onVote: (winner: { model_id: number; model_name: string }, losers: { model_id: number; model_name: string }[]) => Promise<void>
   t: (key: string) => string
   renderMarkdown: (md: string) => string
+  prompt: string
 }) {
   const [revealed, setRevealed] = useState(new Set<string>())
   const [done, setDone] = useState(false)
@@ -32,7 +34,7 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown }: {
     if (results.length === 0) return
     if (done) return
 
-    const modelIds = results.map(r => String(r.model_id))
+    const modelIds = results.map(r => `${r.model_id}::${r.variant || 'default'}`)
     const toReveal = modelIds.filter(id => !revealed.has(id))
     if (toReveal.length === 0) {
       setDone(true)
@@ -56,14 +58,30 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown }: {
 
   return (
     <div className="space-y-3">
-      <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
+        {results.length > 0 && (
+          <button onClick={() => {
+            try {
+              // 导出本轮对比报告(Markdown)
+              const md = arenaRoundToMarkdown(prompt, results)
+              downloadText(`aether-arena-${Date.now()}.md`, md, 'text/markdown')
+            } catch {}
+          }}
+            className="text-[10px] px-2 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            📄 导出报告
+          </button>
+        )}
+      </div>
       {results.map((r) => {
-        const key = String(r.model_id)
+        // 多温度对比时同 model 有多个 variant, key 必须含 variant 否则 reveal 冲突
+        const key = `${r.model_id}::${r.variant || 'default'}`
         const isRevealed = revealed.has(key)
         const isWinner = voted && r.model_id === winnerId
         const isLoser = voted && r.model_id !== winnerId
         return (
-          <div key={r.model_id} className="border rounded-xl overflow-hidden animate-blur-fade"
+          <div key={key} className="border rounded-xl overflow-hidden animate-blur-fade"
             style={{
               borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
               opacity: isLoser ? 0.5 : isRevealed ? 1 : 0,
@@ -74,7 +92,9 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown }: {
               filter: isLoser ? 'grayscale(0.3)' : undefined,
             }}>
             <div className="px-3 py-2 border-b flex items-center justify-between text-sm font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-              <span style={{ color: isWinner ? 'var(--success)' : isLoser ? 'var(--text-muted)' : 'var(--text-primary)' }}>{r.model_name}</span>
+              <span style={{ color: isWinner ? 'var(--success)' : isLoser ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                {r.model_name}{r.variant ? <span className="text-[10px] ml-1.5 font-normal" style={{ color: 'var(--text-muted)' }}>{r.variant}</span> : null}
+              </span>
               <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.provider_name}</span>
             </div>
             <div className="p-3 text-sm leading-relaxed max-h-60 overflow-y-auto">
@@ -470,6 +490,7 @@ export default function ChatWindow() {
               onVote={arenaVote}
               t={t}
               renderMarkdown={renderMarkdown}
+              prompt={messages.filter(m => m.role === 'user').pop()?.content || ''}
             />
           )}
           {arenaPending > 0 && arenaResultsSessionId === currentSessionId && (
