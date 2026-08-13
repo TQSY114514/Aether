@@ -1,0 +1,63 @@
+name: Bug Report
+description: Report a bug to help improve Aether
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report. A clear report helps us fix it fast.
+  - type: dropdown
+    id: form
+    attributes:
+      label: Which form are you using?
+      options:
+        - Desktop app (Windows)
+        - Terminal TUI (aether tui)
+        - CLI (headless)
+        - VS Code extension
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Aether version
+      description: e.g. 0.7.0 (check Settings → About, or `aether --version`)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      description: e.g. Windows 11 24H2 (winver)
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version (only for TUI/CLI)
+      description: e.g. 22.12.0 (`node --version`). Leave blank for desktop app.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do? Be specific.
+      placeholder: |
+        1. Opened app and clicked ...
+        2. Typed ...
+        3. Saw ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error message / logs
+      description: Paste the error text, or the red [sys] line if it happened in the TUI. Desktop logs live in %APPDATA%\aetherai\aetherai.log.
+      render: text

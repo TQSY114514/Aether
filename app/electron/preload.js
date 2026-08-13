@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (id) => ipcRenderer.invoke('provider:delete', id),
     testConnection: (id) => ipcRenderer.invoke('provider:test-connection', id),
     fetchModels: (id) => ipcRenderer.invoke('provider:fetch-models', id),
+    detectOllama: () => ipcRenderer.invoke('provider:detect-ollama'),
   },
   agent: {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),

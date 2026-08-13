@@ -26,6 +26,15 @@ Chat with any model, run a safe coding agent, and compare models side-by-side �
 > edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
 > [SECURITY.md](./SECURITY.md).
 
+> [!CAUTION]
+> **Windows SmartScreen warning is expected.** Aether is built by a student
+> developer without a commercial code-signing certificate, so Windows 11 /
+> Defender may show "Windows protected your PC" on first launch.
+> **The app is safe and open source — review the code, then click "More info → Run anyway".**
+> If your antivirus quarantines it, add the app folder to your AV exclusions
+> (see [Download](#download) for details). No data leaves your machine except
+> to the LLM providers you configure.
+
 **Platform: Windows only.** Official builds, testing, and support target Windows. macOS / Linux may build from source but are not officially supported, and code signing is not planned — expect a SmartScreen "unknown publisher" prompt on first launch (see [Download](#download)).
 
 **One app for every model.** OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — chat, run a coding agent, and compare models head-to-head in a multi-model arena with ELO voting.

@@ -24,6 +24,11 @@
 
 > **状态:Beta。** Aether 是个人/业余项目。它能用,但会有粗糙之处。欢迎提 bug——见 [CONTRIBUTING.md](./CONTRIBUTING.md) 和 [SECURITY.md](./SECURITY.md)。
 
+> [!CAUTION]
+> **Windows SmartScreen 警告属正常现象。** Aether 由学生开发者构建、未购买商业代码签名证书,因此 Win11 / Defender 首次启动可能提示「Windows 已保护你的电脑」。
+> **应用是安全的开源软件——可先审查代码,再点「更多信息 → 仍要运行」。**
+> 若被杀软隔离,请将应用文件夹加入排除项(见[下载](#下载))。除你配置的 LLM 供应商外,不会有任何数据离开你的电脑。
+
 **平台:仅支持 Windows。** 官方构建、测试与支持仅面向 Windows。macOS / Linux 可自行从源码构建,但不提供官方支持;项目未做代码签名——首次启动出现 SmartScreen「未知发布者」提示属正常现象(见[下载](#下载))。
 
 **一个应用,所有模型。** OpenAI / Claude / DeepSeek / 本地模型 / 任何 OpenAI 兼容端点——聊天、运行编码 Agent、在带 ELO 投票的多模型竞技场里横向对比模型能力。

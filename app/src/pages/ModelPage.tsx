@@ -39,6 +39,31 @@ export default function ModelPage() {
   const [newModelName, setNewModelName] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null)
   const [editData, setEditData] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
+  // 一键检测本地 Ollama(学生免费方案): 探测 → 建 provider → 拉模型 → 选中推荐
+  const [ollamaBusy, setOllamaBusy] = useState(false)
+  const [ollamaMsg, setOllamaMsg] = useState<string | null>(null)
+
+  const detectOllama = async () => {
+    setOllamaBusy(true)
+    setOllamaMsg(null)
+    try {
+      const r = await window.electronAPI.provider.detectOllama()
+      if (r.ok) {
+        await loadProviders()
+        await loadAllModels()
+        if (r.providerId != null) await loadModels(r.providerId)
+        setOllamaMsg(r.recommended
+          ? `✅ 已连接本地 Ollama — ${r.models?.length ?? 0} 个模型, 推荐: ${r.recommended}`
+          : '✅ 已连接本地 Ollama')
+      } else {
+        setOllamaMsg(`❌ ${r.error || '未检测到 Ollama'}`)
+      }
+    } catch {
+      setOllamaMsg('❌ 检测失败')
+    } finally {
+      setOllamaBusy(false)
+    }
+  }
 
   useEffect(() => { loadProviders() }, [loadProviders])
 
@@ -90,7 +115,17 @@ export default function ModelPage() {
           <div className="mb-6 p-4 rounded-xl space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <div>
               <div className="text-xs mb-1.5" style={{ color: 'var(--text-muted)' }}>{t('models.presets')}</div>
-              <PresetButtons onPick={(p) => { setNewProvider({ name: p.name, api_url: p.api_url, api_key: '', api_format: p.api_format }); setShowAdd(true) }} />
+              <div className="flex items-center gap-2 flex-wrap">
+                <PresetButtons onPick={(p) => { setNewProvider({ name: p.name, api_url: p.api_url, api_key: '', api_format: p.api_format }); setShowAdd(true) }} />
+                <button onClick={detectOllama} disabled={ollamaBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-white disabled:opacity-50 transition-opacity"
+                  style={{ backgroundColor: 'var(--accent)' }}>
+                  🦙 {ollamaBusy ? '检测中…' : '一键检测本地 Ollama'}
+                </button>
+              </div>
+              {ollamaMsg && (
+                <p className="text-[11px] mt-1.5" style={{ color: ollamaMsg.startsWith('✅') ? 'var(--success)' : 'var(--error)' }}>{ollamaMsg}</p>
+              )}
             </div>
             <input value={newProvider.name} onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
               placeholder={t('models.add_provider_name')}
