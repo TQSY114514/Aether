@@ -174,6 +174,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     info: () => ipcRenderer.invoke('gateway:info'),
     setEnabled: (enabled) => ipcRenderer.invoke('gateway:set-enabled', enabled),
   },
+  system: {
+    getAutoLaunch: () => ipcRenderer.invoke('system:get-auto-launch'),
+    setAutoLaunch: (enabled) => ipcRenderer.invoke('system:set-auto-launch', enabled),
+    notify: (data) => ipcRenderer.invoke('system:notify', data),
+  },
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
