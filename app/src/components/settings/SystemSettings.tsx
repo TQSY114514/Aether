@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
-import { Power, Bell, Rocket } from 'lucide-react'
+import { Power, Bell, Rocket, Clipboard, FileText } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SystemSettings — Windows 系统集成（Phase 3 剩余项）
@@ -82,6 +82,48 @@ export default function SystemSettings() {
             className="text-[11px] px-3 py-1.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors shrink-0"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             发送测试通知
+          </button>
+        </div>
+
+        {/* 剪贴板 */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <Clipboard size={13} className="text-gray-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs" style={{ color: 'var(--text-primary)' }}>剪贴板</p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>复制 AI 回复到剪贴板、粘贴外部文本作为上下文</p>
+            </div>
+          </div>
+          <button onClick={async () => {
+            try {
+              const r = await window.electronAPI?.system?.clipboardWrite?.('Aether 剪贴板测试 —— 粘贴到任意位置验证。')
+              toast(r?.ok ? '已复制到剪贴板' : `失败: ${r?.error || ''}`, { type: r?.ok ? 'success' : 'error' })
+            } catch { toast('剪贴板不可用', { type: 'error' }) }
+          }}
+            className="text-[11px] px-3 py-1.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors shrink-0"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            复制测试文本
+          </button>
+        </div>
+
+        {/* 文件关联 */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <FileText size={13} className="text-gray-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs" style={{ color: 'var(--text-primary)' }}>文件关联</p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>注册右键「用 Aether 打开」(.cs/.js/.ts/.tsx/.md/.json + 文件夹)。可能需要管理员权限</p>
+            </div>
+          </div>
+          <button onClick={async () => {
+            try {
+              const r = await window.electronAPI?.system?.registerFileAssociations?.()
+              toast(r?.ok ? '文件关联已注册' : `失败: ${r?.error || '需要管理员权限'}`, { type: r?.ok ? 'success' : 'error' })
+            } catch { toast('文件关联注册失败', { type: 'error' }) }
+          }}
+            className="text-[11px] px-3 py-1.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors shrink-0"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            注册文件关联
           </button>
         </div>
       </div>
