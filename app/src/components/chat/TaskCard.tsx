@@ -63,7 +63,7 @@ export default function TaskCard({ todos, planSteps, statusLines }: { todos: Tod
   return (
     <div className="rounded-lg border mb-2 overflow-hidden" style={{ borderColor: accent, backgroundColor: 'var(--bg-secondary)' }}>
       <button onClick={() => setOpen(!open)} aria-expanded={open}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--border) transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)] transition-colors"
         title={tx('taskcard.toggle', '点击展开 / 收起任务进度')}>
         {open ? <ChevronDown size={12} style={{ color: accent }} /> : <ChevronRight size={12} style={{ color: accent }} />}
         <HeaderIcon size={12} style={{ color: accent }} />

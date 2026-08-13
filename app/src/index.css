@@ -1,16 +1,6 @@
-@import "tailwindcss";
-@source "../src";
-
-/* 恢复 Tailwind 3 观感(Tailwind 4 默认值有差异):
-   - --radius-* 覆盖了 v4 的 rounded-lg/xl(Tailwind 3 是 0.5rem/0.75rem)
-   - --shadow-sm 默认透明度 v4 是 10%, v3 是 5% */
-@theme {
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
-}
-
-/* 自定义语义色见文件中部 ":root 之后" 的兼容层(bg-secondary/text-muted 等),
-   Tailwind 4 顶部 @utility 在该版本下不生效, 故不用。 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --bg-primary: #FFFFFF;
@@ -26,10 +16,10 @@
   --success: #16A34A;
   --warning: #D97706;
   --sidebar-width: 260px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
   --shadow-card: 0 1px 4px rgba(0,0,0,0.06);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
@@ -182,23 +172,6 @@ select option {
   background: var(--accent); cursor: grab; box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 
-/* Tailwind v4 兼容层:
-   - v3 的 theme.extend.colors 允许 bg-secondary/text-muted 等任意类名, v4 的
-     --color-* 命名空间无法表达同源不同类名 —— 此处以普通 CSS 类补回
-     (放在 :root 之后的普通 CSS 区, Tailwind 4 会原样保留; 顶部 @utility
-     在该版本下不生效, 已弃用)。
-   - Tailwind v4 的裸 border 类默认色是 currentColor(v3 是浅灰) —— 全局
-     默认浅灰边框色, utilities 层的彩色边框类(border-red-200)优先级更高。 */
-.bg-secondary { background-color: var(--bg-secondary); }
-.text-secondary { color: var(--text-secondary); }
-.text-muted { color: var(--text-muted); }
-
-*,
-::before,
-::after {
-  border-color: var(--border);
-}
-
 /* Smooth overscroll with rubber-band containment */
 .scroll-bounce {
   overscroll-behavior: contain;
@@ -225,13 +198,8 @@ select option {
 .qaction {
   @apply px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all duration-150;
   @apply border-[var(--border)] text-[var(--text-secondary)];
-  @apply hover:bg-[var(--accent)] hover:text-white hover:border-[var(--accent)];
+  @apply hover:bg-[var(--accent)] hover:text-white hover:border-[var(--accent)] hover-lift;
   cursor: pointer;
-}
-/* hover-lift 是自定义类, 不能进 @apply(Tailwind 4 只认 utility) */
-.qaction:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
 }
 .qaction:active { transform: scale(0.96); }
 

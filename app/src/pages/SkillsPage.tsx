@@ -90,13 +90,13 @@ export default function SkillsPage() {
             </p>
           </div>
           <button onClick={rescan} disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
             style={{ borderColor: 'var(--border)' }}>
             <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
             {t('settings.skills.rescan', '重新扫描')}
           </button>
           <button onClick={importDir} disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
             style={{ borderColor: 'var(--border)' }}>
             <FolderPlus size={12} />
             {t('settings.skills.import', '导入目录')}
@@ -200,7 +200,7 @@ export default function SkillsPage() {
                   </div>
                   <button onClick={() => autoDraft(c.name, `Auto-drafted from ${c.totalUses} successful uses`)}
                     disabled={busy}
-                    className="text-[10px] px-2.5 py-1 rounded-lg border hover:bg-(--bg-primary) transition-colors flex items-center gap-1"
+                    className="text-[10px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-primary)] transition-colors flex items-center gap-1"
                     style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
                     <Wand2 size={10} /> {t('settings.skills.auto_draft')}
                   </button>

@@ -11,7 +11,7 @@ function PresetButtons({ onPick }: { onPick: (p: { name: string; api_url: string
       {PROVIDER_PRESETS.map((p) => (
         <button key={p.name} onClick={() => onPick(p)}
           title={p.local ? t('models.presets.local_hint') : t('models.presets.hint')}
-          className="px-2 py-1 text-xs rounded-lg border hover:bg-(--content-bg) transition-colors"
+          className="px-2 py-1 text-xs rounded-lg border hover:bg-[var(--content-bg)] transition-colors"
           style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
           {p.name}
         </button>
@@ -80,7 +80,7 @@ export default function ModelPage() {
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('models.subtitle')}</p>
           </div>
           <button onClick={() => setShowAdd(!showAdd)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-(--bg-secondary) transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)' }}>
             <Plus size={14} />{t('models.add_provider')}
           </button>
@@ -94,20 +94,20 @@ export default function ModelPage() {
             </div>
             <input value={newProvider.name} onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
               placeholder={t('models.add_provider_name')}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-(--content-bg)"
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <input value={newProvider.api_url} onChange={(e) => setNewProvider({ ...newProvider, api_url: e.target.value })}
               placeholder={t('models.add_provider_url')}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-(--content-bg)"
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <input value={newProvider.api_key} onChange={(e) => setNewProvider({ ...newProvider, api_key: e.target.value })}
               placeholder={t('models.add_provider_key')} type="password"
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-(--content-bg)"
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <div className="flex items-center gap-2">
               <label className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>{t('models.api_format')}</label>
               <select value={newProvider.api_format} onChange={(e) => setNewProvider({ ...newProvider, api_format: e.target.value })}
-                className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }}>
+                className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                 <option value="openai">OpenAI (/chat/completions)</option>
                 <option value="anthropic">Anthropic (/messages)</option>
                 <option value="responses">OpenAI Responses (/responses)</option>
@@ -115,7 +115,7 @@ export default function ModelPage() {
             </div>
             <div className="flex gap-2">
               <button onClick={handleAddProvider} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80">{t('models.save')}</button>
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
+              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
             </div>
           </div>
         )}
@@ -141,7 +141,7 @@ export default function ModelPage() {
                       <Globe size={16} className="text-gray-400" />
                       {isEditing ? (
                         <input value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                          className="text-sm font-medium px-2 py-1 rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--accent)' }} />
+                          className="text-sm font-medium px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }} />
                       ) : (
                         <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{provider.name}</span>
                       )}
@@ -151,16 +151,16 @@ export default function ModelPage() {
                         <button onClick={async () => {
                           await window.electronAPI.provider.update(provider.id, editData)
                           setEditingProviderId(null); loadProviders()
-                        }} className="p-1 rounded hover:bg-(--border) transition-colors">
+                        }} className="p-1 rounded hover:bg-[var(--border)] transition-colors">
                           <Save size={14} className="text-green-500" />
                         </button>
                       ) : (
                         <button onClick={() => { setEditingProviderId(provider.id); setEditData({ name: provider.name, api_url: provider.api_url, api_key: provider.api_key, api_format: provider.api_format || 'openai' }) }}
-                          className="p-1 rounded hover:bg-(--border) transition-colors">
+                          className="p-1 rounded hover:bg-[var(--border)] transition-colors">
                           <Edit2 size={14} className="text-gray-400" />
                         </button>
                       )}
-                      <button onClick={() => deleteProvider(provider.id)} className="p-1 rounded hover:bg-(--border) transition-colors">
+                      <button onClick={() => deleteProvider(provider.id)} className="p-1 rounded hover:bg-[var(--border)] transition-colors">
                         <Trash2 size={14} className="text-gray-400" />
                       </button>
                     </div>
@@ -170,13 +170,13 @@ export default function ModelPage() {
                     {isEditing ? (
                       <>
                         <input value={editData.api_url} onChange={(e) => setEditData({ ...editData, api_url: e.target.value })}
-                          placeholder="API URL" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-(--content-bg) mb-2 font-mono" style={{ borderColor: 'var(--accent)' }} />
+                          placeholder="API URL" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)] mb-2 font-mono" style={{ borderColor: 'var(--accent)' }} />
                         <input value={editData.api_key} onChange={(e) => setEditData({ ...editData, api_key: e.target.value })}
-                          placeholder="API Key" type="password" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-(--content-bg) font-mono mb-2" style={{ borderColor: 'var(--accent)' }} />
+                          placeholder="API Key" type="password" className="w-full px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)] font-mono mb-2" style={{ borderColor: 'var(--accent)' }} />
                         <div className="flex items-center gap-2">
                           <label className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>{t('models.api_format')}</label>
                           <select value={editData.api_format} onChange={(e) => setEditData({ ...editData, api_format: e.target.value })}
-                            className="flex-1 px-2 py-1.5 text-xs rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--accent)' }}>
+                            className="flex-1 px-2 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }}>
                             <option value="openai">OpenAI (/chat/completions)</option>
                             <option value="anthropic">Anthropic (/messages)</option>
                             <option value="responses">OpenAI Responses (/responses)</option>
@@ -204,7 +204,7 @@ export default function ModelPage() {
                   <div className="flex gap-2 flex-wrap">
                     <Tooltip text={t('tooltip.model_test')}>
                       <button onClick={() => handleTest(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-(--content-bg) hover:bg-(--bg-secondary) disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
                         style={{ borderColor: 'var(--border)' }}>
                         {testingId === provider.id ? <RefreshCw size={12} className="animate-spin" /> : <Wifi size={12} />}
                         {t('models.test')}
@@ -212,7 +212,7 @@ export default function ModelPage() {
                     </Tooltip>
                     <Tooltip text={t('tooltip.model_fetch')}>
                       <button onClick={() => handleFetchModels(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-(--content-bg) hover:bg-(--bg-secondary) disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
                         style={{ borderColor: 'var(--border)' }}>
                         <RefreshCw size={12} />{t('models.fetch')}
                       </button>
@@ -233,7 +233,7 @@ export default function ModelPage() {
                   )}
                   {models.map((model) => (
                     <div key={model.id}
-                      className="flex items-center justify-between px-4 py-2.5 text-sm cursor-pointer hover:bg-(--bg-secondary) transition-colors"
+                      className="flex items-center justify-between px-4 py-2.5 text-sm cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors"
                       onClick={() => {}}>
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="truncate" style={{ color: 'var(--text-primary)' }}>{model.model_name}</span>
@@ -246,7 +246,7 @@ export default function ModelPage() {
                         )}
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); deleteModel(model.id); loadModels(provider.id); loadAllModels() }}
-                        className="p-1 rounded hover:bg-(--border) transition-colors opacity-0 hover:opacity-100 shrink-0">
+                        className="p-1 rounded hover:bg-[var(--border)] transition-colors opacity-0 hover:opacity-100 shrink-0">
                         <Trash2 size={12} className="text-gray-400" />
                       </button>
                     </div>
@@ -258,7 +258,7 @@ export default function ModelPage() {
                     <div className="flex gap-2">
                       <input value={newModelName} onChange={(e) => setNewModelName(e.target.value)}
                         placeholder={t('models.add_model_name')} autoFocus
-                        className="flex-1 px-2 py-1 text-xs rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--accent)' }}
+                        className="flex-1 px-2 py-1 text-xs rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }}
                         onKeyDown={async (e) => {
                           if (e.key === 'Enter' && newModelName.trim()) {
                             await addModel({ provider_id: provider.id, model_name: newModelName.trim(), is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })

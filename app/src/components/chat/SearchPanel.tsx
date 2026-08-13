@@ -392,7 +392,7 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
               {scope === 'current' ? '本会话' : '全部'}
             </button>
           )}
-          <button onClick={onClose} className="p-0.5 rounded shrink-0 hover:bg-(--border)" title="关闭">
+          <button onClick={onClose} className="p-0.5 rounded shrink-0 hover:bg-[var(--border)]" title="关闭">
             <X size={14} style={{ color: 'var(--text-muted)' }} />
           </button>
         </div>

@@ -90,7 +90,7 @@ function Toaster({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: numbe
             style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
             <Icon size={15} style={{ color: ACCENTS[t.type] }} className="shrink-0" />
             <span className="flex-1">{t.message}</span>
-            <button onClick={() => onDismiss(t.id)} className="p-0.5 rounded hover:bg-(--border) transition-colors">
+            <button onClick={() => onDismiss(t.id)} className="p-0.5 rounded hover:bg-[var(--border)] transition-colors">
               <X size={13} className="text-gray-400" />
             </button>
           </div>
@@ -124,7 +124,7 @@ function ConfirmHost({ state, onConfirm, onCancel }: { state: ConfirmState; onCo
         <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>{state.title || '确认'}</h3>
         {state.description && <p className="text-xs leading-relaxed mb-4" style={{ color: 'var(--text-secondary)' }}>{state.description}</p>}
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors"
+          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{state.cancelText || '取消'}</button>
           <button onClick={onConfirm}
             className="px-3.5 py-1.5 text-xs rounded-lg text-white transition-opacity hover:opacity-90"

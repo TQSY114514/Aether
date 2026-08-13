@@ -79,7 +79,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t('onboarding.subtitle')}</p>
           </div>
           <button onClick={finish} aria-label={t('onboarding.skip')} title={t('onboarding.skip')}
-            className="p-1 rounded hover:bg-(--bg-secondary) transition-colors">
+            className="p-1 rounded hover:bg-[var(--bg-secondary)] transition-colors">
             <X size={14} className="text-gray-400" />
           </button>
         </div>
@@ -99,7 +99,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <div className="grid grid-cols-2 gap-2">
               {PROVIDER_PRESETS.map((p) => (
                 <button key={p.name} onClick={() => pickPreset(p)}
-                  className="text-left px-3 py-2.5 rounded-lg border transition-colors hover:bg-(--bg-secondary)"
+                  className="text-left px-3 py-2.5 rounded-lg border transition-colors hover:bg-[var(--bg-secondary)]"
                   style={{ borderColor: 'var(--border)' }}>
                   <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.name}</div>
                   <div className="text-[11px] font-mono truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>{p.api_url}</div>
@@ -119,20 +119,20 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <label className="block">
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('onboarding.name')}</span>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="mt-1 w-full px-3 py-2 text-sm rounded-lg outline-none bg-(--content-bg)"
+                className="mt-1 w-full px-3 py-2 text-sm rounded-lg outline-none bg-[var(--content-bg)]"
                 style={{ border: '1px solid var(--border)' }} />
             </label>
             <label className="block">
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('onboarding.url')}</span>
               <input value={form.api_url} onChange={(e) => setForm({ ...form, api_url: e.target.value })}
-                className="mt-1 w-full px-3 py-2 text-sm rounded-lg outline-none font-mono bg-(--content-bg)"
+                className="mt-1 w-full px-3 py-2 text-sm rounded-lg outline-none font-mono bg-[var(--content-bg)]"
                 style={{ border: '1px solid var(--border)' }} />
             </label>
             {!preset.local && (
               <label className="block">
                 <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('onboarding.key')}</span>
                 <input value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} type="password"
-                  className="mt-1 w-full px-3 py-2 text-sm rounded-lg outline-none font-mono bg-(--content-bg)"
+                  className="mt-1 w-full px-3 py-2 text-sm rounded-lg outline-none font-mono bg-[var(--content-bg)]"
                   style={{ border: '1px solid var(--border)' }} />
               </label>
             )}

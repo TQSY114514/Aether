@@ -108,7 +108,7 @@ export default function ChatPage() {
                   const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
                   syncLocalArena(ids)
                 }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }}>
+                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                   <option value="">Model 1</option>
                   {allArenaModels.map(m => (
                     <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
@@ -118,7 +118,7 @@ export default function ChatPage() {
                   const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
                   syncLocalArena(ids)
                 }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }}>
+                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                   <option value="">Model 2</option>
                   {allArenaModels.map(m => (
                     <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
@@ -129,11 +129,11 @@ export default function ChatPage() {
             <Tooltip text={t('tooltip.mode_switch')}>
             <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => setChatMode('normal')}
-                className={`px-2.5 py-1.5 transition-colors ${chatMode === 'normal' ? 'bg-(--accent) text-white' : ''}`}
+                className={`px-2.5 py-1.5 transition-colors ${chatMode === 'normal' ? 'bg-[var(--accent)] text-white' : ''}`}
                 style={chatMode !== 'normal' ? { color: 'var(--text-secondary)' } : {}}>{t('chat.mode.normal')}</button>
               <Tooltip text={t('tooltip.arena_mode')}>
                 <button onClick={() => setChatMode('arena')}
-                  className={`px-2.5 py-1.5 transition-colors ${chatMode === 'arena' ? 'bg-(--accent) text-white' : ''}`}
+                  className={`px-2.5 py-1.5 transition-colors ${chatMode === 'arena' ? 'bg-[var(--accent)] text-white' : ''}`}
                   style={chatMode !== 'arena' ? { color: 'var(--text-secondary)' } : {}}>
                   <FlaskConical size={12} className="inline mr-0.5" />{t('chat.mode.arena')}</button>
               </Tooltip>
@@ -152,7 +152,7 @@ export default function ChatPage() {
   // ── View 3: Active chat ──
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }} {...arenaBgStyle}>
-      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-(--content-bg)/95 backdrop-blur-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2">
           {currentModel && currentProvider && (
             <Tooltip text={t('tooltip.model_badge')}>
@@ -177,7 +177,7 @@ export default function ChatPage() {
                 const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
                 syncLocalArena(ids)
               }}
-                className="text-xs px-2 py-1 rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }}>
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                   <option value="">Model 1</option>
                   {allArenaModels.map(m => (
                     <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
@@ -187,7 +187,7 @@ export default function ChatPage() {
                   const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
                   syncLocalArena(ids)
                 }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }}>
+                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                 <option value="">Model 2</option>
                 {allArenaModels.map(m => (
                   <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
@@ -199,7 +199,7 @@ export default function ChatPage() {
                 setArenaTemperatures(v ? v.split(',').map(Number) : null)
               }}
                 title="同模型多温度对比"
-                className="text-xs px-2 py-1 rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }}>
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                 <option value="">单次</option>
                 <option value="0.2,0.8">温度 0.2/0.8</option>
                 <option value="0.2,0.5,0.8">温度 0.2/0.5/0.8</option>
@@ -223,7 +223,7 @@ export default function ChatPage() {
             <select value={currentPersonaId ?? ''} onChange={(e) => {
               const v = e.target.value ? Number(e.target.value) : null
               if (currentSessionId) saveSessionConfig(currentSessionId, { personaId: v })
-            }} className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }}>
+            }} className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
               <option value="">{t('chat.no_persona')}</option>
               {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>

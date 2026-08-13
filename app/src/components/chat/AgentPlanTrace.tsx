@@ -28,7 +28,7 @@ export default function AgentPlanTrace({ steps }: { steps: { step: number; depth
   const last = steps[steps.length - 1]
   return (
     <div className="rounded-lg border mb-2 overflow-hidden" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--border) transition-colors">
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)] transition-colors">
         {open ? <ChevronDown size={12} style={{ color: 'var(--accent)' }} /> : <ChevronRight size={12} style={{ color: 'var(--accent)' }} />}
         <Brain size={12} style={{ color: 'var(--accent)' }} />
         <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{t('agent.trace.title')}</span>

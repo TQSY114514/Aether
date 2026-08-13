@@ -26,7 +26,7 @@ export default function CompletionToasts() {
           <Bell size={12} className="shrink-0" style={{ color: 'var(--accent)' }} />
           <span className="flex-1 truncate">{toast.sessionTitle}</span>
           <button onClick={(e) => { e.stopPropagation(); dismiss(toast.id) }}
-            className="p-0.5 rounded hover:bg-(--border) transition-colors shrink-0">
+            className="p-0.5 rounded hover:bg-[var(--border)] transition-colors shrink-0">
             <X size={10} className="text-gray-400" />
           </button>
         </div>
