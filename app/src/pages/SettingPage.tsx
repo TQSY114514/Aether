@@ -73,7 +73,7 @@ function GatewayCard() {
           <div className="flex items-center justify-between gap-2 text-xs">
             <span style={{ color: 'var(--text-muted)' }}>服务地址</span>
             <button onClick={() => copy(`http://127.0.0.1:${info.port}`, '地址')}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md border hover:bg-(--bg-secondary) transition-colors font-mono"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               http://127.0.0.1:{info.port} <Copy size={11} />
             </button>
@@ -82,7 +82,7 @@ function GatewayCard() {
             <span style={{ color: 'var(--text-muted)' }}>访问 Token</span>
             <button onClick={() => info.token && copy(info.token, 'Token')}
               disabled={!info.token}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono disabled:opacity-40"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md border hover:bg-(--bg-secondary) transition-colors font-mono disabled:opacity-40"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               {info.token ? `${info.token.slice(0, 12)}…` : '—'} <Copy size={11} />
             </button>
@@ -160,7 +160,7 @@ function UpdateCard() {
             {t('settings.update.restart')}
           </button>
         ) : (
-          <button onClick={check} disabled={busy} className="px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] disabled:opacity-50 transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+          <button onClick={check} disabled={busy} className="px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) disabled:opacity-50 transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             {busy ? t('settings.update.checking') : t('settings.update.check')}
           </button>
         )}
@@ -222,7 +222,7 @@ export default function SettingPage() {
         {/* Back bar */}
         <div className="flex items-center gap-2 px-6 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <button onClick={() => setToolsPanel(null)}
-            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border hover:bg-(--bg-secondary) transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             <ChevronLeft size={14} />{t('settings.tools.back', '返回设置')}
           </button>
@@ -288,14 +288,14 @@ export default function SettingPage() {
                   : <ImageIcon size={20} className="text-gray-400" />}
               </div>
               <div className="flex gap-2">
-                <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
+                <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-(--content-bg) hover:bg-(--bg-secondary) cursor-pointer transition-colors"
                   style={{ borderColor: 'var(--border)' }}>
                   <ImageIcon size={12} />{t('settings.background.upload')}
                   <input type="file" accept="image/*" onChange={handleUpload} className="hidden" />
                 </label>
                 {backgroundImage && (
                   <button onClick={() => setBackgroundImage(null)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                     <Trash2 size={12} />{t('settings.background.clear')}
                   </button>
@@ -353,7 +353,7 @@ export default function SettingPage() {
                 <div className="flex items-center rounded-lg border overflow-hidden w-fit" style={{ borderColor: 'var(--border)' }}>
                   {(['off', 'low', 'medium', 'high'] as const).map((e) => (
                     <button key={e} onClick={() => setDefaultEffort(e)}
-                      className={`px-3 py-1 text-xs transition-colors ${defaultEffort === e ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
+                      className={`px-3 py-1 text-xs transition-colors ${defaultEffort === e ? 'bg-black text-white' : 'hover:bg-(--bg-secondary)'}`}
                       style={defaultEffort !== e ? { color: 'var(--text-muted)' } : {}}>
                       {e === 'off' ? t('effort.off') : e === 'low' ? t('effort.low') : e === 'medium' ? t('effort.medium') : t('effort.high')}
                     </button>
@@ -377,7 +377,7 @@ export default function SettingPage() {
                   <div className="flex items-center gap-2">
                     <input value={localTimeout} onChange={(e) => setLocalTimeout(e.target.value)}
                       type="number" min="5000" max="300000" step="5000"
-                      className="w-24 px-2 py-1 text-xs rounded-lg border outline-none bg-[var(--content-bg)] text-right"
+                      className="w-24 px-2 py-1 text-xs rounded-lg border outline-none bg-(--content-bg) text-right"
                       style={{ borderColor: 'var(--border)' }} />
                     <button onClick={handleSaveTimeout}
                       className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-black text-white hover:opacity-80 transition-opacity">
@@ -409,7 +409,7 @@ export default function SettingPage() {
                 const Icon = entry.icon
                 return (
                   <button key={entry.key} onClick={() => setToolsPanel(entry.key)}
-                    className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors text-left"
+                    className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-(--bg-secondary) transition-colors text-left"
                     style={{ borderColor: 'var(--border)' }}>
                     <Icon size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
                     <span className="flex-1 min-w-0">
@@ -464,7 +464,7 @@ export default function SettingPage() {
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
                 a.download = `aetherai-config-${new Date().toISOString().slice(0, 10)}.json`
                 a.click(); URL.revokeObjectURL(a.href)
-              }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
+              }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>
                 <Download size={12} />导出配置
               </button>
               <button onClick={() => {
@@ -482,7 +482,7 @@ export default function SettingPage() {
                   } catch { toast('无效的 JSON 文件', { type: 'error' }) }
                 }
                 input.click()
-              }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
+              }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>
                 <Upload size={12} />导入配置
               </button>
             </div>

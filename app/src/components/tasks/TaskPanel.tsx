@@ -248,9 +248,9 @@ export default function TaskPanel() {
           </span>
         )}
         <button onClick={() => setTasksOpen(false)}
-          className="ms-auto p-1.5 rounded-md hover:bg-[var(--border)] transition-colors"
+          className="ms-auto p-1.5 rounded-md hover:bg-(--border) transition-colors"
           title={tx('task.close', '关闭')} aria-label={tx('task.close', '关闭')}>
-          <X size={14} className="text-[var(--text-muted)]" />
+          <X size={14} className="text-(--text-muted)" />
         </button>
       </div>
 
@@ -264,7 +264,7 @@ export default function TaskPanel() {
           <div className="flex items-center gap-1.5 mt-1.5">
             <Cpu size={12} className="text-gray-400 shrink-0" />
             <select value={String(modelId ?? '')} onChange={(e) => setPickedModelId(Number(e.target.value) || null)}
-              className="flex-1 min-w-0 text-[11px] rounded-lg border px-2 py-1 outline-none bg-[var(--content-bg)]"
+              className="flex-1 min-w-0 text-[11px] rounded-lg border px-2 py-1 outline-none bg-(--content-bg)"
               style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               title={tx('task.model', '任务使用的模型')}>
               <option value="" disabled>{tx('task.select_model', '选择模型')}</option>
@@ -328,7 +328,7 @@ export default function TaskPanel() {
           const detail = task.status === 'error' && task.error ? task.error : task.lastProgress
           return (
             <div key={task.id} onClick={() => openTask(task)}
-              className="group rounded-xl border px-2.5 py-2 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]"
+              className="group rounded-xl border px-2.5 py-2 cursor-pointer transition-colors hover:bg-(--bg-secondary)"
               style={{ backgroundColor: 'var(--bg-secondary)', borderColor: running ? color : 'var(--border)' }}
               title={tx('task.open_hint', '点击打开任务会话，查看完整轨迹')}>
               <div className="flex items-center gap-1.5">
@@ -353,20 +353,20 @@ export default function TaskPanel() {
               </div>
               <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={(e) => { e.stopPropagation(); openTask(task) }}
-                  className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                  className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-(--border) transition-colors"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                   <ExternalLink size={9} /> {tx('task.open', '打开')}
                 </button>
                 {running ? (
                   <>
                     <button onClick={(e) => { e.stopPropagation(); pauseTask(task) }}
-                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-(--border) transition-colors"
                       style={{ borderColor: 'var(--border)', color: 'var(--warning)' }}
                       title={tx('task.pause_hint', '暂停（在当前工具步骤结束后生效）')}>
                       <Pause size={9} /> {tx('task.pause', '暂停')}
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); cancelTask(task) }}
-                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-(--border) transition-colors"
                       style={{ borderColor: 'var(--border)', color: 'var(--error)' }}>
                       <CircleSlash size={9} /> {tx('task.cancel', '取消')}
                     </button>
@@ -374,12 +374,12 @@ export default function TaskPanel() {
                 ) : task.status === 'paused' || task.status === 'plan' ? (
                   <>
                     <button onClick={(e) => { e.stopPropagation(); resumeTask(task) }}
-                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-(--border) transition-colors"
                       style={{ borderColor: 'var(--border)', color: 'var(--accent)' }}>
                       <Play size={9} /> {tx('task.resume', '恢复')}
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); removeTask(task.id) }}
-                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-(--border) transition-colors"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
                       title={tx('task.dismiss', '从列表移除（会话保留）')}>
                       <Trash2 size={9} /> {tx('task.dismiss_short', '移除')}
@@ -387,7 +387,7 @@ export default function TaskPanel() {
                   </>
                 ) : (
                   <button onClick={(e) => { e.stopPropagation(); removeTask(task.id) }}
-                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-[var(--border)] transition-colors"
+                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border hover:bg-(--border) transition-colors"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
                     title={tx('task.dismiss', '从列表移除（会话保留）')}>
                     <Trash2 size={9} /> {tx('task.dismiss_short', '移除')}

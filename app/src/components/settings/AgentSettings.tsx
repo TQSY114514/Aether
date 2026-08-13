@@ -139,11 +139,11 @@ export default function AgentSettings() {
               className="flex-1 px-3 py-2 text-xs rounded-lg border outline-none font-mono"
               style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }} />
             <button onClick={pickFolder} disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors disabled:opacity-50"
               style={{ borderColor: 'var(--border)' }}>
               <FolderOpen size={13} />{t('settings.agent.browse')}
             </button>
-            <button onClick={resetToDefault} className="px-3 py-2 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('settings.agent.reset')}</button>
+            <button onClick={resetToDefault} className="px-3 py-2 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>{t('settings.agent.reset')}</button>
           </div>
           <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.workspace_hint')}</p>
         </div>

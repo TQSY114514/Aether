@@ -181,7 +181,7 @@ export default function PermissionDialog() {
           {t('agent.permission.desc')}
         </p>
         <div className="flex justify-end gap-2 flex-wrap">
-          <button onClick={() => resolve(req.reqId, false)} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+          <button onClick={() => resolve(req.reqId, false)} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('agent.permission.deny')}</button>
           <button onClick={() => resolve(req.reqId, true, true)}
             className="px-3.5 py-1.5 text-xs rounded-lg border transition-colors hover:opacity-90"

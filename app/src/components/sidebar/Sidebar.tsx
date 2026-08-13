@@ -133,18 +133,18 @@ export default function Sidebar() {
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>AetherAI</span>
         </div>
-        <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
-          <ChevronLeft size={16} className="text-[var(--text-muted)]" />
+        <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-(--border) transition-colors">
+          <ChevronLeft size={16} className="text-(--text-muted)" />
         </button>
       </div>
       <div className="p-2 shrink-0">
-        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
-          <Plus size={16} className="text-[var(--text-secondary)]" />{t('chat.new')}
+        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-(--content-bg) hover:bg-(--bg-secondary) transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
+          <Plus size={16} className="text-(--text-secondary)" />{t('chat.new')}
         </button>
       </div>
       <div className="px-2 pb-2 shrink-0">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[var(--content-bg)] text-sm transition-colors" style={{ borderColor: 'var(--border)' }}>
-          <Search size={14} className="text-[var(--text-muted)] shrink-0" />
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-(--content-bg) text-sm transition-colors" style={{ borderColor: 'var(--border)' }}>
+          <Search size={14} className="text-(--text-muted) shrink-0" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('sidebar.search')} className="w-full bg-transparent outline-none text-sm" />
           {searchQuery && (
@@ -171,10 +171,10 @@ export default function Sidebar() {
                 onClick={() => { selectSession(session.id); setCurrentView('chat') }}
                 onDoubleClick={() => handleDoubleClick(session)}
                 onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
-                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
+                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'shadow-soft' : 'border border-transparent hover:bg-(--bg-secondary)'}`}
                 style={currentSessionId === session.id ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
-                  : <MessageSquare size={14} className="text-[var(--text-muted)] shrink-0" />}
+                  : <MessageSquare size={14} className="text-(--text-muted) shrink-0" />}
                 {streamingBySession[session.id] && (
                   <Loader2 size={11} className="shrink-0 animate-spin" style={{ color: 'var(--accent)' }} />
                 )}
@@ -182,7 +182,7 @@ export default function Sidebar() {
                   <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenamingId(null) }}
                     onBlur={handleRenameSubmit} autoFocus
-                    className="flex-1 text-[13px] px-1.5 py-0.5 rounded border outline-none bg-[var(--content-bg)]"
+                    className="flex-1 text-[13px] px-1.5 py-0.5 rounded border outline-none bg-(--content-bg)"
                     style={{ borderColor: 'var(--accent)' }} onClick={(e) => e.stopPropagation()} />
                 ) : (
                   <div className="flex-1 min-w-0">
@@ -207,7 +207,7 @@ export default function Sidebar() {
                   await window.electronAPI?.session?.pin?.(session.id, pinned)
                   loadSessions()
                 }}
-                  className={`opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all shrink-0 ${session.pinned ? 'opacity-100 text-amber-500' : ''}`}
+                  className={`opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-(--border) transition-all shrink-0 ${session.pinned ? 'opacity-100 text-amber-500' : ''}`}
                   title={session.pinned ? 'Unpin' : 'Pin'}>
                   <Pin size={11} />
                 </button>
@@ -216,7 +216,7 @@ export default function Sidebar() {
                   const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
                   if (ok) deleteSession(session.id)
                 }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all">
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-(--border) transition-all">
                   <Trash2 size={12} className="text-gray-400" />
                 </button>
               </div>
@@ -228,16 +228,16 @@ export default function Sidebar() {
             style={{ left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 200), backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
             onClick={(e) => e.stopPropagation()}>
             <button onClick={() => { setCtxMenu(null); handleDoubleClick(ctxMenu.session) }}
-              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-(--bg-secondary) transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
               Rename
             </button>
             <button onClick={() => { setCtxMenu(null); window.electronAPI?.session?.pin?.(ctxMenu.session.id, ctxMenu.session.pinned ? 0 : 1); loadSessions() }}
-              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-(--bg-secondary) transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
               <Pin size={11} /> {ctxMenu.session.pinned ? 'Unpin' : 'Pin'}
             </button>
             <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
             <button onClick={() => { setCtxMenu(null); exportSession(ctxMenu.session) }}
-              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-(--bg-secondary) transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
               <Download size={11} /> Export conversation
             </button>
             <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
@@ -272,9 +272,9 @@ export default function Sidebar() {
 
 function NavItem({ icon: Icon, label, active, onClick, badge }: { icon: any; label: string; active: boolean; onClick: () => void; badge?: number }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
+    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'shadow-soft' : 'border border-transparent hover:bg-(--bg-secondary)'}`}
       style={active ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
-      <Icon size={16} className={active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} />{label}
+      <Icon size={16} className={active ? 'text-(--text-primary)' : 'text-(--text-secondary)'} />{label}
       {badge ? (
         <span className="ms-auto flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full tabular-nums" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
           <Loader2 size={8} className="animate-spin" />{badge}
@@ -306,7 +306,7 @@ function AgentHistory() {
 
   return (
     <div className="mt-1" style={{ borderTop: '1px solid var(--border)' }}>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--bg-secondary)]" style={{ color: 'var(--text-secondary)' }}>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors hover:bg-(--bg-secondary)" style={{ color: 'var(--text-secondary)' }}>
         <History size={13} className="shrink-0" />
         <span className="flex-1 text-left">{t('sidebar.agent_history')}</span>
         <ChevronDown size={12} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} style={{ color: 'var(--text-muted)' }} />

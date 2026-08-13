@@ -65,7 +65,7 @@ export default function DefaultChatSettings() {
           <div className="flex gap-2">
             {PRIORITY_OPTIONS.map(opt => (
               <button key={opt.value} onClick={() => setModelRoutingPriority(opt.value as any)}
-                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors ${modelRoutingPriority === opt.value ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
+                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors ${modelRoutingPriority === opt.value ? 'bg-black text-white' : 'hover:bg-(--bg-secondary)'}`}
                 style={modelRoutingPriority !== opt.value ? { borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'var(--content-bg)' } : {}}>
                 {opt.icon} {t(`settings.routing_priority.${opt.value}`)}
               </button>

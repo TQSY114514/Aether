@@ -43,7 +43,7 @@ export default function ShortcutOverlay({ open, onClose }: { open: boolean; onCl
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Keyboard Shortcuts</h2>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-[var(--border)] transition-colors">
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-(--border) transition-colors">
             <kbd className="text-[10px] px-1.5 py-0.5 rounded border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>ESC</kbd>
           </button>
         </div>

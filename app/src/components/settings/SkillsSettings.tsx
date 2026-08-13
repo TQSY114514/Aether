@@ -88,7 +88,7 @@ export default function SkillsSettings() {
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.skills.title')}</h2>
         </div>
         <button onClick={rescan} disabled={busy}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors disabled:opacity-50"
           style={{ borderColor: 'var(--border)' }}>
           <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />{t('settings.skills.rescan', '重新扫描')}
         </button>
@@ -104,12 +104,12 @@ export default function SkillsSettings() {
       {/* Tab bar */}
       <div className="flex gap-1 mb-4 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
         <button onClick={() => setActiveTab('discover')}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'discover' ? 'bg-[var(--content-bg)] shadow-sm' : ''}`}
+          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'discover' ? 'bg-(--content-bg) shadow-sm' : ''}`}
           style={{ color: activeTab === 'discover' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
           <BookOpen size={12} />{t('settings.skills.tab_discover', '发现')}
         </button>
         <button onClick={() => setActiveTab('performance')}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'performance' ? 'bg-[var(--content-bg)] shadow-sm' : ''}`}
+          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'performance' ? 'bg-(--content-bg) shadow-sm' : ''}`}
           style={{ color: activeTab === 'performance' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
           <Trophy size={12} />{t('settings.skills.tab_performance', '成功率')}
         </button>
@@ -179,7 +179,7 @@ export default function SkillsSettings() {
                     </span>
                     <button onClick={() => autoDraft(c.name, `Auto-drafted from ${c.totalUses} successful uses`)}
                       disabled={busy}
-                      className="text-[10px] px-2 py-0.5 rounded border hover:bg-[var(--bg-primary)] transition-colors flex items-center gap-1"
+                      className="text-[10px] px-2 py-0.5 rounded border hover:bg-(--bg-primary) transition-colors flex items-center gap-1"
                       style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
                       <Wand2 size={9} /> {t('settings.skills.auto_draft', '生成技能')}
                     </button>
@@ -235,7 +235,7 @@ export default function SkillsSettings() {
                   </span>
                   <button onClick={() => autoDraft(c.name, `Auto-drafted from ${c.totalUses} successful uses`)}
                     disabled={busy}
-                    className="text-[10px] px-2 py-0.5 rounded border hover:bg-[var(--bg-primary)] transition-colors flex items-center gap-1"
+                    className="text-[10px] px-2 py-0.5 rounded border hover:bg-(--bg-primary) transition-colors flex items-center gap-1"
                     style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
                     <Wand2 size={9} /> {t('settings.skills.auto_draft', '生成技能')}
                   </button>

@@ -102,7 +102,7 @@ export default function McpSettings() {
           <Plug size={14} className="text-gray-400" />
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('mcp.title')}</h2>
         </div>
-        <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
+        <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>
           <Plus size={12} />{t('mcp.add')}
         </button>
       </div>
@@ -110,10 +110,10 @@ export default function McpSettings() {
 
       {showAdd && (
         <div className="mb-4 p-3 rounded-lg space-y-2" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('mcp.name_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
-          <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder={t('mcp.command_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
-          <input value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} placeholder={t('mcp.args_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
-          <input value={form.env} onChange={(e) => setForm({ ...form, env: e.target.value })} placeholder={t('mcp.env_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('mcp.name_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder={t('mcp.command_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} placeholder={t('mcp.args_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
+          <input value={form.env} onChange={(e) => setForm({ ...form, env: e.target.value })} placeholder={t('mcp.env_ph')} className="w-full px-2.5 py-1.5 text-xs rounded border outline-none font-mono bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
           <div className="flex gap-2">
             <button onClick={handleAdd} disabled={busy === 'new'} className="px-3 py-1.5 text-xs bg-black text-white rounded-lg hover:opacity-80 disabled:opacity-40">{t('mcp.add_btn')}</button>
             <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 text-xs rounded-lg border" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
@@ -135,10 +135,10 @@ export default function McpSettings() {
               <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: isConnected ? 'rgba(22,163,74,0.12)' : 'rgba(156,163,175,0.15)', color: isConnected ? 'var(--success)' : 'var(--text-muted)' }}>
                 {isConnected ? t('mcp.online') : t('mcp.offline')}
               </span>
-              <button onClick={() => handleConnect(s.id)} disabled={busy === s.id} className="p-1 rounded hover:bg-[var(--border)]" title={t('mcp.reconnect')}>
+              <button onClick={() => handleConnect(s.id)} disabled={busy === s.id} className="p-1 rounded hover:bg-(--border)" title={t('mcp.reconnect')}>
                 <RefreshCw size={12} className={busy === s.id ? 'animate-spin text-gray-400' : 'text-gray-400'} />
               </button>
-              <button onClick={() => handleDelete(s.id)} className="p-1 rounded hover:bg-[var(--border)]"><Trash2 size={12} className="text-gray-400" /></button>
+              <button onClick={() => handleDelete(s.id)} className="p-1 rounded hover:bg-(--border)"><Trash2 size={12} className="text-gray-400" /></button>
             </div>
           )
         })}
