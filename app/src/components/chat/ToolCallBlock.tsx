@@ -93,7 +93,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
   return (
     <div className="rounded-lg border mb-2 overflow-hidden" style={{ borderColor: dangerous ? 'var(--warning)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--border) transition-colors" title={tool.name}>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)] transition-colors" title={tool.name}>
         {open ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
         {dangerous ? <ShieldAlert size={12} style={{ color: 'var(--warning)' }} /> : <ShieldCheck size={12} className="text-gray-400" />}
         <span className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{label}</span>
@@ -132,7 +132,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                   <button
                     type="button"
                     onClick={() => setCollapsed(false)}
-                    className="inline-flex items-center gap-1 mt-1 text-[10px] hover:text-(--text-primary)"
+                    className="inline-flex items-center gap-1 mt-1 text-[10px] hover:text-[var(--text-primary)]"
                     style={{ color: 'var(--text-muted)' }}
                   >
                     <ChevronDown size={10} />{t('tool.result.expand')}
@@ -145,7 +145,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                     <button
                       type="button"
                       onClick={() => setCollapsed(true)}
-                      className="inline-flex items-center gap-1 mt-1 text-[10px] hover:text-(--text-primary)"
+                      className="inline-flex items-center gap-1 mt-1 text-[10px] hover:text-[var(--text-primary)]"
                       style={{ color: 'var(--text-muted)' }}
                     >
                       <ChevronRight size={10} />{t('tool.result.collapse')}
@@ -227,7 +227,7 @@ function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
       </pre>
       {isTruncated && (
         <button onClick={() => setShowFull(true)}
-          className="w-full text-[10px] py-1 hover:bg-(--border) transition-colors"
+          className="w-full text-[10px] py-1 hover:bg-[var(--border)] transition-colors"
           style={{ color: 'var(--text-muted)' }}>
           展开全部 {lines.length} 行
         </button>
@@ -244,7 +244,7 @@ function AfterSnapshotView({ snapshot }: { snapshot: { path: string; content: st
   return (
     <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
       <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-(--border) transition-colors"
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-[var(--border)] transition-colors"
         style={{ backgroundColor: 'var(--bg-secondary)' }}>
         <FileText size={11} style={{ color: 'var(--text-muted)' }} />
         <span className="text-[10px] font-medium" style={{ color: 'var(--text-secondary)' }}>

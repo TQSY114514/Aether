@@ -61,10 +61,10 @@ export default function PersonaPage() {
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('persona.subtitle')}</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleImport} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={handleImport} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
               <Upload size={14} />{t('persona.import')}
             </button>
-            <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
               <Plus size={14} />{t('persona.add')}
             </button>
           </div>
@@ -73,12 +73,12 @@ export default function PersonaPage() {
         {showAdd && (
           <div className="mb-6 p-4 rounded-xl space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('persona.name')}
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
             <textarea value={newPrompt} onChange={(e) => setNewPrompt(e.target.value)} placeholder={t('persona.prompt')}
-              rows={4} className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 resize-none font-mono bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
+              rows={4} className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 resize-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
             <div className="flex gap-2">
               <button onClick={handleAdd} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80">{t('models.save')}</button>
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
+              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
             </div>
           </div>
         )}
@@ -92,12 +92,12 @@ export default function PersonaPage() {
               {editingId === persona.id ? (
                 <div className="p-4 space-y-3">
                   <input value={editName} onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
+                    className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
                   <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)}
-                    rows={4} className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 resize-none font-mono bg-(--content-bg)" style={{ borderColor: 'var(--border)' }} />
+                    rows={4} className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 resize-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
                   <div className="flex gap-2">
                     <button onClick={() => handleSaveEdit(persona.id)} className="px-4 py-1.5 bg-black text-white text-xs rounded-lg hover:opacity-80">{t('models.save')}</button>
-                    <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-xs rounded-lg border hover:bg-(--bg-secondary) transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
+                    <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
                   </div>
                 </div>
               ) : (
@@ -106,13 +106,13 @@ export default function PersonaPage() {
                     <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{persona.name}</span>
                     <div className="flex gap-1">
                       <button onClick={() => { setEditingId(persona.id); setEditName(persona.name); setEditPrompt(persona.prompt) }}
-                        className="p-1.5 rounded hover:bg-(--border) transition-colors">
+                        className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
-                      <button onClick={() => handleExport(persona)} className="p-1.5 rounded hover:bg-(--border) transition-colors">
+                      <button onClick={() => handleExport(persona)} className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
                         <Download size={14} className="text-gray-400" />
                       </button>
-                      <button onClick={() => deletePersona(persona.id)} className="p-1.5 rounded hover:bg-(--border) transition-colors">
+                      <button onClick={() => deletePersona(persona.id)} className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
                         <Trash2 size={14} className="text-gray-400" />
                       </button>
                     </div>

@@ -54,22 +54,22 @@ export default function ContextBar() {
     .sort((a, b) => b.tokens - a.tokens)
 
   return (
-    <div className="border-b border-(--border) bg-(--bg-secondary)/50">
+    <div className="border-b border-[var(--border)] bg-[var(--bg-secondary)]/50">
       {/* Main bar — click to expand/collapse breakdown */}
       <button onClick={() => setExpanded(e => !e)}
-        className="flex items-center gap-3 px-4 py-1.5 w-full text-left cursor-pointer hover:bg-(--bg-secondary) transition-colors">
-        <div className="flex-1 flex rounded-full overflow-hidden h-1.5 gap-0.5 bg-(--border) max-w-[200px]">
+        className="flex items-center gap-3 px-4 py-1.5 w-full text-left cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors">
+        <div className="flex-1 flex rounded-full overflow-hidden h-1.5 gap-0.5 bg-[var(--border)] max-w-[200px]">
           {compact.map(s => (
             <div key={s.role} title={`${s.role}: ${formatTokens(s.tokens)} (${s.count} msgs)`}
               className="h-full rounded-full transition-all duration-500"
               style={{ width: `${(s.tokens / used) * 100}%`, backgroundColor: ROLE_COLORS[s.role] || 'var(--text-muted)', minWidth: s.tokens > 0 ? 3 : 0 }} />
           ))}
         </div>
-        <span className="text-[11px] text-(--text-muted) whitespace-nowrap tabular-nums">
+        <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap tabular-nums">
           {formatTokens(used)} / {formatTokens(contextWindow)} ({pct}%)
         </span>
         {remaining < contextWindow * 0.3 && remaining > 0 && (
-          <span className="text-[11px] text-(--text-muted) whitespace-nowrap">
+          <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
             {formatTokens(remaining)} left
           </span>
         )}
@@ -78,7 +78,7 @@ export default function ContextBar() {
             {contextBudgetText}
           </span>
         )}
-        <span className="text-(--text-muted)">{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
+        <span className="text-[var(--text-muted)]">{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
       </button>
 
       {/* Expandable breakdown */}
@@ -89,19 +89,19 @@ export default function ContextBar() {
             return (
               <div key={s.role} className="flex items-center gap-1.5 py-0.5">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ROLE_COLORS[s.role] || 'var(--text-muted)' }} />
-                <span className="text-(--text-secondary) capitalize w-16">{s.role}</span>
-                <span className="text-(--text-muted) tabular-nums">{formatTokens(s.tokens)} ({rolePct}%)</span>
-                <span className="text-(--text-muted)">×{s.count}</span>
+                <span className="text-[var(--text-secondary)] capitalize w-16">{s.role}</span>
+                <span className="text-[var(--text-muted)] tabular-nums">{formatTokens(s.tokens)} ({rolePct}%)</span>
+                <span className="text-[var(--text-muted)]">×{s.count}</span>
               </div>
             )
           })}
-          <div className="col-span-2 border-t border-(--border) mt-1 pt-1 flex justify-between">
-            <span className="text-(--text-secondary)">Compaction threshold</span>
-            <span className="text-(--text-muted) tabular-nums">{formatTokens(Math.floor(contextWindow * 0.8))} (80%)</span>
+          <div className="col-span-2 border-t border-[var(--border)] mt-1 pt-1 flex justify-between">
+            <span className="text-[var(--text-secondary)]">Compaction threshold</span>
+            <span className="text-[var(--text-muted)] tabular-nums">{formatTokens(Math.floor(contextWindow * 0.8))} (80%)</span>
           </div>
           <div className="col-span-2 flex justify-between">
-            <span className="text-(--text-secondary)">Warning threshold</span>
-            <span className="text-(--text-muted) tabular-nums">{formatTokens(Math.floor(contextWindow * 0.7))} (70%)</span>
+            <span className="text-[var(--text-secondary)]">Warning threshold</span>
+            <span className="text-[var(--text-muted)] tabular-nums">{formatTokens(Math.floor(contextWindow * 0.7))} (70%)</span>
           </div>
         </div>
       )}

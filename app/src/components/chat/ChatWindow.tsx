@@ -68,7 +68,7 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
               downloadText(`aether-arena-${Date.now()}.md`, md, 'text/markdown')
             } catch {}
           }}
-            className="text-[10px] px-2 py-1 rounded-lg border hover:bg-(--bg-secondary) transition-colors"
+            className="text-[10px] px-2 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             📄 导出报告
           </button>
@@ -106,7 +106,7 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
                   { model_id: r.model_id, model_name: r.model_name },
                   results.filter(x => x.model_id !== r.model_id).map(x => ({ model_id: x.model_id, model_name: x.model_name }))
                 )}
-                  className="text-xs px-3 py-1 rounded-lg border bg-(--content-bg) hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
+                  className="text-xs px-3 py-1 rounded-lg border bg-[var(--content-bg)] hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
                   ⭐ {t('chat.arena.vote')}
                 </button>
               </div>
@@ -179,9 +179,9 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
           </div>
           <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Assistant</span>
           <span className="flex items-center gap-0.5 ml-1">
-            <span className="w-1 h-1 rounded-full bg-(--accent) typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-(--accent) typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-(--accent) typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
           </span>
         </div>
         <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
@@ -384,14 +384,14 @@ export default function ChatWindow() {
                 {matchCount > 0 ? `${matchIdx + 1}/${matchCount}` : `0/${matchCount}`}
               </span>
               <button onClick={() => jumpTo(-1)} disabled={matchCount === 0} title={t('chat.search_prev')}
-                aria-label={t('chat.search_prev')} className="p-0.5 rounded hover:bg-(--border) disabled:opacity-30">
+                aria-label={t('chat.search_prev')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
                 <ChevronUp size={13} className="text-gray-400" />
               </button>
               <button onClick={() => jumpTo(1)} disabled={matchCount === 0} title={t('chat.search_next')}
-                aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-(--border) disabled:opacity-30">
+                aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
                 <ChevronDown size={13} className="text-gray-400" />
               </button>
-              <button onClick={() => setSearchQuery('')} className="p-0.5 rounded hover:bg-(--border)">
+              <button onClick={() => setSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
                 <X size={12} className="text-gray-400" />
               </button>
             </>
@@ -403,7 +403,7 @@ export default function ChatWindow() {
       {(currentSessionId && streamingBySession[currentSessionId]) && streamingStatus && (
         <div className="px-4 py-1 shrink-0 animate-blur-fade" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="max-w-3xl mx-auto flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-(--accent) animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
             <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{streamingStatus}</span>
           </div>
         </div>
@@ -495,7 +495,7 @@ export default function ChatWindow() {
           )}
           {arenaPending > 0 && arenaResultsSessionId === currentSessionId && (
             <div className="text-[11px] px-1 py-1 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-(--accent) animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
               <span>{t('chat.arena.running', String(arenaPending))}</span>
             </div>
           )}

@@ -414,7 +414,7 @@ export default function ChatInput() {
   }, [input, isStreaming, showSlash, pending.length, snippets.length])
 
   return (
-    <div className="border-t border-(--border) bg-(--content-bg) px-4 py-2.5"
+    <div className="border-t border-[var(--border)] bg-[var(--content-bg)] px-4 py-2.5"
       ref={dropZoneRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -434,7 +434,7 @@ export default function ChatInput() {
             {queuedMessages.map((q) => (
               <span key={q.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
                 <span className="truncate max-w-[200px]">{q.content}</span>
-                <button onClick={() => removeQueued(q.id)} className="hover:bg-(--border) rounded p-0.5"><X size={10} /></button>
+                <button onClick={() => removeQueued(q.id)} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
               </span>
             ))}
           </div>
@@ -447,7 +447,7 @@ export default function ChatInput() {
                   ? <img src={a.dataUrl} alt="" className="w-6 h-6 rounded object-cover border" style={{ borderColor: 'var(--border)' }} />
                   : <FileText size={12} className="text-gray-400 shrink-0" />}
                 <span className="truncate max-w-[160px]">{a.name}</span>
-                <button onClick={() => setPending(prev => prev.filter((_, j) => j !== i))} className="hover:bg-(--border) rounded p-0.5"><X size={10} /></button>
+                <button onClick={() => setPending(prev => prev.filter((_, j) => j !== i))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
               </span>
             ))}
           </div>
@@ -459,12 +459,12 @@ export default function ChatInput() {
               <span key={s.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
                 <FileText size={11} className="text-gray-400" />
                 {t('paste.snippet_n', i + 1)} · {s.preview}
-                <button onClick={() => setSnippets(prev => prev.filter((_, j) => j !== i))} className="hover:bg-(--border) rounded p-0.5"><X size={10} /></button>
+                <button onClick={() => setSnippets(prev => prev.filter((_, j) => j !== i))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
               </span>
             ))}
           </div>
         )}
-        <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-(--accent) ring-2 ring-(--accent)/20')}
+        <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
             <div className="slash-menu" role="listbox" aria-label="Slash commands">
@@ -472,13 +472,13 @@ export default function ChatInput() {
                 const active = idx === slashIndex
                 return (
                   <div key={cmd.id} role="option" aria-selected={active}
-                    className={cn('slash-item', active && 'bg-(--bg-secondary)')}
+                    className={cn('slash-item', active && 'bg-[var(--bg-secondary)]')}
                     onMouseEnter={() => setSlashIndex(idx)} onClick={() => handleSlashSelect(cmd)}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm font-medium">{cmd.name}</div>
                       <kbd className="text-[10px] rounded border px-1.5 py-0.5 font-mono" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>/{cmd.id}</kbd>
                     </div>
-                    <div className="text-[11px] text-(--text-muted) truncate">{cmd.description}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] truncate">{cmd.description}</div>
                   </div>
                 )
               })}
@@ -486,7 +486,7 @@ export default function ChatInput() {
           )}
           <InputReference value={input} cursorPos={refCursor} visible onSelect={handleReferenceSelect} />
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-(--border) transition-colors disabled:opacity-30">
+          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
             <Paperclip size={16} className="text-gray-400" />
           </button>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)} onKeyDown={handleKeyDown} onPaste={handlePaste}
@@ -499,7 +499,7 @@ export default function ChatInput() {
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2.5 rounded-xl bg-(--accent) text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
+              className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
               <Send size={14} />
             </button>
           )}
@@ -535,7 +535,7 @@ export default function ChatInput() {
                 {t('chat.tokens_estimate', String(totalInputTokens))}
               </span>
             )}
-            <span className="text-[10px] text-(--text-muted) ml-auto">{t('empty.hint.slash')}</span>
+            <span className="text-[10px] text-[var(--text-muted)] ml-auto">{t('empty.hint.slash')}</span>
           </div>
         )}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
@@ -621,7 +621,7 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   return (
     <div className="px-0.5 mt-1.5 animate-blur-fade">
       <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        <span className="w-1.5 h-1.5 rounded-full bg-(--accent) animate-pulse" />
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
         <span>{status}</span>
       </div>
     </div>
@@ -700,7 +700,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
             const model = allModels.find(m => m.id === mid)
             if (model) onSelect(mid, model.provider_id)
           }}
-          className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-(--content-bg)"
+          className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-[var(--content-bg)]"
           style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
           <option value="" disabled>{t('chat.select_model')}</option>
           {groups.map(g => (
