@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="./assets/readme-hero.svg" width="780" alt="AetherAI" />
+<img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
-# AetherAI
+# Aether
 
 ### 本機優先 · 多模型 · Agent 原生
 
@@ -22,7 +22,7 @@
 
 ---
 
-> **狀態:Beta。** AetherAI 是個人/業餘專案。它能用,但會有粗糙之處。歡迎提 bug——見 [CONTRIBUTING.md](./CONTRIBUTING.md) 和 [SECURITY.md](./SECURITY.md)。
+> **狀態:Beta。** Aether 是個人/業餘專案。它能用,但會有粗糙之處。歡迎提 bug——見 [CONTRIBUTING.md](./CONTRIBUTING.md) 和 [SECURITY.md](./SECURITY.md)。
 
 **平台:僅支援 Windows。** 官方建置、測試與支援僅面向 Windows。macOS / Linux 可自行從原始碼建置,但不提供官方支援;專案未做程式碼簽署——首次啟動出現 SmartScreen「未知發行者」提示屬正常現象(見[下載](#下載))。
 
@@ -34,9 +34,9 @@
 
 ---
 
-## AetherAI 有什麼不同
+## Aether 有什麼不同
 
-AetherAI 把通常分散在多個工具裡的能力集中到一個本機桌面應用:
+Aether 把通常分散在多個工具裡的能力集中到一個本機桌面應用:
 
 | 能力 | 說明 | 成熟度 |
 |---|---|---|
@@ -63,8 +63,8 @@ AetherAI 把通常分散在多個工具裡的能力集中到一個本機桌面�
 
 | 建置 | 說明 |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | NSIS 安裝套件。按使用者安裝(無需管理員),應用內自動更新。**推薦。** |
-| **`AetherAI-x.y.z.exe`** | 可攜單檔。免安裝、無自動更新;直接執行。 |
+| **`aetherai-setup-x.y.z.exe`** | NSIS 安裝套件。按使用者安裝(無需管理員),應用內自動更新。**推薦。** |
+| **`aetherai-x.y.z.exe`** | 可攜單檔。免安裝、無自動更新;直接執行。 |
 
 > 安裝套件首次啟動會出現 SmartScreen「未知發行者」警告——未簽署個人應用的正常現象。所有資料均留在本機。
 >
@@ -205,13 +205,13 @@ node cli.js tui --smoke      # headless 狀態機冒煙
 
 ### 隱私
 
-> **所有資料留在本機。** AetherAI 不收集、不上傳任何關於你的資訊。API 金鑰、對話、人設都儲存在本機 SQLite 資料庫。唯一的出站網路請求只會發往你設定的 LLM 提供商。
+> **所有資料留在本機。** Aether 不收集、不上傳任何關於你的資訊。API 金鑰、對話、人設都儲存在本機 SQLite 資料庫。唯一的出站網路請求只會發往你設定的 LLM 提供商。
 
 ---
 
 ## VS Code 擴充與無頭 CLI
 
-除了桌面應用,AetherAI 還以 CLI 和編輯器擴充形式提供同一 Agent:
+除了桌面應用,Aether 還以 CLI 和編輯器擴充形式提供同一 Agent:
 
 - **無頭 CLI**(`app/cli.js`)— 非互動式執行 Agent,向腳本/CI 輸出 NDJSON 事件:
   ```bash
@@ -224,7 +224,7 @@ node cli.js tui --smoke      # headless 狀態機冒煙
 
 ## 終端 TUI、RPC 與 SDK
 
-除桌面應用和普通 CLI 外,AetherAI 還提供互動式終端 UI、機器可呼叫的 JSONL RPC 模式與 Electron-free SDK。三者與桌面端共用同一 Agent 核心、記憶、人設、MCP 工具與權限規則。
+除桌面應用和普通 CLI 外,Aether 還提供互動式終端 UI、機器可呼叫的 JSONL RPC 模式與 Electron-free SDK。三者與桌面端共用同一 Agent 核心、記憶、人設、MCP 工具與權限規則。
 
 ### 快速開始 — 雙形態
 
@@ -358,7 +358,7 @@ app/
 
 ## 致謝
 
-AetherAI 站在這些專案的肩膀上——它們的思想塑造了架構與體驗:
+Aether 站在這些專案的肩膀上——它們的思想塑造了架構與體驗:
 
 ### Agent 框架
 
@@ -382,7 +382,7 @@ AetherAI 站在這些專案的肩膀上——它們的思想塑造了架構與�
 | 專案 | 啟發 |
 |---|---|
 | [Dify](https://github.com/langgenius/dify) | 多格式提供商歸一化 |
-| [MCP](https://modelcontextprotocol.io) | AetherAI Agent 所說的協定規範 |
+| [MCP](https://modelcontextprotocol.io) | Aether Agent 所說的協定規範 |
 | [cc-switch](https://github.com/farion1231/cc-switch) | 用量統計面板佈局 |
 | [new-api](https://github.com/QuantumNous/new-api) | 思考力度中轉、用量/成本追蹤 |
 | [Continue](https://github.com/continuedev/continue) | 設定即事實來源、提供商抽象 |
@@ -408,7 +408,7 @@ AetherAI 站在這些專案的肩膀上——它們的思想塑造了架構與�
 
 ## 許可
 
-[MIT](./LICENSE) © 2025 AetherAI
+[MIT](./LICENSE) © 2025 Aether
 
 ---
 
@@ -416,6 +416,6 @@ AetherAI 站在這些專案的肩膀上——它們的思想塑造了架構與�
 
 用 ❤️ 建置,Electron + React + TypeScript
 
-[⬆ 返回頂部](#aetherai)
+[⬆ 返回頂部](#aether)
 
 </div>

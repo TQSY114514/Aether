@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="./assets/readme-hero.svg" width="780" alt="AetherAI" />
+<img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
-# AetherAI
+# Aether
 
 ### 로컬 우선 · 멀티 모델 · 에이전트 네이티브
 
@@ -22,7 +22,7 @@
 
 ---
 
-> **상태: Beta.** AetherAI는 솔로/취미 프로젝트입니다. 동작은 하지만 거친
+> **상태: Beta.** Aether는 솔로/취미 프로젝트입니다. 동작은 하지만 거친
 > 부분이 있을 수 있습니다. 버그 리포트는 환영합니다 — [CONTRIBUTING.md](./CONTRIBUTING.md) 및
 > [SECURITY.md](./SECURITY.md)를 참조하세요.
 
@@ -36,9 +36,9 @@
 
 ---
 
-## AetherAI의 차별점
+## Aether의 차별점
 
-AetherAI는 일반적으로 여러 도구에 분산되어 있는 기능들을 하나의 로컬 데스크톱 앱에 결합합니다:
+Aether는 일반적으로 여러 도구에 분산되어 있는 기능들을 하나의 로컬 데스크톱 앱에 결합합니다:
 
 | 기능 | 설명 | 성숙도 |
 |---|---|:---:|
@@ -65,8 +65,8 @@ AetherAI는 일반적으로 여러 도구에 분산되어 있는 기능들을 �
 
 | 빌드 | 설명 |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | NSIS 설치 프로그램. 사용자별(관리자 불필요), 앱 내 자동 업데이트. **권장.** |
-| **`AetherAI-x.y.z.exe`** | 포터블 단일 exe. 설치 불필요, 자동 업데이트 없음; 그냥 실행하세요. |
+| **`aetherai-setup-x.y.z.exe`** | NSIS 설치 프로그램. 사용자별(관리자 불필요), 앱 내 자동 업데이트. **권장.** |
+| **`aetherai-x.y.z.exe`** | 포터블 단일 exe. 설치 불필요, 자동 업데이트 없음; 그냥 실행하세요. |
 
 > 설치 프로그램은 첫 실행 시 SmartScreen "알 수 없는 게시자" 경고를 표시합니다 — 서명되지 않은 솔로 앱의 예상된 동작입니다. 모든 데이터는 로컬에 유지됩니다.
 >
@@ -78,7 +78,7 @@ AetherAI는 일반적으로 여러 도구에 분산되어 있는 기능들을 �
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
-cd AetherAI
+cd Aether
 start.bat        # Windows: installs deps, builds frontend, launches Electron
 ```
 
@@ -206,11 +206,11 @@ node cli.js tui --smoke      # headless 상태 머신 스모크
 
 ### 프라이버시
 
-> **모든 데이터는 로컬에 유지됩니다.** AetherAI는 귀하에 대한 어떤 것도 수집하거나 업로드하지 않습니다. API 키, 대화, 페르소나는 로컬 SQLite 데이터베이스에 저장됩니다. 유일한 외부 네트워크 요청은 귀하가 구성한 LLM 프로바이더로 전송됩니다.
+> **모든 데이터는 로컬에 유지됩니다.** Aether는 귀하에 대한 어떤 것도 수집하거나 업로드하지 않습니다. API 키, 대화, 페르소나는 로컬 SQLite 데이터베이스에 저장됩니다. 유일한 외부 네트워크 요청은 귀하가 구성한 LLM 프로바이더로 전송됩니다.
 
 ---## VS Code 확장 프로그램 & Headless CLI
 
-데스크톱 앱 외에도 AetherAI는 동일한 에이전트를 CLI 및 에디터 확장 프로그램으로 제공합니다:
+데스크톱 앱 외에도 Aether는 동일한 에이전트를 CLI 및 에디터 확장 프로그램으로 제공합니다:
 
 - **Headless CLI** (`app/cli.js`) — 에이전트를 비대화형으로 실행하고 NDJSON 이벤트를 스크립트/CI에 제공:
   ```bash
@@ -223,7 +223,7 @@ node cli.js tui --smoke      # headless 상태 머신 스모크
 
 ## 터미널 TUI, RPC & SDK
 
-데스크톱 앱과 일반 CLI 외에도 AetherAI는 인터랙티브 터미널 UI, 머신 호출 가능한 JSONL RPC 모드, Electron-free SDK를 제공합니다. 세 가지 모두 데스크톱과 동일한 에이전트 코어, 메모리, 페르소나, MCP 도구, 권한 규칙을 공유합니다.
+데스크톱 앱과 일반 CLI 외에도 Aether는 인터랙티브 터미널 UI, 머신 호출 가능한 JSONL RPC 모드, Electron-free SDK를 제공합니다. 세 가지 모두 데스크톱과 동일한 에이전트 코어, 메모리, 페르소나, MCP 도구, 권한 규칙을 공유합니다.
 
 ### 빠른 시작 — 이중 형태
 
@@ -355,7 +355,7 @@ app/
 
 ## 감사의 말
 
-AetherAI는 다음 프로젝트들의 어깨 위에 서 있습니다 — 그들의 아이디어가 아키텍처와 UX를 형성했습니다:
+Aether는 다음 프로젝트들의 어깨 위에 서 있습니다 — 그들의 아이디어가 아키텍처와 UX를 형성했습니다:
 
 ### 에이전트 프레임워크
 
@@ -379,7 +379,7 @@ AetherAI는 다음 프로젝트들의 어깨 위에 서 있습니다 — 그들�
 | 프로젝트 | 영감 |
 |---|---|
 | [Dify](https://github.com/langgenius/dify) | 다중 형식 프로바이더 정규화 |
-| [MCP](https://modelcontextprotocol.io) | AetherAI의 에이전트가 사용하는 스펙 |
+| [MCP](https://modelcontextprotocol.io) | Aether의 에이전트가 사용하는 스펙 |
 | [cc-switch](https://github.com/farion1231/cc-switch) | 사용량 통계 대시보드 레이아웃 |
 | [new-api](https://github.com/QuantumNous/new-api) | reasoning-effort 릴레이, 사용량/비용 추적 |
 | [Continue](https://github.com/continuedev/continue) | 구성-소스-최종본(config-as-source-of-truth), 프로바이더 추상화 |
@@ -405,7 +405,7 @@ AetherAI는 다음 프로젝트들의 어깨 위에 서 있습니다 — 그들�
 
 ## 라이선스
 
-[MIT](./LICENSE) © 2025 AetherAI
+[MIT](./LICENSE) © 2025 Aether
 
 ---
 
@@ -413,6 +413,6 @@ AetherAI는 다음 프로젝트들의 어깨 위에 서 있습니다 — 그들�
 
 ❤️를 담아 Electron + React + TypeScript로 제작
 
-[⬆ 맨 위로](#aetherai)
+[⬆ 맨 위로](#aether)
 
 </div>

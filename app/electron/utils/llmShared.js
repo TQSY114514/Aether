@@ -10,7 +10,7 @@ function baseUrl(provider) {
 }
 
 /**
- * Normalize a provider usage object into AetherAI's canonical shape.
+ * Normalize a provider usage object into Aether's canonical shape.
  * Handles both OpenAI-style (prompt_tokens, cached_tokens in details)
  * and Anthropic-style (input_tokens, cache_read_input_tokens) field names.
  * Returns null if the input is empty.

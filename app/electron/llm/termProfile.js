@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // termProfile.js — Windows Terminal profile 引导（todo 18，Electron-free）
-// buildTermProfile 生成 AetherAI TUI profile（深/浅两套配色）；
+// buildTermProfile 生成 Aether TUI profile（深/浅两套配色）；
 // updateSettingsJson 合并进 WT settings.json（profiles.list 按名去重 + schemes）。
 // CLI `aether --setup-term [--term-settings <path>]` 调用。
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8,9 +8,9 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const PROFILE_NAME = 'AetherAI TUI'
-const SCHEME_DARK = 'AetherAI Dark'
-const SCHEME_LIGHT = 'AetherAI Light'
+const PROFILE_NAME = 'Aether TUI'
+const SCHEME_DARK = 'Aether Dark'
+const SCHEME_LIGHT = 'Aether Light'
 
 const DARK_SCHEME = {
   name: SCHEME_DARK,
@@ -37,7 +37,7 @@ const LIGHT_SCHEME = {
 }
 
 /**
- * 生成 AetherAI WT profile 片段。
+ * 生成 Aether WT profile 片段。
  * @param {{ ps1Path?: string }} [opts]
  * @returns {{ profiles: object[], schemes: object[] }}
  */

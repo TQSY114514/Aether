@@ -1,7 +1,7 @@
 {
   "name": "aetherai-vscode",
-  "displayName": "AetherAI",
-  "description": "Chat with the AetherAI agent inside VS Code. Streams status, tool calls and code from the headless Aether CLI.",
+  "displayName": "Aether",
+  "description": "Chat with the Aether agent inside VS Code. Streams status, tool calls and code from the headless Aether CLI.",
   "version": "0.1.0",
   "publisher": "tqsy",
   "license": "MIT",
@@ -33,7 +33,7 @@
       }
     ],
     "configuration": {
-      "title": "AetherAI",
+      "title": "Aether",
       "properties": {
         "aether.cliPath": {
           "type": "string",

@@ -1,8 +1,8 @@
 ﻿<div align="center">
 
-<img src="./assets/readme-hero.svg" width="780" alt="AetherAI" />
+<img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
-# AetherAI
+# Aether
 
 ### Local-first · Multi-model · Agent-native
 
@@ -22,7 +22,7 @@ Chat with any model, run a safe coding agent, and compare models side-by-side �
 
 ---
 
-> **Status: Beta.** AetherAI is a solo/hobby project. It works, but expect rough
+> **Status: Beta.** Aether is a solo/hobby project. It works, but expect rough
 > edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
 > [SECURITY.md](./SECURITY.md).
 
@@ -36,9 +36,9 @@ Chat with any model, run a safe coding agent, and compare models side-by-side �
 
 ---
 
-## What makes AetherAI different
+## What makes Aether different
 
-AetherAI combines several capabilities that are typically spread across multiple tools into one local desktop app:
+Aether combines several capabilities that are typically spread across multiple tools into one local desktop app:
 
 | Capability | Description | Maturity |
 |---|---|:---:|
@@ -65,8 +65,8 @@ Download the latest [Release](https://github.com/TQSY114514/Aether/releases):
 
 | Build | Description |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | NSIS installer. Per-user (no admin), auto-updates in-app. **Recommended.** |
-| **`AetherAI-x.y.z.exe`** | Portable single-exe. No install, no auto-update; just run it. |
+| **`aetherai-setup-x.y.z.exe`** | NSIS installer. Per-user (no admin), auto-updates in-app. **Recommended.** |
+| **`aetherai-x.y.z.exe`** | Portable single-exe. No install, no auto-update; just run it. |
 
 > The installer shows a SmartScreen "unknown publisher" warning on first launch — expected for an unsigned solo app. All data stays local.
 >
@@ -78,7 +78,7 @@ If you prefer to run from source, or want to modify the code, use `start.bat` (r
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
-cd AetherAI
+cd Aether
 start.bat        # Windows: installs deps, builds frontend, launches Electron
 ```
 
@@ -207,13 +207,13 @@ node cli.js tui --smoke      # headless state-machine smoke
 
 ### Privacy
 
-> **All data stays local.** AetherAI collects nothing and uploads nothing about you. Your API keys, conversations, and personas live in a local SQLite database. The only outbound network requests go to the LLM providers you configure.
+> **All data stays local.** Aether collects nothing and uploads nothing about you. Your API keys, conversations, and personas live in a local SQLite database. The only outbound network requests go to the LLM providers you configure.
 
 ---
 
 ## VS Code Extension & Headless CLI
 
-Beyond the desktop app, AetherAI ships the same agent as a CLI and an editor extension:
+Beyond the desktop app, Aether ships the same agent as a CLI and an editor extension:
 
 - **Headless CLI** (`app/cli.js`) — run the agent non-interactively, feed NDJSON events to scripts/CI:
   ```bash
@@ -226,7 +226,7 @@ Beyond the desktop app, AetherAI ships the same agent as a CLI and an editor ext
 
 ## Terminal TUI, RPC & SDK
 
-Beyond the desktop app and the plain CLI, AetherAI ships an interactive terminal UI, a machine-callable JSONL RPC mode, and an Electron-free SDK. All three share the same agent core, memory, personas, MCP tools, and permission rules as the desktop.
+Beyond the desktop app and the plain CLI, Aether ships an interactive terminal UI, a machine-callable JSONL RPC mode, and an Electron-free SDK. All three share the same agent core, memory, personas, MCP tools, and permission rules as the desktop.
 
 ### Quick start — dual form
 
@@ -367,7 +367,7 @@ app/
 
 ## Acknowledgements
 
-AetherAI stands on the shoulders of these projects — their ideas shaped the architecture and UX:
+Aether stands on the shoulders of these projects — their ideas shaped the architecture and UX:
 
 ### Agent frameworks
 
@@ -391,7 +391,7 @@ AetherAI stands on the shoulders of these projects — their ideas shaped the ar
 | Project | Inspiration |
 |---|---|
 | [Dify](https://github.com/langgenius/dify) | Multi-format provider normalization |
-| [MCP](https://modelcontextprotocol.io) | The spec AetherAI's agent speaks |
+| [MCP](https://modelcontextprotocol.io) | The spec Aether's agent speaks |
 | [cc-switch](https://github.com/farion1231/cc-switch) | Usage-stats dashboard layout |
 | [new-api](https://github.com/QuantumNous/new-api) | Reasoning-effort relay, usage/cost tracking |
 | [Continue](https://github.com/continuedev/continue) | Config-as-source-of-truth, provider abstraction |
@@ -417,7 +417,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 
 ## License
 
-[MIT](./LICENSE) © 2025 AetherAI
+[MIT](./LICENSE) © 2025 Aether
 
 ---
 
@@ -425,7 +425,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 
 Built with ❤️ using Electron + React + TypeScript
 
-[⬆ Back to top](#aetherai)
+[⬆ Back to top](#aether)
 
 </div>
 

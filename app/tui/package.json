@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "AetherAI interactive terminal UI (Ink v5, Electron-free). Local type:module — app root stays CJS.",
+  "description": "Aether interactive terminal UI (Ink v5, Electron-free). Local type:module — app root stays CJS.",
   "dependencies": {
     "ink": "^5.2.0",
     "react": "^18.3.1"

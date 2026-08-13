@@ -4,7 +4,7 @@
 // Pure module: no electron, no http — the HTTP layer (localGateway.js) wires
 // it to the wire. It reuses the exact model/provider resolution the
 // chat:complete handler uses, but answers with the OpenAI API shape so
-// OpenAI-compatible clients (scripts, SDKs, tools) can talk to AetherAI.
+// OpenAI-compatible clients (scripts, SDKs, tools) can talk to Aether.
 //
 // The SSE stream yields framing-ready lines (data: <json> / data: [DONE])
 // WITHOUT trailing newlines; the HTTP layer is responsible for writing them.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ───────────────────────────────────────────────────────────────────────────
-// AetherAI — headless CLI.
+// Aether — headless CLI.
 //
 // Task 3.1: thin CLI layer over the Electron-free agent core. Lets the agent
 // run in CI/CD, SSH sessions, and scripts without an Electron window.
@@ -31,7 +31,7 @@ try { taskEngine = require('./electron/llm/backgroundTasks') } catch { taskEngin
 // createSession/addMessage/createAgentTask/... 十个方法）。
 const { taskDbAdapter } = require('./electron/llm/taskDbAdapter')
 
-const HELP = `AetherAI headless agent
+const HELP = `Aether headless agent
 
 Usage:
   aether <prompt> [options]      Single-shot prompt (positional or -p).
@@ -71,7 +71,7 @@ Options:
                           running inline: returns { taskId, sessionId } and exits.
                           The task shows up in the app's task panel and survives
                           restarts (agent_task persistence).
-  --setup-term            Write the AetherAI profile into Windows Terminal settings
+  --setup-term            Write the Aether profile into Windows Terminal settings
                           (--term-settings <path> overrides the default location).
   --memory-trace          Report how many memory entries were injected this run.
   --skills                List habit-derived skill proposals as JSON.

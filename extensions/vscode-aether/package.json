@@ -1,7 +1,7 @@
 {
   "name": "aether-ai",
-  "displayName": "AetherAI",
-  "description": "Connect VS Code to the AetherAI desktop app: ask about code, inline chat, fix errors, and generate code.",
+  "displayName": "Aether",
+  "description": "Connect VS Code to the Aether desktop app: ask about code, inline chat, fix errors, and generate code.",
   "version": "0.1.0",
   "publisher": "aether",
   "license": "MIT",
@@ -26,28 +26,28 @@
     "commands": [
       {
         "command": "aether.chat",
-        "title": "AetherAI: Open Chat",
+        "title": "Aether: Open Chat",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "aether.askSelection",
-        "title": "AetherAI: Ask About Selection"
+        "title": "Aether: Ask About Selection"
       },
       {
         "command": "aether.explainSelection",
-        "title": "AetherAI: Explain Selection"
+        "title": "Aether: Explain Selection"
       },
       {
         "command": "aether.fixProblems",
-        "title": "AetherAI: Fix File Errors"
+        "title": "Aether: Fix File Errors"
       },
       {
         "command": "aether.generate",
-        "title": "AetherAI: Generate Code"
+        "title": "Aether: Generate Code"
       },
       {
         "command": "aether.connect",
-        "title": "AetherAI: Connect"
+        "title": "Aether: Connect"
       }
     ],
     "menus": {
@@ -75,17 +75,17 @@
       ]
     },
     "configuration": {
-      "title": "AetherAI",
+      "title": "Aether",
       "properties": {
         "aether.host": {
           "type": "string",
           "default": "http://127.0.0.1:35791",
-          "description": "AetherAI local gateway URL (see Settings → Local Gateway in the desktop app)."
+          "description": "Aether local gateway URL (see Settings → Local Gateway in the desktop app)."
         },
         "aether.token": {
           "type": "string",
           "default": "",
-          "description": "AetherAI gateway access token. Copy it from Settings → Local Gateway in the desktop app."
+          "description": "Aether gateway access token. Copy it from Settings → Local Gateway in the desktop app."
         }
       }
     }

@@ -15,7 +15,7 @@ Windows Registry Editor Version 5.00
 
 ; ── aetherai:// 协议关联 ───────────────────────────────────────────────────
 [HKEY_CLASSES_ROOT\aetherai]
-@="URL:AetherAI Protocol"
+@="URL:Aether Protocol"
 "URL Protocol"=""
 
 [HKEY_CLASSES_ROOT\aetherai\shell\open\command]

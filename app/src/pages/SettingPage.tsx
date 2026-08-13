@@ -29,7 +29,7 @@ const TOOLS_ENTRIES: { key: Exclude<ToolsPanel, null>; icon: any; titleKey: stri
 ]
 
 // "Local Gateway" card — shows the connection info the VS Code extension /
-// browser tools use to reach AetherAI (127.0.0.1:<port> + token). Mirror of
+// browser tools use to reach Aether (127.0.0.1:<port> + token). Mirror of
 // the gateway:info IPC; the token is generated once and persisted in settings.
 function GatewayCard() {
   const { toast } = useUI()
@@ -66,7 +66,7 @@ function GatewayCard() {
         </button>
       </div>
       <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
-        在 VS Code 里安装 AetherAI 扩展后，填入下面的地址与 Token 即可连接当前桌面 App，复用已配置的模型/记忆/技能。
+        在 VS Code 里安装 Aether 扩展后，填入下面的地址与 Token 即可连接当前桌面 App，复用已配置的模型/记忆/技能。
       </p>
       {info ? (
         <div className="space-y-2">

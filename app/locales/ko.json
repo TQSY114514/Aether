@@ -1,5 +1,5 @@
 {
-  "app.name": "AetherAI",
+  "app.name": "Aether",
   "chat.new": "새 채팅",
   "chat.placeholder": "메시지를 입력하세요... (Shift+Enter 줄바꿈)",
   "chat.arena.placeholder": "질문을 입력하면 여러 모델이 동시에 답변합니다...",

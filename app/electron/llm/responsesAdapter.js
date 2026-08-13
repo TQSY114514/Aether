@@ -33,7 +33,7 @@ function headers(provider) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${pickKey(provider)}` }
 }
 
-// Convert AetherAI's OpenAI-style message array into Responses API `input` items.
+// Convert Aether's OpenAI-style message array into Responses API `input` items.
 //   - system / user / assistant (no tool_calls): { role, content }
 //   - assistant with tool_calls: { role, content, output: [function_call, ...] }
 //   - tool-role results: { type: 'function_call_output', call_id, output }

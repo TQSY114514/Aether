@@ -1,4 +1,4 @@
-# AetherAI pitfalls & lessons
+# Aether pitfalls & lessons
 
 Curated from the developer knowledge base (W28-W32 era, 2026-07..08), verified
 current as of 2026-08 against this repo. Each entry: Pitfall / Why / Fix /

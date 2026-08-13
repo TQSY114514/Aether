@@ -1,4 +1,4 @@
-# AetherAI Roadmap（2026-08 版）
+# Aether Roadmap（2026-08 版）
 
 > 依据 2026-08-12 两份外部 AI 评审（ChatGPT / Grok）提炼，并与代码库现状逐一核对后形成。
 > **用户已拍板约束**：跨平台不做（只搞 Windows）、代码签名不买。

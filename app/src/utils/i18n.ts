@@ -140,7 +140,7 @@ const translations: Record<string, Record<string, string>> = {
     "agent.trace.steps": "steps",
     "agent.trace.title": "Agent reasoning",
     "agent.yolo": "Yolo — full permissions, no sandbox (dangerous!)",
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.aborted": "Aborted",
     "chat.cancel": "Cancel",
     "chat.continue": "Continue",
@@ -358,7 +358,7 @@ const translations: Record<string, Record<string, string>> = {
     "scores.copied": "Report copied to clipboard",
     "scores.export_hint": "Share or archive the leaderboard",
     "settings.about": "About",
-    "settings.about_desc": "AetherAI is a local-first multi-model desktop AI chat client. All data stays on your device.",
+    "settings.about_desc": "Aether is a local-first multi-model desktop AI chat client. All data stays on your device.",
     "settings.advanced": "Advanced",
     "settings.advanced.save": "Save",
     "settings.advanced.saved": "Saved",
@@ -630,11 +630,11 @@ const translations: Record<string, Record<string, string>> = {
     "error.boundary.copied": "Copied",
     "error.boundary.details": "Details",
     "error.boundary.stack": "Stack trace",
-    "onboarding.title": "Welcome to AetherAI",
+    "onboarding.title": "Welcome to Aether",
     "onboarding.subtitle": "Add your first provider in under a minute — or skip and explore first.",
     "onboarding.skip": "Skip for now",
     "onboarding.next": "Next",
-    "onboarding.complete": "Start using AetherAI",
+    "onboarding.complete": "Start using Aether",
     "onboarding.template": "Pick a provider template",
     "onboarding.name": "Provider name",
     "onboarding.url": "API URL",
@@ -1235,7 +1235,7 @@ const translations: Record<string, Record<string, string>> = {
     "agent.trace.steps": "步",
     "agent.trace.title": "Agent 推理过程",
     "agent.yolo": "Yolo — 完全权限，无沙箱（危险！）",
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.aborted": "已中止",
     "chat.arena.min_models": "至少选 2 个模型",
     "chat.arena.placeholder": "输入一个问题，多个模型同时作答…",
@@ -1465,7 +1465,7 @@ const translations: Record<string, Record<string, string>> = {
     "scores.copied": "排行榜报告已复制到剪贴板",
     "scores.export_hint": "分享或归档排行榜",
     "settings.about": "关于",
-    "settings.about_desc": "AetherAI 是本地优先的多模型桌面 AI 聊天客户端，所有数据保留在你的设备上。",
+    "settings.about_desc": "Aether 是本地优先的多模型桌面 AI 聊天客户端，所有数据保留在你的设备上。",
     "settings.advanced": "高级",
     "settings.advanced.save": "保存",
     "settings.advanced.saved": "已保存",
@@ -1733,11 +1733,11 @@ const translations: Record<string, Record<string, string>> = {
     "error.boundary.copied": "已复制",
     "error.boundary.details": "详细信息",
     "error.boundary.stack": "堆栈信息",
-    "onboarding.title": "欢迎使用 AetherAI",
+    "onboarding.title": "欢迎使用 Aether",
     "onboarding.subtitle": "一分钟内添加你的第一个供应商——也可以先跳过，四处看看。",
     "onboarding.skip": "暂时跳过",
     "onboarding.next": "下一步",
-    "onboarding.complete": "开始使用 AetherAI",
+    "onboarding.complete": "开始使用 Aether",
     "onboarding.template": "选择供应商模板",
     "onboarding.name": "供应商名称",
     "onboarding.url": "API 地址",
@@ -1748,7 +1748,7 @@ const translations: Record<string, Record<string, string>> = {
     "onboarding.error": "保存时出错，请检查 API 地址和密钥。"
   },
   "es": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "Nuevo chat",
     "chat.placeholder": "Escribe un mensaje... (Shift+Enter para salto de línea)",
     "chat.arena.placeholder": "Escribe una pregunta, varios modelos responden a la vez...",
@@ -1891,7 +1891,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "Habilidades"
   },
   "ja": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "新しいチャット",
     "chat.placeholder": "メッセージを入力...（Shift+Enterで改行）",
     "chat.arena.placeholder": "質問を入力すると、複数のモデルが同時に回答します...",
@@ -2034,7 +2034,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "スキル"
   },
   "zh-WEN": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "新对话",
     "chat.placeholder": "请留言……（Shift+Enter 换行）",
     "chat.arena.placeholder": "请出一问，诸模型同答之……",
@@ -2176,7 +2176,7 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.error": "Rollback failed"
   },
   "fr": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "Nouvelle conversation",
     "chat.placeholder": "Saisissez un message... (Maj+Entrée pour un saut de ligne)",
     "chat.arena.placeholder": "Posez une question, plusieurs modèles répondent à la fois...",
@@ -2319,7 +2319,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "Compétences"
   },
   "de": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "Neuer Chat",
     "chat.placeholder": "Nachricht eingeben... (Shift+Enter für Zeilenumbruch)",
     "chat.arena.placeholder": "Eine Frage eingeben, mehrere Modelle antworten gleichzeitig...",
@@ -2462,7 +2462,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "Fähigkeiten"
   },
   "pt": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "Nova conversa",
     "chat.placeholder": "Escreva uma mensagem... (Shift+Enter para nova linha)",
     "chat.arena.placeholder": "Escreva uma pergunta, vários modelos respondem ao mesmo tempo...",
@@ -2605,7 +2605,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "Habilidades"
   },
   "ru": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "Новый чат",
     "chat.placeholder": "Введите сообщение... (Shift+Enter для новой строки)",
     "chat.arena.placeholder": "Введите вопрос — несколько моделей ответят одновременно...",
@@ -2748,7 +2748,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "Навыки"
   },
   "zh-TW": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "新對話",
     "chat.placeholder": "輸入訊息...（Shift+Enter 換行）",
     "chat.arena.placeholder": "輸入問題，多個模型同時回答...",
@@ -2891,7 +2891,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "技能"
   },
   "ar": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "محادثة جديدة",
     "chat.placeholder": "اكتب رسالة... (Shift+Enter لسطر جديد)",
     "chat.arena.placeholder": "أدخل سؤالاً، وستجيب نماذج متعددة دفعة واحدة...",
@@ -3034,7 +3034,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "المهارات"
   },
   "uk": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "Новий чат",
     "chat.placeholder": "Введіть повідомлення... (Shift+Enter — новий рядок)",
     "chat.arena.placeholder": "Задайте запитання — кілька моделей дадуть відповідь одночасно...",
@@ -3177,7 +3177,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "Навички"
   },
   "ko": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "새 채팅",
     "chat.placeholder": "메시지를 입력하세요... (Shift+Enter 줄바꿈)",
     "chat.arena.placeholder": "질문을 입력하면 여러 모델이 동시에 답변합니다...",
@@ -3320,7 +3320,7 @@ const translations: Record<string, Record<string, string>> = {
     "sidebar.nav.skills": "스킬"
   },
   "hi": {
-    "app.name": "AetherAI",
+    "app.name": "Aether",
     "chat.new": "नई चैट",
     "chat.placeholder": "संदेश लिखें... (नई लाइन के लिए Shift+Enter)",
     "chat.arena.placeholder": "एक प्रश्न दर्ज करें, कई मॉडल एक साथ उत्तर देंगे...",

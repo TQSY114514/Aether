@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// AetherAI centralized feature-flag registry (Phase 0 infrastructure).
+// Aether centralized feature-flag registry (Phase 0 infrastructure).
 //
 // One source of truth for every capability gate in the app, so large features
 // (cloud execution, worktree isolation, LSP full mode, plugin SDK, ...) can

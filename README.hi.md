@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="./assets/readme-hero.svg" width="780" alt="AetherAI" />
+<img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
-# AetherAI
+# Aether
 
 ### Local-first · Multi-model · Agent-native
 
@@ -22,7 +22,7 @@
 
 ---
 
-> **स्थिति: Beta.** AetherAI एक व्यक्तिगत/शौकिया परियोजना है। यह काम करता है, लेकिन खुरदरे किनारों की उम्मीद करें।
+> **स्थिति: Beta.** Aether एक व्यक्तिगत/शौकिया परियोजना है। यह काम करता है, लेकिन खुरदरे किनारों की उम्मीद करें।
 > बग रिपोर्ट का स्वागत है — [CONTRIBUTING.md](./CONTRIBUTING.md) और
 > [SECURITY.md](./SECURITY.md) देखें।
 
@@ -36,9 +36,9 @@
 
 ---
 
-## AetherAI किस प्रकार भिन्न है
+## Aether किस प्रकार भिन्न है
 
-AetherAI कई क्षमताओं को एक ही स्थानीय डेस्कटॉप ऐप में जोड़ता है जो आमतौर पर कई टूल में फैली होती हैं:
+Aether कई क्षमताओं को एक ही स्थानीय डेस्कटॉप ऐप में जोड़ता है जो आमतौर पर कई टूल में फैली होती हैं:
 
 | क्षमता | विवरण | परिपक्वता |
 |---|---|:---:|
@@ -65,8 +65,8 @@ AetherAI कई क्षमताओं को एक ही स्थानी
 
 | Build | विवरण |
 |---|---|
-| **`AetherAI-Setup-x.y.z.exe`** | NSIS इंस्टॉलर। प्रति-उपयोगकर्ता (कोई एडमिन नहीं), इन-ऐप ऑटो-अपडेट। **अनुशंसित।** |
-| **`AetherAI-x.y.z.exe`** | पोर्टेबल सिंगल-exe। कोई इंस्टॉल नहीं, कोई ऑटो-अपडेट नहीं; बस इसे चलाएँ। |
+| **`aetherai-setup-x.y.z.exe`** | NSIS इंस्टॉलर। प्रति-उपयोगकर्ता (कोई एडमिन नहीं), इन-ऐप ऑटो-अपडेट। **अनुशंसित।** |
+| **`aetherai-x.y.z.exe`** | पोर्टेबल सिंगल-exe। कोई इंस्टॉल नहीं, कोई ऑटो-अपडेट नहीं; बस इसे चलाएँ। |
 
 > इंस्टॉलर पहली लॉन्च पर SmartScreen "unknown publisher" चेतावनी दिखाता है — एक अहस्ताक्षरित व्यक्तिगत ऐप के लिए अपेक्षित। सभी डेटा स्थानीय रहता है।
 >
@@ -78,7 +78,7 @@ AetherAI कई क्षमताओं को एक ही स्थानी
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
-cd AetherAI
+cd Aether
 start.bat        # Windows: installs deps, builds frontend, launches Electron
 ```
 
@@ -207,13 +207,13 @@ node cli.js tui --smoke      # headless स्टेट-मशीन स्म�
 
 ### Privacy
 
-> **सभी डेटा स्थानीय रहता है।** AetherAI आपके बारे में कुछ भी एकत्र नहीं करता और कुछ भी अपलोड नहीं करता। आपकी API कुंजियाँ, वार्तालाप और personas एक स्थानीय SQLite डेटाबेस में रहते हैं। एकमात्र आउटबाउंड नेटवर्क अनुरोध उन LLM प्रदाताओं को जाते हैं जिन्हें आप कॉन्फ़िगर करते हैं।
+> **सभी डेटा स्थानीय रहता है।** Aether आपके बारे में कुछ भी एकत्र नहीं करता और कुछ भी अपलोड नहीं करता। आपकी API कुंजियाँ, वार्तालाप और personas एक स्थानीय SQLite डेटाबेस में रहते हैं। एकमात्र आउटबाउंड नेटवर्क अनुरोध उन LLM प्रदाताओं को जाते हैं जिन्हें आप कॉन्फ़िगर करते हैं।
 
 ---
 
 ## VS Code एक्सटेंशन और Headless CLI
 
-डेस्कटॉप ऐप के अलावा, AetherAI समान एजेंट को CLI और एक एडिटर एक्सटेंशन के रूप में भेजता है:
+डेस्कटॉप ऐप के अलावा, Aether समान एजेंट को CLI और एक एडिटर एक्सटेंशन के रूप में भेजता है:
 
 - **Headless CLI** (`app/cli.js`) — एजेंट को गैर-इंटरैक्टिव रूप से चलाएँ, NDJSON इवेंट को स्क्रिप्ट/CI में फीड करें:
   ```bash
@@ -226,7 +226,7 @@ node cli.js tui --smoke      # headless स्टेट-मशीन स्म�
 
 ## Terminal TUI, RPC और SDK
 
-डेस्कटॉप ऐप और सादे CLI के अलावा, AetherAI एक इंटरैक्टिव टर्मिनल UI, एक मशीन-कॉल करने योग्य JSONL RPC मोड और एक Electron-free SDK भेजता है। तीनों डेस्कटॉप के समान एजेंट कोर, मेमोरी, personas, MCP टूल और अनुमति नियम साझा करते हैं।
+डेस्कटॉप ऐप और सादे CLI के अलावा, Aether एक इंटरैक्टिव टर्मिनल UI, एक मशीन-कॉल करने योग्य JSONL RPC मोड और एक Electron-free SDK भेजता है। तीनों डेस्कटॉप के समान एजेंट कोर, मेमोरी, personas, MCP टूल और अनुमति नियम साझा करते हैं।
 
 ### त्वरित आरंभ — दोहरा रूप
 
@@ -360,7 +360,7 @@ app/
 
 ## आभार
 
-AetherAI इन परियोजनाओं के कंधों पर खड़ा है — इनके विचारों ने वास्तुकला और UX को आकार दिया:
+Aether इन परियोजनाओं के कंधों पर खड़ा है — इनके विचारों ने वास्तुकला और UX को आकार दिया:
 
 ### एजेंट फ्रेमवर्क
 
@@ -384,7 +384,7 @@ AetherAI इन परियोजनाओं के कंधों पर ख
 | Project | Inspiration |
 |---|---|
 | [Dify](https://github.com/langgenius/dify) | Multi-format provider normalization |
-| [MCP](https://modelcontextprotocol.io) | The spec AetherAI's agent speaks |
+| [MCP](https://modelcontextprotocol.io) | The spec Aether's agent speaks |
 | [cc-switch](https://github.com/farion1231/cc-switch) | Usage-stats dashboard layout |
 | [new-api](https://github.com/QuantumNous/new-api) | Reasoning-effort relay, usage/cost tracking |
 | [Continue](https://github.com/continuedev/continue) | Config-as-source-of-truth, provider abstraction |
@@ -410,7 +410,7 @@ AetherAI इन परियोजनाओं के कंधों पर ख
 
 ## लाइसेंस
 
-[MIT](./LICENSE) © 2025 AetherAI
+[MIT](./LICENSE) © 2025 Aether
 
 ---
 
@@ -418,6 +418,6 @@ AetherAI इन परियोजनाओं के कंधों पर ख
 
 Built with ❤️ using Electron + React + TypeScript
 
-[⬆ शीर्ष पर वापस](#aetherai)
+[⬆ शीर्ष पर वापस](#aether)
 
 </div>

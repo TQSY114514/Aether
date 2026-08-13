@@ -61,7 +61,7 @@ class McpClient extends EventEmitter {
       this.request('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'AetherAI', version: '0.1' },
+        clientInfo: { name: 'Aether', version: '0.1' },
       })
         .then(async (init) => {
           this.notify('notifications/initialized', {})
