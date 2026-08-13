@@ -82,6 +82,7 @@ interface Window {
       delete: (id: number) => Promise<void>
       testConnection: (id: number) => Promise<TestConnectionResult>
       fetchModels: (id: number) => Promise<string[]>
+      detectOllama: () => Promise<{ ok: boolean; providerId?: number; models?: string[]; recommended?: string | null; error?: string }>
     }
     model: {
       list: (providerId: number) => Promise<Model[]>
