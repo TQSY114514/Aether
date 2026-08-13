@@ -287,6 +287,8 @@ export interface AppState {
   arenaPending: number
   arenaModelIds: number[]
   setArenaModelIds: (ids: number[]) => void
+  arenaTemperatures: number[] | null
+  setArenaTemperatures: (temps: number[] | null) => void
   arenaError: string | null
   arenaVoted: boolean
   arenaVoteWinnerId: number | null

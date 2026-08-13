@@ -69,6 +69,51 @@ export function scoresToMarkdown(scores: ArenaScoreRow[]): string {
 
 // JSON export is a plain JSON.stringify of the scores array — no helper needed.
 
+// ── Arena 2.0 (review P0-3): single-round comparison report ────────────────
+// Turn one arena round's results (with optional temperature variants) into a
+// shareable Markdown report: per-model variant rows with latency + cost, and a
+// summary table sorted by latency. Pure function, no IPC.
+// ── Arena 2.0 (review P0-3): single-round comparison report ────────────────
+// Turn one arena round's results (with optional temperature variants) into a
+// shareable Markdown report: per-model variant rows with latency + cost, and a
+// summary table sorted by latency. Pure function, no IPC.
+export type ArenaRoundRow = {
+  model_name: string
+  provider_name: string
+  variant?: string | null
+  latency_ms?: number
+  content: string
+  usage?: { total_tokens: number; cost: number }
+}
+
+export function arenaRoundToMarkdown(prompt: string, results: ArenaRoundRow[]): string {
+  const lines: string[] = []
+  lines.push('# Aether Arena — 对比报告')
+  lines.push('')
+  lines.push(`**Prompt**: ${mdField(prompt)}`)
+  lines.push(`**时间**: ${new Date().toLocaleString()}`)
+  lines.push(`**模型×变体数**: ${results.length}`)
+  lines.push('')
+  lines.push('## 摘要')
+  lines.push('')
+  lines.push('| 模型 | 变体 | 延迟 | Tokens | 成本 |')
+  lines.push('|---|---|---|---|---|')
+  const sorted = [...results].sort((a, b) => (a.latency_ms ?? 0) - (b.latency_ms ?? 0))
+  for (const r of sorted) {
+    lines.push(`| ${mdField(r.model_name)} | ${mdField(r.variant || '—')} | ${r.latency_ms != null ? `${r.latency_ms}ms` : '—'} | ${r.usage?.total_tokens ?? '—'} | ${r.usage?.cost != null && r.usage.cost > 0 ? `$${r.usage.cost.toFixed(4)}` : '—'} |`)
+  }
+  lines.push('')
+  lines.push('## 详情')
+  lines.push('')
+  for (const r of results) {
+    lines.push(`### ${mdField(r.model_name)}${r.variant ? ` @ ${mdField(r.variant)}` : ''}`)
+    lines.push('')
+    lines.push(mdField(r.content.slice(0, 2000)))
+    lines.push('')
+  }
+  return lines.join('\n')
+}
+
 // Trigger a browser download of `content` as a file with the given name/MIME.
 // Pure DOM helper — no Electron IPC required (renderer-side only).
 export function downloadText(filename: string, content: string, mime = 'text/plain'): void {

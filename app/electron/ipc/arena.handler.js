@@ -4,21 +4,36 @@ const log = require('../logger')
 const abortControllers = new Map()
 
 function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
-  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, personaId }) => {
+  ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, personaId, temperatures }) => {
     const allModels = db.getAllModels()
     const selected = allModels.filter(m => modelIds.includes(m.id))
     if (!selected.length) return { results: [] }
 
+    // Arena 2.0 (review P0-3): same-model multi-temperature comparison.
+    // temperatures = [0.2, 0.8] → each selected model runs once per temperature,
+    // results carry a `variant` label ("temp 0.2") so the UI can show them side by side.
+    const temps = Array.isArray(temperatures) && temperatures.length > 0
+      ? temperatures.map(t => Number(t)).filter(Number.isFinite)
+      : null
+    const runs = []
+    for (const m of selected) {
+      if (temps) {
+        for (const t of temps) runs.push({ m, temperature: t, variant: `temp ${t}` })
+      } else {
+        runs.push({ m, temperature: null, variant: null })
+      }
+    }
+
     // Persist the user's arena prompt as a message so it survives a reload
     db.addMessage({ session_id: sessionId, role: 'user', content })
 
-    // Run all selected models CONCURRENTLY (Promise.all) so a slow model doesn't
-    // block the others — each gets its own 60s timeout + abort controller.
+    // Run all model×temperature variants CONCURRENTLY (Promise.all) so a slow
+    // model doesn't block the others — each gets its own 60s timeout + abort.
     const controller = new AbortController()
     abortControllers.set(sessionId, controller)
     const wc = getWebContents()
 
-    const runOne = async (m) => {
+    const runOne = async ({ m, temperature, variant }) => {
       const start = Date.now()
       const perModel = new AbortController()
       const timeout = setTimeout(() => perModel.abort(), 60000)
@@ -35,6 +50,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
           model: m,
           messages,
           signal: perModel.signal,
+          options: temperature != null ? { temperature } : {},
         })
         const u = normalizeUsage(usage)
         const cost = u ? computeCost(m, u) : 0
@@ -47,6 +63,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
         })
         const result = {
           model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
+          variant, temperature,
           content: answer, latency_ms: Date.now() - start,
           usage: u ? { prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens, total_tokens: u.total_tokens, cost } : undefined,
         }
@@ -58,6 +75,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
           model_name: m.model_name, latency_ms: Date.now() - start, status, source: 'arena' })
         const result = {
           model_id: m.id, model_name: m.model_name, provider_name: m.provider_name,
+          variant, temperature,
           content: `[Error: ${err.name === 'AbortError' ? 'aborted/timeout' : err.message}]`, latency_ms: Date.now() - start,
         }
         try { wc?.send('arena:model-done', { sessionId, result }) } catch {}
@@ -68,7 +86,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       }
     }
 
-    const results = await Promise.all(selected.map(runOne))
+    const results = await Promise.all(runs.map(runOne))
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     for (const r of results) {
       db.addMessage({
