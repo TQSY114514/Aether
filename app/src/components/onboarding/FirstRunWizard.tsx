@@ -86,6 +86,15 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
 
         {step === 'template' && (
           <div>
+            {/* Desktop polish #9: import existing configuration — if the user
+                already saved API keys (auth.json via /apikey or the app), offer
+                to skip straight past onboarding. */}
+            <div className="flex items-center gap-2 p-2.5 rounded-lg mb-3" style={{ backgroundColor: 'rgba(34,197,94,0.06)', border: '1px solid var(--border)' }}>
+              <Check size={13} className="text-green-500 shrink-0" />
+              <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                已有配置? 在终端输入 <code className="font-mono text-[10px]" style={{ color: 'var(--accent)' }}>aether tui</code> 后用 <code className="font-mono text-[10px]" style={{ color: 'var(--accent)' }}>/apikey &lt;provider&gt; &lt;key&gt;</code> 保存密钥, 或在「模型」页手动添加 provider — 完成后向导会自动消失。
+              </p>
+            </div>
             <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{t('onboarding.template')}</div>
             <div className="grid grid-cols-2 gap-2">
               {PROVIDER_PRESETS.map((p) => (

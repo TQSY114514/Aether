@@ -477,11 +477,17 @@ const TOOLS = [
       // Lazy require to avoid a load-time cycle (skills.js requires nothing here,
       // but registry is required early; this keeps the dependency one-directional).
       const skills = require('../llm/skills')
-      const body = skills.getSkillBody(name)
-      if (body == null) throw new Error(`unknown skill: ${name} (call only skills listed in <available_skills>)`)
+      const skill = skills.getSkill(name)
+      if (!skill) throw new Error(`unknown skill: ${name} (call only skills listed in <available_skills>)`)
+      // Desktop polish #8: surface the skill's declared permissions (frontmatter
+      // `permissions:` block, e.g. filesystem: project / network: github.com) so
+      // the model knows what the skill may touch before executing its steps.
+      const perms = skill.metadata && skill.metadata.permissions
+        ? `\n\n[skill permissions]\n${String(skill.metadata.permissions)}`
+        : ''
       // Track usage for the skills management UI.
       try { skills.recordSkillUse(name) } catch {}
-      return body
+      return skill.body + perms
     },
   },
   {

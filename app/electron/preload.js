@@ -162,6 +162,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   kg: {
     graph: (opts) => ipcRenderer.invoke('kg:graph', opts),
+    deleteNode: (nodeId) => ipcRenderer.invoke('kg:delete-node', nodeId),
+    renameNode: (nodeId, newEntity) => ipcRenderer.invoke('kg:rename-node', nodeId, newEntity),
   },
   background: {
     set: (dataUrl) => ipcRenderer.invoke('background:set', dataUrl),

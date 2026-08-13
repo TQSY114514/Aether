@@ -213,6 +213,14 @@ describe('prefetch', () => {
     })
     expect(autoMemory.prefetch(db, 'the')).toBe('')
   })
+
+  it('injected keyword memories carry a [kw:...] explainability tag', () => {
+    const db = mkDb({
+      memories: [{ id: 1, content: 'user prefers python for data analysis', created_at: new Date().toISOString(), access_count: 0, type: 'fact' }],
+    })
+    const out = autoMemory.prefetch(db, 'python data analysis')
+    expect(out).toMatch(/\[kw:[^\]]+\]/)
+  })
 })
 
 // ─── prune ─────────────────────────────────────────────────────────────────
