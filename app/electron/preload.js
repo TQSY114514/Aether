@@ -178,6 +178,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAutoLaunch: () => ipcRenderer.invoke('system:get-auto-launch'),
     setAutoLaunch: (enabled) => ipcRenderer.invoke('system:set-auto-launch', enabled),
     notify: (data) => ipcRenderer.invoke('system:notify', data),
+    clipboardWrite: (text) => ipcRenderer.invoke('system:clipboard-write', text),
+    clipboardRead: () => ipcRenderer.invoke('system:clipboard-read'),
+    registerFileAssociations: () => ipcRenderer.invoke('system:register-file-associations'),
   },
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts),

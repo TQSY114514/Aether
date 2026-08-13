@@ -19,6 +19,23 @@
 
 const { spawn } = require('child_process')
 
+// Windows 进程树终止（对标 Codex 沙箱的 Job Object 隔离）:
+// child.kill() 只杀主进程, cmd.exe /c 派生的孙进程会变孤儿继续跑。
+// 用 taskkill /T /F 递归杀整棵树——零依赖的 Job Object 等效方案。
+function killTree(pid) {
+  if (!pid) return
+  try {
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    } else {
+      // POSIX: 杀进程组
+      try { process.kill(-pid, 'SIGKILL') } catch {}
+    }
+    // 主进程本身也补一发
+    try { process.kill(pid, 'SIGKILL') } catch {}
+  } catch {}
+}
+
 /**
  * @param {string} command - Program to execute (e.g. 'git', 'cmd.exe', 'ls')
  * @param {string[]} args - Array of arguments (NOT a single shell string)
@@ -57,19 +74,19 @@ function runCommand(command, args, opts = {}) {
     child.stdout.on('data', (d) => {
       stdoutParts.push(d)
       if (Buffer.concat(stdoutParts).byteLength > maxBuffer) {
-        child.kill()
+        killTree(child.pid)
       }
     })
     child.stderr.on('data', (d) => {
       stderrParts.push(d)
       if (Buffer.concat(stderrParts).byteLength > maxBuffer) {
-        child.kill()
+        killTree(child.pid)
       }
     })
 
     const timer = setTimeout(() => {
       timedOut = true
-      child.kill()
+      killTree(child.pid)
     }, timeout)
 
     child.on('close', (code) => {
@@ -118,4 +135,4 @@ function runCommandSync(command, args, opts = {}) {
   }
 }
 
-module.exports = { runCommand, runCommandSync }
+module.exports = { runCommand, runCommandSync, killTree }

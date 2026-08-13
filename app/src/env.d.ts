@@ -215,6 +215,9 @@ interface Window {
       getAutoLaunch: () => Promise<{ enabled: boolean }>
       setAutoLaunch: (enabled: boolean) => Promise<{ ok: boolean; enabled?: boolean; error?: string }>
       notify: (data: { title?: string; body?: string }) => Promise<{ ok: boolean; error?: string }>
+      clipboardWrite: (text: string) => Promise<{ ok: boolean; error?: string }>
+      clipboardRead: () => Promise<{ ok: boolean; text?: string; error?: string }>
+      registerFileAssociations: () => Promise<{ ok: boolean; error?: string }>
     }
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
