@@ -1,22 +1,8 @@
 @import "tailwindcss";
 @source "../src";
 
-/* Tailwind 4: 自定义语义色(替代 tailwind.config.js theme.extend.colors)。
-   v3 的 extend.colors 允许任意类名(bg-secondary/text-muted 等), v4 的
-   --color-* 命名空间只能生成 --color-X -> bg-X, 无法表达 bg-secondary 与
-   text-secondary 同源不同类名 —— 用 @utility 显式定义这三个类。 */
-@utility bg-secondary {
-  background-color: var(--bg-secondary);
-}
-@utility text-secondary {
-  color: var(--text-secondary);
-}
-@utility text-muted {
-  color: var(--text-muted);
-}
-@utility border {
-  border-color: var(--border);
-}
+/* 自定义语义色见文件中部 ":root 之后" 的兼容层(bg-secondary/text-muted 等),
+   Tailwind 4 顶部 @utility 在该版本下不生效, 故不用。 */
 
 :root {
   --bg-primary: #FFFFFF;
@@ -186,6 +172,23 @@ select option {
 .effort-slider::-moz-range-thumb {
   width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--bg-primary);
   background: var(--accent); cursor: grab; box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+/* Tailwind v4 兼容层:
+   - v3 的 theme.extend.colors 允许 bg-secondary/text-muted 等任意类名, v4 的
+     --color-* 命名空间无法表达同源不同类名 —— 此处以普通 CSS 类补回
+     (放在 :root 之后的普通 CSS 区, Tailwind 4 会原样保留; 顶部 @utility
+     在该版本下不生效, 已弃用)。
+   - Tailwind v4 的裸 border 类默认色是 currentColor(v3 是浅灰) —— 全局
+     默认浅灰边框色, utilities 层的彩色边框类(border-red-200)优先级更高。 */
+.bg-secondary { background-color: var(--bg-secondary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
+
+*,
+::before,
+::after {
+  border-color: var(--border);
 }
 
 /* Smooth overscroll with rubber-band containment */
