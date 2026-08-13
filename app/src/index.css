@@ -1,6 +1,22 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@source "../src";
+
+/* Tailwind 4: 自定义语义色(替代 tailwind.config.js theme.extend.colors)。
+   v3 的 extend.colors 允许任意类名(bg-secondary/text-muted 等), v4 的
+   --color-* 命名空间只能生成 --color-X -> bg-X, 无法表达 bg-secondary 与
+   text-secondary 同源不同类名 —— 用 @utility 显式定义这三个类。 */
+@utility bg-secondary {
+  background-color: var(--bg-secondary);
+}
+@utility text-secondary {
+  color: var(--text-secondary);
+}
+@utility text-muted {
+  color: var(--text-muted);
+}
+@utility border {
+  border-color: var(--border);
+}
 
 :root {
   --bg-primary: #FFFFFF;
@@ -198,8 +214,13 @@ select option {
 .qaction {
   @apply px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all duration-150;
   @apply border-[var(--border)] text-[var(--text-secondary)];
-  @apply hover:bg-[var(--accent)] hover:text-white hover:border-[var(--accent)] hover-lift;
+  @apply hover:bg-[var(--accent)] hover:text-white hover:border-[var(--accent)];
   cursor: pointer;
+}
+/* hover-lift 是自定义类, 不能进 @apply(Tailwind 4 只认 utility) */
+.qaction:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 .qaction:active { transform: scale(0.96); }
 
