@@ -332,14 +332,14 @@ select option {
 
 /* ── Code block line numbers ────────────────────────────────────────────────
    The markdown renderer wraps each line in <span class="ln"><span class="ln-i" data-l="N"></span></span>.
-   The .ln-i span shows the line number via its data-l attribute (set via JS in
-   MessageBubble for foldable blocks; static for non-foldable). */
+   The line number is rendered from the data-l attribute via CSS ::before
+   (there is no JS that fills .ln-i, and an empty inline-block would leave a
+   blank gutter in front of every code line). */
 .code-block.lines code {
   display: block;
 }
 .code-block.lines code .ln {
   display: inline-block;
-  min-width: 100%;
 }
 .code-block.lines code .ln-i {
   display: inline-block;
@@ -350,6 +350,9 @@ select option {
   opacity: 0.35;
   font-size: 0.85em;
   color: var(--text-muted);
+}
+.code-block.lines code .ln-i::before {
+  content: attr(data-l);
 }
 
 /* ── Unified select chevron ───────────────────────────────────────────────
