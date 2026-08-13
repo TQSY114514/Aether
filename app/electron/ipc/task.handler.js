@@ -61,10 +61,33 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
             wc.send('task:progress', { taskId, type: evt.type, payload: evt.payload })
           } else if (evt.type === 'done') {
             wc.send('task:done', evt.payload)
+            // 后台任务完成 → 系统通知（仅当窗口不可见/最小化时, 不打扰前台用户）
+            try {
+              const { Notification } = require('electron')
+              if (Notification.isSupported() && !wc.isFocused()) {
+                const content = evt.payload && evt.payload.finalContent ? String(evt.payload.finalContent).slice(0, 80) : ''
+                new Notification({
+                  title: 'Aether 任务完成',
+                  body: content || '后台任务已完成',
+                  silent: true,
+                }).show()
+              }
+            } catch {}
           } else if (evt.type === 'cancelled') {
             wc.send('task:cancelled', evt.payload)
           } else if (evt.type === 'error') {
             wc.send('task:error', evt.payload)
+            try {
+              const { Notification } = require('electron')
+              if (Notification.isSupported() && !wc.isFocused()) {
+                const errMsg = evt.payload && evt.payload.errorMsg ? String(evt.payload.errorMsg).slice(0, 80) : '任务失败'
+                new Notification({
+                  title: 'Aether 任务失败',
+                  body: errMsg,
+                  silent: true,
+                }).show()
+              }
+            } catch {}
           }
         } catch {}
       }

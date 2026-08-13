@@ -68,6 +68,7 @@ function initAppReady() {
 }
 
 const { registerProviderHandlers } = require('./ipc/provider.handler')
+const { registerSystemHandlers } = require('./ipc/system.handler')
 const { registerModelHandlers } = require('./ipc/model.handler')
 const { registerPersonaHandlers } = require('./ipc/persona.handler')
 const { registerSessionHandlers } = require('./ipc/session.handler')
@@ -249,6 +250,7 @@ function updateTrayMenu() {
 
 function setupIpcHandlers() {
   registerProviderHandlers(ipcMain, db)
+  registerSystemHandlers(ipcMain, app, () => mainWindow?.webContents)
   registerModelHandlers(ipcMain, db)
   registerPersonaHandlers(ipcMain, db)
   registerSessionHandlers(ipcMain, db)

@@ -7,6 +7,7 @@ import { t, LANGS } from '@/utils/i18n'
 import McpSettings from '@/components/settings/McpSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 import AgentSettings from '@/components/settings/AgentSettings'
+import SystemSettings from '@/components/settings/SystemSettings'
 import SkillsSettings from '@/components/settings/SkillsSettings'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
 import TokenPage from '@/pages/TokenPage'
@@ -396,6 +397,9 @@ export default function SettingPage() {
 
           {/* Agent workspace + safety */}
           <AgentSettings />
+
+          {/* Windows system integration: auto-launch + notifications */}
+          <SystemSettings />
 
           {/* Skills */}
           <SkillsSettings />

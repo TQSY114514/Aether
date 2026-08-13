@@ -211,6 +211,11 @@ interface Window {
       info: () => Promise<{ enabled: boolean; port: number; token: string | null; running: boolean }>
       setEnabled: (enabled: boolean) => Promise<{ ok: boolean; running: boolean }>
     }
+    system: {
+      getAutoLaunch: () => Promise<{ enabled: boolean }>
+      setAutoLaunch: (enabled: boolean) => Promise<{ ok: boolean; enabled?: boolean; error?: string }>
+      notify: (data: { title?: string; body?: string }) => Promise<{ ok: boolean; error?: string }>
+    }
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
       import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
