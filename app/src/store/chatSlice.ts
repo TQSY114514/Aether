@@ -33,8 +33,6 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   effortLevel: "off",
   agentMode: "off",
   modelSuggestion: null as ModelSuggestion | null,
-  lastUsage: null,
-  setLastUsage: (u) => set({ lastUsage: u }),
   messageSearchQuery: "",
 
   setChatMode: (mode) => {
@@ -147,8 +145,6 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         systemPrefix,
         })
       if (result?.modelSuggestion) set({ modelSuggestion: result.modelSuggestion })
-      // Desktop polish #1: surface per-turn token/cost usage.
-      if (result?.usage) set({ lastUsage: result.usage })
     } catch (err) {
       log.error("[AetherAI] chat.send FAILED:", err)
       set(clearStreaming(currentSessionId))
