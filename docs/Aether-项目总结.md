@@ -121,7 +121,7 @@ flowchart LR
 - `credentialPool.js` 多 key 轮换 + `providerHealth.js` 健康探测自动降级。
 - 会话级配置覆盖全局默认（`sessionConfigs[sid].modelId`）。
 
-### 记忆系统 `autoMemory.js` / `curator.js` / `memoryGraph.js`
+### 记忆系统 `autoMemory.js` / `curator.js`
 - 记忆分类型（entity / fact / context），带 confidence 评分。
 - **Trae 会话新增**：使用反馈回路更新 confidence，低分记忆可被淘汰。
 

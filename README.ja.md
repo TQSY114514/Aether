@@ -335,7 +335,6 @@ app/
 │   └── types/
 ├── skills/                # Built-in skills (release-checklist, git-commit)
 ├── commands/              # Built-in slash commands (/code, /explain, /polish, ...)
-├── locales/               # Translation files (13 languages, lazy-loaded)
 └── resources/             # App icons
 ```
 

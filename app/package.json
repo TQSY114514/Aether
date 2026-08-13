@@ -36,8 +36,6 @@
     "postinstall": "node scripts/patch-brace-expansion.js & electron-rebuild -f -w better-sqlite3 || (echo [Aether] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
   },
   "dependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-virtual": "^3.14.9",
     "better-sqlite3": "^13.0.0",
     "dompurify": "^3.4.13",

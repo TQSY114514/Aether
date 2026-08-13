@@ -59,7 +59,7 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   模块必须保持 Electron-free。
 - **RPC** `app/electron/llm/rpc/` — JSONL 帧协议（`--mode rpc`）。方法宿主显式
   标注在 `server.js` 文件头，禁止另起炉灶重复实现既有业务。
-- **i18n 刻意例外**：TUI 的 en/zh 双语文案模块**不入 `i18n.base.json` 管道**。
+- **i18n 刻意例外**：TUI 的 en/zh 双语文案模块**不入 i18n-en-base 管道**。
   理由：终端多语言收益低，为 TUI 全量铺 15 语言管道不划算。桌面/CLI 用户可见
   字符串仍必须走 i18n base 键（惯例不变）。
 - `app/scripts/smoke-rpc.js` 与 `app/scripts/boot-smoke.js` 是 CI 冒烟入口
@@ -99,17 +99,17 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   `flags:set` IPC; main-process consumers subscribe to `flags:changed` on
   ipcMain. Unknown keys and missing DB rows fall back to defaults — flags must
   never throw, and shipping a new feature means adding one registry entry.
-- **i18n is generated**: base keys live in `app/src/utils/i18n.base.json`;
-  `gen-i18n.js` produces `i18n.ts` for all 15 languages. Don't hand-edit
-  `i18n.ts`. New user-visible strings → add to `i18n.base.json` (zh + en at
-  minimum) then regenerate. The `t()` placeholder syntax is `{0}` (positional);
-  the generator wires the replace fn.
+- **i18n is generated**: base keys live in `app/src/utils/i18n-en-base.json`
+  (+ `i18n-translations.json`); `gen-i18n.js` produces `i18n.ts` for all 15
+  languages. Don't hand-edit `i18n.ts`. New user-visible strings → add to
+  `i18n-en-base.json` (zh + en at minimum) then regenerate. The `t()`
+  placeholder syntax is `{0}` (positional); the generator wires the replace fn.
 - **Storage is SQLite**: settings, sessions, messages, providers, models,
   personas, memory, arena votes, model scores — all in `aetherai.db`. The only
   file-on-disk exception is `background.img` (too large for a TEXT column).
-  Don't add JSON/JSONL sidecar stores for runtime state (the `memoryGraph.js`
-  JSONL module is dead code and must not be revived that way — graph memory
-  belongs in `kg_nodes`/`kg_edges` tables).
+  Don't add JSON/JSONL sidecar stores for runtime state — graph memory belongs
+  in the `kg_nodes`/`kg_edges` tables. (The old `memoryGraph.js` JSONL module
+  was dead code and has been removed; do not revive that approach.)
 
 ## Known pitfalls (condensed)
 

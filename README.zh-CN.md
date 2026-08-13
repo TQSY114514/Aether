@@ -344,7 +344,6 @@ app/
 │   └── types/
 ├── skills/                # 内置技能 (release-checklist, git-commit)
 ├── commands/              # 内置斜杠命令 (/code, /explain, /polish, ...)
-├── locales/               # 翻译文件 (13 种语言, 懒加载)
 └── resources/             # 应用图标
 ```
 

@@ -333,7 +333,6 @@ app/
 │   └── types/
 ├── skills/                # 內建技能 (release-checklist, git-commit)
 ├── commands/              # 內建斜線命令 (/code, /explain, /polish, ...)
-├── locales/               # 翻譯檔案 (13 種語言, 懶載入)
 └── resources/             # 應用圖示
 ```
 
