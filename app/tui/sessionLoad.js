@@ -15,7 +15,8 @@ export function loadSessionMessages(db, sessionId) {
   if (!db || sessionId == null) return []
   let rows = []
   try {
-    rows = db.prepare('SELECT id, role, content FROM message WHERE session_id = ? ORDER BY id').all(Number(sessionId))
+    // LP1: 只取 user/assistant 行——注入上下文（system）留库审计, 不在 UI 渲染。
+    rows = db.prepare('SELECT id, role, content FROM message WHERE session_id = ? AND role IN (\'user\',\'assistant\') ORDER BY id').all(Number(sessionId))
   } catch {
     return []
   }

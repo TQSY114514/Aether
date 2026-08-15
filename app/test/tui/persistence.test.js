@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { createEmptyDatabase } from '../../electron/database.js'
 import { taskDbAdapter } from '../../electron/llm/taskDbAdapter.js'
 import { runSession } from '../../tui/runSession.js'
+import { loadSessionMessages } from '../../tui/sessionLoad.js'
 
 let dbPath = ''
 let db = null
@@ -193,5 +194,134 @@ describe('runSession 自动标题', () => {
     })
     const row = db.prepare('SELECT title FROM session WHERE id = ?').get(sid)
     expect(row.title).toBe('manual-name')
+  })
+})
+
+// ── LP1: 注入上下文落库（模型可见 ⟺ 日志可重建）────────────────────────
+// runSession 收到 injectedContext（@文件 / !shell 块）→ 每条独立 system 行,
+// 顺序 = user 行之后、数组序（与模型实际看到的一致）, assistant 行之前。
+describe('runSession 注入上下文落库（LP1）', () => {
+  function newSid() {
+    return Number(taskDbAdapter(db).createSession({ title: 'tui', parentSessionId: null }).lastInsertRowid)
+  }
+
+  it('注入上下文 → user 行后按数组序落 system 行, 再落 assistant 行', async () => {
+    const sid = newSid()
+    await runSession({
+      dbPath: null,
+      prompt: '带注入的一轮',
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      dbSessionId: sid,
+      runAgentImpl: async () => ({ text: 'reply', toolCalls: [] }),
+      injectedContext: [
+        { kind: 'file', label: '@a.txt', content: 'file body' },
+        { kind: 'shell', label: '!ls', content: 'out' },
+      ],
+    })
+    const rows = db.prepare('SELECT role, content FROM message WHERE session_id = ? ORDER BY id').all(sid)
+    expect(rows).toHaveLength(4) // user + 2 injected system + assistant
+    expect(rows[0]).toEqual({ role: 'user', content: '带注入的一轮' })
+    expect(rows[1]).toEqual({ role: 'system', content: '[injected:file:@a.txt]\nfile body' })
+    expect(rows[2]).toEqual({ role: 'system', content: '[injected:shell:!ls]\nout' })
+    expect(rows[3]).toEqual({ role: 'assistant', content: 'reply' })
+  })
+
+  it('loadSessionMessages 只返回 user/assistant 行（注入行留库不渲染）', async () => {
+    const sid = newSid()
+    await runSession({
+      dbPath: null,
+      prompt: '注入轮次',
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      dbSessionId: sid,
+      runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
+      injectedContext: [{ kind: 'file', label: '@x.txt', content: 'x' }],
+    })
+    const loaded = loadSessionMessages(db, sid)
+    expect(loaded.map((m) => m.role)).toEqual(['user', 'assistant'])
+    expect(loaded).toHaveLength(2)
+  })
+
+  it('injectedContext 空数组 → 不落任何注入行（既有行为不变）', async () => {
+    const sid = newSid()
+    await runSession({
+      dbPath: null,
+      prompt: '无注入',
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      dbSessionId: sid,
+      runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
+      injectedContext: [],
+    })
+    const rows = db.prepare('SELECT role FROM message WHERE session_id = ? ORDER BY id').all(sid)
+    expect(rows.map((r) => r.role)).toEqual(['user', 'assistant'])
+  })
+
+  it('非数组 injectedContext → 防御为空数组, 不崩溃', async () => {
+    const sid = newSid()
+    const result = await runSession({
+      dbPath: null,
+      prompt: '防御',
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      dbSessionId: sid,
+      runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
+      injectedContext: 'not-an-array',
+    })
+    expect(result.text).toBe('ok')
+    const rows = db.prepare('SELECT role FROM message WHERE session_id = ? ORDER BY id').all(sid)
+    expect(rows.map((r) => r.role)).toEqual(['user', 'assistant'])
+  })
+
+  it('label/content 含换行/怪字符 → 原样存储, 不崩溃', async () => {
+    const sid = newSid()
+    await runSession({
+      dbPath: null,
+      prompt: '怪字符',
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      dbSessionId: sid,
+      runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
+      injectedContext: [{ kind: 'steering', label: 'multi\nline', content: 'a\nb\r\nc' }],
+    })
+    const rows = db.prepare('SELECT content FROM message WHERE session_id = ? AND role = \'system\' ORDER BY id').all(sid)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].content).toBe('[injected:steering:multi\nline]\na\nb\r\nc')
+  })
+
+  it('content 超 8000 字 → 截断为 8000 + \\n… (truncated)', async () => {
+    const sid = newSid()
+    await runSession({
+      dbPath: null,
+      prompt: '长内容',
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      dbSessionId: sid,
+      runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
+      injectedContext: [{ kind: 'file', label: '@big.txt', content: 'x'.repeat(9000) }],
+    })
+    const row = db.prepare('SELECT content FROM message WHERE session_id = ? AND role = \'system\' ORDER BY id').all(sid)[0]
+    const prefix = '[injected:file:@big.txt]\n'
+    expect(row.content.startsWith(prefix)).toBe(true)
+    const body = row.content.slice(prefix.length)
+    expect(body.length).toBe(8000 + '\n… (truncated)'.length)
+    expect(body.endsWith('\n… (truncated)')).toBe(true)
+  })
+
+  it('空/非法条目（null/非对象）→ 跳过, 不崩溃', async () => {
+    const sid = newSid()
+    await runSession({
+      dbPath: null,
+      prompt: '坏条目',
+      dispatch: () => {},
+      resolveImpl: resolveWithDb,
+      dbSessionId: sid,
+      runAgentImpl: async () => ({ text: 'ok', toolCalls: [] }),
+      injectedContext: [null, 'junk', { kind: 'file', label: '@ok.txt', content: 'fine' }],
+    })
+    const rows = db.prepare('SELECT role, content FROM message WHERE session_id = ? ORDER BY id').all(sid)
+    expect(rows).toHaveLength(3)
+    expect(rows[1].content).toBe('[injected:file:@ok.txt]\nfine')
   })
 })

@@ -58,6 +58,19 @@ describe('loadSessionMessages（W2-t15）', () => {
     expect(loadSessionMessages(db, b)[0].text).toBe('b-msg')
   })
 
+  it('LP1：system 行（注入上下文审计行）被过滤, 只返回 user/assistant', () => {
+    const sid = seedSession('lp1', [
+      ['user', '问题'],
+      ['system', '[injected:file:@a.txt]\nfile body'],
+      ['assistant', '回答'],
+    ])
+    const loaded = loadSessionMessages(db, sid)
+    expect(loaded.map((m) => m.role)).toEqual(['user', 'assistant'])
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0].text).toBe('问题')
+    expect(loaded[1].text).toBe('回答')
+  })
+
   it('无消息会话 → []', () => {
     const sid = seedSession('empty', [])
     expect(loadSessionMessages(db, sid)).toEqual([])
