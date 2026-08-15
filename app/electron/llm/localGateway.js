@@ -105,8 +105,14 @@ function start(db, port = DEFAULT_PORT) {
           res.writeHead(200)
           res.end(JSON.stringify(out.json))
         } catch (e) {
+          // 不向客户端暴露内部错误细节（CodeQL js/stack-trace-exposure）：
+          // 异常消息可能携带内部路径/模块信息，回环 + token 鉴权下攻击面小，
+          // 但 127.0.0.1 上的恶意网页/进程仍可读取——统一返回通用文案，
+          // 详细错误只进服务端日志。
+          const detail = e && e.stack ? e.stack : (e && e.message ? e.message : String(e))
+          try { console.error(`[localGateway] /v1/chat/completions failed: ${detail}`) } catch {}
           res.writeHead(500)
-          res.end(JSON.stringify({ error: { message: e && e.message ? e.message : String(e), type: 'internal_error', code: 500 } }))
+          res.end(JSON.stringify({ error: { message: 'Internal server error', type: 'internal_error', code: 500 } }))
         }
       })
       return
@@ -143,10 +149,20 @@ function start(db, port = DEFAULT_PORT) {
         const ch = parts.join(':')
         const h2 = _handlers.get(`${ch}:${act}`) || ipcMain.listeners(`${ch}:${act}`)?.[0]
         if (!h2) { res.writeHead(404); res.end(JSON.stringify({ error: `Channel not found: ${channel}` })); return }
-        Promise.resolve(h2(null, ...args)).then(r => { res.writeHead(200); res.end(JSON.stringify(r || { ok: true })) }).catch(e => { res.writeHead(500); res.end(JSON.stringify({ error: e.message })) })
+        Promise.resolve(h2(null, ...args)).then(r => { res.writeHead(200); res.end(JSON.stringify(r || { ok: true })) }).catch(e => {
+          // 同 /v1/chat/completions：不向客户端暴露异常细节（js/stack-trace-exposure）
+          const detail = e && e.stack ? e.stack : (e && e.message ? e.message : String(e))
+          try { console.error(`[localGateway] ${channel} failed: ${detail}`) } catch {}
+          res.writeHead(500); res.end(JSON.stringify({ error: 'Internal server error' }))
+        })
         return
       }
-      Promise.resolve(handler(null, ...args)).then(r => { res.writeHead(200); res.end(JSON.stringify(r || { ok: true })) }).catch(e => { res.writeHead(500); res.end(JSON.stringify({ error: e.message })) })
+      Promise.resolve(handler(null, ...args)).then(r => { res.writeHead(200); res.end(JSON.stringify(r || { ok: true })) }).catch(e => {
+        // 同 /v1/chat/completions：不向客户端暴露异常细节（js/stack-trace-exposure）
+        const detail = e && e.stack ? e.stack : (e && e.message ? e.message : String(e))
+        try { console.error(`[localGateway] ${channel} failed: ${detail}`) } catch {}
+        res.writeHead(500); res.end(JSON.stringify({ error: 'Internal server error' }))
+      })
     })
   })
 
