@@ -5,9 +5,36 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 10
+    # 按依赖性质分组，避免"所有更新一个 PR"；运行时依赖单独出 PR
+    # （js-yaml CVE 修复就属于 runtime，若被卷进 dev 组会延迟合并）。
+    groups:
+      production-dependencies:
+        dependency-type: production
+        patterns:
+          - "*"
+      dev-dependencies:
+        dependency-type: development
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+
+  - package-ecosystem: npm
+    directory: /app/tui
+    schedule:
+      interval: weekly
+      day: monday
     open-pull-requests-limit: 5
     groups:
+      production-dependencies:
+        dependency-type: production
+        patterns:
+          - "*"
       dev-dependencies:
+        dependency-type: development
         patterns:
           - "*"
     commit-message:
