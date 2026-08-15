@@ -29,7 +29,7 @@ import { listModels } from './models.js'
 import { dispatchKey, resolveMode } from './keyHandlers.js'
 import { wheelDelta } from './wheel.js'
 import { resolveFileRefs, globCandidates } from './fileRef.js' // W3-t18: @文件引用
-import { parseShellLine, formatShellContext, truncateOutput, formatRecentShellContext, isBlockedShellCommand } from './shellExec.js' // W3-t19: !shell
+import { parseShellLine, formatShellContext, truncateOutput, formatRecentShellContext, isBlockedShellCommand, SHELL_CONTEXT_MAX } from './shellExec.js' // W3-t19: !shell
 import { resolveEditorCommand, editorTempPath, readEditorResult, spawnEditor } from './editor.js' // W3-t20: 外部编辑器
 import { favoriteKey, toggleFavorite, recordRecent, cycleRecent } from './favorites.js' // W3-t22: 模型收藏
 import { parseDiffStat, splitDiffFiles, diffToViewLines } from './diffParse.js' // W3-t23: /diff 查看器
@@ -355,9 +355,19 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     try {
       // W3-t18: @文件引用注入（≤50KB 内容块 / 超限截断标注 / 缺失原样保留）
       // W3-t19: 最近 !shell 上下文块前置注入（模型可见上次命令输出）
-      const filePrompt = resolveFileRefs(promptText, workspaceRef.current).prompt
+      const fileRefResult = resolveFileRefs(promptText, workspaceRef.current)
+      const filePrompt = fileRefResult.prompt
       const shellCtx = formatRecentShellContext(shellContextRef.current)
       const finalPrompt = shellCtx ? `${shellCtx}\n\n${filePrompt}` : filePrompt
+      // LP1: 模型可见的注入上下文随 turn 落库（模型可见 ⟺ 日志可重建）——
+      // (a) 成功解析的 @文件（r.token 含 '@' 前缀, 如 '@a.txt'）;
+      // (b) 最近 !shell 缓冲（与 formatRecentShellContext 同集合: 尾部
+      //     SHELL_CONTEXT_MAX 条, 输出已在 runShell 截断 8KB）。
+      // steering 注入运行中经 steering 模块直达循环, 不在此列（见 docs）。
+      const injectedContext = [
+        ...fileRefResult.refs.filter((r) => r.ok && r.content).map((r) => ({ kind: 'file', label: r.token, content: r.content })),
+        ...shellContextRef.current.slice(-SHELL_CONTEXT_MAX).map((e) => ({ kind: 'shell', label: `!${e.command}`, content: e.output })),
+      ]
       const result = await runSession({
         dbPath,
         modelName: state.modelName || modelName,   // /model 优先于 CLI 参数
@@ -368,6 +378,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
         agentMode: state.mode,
         personaId: state.currentPersonaId,
         dbSessionId: state.dbSessionId,  // W0-t3: 复用 /use /fork 的 DB 会话行；null → runSession 新建
+        injectedContext,                 // LP1: @文件 / !shell 注入上下文落库
       dispatch,
       requestPermission: tuiPermission,
       onAskUser: tuiAskUser,

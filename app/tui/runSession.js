@@ -155,9 +155,13 @@ export function injectSteering(sessionId, text) {
  * @param {(action: object) => void} opts.dispatch   reducer dispatch
   * @param {(result: object) => void} [opts.onEnd]    完成回调（result.text/toolCalls）
   * @param {(perm: object) => Promise<boolean>} [opts.requestPermission]  权限回调（todo 4：createTuiPermissionHandler 产物或自定义）
-  * @param {Function} [opts.runAgentImpl]  可注入 runAgent（测试用）
-  * @param {Function} [opts.resolveImpl]   可注入 resolveSessionResources（测试用）
-  * @returns {Promise<{text: string, toolCalls: object[], dbSessionId: number|null}>}
+ * @param {Function} [opts.runAgentImpl]  可注入 runAgent（测试用）
+ * @param {Function} [opts.resolveImpl]   可注入 resolveSessionResources（测试用）
+ * @param {Array<{kind: string, label: string, content: string}>} [opts.injectedContext]
+ *   模型实际可见、但非 prompt 本体的注入上下文（@文件 / !shell 块）。每条落库为
+ *   独立 system 行（user 行之后、数组序），前缀 [injected:<kind>:<label>] —
+ *   保证「模型可见 ⟺ 日志可重建」。空/非数组 → 不落任何行。
+ * @returns {Promise<{text: string, toolCalls: object[], dbSessionId: number|null}>}
   *
   * W0-t3 落库语义（按 turn 聚合单次写入，绝不逐 chunk 写）：
   *   - db 存在时：dbSessionId 为 null → createSession({title:'tui'}) 建行；
@@ -222,6 +226,9 @@ export async function runSession({
   // 测试注入 0 → 立即 dispatch（同步语义, 便于断言）。
   textThrottleMs = TEXT_DELTA_THROTTLE_MS,
   thinkThrottleMs = THINK_DELTA_THROTTLE_MS,
+  // LP1: 模型可见的注入上下文（@文件 / !shell 块）→ 随 user 行落库（见 JSDoc）。
+  // 默认空数组: 不传/非数组 → 不落任何注入行（既有行为不变）。
+  injectedContext = [],
 } = {}) {
   const { provider, model, db } = resolveImpl(dbPath, modelName)
   // headless 无法解密 safeStorage 加密的 API key——密文直接发 API 会 401/卡住，
@@ -259,6 +266,19 @@ export async function runSession({
       }
       // 用户消息在运行前落库：agent 抛错也保留该行（中断轮次 = 合法的"无回复"态）
       adapter.addMessage({ session_id: sessionRowId, role: 'user', content: String(prompt || '') })
+      // LP1: 注入上下文随 user 行落库（模型可见 ⟺ 日志可重建）——每条独立 system
+      // 行, user 行之后按数组序（与模型实际看到的注入顺序一致）:
+      //   [injected:<kind>:<label>]\n<content>（content >8000 字截断加标注）
+      // 非数组防御（调用方传错类型不崩溃）; 中断轮次这些行随 user 行保留。
+      const injected = Array.isArray(injectedContext) ? injectedContext : []
+      for (const ic of injected) {
+        if (!ic || typeof ic !== 'object') continue
+        const kind = String(ic.kind || 'unknown')
+        const label = String(ic.label ?? '')
+        let body = String(ic.content ?? '')
+        if (body.length > 8000) body = `${body.slice(0, 8000)}\n… (truncated)`
+        adapter.addMessage({ session_id: sessionRowId, role: 'system', content: `[injected:${kind}:${label}]\n${body}` })
+      }
     } catch (err) {
       throw new Error(`session persistence failed: ${err && err.message ? err.message : String(err)}`)
     }

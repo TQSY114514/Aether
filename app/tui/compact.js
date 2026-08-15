@@ -136,9 +136,20 @@ export function rebuildMessages(result, original) {
 export function syncCompactToDb(db, sessionId, { droppedUa, summaryText }) {
   if (!db || sessionId == null) return { deleted: 0, added: false, note: 'session not persisted (db unavailable)' }
   const adapter = taskDbAdapter(db)
-  const rows = db.prepare('SELECT id, role FROM message WHERE session_id = ? ORDER BY id').all(sessionId)
+  // LP1: 只取 user/assistant 行做位置映射——注入 system 行（runSession 落库的
+  // [injected:...]）夹在 user/assistant 之间, 全量行会把映射偏移一位。
+  const allRows = db.prepare('SELECT id, role FROM message WHERE session_id = ? ORDER BY id').all(sessionId)
+  const rows = allRows.filter((r) => r.role === 'user' || r.role === 'assistant')
   const dropCount = Math.max(0, Math.min(Number(droppedUa) || 0, rows.length))
   for (let i = 0; i < dropCount; i++) adapter.deleteMessage(rows[i].id)
+  // LP1: 被压缩轮次的注入 system 行（id 介于被删 user/assistant 行之间）一并
+  // 删除, 不留孤儿审计行; 保留轮次的行 id 恒大于最后被删行, 不受影响。
+  if (dropCount > 0) {
+    const maxDroppedId = rows[dropCount - 1].id
+    for (const r of allRows) {
+      if (r.role !== 'user' && r.role !== 'assistant' && Number(r.id) <= maxDroppedId) adapter.deleteMessage(r.id)
+    }
+  }
   let added = false
   const text = String(summaryText || '').trim()
   if (text) {

@@ -41,10 +41,12 @@ export function syncUndoToDb(db, sessionId, messages, boundary) {
   const pos = userAssistantIndexOf(messages, boundary.lastUserIndex)
   if (pos < 0) return { ok: false, deleted: 0, note: 'last user message not mappable to a db row' }
   const adapter = taskDbAdapter(db)
-  const rows = db.prepare('SELECT id, role FROM message WHERE session_id = ? ORDER BY id').all(sessionId)
+  // LP1: 只取 user/assistant 行做位置映射——注入 system 行（runSession 落库的
+  // [injected:...]）夹在 user/assistant 之间, 全量行会把映射偏移一位（拒删/误删）。
+  const rows = db.prepare('SELECT id, role FROM message WHERE session_id = ? AND role IN (\'user\',\'assistant\') ORDER BY id').all(sessionId)
   if (pos >= rows.length) return { ok: false, deleted: 0, note: 'db rows fewer than state (aborted turn?)' }
   if (rows[pos].role !== 'user') return { ok: false, deleted: 0, note: 'db row at mapped position is not user (state/db mismatch)' }
   adapter.deleteMessage(rows[pos].id)          // user 行
-  const after = adapter.deleteMessagesAfter(sessionId, rows[pos].id) // id > user 行 id → assistant + 后续
+  const after = adapter.deleteMessagesAfter(sessionId, rows[pos].id) // id > user 行 id → 注入行 + assistant + 后续
   return { ok: true, deleted: 1 + Number(after.changes || 0) }
 }
