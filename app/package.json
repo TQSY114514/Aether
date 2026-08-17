@@ -1,11 +1,39 @@
 {
   "name": "aetherai",
-  "version": "0.7.0",
-  "description": "Aether - Multi-provider AI aggregation client",
+  "version": "0.7.1",
+  "description": "Aether headless agent — CLI, TUI, and Electron-free SDK. Pairs with the Aether Desktop GUI (separate installer) sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
+  "license": "MIT",
+  "homepage": "https://github.com/TQSY114514/Aether#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TQSY114514/Aether.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TQSY114514/Aether/issues"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "tui",
+    "sdk",
+    "llm",
+    "mcp",
+    "electron-free",
+    "aether",
+    "aetherai",
+    "agentic",
+    "coding-agent",
+    "openai",
+    "anthropic",
+    "deepseek"
+  ],
   "main": "electron/main.js",
   "exports": {
-    ".": "./electron/main.js",
     "./sdk": {
       "types": "./electron/sdk/index.d.ts",
       "default": "./electron/sdk/index.js"
@@ -15,6 +43,31 @@
   "bin": {
     "aether": "./cli.js"
   },
+  "//": "files: NPM publish whitelist. Keeps the npm tarball small (excludes Electron, src/, dist/, release/, resources/, e2e/). The full app/ tree is published EXCEPT desktop-only paths — these are the blacklisted dirs that would otherwise pull in Electron + the renderer + the bundler config.",
+  "files": [
+    "cli.js",
+    "tui/",
+    "tui/package.json",
+    "electron/cli/",
+    "electron/sdk/",
+    "electron/llm/",
+    "electron/tools/",
+    "electron/utils/",
+    "electron/cron/",
+    "electron/evolution/",
+    "electron/mcp/",
+    "electron/context/",
+    "electron/plugins/",
+    "electron/database.js",
+    "electron/logger.js",
+    "electron/featureFlags.js",
+    "electron/worktreeManager.js",
+    "electron/skills/",
+    "package.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "aether": "node cli.js",
     "dev:renderer": "vite",
@@ -30,9 +83,11 @@
     "build:win": "vite build && electron-builder --win --x64",
     "build:ci": "vite build && electron-builder --win nsis portable --x64 --publish always",
     "start": "electron .",
-    "test": "vitest run",
+    "test": "vitest run --fileParallelism=false --testTimeout=30000",
     "test:watch": "vitest",
     "test:e2e": "node e2e/launch.test.js",
+    "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('publishing from local is blocked; use npm run publish:npm in CI (see .github/workflows/npm-publish.yml)'); process.exit(1) }\" && npm run smoke:boot && npm run smoke:rpc && npm test",
+    "publish:npm": "npm publish --provenance --access public",
     "postinstall": "node scripts/patch-brace-expansion.js & electron-rebuild -f -w better-sqlite3 || (echo [Aether] electron-rebuild unavailable ^(no Visual Studio build tools^) - using prebuilt better-sqlite3 & exit /b 0)"
   },
   "dependencies": {

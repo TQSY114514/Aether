@@ -2,6 +2,25 @@
 
 All notable changes to AetherAI are documented here.
 
+## [Unreleased]
+
+### Removed (BREAKING for users who used the VS Code extension)
+
+- **VS Code extension (`extension/`) — REMOVED.** The CLI-backed variant that spawned `app/cli.js --json-lines` from a chat Webview is gone. Two reasons: (1) the model name "Aether" appears in many other open-source projects and the user-facing extension would have collided in the marketplace; (2) the existing desktop GUI already provides every feature the extension offered (file diff cards, revert, ask selection, etc.) plus a richer agent tool loop. If you relied on the extension, switch to the `aetherai` npm package + a terminal workflow, or use the desktop app's "Open with Aether" context menu.
+- **Second extension (`extensions/vscode-aether/`) — REMOVED.** The gateway-backed variant was only used by a handful of users; the desktop app's local gateway (`127.0.0.1:35791`) still ships for browser / external consumers.
+
+### Added
+
+- **`aetherai` npm package** — the headless CLI, Ink v5 TUI, and Electron-free SDK now publish as a single npm package. Install with `npm install -g aetherai` (or `npx aetherai "..."`). The `aether` bin is the same package. Published from the same git tag (`v*`) as the desktop release.
+- **`.github/workflows/npm-publish.yml`** — automated npm publish on `v*` tag. Requires `NPM_TOKEN` secret. Uses `--provenance` for supply-chain integrity.
+- **`files` whitelist in `app/package.json`** — the npm tarball excludes Electron, the renderer (`src/`, `dist/`), `resources/`, `e2e/`, and the electron-builder config, so `npm install aetherai` doesn't pull down a 100 MB desktop installer.
+- **`Two products, one repo` section in README** — explicitly tells users they can install just one of the two artifacts.
+
+### Changed
+
+- **Distribution model** — `aetherai` is now a single repo with two products: desktop (Windows NSIS + portable, GitHub Releases) and CLI / TUI / SDK (npm). Both products share the agent runtime and SQLite session store.
+- **`README.md`** — rewritten to lead with the two-product matrix. The "VS Code Extension & Headless CLI" section is gone; "Terminal TUI, RPC & SDK" is unchanged.
+
 ## [0.7.0] - 2026-08-11
 
 ### TUI — opencode 级交互重构

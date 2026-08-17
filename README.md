@@ -8,7 +8,7 @@
 
 Chat with any model, run a safe coding agent, and compare models side-by-side — on your desktop or in your terminal.
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -45,6 +45,17 @@ Chat with any model, run a safe coding agent, and compare models side-by-side �
 
 ---
 
+## Two products, one repo
+
+Aether ships as two independent artifacts that share the same agent runtime:
+
+- **Aether Desktop** — the Electron + React GUI. Download from [GitHub Releases](#download-desktop). Works out of the box.
+- **Aether CLI / TUI / SDK** — headless agent, Ink v5 terminal UI, and Electron-free SDK. Install with `npm install -g aetherai` ([setup →](#download-cli)). The CLI binary is `aether`.
+
+Both share `agentCore`, 42 tools, SQLite memory, multi-model routing, MCP servers, and the same session store. A chat started in the GUI can be resumed in the TUI with `aether tui --session <id>` and vice versa.
+
+---
+
 ## What makes Aether different
 
 Aether combines several capabilities that are typically spread across multiple tools into one local desktop app:
@@ -68,7 +79,13 @@ Aether combines several capabilities that are typically spread across multiple t
 
 ## Download
 
-### Windows — Prebuilt Installer (Recommended for most users)
+> Pick **one**. Both products share the same agent runtime and session store.
+> - **Just want a desktop chat app?** → [Aether Desktop](#download-desktop)
+> - **Want a terminal agent / CI / SDK?** → [Aether CLI](#download-cli)
+
+### Download — Desktop
+
+**Windows — Prebuilt Installer (Recommended for most users)**
 
 Download the latest [Release](https://github.com/TQSY114514/Aether/releases):
 
@@ -81,9 +98,33 @@ Download the latest [Release](https://github.com/TQSY114514/Aether/releases):
 >
 > ⚠️ Some antivirus software may quarantine the unpacked `electron.exe` during packaging because the app is unsigned. If the installer is removed by your AV, add an exclusion or use the portable build.
 
+### Download — CLI / TUI / SDK
+
+**`aetherai`** is the npm package. It bundles the headless CLI, the Ink v5 interactive TUI, and the Electron-free SDK in one binary.
+
+```bash
+# Install once (requires Node.js ≥ 22)
+npm install -g aetherai
+# or, no install:
+npx aetherai "fix the failing test" --model deepseek
+
+# Interactive terminal UI (best in Windows Terminal)
+aether tui
+
+# Single-shot prompt (CI / scripts)
+aether "summarize README.md"
+
+# JSONL RPC for external scripts
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` and `aetherai` resolve to the same package. Pin a version with `npm install -g aetherai@0.7.0` to match a desktop release.
+
+> **Sharing data with the GUI** — both products use the same SQLite database (`%APPDATA%/aetherai/aetherai.db`). A session started in the desktop app can be resumed in the TUI and vice versa.
+
 ### Run from source (developers / power users)
 
-If you prefer to run from source, or want to modify the code, use `start.bat` (requires [Node.js 18+](https://nodejs.org)):
+If you prefer to run from source, or want to modify the code, use `start.bat` (requires [Node.js 22+](https://nodejs.org)):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -93,9 +134,7 @@ start.bat        # Windows: installs deps, builds frontend, launches Electron
 
 See [Quick Start](#-quick-start) for the manual step-by-step.
 
-> **exe vs start.bat** — both are supported and serve different audiences:
-> - **Installer exe** — for end users: double-click to install, Start Menu entry, in-app auto-update, no Node.js needed.
-> - **start.bat** — for developers / tinkerers: transparent `npm install` → `vite build` → `electron .` pipeline, edit-and-run, requires Node.js.
+> **Two products or one source tree** — both products live in the same repo. `app/electron/` holds the shared agent runtime, `app/src/` is the desktop renderer, `app/cli.js` + `app/tui/` are the CLI/TUI entry points. Releases are tagged by git tag (`v*`) and from a single tag you get both a desktop installer and an npm publish.
 
 ---
 
@@ -431,7 +470,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 
 <div align="center">
 
-Built with ❤️ using Electron + React + TypeScript
+Built with ❤️ using Electron + Node.js + React + TypeScript
 
 [⬆ Back to top](#aether)
 

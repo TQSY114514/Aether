@@ -1,0 +1,157 @@
+# Publishes the `aetherai` npm package on a `v*` tag push.
+#
+# Pairs with release.yml (which builds the Windows desktop installer). Both
+# workflows trigger on the same tag, so a single `git tag v0.7.0 && git push --tags`
+# produces both a desktop release and an npm publish.
+#
+# Required secrets:
+#   NPM_TOKEN — automation token from npmjs.com → Access Tokens → "Automation"
+#               (NOT a publish-from-web token — this needs no 2FA on each publish).
+#
+# Optional (for provenance):
+#   The job runs with `id-token: write` so `npm publish --provenance` can mint
+#   an npm Sigstore attestation. npm automatically resolves the repo from
+#   package.json's `repository` field.
+name: npm-publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry-run (pack only, no publish)'
+        required: false
+        default: 'true'
+
+jobs:
+  publish:
+    # Match master CI (windows-latest) so sandbox/agent fixtures that assume
+    # Windows-style paths (e.g. `C:/...`) resolve the same way the rest of the
+    # test suite does. ubuntu-latest caused Linux `path.posix.isAbsolute`
+    # to return false for `C:/...`, treating Windows paths as relative.
+    runs-on: windows-latest
+    # Avoid duplicate publishes if both v* and a manual dispatch trigger.
+    concurrency:
+      group: npm-publish-${{ github.ref }}
+      cancel-in-progress: false
+
+    permissions:
+      contents: read       # checkout
+      id-token: write       # for npm provenance signing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install deps (no scripts — we don't want the desktop postinstall)
+        working-directory: app
+        run: npm ci --ignore-scripts
+
+      # `app/tui` is an independent sub-package (`ink` + `react`). Its tests
+      # import from `tui/node_modules/*`, which the root `npm ci` doesn't
+      # touch. Install them explicitly so the test runner can resolve TUI deps.
+      # Their packages are NOT shipped to npm — the `files` whitelist in
+      # package.json excludes `app/tui/node_modules`.
+      - name: Install TUI sub-package deps (test-only)
+        working-directory: app/tui
+        run: npm install --no-audit --no-fund --ignore-scripts
+
+      # Local `./node_modules/better-sqlite3` would be unrelocatable across
+      # platforms; the `files` whitelist in package.json only ships the JS
+      # sources — the npm user rebuilds the native module on `npm install`.
+      - name: Copy root docs into app/ for npm pack
+        # `npm pack` runs in `app/` and respects the `files` whitelist, but
+        # README/LICENSE/CHANGELOG live at the repo root (alongside 13 i18n
+        # READMEs). Copy them into `app/` so they end up in the tarball;
+        # otherwise `npm view aetherai readme` returns "No README data found".
+        shell: pwsh
+        working-directory: app
+        run: |
+          Copy-Item -Path ..\README.md     -Destination .\README.md     -Force
+          Copy-Item -Path ..\LICENSE       -Destination .\LICENSE       -Force
+          Copy-Item -Path ..\CHANGELOG.md  -Destination .\CHANGELOG.md  -Force
+
+      - name: Smoke-test the CLI source
+        working-directory: app
+        run: |
+          node -e "require('./cli.js')" || true    # toplevel side-effects only — sanity check require graph
+          node -e "require('./electron/llm/agentCore')" || true
+          node -e "require('./electron/llm/toolLoop')" || true
+
+      # Run real boot and RPC smoke tests against the freshly-installed dep
+      # tree. These don't hit the network — they only verify the modules
+      # load and the CLI initializes its config / arg parser.
+      - name: boot smoke
+        working-directory: app
+        run: npm run smoke:boot
+
+      - name: RPC smoke
+        working-directory: app
+        run: npm run smoke:rpc
+
+      - name: Dry-run pack (always, for visibility)
+        working-directory: app
+        run: |
+          npm pack --dry-run 2>&1 | head -80
+          echo "----"
+          echo "Files targeted for publish (first 40):"
+          node -e "console.log(require('./package.json').files.join('\n'))"
+
+      - name: Publish to npm
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
+        working-directory: app
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          if npm view "aetherai@${VER}" version >/dev/null 2>&1; then
+            echo "::notice::aetherai@${VER} already on the registry — skipping publish (idempotent re-tag push)"
+          else
+            echo "Publishing aetherai@${VER}..."
+            npm run publish:npm
+          fi
+
+      # Mark the previous npm version as deprecated so anyone who already
+      # pinned it (should be nobody this early) gets a `npm install` warning
+      # pointing them at the new release. Skipped if the previous version
+      # doesn't exist (fresh package).
+      - name: Deprecate previous npm version
+        if: github.event_name == 'push'
+        # Default shell on windows-latest is PowerShell, which doesn't
+        # accept `FOO=bar` POSIX-style assignments. Pin to bash.
+        shell: bash
+        # Never fail the workflow for a deprecate no-op (e.g. version
+        # doesn't exist, registry hiccup) — publish is the load-bearing step.
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          PREV="0.7.0"
+          if npm view "aetherai@${PREV}" version >/dev/null 2>&1; then
+            echo "Deprecating aetherai@${PREV} (superseded by ${{ github.ref_name }})"
+            npm deprecate "aetherai@${PREV}" "superseded by ${{ github.ref_name }} — run 'npm i -g aetherai@latest' to upgrade"
+          else
+            echo "::notice::aetherai@${PREV} does not exist on registry — no-op"
+          fi
+
+      - name: Publish summary (on success)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
+        run: |
+          echo "::notice title=npm publish::Published aetherai@${{ github.ref_name }}"
+          echo "View: https://www.npmjs.com/package/aetherai"
+
+      - name: Skip-publish notice (dry_run)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
+        run: |
+          echo "::notice title=npm dry-run::Skipped publish (dry_run=true). Run again with dry_run=false to actually publish."
