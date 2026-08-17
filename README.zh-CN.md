@@ -8,7 +8,7 @@
 
 与任意模型聊天、运行安全编码 Agent、多模型横向对比——桌面端与终端皆可。
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -39,6 +39,17 @@
 
 ---
 
+## 两个产品,一个仓库
+
+Aether 以两个独立产物的形式发布,二者共享同一 Agent 运行时:
+
+- **Aether 桌面版** — Electron + React 图形界面。从 [GitHub Releases](#下载-桌面版) 下载,开箱即用。
+- **Aether CLI / TUI / SDK** — 无头 Agent、Ink v5 终端 UI、Electron-free SDK。`npm install -g aetherai`(详见[下载 CLI](#下载-cli--tui--sdk))。CLI 命令为 `aether`。
+
+二者共享 `agentCore`、42 个工具、SQLite 记忆、多模型路由、MCP 服务器与同一会话存储。桌面端开启的会话可在终端用 `aether tui --session <id>` 续接,反之亦然。
+
+---
+
 ## Aether 有什么不同
 
 Aether 把通常分散在多个工具里的能力集中到一个本地桌面应用:
@@ -62,7 +73,13 @@ Aether 把通常分散在多个工具里的能力集中到一个本地桌面应�
 
 ## 下载
 
-### Windows — 预构建安装包(大多数用户推荐)
+> 二选一即可。两个产品共享同一 Agent 运行时与会话存储。
+> - **只想要桌面聊天应用?** → [Aether 桌面版](#下载-桌面版)
+> - **想要终端 Agent / CI / SDK?** → [Aether CLI](#下载-cli--tui--sdk)
+
+### 下载 — 桌面版
+
+**Windows — 预构建安装包(大多数用户推荐)**
 
 从最新 [Release](https://github.com/TQSY114514/Aether/releases) 下载:
 
@@ -75,9 +92,33 @@ Aether 把通常分散在多个工具里的能力集中到一个本地桌面应�
 >
 > ⚠️ 部分杀毒软件可能因应用未签名而隔离打包后的 `electron.exe`。若安装包被杀软移除,请添加排除项或改用便携版。
 
+### 下载 — CLI / TUI / SDK
+
+**`aetherai`** 是 npm 包名。一个二进制包含无头 CLI、Ink v5 交互 TUI、Electron-free SDK。
+
+```bash
+# 一次性安装(需 Node.js ≥ 22)
+npm install -g aetherai
+# 或不安装直接用:
+npx aetherai "fix the failing test" --model deepseek
+
+# 交互终端 UI(在 Windows Terminal 下体验最佳)
+aether tui
+
+# 单发 prompt(适合 CI / 脚本)
+aether "summarize README.md"
+
+# 外部脚本用 JSONL RPC
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` 与 `aetherai` 指向同一个包。`npm install -g aetherai@0.7.0` 可锁定到桌面版同一版本。
+
+> **与 GUI 共享数据** — 两个产品共用同一 SQLite 数据库(`%APPDATA%/aetherai/aetherai.db`)。桌面端开启的会话可在 TUI 续接,反之亦然。
+
 ### 从源码运行(开发者 / 高级用户)
 
-想从源码运行或修改代码,使用 `start.bat`(需要 [Node.js 18+](https://nodejs.org)):
+想从源码运行或修改代码,使用 `start.bat`(需要 [Node.js 22+](https://nodejs.org)):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -87,9 +128,7 @@ start.bat        # Windows: 安装依赖、构建前端、启动 Electron
 
 手动分步见[快速开始](#-快速开始)。
 
-> **exe 与 start.bat** — 两者都受支持,面向不同人群:
-> - **安装包 exe** — 面向终端用户:双击安装、开始菜单入口、应用内自动更新、无需 Node.js。
-> - **start.bat** — 面向开发者/折腾党:`npm install` → `vite build` → `electron .` 透明流水线,改完即跑,需要 Node.js。
+> **两个产品同源** — 两个产品都在同一仓库。`app/electron/` 是共享的 Agent 运行时;`app/src/` 是桌面渲染层;`app/cli.js` + `app/tui/` 是 CLI/TUI 入口。从一个 git tag(`v*`)同时得到桌面安装包与 npm 发布。
 
 ---
 
@@ -211,19 +250,6 @@ node cli.js tui --smoke      # headless 状态机冒烟
 ### 隐私
 
 > **所有数据留在本地。** Aether 不收集、不上传任何关于你的信息。API 密钥、对话、人设都存储在本地 SQLite 数据库。唯一的出站网络请求只会发往你配置的 LLM 提供商。
-
----
-
-## VS Code 扩展与无头 CLI
-
-除了桌面应用,Aether 还以 CLI 和编辑器扩展形式提供同一 Agent:
-
-- **无头 CLI**(`app/cli.js`)— 非交互式运行 Agent,向脚本/CI 输出 NDJSON 事件:
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **VS Code 扩展**(`extension/`)— 在聊天面板中启动 CLI:实时工具调用流、代码块操作(插入 / 写入文件)、**文件 diff 卡片**:每次 `write_file` / `edit_file` / `apply_patch` 调用都渲染相对改动前文件内容的行级 diff,支持一键 **Revert**(还原工具运行前拍摄的快照)。需要扩展设置 `aether.cliPath`(仓库本地克隆时自动检测)。
-- **本地网关**(`127.0.0.1:35791`)— 由桌面应用支撑的 OpenAI 兼容 REST API(设置 → Local Gateway → token);第二个扩展(`extensions/vscode-aether/`)经它连接。
 
 ---
 
