@@ -43,7 +43,11 @@ function isComplexRequest(userMessage, msgCount) {
   const text = String(userMessage || '')
   const sentences = (text.match(/[。！？.!?;；\n]/g) || []).length
   const paths = (text.match(/[A-Za-z]:[\\/][\w\\/]+\.\w{1,5}|\/[\w\/]+\.\w{1,5}/g) || []).length
-  const multiStep = /implement.*test|refactor.*then|create.*deploy|build.*from|analyze.*fix|migrate.*to|rewrite.*to/i.test(text)
+  const multiStep = /implement.*test|refactor.*then|create.*deploy|build.*from|analyze.*fix|migrate.*to|rewrite.*to/i.test(text) ||
+    // 中文多步任务模式:明确拆解/并行/多个模块联动 → 应触发编排。
+    /(重构|改写|重写|迁移|实现).*(并且|同时|然后|再|以及)/.test(text) ||
+    /(拆|分|并行|多个文件|涉及多个|子任务|几步.y|步骤)/.test(text) ||
+    /(修复|解决|实现|构建).*(bug|测试|登录|模块|功能).*(并且|同时|一起|再)/.test(text)
   return (sentences >= 4 && text.length > 200) || paths >= 3 || multiStep || msgCount > 10
 }
 

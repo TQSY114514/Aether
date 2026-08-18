@@ -38,20 +38,29 @@ function normalizeSignature(sig) {
   return String(sig || '')
     .toLowerCase()
     .replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ')
+    .replace(/[\u4e00-\u9fff]/g, (c) => `${c} `) // 中文逐字切分,使 Jaccard 能在中文短语间匹配
     .replace(/\s+/g, ' ')
     .trim()
 }
 
 /**
  * Jaccard similarity over word sets. 0 = disjoint, 1 = identical.
+ * Filters Chinese function words / high-frequency particles that would
+ * otherwise make any two contiguous-Chinese strings intersect (e.g. 的/了/时).
  */
+const STOP_WORDS = new Set([
+  '的','了','时','是','在','与','和','或','及','我','你','他','她','它','我们','你们','他们',
+  '帮','请','把','将','为','给','用','对','从','到','要','这','那','并','且','然后','同时',
+  '一个','一些','这个','那个',
+])
 function wordSimilarity(a, b) {
-  const wa = new Set(normalizeSignature(a).split(' ').filter(Boolean))
-  const wb = new Set(normalizeSignature(b).split(' ').filter(Boolean))
-  if (wa.size === 0 || wb.size === 0) return 0
+  const fw = (s) => [...new Set(s.split(' ').filter(Boolean))].filter((w) => !STOP_WORDS.has(w))
+  const wa = fw(normalizeSignature(a))
+  const wb = fw(normalizeSignature(b))
+  if (wa.length === 0 || wb.length === 0) return 0
   let inter = 0
-  for (const w of wa) if (wb.has(w)) inter++
-  const union = wa.size + wb.size - inter
+  for (const w of wa) if (wb.includes(w)) inter++
+  const union = wa.length + wb.length - inter
   return union === 0 ? 0 : inter / union
 }
 
