@@ -2,9 +2,19 @@
 
 All notable changes to AetherAI are documented here.
 
-## [0.7.3] - 2026-08-18
+## [0.7.4] - 2026-08-18
+
+### Added
+
+- **Parallel multi-agent orchestration, now active.** The orchestrator (plan → dependency-aware parallel sub-agents → summary) was implemented but never wired into the main loop; complex requests silently fell through to a single agent loop. It now routes complex requests through parallel sub-agents. Sub-agents inherit the parent's permission mode — in `ask` they can execute but still prompt for confirmation, in `plan` they stay read-only, in `auto` they run autonomously, `yolo` degrades to `auto`. Any orchestration failure falls back to the single loop, so the chat thread never breaks. Gated by `agent.orchestrator` (default on).
+- **Experience replay (long-term memory loop).** Successful trajectories are recorded to the `skill_patterns` pool; before a new task, similar past-success patterns are injected back into context (`Experience replay` block) so the agent reuses what worked. Gated by `memory.experienceReplay` (default on).
+- **Skill self-evolution wired + GEP capsules loadable.** Repeated tool sequences now auto-draft `SKILL.md` recipes (gated by `skills.selfEvolution`, default on, driven by the cron `skill-autodraft` task), and the GEP evolution engine's capsule output is now scanned by the skills loader — learned evolution strategies finally reach the agent context.
+- **Code understanding on by default.** The workspace's structure is persisted into the knowledge graph on each tool-looped turn so cross-session "how does X reach Y" queries work out of the box.
 
 ### Fixed
+
+- **Chinese multi-step requests now trigger orchestration.** The planner's complexity heuristic only matched English phrases (`implement … test`, `refactor … then` …), so CJK requests like "重构这个模块，拆成子任务并行处理" always fell through to a single loop. Added Chinese multi-step patterns (重构/拆分/并行/多个文件/子任务/修复…同时…).
+- **Chinese experience replay now matches.** The replay similarity used space-tokenized Jaccard, which collapses contiguous CJK into one token and made Chinese pattern matching fail almost always. Signatures now split each CJK character and a Chinese function-word (的/了/时…) stoplist is applied — similar Chinese past-success tasks are now matched and injected.
 
 - **NSIS installer is back.** Releases since 0.5.x shipped only a single exe: the global `win.artifactName` gave both the NSIS and portable targets the same filename, and the portable build (constructed last) silently overwrote the installer. Each target now has its own artifact name matching the README download table — `aetherai-setup-x.y.z.exe` (NSIS, per-user, auto-update) and `aetherai-x.y.z.exe` (portable) — and the NSIS target builds last so `latest.yml` points electron-updater at the setup exe instead of the portable one.
 - **npm publish on tag push** now syncs `package.json` with the tag version (0.7.2 never reached npm because the workflow saw the stale 0.7.1 and idempotently skipped); the deprecate step targets the actual previous `latest` instead of a hardcoded version.
