@@ -48,6 +48,8 @@ Aether wird als zwei unabhängige Artefakte ausgeliefert, die sich dieselbe Agen
 - **Aether Desktop** — die Electron-+React-GUI. Von [GitHub Releases](#download--desktop) herunterladen. Funktioniert sofort.
 - **Aether CLI / TUI / SDK** — Headless-Agent, Ink-v5-Terminal-UI und Electron-freies SDK. Installieren mit `npm install -g aetherai` ([Setup →](#download--cli--tui--sdk)). Das CLI-Binary ist `aether`.
 
+> **Aether begann als Desktop-App.** CLI und TUI wurden später hinzugefügt und holen noch auf. Wenn Sie einfach einen funktionierenden KI-Arbeitsplatz wollen, fangen Sie mit **Aether Desktop** an. Die CLI/TUI/SDK-Schicht ist experimentell: APIs und Verhalten können sich ändern, und einige Funktionen sind möglicherweise unvollständig oder unzuverlässig.
+
 Beide teilen sich `agentCore`, 42 Tools, SQLite-Speicher, Multi-Modell-Routing, MCP-Server und denselben Sitzungsspeicher. Ein in der GUI begonnener Chat lässt sich in der TUI mit `aether tui --session <id>` fortsetzen — und umgekehrt.
 
 ---
@@ -67,8 +69,8 @@ Aether bündelt mehrere Fähigkeiten, die normalerweise über verschiedene Tools
 | **Kontext-Kompaktierung** | Lange Unterhaltungen werden automatisch zusammengefasst, ohne Tool-Call-Paare zu verlieren. | `Beta` |
 | **Local-First-Datenschutz** | Unterhaltungen, Schlüssel, Personas in lokaler SQLite. Nichts verlässt Ihren Rechner. | `Stable` |
 | **15 UI-Sprachen** | Einschließlich klassischem Chinesisch (klassisches Chinesisch) und RTL-Arabisch. | `Beta` |
-| **Terminal-TUI** | Ink-v5-Interaktivterminal: Sitzungsstream, Tool-Karten, Diff-Review/Rollback, Tastatur-Berechtigungsgate, `/fork`-Sitzungsbaum, `/memory`, Live-Steering-Einspeisung. | `Beta` |
-| **Headless-CLI · RPC · SDK** | Vier-Modus-CLI (Einzelausführung / NDJSON / JSONL-RPC / Pipe), Electron-freies SDK (`aetherai/sdk`), maschinenaufrufbares JSONL-Protokoll. | `Beta` |
+| **Terminal-TUI** | Ink-v5-Interaktivterminal: Sitzungsstream, Tool-Karten, Diff-Review/Rollback, Tastatur-Berechtigungsgate, `/fork`-Sitzungsbaum, `/memory`, Live-Steering-Einspeisung. | `Experimental` |
+| **Headless-CLI · RPC · SDK** | Vier-Modus-CLI (Einzelausführung / NDJSON / JSONL-RPC / Pipe), Electron-freies SDK (`aetherai/sdk`), maschinenaufrufbares JSONL-Protokoll. | `Experimental` |
 | **MIT-Lizenz** | Vollständig Open Source. | `Stable` |
 
 ---

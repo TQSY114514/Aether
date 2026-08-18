@@ -48,6 +48,8 @@ Aether は同じエージェントランタイムを共有する 2 つの独立�
 - **Aether Desktop** — Electron + React の GUI。[GitHub Releases](#ダウンロード-デスクトップ) からダウンロード。すぐに使えます。
 - **Aether CLI / TUI / SDK** — ヘッドレスエージェント、Ink v5 のターミナル UI、Electron 不要の SDK。`npm install -g aetherai` でインストール（[セットアップ →](#ダウンロード-cli--tui--sdk)）。CLI バイナリは `aether` です。
 
+> **Aether はもともとデスクトップアプリとして始まりました。** CLI と TUI は後に追加されたもので、まだ追いついていない部分があります。単に動作する AI ワークベンチが必要な場合は、**Aether Desktop** から始めてください。CLI/TUI/SDK レイヤーは実験的です：API や動作が変更される可能性があり、一部の機能が不完全または信頼できない場合があります。
+
 両者は `agentCore`、42 のツール、SQLite メモリ、マルチモデルルーティング、MCP サーバー、同じセッションストアを共有します。GUI で開始したチャットは `aether tui --session <id>` で TUI から再開でき、その逆も可能です。
 
 ---
@@ -67,8 +69,8 @@ Aether は、通常は複数のツールに分散している機能を、1 つ�
 | **コンテキスト圧縮** | 長い会話をツール呼び出しペアを失わずに自動要約。 | `Beta` |
 | **ローカルファーストのプライバシー** | 会話、キー、ペルソナをローカルの SQLite に保存。何もマシンの外に出ません。 | `Stable` |
 | **15 の UI 言語** | 文語中国語（文言）と RTL アラビア語を含む。 | `Beta` |
-| **ターミナル TUI** | Ink v5 の対話型ターミナル: セッションストリーム、ツールカード、diff 審査 / ロールバック、キーボード権限ゲート、`/fork` セッションツリー、`/memory`、todo パネル、`@` ファイル参照、`!` シェル、実行中の steering、セッションの resume。 | `Beta` |
-| **ヘッドレス CLI · RPC · SDK** | 4 モード CLI（単発 / NDJSON / JSONL RPC / パイプ）、Electron 不要の SDK（`aetherai/sdk`）、機械から呼び出し可能な JSONL プロトコル。 | `Beta` |
+| **ターミナル TUI** | Ink v5 の対話型ターミナル: セッションストリーム、ツールカード、diff 審査 / ロールバック、キーボード権限ゲート、`/fork` セッションツリー、`/memory`、todo パネル、`@` ファイル参照、`!` シェル、実行中の steering、セッションの resume。 | `Experimental` |
+| **ヘッドレス CLI · RPC · SDK** | 4 モード CLI（単発 / NDJSON / JSONL RPC / パイプ）、Electron 不要の SDK（`aetherai/sdk`）、機械から呼び出し可能な JSONL プロトコル。 | `Experimental` |
 | **MIT ライセンス** | 完全オープンソース。 | `Stable` |
 
 ---
