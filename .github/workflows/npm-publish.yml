@@ -53,6 +53,18 @@ jobs:
           cache-dependency-path: app/package-lock.json
           registry-url: 'https://registry.npmjs.org'
 
+      # Sync package.json version with the git tag (strip leading 'v') — same
+      # trick as release.yml. Without this, a tag push reads the stale
+      # package.json version, sees it already on the registry, and silently
+      # skips the publish (the v0.7.2 tag shipped npm 0.7.1 for this reason).
+      - name: Sync package.json version with tag
+        if: github.event_name == 'push'
+        working-directory: app
+        run: |
+          $TAG = $env:GITHUB_REF -replace 'refs/tags/v', ''
+          echo "Syncing package.json version to $TAG"
+          node -e "const fs=require('fs');const p=require('./package.json');p.version='$TAG';fs.writeFileSync('./package.json',JSON.stringify(p,null,2)+'\n')"
+
       - name: Install deps (no scripts — we don't want the desktop postinstall)
         working-directory: app
         run: npm ci --ignore-scripts
@@ -118,6 +130,10 @@ jobs:
           if npm view "aetherai@${VER}" version >/dev/null 2>&1; then
             echo "::notice::aetherai@${VER} already on the registry — skipping publish (idempotent re-tag push)"
           else
+            # Capture the current 'latest' so the deprecate step below targets
+            # the version we just replaced (not a hardcoded one).
+            PREV_VER=$(npm view aetherai dist-tags.latest 2>/dev/null || true)
+            if [ -n "$PREV_VER" ]; then echo "PREV_NPM_VERSION=$PREV_VER" >> $GITHUB_ENV; fi
             echo "Publishing aetherai@${VER}..."
             npm run publish:npm
           fi
@@ -137,8 +153,10 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          PREV="0.7.0"
-          if npm view "aetherai@${PREV}" version >/dev/null 2>&1; then
+          PREV="${PREV_NPM_VERSION:-}"
+          if [ -z "$PREV" ]; then
+            echo "::notice::No previous npm version recorded — skipping deprecate"
+          elif npm view "aetherai@${PREV}" version >/dev/null 2>&1; then
             echo "Deprecating aetherai@${PREV} (superseded by ${{ github.ref_name }})"
             npm deprecate "aetherai@${PREV}" "superseded by ${{ github.ref_name }} — run 'npm i -g aetherai@latest' to upgrade"
           else
