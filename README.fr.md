@@ -48,6 +48,8 @@ Aether se présente sous la forme de deux artefacts indépendants qui partagent 
 - **Aether Desktop** — l'interface graphique Electron + React. Téléchargez-la depuis [GitHub Releases](#téléchargement--bureau). Fonctionne immédiatement.
 - **Aether CLI / TUI / SDK** — agent headless, UI terminal Ink v5 et SDK sans Electron. Installez avec `npm install -g aetherai` ([installation →](#téléchargement--cli--tui--sdk)). Le binaire CLI est `aether`.
 
+> **Aether a commencé comme une application de bureau.** La CLI et la TUI ont été ajoutées plus tard et sont toujours en rattrapage. Si vous voulez simplement un environnement de travail IA fonctionnel, commencez par **Aether Desktop**. La couche CLI/TUI/SDK est expérimentale : les API et le comportement peuvent changer, et certaines fonctionnalités peuvent être incomplètes ou peu fiables.
+
 Les deux partagent `agentCore`, 42 outils, la mémoire SQLite, le routage multi-modèles, les serveurs MCP et le même magasin de sessions. Une discussion commencée dans l'interface graphique peut être reprise dans le TUI avec `aether tui --session <id>` et inversement.
 
 ---
@@ -67,8 +69,8 @@ Aether combine plusieurs capacités, habituellement réparties entre plusieurs o
 | **Compaction du contexte** | Les longues conversations se résument automatiquement sans perdre les paires d'appels d'outils. | `Beta` |
 | **Confidentialité local-first** | Conversations, clés, personas dans SQLite local. Rien ne quitte votre machine. | `Stable` |
 | **15 langues d'interface** | Y compris le chinois classique (chinois classique) et l'arabe RTL. | `Beta` |
-| **TUI terminal** | Terminal interactif Ink v5 : flux de sessions, cartes d'outils, revue/rollback de diffs, portes de permissions clavier, `/fork` arbre de sessions, `/memory`, réinjection de steering en cours d'exécution. | `Beta` |
-| **CLI headless · RPC · SDK** | CLI à quatre modes (one-shot / NDJSON / JSONL RPC / pipe), SDK sans Electron (`aetherai/sdk`), protocole JSONL appelable par machine. | `Beta` |
+| **TUI terminal** | Terminal interactif Ink v5 : flux de sessions, cartes d'outils, revue/rollback de diffs, portes de permissions clavier, `/fork` arbre de sessions, `/memory`, réinjection de steering en cours d'exécution. | `Experimental` |
+| **CLI headless · RPC · SDK** | CLI à quatre modes (one-shot / NDJSON / JSONL RPC / pipe), SDK sans Electron (`aetherai/sdk`), protocole JSONL appelable par machine. | `Experimental` |
 | **Licence MIT** | Entièrement open source. | `Stable` |
 
 ---

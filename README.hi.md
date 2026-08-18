@@ -48,6 +48,8 @@ Aether दो स्वतंत्र उत्पादों के रूप
 - **Aether Desktop** — Electron + React GUI। इसे [GitHub Releases](#डाउनलोड-डेस्कटॉप) से डाउनलोड करें; बॉक्स से बाहर तैयार।
 - **Aether CLI / TUI / SDK** — हेडलेस एजेंट, Ink v5 टर्मिनल UI और Electron-free SDK। `npm install -g aetherai` से इंस्टॉल करें ([सेटअप →](#डाउनलोड-cli--tui--sdk))। CLI बाइनरी का नाम `aether` है।
 
+> **Aether एक डेस्कटॉप ऐप के रूप में शुरू हुआ था।** CLI और TUI बाद में जोड़े गए थे और अभी भी पूरा हो रहे हैं। यदि आप केवल एक कार्यरत AI वर्कबेंच चाहते हैं, तो **Aether Desktop** से शुरुआत करें। CLI/TUI/SDK परत प्रयोगात्मक है: API और व्यवहार बदल सकते हैं, और कुछ सुविधाएं अपूर्ण या अविश्वसनीय हो सकती हैं।
+
 दोनों `agentCore`, 42 टूल, SQLite मेमोरी, मल्टी-मॉडल रूटिंग, MCP सर्वर और एक ही सत्र स्टोर साझा करते हैं। GUI में शुरू की गई चैट को TUI में `aether tui --session <id>` से जारी रखा जा सकता है, और इसका उल्टा भी।
 
 ---
@@ -67,8 +69,8 @@ Aether कई क्षमताओं को एक ही स्थानी�
 | **Context Compaction** | लंबे वार्तालाप बिना टूल-कॉल जोड़े खोए स्वतः सारांशित होते हैं। | `Beta` |
 | **Local-First Privacy** | वार्तालाप, कुंजियाँ, personas स्थानीय SQLite में। कुछ भी आपकी मशीन से बाहर नहीं जाता। | `Stable` |
 | **15 UI Languages** | क्लासिकल चाइनीज़ (शास्त्रीय चीनी) और RTL अरबी सहित। | `Beta` |
-| **Terminal TUI** | Ink v5 इंटरैक्टिव टर्मिनल: सत्र स्ट्रीम, टूल कार्ड, diff समीक्षा/रोलबैक, कीबोर्ड अनुमति द्वार, `/fork` सत्र ट्री, `/memory`, चलते-चलते steering इंजेक्शन। | `Beta` |
-| **Headless CLI · RPC · SDK** | चार-मोड CLI (सिंगल-शॉट / NDJSON / JSONL RPC / पाइप), Electron-free SDK (`aetherai/sdk`), मशीन-कॉल करने योग्य JSONL प्रोटोकॉल। | `Beta` |
+| **Terminal TUI** | Ink v5 इंटरैक्टिव टर्मिनल: सत्र स्ट्रीम, टूल कार्ड, diff समीक्षा/रोलबैक, कीबोर्ड अनुमति द्वार, `/fork` सत्र ट्री, `/memory`, चलते-चलते steering इंजेक्शन। | `Experimental` |
+| **Headless CLI · RPC · SDK** | चार-मोड CLI (सिंगल-शॉट / NDJSON / JSONL RPC / पाइप), Electron-free SDK (`aetherai/sdk`), मशीन-कॉल करने योग्य JSONL प्रोटोकॉल। | `Experimental` |
 | **MIT Licensed** | पूर्ण रूप से ओपन सोर्स। | `Stable` |
 
 ---

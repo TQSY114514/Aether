@@ -48,6 +48,8 @@ Aether se distribuye como dos artefactos independientes que comparten el mismo r
 - **Aether Desktop** — la GUI de Electron + React. Descárgala desde [GitHub Releases](#descarga--escritorio). Funciona out of the box.
 - **Aether CLI / TUI / SDK** — agente headless, UI de terminal Ink v5 y SDK sin Electron. Instala con `npm install -g aetherai` ([instalación →](#descarga--cli--tui--sdk)). El binario del CLI es `aether`.
 
+> **Aether comenzó como una aplicación de escritorio.** La CLI y la TUI se añadieron después y todavía se están poniendo al día. Si solo quieres un entorno de trabajo con IA que funcione, empieza por **Aether Desktop**. La capa CLI/TUI/SDK es experimental: las API y el comportamiento pueden cambiar, y algunas funciones pueden estar incompletas o ser poco fiables.
+
 Ambos comparten `agentCore`, 42 herramientas, la memoria SQLite, el enrutamiento multi-modelo, los servidores MCP y el mismo almacén de sesiones. Un chat iniciado en la GUI puede continuarse en la TUI con `aether tui --session <id>` y viceversa.
 
 ---
@@ -67,8 +69,8 @@ Aether combina varias capacidades que normalmente se encuentran repartidas entre
 | **Compacción de contexto** | Las conversaciones largas se resumen automáticamente sin perder pares de llamadas a herramientas. | `Beta` |
 | **Privacidad local-first** | Conversaciones, claves y personas en SQLite local. Nada sale de tu máquina. | `Stable` |
 | **15 idiomas de UI** | Incluyendo chino clásico (chino clásico) y árabe RTL. | `Beta` |
-| **Terminal TUI** | Terminal interactivo Ink v5: flujo de sesiones, tarjetas de herramientas, revisión/reversión de diff, puerta de permisos por teclado, árbol de sesiones con `/fork`, `/memory` y reinyección de steering en tiempo de ejecución. | `Beta` |
-| **Headless CLI · RPC · SDK** | CLI de cuatro modos (disparo único / NDJSON / JSONL RPC / pipe), SDK sin Electron (`aetherai/sdk`) y protocolo JSONL invocable por máquinas. | `Beta` |
+| **Terminal TUI** | Terminal interactivo Ink v5: flujo de sesiones, tarjetas de herramientas, revisión/reversión de diff, puerta de permisos por teclado, árbol de sesiones con `/fork`, `/memory` y reinyección de steering en tiempo de ejecución. | `Experimental` |
+| **Headless CLI · RPC · SDK** | CLI de cuatro modos (disparo único / NDJSON / JSONL RPC / pipe), SDK sin Electron (`aetherai/sdk`) y protocolo JSONL invocable por máquinas. | `Experimental` |
 | **Licencia MIT** | Totalmente open source. | `Stable` |
 
 ---

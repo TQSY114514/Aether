@@ -56,8 +56,8 @@ Aether는 일반적으로 여러 도구에 분산되어 있는 기능들을 하�
 | **컨텍스트 압축** | 도구 호출 쌍을 잃지 않으면서 긴 대화를 자동 요약합니다. | `Beta` |
 | **로컬 우선 프라이버시** | 대화, 키, 페르소나가 로컬 SQLite에 저장됩니다. 어떤 것도 머신을 벗어나지 않습니다. | `Stable` |
 | **15개 UI 언어** | 문언 중국어(고전 중국어) 및 RTL 아랍어 포함. | `Beta` |
-| **터미널 TUI** | Ink v5 인터랙티브 터미널: 세션 스트림, 도구 카드, diff 검토/롤백, 키보드 권한 게이트, `/fork` 세션 트리, `/memory`, todo 패널, `@` 파일 참조, `!` 셸, 실행 중 steering, 세션 resume. | `Beta` |
-| **Headless CLI · RPC · SDK** | 4모드 CLI(단발 / NDJSON / JSONL RPC / 파이프), Electron-free SDK(`aetherai/sdk`), 머신 호출 가능한 JSONL 프로토콜. | `Beta` |
+| **터미널 TUI** | Ink v5 인터랙티브 터미널: 세션 스트림, 도구 카드, diff 검토/롤백, 키보드 권한 게이트, `/fork` 세션 트리, `/memory`, todo 패널, `@` 파일 참조, `!` 셸, 실행 중 steering, 세션 resume. | `Experimental` |
+| **Headless CLI · RPC · SDK** | 4모드 CLI(단발 / NDJSON / JSONL RPC / 파이프), Electron-free SDK(`aetherai/sdk`), 머신 호출 가능한 JSONL 프로토콜. | `Experimental` |
 | **MIT 라이선스** | 완전한 오픈소스. | `Stable` |
 
 ---
@@ -85,7 +85,9 @@ Aether는 일반적으로 여러 도구에 분산되어 있는 기능들을 하�
 
 ### 다운로드 — CLI / TUI / SDK
 
-**`aetherai`**는 npm 패키지입니다. 헤드리스 CLI, Ink v5 인터랙티브 TUI, Electron-free SDK를 하나의 바이너리로 묶어 제공합니다.
+- **Aether CLI / TUI / SDK** — 헤드리스 CLI, Ink v5 인터랙티브 TUI, Electron-free SDK를 하나의 바이너리로 묶어 제공합니다.
+
+> **Aether는 데스크톱 앱으로 시작했습니다.** CLI와 TUI는 나중에 추가되었으며 아직 개선 중입니다. 단순히 작동하는 AI 워크벤치를 원하시면 **Aether Desktop**부터 시작하세요. CLI/TUI/SDK 계층은 실험적입니다: API와 동작이 변경될 수 있으며 일부 기능이 불완전하거나 신뢰할 수 없을 수 있습니다.
 
 ```bash
 # Install once (requires Node.js ≥ 22)

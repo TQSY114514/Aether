@@ -52,6 +52,8 @@ Aether ships as two independent artifacts that share the same agent runtime:
 - **Aether Desktop** — the Electron + React GUI. Download from [GitHub Releases](#download-desktop). Works out of the box.
 - **Aether CLI / TUI / SDK** — headless agent, Ink v5 terminal UI, and Electron-free SDK. Install with `npm install -g aetherai` ([setup →](#download-cli)). The CLI binary is `aether`.
 
+> **Aether started as a desktop app.** The CLI and TUI were added later and are still catching up. If you just want a working AI workbench, start with **Aether Desktop**. The CLI/TUI/SDK layer is experimental: APIs and behavior may change, and some features may be incomplete or unreliable.
+
 Both share `agentCore`, 42 tools, SQLite memory, multi-model routing, MCP servers, and the same session store. A chat started in the GUI can be resumed in the TUI with `aether tui --session <id>` and vice versa.
 
 ---
@@ -72,8 +74,8 @@ Two things set Aether apart — a **security-first agent** that refuses to surpr
 | **Context Compaction** | Long conversations auto-summarize without losing tool-call pairs. | `Beta` |
 | **Local-First Privacy** | Conversations, keys, personas in local SQLite. Nothing leaves your machine. | `Stable` |
 | **15 UI Languages** | Including Classical Chinese and RTL Arabic. | `Beta` |
-| **Terminal TUI** | Ink v5 interactive terminal: session streaming, tool cards, diff review/rollback, keyboard permission gate, `/fork` session tree, `/memory`, todo panel, `@` file refs, `!` shell, in-flight steering, session resume. | `Beta` |
-| **Headless CLI · RPC · SDK** | Four-mode CLI (one-shot / NDJSON / JSONL RPC / pipe), Electron-free SDK (`aetherai/sdk`), machine-callable JSONL protocol. | `Beta` |
+| **Terminal TUI** | Ink v5 interactive terminal: session streaming, tool cards, diff review/rollback, keyboard permission gate, `/fork` session tree, `/memory`, todo panel, `@` file refs, `!` shell, in-flight steering, session resume. | `Experimental` |
+| **Headless CLI · RPC · SDK** | Four-mode CLI (one-shot / NDJSON / JSONL RPC / pipe), Electron-free SDK (`aetherai/sdk`), machine-callable JSONL protocol. | `Experimental` |
 | **MIT Licensed** | Fully open source. | `Stable` |
 
 ---

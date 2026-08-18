@@ -46,6 +46,8 @@ Aether 以兩個獨立產品的形式發布,二者共享同一 Agent 執行時:
 - **Aether 桌面版** — Electron + React 圖形介面。從 [GitHub Releases](#下載-桌面版) 下載,開箱即用。
 - **Aether CLI / TUI / SDK** — 無頭 Agent、Ink v5 終端 UI、Electron-free SDK。`npm install -g aetherai`(詳見[下載 CLI](#下載-cli--tui--sdk))。CLI 命令為 `aether`。
 
+> **Aether 最初只有桌面端**，CLI / TUI 是後來補上的，目前仍在完善中。如果你只是想用一個**穩定可用的 AI 工作台**，請先裝 **Aether 桌面版**。CLI / TUI / SDK 仍處於**實驗性質**：接口與行為可能變化，部分功能可能不完整或不可靠。
+
 二者共享 `agentCore`、42 個工具、SQLite 記憶、多模型路由、MCP 伺服器與同一會話儲存。桌面端開啟的會話可在終端用 `aether tui --session <id>` 續接,反之亦然。
 
 ---
@@ -65,8 +67,8 @@ Aether 把通常分散在多個工具裡的能力集中到一個本機桌面應�
 | **上下文壓縮** | 長對話自動摘要且不丟工具呼叫對。 | `Beta` |
 | **本機優先隱私** | 對話、金鑰、人設都在本機 SQLite。資料不離開你的機器。 | `Stable` |
 | **15 種介面語言** | 含文言文與 RTL 阿拉伯語。 | `Beta` |
-| **終端 TUI** | Ink v5 互動終端:會話流、工具卡、diff 審閱/回滾、鍵盤權限門、`/fork` 會話樹、`/memory`、todo 面板、`@` 檔案參照、`!` shell、執行中 steering 回注、會話 resume。 | `Beta` |
-| **無頭 CLI · RPC · SDK** | 四模式 CLI(單發 / NDJSON / JSONL RPC / 管道)、Electron-free SDK(`aetherai/sdk`)、機器可呼叫的 JSONL 協定。 | `Beta` |
+| **終端 TUI** | Ink v5 互動終端:會話流、工具卡、diff 審閱/回滾、鍵盤權限門、`/fork` 會話樹、`/memory`、todo 面板、`@` 檔案參照、`!` shell、執行中 steering 回注、會話 resume。 | `Experimental` |
+| **無頭 CLI · RPC · SDK** | 四模式 CLI(單發 / NDJSON / JSONL RPC / 管道)、Electron-free SDK(`aetherai/sdk`)、機器可呼叫的 JSONL 協定。 | `Experimental` |
 | **MIT 許可** | 完全開源。 | `Stable` |
 
 ---
