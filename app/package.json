@@ -1,6 +1,6 @@
 {
   "name": "aetherai",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Aether headless agent — CLI, TUI, and Electron-free SDK. Pairs with the Aether Desktop GUI (separate installer) sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
   "license": "MIT",
@@ -81,7 +81,7 @@
     "check:ipc": "node scripts/check-ipc.js",
     "build:icon": "node build-icons.js",
     "build:win": "vite build && electron-builder --win --x64",
-    "build:ci": "vite build && electron-builder --win nsis portable --x64 --publish always",
+    "build:ci": "vite build && electron-builder --win --x64 --publish always",
     "start": "electron .",
     "test": "vitest run --fileParallelism=false --testTimeout=30000",
     "test:watch": "vitest",

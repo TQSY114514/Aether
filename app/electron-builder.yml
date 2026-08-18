@@ -21,16 +21,28 @@ publish:
   vPrefixedTagName: true
 
 win:
+  # portable builds first, nsis last: with multiple win targets both write
+  # release/latest.yml (last one wins), and it must point at the NSIS
+  # installer so electron-updater downloads the setup exe (the portable exe
+  # cannot self-install an update). Keep this order if targets change.
   target:
-    - nsis
     - portable
+    - nsis
   icon: resources/icon.png
-  artifactName: ${name}-${version}-${os}-${arch}.${ext}
 
 linux:
   icon: resources
 
+# Per-target artifact names — REQUIRED. A single win.artifactName gives both
+# targets the same filename and the second build silently overwrites the
+# first (this is why releases <= 0.7.2 shipped only one exe: the NSIS
+# installer was overwritten by the portable build). Names match the download
+# table documented in README.md.
+portable:
+  artifactName: ${name}-${version}.${ext}
+
 nsis:
+  artifactName: ${name}-setup-${version}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
