@@ -14,6 +14,7 @@ import LearningGraphPage from '@/pages/LearningGraphPage'
 import SkillsPage from '@/pages/SkillsPage'
 import EvolutionPage from '@/pages/EvolutionPage'
 import LearningStatusPage from '@/pages/LearningStatusPage'
+import SecurityPage from '@/pages/SecurityPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
@@ -241,6 +242,7 @@ export default function App() {
       case 'skills': return <SkillsPage />
       case 'evolution': return <EvolutionPage />
       case 'learningStatus': return <LearningStatusPage />
+      case 'security': return <SecurityPage />
     }
   }
 
