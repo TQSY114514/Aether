@@ -191,6 +191,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   learning: {
     overview: () => ipcRenderer.invoke('learning:overview'),
+    recentAudit: (limit = 30) => ipcRenderer.invoke('audit:recent', { limit }),
   },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),

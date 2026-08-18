@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import TaskPanel, { tx } from '@/components/tasks/TaskPanel'
@@ -271,6 +271,7 @@ export default function Sidebar() {
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
         <NavItem icon={History} label={tx('sidebar.nav.learningStatus', '学习状态')} active={currentView === 'learningStatus'} onClick={() => setCurrentView('learningStatus')} />
+        <NavItem icon={Shield} label={tx('sidebar.nav.security', '安全')} active={currentView === 'security'} onClick={() => setCurrentView('security')} />
         {/* Background tasks (功能 A): a drawer toggle, not a view — the page
             switch lives in App.tsx and stays untouched. */}
         <NavItem icon={ListTodo} label={tx('sidebar.nav.tasks', '任务')} active={tasksOpen}

@@ -51,6 +51,19 @@ function registerLearningHandlers(ipcMain, db) {
 
     return { memory, autoSkills, evolution, habits, replay }
   })
+
+  // 跨 session 的最近 agent 审计轨迹(安全面板用)：工具调用 trace.
+  ipcMain.handle('audit:recent', (_e, { limit = 30 } = {}) => {
+    try {
+      const rows = db.prepare('SELECT id, session_id, turn_id, payload, created_at FROM agent_execution_log ORDER BY id DESC LIMIT ?').all(limit)
+      return rows.map((r) => {
+        try { r.payload = JSON.parse(r.payload || '{}') } catch { r.payload = {} }
+        return r
+      })
+    } catch {
+      return []
+    }
+  })
 }
 
 module.exports = { registerLearningHandlers }

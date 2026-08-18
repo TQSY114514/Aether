@@ -206,6 +206,7 @@ interface Window {
         habits: { total: number; recent: { key: string; imperative: string; occurrences: number }[] }
         replay: { total: number; top: { signature: string; tools: string; count: number }[] }
       }>
+      recentAudit: (limit?: number) => Promise<{ id: number; session_id: number; turn_id: number; payload: any; created_at: string }[]>
     }
     kg: {
       graph: (opts?: { nodeLimit?: number; edgeLimit?: number }) => Promise<{ nodes: { id: string; label: string; type: string }[]; edges: { source: string; target: string; relation: string; confidence: number }[] }>
