@@ -14,7 +14,7 @@ import codeUnderstanding from '../electron/context/codeUnderstanding'
 const {
   listSourceFiles, extractModuleSpecs, extractSymbols, moduleImports,
   resolveImportTarget, buildGraphUnderstanding, buildCodeUnderstanding,
-  writeCodeUnderstanding,
+  writeCodeUnderstanding, indexWorkspace,
 } = codeUnderstanding
 
 // ─── Fake db (kg_nodes / kg_edges as in-memory arrays) ──────────────────────
@@ -224,5 +224,35 @@ describe('end-to-end', () => {
     expect(db.edges.length).toBeGreaterThanOrEqual(1)
     const importEdges = db.edges.filter(e => e.relation === 'imports')
     expect(importEdges.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+// ─── indexWorkspace ─────────────────────────────────────────────────────────
+
+describe('indexWorkspace', () => {
+  it('scans a workspace and persists the graph on first run', () => {
+    writeSrc('src/a.js', `import { x } from './b'\n`)
+    writeSrc('src/b.js', `export const x = 1\n`)
+    const db = mkDb()
+    const res = indexWorkspace(db, tmpRoot)
+    expect(res.skipped).toBe(false)
+    expect(res.nodes).toBeGreaterThanOrEqual(2)
+    expect(res.edges).toBeGreaterThanOrEqual(1)
+    expect(db.nodes.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('skips re-indexing the same directory within TTL (idempotent)', () => {
+    writeSrc('src/a.js', `export const a = 1\n`)
+    const db = mkDb()
+    const first = indexWorkspace(db, tmpRoot)
+    const second = indexWorkspace(db, tmpRoot)
+    expect(first.skipped).toBe(false)
+    expect(second.skipped).toBe(true)
+    expect(second.nodes).toBe(0)
+  })
+
+  it('tolerates missing root or db', () => {
+    expect(indexWorkspace(null, tmpRoot).skipped).toBe(true)
+    expect(indexWorkspace(mkDb(), null).skipped).toBe(true)
   })
 })

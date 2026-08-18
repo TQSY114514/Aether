@@ -19,6 +19,7 @@ const modelAdvisor = require('../llm/modelAdvisor')
 const log = require('../logger')
 const providerHealth = require('../llm/providerHealth')
 const { buildToolLoopCallbacks } = require('./toolLoopCallbacks')
+const codeUnderstanding = require('../context/codeUnderstanding')
 
 const DEFAULT_CTX_BUDGET = 32000
 const DEFAULT_FALLBACK_TIMEOUT_MS = 30000
@@ -361,6 +362,16 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // then delivered as the assistant message. Falls through to the normal
     // streaming path when useTools is false.
     if (useTools) {
+      // Code understanding(本地、无 LLM):把 workspace 结构持久化进知识图谱,
+      // 让跨会话「X 如何连到 Y」的查询可用。延迟 + fire-and-forget,不阻塞回复路径。
+      try {
+        const ff = require('../featureFlags')
+        if (ff.isEnabled(db, 'memory.codeUnderstanding')) {
+          let wsRoot = null
+          try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+          if (wsRoot) setImmediate(() => { try { codeUnderstanding.indexWorkspace(db, wsRoot, { maxFiles: 2000 }) } catch {} })
+        }
+      } catch {}
       // Inject the available-skills list as a system message so the model can
       // call use_skill when a task matches. Only when tools are on (skills are
       // meaningless without the tool loop). Done after compaction so the list

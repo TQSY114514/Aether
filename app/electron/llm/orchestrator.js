@@ -20,16 +20,13 @@
 const planning = require('./planning')
 const subAgent = require('./subAgent')
 const log = require('../logger')
+const featureFlags = require('../featureFlags')
 
 const FLAG_KEY = 'agent.orchestrator'
 
+// flag 单一事实来源:存储值或声明默认值。改 featureFlags.js 的 default 才真正生效。
 function isEnabled(db) {
-  if (!db || typeof db.getSetting !== 'function') return false
-  try {
-    const raw = db.getSetting(`feature_flag.${FLAG_KEY}`)
-    if (raw === null || raw === undefined) return false
-    return String(raw) !== '0' && String(raw) !== 'false' && String(raw) !== 'off' && String(raw) !== 'no'
-  } catch { return false }
+  return featureFlags.isEnabled(db, FLAG_KEY)
 }
 
 // ─── Batching ───────────────────────────────────────────────────────────────
