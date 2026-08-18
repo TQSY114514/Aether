@@ -4,9 +4,9 @@
 
 # Aether
 
-### Local-first · Multi-model · Agent-native
+### Safe by default · Multi-model Arena · Local-first
 
-Chat with any model, run a safe coding agent, and compare models side-by-side — on your desktop or in your terminal.
+The AI workbench that refuses to surprise you — an agent that asks before it acts, and a head-to-head arena for comparing models. All on your device.
 
 **Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
@@ -37,11 +37,11 @@ Chat with any model, run a safe coding agent, and compare models side-by-side �
 
 **Platform: Windows only.** Official builds, testing, and support target Windows. macOS / Linux may build from source but are not officially supported, and code signing is not planned — expect a SmartScreen "unknown publisher" prompt on first launch (see [Download](#download)).
 
-**One app for every model.** OpenAI / Claude / DeepSeek / local models / any OpenAI-compatible endpoint — chat, run a coding agent, and compare models head-to-head in a multi-model arena with ELO voting.
+**Safe by default.** The agent asks before it acts. Commands run through an allowlist sandbox rather than a blocklist an attacker can chain around; writes to sensitive paths (`.git`, `.ssh`, hooks) are refused; and content read from files or MCP is treated as untrusted before it reaches the model. A permission ladder — plan, read-only, ask, full-access — leaves you in control of every tool call.
 
-**Local-first by design.** API keys and conversations live in a local SQLite database and never leave your machine — except to the providers you configure.
+**Multi-model Arena.** Stop trusting a single model. Send one prompt to several at once, vote on the best answer, and watch ELO rankings update live — a built-in peer-review bench for your own prompts.
 
-**Safe by default.** The built-in agent runs inside a workspace sandbox with a permission ladder: file and command access is confirmed before it happens, and every tool call is auditable.
+**Local-first by design.** Keys, chats, and memory live in a local SQLite database and never leave your machine except to the providers you configure. No account, no cloud sync, no telemetry. The safest place for your data is on your device.
 
 ---
 
@@ -58,13 +58,14 @@ Both share `agentCore`, 42 tools, SQLite memory, multi-model routing, MCP server
 
 ## What makes Aether different
 
-Aether combines several capabilities that are typically spread across multiple tools into one local desktop app:
+Two things set Aether apart — a **security-first agent** that refuses to surprise you, and a **multi-model arena** that lets you test models instead of trusting one.
 
 | Capability | Description | Maturity |
 |---|---|:---:|
+| **Security-first sandbox** | Allowlist command sandbox (multi-segment checked), sensitive-path write protection, external-content sanitization, and a plan → read-only → ask → full permission ladder. | `Beta` |
+| **Multi-model Arena** | Send one prompt to many models at once, vote on the best, track live ELO rankings. | `Beta` |
 | **Multi-provider Chat** | Switch between OpenAI, Claude, DeepSeek, and any OpenAI-compatible endpoint mid-conversation. | `Stable` |
-| **Agent Tool Loop** | 42 built-in tools with Plan-Act-Observe loop, sandboxing, permission ladder. | `Beta` |
-| **Multi-model Arena** | Send one prompt to multiple models, vote on the best, track ELO rankings. | `Beta` |
+| **Agent Tool Loop** | 42 built-in tools with a Plan-Act-Observe loop. | `Beta` |
 | **Skills & Extensibility** | Drop-in `SKILL.md` files, MCP servers, 10-point hook system. | `Experimental` |
 | **Structured Memory** | Agent recalls preferences and past decisions across sessions. | `Beta` |
 | **Hierarchical Planning** | Complex requests auto-decompose into parallel sub-tasks. | `Experimental` |
