@@ -110,6 +110,13 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   Don't add JSON/JSONL sidecar stores for runtime state — graph memory belongs
   in the `kg_nodes`/`kg_edges` tables. (The old `memoryGraph.js` JSONL module
   was dead code and has been removed; do not revive that approach.)
+- **UI must not look AI-generated**: every visual decision in `app/src` must be
+  intentional per `docs/ui-design.md` — no indigo/violet/purple gradients, no
+  `bg-clip-text` gradient headlines, no reflexive glassmorphism, no oversized
+  card corners or colored glow shadows, no emoji iconography, no `→` glyphs in
+  copy. New UI ships with all interactive states (hover/focus-visible/active/
+  disabled) and a `prefers-reduced-motion` fallback. A generated UI that reads
+  as a template is a bug, not a style.
 
 ## Known pitfalls (condensed)
 
@@ -126,8 +133,10 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   `llm/toolResultMiddleware.js`. A new tool needs `risk` set correctly.
 - Before changing the IPC surface → read the handler, `preload.js`, AND
   `src/env.d.ts` (see hard rules).
-- Before changing themes/background → read `utils/theme.ts` (it sets CSS vars
-  including `--content-bg`) AND `App.tsx` (background layer + main container).
+- Before changing themes/background or writing UI → read `utils/theme.ts` (it
+  sets CSS vars including `--content-bg`) AND `App.tsx` (background layer +
+  main container) AND `docs/ui-design.md` (anti-AI-slop design rules — binding
+  for all `app/src` UI).
 - Before changing DB schema → read `database.js` `initDatabase` (CREATE TABLE)
   AND the `addCol` migration block. Add new columns there so old DBs upgrade.
 
