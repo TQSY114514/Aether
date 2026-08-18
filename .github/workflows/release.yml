@@ -47,7 +47,23 @@ jobs:
 
       - name: Build Windows artifacts (no auto-publish to avoid duplicate Release creation)
         working-directory: app
-        run: npx electron-builder --win nsis portable --x64 --publish never
+        # Targets + order come from electron-builder.yml (portable then nsis —
+        # nsis must build last so latest.yml points at the setup exe).
+        run: npx electron-builder --win --x64 --publish never
+
+      # Guard against a silent regression of the <=0.7.2 bug (one target's
+      # artifact overwriting the other, latest.yml pointing at the portable
+      # exe): fail the release BEFORE publishing if artifacts look wrong.
+      - name: Verify build artifacts (setup + portable + latest.yml)
+        working-directory: app/release
+        run: |
+          $setup = Get-ChildItem -Filter 'aetherai-setup-*.exe' -ErrorAction SilentlyContinue
+          $portable = Get-ChildItem -Filter 'aetherai-*.exe' | Where-Object { $_.Name -notmatch '-setup-' }
+          if (-not $setup) { throw 'NSIS setup exe missing from build output' }
+          if (-not $portable) { throw 'portable exe missing from build output' }
+          $yml = Get-Content latest.yml -Raw
+          if ($yml -notmatch 'aetherai-setup-[\d.]+\.exe') { throw "latest.yml does not reference the NSIS setup exe (electron-updater would download the portable exe):`n$yml" }
+          echo 'Artifacts OK:'; Get-ChildItem -Filter *.exe | Select-Object -ExpandProperty Name
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2

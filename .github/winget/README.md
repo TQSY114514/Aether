@@ -5,7 +5,7 @@
 #
 # 提交流程:
 #   1. 构建并发布 GitHub Release(v0.x.y), 拿到安装包直链:
-#      https://github.com/TQSY114514/Aether/releases/download/v0.x.y/aetherai-0.x.y-win-x64.exe
+#      https://github.com/TQSY114514/Aether/releases/download/v0.x.y/aetherai-setup-0.x.y.exe
 #   2. 用 wingetcreate 生成 manifest(推荐, 自动算哈希):
 #        wingetcreate update Aether.Aether -u <installer-url> -v 0.x.y
 #   3. 复制生成的 YAML 到本目录(替换占位), 提交到 microsoft/winget-pkgs:
@@ -26,7 +26,7 @@ ShortDescription: Local-first multi-model AI workbench - chat with any model, ru
 InstallerType: exe
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/TQSY114514/Aether/releases/download/v0.7.0/aetherai-0.7.0-win-x64.exe
+    InstallerUrl: https://github.com/TQSY114514/Aether/releases/download/v0.7.0/aetherai-setup-0.7.0.exe
     InstallerSha256: REPLACE_WITH_REAL_SHA256
     InstallerSwitches:
       Silent: /S

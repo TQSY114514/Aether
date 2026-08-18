@@ -2,6 +2,13 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.7.3] - 2026-08-18
+
+### Fixed
+
+- **NSIS installer is back.** Releases since 0.5.x shipped only a single exe: the global `win.artifactName` gave both the NSIS and portable targets the same filename, and the portable build (constructed last) silently overwrote the installer. Each target now has its own artifact name matching the README download table — `aetherai-setup-x.y.z.exe` (NSIS, per-user, auto-update) and `aetherai-x.y.z.exe` (portable) — and the NSIS target builds last so `latest.yml` points electron-updater at the setup exe instead of the portable one.
+- **npm publish on tag push** now syncs `package.json` with the tag version (0.7.2 never reached npm because the workflow saw the stale 0.7.1 and idempotently skipped); the deprecate step targets the actual previous `latest` instead of a hardcoded version.
+
 ## [0.7.2] - 2026-08-18
 
 ### Changed
