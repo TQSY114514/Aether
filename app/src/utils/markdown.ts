@@ -117,7 +117,14 @@ const HL_LANGS: Record<string, string> = {
 // loads in non-DOM contexts (unit tests).
 let _purify: ReturnType<typeof createDOMPurify> | null = null
 
-function sanitizeHtml(html: string): string {
+// Attribute-value escape for the HTML string building below. The global
+// pre-escape at the top of renderInner already turned & < > into entities,
+// so only `"` remains: an unescaped quote would terminate the attribute
+// early and let message content inject attributes/styles (e.g. via a `"`
+// inside an img alt/src or an autolinked URL).
+const escapeAttr = (s: string) => s.replace(/"/g, '&quot;')
+
+export function sanitizeHtml(html: string): string {
   if (typeof window === 'undefined') return html
   if (!_purify) _purify = createDOMPurify(window)
   return _purify.sanitize(html)
@@ -234,7 +241,8 @@ function renderInner(raw: string, hljs: typeof hljsCore | null): string {
     linkTokens.push(html)
     return ph
   })
-  t = t.replace(RE_AUTO_URL, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>')
+  t = t.replace(RE_AUTO_URL, (_, url: string) =>
+    `<a href="${escapeAttr(url)}" target="_blank" rel="noreferrer noopener">${url}</a>`)
   t = t.replace(/\x00L(\d+)\x00/g, (_, i) => linkTokens[Number(i)] || '')
 
   t = t.replace(RE_HR, '<hr>')

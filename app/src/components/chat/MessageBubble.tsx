@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
 import { Copy, Check, RefreshCw, Pencil, Play } from 'lucide-react'
-import { renderMarkdown } from '@/utils/markdown'
+import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
@@ -98,8 +98,12 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
     }
     const html = renderMarkdown(text)
     if (hlRe) {
-      const highlighted = html.replace(hlRe,
-        '<mark class="search-hl" style="background:var(--accent);color:#fff;border-radius:2px;padding:0 1px">$1</mark>')
+      // String substitution over sanitized HTML can re-form markup (e.g. a
+      // keyword matching inside a tag or entity); re-sanitize the result so
+      // only the allowed <mark> highlight survives. mark/style are in
+      // DOMPurify's default allowlist, so the highlight itself is kept.
+      const highlighted = sanitizeHtml(html.replace(hlRe,
+        '<mark class="search-hl" style="background:var(--accent);color:#fff;border-radius:2px;padding:0 1px">$1</mark>'))
       return <div className="mc" dangerouslySetInnerHTML={{ __html: highlighted }} />
     }
     return <div className="mc" dangerouslySetInnerHTML={{ __html: html }} />

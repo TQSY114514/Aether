@@ -311,6 +311,24 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const permissionPolicy = new permissions.PermissionPolicy(
     permissions.PermissionMode[agentModeToPermissionMode(agentMode) || 'Prompt']
   )
+  // C1 修复: 按各工具 risk 填充权限需求档位 —— safe → ReadOnly（任何模式
+  // 直接放行）, dangerous → DangerFullAccess（plan/auto 拒绝, ask 走下方
+  // 用户确认门）。未登记的工具（如陌生 MCP 工具）回落 requiredModeFor 的
+  // 默认 DangerFullAccess（保守）。修复此前 toolRequirements 从不填充导致
+  // plan/auto 模式全工具皆拒的副作用（子代理/后台任务恢复可用）。
+  for (const p of toolPayload) {
+    try {
+      const t = getTool(p.function.name)
+      if (t) {
+        permissionPolicy.withToolRequirement(
+          p.function.name,
+          t.risk === 'dangerous'
+            ? permissions.PermissionMode.DangerFullAccess
+            : permissions.PermissionMode.ReadOnly
+        )
+      }
+    } catch {}
+  }
 
   // Capability axis policies（评审 P0-2）: 从 settings 读取持久化配置
   //   capability.filesystem / capability.shell / capability.network
@@ -628,12 +646,58 @@ Reply in this format:
               entry.failure_kind = 'permission_denied'
             }
           }
-          // Phase 4: Permission policy authorization — runs after hooks so
-          // hook overrides (permission_override) are incorporated.
+          // ── C1: effectiveMode（auto_confirm 拆分 + 信任引擎自适应）────────
+          let effectiveMode = agentMode === 'auto_confirm'
+            ? (tool.risk === 'safe' ? 'auto' : 'ask')
+            : agentMode
+          let trustAutoApproved = false
+          if (!entry.error && sessionId && db && effectiveMode === 'ask' && tool.risk === 'dangerous') {
+            try {
+              const trustEngine = require('./trustEngine')
+              effectiveMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
+              if (effectiveMode !== 'ask') trustAutoApproved = true
+            } catch {}
+          }
+
+          // ── C1: ask 模式 dangerous 工具的用户确认门（真正接线）───────────
+          // requestPermissionWithTimeout: 回调抛错/超时均解析为 false ——
+          // 默认拒绝, 无静默放行。复用 chat:permission-request IPC 链路
+          // （toolLoopCallbacks.requestPermission, 内层 60s 超时）。
+          let userDecision = null
+          if (!entry.error && tool.risk === 'dangerous' && effectiveMode === 'ask') {
+            if (typeof requestPermission !== 'function') {
+              // 无确认通道（headless/后台恢复）→ 默认拒绝。
+              entry.error = `permission denied: dangerous tool '${fn.name}' requires user confirmation but no permission callback is available`
+              entry.failure_kind = 'permission_denied'
+            } else {
+              userDecision = await requestPermissionWithTimeout(requestPermission, {
+                name: fn.name, args, risk: tool.risk,
+              })
+              // 信任分绑定用户决定（批准 +5 / 拒绝·超时 -10）, 而非"调用即加"。
+              try {
+                if (sessionId && db) {
+                  const trustEngine = require('./trustEngine')
+                  trustEngine.adjustTrust(db, sessionId, userDecision ? 5 : -10, fn.name)
+                }
+              } catch {}
+            }
+          }
+
+          // ── Phase 4: 权限策略终审（hooks override 优先）──────────────────
+          // Prompt 模式的 prompt 分支经由 prompter 桥消费上方既定决定:
+          // 用户批准/信任放行 → Allow; 用户拒绝/超时 → Deny。
           if (!entry.error) {
             try {
               const context = permissionOverride ? { permissionOverride, overrideReason } : null
-              const outcome = permissionPolicy.authorizeWithContext(fn.name, JSON.stringify(args), context)
+              let prompter = null
+              if (userDecision !== null) {
+                prompter = { decide: () => userDecision
+                  ? permissions.PermissionPromptDecision.Allow
+                  : permissions.PermissionPromptDecision.Deny }
+              } else if (trustAutoApproved) {
+                prompter = { decide: () => permissions.PermissionPromptDecision.Allow }
+              }
+              const outcome = permissionPolicy.authorizeWithContext(fn.name, JSON.stringify(args), context, prompter)
               if (!outcome.allowed) {
                 entry.error = outcome.reason || 'blocked by permission policy'
                 entry.failure_kind = 'permission_denied'
@@ -642,30 +706,6 @@ Reply in this format:
               entry.error = `permission policy error: ${e.message}`
               entry.failure_kind = 'permission_denied'
             }
-          }
-          let effectiveMode = agentMode === 'auto_confirm'
-            ? (tool.risk === 'safe' ? 'auto' : 'ask')
-            : agentMode
-          // Phase 4: trust engine — adaptive permission based on history.
-          if (!entry.error && sessionId && db && effectiveMode === 'ask' && tool.risk === 'dangerous') {
-            try {
-              const trustEngine = require('./trustEngine')
-              effectiveMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
-            } catch {}
-          }
-          // Phase 4: Permission gate replaced by PermissionPolicy above.
-          // Trust engine integration for adaptive permission tracking.
-          if (!entry.error && sessionId && db && tool.risk === 'dangerous' && effectiveMode === 'ask') {
-            try {
-              const trustEngine = require('./trustEngine')
-              const trustMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
-              if (trustMode === 'auto') {
-                // Trust engine auto-approved — proceed.
-              } else {
-                // Record that the tool was used despite trust engine not auto-approving.
-                trustEngine.adjustTrust(db, sessionId, 1, fn.name)
-              }
-            } catch {}
           }
           if (!entry.error) {
             if (tool.risk === 'dangerous') {
@@ -949,10 +989,10 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function requestPermissionWithTimeout(requestPermission, payload) {
+function requestPermissionWithTimeout(requestPermission, payload, timeoutMs = PERMISSION_TIMEOUT_MS) {
   if (!requestPermission) return Promise.resolve(false)
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(false), PERMISSION_TIMEOUT_MS)
+    const timer = setTimeout(() => resolve(false), timeoutMs)
     Promise.resolve(requestPermission(payload))
       .then((ok) => { clearTimeout(timer); resolve(!!ok) })
       .catch(() => { clearTimeout(timer); resolve(false) })
@@ -969,4 +1009,5 @@ module.exports = {
   classifyToolError,
   getMaxConcurrent,
   agentModeToPermissionMode,
+  requestPermissionWithTimeout,
 }

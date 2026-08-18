@@ -462,7 +462,8 @@ export default function SettingPage() {
             <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.data_desc')}</p>
             <div className="flex gap-2">
               <button onClick={async () => {
-                const res = await window.electronAPI.config.export({ includeSecrets: true })
+                const withSecrets = window.confirm('导出是否包含 API 密钥？\n\n包含密钥的配置文件请妥善保管，避免泄露。默认不含密钥。')
+                const res = await window.electronAPI.config.export({ includeSecrets: withSecrets })
                 if (!res.success || !res.bundle) return
                 const blob = new Blob([JSON.stringify(res.bundle, null, 2)], { type: 'application/json' })
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob)

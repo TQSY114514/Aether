@@ -16,6 +16,17 @@ const MAX_TAIL = 64 * 1024
 const executions = new Map()
 let nextExecId = 1
 
+// host/user 参数校验（安全审查 Low 项）：两者最终拼进 ssh argv，若以 `-`
+// 开头会被 ssh 当作选项解析（如 `-oProxyCommand=...` 的 argv 注入）；
+// 空白/引号/反斜杠同样能构造越权参数。只放行严格的 host/user 词法。
+function validateSshIdent(value, label) {
+  const s = String(value || '').trim()
+  if (!s) return { ok: false, error: `${label} is required` }
+  if (s.startsWith('-')) return { ok: false, error: `invalid ${label}: must not start with '-' (ssh option injection)` }
+  if (/[\s"'\\`]/.test(s)) return { ok: false, error: `invalid ${label}: whitespace/quote characters are not allowed` }
+  return { ok: true, value: s }
+}
+
 function capTail(buf, chunk) {
   return buf.length + chunk.length > MAX_TAIL ? (buf + chunk).slice(-MAX_TAIL) : buf + chunk
 }
@@ -35,7 +46,14 @@ const sshBackend = {
    * @param {number}  [opts.timeout]  client-side timeout ms (0 = none)
    */
   async execute({ host, user, port = 22, command = '', args = [], timeout = 0 }) {
-    if (!host) return { ok: false, error: 'host is required' }
+    const hostCheck = validateSshIdent(host, 'host')
+    if (!hostCheck.ok) return { ok: false, error: hostCheck.error }
+    host = hostCheck.value
+    if (user) {
+      const userCheck = validateSshIdent(user, 'user')
+      if (!userCheck.ok) return { ok: false, error: userCheck.error }
+      user = userCheck.value
+    }
 
     const sshArgs = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
     if (port && port !== 22) sshArgs.push('-p', String(port))

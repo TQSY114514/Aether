@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- H2 (2026-08 audit): renderer CSP. Scripts/styles/assets are same-origin
+       only; images may additionally be data:/https: (markdown & attachments);
+       network egress from the renderer is restricted to loopback services
+       (dev server HMR, local gateway). Remote fonts were removed with this. -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*; font-src 'self' data:" />
   <title>AetherAI</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="root"></div>

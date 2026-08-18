@@ -21,8 +21,10 @@
 // re-sanitizes — a cached result is never trusted blindly.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Tools that produce untrusted external content.
-const EXTERNAL_TOOLS = new Set(['web_fetch', 'web_search'])
+// Tools that produce untrusted external content. H4: read_file joins the set —
+// local file reads feed model-visible content the user did not type (a checked
+//-out repo can carry prompt injection in a README just like a web page can).
+const EXTERNAL_TOOLS = new Set(['web_fetch', 'web_search', 'read_file'])
 
 // Markers the external tools prepend to their output (kept in the cache). These
 // are stripped and replaced by the canonical <external> wrapper on injection.
@@ -47,6 +49,21 @@ const INJECTION_PATTERNS = [
   { label: 'reveal-prompt', re: /\b(?:reveal|show|tell|print|output|display)\s+(?:me\s+)?(?:your\s+)?(?:system\s+)?prompt\b/gi },
   { label: 'override', re: /\boverride\s+(?:your\s+)?(?:instructions?|system\s+prompt)\b/gi },
   { label: 'do-not-follow', re: /\bdo\s+not\s+follow\s+(?:the\s+)?(?:instructions?|commands?|rules?)\s+above\b/gi },
+  // ── 中文句式（H4）───────────────────────────────────────────────────────
+  // CJK has no word boundaries, so these patterns are guarded by structure
+  // (positional word + object noun) instead of \b. Benign discussion of e.g.
+  // 「忽略」 alone does not match: the positional+noun frame is required.
+  { label: 'zh-ignore-previous', re: /忽略(?:掉|去)?(?:之前|以前|以上|上面|上述|前面|先前)(?:的)?(?:所有|全部|一切)?(?:指令|指示|命令|规则|要求|设定|提示词?)/g },
+  { label: 'zh-disregard-previous', re: /(?:无视|不理会|不必理会|不用理会)(?:之前|以前|以上|上述|前面|先前)(?:的)?(?:所有|全部)?(?:指令|指示|命令|规则|设定)/g },
+  { label: 'zh-forget-previous', re: /忘(?:记|掉|了)(?:你)?(?:之前|以前|以上|上述|前面|先前)?(?:的)?(?:所有|全部)?(?:指令|指示|命令|角色|设定|身份)/g },
+  { label: 'zh-execute-now', re: /(?:立即|马上|立刻|现在就|直接)(?:执行|运行|遵照)(?:以下|下列|如下|上述|上面)?(?:命令|指令|操作|步骤|代码|脚本)/g },
+  { label: 'zh-no-confirm', re: /(?:不要|无须|无需|别)(?:再)?(?:询问|确认|请示|提问|征求(?:同意|许可|批准)|等待(?:确认|批准))/g },
+  { label: 'zh-now-you-are', re: /(?:你|您)(?:现在|如今|已经)是|从现在(?:起|开始)(?:你|您)(?:是|将|要)|(?:你|您)(?:已|已经)成为/g },
+  { label: 'zh-new-task', re: /(?:你|您)(?:的)?(?:新任务|新角色|新身份|新的(?:任务|角色|身份))(?:是|为|：|:)/g },
+  { label: 'zh-exfiltrate', re: /(?:把|将)(?:以下|上述|这些|此|所有|全部)?[^。！？!?\n]{0,40}?(?:发送|上传|传送|提交|转发|泄露)到/g },
+  { label: 'zh-send-to', re: /(?:发送|上传|传送|提交|转发)到(?:以下)?(?:地址|网址|链接|服务器|邮箱|端口|[Uu][Rr][Ll])/g },
+  { label: 'zh-indirect-reference', re: /(?:执行|运行|遵循|按照|根据)(?:上述|上面|上文|以上|前文|先前|网页|页面|文档|文章|链接|搜索结果)(?:中|里|所|中所)?[^。！？!?\n]{0,16}?(?:的)?(?:步骤|指令|命令|操作|要求|指示|内容)/g },
+  { label: 'zh-reveal-prompt', re: /(?:显示|输出|打印|泄露|透露|告诉我)(?:你|您)(?:的)?(?:系统提示词?|初始指令|预设指令|提示词|系统指令)/g },
 ]
 
 // Strip the known instruction patterns out of a string. Returns the cleaned text.

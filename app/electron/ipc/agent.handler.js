@@ -75,15 +75,17 @@ function registerAgentHandlers(ipcMain, db) {
   // Load a specific checkpoint's messages for inspection.
   ipcMain.handle('agent:checkpoint:get', (_e, id) => {
     try {
-      const r = db.exec('SELECT * FROM agent_checkpoint WHERE id = ? LIMIT 1', [id])
-      if (!r[0]?.values?.[0]) return null
-      const row = r[0].values[0]
+      // better-sqlite3: db.exec() takes no bound parameters — use the facade's
+      // allRows (prepare().all(?)) instead of interpolating/exec-ing `?`.
+      const rows = db.allRows('SELECT * FROM agent_checkpoint WHERE id = ? LIMIT 1', [id])
+      const row = rows && rows[0]
+      if (!row) return null
       return {
-        id: row[0], sessionId: row[1], turnId: row[2], stepIndex: row[3],
-        messages: JSON.parse(row[4] || '[]'),
-        toolTrace: JSON.parse(row[5] || '[]'),
-        meta: JSON.parse(row[6] || '{}'),
-        createdAt: row[7],
+        id: row.id, sessionId: row.session_id, turnId: row.turn_id, stepIndex: row.step_index,
+        messages: JSON.parse(row.messages || '[]'),
+        toolTrace: JSON.parse(row.tool_trace || '[]'),
+        meta: JSON.parse(row.checkpoint_meta || '{}'),
+        createdAt: row.created_at,
       }
     } catch { return null }
   })

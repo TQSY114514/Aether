@@ -169,6 +169,10 @@ export default function App() {
   useEffect(() => {
     const off = window.electronAPI?.protocol?.onOpen?.(async (payload: { action: string; workspace?: string }) => {
       if (payload.action === 'open' && payload.workspace) {
+        // M6（2026-08 安全审计）：深链可静默切换 agent 工作区，先展示完整
+        // 路径让用户确认；取消则不发生任何变更。
+        const ok = window.confirm(`是否将 Aether 的 Agent 工作区切换到：\n${payload.workspace}`)
+        if (!ok) return
         // 右键/协议「用 Aether 打开文件夹」→ 设为 agent 工作区 + 新建会话
         try { await window.electronAPI?.agent?.setWorkspace?.({ dir: payload.workspace }) } catch {}
         useStore.getState().newChat()

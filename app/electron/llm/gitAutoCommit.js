@@ -1,11 +1,17 @@
 // ───────────────────────────────────────────────────────────────────────────
 // Git Auto-Commit module — independent of verification flow.
 // Automatically commit after each file change (write_file/edit_file/apply_patch).
-// Supports configurable auto-commit and /undo command (git reset --hard HEAD~1).
+// Supports configurable auto-commit. /undo lives in ipc/git.handler.js and is
+// checkpoint-driven (see llm/checkpoints.js) — no `git reset --hard` anymore.
+//
+// SECURITY (audit P1-H8): files that are gitignored or whose names look like
+// secrets/credentials are never staged by auto-commit. Committing a key file
+// is a one-way leak (history rewrite required to fix), so we skip and warn.
 // ───────────────────────────────────────────────────────────────────────────
 
 const { runCommandSync } = require('../tools/exec')
 const { nearestGitRoot } = require('./checkpoints')
+const log = require('../logger')
 const path = require('path')
 
 // Configuration setting key stored in DB
@@ -20,6 +26,57 @@ const DEFAULT_ENABLED = true
 function isGitRepo(filePath) {
   if (!filePath) return null
   return nearestGitRoot(filePath)
+}
+
+/**
+ * Secret-like filename check (case-insensitive). Matches .env*, *.pem, *.key,
+ * id_rsa*, id_ed25519*, *credential*, *secret*.
+ * @param {string} filePath - Any path; only the basename is inspected
+ * @returns {boolean}
+ */
+function isSecretLike(filePath) {
+  const base = path.basename(String(filePath || '')).toLowerCase()
+  if (!base) return false
+  if (base.startsWith('.env')) return true
+  if (base.endsWith('.pem') || base.endsWith('.key')) return true
+  if (base.startsWith('id_rsa') || base.startsWith('id_ed25519')) return true
+  if (base.includes('credential') || base.includes('secret')) return true
+  return false
+}
+
+/**
+ * Check whether a file is ignored by the repo's .gitignore rules via
+ * `git check-ignore` (exit 0 = ignored). Errors are treated as "not ignored"
+ * so a transient git failure can't silently disable auto-commit entirely —
+ * the secret-pattern gate above still applies.
+ * @param {string} filePath - Absolute path to file
+ * @param {string} gitRoot - Repo root (cwd for the git call)
+ * @returns {boolean}
+ */
+function isGitIgnored(filePath, gitRoot) {
+  try {
+    const r = runCommandSync('git', ['check-ignore', '--quiet', '--', String(filePath)], { cwd: gitRoot || path.dirname(String(filePath)) })
+    return r.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Why this file must not be auto-committed, or null if it may be staged.
+ * @param {string} filePath
+ * @param {string} gitRoot
+ * @returns {string|null} skip reason
+ */
+function skipReason(filePath, gitRoot) {
+  if (isSecretLike(filePath)) return 'secret-like filename'
+  if (isGitIgnored(filePath, gitRoot)) return 'ignored by .gitignore'
+  return null
+}
+
+function warnSkipped(filePath, gitRoot, reason) {
+  const rel = gitRoot ? path.relative(gitRoot, String(filePath)) : String(filePath)
+  log.warn(`[gitAutoCommit] skip ${rel || filePath}: ${reason} — file NOT staged/committed`)
 }
 
 /**
@@ -44,6 +101,13 @@ function gitCommit(filePath, operation = 'edit') {
   const gitRoot = isGitRepo(filePath)
   if (!gitRoot) {
     return { success: false, message: 'not a git repository', commitMessage: null }
+  }
+
+  // SECURITY (P1-H8): never stage secret-like or gitignored files.
+  const reason = skipReason(filePath, gitRoot)
+  if (reason) {
+    warnSkipped(filePath, gitRoot, reason)
+    return { success: false, message: `skipped: ${reason}`, commitMessage: null, skipped: true, skipReason: reason }
   }
 
   const relPath = path.relative(gitRoot, filePath)
@@ -95,8 +159,31 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
     return { success: false, message: 'not a git repository' }
   }
 
-  // Add all files
-  for (const filePath of filePaths) {
+  // SECURITY (P1-H8): filter out gitignored / secret-like files before staging.
+  // If every candidate is skipped there is nothing to commit — return without
+  // creating an empty commit.
+  const toAdd = []
+  const skipped = []
+  for (const filePath of filePaths || []) {
+    const reason = skipReason(filePath, gitRoot)
+    if (reason) {
+      skipped.push({ file: filePath, reason })
+      warnSkipped(filePath, gitRoot, reason)
+    } else {
+      toAdd.push(filePath)
+    }
+  }
+  if ((filePaths || []).length > 0 && toAdd.length === 0) {
+    return {
+      success: false,
+      message: `nothing to commit (${skipped.length} file(s) skipped: secret-like or gitignored)`,
+      nothingToCommit: true,
+      skipped,
+    }
+  }
+
+  // Add remaining files
+  for (const filePath of toAdd) {
     const addResult = runCommandSync('git', ['add', filePath], { cwd: gitRoot })
     if (addResult.exitCode !== 0) {
       // Continue anyway - best effort
@@ -106,7 +193,7 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
   // Check if anything staged
   const statusResult = runCommandSync('git', ['diff', '--cached', '--name-only'], { cwd: gitRoot })
   if (statusResult.exitCode === 0 && !statusResult.stdout.trim()) {
-    return { success: false, message: 'nothing to commit' }
+    return { success: false, message: 'nothing to commit', nothingToCommit: true, skipped }
   }
 
   // Commit
@@ -115,42 +202,11 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
     return {
       success: false,
       message: `git commit failed: ${commitResult.stderr || `exit ${commitResult.exitCode}`}`,
+      skipped,
     }
   }
 
-  return { success: true, message: `committed: ${message}` }
-}
-
-/**
- * Undo last commit with git reset --hard HEAD~1.
- * DANGEROUS operation - must confirm with user.
- * @param {string} cwd - Working directory (git repo root)
- * @returns {{success: boolean, message: string, undoneCommit: string|null}} Result
- */
-function gitUndoLast(cwd) {
-  const gitRoot = isGitRepo(cwd)
-  if (!gitRoot) {
-    return { success: false, message: 'not a git repository', undoneCommit: null }
-  }
-
-  // Get the last commit message before reset
-  const logResult = runCommandSync('git', ['log', '--oneline', '-1'], { cwd: gitRoot })
-  let lastCommit = null
-  if (logResult.exitCode === 0 && logResult.stdout) {
-    lastCommit = logResult.stdout.trim()
-  }
-
-  // Perform reset --hard
-  const resetResult = runCommandSync('git', ['reset', '--hard', 'HEAD~1'], { cwd: gitRoot })
-  if (resetResult.exitCode !== 0) {
-    return {
-      success: false,
-      message: `git reset failed: ${resetResult.stderr || `exit ${resetResult.exitCode}`}`,
-      undoneCommit: lastCommit,
-    }
-  }
-
-  return { success: true, message: 'undone last commit', undoneCommit: lastCommit }
+  return { success: true, message: `committed: ${message}`, skipped }
 }
 
 /**
@@ -180,10 +236,12 @@ function setAutoCommitEnabled(db, enabled) {
 
 module.exports = {
   isGitRepo,
+  isSecretLike,
+  isGitIgnored,
+  skipReason,
   generateCommitMessage,
   gitCommit,
   gitCommitMultiple,
-  gitUndoLast,
   getAutoCommitEnabled,
   setAutoCommitEnabled,
   SETTING_KEY,

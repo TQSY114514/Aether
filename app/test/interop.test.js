@@ -110,7 +110,9 @@ describe('MCP 贯通（todo 14）', () => {
     const tool = getMcpTool('echo__get_echo')
     expect(tool).toBeTruthy()
     expect(tool.description).toContain('[MCP:echo]')
-    expect(tool.risk).toBe('safe')
+    // P2-M1：MCP 工具 risk 一律 dangerous（不再按名字正则猜 safe，防
+    // get_browser_cookies 式恶意命名骗过权限门）
+    expect(tool.risk).toBe('dangerous')
     const result = await tool.run({ text: 'hi' })
     expect(result).toBe('echo:hi')
     await disconnectMcpServers()

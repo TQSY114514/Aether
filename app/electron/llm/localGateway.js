@@ -13,6 +13,11 @@ const crypto = require('crypto')
 
 const DEFAULT_PORT = 35791
 const TOKEN_HEADER = 'X-Aether-Token'
+// M5 (2026-08 audit): browsers may only call the gateway from loopback pages;
+// missing Origin = non-browser client (curl / scripts / SDK) → allowed.
+const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+// M5: request body cap — stop buffering and drop the connection past this.
+const MAX_BODY_BYTES = 16 * 1024 * 1024
 
 let _server = null
 let _token = null
@@ -44,12 +49,62 @@ function _ensureToken(db) {
   return t
 }
 
-// Middleware: check auth.
+// Middleware: check auth. M5: the URL ?token= query channel was removed —
+// tokens in URLs leak into logs/history; only header auth is accepted.
+// Comparison is timing-safe (crypto.timingSafeEqual throws on length
+// mismatch, so lengths are compared first — length alone is not secret).
 function _auth(req) {
+  if (!_token) return false
   // Node lowercases all incoming header names, so look up the token header
   // case-insensitively (TOKEN_HEADER as written would never match).
-  const token = req.headers[TOKEN_HEADER.toLowerCase()] || req.url.match(/[?&]token=([^&]+)/)?.[1]
-  return token === _token
+  let token = req.headers[TOKEN_HEADER.toLowerCase()]
+  const authz = req.headers['authorization']
+  if (!token && typeof authz === 'string' && authz.slice(0, 7).toLowerCase() === 'bearer ') {
+    token = authz.slice(7)
+  }
+  if (typeof token !== 'string' || token.length === 0) return false
+  const a = Buffer.from(token, 'utf8')
+  const b = Buffer.from(_token, 'utf8')
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(a, b)
+}
+
+// M5: CORS gate. A request carrying an Origin header (i.e. from a browser)
+// is only allowed when the origin is a loopback page; everything else —
+// arbitrary websites, DNS-rebound hostnames, extension pages — gets 403.
+function _originAllowed(req) {
+  const origin = req.headers.origin
+  if (origin === undefined || origin === '') return true
+  return LOCAL_ORIGIN_RE.test(String(origin))
+}
+
+// Accumulate the request body with a hard cap (M5). Past MAX_BODY_BYTES the
+// server answers 413, stops buffering, and destroys the socket so a
+// misbehaving client cannot exhaust memory by uploading forever.
+function _readBody(req, res, onBody) {
+  let body = ''
+  let received = 0
+  let overLimit = false
+  // We deliberately destroy the socket mid-upload; the resulting client-side
+  // reset surfaces here as ECONNRESET and must not crash the process.
+  req.on('error', () => {})
+  req.on('data', (d) => {
+    if (overLimit) return
+    received += d.length
+    if (received > MAX_BODY_BYTES) {
+      overLimit = true
+      body = ''
+      res.writeHead(413, { 'Content-Type': 'application/json', Connection: 'close' })
+      res.end(JSON.stringify({ error: 'payload too large' }))
+      // 销毁连接（任务要求）：等响应 flush 后稍候再断，保证客户端能先读到 413。
+      res.once('finish', () => {
+        setTimeout(() => { try { req.destroy() } catch {} }, 25)
+      })
+      return
+    }
+    body += d
+  })
+  req.on('end', () => { if (!overLimit) onBody(body) })
 }
 
 // Start the gateway.
@@ -59,9 +114,18 @@ function start(db, port = DEFAULT_PORT) {
   _token = null
 
   _server = http.createServer((req, res) => {
-    // CORS for browser extensions
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Aether-Token')
+    // M5: cross-origin browser requests are rejected outright (403) — only
+    // loopback pages and non-browser clients (no Origin) may proceed.
+    if (!_originAllowed(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Origin not allowed' }))
+      return
+    }
+    // CORS for allowed browser callers (echo the whitelisted origin).
+    const origin = req.headers.origin
+    res.setHeader('Access-Control-Allow-Origin', typeof origin === 'string' && origin ? origin : '*')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Aether-Token, Authorization')
+    res.setHeader('Vary', 'Origin')
     res.setHeader('Content-Type', 'application/json')
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
@@ -77,9 +141,7 @@ function start(db, port = DEFAULT_PORT) {
     // OpenAI-compatible clients (scripts, SDKs, tools) can talk to Aether.
     const url = new URL(req.url, `http://localhost:${port}`)
     if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {
-      let body = ''
-      req.on('data', (d) => { body += d })
-      req.on('end', async () => {
+      _readBody(req, res, async (body) => {
         let parsed = null
         try { parsed = body ? JSON.parse(body) : {} } catch {
           res.writeHead(400)
@@ -122,9 +184,7 @@ function start(db, port = DEFAULT_PORT) {
     const channel = url.pathname.replace(/^\//, '')
     if (!channel) { res.writeHead(404); res.end(JSON.stringify({ error: 'No channel' })); return }
 
-    let body = ''
-    req.on('data', (d) => { body += d })
-    req.on('end', () => {
+    _readBody(req, res, (body) => {
       let args = []
       try {
         const parsed = body ? JSON.parse(body) : null

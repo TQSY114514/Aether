@@ -72,6 +72,46 @@ function createCheckpoint({ sessionId, messageId, toolName, args }) {
   return row?.lastInsertRowid || null
 }
 
+// Case-insensitive on Windows (FS is case-insensitive there), exact elsewhere.
+// Handles mixed separators (git rev-print emits forward slashes, path.resolve
+// backslashes) via path.normalize.
+function isInsideGitRoot(p, root) {
+  const norm = (s) => {
+    let x = path.normalize(String(s))
+    if (process.platform === 'win32') x = x.toLowerCase()
+    return x
+  }
+  const a = norm(p)
+  const b = norm(root)
+  return a === b || a.startsWith(b.endsWith(path.sep) ? b : b + path.sep)
+}
+
+/**
+ * Newest not-yet-rolled-back checkpoint whose affected paths live inside the
+ * given git root. Powers the checkpoint-driven /undo in ipc/git.handler.js —
+ * when there is no match /undo refuses to run instead of falling back to a
+ * destructive `git reset --hard` (audit P1-H8).
+ * @param {string} gitRoot - Absolute repo root
+ * @returns {object|null} checkpoint row (parsed via getAgentCheckpoint) or null
+ */
+function findLatestCheckpointForRoot(gitRoot) {
+  if (!db || typeof db.prepare !== 'function' || !gitRoot) return null
+  try {
+    // affected_paths is a JSON array; scan the most recent unrolled-back rows
+    // and match in JS (LIKE on JSON text is both fragile and injectable-looking).
+    const rows = db.prepare('SELECT id, affected_paths FROM agent_checkpoint WHERE rolled_back_at IS NULL ORDER BY id DESC LIMIT 200').all()
+    for (const row of rows) {
+      let paths = []
+      try { paths = JSON.parse(row.affected_paths || '[]') } catch { paths = [] }
+      if (!Array.isArray(paths)) paths = []
+      if (paths.some((p) => isInsideGitRoot(p, gitRoot))) {
+        return typeof db.getAgentCheckpoint === 'function' ? db.getAgentCheckpoint(row.id) : null
+      }
+    }
+  } catch { return null }
+  return null
+}
+
 function rollbackCheckpoint(id) {
   if (!db) return { success: false, error: 'database unavailable' }
   const cp = db.getAgentCheckpoint(id)
@@ -106,4 +146,4 @@ function rollbackCheckpoint(id) {
   return { success: false, error: 'some files failed to restore', restored, failed }
 }
 
-module.exports = { setDb, createCheckpoint, rollbackCheckpoint, extractAffectedPaths }
+module.exports = { setDb, createCheckpoint, rollbackCheckpoint, extractAffectedPaths, findLatestCheckpointForRoot, isInsideGitRoot }

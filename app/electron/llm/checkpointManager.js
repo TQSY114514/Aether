@@ -65,18 +65,18 @@ function load(db, sessionId, turnId, beforeStep = null) {
       params.push(beforeStep)
     }
     sql += ' ORDER BY step_index DESC LIMIT 1'
-    const r = db.exec(sql, params)
-    if (!r[0]?.values?.[0]) return null
-    const row = r[0].values[0]
+    // better-sqlite3: exec() takes no bound parameters — prepare + get.
+    const r = db.prepare(sql).get(...params)
+    if (!r) return null
     return {
-      id: row[0],
-      session_id: row[1],
-      turn_id: row[2],
-      step_index: row[3],
-      messages: JSON.parse(row[4] || '[]'),
-      toolTrace: JSON.parse(row[5] || '[]'),
-      meta: JSON.parse(row[6] || '{}'),
-      created_at: row[7],
+      id: r.id,
+      session_id: r.session_id,
+      turn_id: r.turn_id,
+      step_index: r.step_index,
+      messages: JSON.parse(r.messages || '[]'),
+      toolTrace: JSON.parse(r.tool_trace || '[]'),
+      meta: JSON.parse(r.checkpoint_meta || '{}'),
+      created_at: r.created_at,
     }
   } catch {
     return null
@@ -86,12 +86,13 @@ function load(db, sessionId, turnId, beforeStep = null) {
 // List checkpoints for a session, most recent first.
 function listForSession(db, sessionId, limit = 20) {
   try {
-    const r = db.exec(`SELECT id, turn_id, step_index, checkpoint_meta, created_at FROM ${TABLE} WHERE session_id = ? ORDER BY id DESC LIMIT ?`,
-      [sessionId, Math.min(limit, MAX_CHECKPOINTS_PER_SESSION)])
-    if (!r[0]?.values) return []
-    return r[0].values.map(row => ({
-      id: row[0], sessionId: row[1], turnId: row[2],
-      stepIndex: row[3], meta: JSON.parse(row[4] || '{}'), createdAt: row[5],
+    // better-sqlite3: exec() takes no bound parameters — prepare + all.
+    const rows = db.prepare(`SELECT id, session_id, turn_id, step_index, checkpoint_meta, created_at FROM ${TABLE} WHERE session_id = ? ORDER BY id DESC LIMIT ?`)
+      .all(sessionId, Math.min(limit, MAX_CHECKPOINTS_PER_SESSION))
+    if (!rows) return []
+    return rows.map(row => ({
+      id: row.id, sessionId: row.session_id, turnId: row.turn_id,
+      stepIndex: row.step_index, meta: JSON.parse(row.checkpoint_meta || '{}'), createdAt: row.created_at,
     }))
   } catch {
     return []

@@ -28,12 +28,24 @@ const path = require('path')
 const { spawn, spawnSync } = require('child_process')
 const { runCommand, runCommandSync } = require('./exec')
 const { glob } = require('glob')
-const { checkWritePath, checkCommand } = require('./sandbox')
+const { checkWritePath, checkCommand, isInsideWorkspace } = require('./sandbox')
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
 const { checkSSRF, checkSSRFHostname, ssrfFetchOptions } = require('./ssrf')
 
 const MAX_READ_BYTES = 64 * 1024 // cap read_file output so a huge file doesn't blow the context
 const MAX_GREP_BYTES = 32 * 1024
+
+// ─── 读边界（spec P1-H1）─────────────────────────────────────────────────────
+// 读工具（read_file/list_dir/glob_find/grep_search）目标路径出 workspace 时：
+//   - ask 模式 → 抛明确错误，提示模型改用 ask_user 请求用户批准；
+//   - yolo/auto（及未传 agentMode 的旧调用）→ 放行。
+function guardWorkspaceRead(target, ctx, label) {
+  const p = String(target || '')
+  if (!p) return
+  if (ctx?.agentMode !== 'ask') return
+  if (isInsideWorkspace(p, ctx?.sessionId)) return
+  throw new Error(`读取被拒绝：${label} ${p} 位于工作区之外（当前为 ask 模式）。如确需读取该路径，请改用 ask_user 工具向用户说明并请求批准`)
+}
 
 // ─── Feature-flag gate for the full LSP tool set ────────────────────────────
 // The lsp_* tools ship behind the `lsp.full` flag (featureFlags.js): when the
@@ -120,9 +132,10 @@ const TOOLS = [
       },
       required: ['path'],
     },
-    run: (args) => {
+    run: (args, ctx) => {
       const p = String(args.path || '')
       if (!p) throw new Error('path is required')
+      guardWorkspaceRead(p, ctx, 'path')
       const buf = fs.readFileSync(p)
       let text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
       // Line-based slicing if offset/limit given.
@@ -149,9 +162,10 @@ const TOOLS = [
       },
       required: ['path'],
     },
-    run: (args) => {
+    run: (args, ctx) => {
       const p = String(args.path || '')
       if (!p) throw new Error('path is required')
+      guardWorkspaceRead(p, ctx, 'path')
       const entries = fs.readdirSync(p, { withFileTypes: true })
       return entries.map(e => e.isDirectory() ? e.name + '/' : e.name).join('\n') || '(empty)'
     },
@@ -168,10 +182,11 @@ const TOOLS = [
       },
       required: ['pattern', 'cwd'],
     },
-    run: async (args) => {
+    run: async (args, ctx) => {
       const pattern = String(args.pattern || '')
       const cwd = String(args.cwd || '')
       if (!pattern) throw new Error('pattern is required')
+      guardWorkspaceRead(cwd, ctx, 'cwd')
       const matches = await glob(pattern, { cwd: cwd || undefined, absolute: true, nodir: true })
       return matches.slice(0, 100).join('\n') || '(no matches)'
     },
@@ -189,10 +204,11 @@ const TOOLS = [
       },
       required: ['pattern', 'cwd'],
     },
-    run: async (args) => {
+    run: async (args, ctx) => {
       const pattern = String(args.pattern || '')
       const cwd = String(args.cwd || '')
       if (!pattern) throw new Error('pattern is required')
+      guardWorkspaceRead(cwd, ctx, 'cwd')
       let re
       try { re = new RegExp(pattern) } catch (e) { return `invalid regex: ${e.message}` }
 
@@ -399,8 +415,10 @@ const TOOLS = [
     run: (args, ctx) => {
       const cmd = String(args.command || '')
       if (!cmd) throw new Error('command is required')
-      // Sandbox: refuse commands matching destructive patterns — unless 'yolo'
-      // mode (full permission, user accepted the risk).
+      // Sandbox（P0-C2 白名单默认拒绝）: checkCommand 对 `&`/`|`/`;` 拼接的
+      // 多段命令逐段校验——未全部命中白名单即整体拒绝，因此下方 needsShell
+      // 的 shell:true 整串执行路径不再放行未审段的命令。yolo 模式（用户已
+      // 接受风险）跳过该校验。
       if (ctx?.agentMode !== 'yolo') {
         const guard = checkCommand(cmd)
         if (!guard.ok) throw new Error(guard.reason)
@@ -1004,7 +1022,7 @@ const TOOLS = [
   {
     name: 'memory_save',
     description: 'Save a note to the app\'s persistent memory store. Use for facts the user wants remembered across conversations.',
-    risk: 'safe',
+    risk: 'dangerous', // P2-M9：记忆可被外部内容污染并在后续会话回灌（H5 防线之一），ask 模式需确认
     parameters: {
       type: 'object',
       properties: {

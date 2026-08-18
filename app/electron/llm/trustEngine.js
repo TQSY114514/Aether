@@ -32,17 +32,18 @@ const HIGH_RISK_TOOLS = new Set(['write_file', 'edit_file', 'run_command', 'git_
 
 function getTrustScore(db, sessionId) {
   try {
-    const row = db.exec(
-      `SELECT trust_score, last_update FROM session WHERE id = ?`, [sessionId]
-    )[0]?.values?.[0]
+    // better-sqlite3: 参数化查询必须 db.prepare(sql).get(?) —— db.exec() 不
+    // 接受绑定参数, 旧写法在此形态下恒返回 falsy, 信任分永远是初始值 50
+    // （审计 Low 项）。session 表的活跃时间列是 updated_at（无 last_update）。
+    const row = db.prepare('SELECT trust_score, updated_at FROM session WHERE id = ?').get(sessionId)
     if (!row) return TRUST_INITIAL
 
-    let score = row[0]
-    if (score === null) return TRUST_INITIAL
+    let score = row.trust_score
+    if (score === null || score === undefined) return TRUST_INITIAL
     score = Number(score)
 
     // Natural decay: -1 per week of inactivity.
-    const lastUpdate = row[1]
+    const lastUpdate = row.updated_at
     if (lastUpdate) {
       const daysAgo = (Date.now() - new Date(lastUpdate).getTime()) / 86400000
       const weeks = Math.floor(daysAgo / 7)
@@ -68,12 +69,17 @@ function adjustTrust(db, sessionId, delta, toolName) {
 
   try {
     // Check if column exists (may not be created yet on older databases).
-    const cols = db.exec("PRAGMA table_info(session)")
-    const hasTrustCol = cols?.[0]?.values?.some(r => r[1] === 'trust_score')
+    // PRAGMA 的表名是模块内常量（无注入面）；better-sqlite3 下用
+    // prepare().all() 取列清单 —— db.exec() 形态恒返回空会让列检查永远
+    // 失败, 写入被静默跳过。时间戳用 datetime('now','localtime') 与
+    // database.js 的 localNow() 同格式（CURRENT_TIMESTAMP 是 UTC）。
+    const cols = db.prepare('PRAGMA table_info(session)').all()
+    const hasTrustCol = Array.isArray(cols) && cols.some(c => c && c.name === 'trust_score')
     if (!hasTrustCol) return
 
-    db.run(`UPDATE session SET trust_score = ?, last_update = CURRENT_TIMESTAMP WHERE id = ?`,
-      [newScore, sessionId])
+    db.prepare(
+      `UPDATE session SET trust_score = ?, updated_at = datetime('now', 'localtime') WHERE id = ?`
+    ).run(newScore, sessionId)
   } catch (e) {
     // Column may not exist yet — silent ignore.
     log.debug('adjustTrust failed:', e && e.message)

@@ -36,6 +36,24 @@ function decryptKey(encoded) {
   } catch { return encoded }
 }
 
+// Key masking for renderer-facing reads (H2): `sk-1234abcd***wxyz` shape —
+// first 4 + *** + last 4. Keys shorter than 12 chars are fully masked so the
+// two visible windows can't overlap or reveal the whole key.
+function maskKey(key) {
+  if (key == null || key === '') return ''
+  const s = String(key)
+  if (s.length < 12) return '****'
+  return `${s.slice(0, 4)}***${s.slice(-4)}`
+}
+
+// True when a submitted api_key value means "keep the stored key" (H2 edit
+// semantics): empty string (form field left blank) or a masked round-trip
+// (the edit form is pre-filled with the masked value from provider:list).
+function isMaskedOrEmptyKey(key) {
+  if (key == null || key === '') return true
+  return typeof key === 'string' && key.includes('***')
+}
+
 // A safeStorage-encrypted value is pure base64 (alphabet + padding); a legacy
 // plaintext API key almost always contains characters outside that alphabet
 // (e.g. "sk-..."), so this heuristic reliably flags unencrypted leftovers.
@@ -284,6 +302,9 @@ function initDatabase() {
   try { db.exec("ALTER TABLE memory ADD COLUMN source_turn_id INTEGER") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN confidence REAL DEFAULT 1.0") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
+  // H5 记忆来源标注：user/assistant/external/review — autoMemory 写此列，
+  // 注入时 external 来源以 untrusted 包裹降权。
+  try { db.exec("ALTER TABLE memory ADD COLUMN origin TEXT DEFAULT 'user'") } catch {}
 
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges("from")') } catch {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges("to")') } catch {}
@@ -394,22 +415,37 @@ function initDatabase() {
 }
 
 // ===== Provider CRUD =====
+// H2 key exposure: list reads are renderer-facing (provider:list IPC) and
+// return a MASKED api_key. Anything that builds LLM request headers must use
+// getProvider / getProvidersDecrypted instead — never the masked list.
 function getProviders() {
+  return db.prepare('SELECT * FROM provider ORDER BY id').all().map(r => ({ ...r, api_key: maskKey(decryptKey(r.api_key)) }))
+}
+function getProvidersDecrypted() {
   return db.prepare('SELECT * FROM provider ORDER BY id').all().map(r => ({ ...r, api_key: decryptKey(r.api_key) }))
 }
+// Returns the DECRYPTED key — internal LLM request path only (chat-send,
+// openaiChatHandler, backgroundTasks, arena, provider test/fetch). Never
+// forward the result over IPC without masking.
 function getProvider(id) {
   const row = db.prepare('SELECT * FROM provider WHERE id = ?').get(id)
   return row ? { ...row, api_key: decryptKey(row.api_key) } : null
 }
+function getProviderDecrypted(id) { return getProvider(id) }
 function addProvider({ name, api_url, api_key, api_format = 'openai', enabled = 1 }) {
   const encrypted = encryptKey(api_key)
   const info = db.prepare('INSERT INTO provider (name, api_url, api_key, api_format, enabled) VALUES (?, ?, ?, ?, ?)').run(name, api_url, encrypted, api_format, enabled)
   return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 function updateProvider(id, data) {
-  const keys = Object.keys(data).filter(k => k !== 'id')
+  // "留空/掩码 = 不修改"（H2）：编辑表单回显掩码值或留空时，不得覆盖已存 key。
+  const patch = { ...data }
+  if ('api_key' in patch && isMaskedOrEmptyKey(patch.api_key)) delete patch.api_key
+  // M8: column-name whitelist — callers can no longer inject arbitrary SQL
+  // through Object.keys(data) interpolation.
+  const keys = safeKeys('provider', patch)
   if (!keys.length) return
-  const values = keys.map(k => k === 'api_key' ? encryptKey(data[k]) : data[k])
+  const values = keys.map(k => k === 'api_key' ? encryptKey(patch[k]) : patch[k])
   db.prepare(`UPDATE provider SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...values, id)
 }
 function deleteProvider(id) {
@@ -421,6 +457,9 @@ function deleteProvider(id) {
 function getModels(providerId) {
   return db.prepare('SELECT * FROM model WHERE provider_id = ? ORDER BY fallback_order ASC, id ASC').all(providerId)
 }
+// NOTE(H2): this stays DECRYPTED on purpose — arena.handler builds request
+// headers straight from these rows, and its only IPC exit (model:list-all)
+// already strips api_key at the handler layer. Do NOT mask here.
 function getAllModels() {
   return db.prepare('SELECT m.*, p.name as provider_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id').all().map(r => ({ ...r, api_key: decryptKey(r.api_key) }))
 }
@@ -712,8 +751,8 @@ function addMemory({ content, type }) {
   try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
   return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
-function addMemoryWithProvenance(content, type, sourceSessionId) {
-  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence) VALUES (?, ?, ?, 1.0)').run(content, type || 'fact', sourceSessionId)
+function addMemoryWithProvenance(content, type, sourceSessionId, origin) {
+  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin) VALUES (?, ?, ?, 1.0, ?)').run(content, type || 'fact', sourceSessionId, origin || 'user')
   try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
   return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
@@ -768,17 +807,34 @@ function getSkillStats() {
 function initSkillSuccessTable() {
   try { db.exec(`CREATE TABLE IF NOT EXISTS skill_success (name TEXT PRIMARY KEY, total_uses INTEGER NOT NULL DEFAULT 0, successes INTEGER NOT NULL DEFAULT 0, last_result INTEGER DEFAULT 1, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`) } catch {}
 }
+// Skill draft name sanitizing (M10): draft names become file names under
+// <userData>/skills/drafts/. Reject anything that could escape the drafts
+// dir — path separators, `..`, leading dot — and collapse the rest through
+// path.basename as defense in depth.
+function sanitizeSkillName(name) {
+  const raw = String(name == null ? '' : name).trim()
+  if (!raw) return null
+  if (raw.includes('/') || raw.includes('\\')) return null
+  if (raw.includes('..')) return null
+  const base = path.basename(raw)
+  if (!base || base === '.' || base === '..' || base.startsWith('.')) return null
+  if (/[<>:"|?*\x00-\x1f]/.test(base)) return null
+  return base
+}
 function autoDraftSkill(name, body, description) {
   try {
+    const safeName = sanitizeSkillName(name)
+    if (!safeName) return false
     const { app } = require('electron')
     const dir = path.join(app.getPath('userData'), 'skills', 'drafts')
     fs.mkdirSync(dir, { recursive: true })
-    const fp = path.join(dir, `${name}.md`)
+    const fp = path.join(dir, `${safeName}.md`)
     if (!fs.existsSync(fp)) {
-      const md = `---\nname: ${name}\ndescription: ${description || 'Auto-drafted skill'}\nauto_draft: true\n---\n\n${body}\n\n(This skill was auto-drafted from successful usage. Edit or delete it via Settings → Skills.)`
+      const md = `---\nname: ${safeName}\ndescription: ${description || 'Auto-drafted skill'}\nauto_draft: true\n---\n\n${body}\n\n(This skill was auto-drafted from successful usage. Edit or delete it via Settings → Skills.)`
       fs.writeFileSync(fp, md, 'utf8')
     }
-  } catch {}
+    return true
+  } catch { return false }
 }
 
 // ===== Agent Audit Log =====
@@ -1036,7 +1092,8 @@ function closeDatabase() {
 }
 
 module.exports = {
-  initDatabase, createEmptyDatabase, closeDatabase, getProviders, getProvider, addProvider, updateProvider, deleteProvider,
+  initDatabase, createEmptyDatabase, closeDatabase, getProviders, getProvidersDecrypted, getProvider, getProviderDecrypted, addProvider, updateProvider, deleteProvider,
+  maskKey, isMaskedOrEmptyKey, sanitizeSkillName,
   getModels, getAllModels, getModel, addModel, updateModel, deleteModel, getFallbackChain,
   getPersonas, getPersona, addPersona, updatePersona, deletePersona,
   getSessions, getSession, createSession, pruneEmptySessions, renameSession, pinSession, deleteSession, touchSession,
