@@ -8,7 +8,7 @@
 
 あらゆるモデルとチャットし、安全なコーディングエージェントを実行し、モデルを並べて比較 — デスクトップでもターミナルでも。
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -26,13 +26,29 @@
 > バグ報告は歓迎します — [CONTRIBUTING.md](./CONTRIBUTING.md) と
 > [SECURITY.md](./SECURITY.md) を参照してください。
 
-**プラットフォーム: Windows のみ。** 公式ビルド、テスト、サポートは Windows を対象としています。macOS / Linux はソースからビルドできますが、公式にはサポートされていません。また、コード署名の予定はなく、初回起動時に SmartScreen の「発行元不明」プロンプトが表示されます（[ダウンロード](#download) を参照）。
+> [!CAUTION]
+> **Windows SmartScreen の警告は想定内です。** Aether は学生開発者が商用コード署名証明書なしで開発しているため、Windows 11 / Defender が初回起動時に「Windows によって PC が保護されました」と表示することがあります。
+> **アプリは安全なオープンソースです — コードを確認してから「詳細情報 → 実行」をクリックしてください。**
+> アンチウイルスに隔離された場合は、アプリフォルダーを除外リストに追加してください（詳細は[ダウンロード](#ダウンロード)を参照）。設定した LLM プロバイダー以外にデータが PC の外へ出ることはありません。
+
+**プラットフォーム: Windows のみ。** 公式ビルド、テスト、サポートは Windows を対象としています。macOS / Linux はソースからビルドできますが、公式にはサポートされていません。また、コード署名の予定はなく、初回起動時に SmartScreen の「発行元不明」プロンプトが表示されます（[ダウンロード](#ダウンロード) を参照）。
 
 **あらゆるモデルに対応する 1 つのアプリ。** OpenAI / Claude / DeepSeek / ローカルモデル / あらゆる OpenAI 互換エンドポイント — チャット、コーディングエージェントの実行、ELO 投票によるマルチモデルアリーナでのモデルの直接比較が可能です。
 
 **設計思想としてのローカルファースト。** API キーと会話はローカルの SQLite データベースに保存され、設定したプロバイダー以外には決してマシンの外に出ません。
 
 **デフォルトで安全。** 内蔵エージェントは権限ラダー付きのワークスペースサンドボックス内で実行されます。ファイルとコマンドへのアクセスは実行前に確認され、すべてのツール呼び出しを監査できます。
+
+---
+
+## 2 つの製品、1 つのリポジトリ
+
+Aether は同じエージェントランタイムを共有する 2 つの独立した成果物として提供されます:
+
+- **Aether Desktop** — Electron + React の GUI。[GitHub Releases](#ダウンロード-デスクトップ) からダウンロード。すぐに使えます。
+- **Aether CLI / TUI / SDK** — ヘッドレスエージェント、Ink v5 のターミナル UI、Electron 不要の SDK。`npm install -g aetherai` でインストール（[セットアップ →](#ダウンロード-cli--tui--sdk)）。CLI バイナリは `aether` です。
+
+両者は `agentCore`、42 のツール、SQLite メモリ、マルチモデルルーティング、MCP サーバー、同じセッションストアを共有します。GUI で開始したチャットは `aether tui --session <id>` で TUI から再開でき、その逆も可能です。
 
 ---
 
@@ -51,7 +67,7 @@ Aether は、通常は複数のツールに分散している機能を、1 つ�
 | **コンテキスト圧縮** | 長い会話をツール呼び出しペアを失わずに自動要約。 | `Beta` |
 | **ローカルファーストのプライバシー** | 会話、キー、ペルソナをローカルの SQLite に保存。何もマシンの外に出ません。 | `Stable` |
 | **15 の UI 言語** | 文語中国語（文言）と RTL アラビア語を含む。 | `Beta` |
-| **ターミナル TUI** | Ink v5 の対話型ターミナル: セッションストリーム、ツールカード、diff 審査 / ロールバック、キーボード権限ゲート、`/fork` セッションツリー、`/memory`、実行中 steering のフィードバック。 | `Beta` |
+| **ターミナル TUI** | Ink v5 の対話型ターミナル: セッションストリーム、ツールカード、diff 審査 / ロールバック、キーボード権限ゲート、`/fork` セッションツリー、`/memory`、todo パネル、`@` ファイル参照、`!` シェル、実行中の steering、セッションの resume。 | `Beta` |
 | **ヘッドレス CLI · RPC · SDK** | 4 モード CLI（単発 / NDJSON / JSONL RPC / パイプ）、Electron 不要の SDK（`aetherai/sdk`）、機械から呼び出し可能な JSONL プロトコル。 | `Beta` |
 | **MIT ライセンス** | 完全オープンソース。 | `Stable` |
 
@@ -59,7 +75,13 @@ Aether は、通常は複数のツールに分散している機能を、1 つ�
 
 ## ダウンロード
 
-### Windows — ビルド済みインストーラー（ほとんどのユーザーに推奨）
+> **どちらか 1 つ**を選んでください。両製品は同じエージェントランタイムとセッションストアを共有します。
+> - **デスクトップのチャットアプリが欲しいだけ?** → [Aether Desktop](#ダウンロード-デスクトップ)
+> - **ターミナルエージェント / CI / SDK が欲しい?** → [Aether CLI](#ダウンロード-cli--tui--sdk)
+
+### ダウンロード — デスクトップ
+
+**Windows — ビルド済みインストーラー（ほとんどのユーザーに推奨）**
 
 最新の [Release](https://github.com/TQSY114514/Aether/releases) をダウンロード:
 
@@ -72,9 +94,33 @@ Aether は、通常は複数のツールに分散している機能を、1 つ�
 >
 > ⚠️ アプリが未署名のため、一部のアンチウイルスソフトウェアはパッケージング中に展開された `electron.exe` を隔離する場合があります。インストーラーが AV に削除された場合は、除外を追加するかポータブルビルドを使用してください。
 
+### ダウンロード — CLI / TUI / SDK
+
+**`aetherai`** は npm パッケージです。ヘッドレス CLI、Ink v5 の対話型 TUI、Electron 不要の SDK を 1 つのバイナリに同梱しています。
+
+```bash
+# Install once (requires Node.js ≥ 22)
+npm install -g aetherai
+# or, no install:
+npx aetherai "fix the failing test" --model deepseek
+
+# Interactive terminal UI (best in Windows Terminal)
+aether tui
+
+# Single-shot prompt (CI / scripts)
+aether "summarize README.md"
+
+# JSONL RPC for external scripts
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` と `aetherai` は同じパッケージを指します。`npm install -g aetherai@0.7.1` でバージョンを固定すると、デスクトップのリリースと一致させられます。
+
+> **GUI とのデータ共有** — 両製品は同じ SQLite データベース（`%APPDATA%/aetherai/aetherai.db`）を使用します。デスクトップアプリで開始したセッションは TUI で再開でき、その逆も可能です。
+
 ### ソースから実行（開発者 / パワーユーザー）
 
-ソースから実行したい場合やコードを変更したい場合は、`start.bat` を使用してください（[Node.js 18+](https://nodejs.org) が必要）:
+ソースから実行したい場合やコードを変更したい場合は、`start.bat` を使用してください（[Node.js 22+](https://nodejs.org) が必要）:
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -84,9 +130,7 @@ start.bat        # Windows: installs deps, builds frontend, launches Electron
 
 手動のステップバイステップは [クイックスタート](#-quick-start) を参照してください。
 
-> **exe と start.bat** — どちらもサポートされており、対象ユーザーが異なります:
-> - **インストーラー exe** — エンドユーザー向け: ダブルクリックでインストール、スタートメニュー登録、アプリ内自動更新、Node.js 不要。
-> - **start.bat** — 開発者 / いじり回す人向け: 透過的な `npm install` → `vite build` → `electron .` パイプライン、編集してそのまま実行、Node.js が必要。
+> **2 つの製品、1 つのソースツリー** — 両製品は同じリポジトリにあります。`app/electron/` は共有のエージェントランタイム、`app/src/` はデスクトップのレンダラー、`app/cli.js` + `app/tui/` は CLI/TUI のエントリポイントです。リリースは git タグ（`v*`）で切り、1 つのタグからデスクトップインストーラーと npm パッケージの両方が得られます。
 
 ---
 
@@ -211,19 +255,6 @@ node cli.js tui --smoke      # headless 状态机冒烟
 
 ---
 
-## VS Code 拡張機能とヘッドレス CLI
-
-デスクトップアプリに加えて、Aether は同じエージェントを CLI とエディタ拡張機能として提供します:
-
-- **ヘッドレス CLI** (`app/cli.js`) — エージェントを非対話的に実行し、NDJSON イベントをスクリプト / CI に渡す:
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **VS Code 拡張機能** (`extension/`) — チャットパネル内で CLI を起動: ライブのツール呼び出しストリーム、コードブロックアクション（Insert / Write file）、**ファイル diff カード**: `write_file` / `edit_file` / `apply_patch` の各呼び出しについて、変更前のファイル内容との行レベル diff を表示し、ワンクリックの **Revert**（ツール実行前に取得したスナップショットを復元）を提供。拡張機能設定 `aether.cliPath` が必要（リポジトリをローカルにクローンしている場合は自動検出）。
-- **ローカルゲートウェイ** (`127.0.0.1:35791`) — デスクトップアプリをバックエンドとする OpenAI 互換 REST API（Settings → Local Gateway → token）。別の拡張機能（`extensions/vscode-aether/`）がこれを経由して接続します。
-
----
-
 ## ターミナル TUI、RPC、SDK
 
 デスクトップアプリと通常の CLI に加えて、Aether は対話型ターミナル UI、機械から呼び出し可能な JSONL RPC モード、Electron 不要の SDK を提供します。3 つすべてがデスクトップと同じエージェントコア、メモリ、ペルソナ、MCP ツール、権限ルールを共有します。
@@ -246,21 +277,28 @@ printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
   | node app/cli.js --mode rpc --db path\to\aetherai.db
 ```
 
-追加のヘッドレスフラグ: `--persona <id>`（persona + メモリ注入）、`--memory-trace`（注入したメモリエントリ数を報告）、`--skills`（スキル提案 JSON）、`--setup-term`（Windows Terminal プロファイルを書き込み）、`--stdin`（明示的なパイプ入力）。
+追加のヘッドレスフラグ: `--persona <id>`（persona + メモリ注入）、`--memory-trace`（注入したメモリエントリ数を報告）、`--skills`（スキル提案 JSON）、`--setup-term`（Windows Terminal プロファイルを書き込み）、`--stdin`（明示的なパイプ入力）、`--resume` / `--session <id>` / `--fork [<id>]`（セッションを再開。context-only — この実行のターンは書き戻されない）、`-o` / `--output-last-message <file>`（最終回答をファイルに書き込み）、`--version`、`--list-models` / `--list-providers`、`aether completion bash|zsh|powershell`（シェル補完スクリプト）。
+
+デフォルトは `~/.config/aether/config.json`（`model` / `mode` / `workspace` / `maxIterations`）と環境変数 `AETHER_MODEL` / `AETHER_MODE` / `AETHER_WORKSPACE` / `AETHER_MAX_ITERATIONS` / `AETHER_CONFIG` から取得されます。優先順位: CLI フラグ > 環境変数 > 設定ファイル > DB デフォルト。JSON の `done` フレームは、価格テーブルが利用可能な場合に `estimatedCost`（USD）を運びます。
 
 ### TUI（`aether tui`）
 
 対話型ターミナルエージェント（Ink v5; Node ≥ 22; Windows Terminal での体験が最良）:
 
-- **セッション**: メッセージのストリーミングレンダリング、`/fork` セッションツリー（`session.parent_session_id`）、`/sessions`、`/use <id>` での履歴切り替え
+- **セッション**: メッセージのストリーミングレンダリング、毎ターン SQLite に保存（終了しても失われない）、`--continue` / `--session <id>` / `--fork` で再開、最初のプロンプトから自動タイトル、`/fork` セッションツリー（`session.parent_session_id`）、`/sessions`、`/use <id>` での履歴切り替え
+- **1 つのランタイム、複数のクライアント**: デスクトップ GUI と TUI は同じ SQLite セッションを共有します — GUI で開始したチャットは `aether tui --session <id>` でターミナルから続きを行え（ID 一覧は `aether tui --continue` または GUI サイドバーで）、その逆も可能です。ヘッドレス CLI（`--resume`/`--fork`）も同じセッションを読み取ります。
 - **ツールと権限**: ツール呼び出しカード（ステータス色 / 所要時間 / 要約）、diff 審査（`Alt+v` で展開、`Enter` で受け入れ / `r` でロールバック — 書き込み前のスナップショットを復元、git ディレクトリでなくても有効）、キーボード権限ゲート（`y` で 1 回許可 / `a` で常に許可 / `n` で拒否、または `←→` で選択）、読み取り専用ツールは自動通過
-- **承認モード**: `Shift+Tab` で `manual → auto-edits → plan` を循環（plan = 読み取り専用のプランニング。完了後に 3 つの選択肢で実施方法を決定）
+- **承認モード**: `Shift+Tab` で `manual → auto-edits → plan` を循環（plan = 読み取り専用のプランニング。完了後に 3 つの選択肢で実施方法を決定）;`/approval-mode dontask` はルールのみの承認を実行（書き込みツールには allow ルールが必要）
 - **モード**: `Alt+m` で ask/plan/auto を切り替え。`/persona <id>` でペルソナを切り替え（persona + メモリプレフィックスを注入）
-- **leader ショートカット**: `Ctrl+X` の後に `m` モデルセレクター / `n` 新規セッション / `l` セッションリスト / `g` タイムライン / `r` rewind チェックポイント / `q` 終了
-- **コマンドパレット**: `Ctrl+P` または `x`（New chat / Model / Timeline / Export JSONL / Help / Quit）
+- **leader ショートカット**: `Ctrl+X` の後に `m` モデルセレクター / `n` 新規セッション / `l` セッションリスト / `g` タイムライン / `r` rewind チェックポイント / `q` 終了 / `e` 外部エディター
+- **コマンドパレット**: `Ctrl+P` または `x`（New chat / Model / History (sessions) / Timeline / Export JSONL / Help / Quit）
 - **キー再バインド可能**: `~/.config/aether/keybindings.json`（例: `{ "char:?": null }` で `?` ヘルプキーを無効化）
 - **API キーの永続化**: `/apikey <provider> <key>` で `auth.json` に保存（デスクトップ版の safeStorage で暗号化されたキーはヘッドレスでは復号できないため、このコマンドまたは環境変数 `AETHER_API_KEY` を使用）
 - **メモリとスキルのループ**: `/memory <キーワード>` で検索、`--memory-trace` で注入エントリ数、`/skills` + `/skill accept|dismiss <key>`（habitLearner → スキル提案）
+- **todo とお気に入り**: `Ctrl+T` でエージェントのライブ todo チェックリストを切り替え、`Ctrl+F` で現在のモデルをお気に入りに追加/解除（永続化）、`F2` で最近のモデルを循環
+- **`@` ファイルと `!` シェル**: `@` を入力するとファイルピッカー（送信時にファイル内容を注入、≤50KB）、`!command` でシェルコマンドをサンドボックス経由で実行し、その出力をモデルに渡します
+- **セッションコンテキストコマンド**: `/compact` / `/compress-fast`（履歴を圧縮）、`/context`（使用量）、`/clear`（新規セッション）、`/undo`（最後のターン + ファイルスナップショットをロールバック）、`/recap`（1 行要約）、`/rename` / `/delete`、`/diff`（未コミット変更ビューアー）、`/permissions add <name> <ruleKey> <allow|deny|ask>`、`/provider add|list`
+- **初回起動のブートストラップ**: デスクトップ版の実行は不要 — `aether tui` がデータベースを自動作成し、`/provider add` でのプロバイダー設定を案内します
 - **steering**: 実行中に `Ctrl+C` で中断 → 次の入力を入力 → 現在のループに注入（キューに `steer:n` を表示）。実行中に `Tab` で次の入力を直接キューに入れる
 - **ショートカットキー**: `Esc` ダブルクリックで終了（または `/quit`）、`Esc` で入力をクリア（下書きは履歴に残る）、`?` でヘルプ画面、`PgUp/PgDn` / マウスホイールでページ送り、ステータスバーに `approval/mode/model/tok/ctx` をリアルタイム表示。完全なキー一覧は [docs/tui-keys.md](./docs/tui-keys.md) を参照
 
@@ -415,7 +453,7 @@ Aether は以下のプロジェクトの上に成り立っています — そ�
 
 <div align="center">
 
-Electron + React + TypeScript で ❤️ を込めて作られました
+Electron + Node.js + React + TypeScript で ❤️ を込めて作られました
 
 [⬆ 先頭に戻る](#aether)
 

@@ -8,7 +8,7 @@
 
 與任意模型聊天、執行安全編碼 Agent、多模型橫向對比——桌面端與終端皆可。
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -24,6 +24,11 @@
 
 > **狀態:Beta。** Aether 是個人/業餘專案。它能用,但會有粗糙之處。歡迎提 bug——見 [CONTRIBUTING.md](./CONTRIBUTING.md) 和 [SECURITY.md](./SECURITY.md)。
 
+> [!CAUTION]
+> **出現 Windows SmartScreen 警告屬正常現象。** Aether 由學生開發者開發,未購買商業程式碼簽署憑證,因此 Win11 / Defender 首次啟動可能提示「Windows 已保護您的電腦」。
+> **應用程式是安全的開源軟體——可先檢視原始碼,再點選「更多資訊 → 仍要執行」。**
+> 若被防毒軟體隔離,請將應用程式資料夾加入排除清單(詳見[下載](#下載))。除您設定的 LLM 供應商外,不會有任何資料離開您的電腦。
+
 **平台:僅支援 Windows。** 官方建置、測試與支援僅面向 Windows。macOS / Linux 可自行從原始碼建置,但不提供官方支援;專案未做程式碼簽署——首次啟動出現 SmartScreen「未知發行者」提示屬正常現象(見[下載](#下載))。
 
 **一個應用,所有模型。** OpenAI / Claude / DeepSeek / 本機模型 / 任何 OpenAI 相容端點——聊天、執行編碼 Agent、在帶 ELO 投票的多模型競技場裡橫向對比模型能力。
@@ -31,6 +36,17 @@
 **本機優先。** API 金鑰和對話儲存在本機 SQLite 中,除了發往你所設定的提供商外,絕不會離開你的電腦。
 
 **預設安全。** 內建 Agent 執行在工作區沙箱內,配有權限階梯:檔案與命令存取在執行前需確認,每次工具呼叫都可稽核。
+
+---
+
+## 兩個產品,一個儲存庫
+
+Aether 以兩個獨立產品的形式發布,二者共享同一 Agent 執行時:
+
+- **Aether 桌面版** — Electron + React 圖形介面。從 [GitHub Releases](#下載-桌面版) 下載,開箱即用。
+- **Aether CLI / TUI / SDK** — 無頭 Agent、Ink v5 終端 UI、Electron-free SDK。`npm install -g aetherai`(詳見[下載 CLI](#下載-cli--tui--sdk))。CLI 命令為 `aether`。
+
+二者共享 `agentCore`、42 個工具、SQLite 記憶、多模型路由、MCP 伺服器與同一會話儲存。桌面端開啟的會話可在終端用 `aether tui --session <id>` 續接,反之亦然。
 
 ---
 
@@ -49,7 +65,7 @@ Aether 把通常分散在多個工具裡的能力集中到一個本機桌面應�
 | **上下文壓縮** | 長對話自動摘要且不丟工具呼叫對。 | `Beta` |
 | **本機優先隱私** | 對話、金鑰、人設都在本機 SQLite。資料不離開你的機器。 | `Stable` |
 | **15 種介面語言** | 含文言文與 RTL 阿拉伯語。 | `Beta` |
-| **終端 TUI** | Ink v5 互動終端:會話流、工具卡、diff 審閱/回滾、鍵盤權限門、`/fork` 會話樹、`/memory`、執行中 steering 回注。 | `Beta` |
+| **終端 TUI** | Ink v5 互動終端:會話流、工具卡、diff 審閱/回滾、鍵盤權限門、`/fork` 會話樹、`/memory`、todo 面板、`@` 檔案參照、`!` shell、執行中 steering 回注、會話 resume。 | `Beta` |
 | **無頭 CLI · RPC · SDK** | 四模式 CLI(單發 / NDJSON / JSONL RPC / 管道)、Electron-free SDK(`aetherai/sdk`)、機器可呼叫的 JSONL 協定。 | `Beta` |
 | **MIT 許可** | 完全開源。 | `Stable` |
 
@@ -57,7 +73,13 @@ Aether 把通常分散在多個工具裡的能力集中到一個本機桌面應�
 
 ## 下載
 
-### Windows — 預建安裝套件(大多數使用者推薦)
+> 二選一即可。兩個產品共享同一 Agent 執行時與會話儲存。
+> - **只想要桌面聊天應用?** → [Aether 桌面版](#下載-桌面版)
+> - **想要終端 Agent / CI / SDK?** → [Aether CLI](#下載-cli--tui--sdk)
+
+### 下載 — 桌面版
+
+**Windows — 預建安裝套件(大多數使用者推薦)**
 
 從最新 [Release](https://github.com/TQSY114514/Aether/releases) 下載:
 
@@ -70,9 +92,33 @@ Aether 把通常分散在多個工具裡的能力集中到一個本機桌面應�
 >
 > ⚠️ 部分防毒軟體可能因應用未簽署而隔離打包後的 `electron.exe`。若安裝套件被防毒軟體移除,請加入排除項或改用可攜版。
 
+### 下載 — CLI / TUI / SDK
+
+**`aetherai`** 是 npm 套件。一個二進位檔打包無頭 CLI、Ink v5 互動 TUI 與 Electron-free SDK。
+
+```bash
+# Install once (requires Node.js ≥ 22)
+npm install -g aetherai
+# or, no install:
+npx aetherai "fix the failing test" --model deepseek
+
+# Interactive terminal UI (best in Windows Terminal)
+aether tui
+
+# Single-shot prompt (CI / scripts)
+aether "summarize README.md"
+
+# JSONL RPC for external scripts
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` 與 `aetherai` 指向同一個套件。`npm install -g aetherai@0.7.1` 可鎖定到與桌面版相同的版本。
+
+> **與 GUI 共享資料** — 兩個產品共用同一 SQLite 資料庫(`%APPDATA%/aetherai/aetherai.db`)。桌面端開啟的會話可在 TUI 續接,反之亦然。
+
 ### 從原始碼執行(開發者 / 進階使用者)
 
-想從原始碼執行或修改程式碼,使用 `start.bat`(需要 [Node.js 18+](https://nodejs.org)):
+想從原始碼執行或修改程式碼,使用 `start.bat`(需要 [Node.js 22+](https://nodejs.org)):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -82,9 +128,7 @@ start.bat        # Windows: 安裝依賴、建置前端、啟動 Electron
 
 手動分步見[快速開始](#-快速開始)。
 
-> **exe 與 start.bat** — 兩者都受支援,面向不同人群:
-> - **安裝套件 exe** — 面向終端使用者:雙擊安裝、開始功能表入口、應用內自動更新、無需 Node.js。
-> - **start.bat** — 面向開發者/折騰黨:`npm install` → `vite build` → `electron .` 透明流水線,改完即跑,需要 Node.js。
+> **兩個產品同源** — 兩個產品都在同一儲存庫。`app/electron/` 是共享的 Agent 執行時;`app/src/` 是桌面渲染層;`app/cli.js` + `app/tui/` 是 CLI/TUI 入口。從單一 git tag(`v*`)同時得到桌面安裝包與 npm 發布。
 
 ---
 
@@ -209,19 +253,6 @@ node cli.js tui --smoke      # headless 狀態機冒煙
 
 ---
 
-## VS Code 擴充與無頭 CLI
-
-除了桌面應用,Aether 還以 CLI 和編輯器擴充形式提供同一 Agent:
-
-- **無頭 CLI**(`app/cli.js`)— 非互動式執行 Agent,向腳本/CI 輸出 NDJSON 事件:
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **VS Code 擴充**(`extension/`)— 在聊天面板中啟動 CLI:即時工具呼叫流、程式碼區塊操作(插入 / 寫入檔案)、**檔案 diff 卡片**:每次 `write_file` / `edit_file` / `apply_patch` 呼叫都渲染相對改動前檔案內容的行級 diff,支援一鍵 **Revert**(還原工具執行前拍攝的快照)。需要擴充設定 `aether.cliPath`(儲存庫本機克隆時自動偵測)。
-- **本機閘道**(`127.0.0.1:35791`)— 由桌面應用支撐的 OpenAI 相容 REST API(設定 → Local Gateway → token);第二個擴充(`extensions/vscode-aether/`)經它連線。
-
----
-
 ## 終端 TUI、RPC 與 SDK
 
 除桌面應用和普通 CLI 外,Aether 還提供互動式終端 UI、機器可呼叫的 JSONL RPC 模式與 Electron-free SDK。三者與桌面端共用同一 Agent 核心、記憶、人設、MCP 工具與權限規則。
@@ -244,21 +275,28 @@ printf '{"type":"request","reqId":"c1","method":"listModels","params":{}}\n' \
   | node app/cli.js --mode rpc --db path\to\aetherai.db
 ```
 
-其他無頭參數:`--persona <id>`(人設 + 記憶注入)、`--memory-trace`(報告注入記憶條目數)、`--skills`(技能提案 JSON)、`--setup-term`(寫入 Windows Terminal profile)、`--stdin`(顯式管道輸入)。
+其他無頭參數:`--persona <id>`(人設 + 記憶注入)、`--memory-trace`(報告注入記憶條目數)、`--skills`(技能提案 JSON)、`--setup-term`(寫入 Windows Terminal profile)、`--stdin`(顯式管道輸入)、`--resume` / `--session <id>` / `--fork [<id>]`(續跑會話;context-only——本輪訊息不回寫 DB)、`-o` / `--output-last-message <file>`(把最終答案寫入檔案)、`--version`、`--list-models` / `--list-providers`,以及 `aether completion bash|zsh|powershell`(shell 補全腳本)。
+
+預設值來自 `~/.config/aether/config.json`(`model` / `mode` / `workspace` / `maxIterations`)與環境變數 `AETHER_MODEL` / `AETHER_MODE` / `AETHER_WORKSPACE` / `AETHER_MAX_ITERATIONS` / `AETHER_CONFIG`。優先順序:CLI 參數 > 環境變數 > 設定檔 > DB 預設。JSON 的 `done` 幀在定價表可用時攜帶 `estimatedCost`(USD)。
 
 ### TUI(`aether tui`)
 
 互動式終端 Agent(Ink v5;Node ≥ 22;Windows Terminal 體驗最佳):
 
-- **會話**:訊息流式渲染、`/fork` 會話樹(`session.parent_session_id`)、`/sessions`、`/use <id>` 歷史切換
+- **會話**:訊息流式渲染、每輪對話落庫 SQLite(退出不丟)、`--continue` / `--session <id>` / `--fork` 恢復會話、首條 prompt 自動標題、`/fork` 會話樹(`session.parent_session_id`)、`/sessions`、`/use <id>` 歷史切換
+- **一個執行時,多個用戶端**:桌面 GUI 與 TUI 共用同一 SQLite 會話——GUI 開啟的對話可在終端用 `aether tui --session <id>` 續接(ID 可經 `aether tui --continue` 或 GUI 側欄列出),反之亦然。無頭 CLI(`--resume`/`--fork`)讀取同一批會話。
 - **工具與權限**:工具呼叫卡(狀態色/耗時/摘要)、diff 審閱(`Alt+v` 展開,`Enter` 接受 / `r` 回滾——寫前快照還原,非 git 目錄也有效)、鍵盤權限門(`y` 允許一次 / `a` 總是允許 / `n` 拒絕,或 `←→` 選擇)、唯讀工具自動放行
-- **審批模式**:`Shift+Tab` 迴圈 `manual → auto-edits → plan`(plan = 唯讀規劃,完成後三選項決定如何實施)
+- **審批模式**:`Shift+Tab` 迴圈 `manual → auto-edits → plan`(plan = 唯讀規劃,完成後三選項決定如何實施);`/approval-mode dontask` 走純規則審批(寫入工具需 allow 規則)
 - **模式**:`Alt+m` 切換 ask/plan/auto;`/persona <id>` 切換人設(注入 persona + 記憶前綴)
-- **leader 快速鍵**:`Ctrl+X` 然後 `m` 模型選擇器 / `n` 新會話 / `l` 會話清單 / `g` 時間線 / `r` rewind 檢查點 / `q` 退出
-- **命令面板**:`Ctrl+P` 或 `x`(New chat / Model / Timeline / Export JSONL / Help / Quit)
+- **leader 快速鍵**:`Ctrl+X` 然後 `m` 模型選擇器 / `n` 新會話 / `l` 會話清單 / `g` 時間線 / `r` rewind 檢查點 / `q` 退出 / `e` 外部編輯器
+- **命令面板**:`Ctrl+P` 或 `x`(New chat / Model / History (sessions) / Timeline / Export JSONL / Help / Quit)
 - **鍵位可重綁**:`~/.config/aether/keybindings.json`(如 `{ "char:?": null }` 停用 `?` 說明鍵)
 - **API key 持久化**:`/apikey <provider> <key>` 儲存到 `auth.json`(桌面版 safeStorage 加密的 key 在 headless 無法解密,用此命令或環境變數 `AETHER_API_KEY`)
 - **記憶與技能閉環**:`/memory <關鍵詞>` 檢索、`--memory-trace` 注入條目數、`/skills` + `/skill accept|dismiss <key>`(habitLearner → 技能提案)
+- **todo 與收藏**:`Ctrl+T` 開關 agent 即時 todo 清單;`Ctrl+F` 收藏/取消目前模型(持久化);`F2` 循環最近模型
+- **`@` 檔案與 `!` shell**:輸入 `@` 彈出檔案選擇(提交時內容注入,≤50KB);`!命令` 經 sandbox 執行並把輸出餵給模型
+- **會話上下文命令**:`/compact` / `/compress-fast`(壓縮歷史)、`/context`(用量)、`/clear`(新會話)、`/undo`(撤銷上一輪 + 檔案快照)、`/recap`(一行摘要)、`/rename` / `/delete`、`/diff`(未提交變更檢視器)、`/permissions add <name> <ruleKey> <allow|deny|ask>`、`/provider add|list`
+- **首次執行自舉**:無需先跑桌面版——`aether tui` 自動建庫並提示用 `/provider add` 設定 provider
 - **steering**:執行中 `Ctrl+C` 打斷 → 輸入下一條 → 注入目前迴圈(佇列顯示 `steer:n`);執行中 `Tab` 直接排隊下一條
 - **快速鍵**:雙擊 `Esc` 退出(或 `/quit`)、`Esc` 清空輸入(草稿入歷史)、`?` 說明螢幕、`PgUp/PgDn`/滑鼠滾輪翻頁、狀態列即時顯示 `approval/mode/model/tok/ctx`;完整鍵位見 [docs/tui-keys.md](./docs/tui-keys.md)
 
@@ -413,7 +451,7 @@ Aether 站在這些專案的肩膀上——它們的思想塑造了架構與體�
 
 <div align="center">
 
-用 ❤️ 建置,Electron + React + TypeScript
+用 ❤️ 建置,Electron + Node.js + React + TypeScript
 
 [⬆ 返回頂部](#aether)
 

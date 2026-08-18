@@ -8,7 +8,7 @@
 
 किसी भी मॉडल से चैट करें, एक सुरक्षित कोडिंग एजेंट चलाएँ, और मॉडलों की आमने-सामने तुलना करें — अपने डेस्कटॉप पर या अपने टर्मिनल में।
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -26,13 +26,29 @@
 > बग रिपोर्ट का स्वागत है — [CONTRIBUTING.md](./CONTRIBUTING.md) और
 > [SECURITY.md](./SECURITY.md) देखें।
 
-**प्लेटफ़ॉर्म: केवल Windows.** आधिकारिक बिल्ड, परीक्षण और सहायता Windows को लक्षित करती है। macOS / Linux स्रोत से बिल्ड हो सकते हैं लेकिन आधिकारिक रूप से समर्थित नहीं हैं, और कोड साइनिंग की योजना नहीं है — पहली लॉन्च पर SmartScreen "unknown publisher" प्रॉम्प्ट की उम्मीद करें ([Download](#download) देखें)।
+> [!CAUTION]
+> **Windows SmartScreen चेतावनी सामान्य है।** Aether एक छात्र डेवलपर द्वारा बिना व्यावसायिक कोड-साइनिंग प्रमाणपत्र के बनाया गया है, इसलिए Windows 11 / Defender पहली लॉन्च पर "Windows ने आपके PC की सुरक्षा की" दिखा सकता है।
+> **ऐप सुरक्षित और ओपन-सोर्स है — कोड की समीक्षा करें, फिर "अधिक जानकारी → फिर भी चलाएँ" पर क्लिक करें।**
+> यदि आपका एंटीवायरस इसे क्वारंटीन कर दे, तो ऐप फ़ोल्डर को AV अपवादों में जोड़ें (विवरण के लिए [डाउनलोड](#डाउनलोड) देखें)। आपके द्वारा कॉन्फ़िगर किए गए LLM प्रदाताओं के अलावा कोई डेटा आपकी मशीन से बाहर नहीं जाता।
+
+**प्लेटफ़ॉर्म: केवल Windows.** आधिकारिक बिल्ड, परीक्षण और सहायता Windows को लक्षित करती है। macOS / Linux स्रोत से बिल्ड हो सकते हैं लेकिन आधिकारिक रूप से समर्थित नहीं हैं, और कोड साइनिंग की योजना नहीं है — पहली लॉन्च पर SmartScreen "unknown publisher" प्रॉम्प्ट की उम्मीद करें ([डाउनलोड](#डाउनलोड) देखें)।
 
 **हर मॉडल के लिए एक ऐप।** OpenAI / Claude / DeepSeek / स्थानीय मॉडल / कोई भी OpenAI-संगत एंडपॉइंट — चैट करें, कोडिंग एजेंट चलाएँ, और ELO मतदान के साथ मल्टी-मॉडल एरिना में मॉडलों की आमने-सामने तुलना करें।
 
 **डिज़ाइन से स्थानीय-प्रथम।** API कुंजियाँ और बातचीत एक स्थानीय SQLite डेटाबेस में रहती हैं और कभी आपकी मशीन से बाहर नहीं जातीं — सिवाय उन प्रदाताओं के जिन्हें आपने कॉन्फ़िगर किया है।
 
 **डिफ़ॉल्ट से सुरक्षित।** अंतर्निर्मित एजेंट अनुमति सीढ़ी के साथ एक वर्कस्पेस सैंडबॉक्स के अंदर चलता है: फ़ाइल और कमांड तक पहुँच होने से पहले पुष्टि की जाती है, और हर टूल कॉल ऑडिट योग्य है।
+
+---
+
+## दो उत्पाद, एक रिपो
+
+Aether दो स्वतंत्र उत्पादों के रूप में आता है जो एक ही agent रनटाइम साझा करते हैं:
+
+- **Aether Desktop** — Electron + React GUI। इसे [GitHub Releases](#डाउनलोड-डेस्कटॉप) से डाउनलोड करें; बॉक्स से बाहर तैयार।
+- **Aether CLI / TUI / SDK** — हेडलेस एजेंट, Ink v5 टर्मिनल UI और Electron-free SDK। `npm install -g aetherai` से इंस्टॉल करें ([सेटअप →](#डाउनलोड-cli--tui--sdk))। CLI बाइनरी का नाम `aether` है।
+
+दोनों `agentCore`, 42 टूल, SQLite मेमोरी, मल्टी-मॉडल रूटिंग, MCP सर्वर और एक ही सत्र स्टोर साझा करते हैं। GUI में शुरू की गई चैट को TUI में `aether tui --session <id>` से जारी रखा जा सकता है, और इसका उल्टा भी।
 
 ---
 
@@ -59,7 +75,13 @@ Aether कई क्षमताओं को एक ही स्थानी�
 
 ## डाउनलोड
 
-### Windows — प्रीबिल्ट इंस्टॉलर (अधिकांश उपयोगकर्ताओं के लिए अनुशंसित)
+> **एक** चुनें। दोनों उत्पाद एक ही agent रनटाइम और सत्र स्टोर साझा करते हैं।
+> - **बस एक डेस्कटॉप चैट ऐप चाहिए?** → [Aether Desktop](#डाउनलोड-डेस्कटॉप)
+> - **टर्मिनल एजेंट / CI / SDK चाहिए?** → [Aether CLI](#डाउनलोड-cli--tui--sdk)
+
+### डाउनलोड — डेस्कटॉप
+
+**Windows — प्रीबिल्ट इंस्टॉलर (अधिकांश उपयोगकर्ताओं के लिए अनुशंसित)**
 
 नवीनतम [Release](https://github.com/TQSY114514/Aether/releases) डाउनलोड करें:
 
@@ -72,9 +94,33 @@ Aether कई क्षमताओं को एक ही स्थानी�
 >
 > ⚠️ कुछ एंटीवायरस सॉफ़्टवेयर पैकेजिंग के दौरान अनपैक्ड `electron.exe` को क्वारंटाइन कर सकते हैं क्योंकि ऐप अहस्ताक्षरित है। यदि इंस्टॉलर आपके AV द्वारा हटा दिया जाता है, तो एक अपवाद जोड़ें या पोर्टेबल बिल्ड का उपयोग करें।
 
+### डाउनलोड — CLI / TUI / SDK
+
+**`aetherai`** npm पैकेज है। यह हेडलेस CLI, Ink v5 इंटरैक्टिव TUI और Electron-free SDK को एक ही बाइनरी में बंडल करता है।
+
+```bash
+# Install once (requires Node.js ≥ 22)
+npm install -g aetherai
+# or, no install:
+npx aetherai "fix the failing test" --model deepseek
+
+# Interactive terminal UI (best in Windows Terminal)
+aether tui
+
+# Single-shot prompt (CI / scripts)
+aether "summarize README.md"
+
+# JSONL RPC for external scripts
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` और `aetherai` एक ही पैकेज पर रिज़ॉल्व होते हैं। डेस्कटॉप रिलीज़ से मेल खाने के लिए `npm install -g aetherai@0.7.1` से वर्ज़न पिन करें।
+
+> **GUI के साथ डेटा साझाकरण** — दोनों उत्पाद एक ही SQLite डेटाबेस (`%APPDATA%/aetherai/aetherai.db`) का उपयोग करते हैं। डेस्कटॉप ऐप में शुरू किया गया सत्र TUI में जारी रखा जा सकता है, और इसका उल्टा भी।
+
 ### स्रोत से चलाएँ (डेवलपर्स / पावर उपयोगकर्ता)
 
-यदि आप स्रोत से चलाना पसंद करते हैं, या कोड संशोधित करना चाहते हैं, तो `start.bat` का उपयोग करें ([Node.js 18+](https://nodejs.org) आवश्यक):
+यदि आप स्रोत से चलाना पसंद करते हैं, या कोड संशोधित करना चाहते हैं, तो `start.bat` का उपयोग करें ([Node.js 22+](https://nodejs.org) आवश्यक):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -84,9 +130,7 @@ start.bat        # Windows: installs deps, builds frontend, launches Electron
 
 मैनुअल स्टेप-बाय-स्टेप के लिए [Quick Start](#-quick-start) देखें।
 
-> **exe vs start.bat** — दोनों समर्थित हैं और अलग-अलग दर्शकों की सेवा करते हैं:
-> - **इंस्टॉलर exe** — अंत उपयोगकर्ताओं के लिए: इंस्टॉल करने के लिए डबल-क्लिक करें, Start Menu एंट्री, इन-ऐप ऑटो-अपडेट, Node.js की आवश्यकता नहीं।
-> - **start.bat** — डेवलपर्स / उत्सुक उपयोगकर्ताओं के लिए: पारदर्शी `npm install` → `vite build` → `electron .` पाइपलाइन, edit-and-run, Node.js आवश्यक।
+> **दो उत्पाद या एक सोर्स ट्री** — दोनों उत्पाद एक ही रिपो में रहते हैं। `app/electron/` साझा agent रनटाइम रखता है, `app/src/` डेस्कटॉप रेंडरर है, और `app/cli.js` + `app/tui/` CLI/TUI के प्रवेश बिंदु हैं। रिलीज़ git टैग (`v*`) से टैग होते हैं और एक ही टैग से आपको डेस्कटॉप इंस्टॉलर और npm प्रकाशन दोनों मिलते हैं।
 
 ---
 
@@ -208,19 +252,6 @@ node cli.js tui --smoke      # headless स्टेट-मशीन स्म�
 ### Privacy
 
 > **सभी डेटा स्थानीय रहता है।** Aether आपके बारे में कुछ भी एकत्र नहीं करता और कुछ भी अपलोड नहीं करता। आपकी API कुंजियाँ, वार्तालाप और personas एक स्थानीय SQLite डेटाबेस में रहते हैं। एकमात्र आउटबाउंड नेटवर्क अनुरोध उन LLM प्रदाताओं को जाते हैं जिन्हें आप कॉन्फ़िगर करते हैं।
-
----
-
-## VS Code एक्सटेंशन और Headless CLI
-
-डेस्कटॉप ऐप के अलावा, Aether समान एजेंट को CLI और एक एडिटर एक्सटेंशन के रूप में भेजता है:
-
-- **Headless CLI** (`app/cli.js`) — एजेंट को गैर-इंटरैक्टिव रूप से चलाएँ, NDJSON इवेंट को स्क्रिप्ट/CI में फीड करें:
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **VS Code एक्सटेंशन** (`extension/`) — चैट पैनल में CLI को स्पॉन करता है: लाइव टूल-कॉल स्ट्रीम, कोड-ब्लॉक एक्शन (Insert / Write file), और **file-diff कार्ड**: हर `write_file` / `edit_file` / `apply_patch` कॉल परिवर्तन-पूर्व फ़ाइल सामग्री के मुकाबले लाइन-स्तरीय diff रेंडर करता है, जिसमें एक-क्लिक **Revert** (टूल चलने से पहले लिया गया स्नैपशॉट पुनर्स्थापित करता है) होता है। एक्सटेंशन सेटिंग `aether.cliPath` आवश्यक है (जब रिपो स्थानीय रूप से क्लोन होती है तो स्वतः पहचाना जाता है)।
-- **Local Gateway** (`127.0.0.1:35791`) — डेस्कटॉप ऐप द्वारा संचालित OpenAI-संगत REST API (Settings → Local Gateway → token); एक दूसरा एक्सटेंशन (`extensions/vscode-aether/`) इसके माध्यम से जुड़ता है।
 
 ---
 
@@ -415,7 +446,7 @@ Aether इन परियोजनाओं के कंधों पर ख�
 
 <div align="center">
 
-Built with ❤️ using Electron + React + TypeScript
+Built with ❤️ using Electron + Node.js + React + TypeScript
 
 [⬆ शीर्ष पर वापस](#aether)
 

@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
@@ -118,7 +118,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` and `aetherai` resolve to the same package. Pin a version with `npm install -g aetherai@0.7.0` to match a desktop release.
+`aether` and `aetherai` resolve to the same package. Pin a version with `npm install -g aetherai@0.7.1` to match a desktop release.
 
 > **Sharing data with the GUI** — both products use the same SQLite database (`%APPDATA%/aetherai/aetherai.db`). A session started in the desktop app can be resumed in the TUI and vice versa.
 
@@ -256,19 +256,6 @@ node cli.js tui --smoke      # headless state-machine smoke
 ### Privacy
 
 > **All data stays local.** Aether collects nothing and uploads nothing about you. Your API keys, conversations, and personas live in a local SQLite database. The only outbound network requests go to the LLM providers you configure.
-
----
-
-## VS Code Extension & Headless CLI
-
-Beyond the desktop app, Aether ships the same agent as a CLI and an editor extension:
-
-- **Headless CLI** (`app/cli.js`) — run the agent non-interactively, feed NDJSON events to scripts/CI:
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **VS Code extension** (`extension/`) — spawns the CLI in a chat panel: live tool-call stream, code-block actions (Insert / Write file), and **file-diff cards**: every `write_file` / `edit_file` / `apply_patch` call renders a line-level diff against the pre-change file content, with one-click **Revert** (restores the snapshot taken before the tool ran). Requires the extension setting `aether.cliPath` (auto-detected when the repo is cloned locally).
-- **Local Gateway** (`127.0.0.1:35791`) — OpenAI-compatible REST API backed by the desktop app (Settings → Local Gateway → token); a second extension (`extensions/vscode-aether/`) connects through it.
 
 ---
 

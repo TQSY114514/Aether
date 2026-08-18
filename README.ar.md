@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="./assets/readme-hero.svg" width="780" alt="Aether" />
 
@@ -8,7 +8,7 @@
 
 تحدّث مع أي نموذج، وشغّل وكيل برمجة آمنًا، وقارن النماذج جنبًا إلى جنب — على سطح المكتب أو في الطرفية.
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -26,13 +26,29 @@
 > تقارير الأخطاء مرحّب بها — راجع [CONTRIBUTING.md](./CONTRIBUTING.md) و
 > [SECURITY.md](./SECURITY.md).
 
-**المنصّة: Windows فقط.** البناءات الرسمية والاختبار والدعم تستهدف Windows. قد يُبنى macOS / Linux من المصدر لكنهما غير مدعومَين رسميًا، ولا يُخطَّط لتوقيع الكود — توقّع رسالة SmartScreen "ناشر غير معروف" عند الإطلاق الأوّل (انظر [التنزيل](#download)).
+> [!CAUTION]
+> **تحذير Windows SmartScreen متوقّع.** Aether يبنيه مطوّر طالب بدون شهادة توقيع كود تجارية، لذا قد يعرض Windows 11 / Defender رسالة "قام Windows بحماية جهازك" عند الإطلاق الأوّل.
+> **التطبيق آمن ومفتوح المصدر — راجع الكود ثم انقر "مزيد من المعلومات ← تشغيل على أي حال".**
+> إذا عزله برنامج مكافحة الفيروسات، أضف مجلد التطبيق إلى قائمة استثناءات برنامج الحماية (انظر [التنزيل](#التنزيل) للتفاصيل). لا تخرج أي بيانات من جهازك إلا إلى مزوّدي LLM الذين تهيّئهم.
+
+**المنصّة: Windows فقط.** البناءات الرسمية والاختبار والدعم تستهدف Windows. قد يُبنى macOS / Linux من المصدر لكنهما غير مدعومَين رسميًا، ولا يُخطَّط لتوقيع الكود — توقّع رسالة SmartScreen "ناشر غير معروف" عند الإطلاق الأوّل (انظر [التنزيل](#التنزيل)).
 
 **تطبيق واحد لكل نموذج.** OpenAI / Claude / DeepSeek / النماذج المحلّية / أي نقطة نهاية متوافقة مع OpenAI — تحدّث، وشغّل وكيل برمجة، وقارن النماذج وجهًا لوجه في ساحة متعدّدة النماذج مع تصويت ELO.
 
 **محلّي أولاً بالتصميم.** مفاتيح API والمحادثات تعيش في قاعدة بيانات SQLite محلّية ولا تغادر جهازك أبدًا — إلّا إلى المزوّدين الذين تُهيّئهم.
 
 **آمن افتراضيًا.** الوكيل المدمج يعمل داخل صندوق رمل لمساحة العمل مع سلم صلاحيات: الوصول إلى الملفات والأوامر يُوافَق عليه قبل حدوثه، وكل استدعاء أداة قابل للتدقيق.
+
+---
+
+## منتجان في مستودع واحد
+
+يُشحن Aether كمنتجين مستقلّين يشتركان في نفس بيئة تشغيل الوكيل:
+
+- **Aether Desktop** — الواجهة الرسومية Electron + React. حمّلها من [GitHub Releases](#التنزيل-سطح-المكتب). تعمل مباشرة دون إعداد.
+- **Aether CLI / TUI / SDK** — وكيل بدون واجهة، وواجهة طرفية Ink v5، وSDK خالٍ من Electron. ثبّتها بـ `npm install -g aetherai` ([الإعداد ←](#التنزيل-cli--tui--sdk)). الأمر الثنائي للـ CLI هو `aether`.
+
+يشترك الاثنان في `agentCore`، وفي 42 أداة، وذاكرة SQLite، وتوجيه النماذج المتعدّدة، وخوادم MCP، وفي نفس مخزن الجلسات. المحادثة التي بدأتَها في الواجهة الرسومية يمكن استئنافها في الطرفية بـ `aether tui --session <id>`، والعكس صحيح.
 
 ---
 
@@ -59,7 +75,13 @@
 
 ## التنزيل
 
-### Windows — مُثبّت جاهز مسبقًا (مُوصى به لمعظم المستخدمين)
+> اختر **واحدًا**. المنتجان يشتركان في نفس بيئة تشغيل الوكيل ونفس مخزن الجلسات.
+> - **كل ما تريده هو تطبيق محادثة لسطح المكتب؟** ← [Aether Desktop](#التنزيل-سطح-المكتب)
+> - **تريد وكيل طرفية / CI / SDK؟** ← [Aether CLI](#التنزيل-cli--tui--sdk)
+
+### التنزيل — سطح المكتب
+
+**Windows — مُثبّت جاهز مسبقًا (مُوصى به لمعظم المستخدمين)**
 
 حمّل أحدث [إصدار](https://github.com/TQSY114514/Aether/releases):
 
@@ -72,9 +94,33 @@
 >
 > ⚠️ قد تعزل بعض برامج مكافحة الفيروسات ملف `electron.exe` غير المُفكّ أثناء التعبئة لأن التطبيق غير موقّع. إذا أزال مضاد الفيروسات المُثبّت، أضف استثناءً أو استخدم البناء المحمول.
 
+### التنزيل — CLI / TUI / SDK
+
+**`aetherai`** هي حزمة npm. تجمع في ملف ثنائي واحد كلًّا من الـ CLI بدون واجهة، والـ TUI التفاعلية Ink v5، والـ SDK الخالي من Electron.
+
+```bash
+# Install once (requires Node.js ≥ 22)
+npm install -g aetherai
+# or, no install:
+npx aetherai "fix the failing test" --model deepseek
+
+# Interactive terminal UI (best in Windows Terminal)
+aether tui
+
+# Single-shot prompt (CI / scripts)
+aether "summarize README.md"
+
+# JSONL RPC for external scripts
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` و `aetherai` يحلّان إلى نفس الحزمة. ثبّت إصدارًا محدّدًا بـ `npm install -g aetherai@0.7.1` لمطابقة إصدار سطح المكتب.
+
+> **مشاركة البيانات مع الواجهة الرسومية** — المنتجان يستخدمان نفس قاعدة بيانات SQLite (`%APPDATA%/aetherai/aetherai.db`). الجلسة التي بدأت في تطبيق سطح المكتب يمكن استئنافها في الـ TUI، والعكس صحيح.
+
 ### التشغيل من المصدر (مطوّرون / مستخدمون متقدّمون)
 
-إذا فضّلت التشغيل من المصدر، أو أردت تعديل الكود، استخدم `start.bat` (يتطلّب [Node.js 18+](https://nodejs.org)):
+إذا فضّلت التشغيل من المصدر، أو أردت تعديل الكود، استخدم `start.bat` (يتطلّب [Node.js 22+](https://nodejs.org)):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -84,9 +130,7 @@ start.bat        # Windows: installs deps, builds frontend, launches Electron
 
 انظر [البداية السريعة](#-quick-start) للخطوات اليدوية خطوة بخطوة.
 
-> **exe مقابل start.bat** — كلاهما مدعوم ويخدمان جمهورًا مختلفًا:
-> - **مُثبّت exe** — للمستخدمين النهائيين: نقر مزدوج للتثبيت، إدخال في قائمة ابدأ، تحديث تلقائي داخل التطبيق، لا يحتاج Node.js.
-> - **start.bat** — للمطوّرين والمُجرّبين: مسار شفّاف `npm install` ← `vite build` ← `electron .`، حرّر وشغّل، يتطلّب Node.js.
+> **منتجان أم شجرة مصدر واحدة** — المنتجان يعيشان في نفس المستودع. `app/electron/` يضمّ بيئة تشغيل الوكيل المشتركة، و`app/src/` هو طبقة العرض لسطح المكتب، و`app/cli.js` + `app/tui/` هما نقطتا دخول CLI/TUI. الإصدارات تُوسَم بوسم git (`v*`)، ومن وسم واحد تحصل على مُثبّت سطح المكتب وعلى نشر npm معًا.
 
 ---
 
@@ -208,19 +252,6 @@ node cli.js tui --smoke      # headless state-machine smoke
 ### الخصوصية
 
 > **كل البيانات تبقى محلّية.** Aether لا يجمع شيئًا ولا يرفع شيئًا عنك. مفاتيح API والمحادثات والشخصيات تعيش في قاعدة بيانات SQLite محلّية. طلبات الشبكة الخارجية الوحيدة تذهب إلى مزوّدي LLM الذين ضبطتهم.
-
----
-
-## إضافة VS Code و CLI بدون واجهة
-
-إلى جانب تطبيق سطح المكتب، يوفر Aether نفس الوكيل كـ CLI وكإضافة محرّر:
-
-- **CLI بدون واجهة** (`app/cli.js`) — شغّل الوكيل بدون تفاعل، وغذِّ أحداث NDJSON إلى السكربتات/CI:
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **إضافة VS Code** (`extension/`) — تشغّل CLI في لوحة محادثة: تدفّق استدعاء الأدوات الحيّ، وإجراءات كتل الكود (إدراج / كتابة ملف)، و**بطاقات diff الملفات**: كل استدعاء `write_file` / `edit_file` / `apply_patch` يعرض diff على مستوى الأسطر مقابل محتوى الملف قبل التغيير، مع **Revert** بنقرة واحدة (يستعيد اللقطة المأخوذة قبل تشغيل الأداة). يتطلّب إعداد الإضافة `aether.cliPath` (يُكتشف تلقائيًا عند استنساخ المستودع محليًا).
-- **بوابة محلّية** (`127.0.0.1:35791`) — واجهة REST متوافقة مع OpenAI يدعمها تطبيق سطح المكتب (الإعدادات ← البوابة المحلّية ← رمز مميّز)؛ إضافة ثانية (`extensions/vscode-aether/`) تتّصل عبرها.
 
 ---
 
@@ -415,7 +446,7 @@ app/
 
 <div align="center">
 
-بُني بـ ❤️ باستخدام Electron + React + TypeScript
+بُني بـ ❤️ باستخدام Electron + Node.js + React + TypeScript
 
 [⬆ العودة إلى الأعلى](#aether)
 

@@ -8,7 +8,7 @@
 
 Chatten Sie mit jedem Modell, führen Sie einen sicheren Coding-Agenten aus und vergleichen Sie Modelle Seite an Seite — auf Ihrem Desktop oder in Ihrem Terminal.
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -26,6 +26,11 @@ Chatten Sie mit jedem Modell, führen Sie einen sicheren Coding-Agenten aus und 
 > rechnen Sie mit rauen Kanten. Bugmeldungen sind willkommen — siehe
 > [CONTRIBUTING.md](./CONTRIBUTING.md) und [SECURITY.md](./SECURITY.md).
 
+> [!CAUTION]
+> **Die Windows-SmartScreen-Warnung ist zu erwarten.** Aether wird von einem Studenten ohne kommerzielles Codesignatur-Zertifikat entwickelt, daher zeigen Windows 11 / Defender beim ersten Start möglicherweise „Windows hat Ihren PC geschützt" an.
+> **Die App ist sicher und Open Source — prüfen Sie den Code und klicken Sie dann auf „Weitere Informationen → Trotzdem ausführen".**
+> Sollte Ihre Antivirus-Software sie in Quarantäne verschieben, fügen Sie den App-Ordner zu den AV-Ausnahmen hinzu (Details siehe [Download](#download)). Es verlassen keine Daten Ihren Rechner — außer zu den von Ihnen konfigurierten LLM-Anbietern.
+
 **Plattform: nur Windows.** Offizielle Builds, Tests und Support zielen auf Windows. macOS / Linux lassen sich eventuell aus dem Quellcode bauen, werden aber nicht offiziell unterstützt, und Codesignierung ist nicht geplant — rechnen Sie beim ersten Start mit einer SmartScreen-Meldung „Unbekannter Herausgeber" (siehe [Download](#download)).
 
 **Eine App für jedes Modell.** OpenAI / Claude / DeepSeek / lokale Modelle / jeder OpenAI-kompatible Endpunkt — chatten, einen Coding-Agenten ausführen und Modelle in einer Multi-Modell-Arena mit ELO-Abstimmung direkt gegeneinander vergleichen.
@@ -33,6 +38,17 @@ Chatten Sie mit jedem Modell, führen Sie einen sicheren Coding-Agenten aus und 
 **Local-first by design.** API-Schlüssel und Unterhaltungen liegen in einer lokalen SQLite-Datenbank und verlassen Ihren Rechner nie — außer zu den von Ihnen konfigurierten Anbietern.
 
 **Standardmäßig sicher.** Der integrierte Agent läuft in einer Workspace-Sandbox mit einer Berechtigungsleiter: Datei- und Befehlszugriffe werden bestätigt, bevor sie stattfinden, und jeder Tool-Aufruf ist prüfbar.
+
+---
+
+## Zwei Produkte, ein Repository
+
+Aether wird als zwei unabhängige Artefakte ausgeliefert, die sich dieselbe Agent-Runtime teilen:
+
+- **Aether Desktop** — die Electron-+React-GUI. Von [GitHub Releases](#download--desktop) herunterladen. Funktioniert sofort.
+- **Aether CLI / TUI / SDK** — Headless-Agent, Ink-v5-Terminal-UI und Electron-freies SDK. Installieren mit `npm install -g aetherai` ([Setup →](#download--cli--tui--sdk)). Das CLI-Binary ist `aether`.
+
+Beide teilen sich `agentCore`, 42 Tools, SQLite-Speicher, Multi-Modell-Routing, MCP-Server und denselben Sitzungsspeicher. Ein in der GUI begonnener Chat lässt sich in der TUI mit `aether tui --session <id>` fortsetzen — und umgekehrt.
 
 ---
 
@@ -59,7 +75,13 @@ Aether bündelt mehrere Fähigkeiten, die normalerweise über verschiedene Tools
 
 ## Download
 
-### Windows — Vorgefertigtes Installationsprogramm (für die meisten Benutzer empfohlen)
+> Wählen Sie **eins**. Beide Produkte teilen sich dieselbe Agent-Runtime und denselben Sitzungsspeicher.
+> - **Nur eine Desktop-Chat-App gewünscht?** → [Aether Desktop](#download--desktop)
+> - **Terminal-Agent / CI / SDK gewünscht?** → [Aether CLI](#download--cli--tui--sdk)
+
+### Download — Desktop
+
+**Windows — Vorgefertigtes Installationsprogramm (für die meisten Benutzer empfohlen)**
 
 Laden Sie die neueste [Release](https://github.com/TQSY114514/Aether/releases) herunter:
 
@@ -72,9 +94,33 @@ Laden Sie die neueste [Release](https://github.com/TQSY114514/Aether/releases) h
 >
 > ⚠️ Einige Antivirenprogramme könnten die entpackte `electron.exe` beim Paketieren unter Quarantäne stellen, weil die App unsigniert ist. Wird der Installer von Ihrem AV entfernt, fügen Sie eine Ausnahme hinzu oder verwenden Sie den portablen Build.
 
+### Download — CLI / TUI / SDK
+
+**`aetherai`** ist das npm-Paket. Es bündelt die Headless-CLI, die interaktive Ink-v5-TUI und das Electron-freie SDK in einem einzigen Binary.
+
+```bash
+# Install once (requires Node.js ≥ 22)
+npm install -g aetherai
+# or, no install:
+npx aetherai "fix the failing test" --model deepseek
+
+# Interactive terminal UI (best in Windows Terminal)
+aether tui
+
+# Single-shot prompt (CI / scripts)
+aether "summarize README.md"
+
+# JSONL RPC for external scripts
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` und `aetherai` zeigen auf dasselbe Paket. Pinnen Sie eine Version mit `npm install -g aetherai@0.7.1`, um sie an ein Desktop-Release anzugleichen.
+
+> **Daten mit der GUI teilen** — beide Produkte verwenden dieselbe SQLite-Datenbank (`%APPDATA%/aetherai/aetherai.db`). Eine in der Desktop-App begonnene Sitzung lässt sich in der TUI fortsetzen und umgekehrt.
+
 ### Aus dem Quellcode ausführen (Entwickler / Power-User)
 
-Wenn Sie lieber aus dem Quellcode ausführen oder den Code ändern möchten, verwenden Sie `start.bat` (erfordert [Node.js 18+](https://nodejs.org)):
+Wenn Sie lieber aus dem Quellcode ausführen oder den Code ändern möchten, verwenden Sie `start.bat` (erfordert [Node.js 22+](https://nodejs.org)):
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -84,9 +130,7 @@ start.bat        # Windows: installs deps, builds frontend, launches Electron
 
 Siehe [Schnellstart](#-quick-start) für die manuelle Schritt-für-Schritt-Anleitung.
 
-> **exe vs. start.bat** — beides wird unterstützt und spricht verschiedene Zielgruppen an:
-> - **Installer-exe** — für Endbenutzer: Doppelklick zum Installieren, Startmenü-Eintrag, In-App-Auto-Update, kein Node.js nötig.
-> - **start.bat** — für Entwickler / Tüftler: transparente `npm install` → `vite build` → `electron .`-Pipeline, Bearbeiten-und-Ausführen, erfordert Node.js.
+> **Zwei Produkte, ein Quellcode-Baum** — beide Produkte leben im selben Repo. `app/electron/` enthält die gemeinsame Agent-Runtime, `app/src/` ist das Desktop-Renderer, `app/cli.js` + `app/tui/` sind die CLI-/TUI-Einstiegspunkte. Releases werden per Git-Tag (`v*`) markiert, und aus einem einzigen Tag entstehen sowohl ein Desktop-Installer als auch eine npm-Veröffentlichung.
 
 ---
 
@@ -208,19 +252,6 @@ node cli.js tui --smoke      # Headless-Zustandsmaschinen-Smoke-Test
 ### Datenschutz
 
 > **Alle Daten bleiben lokal.** Aether sammelt nichts über Sie und lädt nichts über Sie hoch. Ihre API-Schlüssel, Unterhaltungen und Personas liegen in einer lokalen SQLite-Datenbank. Die einzigen ausgehenden Netzwerkanfragen gehen an die von Ihnen konfigurierten LLM-Anbieter.
-
----
-
-## VS-Code-Erweiterung & Headless-CLI
-
-Über die Desktop-App hinaus liefert Aether denselben Agenten als CLI und Editor-Erweiterung:
-
-- **Headless-CLI** (`app/cli.js`) — den Agenten nicht-interaktiv ausführen, NDJSON-Ereignisse an Skripte/CI füttern:
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **VS-Code-Erweiterung** (`extension/`) — startet die CLI in einem Chat-Panel: Live-Tool-Call-Stream, Codeblock-Aktionen (Einfügen / Datei schreiben) und **Datei-Diff-Karten**: jeder `write_file`-/`edit_file`-/`apply_patch`-Aufruf rendert einen zeilengenauen Diff gegen den Dateiinhalt vor der Änderung, mit Ein-Klick-**Revert** (stellt den vor der Tool-Ausführung aufgenommenen Snapshot wieder her). Erfordert die Erweiterungseinstellung `aether.cliPath` (wird automatisch erkannt, wenn das Repo lokal geklont ist).
-- **Lokales Gateway** (`127.0.0.1:35791`) — OpenAI-kompatible REST-API, gestützt von der Desktop-App (Einstellungen → Lokales Gateway → Token); eine zweite Erweiterung (`extensions/vscode-aether/`) verbindet sich darüber.
 
 ---
 
@@ -415,7 +446,7 @@ Siehe [CONTRIBUTING.md](./CONTRIBUTING.md) für ausführliche Richtlinien.
 
 <div align="center">
 
-Mit ❤️ gebaut mit Electron + React + TypeScript
+Mit ❤️ gebaut mit Electron + Node.js + React + TypeScript
 
 [⬆ Nach oben](#aether)
 
