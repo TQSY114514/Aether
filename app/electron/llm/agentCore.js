@@ -204,7 +204,8 @@ async function runAgent({
     if (onEvent) onEvent({ type: 'tool:end', payload: entry })
   }
 
-  const text = await runToolLoop({
+  // Orchestration:db 在场且复杂请求时走编排器(并行子代理),否则/任何失败回落单循环。
+  const runSingleLoop = () => runToolLoop({
     provider,
     model,
     messages: convo,
@@ -239,6 +240,30 @@ async function runAgent({
     // 无回调时 runToolLoop 默认拒绝（toolLoop.js:872-880）。
     requestPermission,
   })
+
+  let text
+  try {
+    const featureFlags = require('../featureFlags')
+    const { isComplexRequest } = require('./planning')
+    const { orchestrate } = require('./orchestrator')
+    if (db && featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(prompt, 0)) {
+      const orc = await orchestrate({
+        db, request: String(prompt || ''), provider, model, signal, agentMode,
+        callbacks: {
+          requestPermission,
+          onToolCall: (entry) => { emit(entry); if (onToolCall) onToolCall(entry) },
+          onAskUser,
+          onStream: (chunk) => { if (chunk?.text && onText) onText({ text: chunk.text, done: chunk.type === 'done' }) },
+          onStatus, onPlanStep, onTodoUpdate, onThinkingStart, onThinkingDelta, onThinkingEnd,
+        },
+      })
+      text = (orc && orc.ok && orc.summary) ? orc.summary : await runSingleLoop()
+    } else {
+      text = await runSingleLoop()
+    }
+  } catch {
+    text = await runSingleLoop()
+  }
 
   return { text, toolCalls, memoryTrace }
 }

@@ -43,12 +43,12 @@ const FLAG_DEFS = [
   { key: 'agent.toolRouter',     default: true,  category: 'agent',      description: 'Inject only task-relevant tools per turn (core always, github/lsp/agent/memory/git on keyword match)' },
   // Phase 3 — code understanding + orchestration
   { key: 'memory.codeUnderstanding', default: true, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
-  { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },
+  { key: 'agent.orchestrator',    default: true,  category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },
   // Phase 3 — network safety
   { key: 'network.policy',        default: false, category: 'agent',      description: 'Network allowlist policy for agent web tools (web_fetch/web_search)' },
   // Phase 4 — self-evolving memory
-  { key: 'memory.experienceReplay', default: false, category: 'learning', description: 'Trajectory experience replay into the loop' },
-  { key: 'skills.selfEvolution', default: false, category: 'learning',    description: 'Agent-created skill drafts (skill evolution)' },
+  { key: 'memory.experienceReplay', default: true, category: 'learning', description: 'Trajectory experience replay into the loop' },
+  { key: 'skills.selfEvolution', default: true, category: 'learning',    description: 'Agent-created skill drafts (skill evolution)' },
   // Phase 6 — ecosystem
   { key: 'plugin.sdk',           default: false, category: 'ecosystem',   description: 'Third-party plugin SDK (registerTool/Skill/Agent/Provider)' },
   // Phase 6 — UX / onboarding

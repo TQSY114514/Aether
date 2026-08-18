@@ -30,7 +30,7 @@ Do NOT call the task tool — nested sub-agents are not allowed.`
 // 运行单个 subagent。返回最后一条 assistant 文本。
 // 参数:
 //   db, parentSessionId, provider, model, prompt, signal, agentMode
-async function runSubagent({ db, parentSessionId, provider, model, prompt, signal, agentMode = 'plan' }) {
+async function runSubagent({ db, parentSessionId, provider, model, prompt, signal, agentMode = 'plan', callbacks = {} }) {
   if (!db || !provider || !model) {
     throw new Error('runSubagent: missing required params')
   }
@@ -53,9 +53,9 @@ async function runSubagent({ db, parentSessionId, provider, model, prompt, signa
     { role: 'user', content: prompt },
   ]
 
-  // 权限派生:子 agent 用 plan 模式(只读),除非父是 yolo(才用 auto)
-  // 这样子 agent 安全,不会破坏文件
-  const childAgentMode = agentMode === 'yolo' ? 'auto' : 'plan'
+  // 权限派生:继承父级 agentMode(yolo→auto),这样子代理在 ask 下能执行但需确认、
+  // plan 下保持只读、auto 下自动执行——并行子代理真正"能干活"。
+  const childAgentMode = agentMode === 'yolo' ? 'auto' : (agentMode || 'plan')
 
   const reasoningOpts = buildReasoningParams(model.model_name, 'medium')
   const opts = { ...reasoningOpts, max_tokens: 4096 }
@@ -78,6 +78,7 @@ async function runSubagent({ db, parentSessionId, provider, model, prompt, signa
       messageId: 0,
       db,
       autoCommit: false,
+      ...(callbacks || {}),
     })
   } catch (e) {
     log.warn('Subagent execution failed:', e?.message)
@@ -108,6 +109,7 @@ async function runParallel(tasks, shared) {
           prompt: task,
           signal: shared.signal,
           agentMode: shared.agentMode || 'plan',
+          callbacks: shared.callbacks || {},
         })
         return { success: true, output, iterations }
       } catch (e) {

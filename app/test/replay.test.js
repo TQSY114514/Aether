@@ -14,7 +14,7 @@ const {
 // ─── Fake db (skill_patterns as in-memory map) ──────────────────────────────
 function mkDb({ enabled = true, patterns = [] } = {}) {
   const db = {
-    _settings: enabled ? { 'feature_flag.memory.experienceReplay': '1' } : {},
+    _settings: { 'feature_flag.memory.experienceReplay': enabled ? '1' : '0' },
     _patterns: patterns.map(p => ({ ...p })),
     getSetting: (key) => db._settings[key] ?? null,
     run(sql, params = []) {
@@ -44,7 +44,7 @@ describe('isReplayEnabled', () => {
   it('honors the feature flag', () => {
     expect(isReplayEnabled(mkDb({ enabled: true }))).toBe(true)
     expect(isReplayEnabled(mkDb({ enabled: false }))).toBe(false)
-    expect(isReplayEnabled(null)).toBe(false)
+    expect(isReplayEnabled(null)).toBe(true) // 无 db/未存储 → 回落到 featureFlags 默认值(true)
   })
 })
 

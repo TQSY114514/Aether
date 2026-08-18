@@ -20,6 +20,9 @@ const log = require('../logger')
 const providerHealth = require('../llm/providerHealth')
 const { buildToolLoopCallbacks } = require('./toolLoopCallbacks')
 const codeUnderstanding = require('../context/codeUnderstanding')
+const { orchestrate } = require('../llm/orchestrator')
+const { isComplexRequest } = require('../llm/planning')
+const featureFlags = require('../featureFlags')
 
 const DEFAULT_CTX_BUDGET = 32000
 const DEFAULT_FALLBACK_TIMEOUT_MS = 30000
@@ -405,7 +408,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
           allowRules: allowRulesStore,
           thinkingSupported,
         })
-        finalContent = await runToolLoop({
+        // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
+        // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
+        const runSingleLoop = () => runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
           agentMode: agentMode || 'ask',
@@ -416,6 +421,14 @@ ipcMain.handle('chat:complete', handleChatComplete)
           getPendingInjections: () => pendingInjections.get(sessionId) || [],
           clearPendingInjections: () => pendingInjections.delete(sessionId),
         })
+        if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
+          try {
+            const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: cb })
+            finalContent = (orc && orc.ok && orc.summary) ? orc.summary : await runSingleLoop()
+          } catch { finalContent = await runSingleLoop() }
+        } else {
+          finalContent = await runSingleLoop()
+        }
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
         const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)

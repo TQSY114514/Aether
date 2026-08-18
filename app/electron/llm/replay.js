@@ -17,18 +17,15 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const log = require('../logger')
+const featureFlags = require('../featureFlags')
 
 const FLAG_KEY = 'memory.experienceReplay'
 
 // ─── Flag helpers ───────────────────────────────────────────────────────────
 
+// flag 单一事实来源:存储值或声明默认值。改 featureFlags.js 的 default 才真正生效。
 function isReplayEnabled(db) {
-  if (!db || typeof db.getSetting !== 'function') return false
-  try {
-    const raw = db.getSetting(`feature_flag.${FLAG_KEY}`)
-    if (raw === null || raw === undefined) return false // default off
-    return String(raw) === '1' || String(raw) === 'true' || String(raw) === 'on' || String(raw) === 'yes'
-  } catch { return false }
+  return featureFlags.isEnabled(db, FLAG_KEY)
 }
 
 // ─── Signatures / similarity ────────────────────────────────────────────────
