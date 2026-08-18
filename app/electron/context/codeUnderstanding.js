@@ -252,6 +252,25 @@ function writeCodeUnderstanding(db, graph) {
   return { nodes: nodeCount, edges: edgeCount }
 }
 
+// 幂等扫描一个 workspace 并把结构写入 kg 图(fire-and-forget 安全:不抛错)。
+// 同一目录在 TTL 内不重复扫,避免每次请求都全库同步扫描导致主进程卡顿。
+const _indexed = new Map()
+function indexWorkspace(db, rootDir, options = {}) {
+  if (!db || !rootDir) return { nodes: 0, edges: 0, skipped: true }
+  const key = path.resolve(rootDir).toLowerCase()
+  const ttl = options.ttl != null ? options.ttl : 5 * 60 * 1000
+  const last = _indexed.get(key)
+  if (last && (Date.now() - last) < ttl) return { nodes: 0, edges: 0, skipped: true }
+  _indexed.set(key, Date.now())
+  try {
+    const graph = buildGraphUnderstanding(db, rootDir, options)
+    return { ...writeCodeUnderstanding(db, graph), skipped: false }
+  } catch (e) {
+    log.warn('codeUnderstanding: index failed:', e && e.message)
+    return { nodes: 0, edges: 0, skipped: false }
+  }
+}
+
 module.exports = {
   DEFAULT_IGNORE_DIRS,
   DEFAULT_EXTENSIONS,
@@ -264,4 +283,5 @@ module.exports = {
   buildGraphUnderstanding,
   buildCodeUnderstanding: buildGraphUnderstanding,
   writeCodeUnderstanding,
+  indexWorkspace,
 }

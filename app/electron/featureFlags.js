@@ -42,7 +42,7 @@ const FLAG_DEFS = [
   // Phase 2 — agent quality (external review P0-1)
   { key: 'agent.toolRouter',     default: true,  category: 'agent',      description: 'Inject only task-relevant tools per turn (core always, github/lsp/agent/memory/git on keyword match)' },
   // Phase 3 — code understanding + orchestration
-  { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
+  { key: 'memory.codeUnderstanding', default: true, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
   { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },
   // Phase 3 — network safety
   { key: 'network.policy',        default: false, category: 'agent',      description: 'Network allowlist policy for agent web tools (web_fetch/web_search)' },
