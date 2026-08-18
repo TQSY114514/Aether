@@ -19,7 +19,12 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aether-boot-'))
 const origLoad = Module._load
 let ipcHandlers = 0
 
-const fakeWebContents = { send: () => {}, isDestroyed: () => false }
+const fakeWebContents = {
+  send: () => {},
+  isDestroyed: () => false,
+  setWindowOpenHandler: () => {},
+  on: () => {},
+}
 class FakeBrowserWindow {
   constructor() {
     this.webContents = fakeWebContents
