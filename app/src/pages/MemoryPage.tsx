@@ -9,8 +9,16 @@ const TYPE_COLORS: Record<string, string> = {
   entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#9333EA', project: '#7C3AED',
 }
 
+// 记忆来源 → 展示标签/颜色。origin 由自动记忆链路写入：user=手动添加、
+// assistant=agent 自动提取、external=外部内容(不可信,注入时降权)。
+const ORIGIN_META: Record<string, { label: string; color: string }> = {
+  assistant: { label: 'AI 提取', color: '#16A34A' },
+  user: { label: '手动', color: '#6B7280' },
+  external: { label: '外部内容', color: '#D97706' },
+}
+
 export default function MemoryPage() {
-  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null }[]>([])
+  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string }[]>([])
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState('fact')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -112,6 +120,7 @@ export default function MemoryPage() {
     : entries
 
   const counts = entries.reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc }, {} as Record<string, number>)
+  const originCounts = entries.reduce((acc, e) => { const o = e.origin || 'user'; acc[o] = (acc[o] || 0) + 1; return acc }, {} as Record<string, number>)
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -187,12 +196,20 @@ export default function MemoryPage() {
         )}
 
         {/* Type badges summary */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center flex-wrap gap-2 mb-4">
           {Object.entries(counts).map(([type, count]) => (
             <span key={type} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: TYPE_COLORS[type] || '#999', color: '#fff' }}>
               <Tag size={8} />{type} · {count}
             </span>
           ))}
+          {Object.entries(originCounts).map(([origin, count]) => {
+            const meta = ORIGIN_META[origin]
+            return meta ? (
+              <span key={origin} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: meta.color, color: '#fff' }}>
+                {meta.label} · {count}
+              </span>
+            ) : null
+          })}
           {entries.length > 0 && (
             <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{entries.length} total</span>
           )}
@@ -254,7 +271,12 @@ export default function MemoryPage() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{entry.content}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center flex-wrap gap-2 mt-1">
+                      {(entry.origin === 'assistant' || entry.origin === 'external') && ORIGIN_META[entry.origin] && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: ORIGIN_META[entry.origin].color, color: '#fff' }}>
+                          {ORIGIN_META[entry.origin].label}
+                        </span>
+                      )}
                       <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{entry.created_at?.slice(0, 16) || ''}</p>
                       {entry.source_session_id && (
                         <span className="text-[9px] px-1 rounded" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}>

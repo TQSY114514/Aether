@@ -86,6 +86,7 @@ const { registerSkillsHandlers } = require('./ipc/skills.handler')
 const { registerTaskHandlers } = require('./ipc/task.handler')
 const { registerCronHandlers } = require('./ipc/cron.handler')
 const { registerFlagsHandlers } = require('./ipc/flags.handler')
+const { registerLearningHandlers } = require('./ipc/learning.handler')
 const { initScheduler } = require('./cron/scheduler')
 const { runEvolutionCycle } = require('./evolution/gep')
 const mcpManager = require('./mcp/manager')
@@ -307,6 +308,7 @@ function setupIpcHandlers() {
   registerTaskHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerCronHandlers(ipcMain, db)
   registerFlagsHandlers(ipcMain, db)
+  registerLearningHandlers(ipcMain, db)
 
   // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──
   try {
