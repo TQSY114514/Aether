@@ -197,6 +197,7 @@ interface Window {
       conflicts: () => Promise<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>
       conflictResolve: (keepId: number, removeId: number) => Promise<{ ok: boolean }>
       access: (id: number) => Promise<void>
+      dedupe: () => Promise<{ removed: number }>
     }
     learning: {
       overview: () => Promise<{
