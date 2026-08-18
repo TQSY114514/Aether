@@ -384,6 +384,19 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     }
   } catch {}
 
+  // Experience replay: 若启用,把与当前请求相似的"成功轨迹"注入 system 上下文,
+  // 让 agent 复用过去奏效的工具序列。Best-effort —— 永不阻塞循环。
+  try {
+    if (db && userText) {
+      const replay = require('./replay')
+      const replayCtx = replay.buildReplayContext(db, userText)
+      if (replayCtx) {
+        const sysIdx = convo.findIndex(m => m.role === 'system')
+        convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, { role: 'system', content: replayCtx })
+      }
+    }
+  } catch {}
+
   let plan = null
   let planningMode = false
   let planToolsPayload = []
@@ -920,6 +933,14 @@ Reply in this format:
     // 推理模型可能全部输出为思考过程(reasoning)而无正文 —— 给出可见说明而非空回复
     if (!msg.content && msg.reasoning) {
       return `[模型仅生成了思考过程, 未输出正文回复。可尝试换非推理模型(如 /model 选择), 或重试。]`
+    }
+    // Experience replay: 成功完成且动了工具 → 把本次轨迹(signature+工具序列)入池,
+    // 供未来相似任务回放。Best-effort —— 永不阻塞回复。
+    if (finalStatus === 'success' && auditTrail.length > 0 && db) {
+      try {
+        const replay = require('./replay')
+        replay.recordPattern({ db, signature: userText, tools: auditTrail.map(t => t.name), params: {}, sessionId })
+      } catch {}
     }
     // Always return the model's actual content — never return verification text
     // as the reply. Verification is fire-and-forget: it runs in the background

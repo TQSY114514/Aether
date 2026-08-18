@@ -191,6 +191,8 @@ function loadPatterns(db) {
 // Detect patterns that crossed the threshold and auto-draft SKILL.md files.
 // Returns the list of newly drafted skill names.
 function detectAndDraft(db) {
+  // skills.selfEvolution 门控:关闭时只记录、不产出 skill 草稿。
+  if (!featureFlags.isEnabled(db, 'skills.selfEvolution')) return []
   const drafted = []
   for (const [sig, p] of _patterns) {
     if (p.count < PATTERN_THRESHOLD) continue

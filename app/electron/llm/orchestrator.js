@@ -112,6 +112,7 @@ async function orchestrate(opts = {}) {
   const enabled = isEnabled(db)
   const planProvider = opts.generatePlan || ((provider, model, text, signal, o) => planning.generatePlan(provider, model, text, signal, o))
   const runner = opts.runParallel || ((tasks, shared) => subAgent.runParallel(tasks, shared))
+  const sharedCallbacks = opts.callbacks || {}
 
   // Decide whether to invest in a plan.
   const planEnabled = opts.isPlanRequested != null ? opts.isPlanRequested : (enabled && planning.isComplexRequest(request, 0))
@@ -120,7 +121,7 @@ async function orchestrate(opts = {}) {
     // No orchestration — single runner pass, still wrapped so the caller
     // sees the same result shape.
     try {
-      const single = await runner([request], { db, provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode })
+      const single = await runner([request], { db, provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: sharedCallbacks })
       return { ok: true, plan: null, results: single, summary: single[0] ? (single[0].output || single[0].error) : '' }
     } catch (e) {
       return { ok: false, error: String((e && e.message) || e) }
@@ -132,13 +133,13 @@ async function orchestrate(opts = {}) {
     const plan = await planProvider(opts.provider, opts.model, request, opts.signal, { max_tokens: 1024, temperature: 0.1 })
     if (!plan || !plan.tasks || plan.tasks.length === 0) {
       // planning failed — degrade to a single run.
-      const single = await runner([request], { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode })
+      const single = await runner([request], { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: sharedCallbacks })
       return { ok: true, plan: null, results: single, summary: single[0] ? (single[0].output || single[0].error) : '' }
     }
 
     const batches = batchTasks(plan.tasks)
     const results = []
-    const shared = { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode }
+    const shared = { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: sharedCallbacks }
 
     for (const batch of batches) {
       const prompts = batch.map(id => {

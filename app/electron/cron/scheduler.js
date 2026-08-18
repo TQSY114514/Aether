@@ -55,6 +55,9 @@ defineTask('skill-autodraft', 4 * 3600 * 1000, async (db) => {
   try {
     const skills = require('../llm/skills')
     const habitLearner = require('../llm/habitLearner')
+    const skillSelfCreate = require('../llm/skillSelfCreate')
+    // 自进化:检测重复工具序列并 auto-draft SKILL.md(受 skills.selfEvolution 门控)
+    const drafted = skillSelfCreate.detectAndDraft(db)
     // Rescan skills to pick up any new drafts
     const count = skills.scanSkills()
     // Check for habits ready to promote
@@ -62,7 +65,7 @@ defineTask('skill-autodraft', 4 * 3600 * 1000, async (db) => {
     if (habits.length > 0) {
       log.info(`cron: skill-autodraft found ${habits.length} habits ready to promote`)
     }
-    log.info(`cron: skill-autodraft completed (${count} skills indexed)`)
+    log.info(`cron: skill-autodraft completed (${count} skills indexed${drafted.length ? `, ${drafted.length} auto-drafted` : ''})`)
   } catch (e) {
     log.warn('cron: skill-autodraft failed:', e.message)
   }

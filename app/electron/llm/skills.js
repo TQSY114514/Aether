@@ -89,6 +89,8 @@ function scanSkills() {
   roots.push(path.join(app.getPath('userData'), 'skills'))
   // Built-in skills shipped with the app (lowest precedence — user copies override).
   roots.push(path.join(__dirname, '..', '..', 'skills'))
+  // GEP 自进化胶囊目录(进化产物也作为 skill 加载, 最低优先级)。
+  try { roots.push(require('../evolution/gep').getCapsuleDir()) } catch {}
   const byName = new Map()
   for (const root of roots) {
     for (const s of loadSkillsFromDir(root)) {
