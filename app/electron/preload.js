@@ -160,6 +160,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     conflicts: () => ipcRenderer.invoke('memory:conflicts'),
     conflictResolve: (keepId, removeId) => ipcRenderer.invoke('memory:conflict:resolve', keepId, removeId),
     access: (id) => ipcRenderer.invoke('memory:access', id),
+    dedupe: () => ipcRenderer.invoke('memory:dedupe'),
   },
   kg: {
     graph: (opts) => ipcRenderer.invoke('kg:graph', opts),

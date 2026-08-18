@@ -146,6 +146,54 @@ describe('sync origin persistence (H5)', () => {
   })
 })
 
+// ─── 4. 去重回归: >50 字符重复不再插入 / 同批重复只记一条 ───────────────────
+describe('sync dedup (regression: >50-char duplicates)', () => {
+  // fake db: getMemories 返回现有记忆(供去重比对), allRows 供 external 判定。
+  function mkDedupDb({ memories = [] }) {
+    const calls = { add: vi.fn(), run: vi.fn() }
+    const db = {
+      getMemories: () => memories,
+      incrementMemoryAccess: () => {},
+      allRows: () => [],
+      exec: () => [],
+      addMemoryWithProvenance: (...args) => { calls.add(...args); return { lastInsertRowid: 1 } },
+      run: (...args) => calls.run(...args),
+    }
+    db._calls = calls
+    return db
+  }
+
+  it('does not insert a duplicate that already exists (>50 chars, the old 50-char-prefix bug)', async () => {
+    // 已有一条 >50 字符的记忆 —— 旧代码 recentKeys 只取前 50 字符, 与完整内容
+    // 比较永不相等 → 每次都会重复插入。
+    const longContent = 'user prefers TypeScript for backend services and Python for data pipelines in this project'
+    completeChat.mockResolvedValue(`[FACT] ${longContent}`)
+    const db = mkDedupDb({ memories: [{ type: 'fact', content: longContent }] })
+    autoMemory.sync({ db, provider: {}, model: {}, userMessage: 'hi', assistantReply: 'hello', sessionId: 5 })
+    await flushSync()
+    // 不应新增(fact 路径走 addMemoryWithProvenance), 只应 solidify(run UPDATE)
+    expect(db._calls.add).not.toHaveBeenCalled()
+    const upd = db._calls.run.mock.calls.find(c => /UPDATE memory SET confidence/.test(c[0]))
+    expect(upd).toBeTruthy()
+  })
+
+  it('inserts a genuinely new memory', async () => {
+    completeChat.mockResolvedValue('[FACT] user prefers dark mode')
+    const db = mkDedupDb({ memories: [{ type: 'fact', content: 'something unrelated' }] })
+    autoMemory.sync({ db, provider: {}, model: {}, userMessage: 'hi', assistantReply: 'hello', sessionId: 5 })
+    await flushSync()
+    expect(db._calls.add).toHaveBeenCalledTimes(1)
+  })
+
+  it('inserts only once when the model emits the same entry twice in one sync', async () => {
+    completeChat.mockResolvedValue('[FACT] user prefers concise answers\n[FACT] user prefers concise answers')
+    const db = mkDedupDb({ memories: [] })
+    autoMemory.sync({ db, provider: {}, model: {}, userMessage: 'hi', assistantReply: 'hello', sessionId: 5 })
+    await flushSync()
+    expect(db._calls.add).toHaveBeenCalledTimes(1)
+  })
+})
+
 // ─── 3. untrusted 注入（包裹 / 末尾 / 限量 / 隔离）──────────────────────────
 describe('prefetch untrusted-memory downgrade (H5)', () => {
   const now = new Date().toISOString()

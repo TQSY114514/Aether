@@ -777,6 +777,32 @@ function deleteMemory(id) {
   db.prepare('DELETE FROM memory WHERE id = ?').run(id)
   try { db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(id)) } catch {}
 }
+// 合并完全重复的记忆：按 (LOWER(type), LOWER(content)) 分组，内容完全一致
+// 的保留最早一条(id 最小)，删除其余并同步清理 FTS、把 conflicts_with 引用
+// 改指保留行。修复自动记忆去重失效后积累的重复数据。返回 { removed }。
+function mergeDuplicateMemories() {
+  let removed = 0
+  try {
+    const groups = db.prepare(
+      `SELECT LOWER(type) AS lt, LOWER(content) AS lc, MIN(id) AS keep_id
+       FROM memory GROUP BY LOWER(type), LOWER(content) HAVING COUNT(*) > 1`
+    ).all()
+    for (const g of groups) {
+      const toDelete = db.prepare(
+        'SELECT id FROM memory WHERE LOWER(type) = ? AND LOWER(content) = ? AND id <> ?'
+      ).all(g.lt, g.lc, g.keep_id)
+      for (const row of toDelete) {
+        try { db.prepare('UPDATE memory SET conflicts_with = ? WHERE conflicts_with = ?').run(g.keep_id, row.id) } catch {}
+        db.prepare('DELETE FROM memory WHERE id = ?').run(row.id)
+        try { db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(row.id)) } catch {}
+        removed++
+      }
+    }
+  } catch (e) {
+    log.warn('mergeDuplicateMemories failed:', e && e.message)
+  }
+  return { removed }
+}
 function incrementMemoryAccess(id) {
   try { db.prepare('UPDATE memory SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?').run(localNow(), id) } catch {}
 }
@@ -1105,7 +1131,7 @@ module.exports = {
 listArenaBenchmarks, saveArenaBenchmark, deleteArenaBenchmark, updateArenaBenchmarkResults,
 saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
-  getMemories, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess,
+  getMemories, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess, mergeDuplicateMemories,
   getMemoryConflicts, resolveMemoryConflict,
   recordSkillResult, getSkillStats,
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,

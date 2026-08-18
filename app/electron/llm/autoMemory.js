@@ -32,6 +32,13 @@ const MAX_UNTRUSTED_MEMORIES = 3
 
 const STOP = new Set(['the','a','an','and','or','but','of','to','in','on','for','is','are','was','were','be','been','this','that','it','i','you','he','she','we','they','my','your','his','her','our','their','what','how','why','when','do','does','did','can','could','would','should'])
 
+// 规范化记忆内容用于去重比较：小写 + 折叠空白 + 收尾。
+// 此前去重 key 用「前 50 字符」而查找用「完整内容」，前后不一致导致 >50
+// 字符的重复记忆永远拦不住 —— 这里统一用规范化后的完整内容。
+function normalizeContent(text) {
+  return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
 function keywords(text) {
   const t = String(text || '').toLowerCase()
   const set = new Set()
@@ -292,18 +299,25 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
 
     // De-dup against recent memories (separate direct DB read — this runs once
     // per sync, not per turn, so the overhead is negligible).
+    // 修复：recentKeys 统一用「规范化完整内容」（此前用前 50 字符前缀，与
+    // 查找用的完整内容不一致，>50 字符的重复永远拦不住）；窗口从 50 扩到
+    // 500，避免重复积累后被挤出窗口；并拦截同一批 sync 内的重复条目。
     let recent
-    try { recent = db.getMemories(50) } catch { recent = [] }
-    const recentKeys = new Set(recent.map(m => `${m.type || 'fact'}:${String(m.content).slice(0, 50).toLowerCase()}`))
+    try { recent = db.getMemories(500) } catch { recent = [] }
+    const recentKeys = new Set(recent.map(m => `${m.type || 'fact'}:${normalizeContent(m.content)}`))
+    const seenBatch = new Set()
 
     for (const entry of entries.slice(0, 5)) {
-      const key = `${entry.type}:${entry.content.toLowerCase()}`
+      const key = `${entry.type}:${normalizeContent(entry.content)}`
+      // 同批重复：模型在同一次提取里输出多个相同条目 → 只记第一条。
+      if (seenBatch.has(key)) continue
+      seenBatch.add(key)
       if (recentKeys.has(key)) {
         // Solidify (Hermes): the same memory was re-observed in a new session
-        // — bump its confidence (cap 1.0) so prefetch ranks it higher. The
-        // dedup key matches on the 50-char prefix, so update by that prefix.
+        // — bump its confidence (cap 1.0) so prefetch ranks it higher.
+        // LOWER 比较保证命中原行（存的是原始大小写，提取的是小写）。
         try {
-          db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE type = ? AND content LIKE ?', [entry.type, `${entry.content.slice(0, 50)}%`])
+          db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE type = ? AND LOWER(content) = LOWER(?)', [entry.type, entry.content])
         } catch {}
         continue
       }

@@ -115,6 +115,14 @@ export default function MemoryPage() {
     input.click()
   }
 
+  const handleDedupe = async () => {
+    try {
+      const res = await window.electronAPI.memory.dedupe()
+      toast(`合并了 ${res?.removed ?? 0} 条完全重复的记忆`, { type: 'success' })
+      loadEntries()
+    } catch { toast('合并重复失败', { type: 'error' }) }
+  }
+
   const filtered = searchQuery.trim()
     ? entries.filter(e => e.content.toLowerCase().includes(searchQuery.toLowerCase()))
     : entries

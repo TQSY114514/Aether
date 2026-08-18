@@ -18,6 +18,8 @@ function registerMemoryHandlers(ipcMain, db) {
   ipcMain.handle('memory:conflict:resolve', (_e, keepId, removeId) => { db.resolveMemoryConflict(keepId, removeId); return { ok: true } })
   // Increment access count (called when memory is injected into context).
   ipcMain.handle('memory:access', (_e, id) => { db.incrementMemoryAccess(id) })
+  // 合并完全重复的记忆(去重失效后积累的冗余数据)。
+  ipcMain.handle('memory:dedupe', () => db.mergeDuplicateMemories())
 }
 
 module.exports = { registerMemoryHandlers }
