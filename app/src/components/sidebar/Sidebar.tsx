@@ -270,6 +270,7 @@ export default function Sidebar() {
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
+        <NavItem icon={History} label={tx('sidebar.nav.learningStatus', '学习状态')} active={currentView === 'learningStatus'} onClick={() => setCurrentView('learningStatus')} />
         {/* Background tasks (功能 A): a drawer toggle, not a view — the page
             switch lives in App.tsx and stays untouched. */}
         <NavItem icon={ListTodo} label={tx('sidebar.nav.tasks', '任务')} active={tasksOpen}

@@ -189,6 +189,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   protocol: {
     onOpen: (cb) => subscribe('protocol:open', cb),
   },
+  learning: {
+    overview: () => ipcRenderer.invoke('learning:overview'),
+  },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     rescan: () => ipcRenderer.invoke('skills:rescan'),

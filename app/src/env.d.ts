@@ -190,13 +190,22 @@ interface Window {
       onEntry: (callback: (entry: { level: string; time: string; msg: string }) => void) => () => void
     }
     memory: {
-      list: () => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null }[]>
+      list: () => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string }[]>
       create: (data: { content: string; type?: string; source_session_id?: number | null }) => Promise<{ lastInsertRowid: number }>
       update: (id: number, data: { content: string }) => Promise<void>
       delete: (id: number) => Promise<void>
       conflicts: () => Promise<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>
       conflictResolve: (keepId: number, removeId: number) => Promise<{ ok: boolean }>
       access: (id: number) => Promise<void>
+    }
+    learning: {
+      overview: () => Promise<{
+        memory: { total: number; assistant: number; user: number; external: number }
+        autoSkills: number
+        evolution: number
+        habits: { total: number; recent: { key: string; imperative: string; occurrences: number }[] }
+        replay: { total: number; top: { signature: string; tools: string; count: number }[] }
+      }>
     }
     kg: {
       graph: (opts?: { nodeLimit?: number; edgeLimit?: number }) => Promise<{ nodes: { id: string; label: string; type: string }[]; edges: { source: string; target: string; relation: string; confidence: number }[] }>
