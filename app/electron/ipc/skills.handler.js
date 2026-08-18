@@ -47,10 +47,14 @@ function registerSkillsHandlers(ipcMain, db) {
   })
 
   // Auto-draft a skill from usage patterns (user-initiated, not automatic).
+  // M10: the draft name becomes a file name under <userData>/skills/drafts —
+  // reject path separators / `..` / dot-prefixed names before any fs write.
   ipcMain.handle('skills:autoDraft', (_e, name, description) => {
     try {
-      const body = skills.getSkillBody(name) || `# ${name}\n\nAuto-generated skill from usage patterns.`
-      db.autoDraftSkill(name, body, description || `Auto-drafted: ${name}`)
+      const safeName = typeof db.sanitizeSkillName === 'function' ? db.sanitizeSkillName(name) : null
+      if (!safeName) return { ok: false, error: 'invalid skill name' }
+      const body = skills.getSkillBody(safeName) || `# ${safeName}\n\nAuto-generated skill from usage patterns.`
+      db.autoDraftSkill(safeName, body, description || `Auto-drafted: ${safeName}`)
       // Rescan to pick up the new draft.
       skills.rescan()
       return { ok: true }

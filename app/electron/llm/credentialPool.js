@@ -28,9 +28,23 @@ function computeCooldownSec(errorCount) {
 
 function init(database) { db = database }
 
+// Encryption helpers (2026-08 audit, Low fix): the provider_credential table
+// stores keys safeStorage-encrypted, exactly like the provider table. `db` is
+// the database.js facade (init is called from main.js with it), which exports
+// encryptKey/decryptKey — use those so both tables share one crypto path.
+// Fallback to passthrough when the injected db doesn't provide them (tests,
+// headless fakes) so behavior is unchanged when no crypto is available.
+function _encKey(k) {
+  return db && typeof db.encryptKey === 'function' ? db.encryptKey(k) : k
+}
+function _decKey(k) {
+  return db && typeof db.decryptKey === 'function' ? db.decryptKey(k) : k
+}
+
 // Pick the next available key for `providerId`. Returns { id, api_key } or
 // null when no viable key exists (caller falls back to provider.api_key for
-// backward compat).
+// backward compat). The returned api_key is DECRYPTED and ready for the
+// Authorization header.
 function pickCredential(providerId) {
   if (!db) return null
   const now = new Date().toISOString()
@@ -43,23 +57,28 @@ function pickCredential(providerId) {
   if (!row) return null
   // Record usage — bump last_used_at.
   db.run('UPDATE provider_credential SET last_used_at=? WHERE id=?', [now, row.id])
+  const plainKey = _decKey(row.api_key)
   // If this key was previously cooled down and its cooldown has just expired,
   // fire a best-effort /models check to see whether it recovered. Never blocks
   // the caller — the key is returned immediately either way.
-  if (row.cooldown_until != null) _verifyInBackground(providerId, row.id, row.api_key)
-  return { id: row.id, api_key: row.api_key }
+  if (row.cooldown_until != null) _verifyInBackground(providerId, row.id, plainKey)
+  return { id: row.id, api_key: plainKey }
 }
 
 // Backward compat: if a provider still has a legacy api_key in the provider
-// table, migrate it into the credential table once.
+// table, migrate it into the credential table once. The provider row holds a
+// safeStorage-ENCRYPTED value, so decrypt it first and re-encrypt on insert —
+// never store plaintext in provider_credential (2026-08 audit: keys were
+// previously migrated as plaintext).
 function _migrateFromProvider(providerId) {
   const n = db.prepare('SELECT count(*) as n FROM provider_credential WHERE provider_id=?').get(providerId)?.n || 0
   if (n > 0) return
   const ps = db.prepare('SELECT api_key FROM provider WHERE id=?').get(providerId)
-  const key = ps ? ps.api_key : null
-  if (key && typeof key === 'string' && key.trim()) {
+  const stored = ps ? ps.api_key : null
+  if (stored && typeof stored === 'string' && stored.trim()) {
+    const plain = _decKey(stored.trim())
     db.run('INSERT INTO provider_credential (provider_id, api_key, label, enabled, last_used_at) VALUES (?,?,?,?,?)',
-      [providerId, key.trim(), '原密钥', 1, '2000-01-01T00:00:00.000Z'])
+      [providerId, _encKey(plain), '原密钥', 1, '2000-01-01T00:00:00.000Z'])
     // clear legacy so we don't double-insert it next time
     db.run('UPDATE provider SET api_key=NULL WHERE id=?', [providerId])
   }
@@ -149,10 +168,11 @@ function listCredentials(providerId) {
   return db.prepare('SELECT * FROM provider_credential WHERE provider_id=? ORDER BY id').all(providerId)
 }
 
-// Add a new key. Returns { lastInsertRowid }.
+// Add a new key. Stored safeStorage-encrypted (same path as provider.api_key);
+// decrypted transparently in pickCredential. Returns { lastInsertRowid }.
 function addCredential(providerId, api_key, label) {
   if (!db) return null
-  const info = db.prepare('INSERT INTO provider_credential (provider_id, api_key, label, enabled) VALUES (?,?,?,?)').run(providerId, api_key, label || '', 1)
+  const info = db.prepare('INSERT INTO provider_credential (provider_id, api_key, label, enabled) VALUES (?,?,?,?)').run(providerId, _encKey(api_key), label || '', 1)
   return { lastInsertRowid: Number(info.lastInsertRowid) }
 }
 

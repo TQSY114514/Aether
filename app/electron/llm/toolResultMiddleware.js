@@ -35,9 +35,27 @@ const SECRET_PATTERNS = [
   /Bearer\s+[A-Za-z0-9_\-\.]{20,}/gi,                  // bearer tokens
   /(?:api[_-]?key|token|secret|password)\s*[:=]\s*["']?[A-Za-z0-9_\-]{16,}["']?/gi,
 ]
+
+// Whole-match secrets（P1-H1 扩充）——整段替换为 [REDACTED]，不做"保留标签"
+// 拆分：PEM 块体内可能含 '='（base64 padding），若走标签保留逻辑会把
+// '=' 之前的私钥材料原样留下。必须先于 SECRET_PATTERNS 运行，否则
+// "token: eyJxxx.yyy.zzz" 会被标签匹配只吃掉 header 段而泄露签名。
+const SECRET_WHOLE_PATTERNS = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, // PEM 私钥块
+  /\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{16,}/g,                    // GitHub tokens
+  /\bAKIA[0-9A-Z]{16}\b/g,                                                      // AWS access key id
+  /\bsk-ant-[A-Za-z0-9_\-]{16,}/g,                                              // Anthropic keys
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,         // 完整 JWT（三段）
+  /\beyJ[A-Za-z0-9_-]{20,}\b/g,                                                 // 裸 JWT header / 长 eyJ 串
+]
 function redactMiddleware(content) {
   if (typeof content !== 'string') content = String(content ?? '')
   let redacted = content
+  // Pass 1: whole-match secrets（先整段吃掉，防止后续标签匹配截出半截泄露）。
+  for (const re of SECRET_WHOLE_PATTERNS) {
+    redacted = redacted.replace(re, '[REDACTED]')
+  }
+  // Pass 2: label-preserving secrets（保留 "api_key=" 之类的标签前缀）。
   for (const re of SECRET_PATTERNS) {
     redacted = redacted.replace(re, (m) => {
       // keep the label (e.g. "api_key=") visible, mask the value
@@ -53,11 +71,42 @@ function redactMiddleware(content) {
 
 // Prompt-injection defense for external (web) content. Added to the chain so
 // untrusted web_fetch/web_search results are scrubbed before reaching the model.
-const { externalInjectionMiddleware } = require('./promptInjection')
+const { externalInjectionMiddleware, EXTERNAL_TOOLS, EXTERNAL_MARKERS } = require('./promptInjection')
+
+// ─── External 判定重构（spec H4）─────────────────────────────────────────────
+// 与 web_fetch 相同的 <external> 包裹+注入剥离+8000 上限，扩展到：
+//   1. EXTERNAL_TOOLS 列表内的工具（promptInjection.js 维护，含 web_fetch/
+//      web_search，且正在扩充 read_file 等）——由 externalInjectionMiddleware
+//      按工具名直接识别；
+//   2. MCP 来源工具：`mcp_` 前缀，或 mcp/manager.js 实际的 `server__tool`
+//      命名（内置工具名从不含 `__`），或结果携带 `__external:true` 标记。
+// 对第 2 类，本中间件给内容预置一个规范 EXTERNAL marker，使既有的
+// externalInjectionMiddleware 对其应用与 web 完全相同的消毒管线（marker
+// 会在消毒时剥除），不重复实现任何剥离/截断逻辑。
+const MCP_TOOL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*__[A-Za-z0-9_-]+$/
+const EXTERNAL_FLAG_RE = /"?__external"?\s*:\s*true\b/
+
+function isExternalBySource(toolName, content) {
+  if (typeof toolName === 'string' && toolName.startsWith('mcp_')) return true
+  if (typeof toolName === 'string' && MCP_TOOL_NAME_RE.test(toolName)) return true
+  if (typeof content === 'string' && EXTERNAL_FLAG_RE.test(content)) return true
+  return false
+}
+
+function externalSourceTagMiddleware(content, ctx) {
+  if (typeof content !== 'string') return content
+  if (!EXTERNAL_MARKERS || !EXTERNAL_MARKERS.length) return content
+  if (EXTERNAL_MARKERS.some((m) => content.includes(m))) return content // 已带标记
+  if (isExternalBySource(ctx?.tool, content)) {
+    return EXTERNAL_MARKERS[0] + '\n' + content
+  }
+  return content
+}
 
 // Ordered chain. Order matters: redact first (so truncated tails don't hide a
-// secret split across the cut), then sanitize external content, then truncate.
-const CHAIN = [redactMiddleware, externalInjectionMiddleware, truncateMiddleware]
+// secret split across the cut), then tag external-by-source content, then
+// sanitize external content, then truncate.
+const CHAIN = [redactMiddleware, externalSourceTagMiddleware, externalInjectionMiddleware, truncateMiddleware]
 
 function applyMiddleware(content, ctx) {
   let out = content
@@ -89,4 +138,4 @@ function enrichWithSummary(content, toolName) {
   return content
 }
 
-module.exports = { applyMiddleware, truncateMiddleware, redactMiddleware, enrichWithSummary, MAX_TOOL_RESULT_CHARS }
+module.exports = { applyMiddleware, truncateMiddleware, redactMiddleware, enrichWithSummary, externalSourceTagMiddleware, isExternalBySource, MAX_TOOL_RESULT_CHARS }

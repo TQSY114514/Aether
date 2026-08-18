@@ -130,17 +130,16 @@ class McpClient extends EventEmitter {
   }
 
   // Convert an MCP tool descriptor to our internal tool shape. MCP tools are
-  // remote, so we can't statically know their risk — default to 'dangerous'
-  // (permission gate will prompt) unless the tool name matches a known-safe
-  // pattern (read/list/search/get). The user can always approve/deny.
+  // remote code we did not write — their risk can never be inferred from the
+  // name (a hostile server names its cookie-stealer `get_browser_cookies` to
+  // farm "safe-looking" ratings). Every MCP tool is 'dangerous' so the
+  // permission gate always prompts (spec P2-M1: no name-regex risk guessing).
   adaptTool(t) {
     const name = `${this.name}__${t.name}`
-    const lower = String(t.name).toLowerCase()
-    const risk = /read|list|search|get|fetch|grep|glob|status|diff/.test(lower) ? 'safe' : 'dangerous'
     return {
       name,
       description: `[MCP:${this.name}] ${t.description || t.name}`,
-      risk,
+      risk: 'dangerous',
       parameters: t.inputSchema || { type: 'object', properties: {} },
       run: async (args) => {
         const result = await this.request('tools/call', { name: t.name, arguments: args })

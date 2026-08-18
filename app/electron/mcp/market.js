@@ -71,6 +71,47 @@ function defaultRuntime(registryType) {
   }
 }
 
+// ── Install hardening (spec P0-C3) ─────────────────────────────────────────
+// The registry manifest is remote, attacker-controlled data. `runtimeHint` is
+// NOT a trusted command: only these runtimes may become `command` — anything
+// else (cmd, powershell, absolute paths, …) is a structured rejection, never a
+// default-allow.
+const ALLOWED_RUNTIMES = new Set(['npx', 'uvx', 'dotnet', 'go', 'node', 'python'])
+
+// Package identifier shape: scoped (`@scope/name`, scope+name lowercase
+// alphanumerics + hyphens) or bare (`[a-z0-9-]` head, then lowercase
+// alphanumerics + `._-`). Rejects shell metacharacters, path traversal
+// (`../x`), empty strings and uppercase names (`A_B_C`) before they ever
+// reach argv or the DB.
+const PACKAGE_IDENTIFIER_RE = /^@[a-z0-9-]+\/[a-z0-9-]+$|^[a-z0-9-][a-z0-9._-]*$/
+
+function isValidPackageIdentifier(id) {
+  return typeof id === 'string' && PACKAGE_IDENTIFIER_RE.test(id)
+}
+
+// Validate a config object coming back from the renderer for the market
+// install flow. Defense in depth: the renderer posts back the entry it was
+// shown, but that data round-tripped through untrusted surfaces, so the main
+// process re-checks command + package identifier before anything is persisted
+// or spawned. npx/uvx fetch-and-execute arbitrary packages, so their first
+// non-flag argument must be a well-formed identifier.
+function validateInstallConfig(cfg) {
+  if (!cfg || typeof cfg !== 'object') return { ok: false, error: 'invalid config' }
+  if (!cfg.name || typeof cfg.name !== 'string') return { ok: false, error: 'invalid config: missing name' }
+  const command = String(cfg.command || '')
+  if (!ALLOWED_RUNTIMES.has(command)) {
+    return { ok: false, error: `runtime "${command || '(empty)'}" is not allowed (whitelist: ${[...ALLOWED_RUNTIMES].join('/')})` }
+  }
+  if (command === 'npx' || command === 'uvx') {
+    const args = Array.isArray(cfg.args) ? cfg.args : []
+    const ident = args.find(a => typeof a === 'string' && a && !a.startsWith('-'))
+    if (!isValidPackageIdentifier(ident)) {
+      return { ok: false, error: `invalid package identifier "${ident || '(missing)'}"` }
+    }
+  }
+  return { ok: true }
+}
+
 // Pick the first stdio package for a server (npx/uvx/dotnet style local run).
 // Remote-only servers (streamable-http/sse) can't be launched as stdio, so we
 // skip them for the local install flow.
@@ -80,8 +121,17 @@ function pickStdioPackage(packages) {
 }
 
 // Build a deployable { name, command, args, env } config from a stdio package.
+// Returns { ok: true, config } or { ok: false, error } — a hostile manifest
+// (runtimeHint=cmd, identifier="evil; rm -rf", …) yields a structured
+// rejection instead of a spawnable config.
 function buildConfig(name, pkg) {
   const runtime = pkg.runtimeHint || defaultRuntime(pkg.registryType)
+  if (!ALLOWED_RUNTIMES.has(runtime)) {
+    return { ok: false, error: `runtime "${runtime}" is not allowed (whitelist: ${[...ALLOWED_RUNTIMES].join('/')})` }
+  }
+  if (!isValidPackageIdentifier(pkg.identifier)) {
+    return { ok: false, error: `package identifier "${pkg.identifier}" is invalid` }
+  }
   const positional = (pkg.runtimeArguments || [])
     .filter(a => a && a.type !== 'named')
     .map(a => a.value)
@@ -93,20 +143,21 @@ function buildConfig(name, pkg) {
   for (const ev of pkg.environmentVariables || []) {
     if (ev && ev.name) env[ev.name] = ev.value != null ? String(ev.value) : ''
   }
-  return { name, command: runtime, args, env }
+  return { ok: true, config: { name, command: runtime, args, env } }
 }
 
 // Translate a raw registry server object into a catalog entry.
 function toCatalogEntry(server) {
   const pkg = pickStdioPackage(server.packages)
+  const built = pkg ? buildConfig(server.name, pkg) : null
   return {
     name: server.name,
     title: server.title || server.name,
     description: server.description || '',
     version: server.version,
     repositoryUrl: (server.repository && server.repository.url) || null,
-    installable: !!pkg,
-    config: pkg ? buildConfig(server.name, pkg) : null,
+    installable: !!(built && built.ok),
+    config: built && built.ok ? built.config : null,
   }
 }
 
@@ -177,4 +228,4 @@ function popular() {
   return POPULAR.slice()
 }
 
-module.exports = { list, search, popular }
+module.exports = { list, search, popular, buildConfig, validateInstallConfig, ALLOWED_RUNTIMES, isValidPackageIdentifier }

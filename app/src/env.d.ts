@@ -163,7 +163,7 @@ interface Window {
     }
     mcp: {
       list: () => Promise<{ id: number; name: string; command: string; args: string[]; env: Record<string, string>; enabled: number }[]>
-      create: (data: { name: string; command: string; args?: string[]; env?: Record<string, string>; enabled?: number }) => Promise<{ lastInsertRowid: number }>
+      create: (data: { name: string; command: string; args?: string[]; env?: Record<string, string>; enabled?: number }) => Promise<{ lastInsertRowid?: number; cancelled?: boolean; error?: string }>
       update: (id: number, data: Partial<{ name: string; command: string; args: string[]; env: Record<string, string>; enabled: number }>) => Promise<{ success: boolean }>
       delete: (id: number) => Promise<{ success: boolean }>
       connect: (id: number) => Promise<{ success: boolean; tools?: { name: string; description: string; risk: string }[]; error?: string }>
@@ -172,7 +172,7 @@ interface Window {
     market: {
       list: () => Promise<{ servers: MarketServer[] }>
       search: (query: string) => Promise<{ servers: MarketServer[] }>
-      install: (entry: MarketServer | { name: string; command: string; args?: string[]; env?: Record<string, string> }) => Promise<{ success: boolean; id?: number; error?: string }>
+      install: (entry: MarketServer | { name: string; command: string; args?: string[]; env?: Record<string, string> }) => Promise<{ success: boolean; id?: number; error?: string; cancelled?: boolean }>
     }
     settings: {
       get: (key: string) => Promise<string | null>

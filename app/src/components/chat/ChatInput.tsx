@@ -33,15 +33,15 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   { id: 'clear', name: '清空对话', description: '清空当前对话历史', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
   { id: 'regenerate', name: '重新生成', description: '撤销最后一条回复并重新生成', action: () => { useStore.getState().regenerate() } },
   { id: 'compact', name: '压缩上下文', description: '智能压缩对话历史节省 token', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
-  { id: 'undo', name: '撤销提交', description: 'git reset --hard HEAD~1（危险操作，需确认）', action: async () => {
+  { id: 'undo', name: '撤销提交', description: '按最近一次检查点恢复文件并生成撤销提交', action: async () => {
     try {
       const cwd = await window.electronAPI.agent.getWorkspace()
       if (!cwd) { window.alert('未配置工作区，无法撤销提交'); return }
-      const confirmed = window.confirm('⚠️ 危险操作：将执行 git reset --hard HEAD~1，撤销最近一次提交并丢弃其变更。此操作不可恢复。确定继续吗？')
+      const confirmed = window.confirm('将按最近一次检查点（checkpoint）快照恢复被修改的文件，并生成一条撤销提交（不做 git reset --hard，不丢弃其他未提交修改）。若本仓库没有检查点记录则拒绝执行。确定继续吗？')
       if (!confirmed) return
       const res = await window.electronAPI.git.undo(cwd)
       if (res.success) {
-        window.alert(`✅ 已撤销提交：${res.undoneCommit || '未知'}`)
+        window.alert(`✅ 已按检查点恢复并生成撤销提交：${res.undoneCommit || '未知'}`)
       } else {
         window.alert(`❌ 撤销失败：${res.error || res.message || '未知错误'}`)
       }

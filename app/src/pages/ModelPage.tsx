@@ -228,8 +228,8 @@ export default function ModelPage() {
                         <div className="flex items-center gap-2 text-sm">
                           <Key size={12} className="text-gray-400 shrink-0" />
                           <span className="text-xs" style={{ color: 'var(--text-muted)', width: 60 }}>{t('models.api_key')}</span>
-                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                            {provider.api_key ? `${provider.api_key.slice(0, 8)}...${provider.api_key.slice(-4)}` : t('models.add_provider_key')}
+                          <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                            {provider.api_key || t('models.add_provider_key')}
                           </span>
                         </div>
                       </>

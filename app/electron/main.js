@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, protocol, globalShortcut } = require('electron')
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, protocol, globalShortcut, shell } = require('electron')
 const path = require('path')
 const http = require('http')
 const fs = require('fs')
@@ -112,6 +112,14 @@ function startStaticServer(distDir) {
   }
   return new Promise((resolve) => {
     staticServer = http.createServer((req, res) => {
+      // DNS-rebinding guard (2026-08 audit): only requests explicitly
+      // addressed to this server's loopback host:port are served. A remote
+      // attacker domain that resolves to 127.0.0.1 arrives with its own
+      // Host header and gets 403.
+      const host = String(req.headers.host || '').toLowerCase()
+      if (host !== `127.0.0.1:${actualDistPort}` && host !== `localhost:${actualDistPort}`) {
+        res.writeHead(403); res.end('Forbidden'); return
+      }
       const rawUrl = req.url.split('?')[0]   // strip query string (e.g. HMR hash)
       const reqPath = rawUrl === '/' ? '/index.html' : rawUrl
       const relative = reqPath.startsWith('/') ? reqPath.slice(1) : reqPath
@@ -146,6 +154,18 @@ function startStaticServer(distDir) {
   })
 }
 
+// M4 (2026-08 audit): in-app navigation allowlist. The renderer may only
+// navigate within the vite dev server or the packaged static server —
+// everything else (external sites, file:, unknown protocols) is prevented.
+function isInternalNavUrl(url) {
+  try {
+    const u = new URL(url)
+    if (u.protocol !== 'http:') return false
+    const host = u.host.toLowerCase()
+    return host === `127.0.0.1:${actualDistPort}` || host === 'localhost:5173' || host === '127.0.0.1:5173'
+  } catch { return false }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -162,6 +182,25 @@ function createWindow() {
     },
     backgroundColor: '#FFFFFF',
     show: false,  // hide until page is ready — no blank flash on startup
+  })
+
+  // M4 (2026-08 audit): the renderer never opens child windows and never
+  // navigates off-app. window.open and target=_blank are denied outright;
+  // external http(s) links are handed to the user's browser via
+  // shell.openExternal instead of loading inside the app (phishing /
+  // protocol-abuse surface). In-app navigation targets pass through.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) {
+      try { shell.openExternal(url) } catch {}
+    }
+    return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (isInternalNavUrl(url)) return
+    e.preventDefault()
+    if (/^https?:/i.test(url)) {
+      try { shell.openExternal(url) } catch {}
+    }
   })
 
   // Show the window only after the page has rendered, avoiding the flash of

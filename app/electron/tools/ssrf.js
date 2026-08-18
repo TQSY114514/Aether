@@ -10,31 +10,70 @@
 const net = require('net')
 const dns = require('dns')
 
+// Strip the `[...]` brackets URL.hostname keeps around IPv6 literals —
+// net.isIP('[::1]') is 0, so an unstripped literal would bypass every check.
+function stripIpBrackets(ip) {
+  const s = String(ip || '').trim()
+  if (s.startsWith('[') && s.endsWith(']')) return s.slice(1, -1)
+  return s
+}
+
+// IPv4 private/reserved rules. `0.0.0.0/8`（P2-M7）整个 A 段封禁——0.x 是
+// "本网络"保留段，部分栈会把它当作 127.0.0.1 的别名处理。
+function isPrivateV4(ip) {
+  const parts = ip.split('.').map(Number)
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true
+  // 10.0.0.0/8
+  if (parts[0] === 10) return true
+  // 172.16.0.0/12
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true
+  // 192.168.0.0/16
+  if (parts[0] === 192 && parts[1] === 168) return true
+  // 127.0.0.0/8 (loopback)
+  if (parts[0] === 127) return true
+  // 169.254.0.0/16 (link-local / cloud metadata)
+  if (parts[0] === 169 && parts[1] === 254) return true
+  // 0.0.0.0/8（P2-M7：整个 0/8 保留段）
+  if (parts[0] === 0) return true
+  return false
+}
+
+// Unwrap an IPv4-mapped IPv6 address（P2-M7）: `::ffff:a.b.c.d`（点分形式）
+// 或 `::ffff:0:w1:w2` / `::ffff:w1:w2`（十六进制形式）→ 返回 IPv4 点分串，
+// 非映射地址返回 null。
+function unwrapIpv4Mapped(v6) {
+  const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(v6)
+  if (dotted) return dotted[1]
+  const hex = /^::ffff:(?:0:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(v6)
+  if (hex) {
+    const hi = parseInt(hex[1], 16)
+    const lo = parseInt(hex[2], 16)
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`
+  }
+  return null
+}
+
 /**
  * Check if an IP address is private/reserved and should be blocked.
+ * IPv4-mapped IPv6 (`::ffff:127.0.0.1` etc.) is unwrapped and re-checked
+ * against the IPv4 rules. Bracketed `[...]` literals (URL.hostname form)
+ * are normalized first. Hostnames (non-IP strings) return false — the DNS
+ * path in checkSSRFHostname handles them.
  */
 function isPrivateIP(ip) {
   if (!ip) return true // block null/undefined
-  if (net.isIP(ip) === 4) {
-    const parts = ip.split('.').map(Number)
-    if (parts.length !== 4) return true
-    // 10.0.0.0/8
-    if (parts[0] === 10) return true
-    // 172.16.0.0/12
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true
-    // 192.168.0.0/16
-    if (parts[0] === 192 && parts[1] === 168) return true
-    // 127.0.0.0/8 (loopback)
-    if (parts[0] === 127) return true
-    // 169.254.0.0/16 (link-local / cloud metadata)
-    if (parts[0] === 169 && parts[1] === 254) return true
-    // 0.0.0.0
-    if (parts[0] === 0 && parts[1] === 0 && parts[2] === 0 && parts[3] === 0) return true
-  }
-  // IPv6
-  if (net.isIP(ip) === 6) {
-    // ::1 (loopback), fd00::/8 (unique local), fe80::/10 (link-local)
-    if (ip === '::1' || ip === '::' || ip.startsWith('fd') || ip.startsWith('FE80')) return true
+  const s = stripIpBrackets(ip)
+  const family = net.isIP(s)
+  if (family === 4) return isPrivateV4(s)
+  if (family === 6) {
+    const lower = s.toLowerCase()
+    // ::1 (loopback), :: (unspecified), fd00::/8 (unique local), fe80::/10 (link-local)
+    if (lower === '::1' || lower === '::') return true
+    if (lower.startsWith('fd') || lower.startsWith('fe80')) return true
+    // ::ffff:127.0.0.1 / ::ffff:169.254.169.254 …（P2-M7）
+    const mapped = unwrapIpv4Mapped(lower)
+    if (mapped && isPrivateV4(mapped)) return true
+    return false
   }
   return false
 }
@@ -44,17 +83,18 @@ function isPrivateIP(ip) {
  * Throws a descriptive error if the IP is private.
  */
 async function checkSSRFHostname(host) {
-  if (isPrivateIP(host)) {
-    throw new Error(`SSRF blocked: ${host} is a private IP`)
+  const bare = stripIpBrackets(host)
+  if (isPrivateIP(bare)) {
+    throw new Error(`SSRF blocked: ${bare} is a private IP`)
   }
   try {
-    const family = net.isIP(host)
+    const family = net.isIP(bare)
     if (family === 4 || family === 6) return // already an IP, checked above
     // DNS lookup — all A + AAAA records
-    const addrs = await dns.promises.lookup(host, { all: true })
+    const addrs = await dns.promises.lookup(bare, { all: true })
     for (const { address } of addrs) {
       if (isPrivateIP(address)) {
-        throw new Error(`SSRF blocked: ${host} resolves to private IP ${address}`)
+        throw new Error(`SSRF blocked: ${bare} resolves to private IP ${address}`)
       }
     }
   } catch (e) {
@@ -111,9 +151,16 @@ function checkSSRF(urlStr) {
     return { ok: false, reason: `blocked: ${url.protocol} protocol` }
   }
 
-  const hostname = url.hostname.toLowerCase()
+  const hostname = stripIpBrackets(url.hostname).toLowerCase()
   if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
     return { ok: false, reason: 'blocked: localhost or 0.0.0.0' }
+  }
+
+  // Literal IPs (v4 / v6 / IPv4-mapped v6 / 0.0.0.0-8) — full private-range
+  // check, so `::ffff:127.0.0.1` and `0.0.0.1` cannot slip past the string
+  // comparisons above.（P2-M7）
+  if (net.isIP(hostname) && isPrivateIP(hostname)) {
+    return { ok: false, reason: `blocked: private/reserved IP ${hostname}` }
   }
 
   if (hostname.endsWith('.meta') || hostname.endsWith('.amazonaws.com')) {
@@ -123,4 +170,4 @@ function checkSSRF(urlStr) {
   return { ok: true }
 }
 
-module.exports = { isPrivateIP, checkSSRF, checkSSRFHostname, ssrfFetchOptions, redirectSSRFCheck }
+module.exports = { isPrivateIP, isPrivateV4, unwrapIpv4Mapped, stripIpBrackets, checkSSRF, checkSSRFHostname, ssrfFetchOptions, redirectSSRFCheck }

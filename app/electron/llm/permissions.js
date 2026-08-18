@@ -2,7 +2,11 @@
 // Aether Agent — Phase 4.1: Permission Model Upgrade (5-tier + hook override)
 //
 // Permission levels assigned to a tool invocation or runtime session.
-// Ordered from least to most permissive — comparisons use >= semantics.
+// ReadOnly < WorkspaceWrite < DangerFullAccess < Allow form the permissive
+// ladder compared with >= semantics. Prompt is NOT on the ladder — it is
+// "confirm each call" semantics: it never satisfies a >= escalation check
+// (ReadOnly requirements are the exception — safe tools run in every mode)
+// and instead routes the request to the prompt branch (audit P0-C1).
 // ───────────────────────────────────────────────────────────────────────────
 
 // ── PermissionMode (ordered 0-4, least to most permissive) ────────────────
@@ -272,7 +276,7 @@ class PermissionPolicy {
         const reason = `tool '${toolName}' requires approval due to ask rule`
         return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
       }
-      if (allowRule || currentMode === PermissionMode.Allow || currentMode >= requiredMode) {
+      if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {
         return PermissionOutcome.allow()
       }
     }
@@ -301,7 +305,7 @@ class PermissionPolicy {
       } catch {}
     }
 
-    if (allowRule || currentMode === PermissionMode.Allow || currentMode >= requiredMode) {
+    if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {
       return PermissionOutcome.allow()
     }
 
@@ -320,6 +324,17 @@ class PermissionPolicy {
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────
+
+// Whether currentMode satisfies requiredMode on the permissive ladder.
+// Prompt（逐次询问）不是权限等级：它从不满足 >= 升档比较 —— ReadOnly 需求
+// 除外（safe 工具任何模式都直接放行）。修复：此前 Prompt(3) >=
+// DangerFullAccess(2) 让 ask 模式的 dangerous 工具绕过确认直接放行，
+// 同时使下方 Prompt 分支成为不可达死代码（审计 P0-C1）。
+function _modeSatisfiesRequirement(currentMode, requiredMode) {
+  if (currentMode === PermissionMode.Allow) return true
+  if (currentMode === PermissionMode.Prompt) return requiredMode === PermissionMode.ReadOnly
+  return currentMode >= requiredMode
+}
 
 function _findMatchingRule(rules, toolName, input) {
   return rules.find(rule => rule.matches(toolName, input)) || null

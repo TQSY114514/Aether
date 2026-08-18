@@ -1,8 +1,14 @@
 const { testConnection, listModels } = require('../llm/providerAdapter')
 
 function registerProviderHandlers(ipcMain, db) {
+  // H2: renderer-facing list/get return a MASKED api_key (sk-1***efgh).
+  // Decrypted keys never cross the IPC boundary; internal request paths
+  // (test-connection / fetch-models below) read via db.getProvider directly.
   ipcMain.handle('provider:list', () => db.getProviders())
-  ipcMain.handle('provider:get', (_e, id) => db.getProvider(id))
+  ipcMain.handle('provider:get', (_e, id) => {
+    const p = db.getProvider(id)
+    return p ? { ...p, api_key: db.maskKey(p.api_key) } : null
+  })
   ipcMain.handle('provider:create', (_e, data) => db.addProvider(data))
   ipcMain.handle('provider:update', (_e, id, data) => db.updateProvider(id, data))
   ipcMain.handle('provider:delete', (_e, id) => db.deleteProvider(id))

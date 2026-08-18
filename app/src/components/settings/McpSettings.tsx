@@ -42,6 +42,9 @@ export default function McpSettings() {
       try { args = form.args ? JSON.parse(form.args) : [] } catch { toast(t('mcp.args_json_error'), { type: 'error' }); setBusy(null); return }
       try { env = form.env ? JSON.parse(form.env) : {} } catch { toast(t('mcp.env_json_error'), { type: 'error' }); setBusy(null); return }
       const res = await window.electronAPI.mcp.create({ name: form.name, command: form.command, args, env, enabled: 1 })
+      // Native confirm dialog cancelled in the main process — nothing was
+      // persisted, so keep the form and skip connect.
+      if (res.cancelled || res.lastInsertRowid == null) { if (res.error) toast(res.error, { type: 'error' }); return }
       // Auto-connect on add.
       await window.electronAPI.mcp.connect(res.lastInsertRowid)
       setForm({ name: '', command: '', args: '', env: '' })
@@ -86,6 +89,7 @@ export default function McpSettings() {
     setInstalling(entry.name)
     try {
       const res = await window.electronAPI.market.install(entry)
+      if (res.cancelled) return // user dismissed the native confirm — stay silent
       if (res.success) {
         toast(t('mcp.market.installed', entry.title))
         await load()
@@ -181,9 +185,18 @@ export default function McpSettings() {
                       </div>
                       <p className="text-[10px] mt-0.5 line-clamp-2" style={{ color: 'var(--text-secondary)' }}>{m.description}</p>
                       {m.repositoryUrl && (
-                        <a href={m.repositoryUrl} target="_blank" rel="noreferrer" className="text-[10px] flex items-center gap-1 mt-1 hover:underline" style={{ color: 'var(--accent)' }}>
-                          <Globe size={9} />{t('mcp.market.repository')}
-                        </a>
+                        // Only https:// URLs become links (spec P2-M2) — the
+                        // market manifest is remote data, so javascript:/file:/
+                        // other schemes render as inert plain text.
+                        m.repositoryUrl.startsWith('https://') ? (
+                          <a href={m.repositoryUrl} target="_blank" rel="noreferrer" className="text-[10px] flex items-center gap-1 mt-1 hover:underline" style={{ color: 'var(--accent)' }}>
+                            <Globe size={9} />{t('mcp.market.repository')}
+                          </a>
+                        ) : (
+                          <span className="text-[10px] flex items-center gap-1 mt-1" style={{ color: 'var(--text-muted)' }}>
+                            <Globe size={9} />{t('mcp.market.repository')}
+                          </span>
+                        )
                       )}
                     </div>
                     {m.installable && (

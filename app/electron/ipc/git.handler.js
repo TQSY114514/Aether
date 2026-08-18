@@ -2,32 +2,52 @@
 // and the git auto-commit system. Follows the IPC trio contract (handler +
 // preload.js + env.d.ts).
 //
-// SAFETY: `git reset --hard HEAD~1` is destructive. The renderer must confirm
-// with the user before calling `git:undo`. The handler additionally validates
-// that the path is a git repo and that at least one commit exists, so a bare
-// path or a fresh repo can never trigger a destructive reset.
+// SECURITY FIX (audit P1-H8): `git:undo` used to run `git reset --hard HEAD~1`,
+// which destroys every uncommitted change in the working tree. It now restores
+// exactly the files recorded in the newest not-yet-rolled-back checkpoint for
+// the repo (per-file snapshots in llm/checkpoints.js) and then records a normal
+// revert commit — no force, no reset --hard. If no checkpoint exists we refuse
+// with an explanation instead of falling back to anything destructive.
 
 const gitAutoCommit = require('../llm/gitAutoCommit')
+const checkpoints = require('../llm/checkpoints')
 const { getWorkspaceRoot } = require('../tools/sandbox')
 
 function registerGitHandlers(ipcMain, db) {
-  // Undo the last commit (git reset --hard HEAD~1) in the git repo that
-  // contains the given path (defaults to the agent workspace root).
+  // Undo the most recent agent change in the git repo that contains the given
+  // path (defaults to the agent workspace root), via checkpoint file snapshots.
+  // Return shape is unchanged: { success, message?, undoneCommit?, error? }.
   ipcMain.handle('git:undo', (_e, cwd) => {
     const root = cwd ? String(cwd) : getWorkspaceRoot()
     if (!root) return { success: false, error: 'no workspace configured' }
     const gitRoot = gitAutoCommit.isGitRepo(root)
     if (!gitRoot) return { success: false, error: 'not a git repository' }
-    // Ensure there is at least one commit to undo (HEAD~1 must exist).
-    const { runCommandSync } = require('../tools/exec')
-    const hasCommit = runCommandSync('git', ['rev-parse', '--verify', 'HEAD~1'], { cwd: gitRoot })
-    if (hasCommit.exitCode !== 0) return { success: false, error: 'no commits to undo' }
-    // Guard: refuse to reset if the working tree is dirty (would lose edits).
-    const dirty = runCommandSync('git', ['status', '--porcelain'], { cwd: gitRoot })
-    if (dirty.exitCode === 0 && dirty.stdout.trim()) {
-      return { success: false, error: 'working tree has uncommitted changes — commit or stash them first' }
+    // Find the newest checkpoint whose affected paths live in this repo.
+    // Without a snapshot there is nothing precise to restore — refuse.
+    const cp = checkpoints.findLatestCheckpointForRoot(gitRoot)
+    if (!cp || cp.id == null) {
+      return { success: false, error: 'no checkpoint record for this repository — undo refused (destructive git reset is disabled; restore files manually with git if needed)' }
     }
-    return gitAutoCommit.gitUndoLast(gitRoot)
+    // Per-file restore from the pre-tool snapshot (see checkpoints.js).
+    const result = checkpoints.rollbackCheckpoint(cp.id)
+    if (!result.success) {
+      return { success: false, error: result.error || 'checkpoint restore failed', restored: result.restored || [], failed: result.failed || [] }
+    }
+    const restored = result.restored || []
+    if (restored.length === 0) {
+      return { success: true, message: `checkpoint #${cp.id} restored (no file changes needed)`, undoneCommit: null }
+    }
+    // Record the restoration as a normal revert-style commit (no force, no
+    // reset). Secret-like/gitignored files are filtered out by gitCommitMultiple.
+    const commit = gitAutoCommit.gitCommitMultiple(restored, gitRoot, `revert: undo agent changes (checkpoint #${cp.id})`)
+    if (commit.success) {
+      return { success: true, message: `checkpoint #${cp.id} restored, revert commit created`, undoneCommit: commit.message }
+    }
+    if (commit.nothingToCommit) {
+      return { success: true, message: `checkpoint #${cp.id} restored (no git-visible changes to commit)`, undoneCommit: null }
+    }
+    // Files are already restored on disk — report success but surface the failure.
+    return { success: true, message: `checkpoint #${cp.id} restored, but revert commit failed: ${commit.message}`, undoneCommit: null }
   })
 
   // Get the current git status of the git repo containing the given path.

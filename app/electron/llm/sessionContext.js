@@ -14,9 +14,15 @@ function ensureMemDb(db) {
   try {
     return {
       getMemories(limit = 200) {
-        // 与 database.js memory 表列面一致（默认无 confidence 列，不做假设）
-        return db.prepare('SELECT id, content, type, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?')
-          .all(Number(limit) || 200)
+        // 与 database.js memory 表列面一致（默认无 confidence 列，不做假设）。
+        // H5: 带上 origin 列 —— autoMemory.prefetch 靠它把 origin='external'
+        // 的记忆分流进 <untrusted_memory> 降权块。旧库尚无该列时回退查询。
+        const l = Number(limit) || 200
+        try {
+          return db.prepare('SELECT id, content, type, origin, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?').all(l)
+        } catch {
+          return db.prepare('SELECT id, content, type, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?').all(l)
+        }
       },
       // knowledgeGraph.searchGraph 需要 allRows；kg_nodes/kg_edges 表在裸连接下
       // 不存在时静默返回 []（graph 增强是 best-effort，缺失不报错、不刷日志）。

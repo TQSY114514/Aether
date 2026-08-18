@@ -14,9 +14,14 @@
 //     then rebuilds from the bundle. Providers/models/personas still match by
 //     name to preserve model routing.
 //
-// API keys: export carries them only if includeSecrets (default true); import
-// re-encrypts every key through the current machine's safeStorage, so a bundle
-// exported on one OS can be imported on another.
+// API keys: export carries them only if includeSecrets (default false since
+// the 2026-08 security audit — H2); import re-encrypts every key through the
+// current machine's safeStorage, so a bundle exported on one OS can be
+// imported on another.
+//
+// Sensitive settings (M10): gateway_token / gateway_* / agent_workspace_root
+// are machine-local secrets/paths. They are stripped from every export and
+// never applied on import, regardless of includeSecrets.
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
@@ -24,6 +29,10 @@ const path = require('path')
 const { app } = require('electron')
 
 const CONFIG_BUNDLE_VERSION = 2
+
+function isSensitiveSettingKey(key) {
+  return typeof key === 'string' && (key.startsWith('gateway_') || key === 'agent_workspace_root')
+}
 
 function bgPath() { return path.join(app.getPath('userData'), 'background.img') }
 function bgMetaPath() { return bgPath() + '.meta' }
@@ -41,14 +50,25 @@ function clearRuntimeData(db) {
 
 function registerConfigHandlers(ipcMain, db) {
   // Export the full configuration + runtime data as a JSON-serializable bundle.
-  ipcMain.handle('config:export', (_e, { includeSecrets = true, includeBackground = false } = {}) => {
-    const providers = db.getProviders()
+  // H2: includeSecrets defaults to FALSE — a bundle must not leak keys unless
+  // the user explicitly opts in.
+  ipcMain.handle('config:export', (_e, { includeSecrets = false, includeBackground = false } = {}) => {
+    // Masked list for display parity; decrypted list only when secrets are
+    // explicitly requested (getProviders() alone now returns masked keys).
+    const providers = includeSecrets ? db.getProvidersDecrypted() : db.getProviders()
     const models = db.getAllModels()
     const personas = db.getPersonas()
     const sessions = db.allRows('SELECT id, title, persona_id, pinned, config, created_at, updated_at FROM session ORDER BY id')
     const messages = db.allRows('SELECT session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model, created_at FROM message ORDER BY id')
     const memories = db.allRows('SELECT * FROM memory ORDER BY id')
-    const settings = db.getAllSettings() || {}
+    const settings = (() => {
+      const all = db.getAllSettings() || {}
+      const out = {}
+      for (const [k, v] of Object.entries(all)) {
+        if (!isSensitiveSettingKey(k)) out[k] = v
+      }
+      return out
+    })()
     const arenaVotes = db.allRows('SELECT prompt, intent, winner_model_id, winner_model_name, loser_model_ids, loser_model_names, created_at FROM arena_vote ORDER BY id')
     const modelScores = db.allRows('SELECT ms.intent, ms.score, ms.win_count, ms.total_count, m.model_name, p.name AS provider_name FROM model_score ms JOIN model m ON ms.model_id = m.id JOIN provider p ON m.provider_id = p.id')
 
@@ -171,8 +191,11 @@ function registerConfigHandlers(ipcMain, db) {
         created.memories += memories.length
       }
 
-      // Settings.
+      // Settings — M10: machine-local secrets (gateway_token / gateway_* /
+      // agent_workspace_root) are never applied from a bundle. A malicious or
+      // stale bundle must not be able to rewrite the local gateway auth token.
       for (const [k, v] of Object.entries(settings)) {
+        if (isSensitiveSettingKey(k)) continue
         try { db.setSetting(k, String(v)) } catch {}
       }
 
