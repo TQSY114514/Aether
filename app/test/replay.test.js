@@ -66,6 +66,10 @@ describe('wordSimilarity', () => {
     expect(s).toBeGreaterThan(0)
     expect(s).toBeLessThan(1)
   })
+  it('matches Chinese phrases over shared content (字符级), ignoring function words', () => {
+    expect(wordSimilarity('修复打包时的报错', '帮我修复构建时报错')).toBeGreaterThan(0)
+    expect(wordSimilarity('写一首关于猫的诗', '修复打包时的报错')).toBe(0)
+  })
 })
 
 // ─── recordPattern ──────────────────────────────────────────────────────────
