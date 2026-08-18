@@ -2,7 +2,14 @@
 
 All notable changes to AetherAI are documented here.
 
-## [Unreleased]
+## [0.7.2] - 2026-08-18
+
+### Changed
+
+- **README — all 14 languages synced.** The two-product restructure (npm `aetherai` CLI download section, "Two products, one repo" preamble) now lands in every translated README; the SmartScreen trust banner is translated into all languages (was English / simplified-Chinese only); localized download-section anchors fixed (`#download` → per-language anchors); CLI pin example updated to `aetherai@0.7.1`.
+- **README.md (English)** — removed the stale "VS Code Extension & Headless CLI" section left behind by the 0.7.1 rewrite (it referenced the deleted `extension/` and `extensions/vscode-aether/` directories).
+
+## [0.7.1] - 2026-08-17
 
 ### Removed (BREAKING for users who used the VS Code extension)
 
@@ -20,6 +27,13 @@ All notable changes to AetherAI are documented here.
 
 - **Distribution model** — `aetherai` is now a single repo with two products: desktop (Windows NSIS + portable, GitHub Releases) and CLI / TUI / SDK (npm). Both products share the agent runtime and SQLite session store.
 - **`README.md`** — rewritten to lead with the two-product matrix. The "VS Code Extension & Headless CLI" section is gone; "Terminal TUI, RPC & SDK" is unchanged.
+- **TUI** — injected context (persona / memory / skills prefixes) is now persisted to the session log, so model-visible content always equals logged content.
+
+### Fixed
+
+- **js-yaml upgraded to 4.3.1** (CVE-2026-59870) and dependabot grouping fixed.
+- **Local gateway** no longer leaks internal error details / stack traces to HTTP clients (CodeQL `js/stack-trace-exposure`).
+- **Code block line numbers** rendered via CSS `::before` instead of text (no longer copied to clipboard / read by screen readers).
 
 ## [0.7.0] - 2026-08-11
 

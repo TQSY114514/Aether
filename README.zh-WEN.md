@@ -8,7 +8,7 @@
 
 凡模型皆可談、可令安全編寫之 Agent、可並列比較諸模型——於桌面或終端之中。
 
-**Electron · React · TypeScript · MCP · Agent · Skills**
+**Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
 [![GitHub Release](https://img.shields.io/github/v/release/TQSY114514/Aether?style=flat-square&label=latest)](https://github.com/TQSY114514/Aether/releases) [![GitHub release date](https://img.shields.io/github/release-date/TQSY114514/Aether?style=flat-square&color=blue)](https://github.com/TQSY114514/Aether/releases) [![GitHub stars](https://img.shields.io/github/stars/TQSY114514/Aether?style=flat-square&label=Stars&color=gold)](https://github.com/TQSY114514/Aether/stargazers) [![GitHub forks](https://img.shields.io/github/forks/TQSY114514/Aether?style=flat-square&label=Forks)](https://github.com/TQSY114514/Aether/network/members) [![GitHub issues](https://img.shields.io/github/issues/TQSY114514/Aether?style=flat-square&label=Issues)](https://github.com/TQSY114514/Aether/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 
@@ -24,13 +24,29 @@
 
 > **狀態：Beta。** Aether 乃一人所造之業餘之物。可用，然未盡善；若有闕漏，敬請告之——見 [CONTRIBUTING.md](./CONTRIBUTING.md) 與 [SECURITY.md](./SECURITY.md)。
 
-**平台惟 Windows 耳。** 官方建置、測試與支援皆以 Windows 為的。macOS / Linux 或可由原始碼自建，然非官方所支援，亦無代碼簽章之議——首啟之時或見 SmartScreen「未知發行者」之警（見 [下載](#download)）。
+> [!CAUTION]
+> **Windows SmartScreen 之警，乃常事也。** Aether 出自學生開發者之手，未購商業代碼簽章之證，故 Win11 / Defender 初啟之時，或示「Windows 已護汝之電腦」。
+> **此乃安全之開源軟體——可先閱其碼，再點「更多資訊 → 仍要執行」。**
+> 若為防毒之軟所隔，請將應用之夾列於排除之冊（詳見[下載](#下載)）。除汝所設 LLM 供應商之外，數據決不離汝之機。
+
+**平台惟 Windows 耳。** 官方建置、測試與支援皆以 Windows 為的。macOS / Linux 或可由原始碼自建，然非官方所支援，亦無代碼簽章之議——首啟之時或見 SmartScreen「未知發行者」之警（見 [下載](#下載)）。
 
 **一器而容諸模型。** OpenAI / Claude / DeepSeek / 本地模型 / 凡 OpenAI 相容之端——可相談、可令編寫 Agent 運行、可於伴 ELO 投票之多模型競技場中並列比較諸模型。
 
 **本地為先，匠心所繫。** API 鑰與對談存於本地 SQLite 庫，除發往汝所設之供應商外，決不離汝機器。
 
 **安全為本，預設而然。** 內置 Agent 於工作區沙箱中運行，並設許可階梯：文件與命令之存取，先確認而後行；凡工具之調用，皆可稽考。
+
+---
+
+## 一庫二品
+
+Aether 之發佈，兩個產品並出，二者同享一 Agent 運行時：
+
+- **Aether 桌面版** —— Electron + React 圖形界面。自 [GitHub Releases](#下載-桌面版) 下載，開箱即用。
+- **Aether CLI / TUI / SDK** —— 無頭 Agent、Ink v5 終端界面、Electron-free SDK。以 `npm install -g aetherai` 裝之（[安裝之法](#下載-cli--tui--sdk)）。CLI 命令曰 `aether`。
+
+二者共享 `agentCore`、四十二工具、SQLite 記憶、多模型路由、MCP 伺服器，會話之庫亦同。圖形界面所啟之會話，可於 TUI 以 `aether tui --session <id>` 續之，反之亦然。
 
 ---
 
@@ -57,7 +73,13 @@ Aether 合眾器之長，納於一本地桌面應用之中：
 
 ## 下載
 
-### Windows — 預裝安裝程式（薦於眾用）
+> 二者**擇一**即可。兩個產品同享一 Agent 運行時與會話之庫。
+> - **惟欲桌面交談之器乎？** 見 [Aether 桌面版](#下載-桌面版)
+> - **欲終端 Agent、CI、SDK 乎？** 見 [Aether CLI](#下載-cli--tui--sdk)
+
+### 下載 — 桌面版
+
+**Windows — 預裝安裝程式（薦於眾用）**
 
 下載最新 [Release](https://github.com/TQSY114514/Aether/releases)：
 
@@ -70,9 +92,33 @@ Aether 合眾器之長，納於一本地桌面應用之中：
 >
 > ⚠️ 部分防毒軟體或於封裝時隔離未解壓之 `electron.exe`，蓋因本應用未經簽章。若安裝程式為汝之防毒所除，請加例外或改用可攜版。
 
+### 下載 — CLI / TUI / SDK
+
+**`aetherai`** 者，npm 套件之名也。無頭 CLI、Ink v5 互動 TUI、Electron-free SDK，三者併入一執行檔中。
+
+```bash
+# Install once (requires Node.js ≥ 22)
+npm install -g aetherai
+# or, no install:
+npx aetherai "fix the failing test" --model deepseek
+
+# Interactive terminal UI (best in Windows Terminal)
+aether tui
+
+# Single-shot prompt (CI / scripts)
+aether "summarize README.md"
+
+# JSONL RPC for external scripts
+echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
+```
+
+`aether` 與 `aetherai` 本同一套件。欲與桌面版同其版次，以 `npm install -g aetherai@0.7.1` 鎖定之。
+
+> **與圖形界面共用數據** —— 兩個產品共用同一 SQLite 庫（`%APPDATA%/aetherai/aetherai.db`）。桌面所啟之會話，可於 TUI 續之，反之亦然。
+
 ### 從原始碼執行（開發者 / 進階用戶）
 
-若欲從原始碼執行，或欲改其碼，請用 `start.bat`（需 [Node.js 18+](https://nodejs.org)）：
+若欲從原始碼執行，或欲改其碼，請用 `start.bat`（需 [Node.js 22+](https://nodejs.org)）：
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
@@ -82,9 +128,7 @@ start.bat        # Windows: installs deps, builds frontend, launches Electron
 
 手動步驟詳見 [速成](#-quick-start)。
 
-> **exe 與 start.bat** —— 二者皆受支援，各適其用：
-> - **安裝程式 exe** —— 為終端用戶：雙擊即裝，開始選單有徑，應用內自動更新，不需 Node.js。
-> - **start.bat** —— 為開發者 / 好事者：透明之 `npm install` → `vite build` → `electron .` 之流，改碼即行，需 Node.js。
+> **二品一源** —— 兩個產品同居一倉。`app/electron/` 藏共享之 Agent 運行時，`app/src/` 為桌面渲染之層，`app/cli.js` 與 `app/tui/` 為 CLI/TUI 入口之門。發版以 git 標籤（`v*`）為記，一籤既下，桌面安裝包與 npm 之刊佈並得。
 
 ---
 
@@ -206,19 +250,6 @@ node cli.js tui --smoke      # headless 状态机冒烟
 ### 隱私
 
 > **諸數據悉存本地。** Aether 不集不傳關於汝之事。汝之 API 鑰、對話與人格存於本地 SQLite 資料庫。唯一向外之網路請求僅發往汝所設之 LLM 供應商。
-
----
-
-## VS Code 擴充與無頭 CLI
-
-除桌面應用外，Aether 亦以 CLI 與編輯器擴充之形同售其 Agent：
-
-- **無頭 CLI**（`app/cli.js`）—— 非交互運行 Agent，以 NDJSON 事件供於腳本 / CI：
-  ```bash
-  node app/cli.js "fix the failing test" --workspace . --mode auto --max-iterations 30 --json-lines
-  ```
-- **VS Code 擴充**（`extension/`）—— 於聊天面板中生起 CLI：即時工具呼叫流、碼塊動作（Insert / Write file），及**檔案 diff 卡**：凡 `write_file` / `edit_file` / `apply_patch` 之調用，皆對照變更前之檔案內容，呈行級 diff，一鍵 **Revert**（還原工具運行前所攝之快照）。須設擴充選項 `aether.cliPath`（本地克隆此倉庫時自動偵測）。
-- **本地閘道**（`127.0.0.1:35791`）—— OpenAI 相容之 REST API，以桌面應用為其後盾（設定 → Local Gateway → token）；另有擴充（`extensions/vscode-aether/`）經此而通。
 
 ---
 
@@ -413,7 +444,7 @@ Aether 竊比諸子，納百川而成海。下列諸專案之念，塑其架構�
 
 <div align="center">
 
-Built with ❤️ using Electron + React + TypeScript
+Built with ❤️ using Electron + Node.js + React + TypeScript
 
 [⬆ Back to top](#aether)
 
