@@ -24,6 +24,12 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
   const [revealed, setRevealed] = useState(new Set<string>())
   const [done, setDone] = useState(false)
 
+  // 本轮对比摘要:最快 / 最便宜(基于每个结果的 latency_ms / usage.cost)
+  const withLatency = results.filter((r) => r.latency_ms != null)
+  const withCost = results.filter((r) => r.usage?.cost != null && r.usage.cost > 0)
+  const fastest = withLatency.length >= 2 ? withLatency.reduce((a, b) => (a.latency_ms! < b.latency_ms! ? a : b)) : null
+  const cheapest = withCost.length >= 2 ? withCost.reduce((a, b) => (a.usage!.cost < b.usage!.cost ? a : b)) : null
+
   useEffect(() => {
     // Reset when new results arrive
     setRevealed(new Set())
@@ -74,6 +80,12 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
           </button>
         )}
       </div>
+      {(fastest || cheapest) && (
+        <div className="flex items-center flex-wrap gap-3 rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)', color: 'var(--text-secondary)' }}>
+          {fastest && <span>最快 <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{fastest.model_name}</span> · {fastest.latency_ms}ms</span>}
+          {cheapest && <span>最便宜 <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{cheapest.model_name}</span> · ${cheapest.usage!.cost.toFixed(4)}</span>}
+        </div>
+      )}
       {results.map((r) => {
         // 多温度对比时同 model 有多个 variant, key 必须含 variant 否则 reveal 冲突
         const key = `${r.model_id}::${r.variant || 'default'}`
@@ -95,7 +107,12 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
               <span style={{ color: isWinner ? 'var(--success)' : isLoser ? 'var(--text-muted)' : 'var(--text-primary)' }}>
                 {r.model_name}{r.variant ? <span className="text-[10px] ml-1.5 font-normal" style={{ color: 'var(--text-muted)' }}>{r.variant}</span> : null}
               </span>
-              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.provider_name}</span>
+              <span className="text-[10px] flex items-center gap-1.5 shrink-0" style={{ color: 'var(--text-muted)' }}>
+                <span>{r.provider_name}</span>
+                {r.latency_ms != null && <span className="tabular-nums">{r.latency_ms}ms</span>}
+                {r.usage?.total_tokens != null && <span className="tabular-nums">{r.usage.total_tokens} tok</span>}
+                {r.usage?.cost != null && r.usage.cost > 0 && <span className="tabular-nums">${r.usage.cost.toFixed(4)}</span>}
+              </span>
             </div>
             <div className="p-3 text-sm leading-relaxed max-h-60 overflow-y-auto">
               <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }} />
