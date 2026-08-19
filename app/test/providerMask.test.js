@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createRequire } from 'module'
+import { randomBytes } from 'crypto'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -72,11 +73,15 @@ afterAll(() => {
   try { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
 })
 
-const PLAIN_KEY = 'sk-test-1234-abcd'
+const configuredProviderKey = process.env.AETHER_TEST_PROVIDER_API_KEY
+const PLAIN_KEY = configuredProviderKey?.length >= 12
+  ? configuredProviderKey
+  : randomBytes(16).toString('hex')
+const MASKED_KEY = `${PLAIN_KEY.slice(0, 4)}***${PLAIN_KEY.slice(-4)}`
 
 describe('maskKey', () => {
   it('masks a long key as first4 + *** + last4', () => {
-    expect(database.maskKey(PLAIN_KEY)).toBe('sk-t***abcd')
+    expect(database.maskKey(PLAIN_KEY)).toBe(MASKED_KEY)
   })
   it('fully masks keys shorter than 12 chars', () => {
     expect(database.maskKey('short')).toBe('****')
@@ -95,13 +100,13 @@ describe('provider:list / provider:get return masked keys (H2)', () => {
     const list = providerHandlers['provider:list']()
     const p = list.find(x => x.name === 'MaskTest')
     expect(p).toBeTruthy()
-    expect(p.api_key).toBe('sk-t***abcd')
+    expect(p.api_key).toBe(MASKED_KEY)
     expect(JSON.stringify(list)).not.toContain(PLAIN_KEY)
   })
   it('get returns a masked api_key', () => {
     const p = providerHandlers['provider:list']().find(x => x.name === 'MaskTest')
     const got = providerHandlers['provider:get'](null, p.id)
-    expect(got.api_key).toBe('sk-t***abcd')
+    expect(got.api_key).toBe(MASKED_KEY)
     expect(JSON.stringify(got)).not.toContain(PLAIN_KEY)
   })
   it('the decrypted channel still exposes the real key for the LLM request path', () => {
@@ -127,7 +132,7 @@ describe('provider:update key semantics (H2 edit = keep unless changed)', () => 
   })
   it('a masked api_key (form round-trip) does not overwrite the stored key', () => {
     const p = providerHandlers['provider:list']().find(x => x.name === 'MaskTest')
-    providerHandlers['provider:update'](null, p.id, { api_key: 'sk-t***abcd' })
+    providerHandlers['provider:update'](null, p.id, { api_key: MASKED_KEY })
     expect(database.getProviderDecrypted(p.id).api_key).toBe(PLAIN_KEY)
   })
   it('a genuinely new api_key is stored (re-encrypted)', () => {
