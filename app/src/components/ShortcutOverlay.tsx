@@ -6,13 +6,15 @@ const SHORTCUTS = [
   { keys: ['Ctrl', 'N'], desc: t('empty.hint.new') },
   { keys: ['Ctrl', 'K'], desc: 'Command palette' },
   { keys: ['Ctrl', 'R'], desc: 'Regenerate last reply' },
+  { keys: ['Ctrl', 'E'], desc: 'Edit last message' },
+  { keys: ['Ctrl', 'Z'], desc: 'Undo last edit' },
+  { keys: ['Ctrl', 'Shift', 'C'], desc: 'Copy code block' },
   { keys: ['Esc'], desc: 'Stop generating / close dialogs' },
   { keys: ['Alt', '←'], desc: 'Back in session history' },
   { keys: ['Alt', '→'], desc: 'Forward in session history' },
   { keys: ['Enter'], desc: 'Send message' },
   { keys: ['Shift', 'Enter'], desc: 'New line in input' },
   { keys: ['/'], desc: t('empty.hint.slash') },
-  { keys: ['Ctrl', 'E'], desc: 'Edit last message' },
 ]
 
 function KeyBadge({ label }: { label: string }) {

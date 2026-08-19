@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -171,12 +171,29 @@ export default function ChatInput() {
     } catch {}
   }, [input])
 
+  // Listen for Ctrl+E → edit last user message
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { content } = (e as CustomEvent).detail
+      setInput(content)
+      textareaRef.current?.focus()
+    }
+    window.addEventListener('aether:edit-last-user', handler)
+    return () => window.removeEventListener('aether:edit-last-user', handler)
+  }, [])
+
   // Load draft when switching sessions — each conversation has its own draft.
   useEffect(() => {
     if (prevSessionRef.current === currentSessionId) return
     prevSessionRef.current = currentSessionId
     try {
-      setInput(localStorage.getItem(`draft:${currentSessionId ?? 'new'}`) || '')
+      const draft = localStorage.getItem(`draft:${currentSessionId ?? 'new'}`) || ''
+      if (draft) {
+        setInput(draft)
+        useStore.getState().triggerToast(t('chat.draft_restored', '已恢复上次未发送的内容'), 'info')
+      } else {
+        setInput('')
+      }
     } catch { setInput('') }
     // Refresh the model suggestion (badge on the model selector) for the
     // newly opened session without waiting for the next send.
@@ -401,6 +418,38 @@ export default function ChatInput() {
       }
       if (key === 'enter') { e.preventDefault(); handleSubmit(); return }
       if (key === 'a') return
+      // Ctrl+E: edit last user message (readline-style)
+      if (key === 'e') {
+        e.preventDefault()
+        useStore.getState().editLastUserMessage()
+        return
+      }
+      // Ctrl+Z: undo last edit
+      if (key === 'z') {
+        e.preventDefault()
+        useStore.getState().undoLastEdit()
+        return
+      }
+    }
+    // Ctrl+Shift+C: copy code block when cursor is inside one
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+      e.preventDefault()
+      const textarea = textareaRef.current
+      if (!textarea) return
+      const val = textarea.value
+      const pos = textarea.selectionStart
+      // Find the nearest code block boundaries around cursor
+      const before = val.slice(0, pos)
+      const after = val.slice(pos)
+      const codeBlockMatch = before.match(/```[\s\S]*?$/)
+      if (codeBlockMatch) {
+        const start = before.lastIndexOf('```')
+        const endMatch = after.match(/\n```/)
+        const end = endMatch ? pos + endMatch.index! + 4 : val.length
+        const codeContent = val.slice(start, end)
+        try { navigator.clipboard?.writeText(codeContent) } catch {}
+      }
+      return
     }
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleSubmit() }
     if (e.key === 'Escape') setShowSlash(false)
@@ -494,7 +543,7 @@ export default function ChatInput() {
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning || (isStreaming && !isLooping)} />
           {isArenaRunning || isStreaming ? (
-            <button onClick={stopGeneration} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
+            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
               <Square size={14} />
             </button>
           ) : (
@@ -605,6 +654,7 @@ function AgentModeSelector({ mode, onChange }: { mode: AgentMode; onChange: (v: 
 function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   const statusLines = useStore((s) => s.statusLinesByMessage)
   const [status, setStatus] = useState('')
+  const [stopped, setStopped] = useState(false)
 
   useEffect(() => {
     if (!sessionId) return
@@ -617,12 +667,33 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
     setStatus(latest)
   }, [statusLines, sessionId])
 
-  if (!status) return null
+  // Listen for stop generation event
+  useEffect(() => {
+    const handler = () => setStopped(true)
+    window.addEventListener('aether:generation-stopped', handler)
+    return () => window.removeEventListener('aether:generation-stopped', handler)
+  }, [])
+
+  // Reset stopped state when streaming resumes
+  useEffect(() => {
+    if (status) setStopped(false)
+  }, [status])
+
+  if (!status && !stopped) return null
   return (
     <div className="px-0.5 mt-1.5 animate-blur-fade">
       <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-        <span>{status}</span>
+        {stopped ? (
+          <>
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            <span>生成已停止 · 按 Continue 继续</span>
+          </>
+        ) : (
+          <>
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+            <span>{status}</span>
+          </>
+        )}
       </div>
     </div>
   )
