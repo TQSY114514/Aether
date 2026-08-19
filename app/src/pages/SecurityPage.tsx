@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
-import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2 } from 'lucide-react'
+import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2, FolderOpen, SquareTerminal, Wifi } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 「安全面板」——让 Aether 的「默认安全」看得见：
 //   1. 安全能力清单(静态, 展示默认开启的硬加固)
-//   2. 最近 agent 活动(跨 session 审计轨迹)
-//   3. safe mode 一键 + 关键安全 flag
+//   2. 能力轴(filesystem / shell / network 的 allow / ask / deny)
+//   3. 最近 agent 活动(跨 session 审计轨迹)
+//   4. safe mode 一键 + 关键安全 flag
 // ─────────────────────────────────────────────────────────────────────────────
 
 // 默认开启的硬安全加固(非 flag, 始终生效)—— 证明「默认安全」。
@@ -26,6 +27,25 @@ const SECURITY_CAPABILITIES: { name: string; desc: string }[] = [
 // 在面板里展示的关键安全 flag（feature_flag.* 中的那些）。
 const SECURITY_FLAGS = ['agent.toolRouter', 'agent.worktreeIsolation', 'agent.backgroundReview', 'network.policy']
 
+// 能力轴定义
+type CapabilityValue = 'allow' | 'ask' | 'deny'
+interface CapabilityAxis {
+  key: string
+  label: string
+  icon: typeof FolderOpen
+  desc: string
+}
+const CAPABILITY_AXES: CapabilityAxis[] = [
+  { key: 'capability.filesystem', label: '文件系统', icon: FolderOpen, desc: 'read_file / write_file / edit_file 等文件操作' },
+  { key: 'capability.shell', label: 'Shell', icon: SquareTerminal, desc: 'run_command 等命令执行' },
+  { key: 'capability.network', label: '网络', icon: Wifi, desc: 'web_fetch / web_search 等网络访问' },
+]
+const CAPABILITY_OPTIONS: { value: CapabilityValue; label: string }[] = [
+  { value: 'allow', label: '允许' },
+  { value: 'ask', label: '询问' },
+  { value: 'deny', label: '拒绝' },
+]
+
 interface AuditRow {
   id: number
   session_id: number
@@ -40,6 +60,8 @@ export default function SecurityPage() {
   const [flags, setFlags] = useState<{ key: string; enabled: boolean; description: string }[]>([])
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [capabilities, setCapabilities] = useState<Record<string, CapabilityValue>>({})
+  const [capLoading, setCapLoading] = useState(true)
 
   const load = async () => {
     try {
@@ -53,7 +75,31 @@ export default function SecurityPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  const loadCapabilities = async () => {
+    setCapLoading(true)
+    try {
+      const entries = await Promise.all(
+        CAPABILITY_AXES.map(async (ax) => {
+          const v = await window.electronAPI.settings.get(ax.key)
+          return [ax.key, (v as CapabilityValue) || 'ask'] as [string, CapabilityValue]
+        })
+      )
+      setCapabilities(Object.fromEntries(entries))
+    } catch { /* ignore */ }
+    setCapLoading(false)
+  }
+
+  useEffect(() => { load(); loadCapabilities() }, [])
+
+  const setCapability = async (key: string, value: CapabilityValue) => {
+    setCapabilities((prev) => ({ ...prev, [key]: value }))
+    try {
+      await window.electronAPI.settings.set(key, value)
+    } catch {
+      toast('保存失败', { type: 'error' })
+      loadCapabilities()
+    }
+  }
 
   const applySafeMode = async () => {
     setBusy(true)
@@ -107,7 +153,54 @@ export default function SecurityPage() {
           </div>
         </div>
 
-        {/* 2. 安全 flag */}
+        {/* 2. 能力轴 */}
+        <div className="rounded-xl border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="flex items-center gap-1.5 mb-3">
+            <ShieldAlert size={15} style={{ color: 'var(--warning)' }} />
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>能力轴</span>
+          </div>
+          <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
+            控制 agent 在文件、Shell、网络三类能力上的默认行为。允许 = 自动执行，询问 = 每次确认，拒绝 = 直接拒绝。
+          </p>
+          {capLoading ? (
+            <div className="text-center py-4 text-xs" style={{ color: 'var(--text-muted)' }}>加载中…</div>
+          ) : (
+            <div className="space-y-2">
+              {CAPABILITY_AXES.map((ax) => {
+                const Icon = ax.icon
+                const current = capabilities[ax.key] || 'ask'
+                return (
+                  <div key={ax.key} className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2" style={{ backgroundColor: 'var(--content-bg)' }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Icon size={13} className="shrink-0" style={{ color: 'var(--text-secondary)' }} />
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{ax.label}</div>
+                        <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{ax.desc}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0 rounded-lg p-0.5" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                      {CAPABILITY_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setCapability(ax.key, opt.value)}
+                          className="px-2.5 py-1 text-[11px] rounded-md transition-colors"
+                          style={{
+                            backgroundColor: current === opt.value ? 'var(--accent)' : 'transparent',
+                            color: current === opt.value ? 'white' : 'var(--text-secondary)',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 3. 安全 flag */}
         {flags.length > 0 && (
           <div className="rounded-xl border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <div className="flex items-center gap-1.5 mb-3">
@@ -132,7 +225,7 @@ export default function SecurityPage() {
           </div>
         )}
 
-        {/* 3. 最近活动 */}
+        {/* 4. 最近活动 */}
         <div>
           <div className="flex items-center gap-1.5 mb-3">
             <Activity size={15} style={{ color: 'var(--text-secondary)' }} />

@@ -242,10 +242,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
   steering: {
-    steer: (params) => ipcRenderer.invoke('steering:steer', params),
-    followUp: (params) => ipcRenderer.invoke('steering:follow-up', params),
-    listSessions: () => ipcRenderer.invoke('steering:list-sessions'),
-  },
+      steer: (params) => ipcRenderer.invoke('steering:steer', params),
+      followUp: (params) => ipcRenderer.invoke('steering:follow-up', params),
+      listSessions: () => ipcRenderer.invoke('steering:list-sessions'),
+    },
+    planControl: {
+      skipStep: (params) => ipcRenderer.invoke('plan:skip-step', params),
+      retryStep: (params) => ipcRenderer.invoke('plan:retry-step', params),
+    },
   evolution: {
     runCycle: (params) => ipcRenderer.invoke('evolution:run-cycle', params),
     history: () => ipcRenderer.invoke('evolution:history'),

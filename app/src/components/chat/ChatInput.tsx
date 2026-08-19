@@ -3,7 +3,9 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react'
+import AgentStatusBar from './AgentStatusBar'
+import ModelRationale from './ModelRationale'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -80,6 +82,7 @@ export default function ChatInput() {
   // Per-session draft: each conversation has its own input draft persisted to
   // localStorage. Switching sessions loads that session's draft; the input no
   // longer leaks across chats. useState initializer reads once on mount.
+  const [showRationale, setShowRationale] = useState(false)
   const [input, setInput] = useState(() => {
     try {
       const sid = useStore.getState().currentSessionId
@@ -557,7 +560,7 @@ export default function ChatInput() {
         {!isStreaming && !isArenaRunning && (
           <div className="flex items-center gap-2 px-0.5 mt-1.5 flex-wrap">
             <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
-            <EffortControl level={effortLevel} onChange={setEffortLevel} />
+            {agentMode !== 'off' && <EffortControl level={effortLevel} onChange={setEffortLevel} />}
             <ModelSelector providers={providers} allModels={allModels}
               activeModelId={activeModelId}
               modelSuggestion={modelSuggestion}
@@ -588,6 +591,7 @@ export default function ChatInput() {
           </div>
         )}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
+        {isLooping && <AgentStatusBar sessionId={currentSessionId} />}
       </div>
     </div>
   )
@@ -748,6 +752,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
   modelSuggestion: ModelSuggestion | null
   scoreByModel: Record<number, number>
 }) {
+  const [showRationale, setShowRationale] = useState(false)
   const groups = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
     return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null
@@ -799,6 +804,23 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
           </span>
         )}
       </div>
+      {!isAutoSuggested && suggestedModel && (
+        <div className="mt-1 relative">
+          <button
+            onClick={() => setShowRationale(!showRationale)}
+            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-colors hover:bg-[var(--bg-secondary)]"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          >
+            {showRationale ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
+            {t('model.rationale.title', 'Model rationale')}
+          </button>
+          {showRationale && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 z-20">
+              <ModelRationale suggestion={modelSuggestion} onClose={() => setShowRationale(false)} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

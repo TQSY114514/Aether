@@ -222,7 +222,7 @@ export interface AppState {
   setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).
   permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous'; impact?: { summary: string; severity: string; affectedFiles: string[]; command?: string } | null }[]
-  resolvePermission: (reqId: string, allowed: boolean, remember?: boolean) => void
+  resolvePermission: (reqId: string, allowed: boolean, remember?: boolean | 'session' | 'remember') => void
   // Habit proposals awaiting user consent (promote vs dismiss). Surfaced as a
   // small inline card in ChatWindow — never auto-applied.
   proposedHabits: { key: string; imperative: string; reason: string }[]
