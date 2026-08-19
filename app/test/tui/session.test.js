@@ -10,6 +10,10 @@ import { join } from 'node:path'
 import { tuiReducer, initialTuiState } from '../../tui/reducer.js'
 import { runSession } from '../../tui/runSession.js'
 
+const encryptedApiKeyFixture = Buffer.from(
+  process.env.AETHER_TEST_ENCRYPTED_API_KEY || 'encrypted-test-fixture',
+).toString('base64')
+
 // 注入的 resolve 实现：跳过真实 DB。
 const stubResolve = () => ({
   provider: { id: 1, name: 'mock', api_url: 'http://127.0.0.1', api_key: 'k', api_format: 'openai' },
@@ -190,7 +194,7 @@ describe('runSession', () => {
 
   it('rejects encrypted safeStorage API keys with a clear error (headless)', async () => {
     const encResolve = () => ({
-      provider: { id: 1, name: 'my-provider', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+      provider: { id: 1, name: 'my-provider', api_url: 'http://x', api_key: encryptedApiKeyFixture, api_format: 'openai' },
       model: { id: 1, model_name: 'm' },
       db: null,
     })
@@ -222,7 +226,7 @@ describe('runSession', () => {
     try {
       let got
       const encResolve = () => ({
-        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: encryptedApiKeyFixture, api_format: 'openai' },
         model: { id: 1, model_name: 'm' },
         db: null,
       })
@@ -247,7 +251,7 @@ describe('runSession', () => {
     try {
       let got
       const encResolve = () => ({
-        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: encryptedApiKeyFixture, api_format: 'openai' },
         model: { id: 1, model_name: 'm' },
         db: null,
       })
