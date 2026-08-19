@@ -67,10 +67,15 @@ describe('redactMiddleware（P1-H1 新增模式）', () => {
   })
 
   it('整段遮蔽完整 JWT（header.payload.signature 都不残留）', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+    const jwt = process.env.AETHER_TEST_JWT || [
+      Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),
+      Buffer.from('{"sub":"redaction-test"}').toString('base64url'),
+      'test-signature-not-a-secret',
+    ].join('.')
+    const [header, , signature] = jwt.split('.')
     const out = redactMiddleware(`token: ${jwt}`)
-    expect(out).not.toContain('eyJhbGciOiJIUzI1NiIs')
-    expect(out).not.toContain('SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV')
+    expect(out).not.toContain(header)
+    expect(out).not.toContain(signature)
   })
 
   it('遮蔽裸 JWT header（长 eyJ 串）', () => {
