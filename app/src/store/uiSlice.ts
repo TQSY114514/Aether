@@ -12,12 +12,18 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
   tasks: [],
   tasksOpen: false,
   scores: [],
+  toasts: [],
 
   setCurrentView: (view) => set({ currentView: view }),
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 
   dismissToast: (id: number) => set((s) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })),
+  triggerToast: (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    const id = Date.now() + Math.random()
+    set((s) => ({ toasts: [...s.toasts, { id, message, type }] }))
+    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 3000)
+  },
 
   pinSession: async (id: number, pinned: number = 1) => {
     try { await window.electronAPI.session.pin(id, pinned) } catch {}
@@ -30,7 +36,7 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
     setTimeout(() => set((s) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })), 3000)
   },
 
-  dismissHint: (flag) => {
+  dismissHint: (flag: string) => {
     const seen = [...new Set([...get().seenHints, flag])]
     set((s) => ({ activeHints: s.activeHints.filter((h) => h.flag !== flag), seenHints: seen }))
     try { window.electronAPI.settings.set("seen_hints", JSON.stringify(seen)) } catch (e) { log.warn("dismissHint persist failed:", e) }

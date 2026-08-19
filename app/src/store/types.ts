@@ -274,6 +274,8 @@ export interface AppState {
   continueMessage: () => Promise<void>
 
   regenerate: () => Promise<void>
+  editLastUserMessage: () => void
+  undoLastEdit: () => void
   editMessage: (messageId: number, newContent: string) => Promise<void>
   sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[]) => Promise<void>
   loadMessages: (sessionId: number) => Promise<void>
@@ -356,7 +358,9 @@ export interface AppState {
   sidebarOpen: boolean
   toggleSidebar: () => void
   completionToasts: { id: number; sessionId: number; sessionTitle: string }[]
+  toasts: { id: number; message: string; type?: 'info' | 'success' | 'warning' | 'error' }[]
   dismissToast: (id: number) => void
+  triggerToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   pinSession: (id: number, pinned?: number) => Promise<void>
   notifyComplete: (sessionId: number, sessionTitle: string) => void
   // Agent workspace root (global, set from settings).
