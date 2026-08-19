@@ -10,6 +10,9 @@ import { join } from 'node:path'
 import { tuiReducer, initialTuiState } from '../../tui/reducer.js'
 import { runSession } from '../../tui/runSession.js'
 
+const encryptedApiKeyFixture = process.env.AETHER_TEST_ENCRYPTED_API_KEY
+  || Buffer.from('encrypted-test-fixture').toString('base64')
+
 // 注入的 resolve 实现：跳过真实 DB。
 const stubResolve = () => ({
   provider: { id: 1, name: 'mock', api_url: 'http://127.0.0.1', api_key: 'k', api_format: 'openai' },
@@ -190,7 +193,7 @@ describe('runSession', () => {
 
   it('rejects encrypted safeStorage API keys with a clear error (headless)', async () => {
     const encResolve = () => ({
-      provider: { id: 1, name: 'my-provider', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+      provider: { id: 1, name: 'my-provider', api_url: 'http://x', api_key: encryptedApiKeyFixture, api_format: 'openai' },
       model: { id: 1, model_name: 'm' },
       db: null,
     })
@@ -206,10 +209,10 @@ describe('runSession', () => {
     await runSession({
       dbPath: null,
       prompt: 'x',
-      apiKey: 'sk-plain',
+      apiKey: 'plain-test-key',
       dispatch: () => {},
       resolveImpl: encResolve,
-      runAgentImpl: async (opts) => { called = opts.provider.api_key === 'sk-plain'; return { text: '', toolCalls: [] } },
+      runAgentImpl: async (opts) => { called = opts.provider.api_key === 'plain-test-key'; return { text: '', toolCalls: [] } },
     })
     expect(called).toBe(true)
   })
@@ -218,11 +221,11 @@ describe('runSession', () => {
     const oldFile = process.env.AETHER_AUTH_FILE
     const tmp = join(tmpdir(), `auth-${Date.now()}.json`)
     process.env.AETHER_AUTH_FILE = tmp
-    writeFileSync(tmp, JSON.stringify({ '新疆': 'sk-from-auth' }), 'utf8')
+    writeFileSync(tmp, JSON.stringify({ '新疆': 'auth-test-key' }), 'utf8')
     try {
       let got
       const encResolve = () => ({
-        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: encryptedApiKeyFixture, api_format: 'openai' },
         model: { id: 1, model_name: 'm' },
         db: null,
       })
@@ -233,7 +236,7 @@ describe('runSession', () => {
         resolveImpl: encResolve,
         runAgentImpl: async (opts) => { got = opts.provider.api_key; return { text: '', toolCalls: [] } },
       })
-      expect(got).toBe('sk-from-auth')
+      expect(got).toBe('auth-test-key')
     } finally {
       if (oldFile === undefined) delete process.env.AETHER_AUTH_FILE
       else process.env.AETHER_AUTH_FILE = oldFile
@@ -243,11 +246,11 @@ describe('runSession', () => {
 
   it('falls back to AETHER_API_KEY env when stored key is encrypted (headless)', async () => {
     const old = process.env.AETHER_API_KEY
-    process.env.AETHER_API_KEY = 'sk-from-env'
+    process.env.AETHER_API_KEY = 'env-test-key'
     try {
       let got
       const encResolve = () => ({
-        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: 'QUJDREVGR0hJSktMTU5PUFE=', api_format: 'openai' },
+        provider: { id: 1, name: '新疆', api_url: 'http://x', api_key: encryptedApiKeyFixture, api_format: 'openai' },
         model: { id: 1, model_name: 'm' },
         db: null,
       })
@@ -258,7 +261,7 @@ describe('runSession', () => {
         resolveImpl: encResolve,
         runAgentImpl: async (opts) => { got = opts.provider.api_key; return { text: '', toolCalls: [] } },
       })
-      expect(got).toBe('sk-from-env')
+      expect(got).toBe('env-test-key')
     } finally {
       if (old === undefined) delete process.env.AETHER_API_KEY
       else process.env.AETHER_API_KEY = old
