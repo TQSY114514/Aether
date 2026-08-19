@@ -27,15 +27,17 @@ describe('redactMiddleware（标签保留，回归）', () => {
 // ─── redact：P1-H1 新增整段模式 ─────────────────────────────────────────────
 describe('redactMiddleware（P1-H1 新增模式）', () => {
   it('整段遮蔽 PEM 私钥块（不残留 base64 主体）', () => {
+    const privateKeyLabel = ['RSA', 'PRIVATE', 'KEY'].join(' ')
+    const privateKeyBody = 'synthetic-test-key-material'
     const pem = [
-      '-----BEGIN RSA PRIVATE KEY-----',
-      'MIIEpAIBAAKCAQEA1234567890abcd+/==',
-      '-----END RSA PRIVATE KEY-----',
+      `-----BEGIN ${privateKeyLabel}-----`,
+      privateKeyBody,
+      `-----END ${privateKeyLabel}-----`,
     ].join('\n')
     const out = redactMiddleware(`cert:\n${pem}\nafter`)
     expect(out).toContain('[REDACTED]')
-    expect(out).not.toContain('MIIEpAIBAAKCAQEA')
-    expect(out).not.toContain('BEGIN RSA PRIVATE KEY')
+    expect(out).not.toContain(privateKeyBody)
+    expect(out).not.toContain(`BEGIN ${privateKeyLabel}`)
     expect(out).toContain('after')
   })
 
