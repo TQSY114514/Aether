@@ -49,6 +49,8 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   const saveSessionConfig = useStore((s) => s.saveSessionConfig)
   const setCurrentView = useStore((s) => s.setCurrentView)
   const setAgentMode = useStore((s) => s.setAgentMode)
+  const setEffortLevel = useStore((s) => s.setEffortLevel)
+  const effortLevel = useStore((s) => s.effortLevel)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
 
   useEffect(() => { if (open) { setQ(''); setSel(0); setTimeout(() => inputRef.current?.focus(), 0) } }, [open])
@@ -56,7 +58,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   const commands = useMemo<Cmd[]>(() => {
     const cmds: Cmd[] = []
     // Pages
-    const pages: [string, ReturnType<typeof t> extends string ? string : string, typeof Search][] = [
+    const pages: [string, string, typeof Search][] = [
       ['chat', t('sidebar.nav.chat') || 'Chat', MessageSquare],
       ['models', t('sidebar.nav.models'), Server],
       ['agents', t('sidebar.nav.personas'), MessageSquare],
@@ -77,9 +79,23 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     modes.forEach(([mode, label, icon]) => {
       cmds.push({ id: `mode-${mode}`, label: `${t('cmd.set_mode')} ${label}`, group: t('cmd.group.agent'), icon, run: () => { setAgentMode(mode as any); onClose() } })
     })
-    // Sessions
-    sessions.slice(0, 30).forEach((s) => {
-      cmds.push({ id: `sess-${s.id}`, label: s.title || t('chat.new'), hint: t('cmd.switch_session'), group: t('cmd.group.sessions'), icon: MessageSquare, run: () => { selectSession(s.id); setCurrentView('chat'); onClose() } })
+    // Effort levels
+    const efforts: [string, string][] = [
+      ['off', t('effort.off')],
+      ['low', t('effort.low')],
+      ['medium', t('effort.medium')],
+      ['high', t('effort.high')],
+    ]
+    efforts.forEach(([level, label]) => {
+      cmds.push({ id: `effort-${level}`, label: `${t('cmd.set_effort')} ${label}`, group: t('cmd.group.effort'), icon: Zap, run: () => { setEffortLevel(level as any); onClose() } })
+    })
+    // Recent sessions (last 5)
+    sessions.slice(0, 5).forEach((s) => {
+      cmds.push({ id: `sess-${s.id}`, label: s.title || t('chat.new'), hint: t('cmd.switch_session'), group: t('cmd.group.recent_sessions'), icon: MessageSquare, run: () => { selectSession(s.id); setCurrentView('chat'); onClose() } })
+    })
+    // Sessions (all)
+    sessions.slice(5, 30).forEach((s) => {
+      cmds.push({ id: `sess-all-${s.id}`, label: s.title || t('chat.new'), hint: t('cmd.switch_session'), group: t('cmd.group.sessions'), icon: MessageSquare, run: () => { selectSession(s.id); setCurrentView('chat'); onClose() } })
     })
     // Models (apply to current session)
     allModels.slice(0, 40).forEach((m) => {
@@ -89,7 +105,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
       } })
     })
     return cmds
-  }, [sessions, allModels, setCurrentView, setAgentMode, selectSession, saveSessionConfig, currentSessionId, onClose])
+  }, [sessions, allModels, setCurrentView, setAgentMode, setEffortLevel, selectSession, saveSessionConfig, currentSessionId, onClose])
 
   const filtered = useMemo(() => {
     if (!q.trim()) return commands

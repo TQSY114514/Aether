@@ -7,6 +7,7 @@ import log from "@/utils/logger"
 import { ensureChunkListener, ensureToolCallListener, ensureLoopStateListener, setStoppingSessionId } from "./listeners"
 
 const _injectedMsgIds = new Set<number>()
+const _undoStack: { sessionId: number; messages: Message[] }[] = []
 
 function clearStreaming(sid: number | null) {
   return (s: AppState): Partial<AppState> => {
@@ -54,8 +55,6 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   refreshModelSuggestion: async () => {
     const { currentSessionId, messages } = get()
     if (currentSessionId == null) return
-    // Use the latest user message as the routing basis; new sessions with no
-    // user message yet have nothing to route on.
     const lastUserMsg = [...messages].reverse().find(m => m.role === "user")
     if (!lastUserMsg) return
     try {
@@ -251,6 +250,31 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     } catch (err) {
       set(clearStreaming(currentSessionId))
       log.error("regenerate error:", err)
+    }
+  },
+
+  editLastUserMessage: () => {
+    const { currentSessionId, messages } = get()
+    if (!currentSessionId) return
+    const userMsgs = messages.filter(m => m.session_id === currentSessionId && m.role === 'user')
+    if (userMsgs.length === 0) return
+    const lastUser = userMsgs[userMsgs.length - 1]
+    // Push current state to undo stack before editing
+    _undoStack.push({ sessionId: currentSessionId, messages: [...messages] })
+    // Dispatch a custom event that ChatInput listens for
+    window.dispatchEvent(new CustomEvent('aether:edit-last-user', { detail: { content: lastUser.content } }))
+  },
+
+  undoLastEdit: () => {
+    const { currentSessionId } = get()
+    if (!currentSessionId) return
+    // Find the last undo entry for this session
+    for (let i = _undoStack.length - 1; i >= 0; i--) {
+      if (_undoStack[i].sessionId === currentSessionId) {
+        const entry = _undoStack.splice(i, 1)[0]
+        set({ messages: entry.messages })
+        return
+      }
     }
   },
 
