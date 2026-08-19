@@ -10,6 +10,11 @@ import { describe, it, expect } from 'vitest'
 import { applyMiddleware, redactMiddleware, isExternalBySource } from '../electron/llm/toolResultMiddleware'
 import { EXTERNAL_TOOLS, MAX_EXTERNAL_CHARS } from '../electron/llm/promptInjection'
 
+function createTestJwt(payload = { sub: 'test-user' }) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  return [encode({ alg: 'none', typ: 'JWT' }), encode(payload), 'test-signature-placeholder'].join('.')
+}
+
 // ─── redact：既有标签保留行为不回归 ─────────────────────────────────────────
 describe('redactMiddleware（标签保留，回归）', () => {
   it('保留 api_key= 标签，遮蔽值', () => {
@@ -67,10 +72,9 @@ describe('redactMiddleware（P1-H1 新增模式）', () => {
   })
 
   it('整段遮蔽完整 JWT（header.payload.signature 都不残留）', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+    const jwt = process.env.AETHER_TEST_JWT || createTestJwt()
     const out = redactMiddleware(`token: ${jwt}`)
-    expect(out).not.toContain('eyJhbGciOiJIUzI1NiIs')
-    expect(out).not.toContain('SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV')
+    expect(out).toBe('token: [REDACTED]')
   })
 
   it('遮蔽裸 JWT header（长 eyJ 串）', () => {
@@ -79,9 +83,9 @@ describe('redactMiddleware（P1-H1 新增模式）', () => {
   })
 
   it('整段模式先于标签模式：token: <JWT> 不泄露签名段', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.dozjgNryP4J3jVmNHl0w5Nghijklmnopqrstuv'
+    const jwt = createTestJwt({ sub: '1' })
     const out = redactMiddleware(`token: ${jwt}`)
-    expect(out).not.toContain('dozjgNryP4J3jVmNHl0w5Nghijklmnopqrstuv')
+    expect(out).toBe('token: [REDACTED]')
   })
 })
 
