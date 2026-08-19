@@ -97,7 +97,7 @@
     "electron-updater": "^6.8.9",
     "highlight.js": "^11.11.1",
     "js-tiktoken": "^1.0.21",
-    "lucide-react": "^0.400.0",
+    "lucide-react": "^1.31.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zustand": "^5.0.15"
