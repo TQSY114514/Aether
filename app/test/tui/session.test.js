@@ -4,6 +4,7 @@
 // 渲染消息含 "hi"（App 渲染的正是 reducer state）。
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from 'vitest'
+import { randomUUID } from 'node:crypto'
 import { writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -202,14 +203,15 @@ describe('runSession', () => {
       runAgentImpl: async () => ({ text: '', toolCalls: [] }),
     })).rejects.toThrow(/encrypted with the desktop app/)
     // 传 --api-key 明文覆盖时不再拦截
+    const plaintextApiKey = process.env.AETHER_TEST_API_KEY || randomUUID()
     let called = false
     await runSession({
       dbPath: null,
       prompt: 'x',
-      apiKey: 'sk-plain',
+      apiKey: plaintextApiKey,
       dispatch: () => {},
       resolveImpl: encResolve,
-      runAgentImpl: async (opts) => { called = opts.provider.api_key === 'sk-plain'; return { text: '', toolCalls: [] } },
+      runAgentImpl: async (opts) => { called = opts.provider.api_key === plaintextApiKey; return { text: '', toolCalls: [] } },
     })
     expect(called).toBe(true)
   })
