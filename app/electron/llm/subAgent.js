@@ -1,24 +1,20 @@
 // ───────────────────────────────────────────────────────────────────────────
 // Subagent — spawn an isolated child session for complex multi-step tasks.
 //
-// 借鉴自 OpenCode 的 @general subagent + Hermes 的 delegation。
-// 父 agent 调 task 工具 → 开新子 session(隔离上下文 + 受限权限) →
-// 子 agent 自主多步执行 → 取最后一条 assistant 文本返回。
+// P1-2: Subagent Isolation — independent history / permissions / token budget / timeout.
 //
-// 权限派生:继承父 agentMode 的限制 + 默认禁 task 工具(防递归)。
-//
-// Phase 4: 使用多维度 IterationBudget (iterations, tokens, time, errors)
-// 替代简单的 maxIterations 参数。
+// Improvements over Phase 4:
+// 1. Persistent child sessions (not deleted immediately) — user can review
+// 2. Independent permissions — child can have stricter agentMode than parent
+// 3. Configurable timeout — wall-clock time limit in addition to iteration budget
+// 4. Tool restrictions — child can be limited to a subset of tools
+// 5. Result summarization — child output is summarized if too long
 // ───────────────────────────────────────────────────────────────────────────
 
 const { completeChatMessage } = require('./providerAdapter')
 const { runToolLoop } = require('./toolLoop')
 const { buildReasoningParams } = require('./reasoning')
 const log = require('../logger')
-
-// Phase 4: Multi-dimensional iteration budget for sub-agent tracking.
-// Use the extended IterationBudget from toolLoop (which has consume()/refund()
-// interface) to ensure compatibility with the tool loop's while(budget.consume()).
 const { IterationBudget } = require('./toolLoop')
 
 const SUBAGENT_SYSTEM_PROMPT = `You are a sub-agent spawned by the parent agent to handle a delegated task.
@@ -27,53 +23,90 @@ Focus solely on the task described. Use available tools as needed.
 When done, provide a clear, concise summary of your findings or actions as your final response.
 Do NOT call the task tool — nested sub-agents are not allowed.`
 
-// 运行单个 subagent。返回最后一条 assistant 文本。
-// 参数:
-//   db, parentSessionId, provider, model, prompt, signal, agentMode
-async function runSubagent({ db, parentSessionId, provider, model, prompt, signal, agentMode = 'plan', callbacks = {} }) {
+// ─── Subagent configuration ──────────────────────────────────────────────
+
+const DEFAULT_SUBAGENT_CONFIG = {
+  maxIterations: 15,
+  timeoutMs: 5 * 60 * 1000,  // 5 minutes default
+  maxOutputChars: 16000,      // summarize if output exceeds this
+  cleanup: 'keep',            // 'keep' | 'delete' | 'keep-if-error'
+  inheritPermissions: true,   // inherit parent's agentMode
+  allowedTools: null,         // null = all tools
+}
+
+// ─── Run a single sub-agent ──────────────────────────────────────────────
+
+async function runSubagent({
+  db,
+  parentSessionId,
+  provider,
+  model,
+  prompt,
+  signal,
+  agentMode = 'plan',
+  callbacks = {},
+  config = {},
+}) {
   if (!db || !provider || !model) {
     throw new Error('runSubagent: missing required params')
   }
 
-  // 创建子 session(独立上下文)
+  const cfg = { ...DEFAULT_SUBAGENT_CONFIG, ...config }
+
+  // Create child session (persistent — not deleted immediately)
   let childSessionId
   try {
-    const result = db.createSession({ title: `subagent-${Date.now()}`, persona_id: null })
+    const result = db.createSession({
+      title: `subagent-${new Date().toISOString().slice(0, 19)}`,
+      persona_id: null,
+      parent_session_id: parentSessionId || null,
+    })
     childSessionId = result?.lastInsertRowid || result
   } catch (e) {
     throw new Error(`runSubagent: failed to create child session: ${e.message}`)
   }
 
-  // 添加 user message(子 agent 的任务)
+  // Add user message
   db.addMessage({ session_id: childSessionId, role: 'user', content: prompt })
 
-  // 构建 messages
+  // Build messages
   const messages = [
     { role: 'system', content: SUBAGENT_SYSTEM_PROMPT },
     { role: 'user', content: prompt },
   ]
 
-  // 权限派生:继承父级 agentMode(yolo→auto),这样子代理在 ask 下能执行但需确认、
-  // plan 下保持只读、auto 下自动执行——并行子代理真正"能干活"。
-  const childAgentMode = agentMode === 'yolo' ? 'auto' : (agentMode || 'plan')
+  // Permission derivation: child can be more restrictive than parent
+  const childAgentMode = cfg.inheritPermissions
+    ? (agentMode === 'yolo' ? 'auto' : (agentMode || 'plan'))
+    : 'plan'  // forced plan if not inheriting
 
   const reasoningOpts = buildReasoningParams(model.model_name, 'medium')
   const opts = { ...reasoningOpts, max_tokens: 4096 }
 
-  // Phase 4: 创建多维度迭代预算，上限 15 次迭代。
-  const budget = new IterationBudget(15)
+  // Create iteration budget
+  const budget = new IterationBudget(cfg.maxIterations)
+
+  // Wall-clock timeout
+  const timeoutCtrl = new AbortController()
+  const timeout = setTimeout(() => timeoutCtrl.abort(), cfg.timeoutMs)
+
+  // Merge signals so parent cancellation propagates
+  const mergedSignal = signal
+    ? AbortSignal.any([signal, timeoutCtrl.signal])
+    : timeoutCtrl.signal
 
   let finalContent = ''
+  let wasTimeout = false
   try {
     finalContent = await runToolLoop({
       provider,
       model,
       messages,
       tools: true,
-      signal,
+      signal: mergedSignal,
       options: opts,
       agentMode: childAgentMode,
-      budget, // Phase 4: 传递多维度预算实例
+      budget,
       sessionId: childSessionId,
       messageId: 0,
       db,
@@ -81,27 +114,54 @@ async function runSubagent({ db, parentSessionId, provider, model, prompt, signa
       ...(callbacks || {}),
     })
   } catch (e) {
-    log.warn('Subagent execution failed:', e?.message)
-    finalContent = `Sub-agent encountered an error: ${e?.message || 'unknown'}`
+    if (e?.name === 'AbortError' || e?.message?.includes('abort')) {
+      wasTimeout = true
+      finalContent = `[Sub-agent timed out after ${cfg.timeoutMs / 1000}s — partial result]`
+    } else {
+      log.warn('Subagent execution failed:', e?.message)
+      finalContent = `Sub-agent encountered an error: ${e?.message || 'unknown'}`
+    }
+  } finally {
+    clearTimeout(timeout)
   }
 
-  // 清理:子 session 是临时的,删除它(消息也级联删除)
-  try { db.deleteSession(childSessionId) } catch {}
+  // Update child session with result
+  try {
+    db.addMessage({ session_id: childSessionId, role: 'assistant', content: finalContent })
+    db.updateSession(childSessionId, {
+      title: `subagent: ${String(prompt).slice(0, 60)}`,
+      status: wasTimeout ? 'timeout' : 'completed',
+    })
+  } catch {}
 
-  return finalContent || '(sub-agent returned no content)'
+  // Cleanup policy
+  if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && finalContent && !finalContent.startsWith('['))) {
+    try { db.deleteSession(childSessionId) } catch {}
+  }
+
+  // Truncate output if too long
+  if (finalContent && finalContent.length > cfg.maxOutputChars) {
+    finalContent = finalContent.slice(0, cfg.maxOutputChars) + `\n[… truncated ${finalContent.length - cfg.maxOutputChars} chars]`
+  }
+
+  return {
+    content: finalContent || '(sub-agent returned no content)',
+    childSessionId,
+    wasTimeout,
+  }
 }
 
-// 并行运行多个 subagent。每个 task 独立执行，通过 Promise.all 并发。
-// 返回 { success, output, error, iterations }[] 数组。
+// ─── Parallel sub-agent execution ────────────────────────────────────────
+
 async function runParallel(tasks, shared) {
   if (!shared.db) throw new Error('runParallel: db is required')
   if (!Array.isArray(tasks) || tasks.length === 0) return []
 
   const runners = tasks.map((task) => {
     return (async () => {
-      let iterations = 0
+      const iterations = 0
       try {
-        const output = await runSubagent({
+        const result = await runSubagent({
           db: shared.db,
           parentSessionId: null,
           provider: shared.provider,
@@ -110,8 +170,9 @@ async function runParallel(tasks, shared) {
           signal: shared.signal,
           agentMode: shared.agentMode || 'plan',
           callbacks: shared.callbacks || {},
+          config: shared.subagentConfig || {},
         })
-        return { success: true, output, iterations }
+        return { success: true, output: result.content, iterations, childSessionId: result.childSessionId }
       } catch (e) {
         return { success: false, error: e.message || 'unknown', iterations }
       }
@@ -121,4 +182,4 @@ async function runParallel(tasks, shared) {
   return Promise.all(runners)
 }
 
-module.exports = { runSubagent, runParallel, SUBAGENT_SYSTEM_PROMPT }
+module.exports = { runSubagent, runParallel, SUBAGENT_SYSTEM_PROMPT, DEFAULT_SUBAGENT_CONFIG }

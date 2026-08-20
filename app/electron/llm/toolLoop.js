@@ -212,8 +212,10 @@ function agentModeToPermissionMode(agentMode) {
   const map = {
     'plan': 'ReadOnly',
     'ask': 'Prompt',
+    'auto_confirm': 'WorkspaceWrite',
     'auto': 'WorkspaceWrite',
     'yolo': 'Allow',
+    'custom': 'Prompt',  // custom mode uses its own policy from settings
   }
   return map[agentMode] || 'Prompt'
 }
@@ -308,9 +310,23 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const metricsRunId = toolMetrics.recordRun({ sessionId })
 
   // Phase 4: Initialize permission policy from agent mode.
-  const permissionPolicy = new permissions.PermissionPolicy(
-    permissions.PermissionMode[agentModeToPermissionMode(agentMode) || 'Prompt']
-  )
+  let permissionPolicy
+  if (agentMode === 'custom' && db) {
+    // Custom mode: build policy from user settings (custom_mode.* keys)
+    try {
+      const customMode = require('./customMode')
+      const { policy, errors } = customMode.buildCustomPolicy(db)
+      permissionPolicy = policy
+      if (errors && errors.length) log.warn('customMode policy errors:', errors.join('; '))
+    } catch (e) {
+      log.warn('customMode build failed, falling back to Prompt:', e?.message)
+      permissionPolicy = new permissions.PermissionPolicy(permissions.PermissionMode.Prompt)
+    }
+  } else {
+    permissionPolicy = new permissions.PermissionPolicy(
+      permissions.PermissionMode[agentModeToPermissionMode(agentMode) || 'Prompt']
+    )
+  }
   // C1 修复: 按各工具 risk 填充权限需求档位 —— safe → ReadOnly（任何模式
   // 直接放行）, dangerous → DangerFullAccess（plan/auto 拒绝, ask 走下方
   // 用户确认门）。未登记的工具（如陌生 MCP 工具）回落 requiredModeFor 的

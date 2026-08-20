@@ -13,17 +13,18 @@ const agentCore = require('../llm/agentCore')
 const { taskDbAdapter } = require('../llm/taskDbAdapter')
 const autoMemory = require('../llm/autoMemory')
 const { classifyAgentMode } = require('../llm/modeClassifier')
+const agentRoles = require('../llm/agentRoles')
+const memorySkillBridge = require('../llm/memorySkillBridge')
+const customMode = require('../llm/customMode')
+const codebaseAnalyzer = require('../context/codebaseAnalyzer')
+const contextBudget = require('../llm/contextBudget')
 
 const sdk = {
-  // agent 执行核心（原签名透出；后续新增参数一律可选追加，不破坏既有调用方）
   runAgent: agentCore.runAgent,
   openDatabase: agentCore.openDatabase,
   resolveProviderModel: agentCore.resolveProviderModel,
-
-  // 任务引擎 DB 适配器工厂（bare better-sqlite3 → database.js 同款业务 API）
   taskDbAdapter,
 
-  // 记忆（autoMemory，全部 Electron-free，db 由调用方注入）
   memory: {
     prefetch: autoMemory.prefetch,
     recall: autoMemory.recall,
@@ -35,7 +36,62 @@ const sdk = {
     detectConflict: autoMemory.detectConflict,
   },
 
-  // 共享 agentMode 分类器（ask/plan/auto）
+  // Agent roles (OpenCode/Hermes-style specialized sub-agents)
+  agentRoles: {
+    listRoles: agentRoles.listRoles,
+    getRole: agentRoles.getRole,
+    buildRolePrompt: agentRoles.buildRolePrompt,
+    buildToolFilter: agentRoles.buildToolFilter,
+    getRoleDefaultMode: agentRoles.getRoleDefaultMode,
+    ROLE_NAMES: agentRoles.ROLE_NAMES,
+  },
+
+  // Memory → Skill bridge (auto-draft skills from accumulated memories)
+  memorySkillBridge: {
+    clusterMemories: memorySkillBridge.clusterMemories,
+    generateDraftSkill: memorySkillBridge.generateDraftSkill,
+    saveDraftSkill: memorySkillBridge.saveDraftSkill,
+    runMemoryAudit: memorySkillBridge.runMemoryAudit,
+    listDraftSkills: memorySkillBridge.listDraftSkills,
+    promoteDraftSkill: memorySkillBridge.promoteDraftSkill,
+  },
+
+  // Custom mode policy (build PermissionPolicy from user settings)
+  customMode: {
+    buildCustomPolicy: customMode.buildCustomPolicy,
+    getCustomPolicySummary: customMode.getCustomPolicySummary,
+    saveCustomPolicy: customMode.saveCustomPolicy,
+  },
+
+  // Codebase analysis (Repository Understanding Layer)
+  codebase: {
+    detectFrameworks: codebaseAnalyzer.detectFrameworks,
+    detectEntryPoints: codebaseAnalyzer.detectEntryPoints,
+    detectApiRoutes: codebaseAnalyzer.detectApiRoutes,
+    detectDataModels: codebaseAnalyzer.detectDataModels,
+    detectConfigFiles: codebaseAnalyzer.detectConfigFiles,
+    analyzeImpact: codebaseAnalyzer.analyzeImpact,
+    scoreRelevance: codebaseAnalyzer.scoreRelevance,
+    analyzeCodebase: codebaseAnalyzer.analyzeCodebase,
+  },
+
+  // Gateway (P2-2)
+  gateway: {
+    Gateway: require('../gateway/index').Gateway,
+    gateway: require('../gateway/index').gateway,
+  },
+
+  // Context Budget Manager (P1-1)
+  contextBudget: {
+    calculateBudget: contextBudget.calculateBudget,
+    classifyToolResult: contextBudget.classifyToolResult,
+    getTruncationLimit: contextBudget.getTruncationLimit,
+    applyTieredTruncation: contextBudget.applyTieredTruncation,
+    pruneOlderBlock: contextBudget.pruneOlderBlock,
+    TIER_CONFIG: contextBudget.TIER_CONFIG,
+    TOOL_TRUNCATION: contextBudget.TOOL_TRUNCATION,
+  },
+
   classifyAgentMode,
 }
 

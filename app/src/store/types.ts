@@ -218,8 +218,8 @@ export interface AppState {
   //   'yolo'         — FULL permission: skip the workspace path guard AND the command blocklist.
   //                    DANGER: the model can write any file and run any command. Only for
   //                    trusted models + throwaway VMs. Warned on enable.
-  agentMode: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'
-  setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo') => void
+  agentMode: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
+  setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom') => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).
   permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous'; impact?: { summary: string; severity: string; affectedFiles: string[]; command?: string } | null }[]
   resolvePermission: (reqId: string, allowed: boolean, remember?: boolean | 'session' | 'remember') => void
