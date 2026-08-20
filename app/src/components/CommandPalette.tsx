@@ -50,6 +50,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   const setCurrentView = useStore((s) => s.setCurrentView)
   const setAgentMode = useStore((s) => s.setAgentMode)
   const setEffortLevel = useStore((s) => s.setEffortLevel)
+  const setThinkingEnabled = useStore((s) => s.setThinkingEnabled)
   const effortLevel = useStore((s) => s.effortLevel)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
 
@@ -81,14 +82,15 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     })
     // Effort levels
     const efforts: [string, string][] = [
-      ['off', t('effort.off')],
       ['low', t('effort.low')],
       ['medium', t('effort.medium')],
       ['high', t('effort.high')],
     ]
     efforts.forEach(([level, label]) => {
-      cmds.push({ id: `effort-${level}`, label: `${t('cmd.set_effort')} ${label}`, group: t('cmd.group.effort'), icon: Zap, run: () => { setEffortLevel(level as any); onClose() } })
+      cmds.push({ id: `effort-${level}`, label: `${t('cmd.set_effort')} ${label}`, group: t('cmd.group.effort'), icon: Zap, run: () => { setThinkingEnabled(true); setEffortLevel(level as any); onClose() } })
     })
+    // Thinking toggle
+    cmds.push({ id: `thinking-off`, label: `${t('cmd.set_effort')} ${t('effort.off')}`, group: t('cmd.group.effort'), icon: Zap, run: () => { setThinkingEnabled(false); onClose() } })
     // Recent sessions (last 5)
     sessions.slice(0, 5).forEach((s) => {
       cmds.push({ id: `sess-${s.id}`, label: s.title || t('chat.new'), hint: t('cmd.switch_session'), group: t('cmd.group.recent_sessions'), icon: MessageSquare, run: () => { selectSession(s.id); setCurrentView('chat'); onClose() } })

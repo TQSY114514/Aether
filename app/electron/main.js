@@ -393,6 +393,14 @@ function setupIpcHandlers() {
   }
 }
 
+// ── Windows AppUserModelID ────────────────────────────────────────────────
+// Without this, the taskbar/notification grouping falls back to electron.exe's
+// default icon (dev mode shows the Electron logo instead of Aether's icon).
+// Must be set before any window is created; matches electron-builder appId.
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.aetherai.app')
+}
+
 app.whenReady().then(async () => {
   initAppReady()
   await db.initDatabase()

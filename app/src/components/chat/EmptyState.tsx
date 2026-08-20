@@ -27,6 +27,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
   const allModels = useStore((s) => s.allModels)
   const sessionConfigs = useStore((s) => s.sessionConfigs)
   const effortLevel = useStore((s) => s.effortLevel)
+  const thinkingEnabled = useStore((s) => s.thinkingEnabled)
   const defaultModelId = useStore((s) => s.defaultModelId)
 
   const startWith = async (prompt: string) => {
@@ -56,7 +57,8 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
     }
     return allModels.find(m => m.is_primary) || allModels[0]
   }, [currentSessionId, sessionConfigs, defaultModelId, allModels])
-  const effortLabel = { off: t('effort.off'), low: t('effort.low'), medium: t('effort.medium'), high: t('effort.high') }[effortLevel]
+  const effortLabel = { low: t('effort.low'), medium: t('effort.medium'), high: t('effort.high') }[effortLevel]
+  const showEffort = thinkingEnabled
 
   return (
     <div className="flex-1 flex items-center justify-center px-6 py-12">
@@ -80,7 +82,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               <Cpu size={11} className="text-[var(--text-muted)]" />{activeModel.display_name || activeModel.model_name}
             </span>
-            {effortLevel !== 'off' && (
+            {showEffort && (
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                 <Brain size={11} style={{ color: 'var(--accent)' }} />{t('empty.effort')}: {effortLabel}
               </span>

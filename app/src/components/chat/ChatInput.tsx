@@ -3,9 +3,8 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw } from 'lucide-react'
 import AgentStatusBar from './AgentStatusBar'
-import ModelRationale from './ModelRationale'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -82,7 +81,6 @@ export default function ChatInput() {
   // Per-session draft: each conversation has its own input draft persisted to
   // localStorage. Switching sessions loads that session's draft; the input no
   // longer leaks across chats. useState initializer reads once on mount.
-  const [showRationale, setShowRationale] = useState(false)
   const [input, setInput] = useState(() => {
     try {
       const sid = useStore.getState().currentSessionId
@@ -106,6 +104,7 @@ export default function ChatInput() {
     sendMessage, enqueueMessage, removeQueued, stopGeneration,
     streamingBySession, currentSessionId, createSession,
     chatMode, arenaModelIds, runArena, effortLevel, setEffortLevel,
+    thinkingEnabled, setThinkingEnabled,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
     loopingSessions,
@@ -116,7 +115,8 @@ export default function ChatInput() {
     currentSessionId: s.currentSessionId, createSession: s.createSession,
     chatMode: s.chatMode, arenaModelIds: s.arenaModelIds,
     runArena: s.runArena, effortLevel: s.effortLevel,
-    setEffortLevel: s.setEffortLevel, providers: s.providers,
+    setEffortLevel: s.setEffortLevel, thinkingEnabled: s.thinkingEnabled,
+    setThinkingEnabled: s.setThinkingEnabled, providers: s.providers,
     allModels: s.allModels, saveSessionConfig: s.saveSessionConfig,
     queuedMessages: s.queuedMessages,
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
@@ -558,9 +558,18 @@ export default function ChatInput() {
         </div>
 
         {!isStreaming && !isArenaRunning && (
-          <div className="flex items-center gap-2 px-0.5 mt-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 px-0.5 mt-1.5 flex-nowrap">
+            <div className="flex items-center gap-1 shrink-0">
+              {slashCommands.slice(0, 2).map((cmd) => (
+                <button key={cmd.id} onClick={() => {
+                  const prompt = cmd.prompt
+                  if (prompt) setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
+                  textareaRef.current?.focus()
+                }} className="qaction">{cmd.name}</button>
+              ))}
+            </div>
             <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
-            {agentMode !== 'off' && <EffortControl level={effortLevel} onChange={setEffortLevel} />}
+            <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
             <ModelSelector providers={providers} allModels={allModels}
               activeModelId={activeModelId}
               modelSuggestion={modelSuggestion}
@@ -573,21 +582,12 @@ export default function ChatInput() {
                   useStore.getState().setDefaultModel(mid)
                 }
               }} />
-            <div className="flex items-center gap-1.5">
-              {slashCommands.slice(0, 3).map((cmd) => (
-                <button key={cmd.id} onClick={() => {
-                  const prompt = cmd.prompt
-                  if (prompt) setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
-                  textareaRef.current?.focus()
-                }} className="qaction">{cmd.name}</button>
-              ))}
-            </div>
             {totalInputTokens > 0 && (
-              <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
+              <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
                 {t('chat.tokens_estimate', String(totalInputTokens))}
               </span>
             )}
-            <span className="text-[10px] text-[var(--text-muted)] ml-auto">{t('empty.hint.slash')}</span>
+            <span className="text-[10px] text-[var(--text-muted)] ml-auto shrink-0">{t('empty.hint.slash')}</span>
           </div>
         )}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
@@ -597,25 +597,32 @@ export default function ChatInput() {
   )
 }
 
-// Thinking-effort control: a slider (Claude-Code-style) with 4 detents
-// (off/low/medium/high). Maps to real reasoning params (reasoning_effort for
-// OpenAI o-series, thinking.budget_tokens for Claude) injected in chat.handler.
+// Thinking-effort control: toggle switch + 3-detent slider (Claude-Code-style
+// Tab + /effort pattern). Toggle controls whether extended thinking is on;
+// slider picks depth (low/medium/high). Slider is disabled when thinking is off.
 const EFFORT_LEVELS = [
-  { value: 'off' as const, labelKey: 'effort.off' },
   { value: 'low' as const, labelKey: 'effort.low' },
   { value: 'medium' as const, labelKey: 'effort.medium' },
   { value: 'high' as const, labelKey: 'effort.high' },
 ]
-function EffortControl({ level, onChange }: { level: 'off' | 'low' | 'medium' | 'high'; onChange: (v: 'off' | 'low' | 'medium' | 'high') => void }) {
-  let idx = EFFORT_LEVELS.findIndex(l => l.value === level)
-  if (idx < 0) idx = 0
-  const fill = idx <= 0 ? 0 : (idx / (EFFORT_LEVELS.length - 1)) * 100
+function EffortControl({ thinkingEnabled, onToggleThinking, level, onLevelChange }: {
+  thinkingEnabled: boolean; onToggleThinking: (v: boolean) => void
+  level: 'low' | 'medium' | 'high'; onLevelChange: (v: 'low' | 'medium' | 'high') => void
+}) {
+  const idx = EFFORT_LEVELS.findIndex(l => l.value === level)
+  const fill = (idx / (EFFORT_LEVELS.length - 1)) * 100
   return (
     <div className="flex items-center gap-1.5" title={t('effort.tooltip')}>
-      <Brain size={13} className="text-gray-400 shrink-0" />
-      <input type="range" min={0} max={3} step={1} value={idx}
-        onChange={(e) => onChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
-        className="effort-slider w-20" style={{ ['--fill' as string]: `${fill}%` }} />
+      <button
+        onClick={() => onToggleThinking(!thinkingEnabled)}
+        className={`thinking-toggle ${thinkingEnabled ? 'is-on' : 'is-off'}`}
+      >
+        <Brain size={13} />
+      </button>
+      <input type="range" min={0} max={2} step={1} value={idx}
+        onChange={(e) => onLevelChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
+        className="effort-slider w-20" disabled={!thinkingEnabled}
+        style={{ ['--fill' as string]: `${fill}%` }} />
       <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{t(EFFORT_LEVELS[idx].labelKey)}</span>
     </div>
   )
@@ -752,7 +759,6 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
   modelSuggestion: ModelSuggestion | null
   scoreByModel: Record<number, number>
 }) {
-  const [showRationale, setShowRationale] = useState(false)
   const groups = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
     return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null
@@ -776,7 +782,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
             const model = allModels.find(m => m.id === mid)
             if (model) onSelect(mid, model.provider_id)
           }}
-          className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[180px] bg-[var(--content-bg)]"
+          className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[160px] bg-[var(--content-bg)]"
           style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
           <option value="" disabled>{t('chat.select_model')}</option>
           {groups.map(g => (
@@ -804,23 +810,6 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
           </span>
         )}
       </div>
-      {!isAutoSuggested && suggestedModel && (
-        <div className="mt-1 relative">
-          <button
-            onClick={() => setShowRationale(!showRationale)}
-            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-colors hover:bg-[var(--bg-secondary)]"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-          >
-            {showRationale ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-            {t('model.rationale.title', 'Model rationale')}
-          </button>
-          {showRationale && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 z-20">
-              <ModelRationale suggestion={modelSuggestion} onClose={() => setShowRationale(false)} />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

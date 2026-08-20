@@ -31,8 +31,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   proposedHabits: [],
   queuedMessages: [],
   loopingSessions: new Set<number>(),
-  effortLevel: "off",
-  agentMode: "off",
+  thinkingEnabled: true,
+  effortLevel: 'medium',
+  agentMode: 'off',
   modelSuggestion: null as ModelSuggestion | null,
   messageSearchQuery: "",
 
@@ -52,6 +53,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
 
   setEffortLevel: (v) => set({ effortLevel: v }),
 
+  setThinkingEnabled: (v) => set({ thinkingEnabled: v }),
+
   refreshModelSuggestion: async () => {
     const { currentSessionId, messages } = get()
     if (currentSessionId == null) return
@@ -68,7 +71,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   },
 
   sendMessage: async (content, attachments) => {
-    const { currentSessionId, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
+    const { currentSessionId, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     let modelId = cfg?.modelId
     if (!modelId) {
@@ -139,7 +142,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         attachments: imageAttachments,
         useTools: agentMode !== "off",
         agentMode: agentMode === "off" ? "ask" : agentMode,
-        effortLevel,
+        effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
         })
@@ -209,7 +212,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   },
 
   regenerate: async () => {
-    const { currentSessionId, messages, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix } = get()
+    const { currentSessionId, messages, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     const activeModelId = cfg?.modelId
     if (!currentSessionId || !activeModelId || messages.length < 2) return
@@ -243,7 +246,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
         agentMode: agentMode === "off" ? "ask" : agentMode,
-        effortLevel,
+        effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
       })
@@ -279,7 +282,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   },
 
   editMessage: async (messageId, newContent) => {
-    const { currentSessionId, messages, agentMode, effortLevel, maxTokens, temperature, topP, systemPrefix } = get()
+    const { currentSessionId, messages, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix } = get()
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     const activeModelId = cfg?.modelId
     if (!currentSessionId || !activeModelId) return
@@ -302,7 +305,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
         agentMode: agentMode === "off" ? "ask" : agentMode,
-        effortLevel,
+        effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
       })

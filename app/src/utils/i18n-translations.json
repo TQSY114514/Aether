@@ -82,12 +82,6 @@
       "chat.mode.normal": "聊天",
       "chat.model_switch": "切换模型",
       "model.suggest.no_match": "无更优匹配 — 保留当前模型",
-      "model.rationale.title": "模型推荐理由",
-      "model.rationale.fit": "匹配度",
-      "model.rationale.confidence": "置信度",
-      "model.rationale.task": "任务",
-      "model.rationale.family": "模型族",
-      "model.rationale.close": "竞争激烈",
       "model.suggest.task": "任务：{0}",
       "model.suggest.task.coding": "编程",
       "model.suggest.task.debug": "调试",
@@ -139,7 +133,7 @@
       "effort.low": "低",
       "effort.medium": "中",
       "effort.off": "关",
-      "effort.tooltip": "思考强度：控制推理深度（仅推理模型可用）",
+      "effort.tooltip": "思考强度：控制推理深度（仅推理模型可用）。关闭时禁用扩展思考。",
       "empty.effort": "思考等级",
       "empty.example.brainstorm": "头脑风暴",
       "empty.example.code": "编写代码",
@@ -568,7 +562,9 @@
       "task.status.paused": "已暂停",
       "task.status.pending": "等待中",
       "task.status.plan": "规划中",
-      "task.status.queued": "排队中"
+      "task.status.queued": "排队中",
+      "effort.on": "开",
+      "settings.default_thinking_toggle": "新会话默认开启思考"
     }
   },
   {

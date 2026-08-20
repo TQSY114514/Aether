@@ -1,15 +1,20 @@
 // ───────────────────────────────────────────────────────────────────────────
 // Reasoning / thinking-effort helpers.
 //
-// Maps a user-facing effort level ('off'|'low'|'medium'|'high') to the correct
-// request parameter shape for the model's provider family. Names are detected
-// by prefix because Aether stores raw provider model ids, not capability flags.
+// Maps a user-facing effort level ('low'|'medium'|'high') + thinking toggle
+// to the correct request parameter shape for the model's provider family.
+// Names are detected by prefix because Aether stores raw provider model ids,
+// not capability flags.
 //
 // Shapes (verified against QuantumNous/new-api relay conversion logic):
-//   OpenAI o-series / gpt-5  ->  { reasoning_effort: 'minimal'|'low'|'medium'|'high' }
-//   Claude (via OpenAI shim) ->  { thinking: { type: 'enabled', budget_tokens: 1280|2048|4096 } }
-//   DeepSeek-R1 / QwQ-style  ->  { reasoning_content / extra_body reasoning } — best-effort, rare
+//   OpenAI o-series / gpt-5  ->  { reasoning_effort: 'low'|'medium'|'high' }
+//   Claude (via OpenAI shim) ->  { reasoning_effort: 'low'|'medium'|'high' }
+//   DeepSeek-R1 / QwQ-style  ->  { thinking: { type: 'enabled'|'disabled' } }
 //   others / off            ->  {} (no param)
+//
+// When thinkingEnabled is false:
+//   OpenAI/Claude → {} (no param, model default)
+//   DeepSeek      → { thinking: { type: 'disabled' } } (true off)
 //
 // Claude thinking forces temperature=1 and drops top_p/top_k — applied by the
 // caller when it merges these into the request body.
@@ -32,15 +37,20 @@ function reasoningFamily(modelName = '') {
   return 'none'
 }
 
-// The OpenAI effort vocabulary. 'off' maps to "send nothing".
+// The OpenAI effort vocabulary.
 const OPENAI_EFFORT = { low: 'low', medium: 'medium', high: 'high' }
 
 // Build the reasoning params to spread into the request body.
-// `effort` is 'off' | 'low' | 'medium' | 'high'. Returns {} when off or the
-// model doesn't support reasoning.
-function buildReasoningParams(modelName, effort) {
-  if (!effort || effort === 'off') return {}
+// `effort` is 'low' | 'medium' | 'high'. `thinkingEnabled` is boolean.
+// Returns {} when thinking is off (OpenAI/Claude) or the model doesn't support
+// reasoning. DeepSeek gets { thinking: { type: 'disabled' } } when off.
+function buildReasoningParams(modelName, effort, thinkingEnabled) {
   const fam = reasoningFamily(modelName)
+  if (fam === 'deepseek') {
+    // DeepSeek supports explicit on/off via thinking.type
+    return thinkingEnabled ? { thinking: { type: 'enabled' } } : { thinking: { type: 'disabled' } }
+  }
+  if (!thinkingEnabled) return {}
   if (fam === 'openai') {
     const e = OPENAI_EFFORT[effort]
     return e ? { reasoning_effort: e } : {}
@@ -56,7 +66,7 @@ function buildReasoningParams(modelName, effort) {
     const e = OPENAI_EFFORT[effort]
     return e ? { reasoning_effort: e } : {}
   }
-  // DeepSeek/Qwen: reasoning is usually always-on for these models; sending an
+  // Qwen: reasoning is usually always-on for these models; sending an
   // extra_body is unreliable across shims, so we send nothing and let the model
   // behave by default. (Best-effort — no harm if omitted.)
   return {}
@@ -65,7 +75,7 @@ function buildReasoningParams(modelName, effort) {
 // Whether the model accepts user-controlled reasoning params (drives UI: show/hide slider).
 function supportsReasoning(modelName = '') {
   const fam = reasoningFamily(modelName)
-  return fam === 'openai' || fam === 'claude'
+  return fam === 'openai' || fam === 'claude' || fam === 'deepseek'
 }
 
 module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning }

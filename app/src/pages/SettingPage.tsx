@@ -183,12 +183,14 @@ export default function SettingPage() {
   const fontScale = useStore((s) => s.fontScale)
   const bubbleWidth = useStore((s) => s.bubbleWidth)
   const defaultEffort = useStore((s) => s.defaultEffort)
+  const defaultThinkingEnabled = useStore((s) => s.defaultThinkingEnabled)
   const setBackgroundImage = useStore((s) => s.setBackgroundImage)
   const setBackgroundOpacity = useStore((s) => s.setBackgroundOpacity)
   const setBackgroundBlur = useStore((s) => s.setBackgroundBlur)
   const setFontScale = useStore((s) => s.setFontScale)
   const setBubbleWidth = useStore((s) => s.setBubbleWidth)
   const setDefaultEffort = useStore((s) => s.setDefaultEffort)
+  const setDefaultThinkingEnabled = useStore((s) => s.setDefaultThinkingEnabled)
 
   const [saved, setSaved] = useState(false)
   const [localTimeout, setLocalTimeout] = useState(String(fallbackTimeout))
@@ -350,13 +352,21 @@ export default function SettingPage() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.default_effort', '默认思考等级')}</p>
+                  <label className="flex items-center gap-1.5 cursor-pointer" title={t('settings.default_thinking_toggle', '新会话默认开启思考模式')}>
+                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      {defaultThinkingEnabled ? t('effort.on', '开') : t('effort.off', '关')}
+                    </span>
+                    <input type="checkbox" checked={defaultThinkingEnabled} onChange={(e) => setDefaultThinkingEnabled(e.target.checked)}
+      className="accent-black" />
+                  </label>
                 </div>
-                <div className="flex items-center rounded-lg border overflow-hidden w-fit" style={{ borderColor: 'var(--border)' }}>
-                  {(['off', 'low', 'medium', 'high'] as const).map((e) => (
+                <div className="flex items-center rounded-lg border overflow-hidden w-fit" style={{ borderColor: 'var(--border)', opacity: defaultThinkingEnabled ? 1 : 0.5 }}>
+                  {(['low', 'medium', 'high'] as const).map((e) => (
                     <button key={e} onClick={() => setDefaultEffort(e)}
+                      disabled={!defaultThinkingEnabled}
                       className={`px-3 py-1 text-xs transition-colors ${defaultEffort === e ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
                       style={defaultEffort !== e ? { color: 'var(--text-muted)' } : {}}>
-                      {e === 'off' ? t('effort.off') : e === 'low' ? t('effort.low') : e === 'medium' ? t('effort.medium') : t('effort.high')}
+                      {e === 'low' ? t('effort.low') : e === 'medium' ? t('effort.medium') : t('effort.high')}
                     </button>
                   ))}
                 </div>
