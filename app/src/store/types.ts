@@ -243,10 +243,17 @@ export interface AppState {
   seenHints: string[]
   dismissHint: (flag: string) => void
   triggerHint: (flag: string, text: string) => void
-  // Thinking/reasoning effort level sent to the model (real param: reasoning_effort
-  // for OpenAI o-series, thinking.budget_tokens for Claude). 'off' = no param.
-  effortLevel: 'off' | 'low' | 'medium' | 'high'
-  setEffortLevel: (v: 'off' | 'low' | 'medium' | 'high') => void
+  // Thinking/reasoning: separated into a toggle (on/off) and a depth slider.
+  //   thinkingEnabled  — whether extended thinking is active at all. When off,
+  //                      OpenAI/Claude send no reasoning param; DeepSeek sends
+  //                      thinking:{type:'disabled'} (true off).
+  //   effortLevel      — depth slider, one of 'low'|'medium'|'high'. Ignored when
+  //                      thinkingEnabled is false. Maps to reasoning_effort for
+  //                      OpenAI o-series, thinking.budget_tokens for Claude.
+  thinkingEnabled: boolean
+  setThinkingEnabled: (v: boolean) => void
+  effortLevel: 'low' | 'medium' | 'high'
+  setEffortLevel: (v: 'low' | 'medium' | 'high') => void
   // Last model-suggestion rationale from modelAdvisor (shown in ModelSelector).
   modelSuggestion: ModelSuggestion | null
   // Refresh the suggestion on session open (based on the latest user message).
@@ -304,7 +311,8 @@ export interface AppState {
   fallbackTimeout: number
   fontScale: number            // 0.85–1.25, base font-size multiplier
   bubbleWidth: number          // 60–100 (%), max width of message bubbles
-  defaultEffort: 'off' | 'low' | 'medium' | 'high'  // default thinking effort for new sessions
+  defaultThinkingEnabled: boolean  // default thinking toggle for new sessions
+  defaultEffort: 'low' | 'medium' | 'high'  // default thinking effort for new sessions
   defaultModelId: number | null   // default model for new sessions (null = first enabled)
   defaultPersonaId: number | null // default persona for new sessions (null = none)
   // Advanced generation params (advanced users). Empty/0 means "let the provider default".
@@ -333,7 +341,8 @@ export interface AppState {
   setAutoTitle: (v: boolean) => Promise<void>
   setTitleLanguage: (v: string) => Promise<void>
   setTitleModel: (id: number | null) => Promise<void>
-  setDefaultEffort: (v: 'off' | 'low' | 'medium' | 'high') => Promise<void>
+  setDefaultEffort: (v: 'low' | 'medium' | 'high') => Promise<void>
+  setDefaultThinkingEnabled: (v: boolean) => Promise<void>
   setDefaultModel: (id: number | null) => Promise<void>
   setDefaultPersona: (id: number | null) => Promise<void>
   setBackgroundImage: (dataUrl: string | null) => Promise<void>

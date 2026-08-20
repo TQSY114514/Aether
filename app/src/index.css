@@ -145,15 +145,39 @@ select option {
 .typing-dot:nth-child(2) { animation-delay: 0.15s; }
 .typing-dot:nth-child(3) { animation-delay: 0.3s; }
 
+/* Thinking toggle — slim icon button that lights up when active. */
+.thinking-toggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.thinking-toggle:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.thinking-toggle.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
+}
+.thinking-toggle.is-off { opacity: 0.6; }
+.thinking-toggle.is-off:hover { opacity: 1; }
+
 /* Effort slider — slim track + pill thumb (Claude-Code-style).
    The filled portion uses a soft accent tint, the thumb is a solid accent pill. */
 .effort-slider {
   -webkit-appearance: none; appearance: none;
   height: 18px; background: transparent; outline: none; cursor: pointer;
 }
+.effort-slider:disabled { cursor: not-allowed; opacity: 0.4; }
 .effort-slider::-webkit-slider-runnable-track {
   height: 5px; border-radius: 999px;
   background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--border) var(--fill, 0%));
+}
+.effort-slider:disabled::-webkit-slider-runnable-track {
+  background: var(--border);
 }
 .effort-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
@@ -163,13 +187,20 @@ select option {
   box-shadow: 0 0 0 1px var(--accent), 0 2px 4px rgba(0,0,0,0.15);
   transition: transform 0.12s ease;
 }
+.effort-slider:disabled::-webkit-slider-thumb {
+  background: var(--text-muted); box-shadow: 0 0 0 1px var(--border);
+}
 .effort-slider::-webkit-slider-thumb:hover { transform: scale(1.12); }
 .effort-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.2); }
 .effort-slider::-moz-range-track { height: 5px; border-radius: 999px; background: var(--border); }
 .effort-slider::-moz-range-progress { height: 5px; border-radius: 999px; background: var(--accent); }
+.effort-slider:disabled::-moz-range-progress { background: var(--text-muted); }
 .effort-slider::-moz-range-thumb {
   width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--bg-primary);
   background: var(--accent); cursor: grab; box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.effort-slider:disabled::-moz-range-thumb {
+  background: var(--text-muted);
 }
 
 /* Smooth overscroll with rubber-band containment */

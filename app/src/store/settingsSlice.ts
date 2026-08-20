@@ -15,7 +15,8 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
   fallbackTimeout: FALLBACK_TIMEOUT_DEFAULT,
   fontScale: 1,
   bubbleWidth: 85,
-  defaultEffort: "off",
+  defaultThinkingEnabled: true,
+  defaultEffort: "medium",
   defaultModelId: null,
   defaultPersonaId: null,
   maxTokens: 0,
@@ -53,7 +54,10 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
       const bgBlur = parseInt(s.backgroundBlur ?? "0", 10)
       const fontScale = parseFloat(s.fontScale ?? "1")
       const bubbleWidth = parseInt(s.bubbleWidth ?? "85", 10)
-      const defaultEffort = (s.defaultEffort ?? "off") as "off" | "low" | "medium" | "high"
+      const defaultThinkingEnabled = (s.defaultThinkingEnabled ?? "1") === "1"
+      const rawEffort = s.defaultEffort ?? "medium"
+      // Migrate legacy 'off' → thinkingEnabled=false, effortLevel='medium'
+      const defaultEffort = (rawEffort === "off" ? "medium" : rawEffort) as "low" | "medium" | "high"
       const defaultModelId = parseInt(s.defaultModelId ?? "0", 10) || null
       const defaultPersonaId = parseInt(s.defaultPersonaId ?? "0", 10) || null
       const maxTokens = parseInt(s.maxTokens ?? "0", 10)
@@ -74,7 +78,7 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
       applyLangDir(lang)
       let seenHints: string[] = []
       try { seenHints = JSON.parse(s.seen_hints || "[]") } catch (e) { log.warn("parse seen_hints failed:", e) }
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, seenHints, modelRoutingPriority, modelAutoRoute, autoCommitOnTestPass, autoCommitAfterFileChange })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultThinkingEnabled, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, thinkingEnabled: defaultThinkingEnabled, seenHints, modelRoutingPriority, modelAutoRoute, autoCommitOnTestPass, autoCommitAfterFileChange })
     } catch (e) { log.warn("loadSettings failed:", e) }
   },
 
@@ -115,6 +119,11 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
   setDefaultEffort: async (v) => {
     await window.electronAPI.settings.set("defaultEffort", v)
     set({ defaultEffort: v, effortLevel: v })
+  },
+
+  setDefaultThinkingEnabled: async (v) => {
+    await window.electronAPI.settings.set("defaultThinkingEnabled", v ? "1" : "0")
+    set({ defaultThinkingEnabled: v, thinkingEnabled: v })
   },
 
   setDefaultModel: async (v) => {

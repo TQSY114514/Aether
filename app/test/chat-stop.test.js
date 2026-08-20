@@ -87,7 +87,7 @@ function installStubs() {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const doneEvents = () => events.filter(e => e.channel === 'chat:stream-chunk' && e.payload.done)
-const base = { sessionId: 1, content: 'hi', modelId: 1, mode: 'normal', useTools: false, agentMode: 'off', effortLevel: 'off', genParams: {}, systemPrefix: '' }
+const base = { sessionId: 1, content: 'hi', modelId: 1, mode: 'normal', useTools: false, agentMode: 'off', effortLevel: 'medium', thinkingEnabled: true, genParams: {}, systemPrefix: '' }
 
 beforeAll(() => {
   installStubs()

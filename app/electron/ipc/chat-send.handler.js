@@ -165,7 +165,7 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
   }
 ipcMain.handle('chat:complete', handleChatComplete)
 
-  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'off', genParams = {}, systemPrefix = '' }) => {
+  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'medium', thinkingEnabled = true, genParams = {}, systemPrefix = '' }) => {
     // Backstop guard: if a tool loop is active for this session, buffer the message
     // as an injection instead of starting a new send turn. Prevents race conditions
     // when the renderer's loopingSessions state hasn't caught up with main-process reality.
@@ -299,7 +299,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // not a summary). Leaving a neutral default until the summary is generated.
 
     // Merge reasoning params (effort) with advanced generation params from settings.
-    const reasoningOpts = buildReasoningParams(model.model_name, effortLevel)
+    const reasoningOpts = buildReasoningParams(model.model_name, effortLevel, thinkingEnabled)
     const genOpts = {}
     if (genParams.maxTokens && genParams.maxTokens > 0) genOpts.max_tokens = genParams.maxTokens
     if (genParams.temperature && genParams.temperature > 0) genOpts.temperature = genParams.temperature
