@@ -31,6 +31,7 @@
 const { completeChat } = require('./providerAdapter')
 const hooks = require('./hooks')
 const tokenizer = require('./tokenizer')
+const { pruneOlderBlock } = require('./contextBudget')
 
 const SAFETY_MARGIN = 1.2          // estimateTokens is rough; pad it
 const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of budget
@@ -160,6 +161,11 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     recent.unshift(...important)
   }
 
+  // ── Context Budget: prune low-value tool results from older block ────────
+  // Before summarization, replace verbose tool results (NOISE tier) with
+  // one-line summaries to free up tokens for the actual conversation.
+  nonSystemOlder = pruneOlderBlock(nonSystemOlder, provider, model)
+
   // ── Incremental compaction: only summarize new messages ─────────────────
   let summary
   if (prev && prev.summary && nonSystemOlder.length > 0) {
@@ -259,4 +265,4 @@ function clearCompactionState(sessionId) {
   if (sessionId) compactionState.delete(sessionId)
 }
 
-module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, clearCompactionState }
+module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, clearCompactionState, applyTieredTruncation }
