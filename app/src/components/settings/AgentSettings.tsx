@@ -34,15 +34,28 @@ export default function AgentSettings() {
   useEffect(() => {
     // Guard: agent IPC may be absent on an older preload build.
     try { window.electronAPI?.agent?.getWorkspace?.().then(setWorkspace).catch(() => {}) } catch {}
-    try { window.electronAPI?.settings?.get?.('agent_max_iterations').then((v) => { if (v) setMaxIter(parseInt(v, 10) || 25) }).catch(() => {}) } catch {}
+    try {
+      window.electronAPI?.settings?.get?.('agent_max_iterations').then((v) => {
+        const n = Number(v)
+        if (Number.isInteger(n) && n > 0) setMaxIter(n)
+      }).catch(() => {})
+    } catch {}
     try { window.electronAPI?.settings?.get?.('auto_memory_enabled').then((v) => setAutoMemory(v !== '0')).catch(() => {}) } catch {}
     // Check for project instruction file (CLAUDE.md / .aetherai.md) in workspace.
     try { window.electronAPI?.agent?.hasProjectInstructions?.().then(setProjectInst).catch(() => {}) } catch {}
     // Load capability axis policies
     try {
-      window.electronAPI?.settings?.get?.('capability.filesystem').then((v) => setAxes((p) => ({ ...p, filesystem: (AXIS_OPTIONS as readonly string[]).includes(v || '') ? v as AxisPolicy : null }))).catch(() => {})
-      window.electronAPI?.settings?.get?.('capability.shell').then((v) => setAxes((p) => ({ ...p, shell: (AXIS_OPTIONS as readonly string[]).includes(v || '') ? v as AxisPolicy : null }))).catch(() => {})
-      window.electronAPI?.settings?.get?.('capability.network').then((v) => setAxes((p) => ({ ...p, network: (AXIS_OPTIONS as readonly string[]).includes(v || '') ? v as AxisPolicy : null }))).catch(() => {})
+      Promise.all([
+        window.electronAPI?.settings?.get?.('capability.filesystem').catch(() => null),
+        window.electronAPI?.settings?.get?.('capability.shell').catch(() => null),
+        window.electronAPI?.settings?.get?.('capability.network').catch(() => null),
+      ]).then(([fs, sh, nw]) => {
+        setAxes({
+          filesystem: (AXIS_OPTIONS as readonly string[]).includes(fs || '') ? fs as AxisPolicy : null,
+          shell: (AXIS_OPTIONS as readonly string[]).includes(sh || '') ? sh as AxisPolicy : null,
+          network: (AXIS_OPTIONS as readonly string[]).includes(nw || '') ? nw as AxisPolicy : null,
+        })
+      })
     } catch {}
   }, [])
 
@@ -51,8 +64,8 @@ export default function AgentSettings() {
     try {
       if (v) await window.electronAPI?.settings?.set?.(`capability.${axis}`, v)
       else await window.electronAPI?.settings?.set?.(`capability.${axis}`, '')
-      toast(`能力轴 ${axis} → ${v || '默认(5档模式)'}`, { type: 'success' })
-    } catch { toast('能力轴设置失败', { type: 'error' }) }
+      toast(t('settings.agent.capability_set', t('capability.axis.' + axis), v ? t('capability.' + v) : t('settings.agent.capability_default')), { type: 'success' })
+    } catch { toast(t('settings.agent.capability_failed'), { type: 'error' }) }
   }
 
   const saveMaxIter = async (v: number) => {
@@ -75,19 +88,9 @@ export default function AgentSettings() {
       input.type = 'file'
       input.webkitdirectory = true
       input.onchange = () => {
-        const f = input.files?.[0]
-        // webkitRelativePath gives the selected dir name; but we want the real
-        // absolute path. Electron exposes .path on File. Fall back to that.
         // @ts-expect-error .path is Electron-only
-        const abs = f?.path || f?.webkitRelativePath || ''
-        // webkitRelativePath is "DirName/..."; we want just the root. Take
-        // the path up to the first separator after the dir name.
-        const root = abs.split(/[/\\]/).slice(0, 1).join('') || abs
-        // Actually: for webkitdirectory, files[].path is the absolute path on
-        // disk in Electron. Use the first file's path minus the relative tail.
-        // @ts-expect-error
         const firstPath = input.files?.[0]?.path || ''
-        const target = firstPath ? firstPath.replace(/[/\\][^/\\]*$/, '') : root
+        const target = firstPath ? firstPath.replace(/[/\\][^/\\\\]*$/, '') : ''
         if (target) applyWorkspace(target)
       }
       input.click()
@@ -113,12 +116,12 @@ export default function AgentSettings() {
       const r = await window.electronAPI?.flags?.safeMode?.()
       if (r?.ok) {
         toast(r.written.length > 0
-          ? `安全模式已启用: 关闭 ${r.written.length} 个实验功能`
-          : '已是安全模式(无实验功能开启)', { type: 'success' })
+          ? t('settings.agent.safe_mode_enabled', String(r.written.length))
+          : t('settings.agent.safe_mode_already'), { type: 'success' })
       } else {
-        toast('安全模式应用失败', { type: 'error' })
+        toast(t('settings.agent.safe_mode_failed'), { type: 'error' })
       }
-    } catch { toast('安全模式应用失败', { type: 'error' }) }
+    } catch { toast(t('settings.agent.safe_mode_failed'), { type: 'error' }) }
     finally { setSafeBusy(false) }
   }
 
@@ -162,9 +165,9 @@ export default function AgentSettings() {
           <div className="flex items-start gap-2">
             <ShieldCheck size={14} className="text-blue-500 mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>一键安全模式</p>
+              <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.safe_mode')}</p>
               <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                关闭全部实验性功能(子 Agent / 编排器 / 经验回放 / 插件 SDK 等), 保留基础对话与已发布能力。适合稳定使用。
+                {t('settings.agent.safe_mode_desc')}
               </p>
             </div>
           </div>
@@ -179,10 +182,10 @@ export default function AgentSettings() {
         <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center gap-2 mb-1">
             <ShieldCheck size={13} className="text-gray-400" />
-            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>能力轴权限(Capability-based)</p>
+            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.capability_title')}</p>
           </div>
           <p className="text-[10px] mb-2.5" style={{ color: 'var(--text-muted)' }}>
-            按能力轴独立控制 Agent 权限, 覆盖既有 5 档模式。allow 放行 · ask 每次确认 · deny 禁止; 留空则回落到档位模式。
+            {t('settings.agent.capability_desc')}
           </p>
           <div className="space-y-2">
             {AXES.map((a) => {
@@ -202,7 +205,7 @@ export default function AgentSettings() {
                       <button key={opt} onClick={() => saveAxis(a.key, cur === opt ? null : opt)}
                         className={`px-2 py-1 text-[10px] rounded-md border transition-colors ${cur === opt ? 'text-white' : ''}`}
                         style={cur === opt ? { backgroundColor: opt === 'deny' ? 'var(--error)' : opt === 'ask' ? '#d97706' : 'var(--accent)', borderColor: 'transparent' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-                        {opt === 'allow' ? '放行' : opt === 'ask' ? '确认' : '禁止'}{cur === opt ? ' ✓' : ''}
+                        {opt === 'allow' ? t('capability.allow') : opt === 'ask' ? t('capability.ask') : t('capability.deny')}{cur === opt ? ' ✓' : ''}
                       </button>
                     ))}
                   </div>
@@ -216,11 +219,11 @@ export default function AgentSettings() {
         <div className="flex items-center gap-2 p-2.5 rounded-lg" style={{ backgroundColor: projectInst.has ? 'rgba(34,197,94,0.06)' : 'var(--bg-secondary)' }}>
           <FileText size={13} className={projectInst.has ? 'text-green-500 mt-0.5 shrink-0' : 'text-gray-400 mt-0.5 shrink-0'} />
           <div>
-            <p className="text-xs" style={{ color: 'var(--text-primary)' }}>Project Instructions</p>
+            <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.project_inst')}</p>
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
               {projectInst.has
-                ? `Active: ${projectInst.fileName} — agent will follow project conventions`
-                : 'No instruction file found — place CLAUDE.md or .aetherai.md in your workspace root'}
+                ? t('settings.agent.project_inst_active', projectInst.fileName || '')
+                : t('settings.agent.project_inst_empty')}
             </p>
           </div>
         </div>
