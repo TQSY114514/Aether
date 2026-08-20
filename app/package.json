@@ -1,6 +1,6 @@
 {
   "name": "aetherai",
-  "version": "0.7.3",
+  "version": "0.7.5",
   "description": "Aether headless agent — CLI, TUI, and Electron-free SDK. Pairs with the Aether Desktop GUI (separate installer) sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
   "license": "MIT",
