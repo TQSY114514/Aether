@@ -5,17 +5,6 @@
 //   DS4 (antirez)   — structured task breakdown before execution
 //   OpenClaw        — plan-then-act rhythm, explicit goal tracking
 //   Hermes          — iteration budget + progress visibility
-//
-// Two modes:
-//   isComplexRequest(userMessage, msgCount) → bool
-//     Heuristic gate: decides whether to invest in planning.
-//
-//   generatePlan(provider, model, userMessage, signal, options)
-//     Asks the model to decompose the request into sub-tasks.
-//     Returns { id, description, tasks } or null.
-//
-//   PLAN_TOOL_SYSTEM — system prompt fragment that tells the model it can
-//     call a `plan_task` tool to report progress on a plan step.
 // ───────────────────────────────────────────────────────────────────────────
 
 const { completeChatMessage } = require('./providerAdapter')
@@ -35,22 +24,20 @@ Rules:
 - 3-8 tasks. Each task is one actionable step.
 - Tasks with no dependency on each other get the same parallelGroup.
 - Include specific file paths, commands, or search queries when possible.
-- Trivial requests (single-step) get a plan with just 1 task.
+- Trivial requests get a plan with just 1 task.
 - NEVER output anything other than the JSON object.`
 
-// Complexity heuristics — returns true if explicit planning is worth it.
 function isComplexRequest(userMessage, msgCount) {
   const text = String(userMessage || '')
   const sentences = (text.match(/[。！？.!?;；\n]/g) || []).length
-  const paths = (text.match(/[A-Za-z]:[\\/][\w\\/]+\.\w{1,5}|\/[\w\/]+\.\w{1,5}/g) || []).length
-  const multiStep = /implement.{0,200}test|refactor.{0,200}then|create.{0,200}deploy|build.{0,200}from|analyze.{0,200}fix|migrate.{0,200}to|rewrite.{0,200}to/i.test(text) ||
-    /(重构|改写|重写|迁移|实现).{0,200}(并且|同时|然后|再|以及)/.test(text) ||
+  const paths = (text.match(/[A-Za-z]:[\/][\w\/]{1,80}\.\w{1,5}|\/[\w\/]{1,80}\.\w{1,5}/g) || []).length
+  const multiStep = /implement.{0,50}test|refactor.{0,50}then|create.{0,50}deploy|build.{0,50}from|analyze.{0,50}fix|migrate.{0,50}to|rewrite.{0,50}to/i.test(text) ||
+    /(重构|改写|重写|迁移|实现).{0,50}(并且|同时|然后|再|以及)/.test(text) ||
     /(拆|分|并行|多个文件|涉及多个|子任务|步骤)/.test(text) ||
-    /(修复|解决|实现|构建).{0,200}(bug|测试|登录|模块|功能).{0,200}(并且|同时|一起|再)/.test(text)
+    /(修复|解决|实现|构建).{0,50}(bug|测试|登录|模块|功能).{0,50}(并且|同时|一起|再)/.test(text)
   return (sentences >= 4 && text.length > 200) || paths >= 3 || multiStep || msgCount > 10
 }
 
-// Ask the model for a plan. Returns null on any failure.
 async function generatePlan(provider, model, userMessage, signal, options = {}) {
   try {
     const result = await completeChatMessage({
@@ -84,8 +71,6 @@ async function generatePlan(provider, model, userMessage, signal, options = {}) 
   }
 }
 
-// Build a system-prompt block that tells the model about the active plan
-// and a `plan_progress` tool it can call to mark steps complete.
 function planSystemBlock(plan) {
   if (!plan || !plan.tasks || plan.tasks.length === 0) return ''
   const lines = [
@@ -104,28 +89,24 @@ function planSystemBlock(plan) {
   return lines.join('\n')
 }
 
-// Available tools for the plan-aware agent loop
 function planToolsPayload() {
-  return [
-    {
-      type: 'function',
-      function: {
-        name: 'plan_progress',
-        description: 'Mark a plan task as completed with a result summary. Call this when you finish a step of the execution plan.',
-        parameters: {
-          type: 'object',
-          properties: {
-            task_id: { type: 'string', description: 'The task id from the execution plan (e.g. "1", "2").' },
-            result: { type: 'string', description: 'Brief summary of what was accomplished.' },
-          },
-          required: ['task_id', 'result'],
+  return [{
+    type: 'function',
+    function: {
+      name: 'plan_progress',
+      description: 'Mark a plan task as completed with a result summary. Call this when you finish a step of the execution plan.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string', description: 'The task id from the execution plan (e.g. "1", "2").' },
+          result: { type: 'string', description: 'Brief summary of what was accomplished.' },
         },
+        required: ['task_id', 'result'],
       },
     },
-  ]
+  }]
 }
 
-// Process a plan_progress tool call from the model. Returns true if handled.
 function handlePlanProgress(plan, args) {
   if (!plan) return false
   const taskId = String(args?.task_id || '')
@@ -137,7 +118,6 @@ function handlePlanProgress(plan, args) {
   return true
 }
 
-// Build a consolidated plan summary from task results.
 function planSummary(plan) {
   if (!plan) return ''
   const lines = ['## Plan Results', '']
