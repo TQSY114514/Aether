@@ -129,7 +129,7 @@ function saveDraftSkill(draftContent, skillsBaseDir) {
   if (!draftContent || !skillsBaseDir) return null
 
   // Extract name from frontmatter (safe regex — no backtracking risk)
-  const nameMatch = draftContent.match(/name:\s*([^\n]+)/m)
+  const nameMatch = draftContent.match(/^name:[ \t]+([^\t\n\r]+?)[ \t]*$/m)
   const name = nameMatch ? nameMatch[1].trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') : `draft-${Date.now()}`
 
   const dir = path.join(skillsBaseDir, AUTO_DRAFT_DIR, name)
