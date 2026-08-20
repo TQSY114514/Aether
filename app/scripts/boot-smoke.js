@@ -54,6 +54,7 @@ Module._load = function (request, parent, isMain) {
         whenReady: () => Promise.resolve(),
         on: () => {},
         setAsDefaultProtocolClient: () => true,
+        setAppUserModelId: () => {},
         quit: () => {},
       },
       BrowserWindow: FakeBrowserWindow,
