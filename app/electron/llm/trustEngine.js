@@ -25,7 +25,7 @@ const TRUST_MAX = 100
 const TRUST_MIN = 0
 const TRUST_AUTO_APPROVE = 80
 const TRUST_YOLO_THRESHOLD = 50
-const HIGH_RISK_TOOLS = new Set(['write_file', 'edit_file', 'run_command', 'git_commit', 'apply_patch'])
+const HIGH_RISK_TOOLS = new Set(['write_file', 'edit_file', 'run_command', 'git_commit', 'git_push', 'apply_patch'])
 
 // ─── Score computation ─────────────────────────────────────────────────────
 // Returns current trust score, computing decay from last update.

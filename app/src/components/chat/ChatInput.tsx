@@ -13,7 +13,7 @@ import { useShallow } from 'zustand/react/shallow'
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
 type SlashCommand = { id: string; name: string; description: string; prompt?: string; action?: () => void }
-type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'
+type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
@@ -641,6 +641,7 @@ function AgentModeSelector({ mode, onChange }: { mode: AgentMode; onChange: (v: 
     { value: 'auto_confirm', label: t('agent.mode.auto_confirm'), color: '#f59e0b', tooltip: t('agent.mode.auto_confirm.desc') },
     { value: 'auto', label: t('agent.mode.auto'), color: '#f97316', tooltip: t('agent.mode.auto.desc') },
     { value: 'yolo', label: t('agent.mode.yolo'), color: 'var(--error)', tooltip: t('agent.mode.yolo.desc') },
+    { value: 'custom', label: t('agent.mode.custom', 'Custom'), color: '#8b5cf6', tooltip: t('agent.mode.custom.desc', 'Custom policy: configure per-tool permissions in settings') },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [language, t])
   const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[2]

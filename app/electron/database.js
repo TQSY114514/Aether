@@ -365,6 +365,7 @@ function initDatabase() {
   addCol('session', 'trust_score', 'INTEGER DEFAULT 50')
   addCol('session', 'last_update', 'DATETIME')
   addCol('session', 'parent_session_id', 'INTEGER')
+  addCol('session', 'status', "TEXT NOT NULL DEFAULT 'active'")
   addCol('provider_credential', 'disable_reason', 'TEXT')
 
   // agent_task status CHECK 迁移：旧库 CHECK 只允许 5 态 (pending/running/
@@ -545,6 +546,23 @@ function deleteSession(id) {
 }
 function touchSession(id) {
   db.prepare('UPDATE session SET updated_at = ? WHERE id = ?').run(localNow(), id)
+}
+
+function updateSession(id, fields) {
+  const allowed = ['title', 'persona_id', 'pinned', 'config', 'status', 'parent_session_id']
+  const sets = []
+  const vals = []
+  for (const k of allowed) {
+    if (fields[k] !== undefined) {
+      sets.push(`${k} = ?`)
+      vals.push(typeof fields[k] === 'object' ? JSON.stringify(fields[k]) : fields[k])
+    }
+  }
+  if (!sets.length) return
+  sets.push('updated_at = ?')
+  vals.push(localNow())
+  vals.push(id)
+  db.prepare(`UPDATE session SET ${sets.join(', ')} WHERE id = ?`).run(...vals)
 }
 function getSessionConfig(id) {
   const row = db.prepare('SELECT config, persona_id FROM session WHERE id = ?').get(id)
@@ -1122,7 +1140,7 @@ module.exports = {
   maskKey, isMaskedOrEmptyKey, sanitizeSkillName,
   getModels, getAllModels, getModel, addModel, updateModel, deleteModel, getFallbackChain,
   getPersonas, getPersona, addPersona, updatePersona, deletePersona,
-  getSessions, getSession, createSession, pruneEmptySessions, renameSession, pinSession, deleteSession, touchSession,
+  getSessions, getSession, createSession, pruneEmptySessions, renameSession, pinSession, deleteSession, touchSession, updateSession,
   getMessages, addMessage, updateMessage,
   getSetting, setSetting, getAllSettings,
   getScheduledTasks, addScheduledTask, getScheduledTask, deleteScheduledTask, markScheduledTaskRun,

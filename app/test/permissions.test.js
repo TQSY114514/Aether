@@ -156,8 +156,8 @@ describe('trustEngine.getPermissionMode', () => {
     expect(trustEngine.getPermissionMode(makeDb([[96, null]]), 1, 'run_command')).toBe('yolo')
   })
 
-  it('dangerous non-high-risk tool (git_push) with trust ≥80 → auto', () => {
-    expect(trustEngine.getPermissionMode(makeDb([[85, null]]), 1, 'git_push')).toBe('auto')
+  it('dangerous non-high-risk tool (delegate_task) with trust >=80 -> auto', () => {
+    expect(trustEngine.getPermissionMode(makeDb([[85, null]]), 1, 'delegate_task')).toBe('auto')
   })
 
   it('low trust + high-risk tool → forced ask', () => {

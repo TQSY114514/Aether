@@ -81,6 +81,58 @@ export interface ClassifyResult {
 
 export declare function classifyAgentMode(input?: ClassifyInput): ClassifyResult
 
+// ── Agent Roles ──────────────────────────────────────────────────────────────
+
+export interface AgentRole {
+  name: string
+  label: string
+  description: string
+  systemPrompt: string
+  defaultMode: string
+  allowTools: string[] | null
+}
+
+export declare const agentRoles: {
+  listRoles: () => AgentRole[]
+  getRole: (name: string) => AgentRole | null
+  buildRolePrompt: (roleName: string, taskDescription: string) => string | null
+  buildToolFilter: (roleName: string) => string[] | null
+  getRoleDefaultMode: (roleName: string) => string
+  ROLE_NAMES: string[]
+}
+
+// ── Memory → Skill Bridge ─────────────────────────────────────────────────────
+
+export declare const memorySkillBridge: {
+  clusterMemories: (memories: unknown[]) => unknown[][]
+  generateDraftSkill: (opts: { provider: unknown; model: unknown; memories: unknown[]; signal?: AbortSignal }) => Promise<string | null>
+  saveDraftSkill: (content: string, skillsDir: string) => { name: string; path: string; content: string } | null
+  runMemoryAudit: (opts: { db: unknown; provider: unknown; model: unknown; signal?: AbortSignal; skillsDir: string }) => Promise<{ drafts: number; clusters?: number; totalMemories?: number; error?: string; reason?: string }>
+  listDraftSkills: (skillsDir: string) => Array<{ name: string; path: string; content: string }>
+  promoteDraftSkill: (draftPath: string, skillsDir: string) => { name: string; path: string } | null
+}
+
+// ── Custom Mode ──────────────────────────────────────────────────────────────
+
+export declare const customMode: {
+  buildCustomPolicy: (db: unknown) => { policy: unknown; errors: string[] }
+  getCustomPolicySummary: (db: unknown) => Record<string, string>
+  saveCustomPolicy: (db: unknown, key: string, value: string) => void
+}
+
+// ── Codebase Analysis ────────────────────────────────────────────────────────
+
+export declare const codebase: {
+  detectFrameworks: (rootDir: string) => Array<{ framework: string; confidence: number }>
+  detectEntryPoints: (rootDir: string, frameworks?: unknown[]) => Array<{ type: string; file: string }>
+  detectApiRoutes: (rootDir: string, frameworks?: unknown[]) => Array<{ method: string; path: string; file: string }>
+  detectDataModels: (rootDir: string, frameworks?: unknown[]) => Array<{ type: string; file: string }>
+  detectConfigFiles: (rootDir: string) => Array<{ type: string; file: string }>
+  analyzeImpact: (graph: unknown, symbol: string) => { direct: string[]; transitive: string[]; total: number }
+  scoreRelevance: (graph: unknown, taskDesc: string, topN: number) => Array<{ file: string; score: number }>
+  analyzeCodebase: (db: unknown, rootDir: string, options?: { maxFiles?: number }) => unknown
+}
+
 /** RPC 帧类型（todo 10 落地后存在；此前为 undefined）。 */
 export declare const rpc: unknown
 /** sessionContext persona+记忆注入（todo 13 落地后存在；此前为 undefined）。 */

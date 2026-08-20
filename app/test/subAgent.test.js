@@ -43,7 +43,7 @@ describe('runSubagent — 权限继承', () => {
 
   it('ask 继承为 ask（子代理能执行但需确认）', async () => {
     const out = await subAgent.runSubagent({ ...base, agentMode: 'ask' })
-    expect(out).toBe('final answer')
+    expect(out.content).toBe('final answer')
     expect(runToolLoop).toHaveBeenCalledTimes(1)
     expect(runToolLoop.mock.calls[0][0].agentMode).toBe('ask')
   })

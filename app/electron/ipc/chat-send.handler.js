@@ -13,6 +13,7 @@ const { maybeCompact, estimateMessagesTokens, estimateTextTokens } = require('..
 const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
+const path = require('path')
 const skills = require('../llm/skills')
 const { computeCost } = require('../utils/cost')
 const modelAdvisor = require('../llm/modelAdvisor')
@@ -445,6 +446,25 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Habit learner: detect recurring preferences and promote them to a
         // user-habits skill once they repeat. Also fire-and-forget.
         if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
+        // Memory → Skill bridge: every 20 messages, run a memory audit to
+        // detect patterns and draft new skills from accumulated memories.
+        // Fire-and-forget, never blocks the reply.
+        if (autoMemoryOn && sessionId && db) {
+          try {
+            const msgCount = (db.allRows('SELECT COUNT(*) as c FROM messages WHERE session_id = ?', [sessionId]) || [])[0]?.c || 0
+            if (msgCount > 0 && msgCount % 20 === 0) {
+              const bridge = require('../llm/memorySkillBridge')
+              const electron = require('electron')
+              const app = electron?.app || (typeof electron === 'object' ? electron : null)
+              const skillsDir = app?.getPath
+                ? path.join(app.getPath('userData'), 'skills')
+                : path.join(process.cwd(), '.aetherai', 'skills')
+              bridge.runMemoryAudit({ db, provider, model, signal: controller?.signal, skillsDir })
+                .then(r => { if (r.drafts > 0) log.info(`memorySkillBridge: ${r.drafts} draft skills created`) })
+                .catch(() => {})
+            }
+          } catch {}
+        }
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)

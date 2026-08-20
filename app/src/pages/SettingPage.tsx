@@ -7,6 +7,7 @@ import { t, LANGS } from '@/utils/i18n'
 import McpSettings from '@/components/settings/McpSettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 import AgentSettings from '@/components/settings/AgentSettings'
+import CustomPolicySettings from '@/components/settings/CustomPolicySettings'
 import SystemSettings from '@/components/settings/SystemSettings'
 import SkillsSettings from '@/components/settings/SkillsSettings'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
@@ -371,6 +372,13 @@ export default function SettingPage() {
                   ))}
                 </div>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t('settings.default_effort_desc')}</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.custom_mode', '自定义模式策略')}</p>
+                </div>
+                <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{t('settings.custom_mode_desc', '配置 Custom 模式下各能力类别的权限级别。Custom 模式需从聊天栏 Agent 模式选择器中切换到 Custom。')}</p>
+                <CustomPolicySettings />
               </div>
             </div>
           </div>
