@@ -564,7 +564,22 @@
       "task.status.plan": "规划中",
       "task.status.queued": "排队中",
       "effort.on": "开",
-      "settings.default_thinking_toggle": "新会话默认开启思考"
+      "settings.default_thinking_toggle": "新会话默认开启思考",
+      "settings.agent.safe_mode": "一键安全模式",
+      "settings.agent.safe_mode_desc": "关闭全部实验性功能(子 Agent / 编排器 / 经验回放 / 插件 SDK 等), 保留基础对话与已发布能力。适合稳定使用。",
+      "settings.agent.capability_title": "能力轴权限(Capability-based)",
+      "settings.agent.capability_desc": "按能力轴独立控制 Agent 权限, 覆盖既有 5 档模式。allow 放行 · ask 每次确认 · deny 禁止; 留空则回落到档位模式。",
+      "settings.agent.project_inst": "项目指令",
+      "settings.agent.project_inst_active": "已启用: {0} — Agent 将遵循项目规范",
+      "settings.agent.project_inst_empty": "未找到指令文件 — 请在工作区根目录放置 CLAUDE.md 或 .aetherai.md",
+      "capability.allow": "放行",
+      "capability.ask": "确认",
+      "capability.deny": "禁止",
+      "settings.agent.capability_set": "能力轴 {0} → {1}",
+      "settings.agent.capability_failed": "能力轴设置失败",
+      "settings.agent.safe_mode_enabled": "安全模式已启用: 关闭 {0} 个实验功能",
+      "settings.agent.safe_mode_already": "已是安全模式(无实验功能开启)",
+      "settings.agent.safe_mode_failed": "安全模式应用失败"
     }
   },
   {
