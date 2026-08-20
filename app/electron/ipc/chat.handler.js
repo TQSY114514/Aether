@@ -7,6 +7,7 @@ const modelRouter = require('../llm/modelRouter')
 const habitLearner = require('../llm/habitLearner')
 const log = require('../logger')
 const steering = require('../llm/steering')
+const planControl = require('../llm/planControl')
 const trajectory = require('../llm/trajectory')
 
 // Per-request abort controllers to avoid race conditions
@@ -204,6 +205,22 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return steering.listSessions()
     } catch (e) {
       return []
+    }
+  })
+
+  // ─── Plan Step Control IPC ──────────────────────────────────────────────
+  ipcMain.handle('plan:skip-step', (_e, { sessionId, stepId }) => {
+    try {
+      return planControl.skipStep(sessionId, stepId)
+    } catch (e) {
+      return { error: e.message }
+    }
+  })
+  ipcMain.handle('plan:retry-step', (_e, { sessionId, stepId }) => {
+    try {
+      return planControl.retryStep(sessionId, stepId)
+    } catch (e) {
+      return { error: e.message }
     }
   })
 

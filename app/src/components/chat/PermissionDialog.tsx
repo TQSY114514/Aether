@@ -64,6 +64,11 @@ export default function PermissionDialog() {
   const impact = (req as any).impact as { summary?: string; severity?: string; affectedFiles?: string[]; command?: string; riskTags?: string[]; rollback?: string; alternatives?: string } | undefined
   const severityColor = impact?.severity ? SEVERITY_COLORS[impact.severity] || 'var(--text-muted)' : 'var(--text-muted)'
 
+  const handleDeny = () => resolve(req.reqId, false, false)
+  const handleAllowSession = () => resolve(req.reqId, true, 'session')
+  const handleAllowRemember = () => resolve(req.reqId, true, 'remember')
+  const handleAllowOnce = () => resolve(req.reqId, true, false)
+
   return (
     <div className="fixed inset-0 z-[101] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 animate-blur-fade" onClick={() => resolve(req.reqId, false)} />
@@ -181,12 +186,15 @@ export default function PermissionDialog() {
           {t('agent.permission.desc')}
         </p>
         <div className="flex justify-end gap-2 flex-wrap">
-          <button onClick={() => resolve(req.reqId, false)} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+          <button onClick={handleDeny} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('agent.permission.deny')}</button>
-          <button onClick={() => resolve(req.reqId, true, true)}
+          <button onClick={handleAllowSession}
+            className="px-3.5 py-1.5 text-xs rounded-lg border transition-colors hover:opacity-90"
+            style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}>{t('agent.permission.allow_session')}</button>
+          <button onClick={handleAllowRemember}
             className="px-3.5 py-1.5 text-xs rounded-lg border transition-colors hover:opacity-90"
             style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>{t('agent.permission.allow_remember')}</button>
-          <button onClick={() => resolve(req.reqId, true)}
+          <button onClick={handleAllowOnce}
             className="px-3.5 py-1.5 text-xs rounded-lg text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: 'var(--error)' }}>{t('agent.permission.allow_once')}</button>
         </div>

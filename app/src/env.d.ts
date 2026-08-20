@@ -344,6 +344,10 @@ interface Window {
       steer: (params: { sessionId: number; text: string; priority?: string }) => Promise<{ text: string; priority: string; timestamp: number; processed: boolean }>
       followUp: (params: { sessionId: number; task: string | { text: string; context?: Record<string, unknown> } }) => Promise<{ id: string; text: string; status: string }>
       listSessions: () => Promise<number[]>
+      planControl: {
+        skipStep: (params: { sessionId: number; stepId: string }) => Promise<{ stepId: string; action: string }>
+        retryStep: (params: { sessionId: number; stepId: string }) => Promise<{ stepId: string; action: string }>
+      }
     }
     evolution: {
       runCycle: (params: { strategy?: string; auditTrail?: { name: string; args?: Record<string, unknown>; error?: string | null }[] }) => Promise<{ ok: boolean; result?: unknown; error?: string }>

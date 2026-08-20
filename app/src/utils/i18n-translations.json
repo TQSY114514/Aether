@@ -22,6 +22,9 @@
       "agent.permission.affected_files": "受影响文件",
       "agent.permission.allow": "允许",
       "agent.permission.allow_once": "本次允许",
+      "agent.permission.allow_session": "本会话允许",
+      "agent.status.running": "Agent 运行中",
+      "agent.status.iterations": "{0} 步",
       "agent.permission.allow_remember": "永久允许",
       "agent.permission.alternatives": "替代方案",
       "agent.permission.command": "命令",
@@ -79,6 +82,12 @@
       "chat.mode.normal": "聊天",
       "chat.model_switch": "切换模型",
       "model.suggest.no_match": "无更优匹配 — 保留当前模型",
+      "model.rationale.title": "模型推荐理由",
+      "model.rationale.fit": "匹配度",
+      "model.rationale.confidence": "置信度",
+      "model.rationale.task": "任务",
+      "model.rationale.family": "模型族",
+      "model.rationale.close": "竞争激烈",
       "model.suggest.task": "任务：{0}",
       "model.suggest.task.coding": "编程",
       "model.suggest.task.debug": "调试",
@@ -555,7 +564,11 @@
       "onboarding.fetch": "获取模型",
       "onboarding.permission": "Agent 权限",
       "onboarding.ask_recommended": "Ask —— 每个风险操作执行前都会先确认。安全起见推荐此模式。",
-      "onboarding.error": "保存时出错，请检查 API 地址和密钥。"
+      "onboarding.error": "保存时出错，请检查 API 地址和密钥。",
+      "task.status.paused": "已暂停",
+      "task.status.pending": "等待中",
+      "task.status.plan": "规划中",
+      "task.status.queued": "排队中"
     }
   },
   {
