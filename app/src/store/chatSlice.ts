@@ -371,8 +371,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
 
   isInjectedMsg: (id) => _injectedMsgIds.has(id),
 
-  resolvePermission: (reqId, allowed, remember = false) => {
-    window.electronAPI.chat.replyPermission({ reqId, allowed, remember })
+  resolvePermission: (reqId, allowed, remember: boolean | 'session' | 'remember' = false) => {
+    window.electronAPI.chat.replyPermission({ reqId, allowed, remember: remember === 'remember' || remember === true })
     set((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
   },
 

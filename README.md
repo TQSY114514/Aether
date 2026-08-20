@@ -43,6 +43,9 @@ The AI workbench that refuses to surprise you — an agent that asks before it a
 
 **Local-first by design.** Keys, chats, and memory live in a local SQLite database and never leave your machine except to the providers you configure. No account, no cloud sync, no telemetry. The safest place for your data is on your device.
 
+> [!TIP]
+> **New user? Start with Aether Desktop.** The desktop app is stable and works out of the box. The CLI / TUI / SDK layer is experimental — APIs may change and some features may be incomplete.
+
 ---
 
 ## Two products, one repo
@@ -410,31 +413,23 @@ Aether stands on the shoulders of these projects — their ideas shaped the arch
 
 | Project | Inspiration |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Agent permission model, thinking slider, tool-call visualization, sub-agent delegation, hooks |
 | [OpenClaw](https://github.com/openclaw/openclaw) | Context compaction, tool-call loop detection, event-stream architecture |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iteration budget, structured long-term memory, autonomous skills |
-| [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, context compression, tool-call repair |
 | [DS4](https://github.com/antirez/ds4) | Hierarchical task decomposition |
+| [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
+| [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
 
 ### UI & UX
 
 | Project | Inspiration |
 |---|---|
 | [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva copy-paste component methodology |
-| [Magic UI](https://github.com/magicuidesign/magicui) | Animation patterns (shimmer, blur-fade) |
 
 ### Infrastructure
 
 | Project | Inspiration |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Multi-format provider normalization |
 | [MCP](https://modelcontextprotocol.io) | The spec Aether's agent speaks |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Usage-stats dashboard layout |
-| [new-api](https://github.com/QuantumNous/new-api) | Reasoning-effort relay, usage/cost tracking |
-| [Continue](https://github.com/continuedev/continue) | Config-as-source-of-truth, provider abstraction |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Multi-turn agent execution, sandboxed tool execution |
-| [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
-| [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
 
 ---
 
