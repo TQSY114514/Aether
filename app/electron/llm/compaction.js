@@ -31,7 +31,7 @@
 const { completeChat } = require('./providerAdapter')
 const hooks = require('./hooks')
 const tokenizer = require('./tokenizer')
-const { pruneOlderBlock } = require('./contextBudget')
+const { pruneOlderBlock, applyTieredTruncation } = require('./contextBudget')
 
 const SAFETY_MARGIN = 1.2          // estimateTokens is rough; pad it
 const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of budget
