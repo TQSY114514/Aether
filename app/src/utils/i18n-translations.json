@@ -579,7 +579,11 @@
       "settings.agent.capability_failed": "能力轴设置失败",
       "settings.agent.safe_mode_enabled": "安全模式已启用: 关闭 {0} 个实验功能",
       "settings.agent.safe_mode_already": "已是安全模式(无实验功能开启)",
-      "settings.agent.safe_mode_failed": "安全模式应用失败"
+      "settings.agent.safe_mode_failed": "安全模式应用失败",
+      "settings.agent.capability_default": "默认",
+      "capability.axis.filesystem": "文件系统",
+      "capability.axis.shell": "Shell 命令",
+      "capability.axis.network": "网络访问"
     }
   },
   {

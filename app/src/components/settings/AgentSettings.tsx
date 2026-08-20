@@ -36,8 +36,8 @@ export default function AgentSettings() {
     try { window.electronAPI?.agent?.getWorkspace?.().then(setWorkspace).catch(() => {}) } catch {}
     try {
       window.electronAPI?.settings?.get?.('agent_max_iterations').then((v) => {
-        const parsed = parseInt(v || '', 10)
-        if (parsed > 0) setMaxIter(parsed)
+        const n = Number(v)
+        if (Number.isInteger(n) && n > 0) setMaxIter(n)
       }).catch(() => {})
     } catch {}
     try { window.electronAPI?.settings?.get?.('auto_memory_enabled').then((v) => setAutoMemory(v !== '0')).catch(() => {}) } catch {}
@@ -64,7 +64,7 @@ export default function AgentSettings() {
     try {
       if (v) await window.electronAPI?.settings?.set?.(`capability.${axis}`, v)
       else await window.electronAPI?.settings?.set?.(`capability.${axis}`, '')
-      toast(t('settings.agent.capability_set', axis, v || 'default'), { type: 'success' })
+      toast(t('settings.agent.capability_set', t('capability.axis.' + axis), v ? t('capability.' + v) : t('settings.agent.capability_default')), { type: 'success' })
     } catch { toast(t('settings.agent.capability_failed'), { type: 'error' }) }
   }
 

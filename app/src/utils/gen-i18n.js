@@ -7,7 +7,9 @@ const data = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'i18n-tr
 // upside-down. Cosmetic joke locale, not a real translation.
 const F = { a: 'ɐ', b: 'q', c: 'ɔ', d: 'p', e: 'ǝ', f: 'ɟ', g: 'ƃ', h: 'ɥ', i: 'ᴉ', j: 'ɾ', k: 'ʞ', l: 'l', m: 'ɯ', n: 'u', o: 'o', p: 'd', q: 'b', r: 'ɹ', s: 's', t: 'ʇ', u: 'n', v: 'ʌ', w: 'ʍ', x: 'x', y: 'ʎ', z: 'z' }
 function flip(s) {
-  return s.split('').map(c => F[c.toLowerCase()] || c).reverse().join('')
+  // Preserve {N} placeholder tokens: split on them, flip each literal part, reassemble
+  const parts = s.split(/(\{\d+\})/)
+  return parts.map(p => /\{\d+\}/.test(p) ? p : p.split('').map(c => F[c.toLowerCase()] || c).reverse().join('')).join('')
 }
 const enUpside = {}
 for (const k in en) enUpside[k] = flip(en[k])
