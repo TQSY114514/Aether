@@ -206,7 +206,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 ### Agent(函数调用)
 
 - `Beta` **42 个内置工具** — 文件操作(`read_file`、`list_dir`、`glob_find`、`grep_search`、`write_file`、`edit_file`、`apply_patch`)、网络(`web_search`、`web_fetch`)、Shell(`run_command`)、git 与 GitHub(`git_status`、`git_diff`、`git_log`、`git_commit`、`git_push`、`git_create_branch`、`github_pr_create/list/merge/review`、`github_issue_create/list`、`github_release_create`、`github_actions_status`)、代码智能(`find_symbol`、`lsp_definition`、`lsp_references`、`lsp_diagnostics`、`lsp_code_actions`、`lsp_rename`)、Agent 元操作(`use_skill`、`ask_user`、`todo_write`、`delegate_task`、`task`、`memory_save/list/search`、`get_project_context`、`review_code`、`debug_loop`、`test_first`)——配 Plan-Act-Observe 循环、实时推理轨迹 + 任务清单、循环检测、工具级超时、可配置迭代预算(默认 25 轮)、上下文压缩。
-- `Experimental` **层次化规划** — 复杂请求自动生成任务分解(DS4 启发)。
+- `Experimental` **层次化规划** — 复杂请求自动生成任务分解。
 - `Experimental` **子 Agent 委派** — 经 `delegate_task` 并行运行独立子任务。
 - `Stable` **权限模式** — 风险递进阶梯:
 
@@ -407,22 +407,27 @@ Aether 站在这些项目的肩膀上——它们的思想塑造了架构与体�
 | 项目 | 启发 |
 |---|---|
 | [OpenClaw](https://github.com/openclaw/openclaw) | 上下文压缩、工具调用循环检测、事件流架构 |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 迭代预算、结构化长期记忆、自主技能 |
-| [DS4](https://github.com/antirez/ds4) | 层次化任务分解 |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 迭代预算、结构化长期记忆、自主技能、cron 调度、FTS5 记忆搜索 |
+| [Evolver](https://github.com/EvoMap/evolver) | 自进化引擎、GEP(Genome Evolution Protocol) |
 | [Aider](https://github.com/Aider-AI/aider) | LLM 编码助手工具循环、git 集成 |
 | [Cline](https://github.com/cline/cline) | IDE 内嵌 Agent、MCP 集成、权限 UX |
+| [OpenCode](https://github.com/sst/opencode) | TUI 键盘/主题/权限交互、prompt 缓存策略层 |
+| [OpenAI Codex](https://github.com/openai/codex) | 沙箱进程树隔离、运行时长与状态指示 UX |
 
 ### UI 与 UX
 
 | 项目 | 启发 |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva 复制粘贴组件方法论 |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() 复制粘贴组件方法论 |
+| [Magic UI](https://github.com/magicuidesign/magicui) | 动画模式(shimmer、blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | 用量统计面板布局 |
 
 ### 基础设施
 
 | 项目 | 启发 |
 |---|---|
 | [MCP](https://modelcontextprotocol.io) | Aether Agent 所说的协议规范 |
+| [new-api](https://github.com/QuantumNous/new-api) | reasoning-effort 参数形状(中转转换逻辑) |
 
 ---
 

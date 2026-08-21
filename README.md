@@ -212,7 +212,7 @@ node cli.js tui --smoke      # headless state-machine smoke
 ### Agent (Function Calling)
 
 - `Beta` **42 built-in tools** — file ops (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), web (`web_search`, `web_fetch`), shell (`run_command`), git & GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), code intelligence (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), agent meta (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — with a Plan-Act-Observe loop, live reasoning trace + task checklist, loop detection, per-tool timeouts, configurable iteration budget (default 25 rounds), and context compaction.
-- `Experimental` **Hierarchical planning** — auto-generates task breakdown for complex requests (DS4-inspired).
+- `Experimental` **Hierarchical planning** — auto-generates task breakdown for complex requests.
 - `Experimental` **Sub-agent delegation** — independent sub-tasks run in parallel via `delegate_task`.
 - `Stable` **Permission modes** — risk-ascending ladder:
 
@@ -414,22 +414,27 @@ Aether stands on the shoulders of these projects — their ideas shaped the arch
 | Project | Inspiration |
 |---|---|
 | [OpenClaw](https://github.com/openclaw/openclaw) | Context compaction, tool-call loop detection, event-stream architecture |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iteration budget, structured long-term memory, autonomous skills |
-| [DS4](https://github.com/antirez/ds4) | Hierarchical task decomposition |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iteration budget, structured long-term memory, autonomous skills, cron scheduler, FTS5 memory search |
+| [Evolver](https://github.com/EvoMap/evolver) | Self-evolution engine, GEP (Genome Evolution Protocol) |
 | [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
 | [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
+| [OpenCode](https://github.com/sst/opencode) | TUI keyboard/theme/permission UX, prompt cache-policy layer |
+| [OpenAI Codex](https://github.com/openai/codex) | Sandbox process-tree isolation, elapsed-time/status indicator UX |
 
 ### UI & UX
 
 | Project | Inspiration |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva copy-paste component methodology |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() copy-paste component methodology |
+| [Magic UI](https://github.com/magicuidesign/magicui) | Animation patterns (shimmer, blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Usage-stats dashboard layout |
 
 ### Infrastructure
 
 | Project | Inspiration |
 |---|---|
 | [MCP](https://modelcontextprotocol.io) | The spec Aether's agent speaks |
+| [new-api](https://github.com/QuantumNous/new-api) | Reasoning-effort param shapes (relay conversion logic) |
 
 ---
 

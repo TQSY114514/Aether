@@ -206,7 +206,7 @@ node cli.js tui --smoke      # headless-смоук-тест скінченног
 ### Агент (Function Calling)
 
 - `Beta` **42 вбудовані інструменти** — операції з файлами (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), веб (`web_search`, `web_fetch`), шелл (`run_command`), git і GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), кодова інтелектуальність (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), мета агента (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — з циклом Plan-Act-Observe, живим трейсом міркувань + чеклистом завдань, виявленням циклів, таймаутами на інструмент, настроюваним бюджетом ітерацій (за замовчуванням 25 раундів) та ущільненням контексту.
-- `Experimental` **Ієрархічне планування** — автоматично генерує розбиття завдань для складних запитів (натхненно DS4).
+- `Experimental` **Ієрархічне планування** — автоматично генерує розбиття завдань для складних запитів.
 - `Experimental` **Делегування сабагентам** — незалежні підзадачі виконуються паралельно через `delegate_task`.
 - `Stable` **Режими дозволів** — драбина за зростанням ризику:
 
@@ -400,31 +400,28 @@ Aether стоїть на плечах цих проєктів — їхні ід�
 
 | Проєкт | Джерело натхнення |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Модель дозволів агента, повзунок мислення, візуалізація викликів інструментів, делегування сабагентам, хуки |
 | [OpenClaw](https://github.com/openclaw/openclaw) | Ущільнення контексту, виявлення циклів викликів інструментів, архітектура подієвих потоків |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Бюджет ітерацій, структурована довгострокова пам'ять, автономні навички |
-| [OpenAI Codex](https://github.com/openai/codex) | Пісочниця, стиснення контексту, відновлення викликів інструментів |
-| [DS4](https://github.com/antirez/ds4) | Ієрархічне розкладання завдань |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Бюджет ітерацій, структурована довгострокова пам'ять, автономні навички, cron-планувальник, пошук у пам'яті FTS5 |
+| [Evolver](https://github.com/EvoMap/evolver) | Рушій самоеволюції, GEP (Genome Evolution Protocol) |
+| [Aider](https://github.com/Aider-AI/aider) | Цикл інструментів LLM-асистента кодування, інтеграція git |
+| [Cline](https://github.com/cline/cline) | Агент, вбудований в IDE, інтеграція MCP, UX дозволів |
+| [OpenCode](https://github.com/sst/opencode) | TUI-UX клавіатури/теми/дозволів, шар кеш-політики промптів |
+| [OpenAI Codex](https://github.com/openai/codex) | Ізоляція дерева процесів у пісочниці, UX індикатора часу та статусу |
 
 ### UI & UX
 
 | Проєкт | Джерело натхнення |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | Методологія copy-paste компонентів cn() / cva |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | Методологія copy-paste компонентів cn() |
 | [Magic UI](https://github.com/magicuidesign/magicui) | Патерни анімації (shimmer, blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Макет панелі статистики використання |
 
 ### Інфраструктура
 
 | Проєкт | Джерело натхнення |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Нормалізація провайдерів різних форматів |
 | [MCP](https://modelcontextprotocol.io) | Специфікація, якою говорить агент Aether |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Макет інформаційної панелі статистики використання |
-| [new-api](https://github.com/QuantumNous/new-api) | Релей зусиль міркування, відстеження використання/вартості |
-| [Continue](https://github.com/continuedev/continue) | Конфігурація як джерело істини, абстракція провайдерів |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Багатоходове виконання агента, виконання інструментів у пісочниці |
-| [Aider](https://github.com/Aider-AI/aider) | Цикл інструментів LLM-асистента кодування, інтеграція git |
-| [Cline](https://github.com/cline/cline) | Агент, вбудований в IDE, інтеграція MCP, UX дозволів |
+| [new-api](https://github.com/QuantumNous/new-api) | Форми параметра reasoning-effort (логіка перетворення relay) |
 
 ---
 
