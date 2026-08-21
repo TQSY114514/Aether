@@ -234,6 +234,23 @@ describe('_doSync dedup', () => {
     const conflictWrites = runSpy.mock.calls.filter(c => String(c[0]).includes('conflicts_with'))
     expect(conflictWrites).toHaveLength(0)
   })
+
+  it('deduplicates two paraphrased facts returned in the SAME batch', async () => {
+    // recentKw 是 sync 开始时的快照：第一条插入后必须对同批后续条目可见，
+    // 否则 "user likes X" 和 "user really likes X" 会双双入库。
+    const runSpy = vi.fn()
+    const { db, insertSpy } = dedupDb([], runSpy)
+    await runSync(db, [
+      '[FACT] user likes Python for data analysis',
+      '[FACT] user really likes Python for data analysis',
+    ].join('\n'))
+    // 只有第一条落库；第二条命中刚插入的行(id=99)走 solidify
+    expect(insertSpy).toHaveBeenCalledTimes(1)
+    expect(runSpy).toHaveBeenCalledWith(
+      'UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?',
+      [99],
+    )
+  })
 })
 
 // ─── search ─────────────────────────────────────────────────────────────────

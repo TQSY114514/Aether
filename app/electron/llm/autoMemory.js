@@ -376,6 +376,11 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
           if (info && info.lastInsertRowid != null) {
             const newId = Number(info.lastInsertRowid)
             try { db.run('UPDATE memory SET origin = ? WHERE id = ?', 'assistant', newId) } catch {}
+            // 同批可见性：recentKw 是 sync 开始时的快照，本批刚插入的行不在
+            // 其中。若同一次提取返回两条改写版事实（"user likes X" +
+            // "user really likes X"），第二条会漏过去重再插一份 —— 把新行
+            // 追加进 recentKw，让同批后续条目也能命中 Jaccard 去重。
+            recentKw.push({ id: newId, type: entry.type, kw: keywords(entry.content) })
             // 冲突标记在插入之后：新行指向旧行（new.conflicts_with = old.id），
             // UI 的二选一才有真实的新旧对比。此前在插入前调用且传参
             // [row.id, row.id]，把旧行指成了自己 —— 见 detectConflict 注释。
