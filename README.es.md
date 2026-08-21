@@ -204,7 +204,7 @@ node cli.js tui --smoke      # smoke de la máquina de estados headless
 ### Agente (Function Calling)
 
 - `Beta` **42 herramientas integradas** — operaciones de archivos (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), web (`web_search`, `web_fetch`), shell (`run_command`), git y GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), inteligencia de código (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), metainformación de agente (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — con bucle Plan-Act-Observe, traza de razonamiento en vivo + lista de tareas, detección de bucles, timeouts por herramienta, presupuesto de iteraciones configurable (25 rondas por defecto) y compacción de contexto.
-- `Experimental` **Planificación jerárquica** — genera automáticamente el desglose de tareas para solicitudes complejas (inspirado en DS4).
+- `Experimental` **Planificación jerárquica** — genera automáticamente el desglose de tareas para solicitudes complejas.
 - `Experimental` **Delegación de sub-agente** — subtareas independientes se ejecutan en paralelo vía `delegate_task`.
 - `Stable` **Modos de permiso** — escalera ascendente de riesgo:
 
@@ -398,31 +398,28 @@ Aether se apoya en los hombros de estos proyectos — sus ideas dieron forma a l
 
 | Proyecto | Inspiración |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Modelo de permisos del agente, deslizador de pensamiento, visualización de llamadas a herramientas, delegación de sub-agentes, hooks |
 | [OpenClaw](https://github.com/openclaw/openclaw) | Compacción de contexto, detección de bucles de llamadas a herramientas, arquitectura de flujo de eventos |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Presupuesto de iteraciones, memoria estructurada a largo plazo, skills autónomas |
-| [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, compresión de contexto, reparación de llamadas a herramientas |
-| [DS4](https://github.com/antirez/ds4) | Descomposición jerárquica de tareas |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Presupuesto de iteraciones, memoria estructurada a largo plazo, skills autónomas, planificador cron, búsqueda de memoria FTS5 |
+| [Evolver](https://github.com/EvoMap/evolver) | Motor de autoevolución, GEP (Genome Evolution Protocol) |
+| [Aider](https://github.com/Aider-AI/aider) | Bucle de herramientas de asistente de codificación LLM, integración con git |
+| [Cline](https://github.com/cline/cline) | Agente integrado en el IDE, integración MCP, UX de permisos |
+| [OpenCode](https://github.com/sst/opencode) | UX de teclado/tema/permisos de la TUI, capa de política de caché de prompts |
+| [OpenAI Codex](https://github.com/openai/codex) | Aislamiento del árbol de procesos en sandbox, UX de indicador de tiempo transcurrido y estado |
 
 ### UI y UX
 
 | Proyecto | Inspiración |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | Metodología de componentes copy-paste cn() / cva |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | Metodología de componentes copy-paste cn() |
 | [Magic UI](https://github.com/magicuidesign/magicui) | Patrones de animación (shimmer, blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Diseño del panel de estadísticas de uso |
 
 ### Infraestructura
 
 | Proyecto | Inspiración |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Normalización de proveedores multi-formato |
 | [MCP](https://modelcontextprotocol.io) | El estándar que habla el agente de Aether |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Disposición del panel de estadísticas de uso |
-| [new-api](https://github.com/QuantumNous/new-api) | Relay de esfuerzo de razonamiento, seguimiento de uso/costo |
-| [Continue](https://github.com/continuedev/continue) | Config como fuente de verdad, abstracción de proveedores |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Ejecución de agente multi-turno, ejecución de herramientas con sandbox |
-| [Aider](https://github.com/Aider-AI/aider) | Bucle de herramientas de asistente de codificación LLM, integración con git |
-| [Cline](https://github.com/cline/cline) | Agente integrado en el IDE, integración MCP, UX de permisos |
+| [new-api](https://github.com/QuantumNous/new-api) | Formas del parámetro reasoning-effort (lógica de conversión del relay) |
 
 ---
 

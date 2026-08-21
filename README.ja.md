@@ -204,7 +204,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 ### エージェント（Function Calling）
 
 - `Beta` **42 の内蔵ツール** — ファイル操作（`read_file`、`list_dir`、`glob_find`、`grep_search`、`write_file`、`edit_file`、`apply_patch`）、ウェブ（`web_search`、`web_fetch`）、シェル（`run_command`）、git & GitHub（`git_status`、`git_diff`、`git_log`、`git_commit`、`git_push`、`git_create_branch`、`github_pr_create/list/merge/review`、`github_issue_create/list`、`github_release_create`、`github_actions_status`）、コードインテリジェンス（`find_symbol`、`lsp_definition`、`lsp_references`、`lsp_diagnostics`、`lsp_code_actions`、`lsp_rename`）、エージェントメタ（`use_skill`、`ask_user`、`todo_write`、`delegate_task`、`task`、`memory_save/list/search`、`get_project_context`、`review_code`、`debug_loop`、`test_first`）— Plan-Act-Observe ループ、ライブ推論トレース + タスクチェックリスト、ループ検出、ツールごとのタイムアウト、設定可能な反復予算（デフォルト 25 ラウンド）、コンテキスト圧縮付き。
-- `Experimental` **階層的プランニング** — 複雑なリクエストに対するタスク分解を自動生成（DS4 に着想）。
+- `Experimental` **階層的プランニング** — 複雑なリクエストに対するタスク分解を自動生成。
 - `Experimental` **サブエージェント委譲** — 独立したサブタスクが `delegate_task` 経由で並行実行されます。
 - `Stable` **権限モード** — リスクの昇順ラダー:
 
@@ -405,31 +405,28 @@ Aether は以下のプロジェクトの上に成り立っています — そ�
 
 | プロジェクト | 着想 |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | エージェント権限モデル、思考量スライダー、ツール呼び出しの可視化、サブエージェント委譲、フック |
 | [OpenClaw](https://github.com/openclaw/openclaw) | コンテキスト圧縮、ツール呼び出しループ検出、イベントストリームアーキテクチャ |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 反復予算、構造化された長期メモリ、自律スキル |
-| [OpenAI Codex](https://github.com/openai/codex) | サンドボックス化、コンテキスト圧縮、ツール呼び出しの修復 |
-| [DS4](https://github.com/antirez/ds4) | 階層的タスク分解 |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 反復予算、構造化された長期メモリ、自律スキル、cron スケジューラ、FTS5 メモリ検索 |
+| [Evolver](https://github.com/EvoMap/evolver) | 自己進化エンジン、GEP（Genome Evolution Protocol） |
+| [Aider](https://github.com/Aider-AI/aider) | LLM コーディングアシスタントのツールループ、git 統合 |
+| [Cline](https://github.com/cline/cline) | IDE 埋め込みエージェント、MCP 統合、権限 UX |
+| [OpenCode](https://github.com/sst/opencode) | TUI のキーボード/テーマ/権限 UX、プロンプトキャッシュポリシーレイヤー |
+| [OpenAI Codex](https://github.com/openai/codex) | サンドボックスのプロセスツリー分離、経過時間/ステータス表示 UX |
 
 ### UI & UX
 
 | プロジェクト | 着想 |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva のコピーペーストコンポーネント手法 |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() のコピーペーストコンポーネント手法 |
 | [Magic UI](https://github.com/magicuidesign/magicui) | アニメーションパターン（shimmer、blur-fade） |
+| [cc-switch](https://github.com/farion1231/cc-switch) | 使用統計ダッシュボードのレイアウト |
 
 ### インフラストラクチャ
 
 | プロジェクト | 着想 |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | マルチフォーマットのプロバイダー正規化 |
 | [MCP](https://modelcontextprotocol.io) | Aether のエージェントが話す仕様 |
-| [cc-switch](https://github.com/farion1231/cc-switch) | 使用量統計ダッシュボードのレイアウト |
-| [new-api](https://github.com/QuantumNous/new-api) | 推論量（reasoning-effort）のリレー、使用量 / コストの追跡 |
-| [Continue](https://github.com/continuedev/continue) | 設定を信頼できる唯一の情報源とするアプローチ、プロバイダー抽象化 |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | マルチターンのエージェント実行、サンドボックス化されたツール実行 |
-| [Aider](https://github.com/Aider-AI/aider) | LLM コーディングアシスタントのツールループ、git 統合 |
-| [Cline](https://github.com/cline/cline) | IDE 埋め込みエージェント、MCP 統合、権限 UX |
+| [new-api](https://github.com/QuantumNous/new-api) | reasoning-effort パラメータ形状（リレー変換ロジック） |
 
 ---
 

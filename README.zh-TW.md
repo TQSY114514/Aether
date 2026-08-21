@@ -202,7 +202,7 @@ node cli.js tui --smoke      # headless 狀態機冒煙
 ### Agent(函式呼叫)
 
 - `Beta` **42 個內建工具** — 檔案操作(`read_file`、`list_dir`、`glob_find`、`grep_search`、`write_file`、`edit_file`、`apply_patch`)、網路(`web_search`、`web_fetch`)、Shell(`run_command`)、git 與 GitHub(`git_status`、`git_diff`、`git_log`、`git_commit`、`git_push`、`git_create_branch`、`github_pr_create/list/merge/review`、`github_issue_create/list`、`github_release_create`、`github_actions_status`)、程式碼智慧(`find_symbol`、`lsp_definition`、`lsp_references`、`lsp_diagnostics`、`lsp_code_actions`、`lsp_rename`)、Agent 元操作(`use_skill`、`ask_user`、`todo_write`、`delegate_task`、`task`、`memory_save/list/search`、`get_project_context`、`review_code`、`debug_loop`、`test_first`)——配 Plan-Act-Observe 迴圈、即時推理軌跡 + 任務清單、迴圈偵測、工具級逾時、可設定迭代預算(預設 25 輪)、上下文壓縮。
-- `Experimental` **層次化規劃** — 複雜請求自動產生任務分解(DS4 啟發)。
+- `Experimental` **層次化規劃** — 複雜請求自動產生任務分解。
 - `Experimental` **子 Agent 委派** — 經 `delegate_task` 並行執行獨立子任務。
 - `Stable` **權限模式** — 風險遞進階梯:
 
@@ -403,31 +403,28 @@ Aether 站在這些專案的肩膀上——它們的思想塑造了架構與體�
 
 | 專案 | 啟發 |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Agent 權限模型、思考滑桿、工具呼叫視覺化、子 Agent 委派、鉤子 |
 | [OpenClaw](https://github.com/openclaw/openclaw) | 上下文壓縮、工具呼叫迴圈偵測、事件流架構 |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 迭代預算、結構化長期記憶、自主技能 |
-| [OpenAI Codex](https://github.com/openai/codex) | 沙箱、上下文壓縮、工具呼叫修復 |
-| [DS4](https://github.com/antirez/ds4) | 層次化任務分解 |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 迭代預算、結構化長期記憶、自主技能、cron 排程、FTS5 記憶搜尋 |
+| [Evolver](https://github.com/EvoMap/evolver) | 自進化引擎、GEP(Genome Evolution Protocol) |
+| [Aider](https://github.com/Aider-AI/aider) | LLM 編碼助手工具迴圈、git 整合 |
+| [Cline](https://github.com/cline/cline) | IDE 內嵌 Agent、MCP 整合、權限 UX |
+| [OpenCode](https://github.com/sst/opencode) | TUI 鍵盤/主題/權限互動、prompt 快取策略層 |
+| [OpenAI Codex](https://github.com/openai/codex) | 沙箱處理程序樹隔離、執行時長與狀態指示 UX |
 
 ### UI 與 UX
 
 | 專案 | 啟發 |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva 複製貼上元件方法論 |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() 複製貼上元件方法論 |
 | [Magic UI](https://github.com/magicuidesign/magicui) | 動畫模式 (shimmer, blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | 用量統計面板佈局 |
 
 ### 基礎設施
 
 | 專案 | 啟發 |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | 多格式提供商歸一化 |
 | [MCP](https://modelcontextprotocol.io) | Aether Agent 所說的協定規範 |
-| [cc-switch](https://github.com/farion1231/cc-switch) | 用量統計面板佈局 |
-| [new-api](https://github.com/QuantumNous/new-api) | 思考力度中轉、用量/成本追蹤 |
-| [Continue](https://github.com/continuedev/continue) | 設定即事實來源、提供商抽象 |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | 多輪 Agent 執行、沙箱化工具執行 |
-| [Aider](https://github.com/Aider-AI/aider) | LLM 編碼助手工具迴圈、git 整合 |
-| [Cline](https://github.com/cline/cline) | IDE 內嵌 Agent、MCP 整合、權限 UX |
+| [new-api](https://github.com/QuantumNous/new-api) | reasoning-effort 參數形狀(中轉轉換邏輯) |
 
 ---
 

@@ -204,7 +204,7 @@ node cli.js tui --smoke      # headless स्टेट-मशीन स्म�
 ### एजेंट (Function Calling)
 
 - `Beta` **42 अंतर्निहित टूल** — फ़ाइल संचालन (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), वेब (`web_search`, `web_fetch`), शेल (`run_command`), git और GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), कोड इंटेलिजेंस (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), एजेंट मेटा (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — Plan-Act-Observe लूप, लाइव रीज़निंग ट्रेस + कार्य चेकलिस्ट, लूप पहचान, प्रति-टूल टाइमआउट, विन्यास योग्य पुनरावृत्ति बजट (डिफ़ॉल्ट 25 राउंड), और संदर्भ संपीड़न के साथ।
-- `Experimental` **Hierarchical planning** — जटिल अनुरोधों के लिए स्वतः कार्य ब्रेकडाउन जनरेट करता है (DS4-प्रेरित)।
+- `Experimental` **Hierarchical planning** — जटिल अनुरोधों के लिए स्वतः कार्य ब्रेकडाउन जनरेट करता है।
 - `Experimental` **Sub-agent delegation** — स्वतंत्र उप-कार्य `delegate_task` के माध्यम से समानांतर चलते हैं।
 - `Stable` **Permission modes** — जोखिम-आरोही सीढ़ी:
 
@@ -398,31 +398,28 @@ Aether इन परियोजनाओं के कंधों पर ख�
 
 | Project | Inspiration |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Agent permission model, thinking slider, tool-call visualization, sub-agent delegation, hooks |
 | [OpenClaw](https://github.com/openclaw/openclaw) | Context compaction, tool-call loop detection, event-stream architecture |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iteration budget, structured long-term memory, autonomous skills |
-| [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, context compression, tool-call repair |
-| [DS4](https://github.com/antirez/ds4) | Hierarchical task decomposition |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iteration budget, structured long-term memory, autonomous skills, cron scheduler, FTS5 memory search |
+| [Evolver](https://github.com/EvoMap/evolver) | Self-evolution engine, GEP (Genome Evolution Protocol) |
+| [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
+| [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
+| [OpenCode](https://github.com/sst/opencode) | TUI keyboard/theme/permission UX, prompt cache-policy layer |
+| [OpenAI Codex](https://github.com/openai/codex) | Sandbox process-tree isolation, elapsed-time/status indicator UX |
 
 ### UI & UX
 
 | Project | Inspiration |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva copy-paste component methodology |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() copy-paste component methodology |
 | [Magic UI](https://github.com/magicuidesign/magicui) | Animation patterns (shimmer, blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Usage-stats dashboard layout |
 
 ### इंफ्रास्ट्रक्चर
 
 | Project | Inspiration |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Multi-format provider normalization |
 | [MCP](https://modelcontextprotocol.io) | The spec Aether's agent speaks |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Usage-stats dashboard layout |
-| [new-api](https://github.com/QuantumNous/new-api) | Reasoning-effort relay, usage/cost tracking |
-| [Continue](https://github.com/continuedev/continue) | Config-as-source-of-truth, provider abstraction |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Multi-turn agent execution, sandboxed tool execution |
-| [Aider](https://github.com/Aider-AI/aider) | LLM coding-assistant tool loop, git integration |
-| [Cline](https://github.com/cline/cline) | IDE-embedded agent, MCP integration, permission UX |
+| [new-api](https://github.com/QuantumNous/new-api) | Reasoning-effort param shapes (relay conversion logic) |
 
 ---
 

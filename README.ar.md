@@ -204,7 +204,7 @@ node cli.js tui --smoke      # headless state-machine smoke
 ### الوكيل (استدعاء الدوال)
 
 - `Beta` **42 أداة مدمجة** — عمليات الملفات (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), الويب (`web_search`, `web_fetch`), الصدفة (`run_command`), git و GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), ذكاء الكود (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), أدوات الوكيل (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — مع حلقة خطّط-نفّذ-راقب، وتتبّع استدلال حيّ + قائمة مهام، وكشف الحلقات، ومهلات زمنية لكل أداة، وميزانية تكرار قابلة للتكوين (25 جولة افتراضيًا)، وانكماش السياق.
-- `Experimental` **تخطيط هرميّ** — يولّد تلقائيًا تفكيك المهام للطلبات المعقّدة (مُلهَم من DS4).
+- `Experimental` **تخطيط هرميّ** — يولّد تلقائيًا تفكيك المهام للطلبات المعقّدة.
 - `Experimental` **تفويض الوكيل الفرعيّ** — المهام الفرعية المستقلّة تعمل بالتوازي عبر `delegate_task`.
 - `Stable` **أوضاع الصلاحيات** — سلم تصاعديّ للمخاطر:
 
@@ -398,31 +398,28 @@ app/
 
 | المشروع | الإلهام |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | نموذج صلاحية الوكيل، مزلقة التفكير، تصوير استدعاء الأداة، تفويض الوكيل الفرعيّ، الخطّافات |
 | [OpenClaw](https://github.com/openclaw/openclaw) | انكماش السياق، كشف حلقة استدعاء الأداة، بنية تدفق الأحداث |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | ميزانية التكرار، الذاكرة طويلة الأمد المهيكلة، المهارات المستقلّة |
-| [OpenAI Codex](https://github.com/openai/codex) | صندوق الرمل، ضغط السياق، إصلاح استدعاء الأداة |
-| [DS4](https://github.com/antirez/ds4) | التفكيك الهرميّ للمهام |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | ميزانية التكرار، الذاكرة طويلة الأمد المهيكلة، المهارات المستقلّة، مجدول cron، بحث ذاكرة FTS5 |
+| [Evolver](https://github.com/EvoMap/evolver) | محرك تطوّر ذاتي، GEP (Genome Evolution Protocol) |
+| [Aider](https://github.com/Aider-AI/aider) | حلقة أدوات مساعد البرمجة بالـ LLM، التكامل مع git |
+| [Cline](https://github.com/cline/cline) | وكيل مدمج في IDE، تكامل MCP، تجربة صلاحيات |
+| [OpenCode](https://github.com/sst/opencode) | تجربة مستخدم TUI للوحة المفاتيح والسمة والأذونات، طبقة سياسة تخزين المطالبات المؤقت |
+| [OpenAI Codex](https://github.com/openai/codex) | عزل شجرة العمليات في الصندوق المحصّن، تجربة مستخدم لمؤشّر الوقت المنقضي والحالة |
 
 ### الواجهة وتجربة المستخدم
 
 | المشروع | الإلهام |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | منهجية المكوّنات القابلة للنسخ واللصق cn() / cva |
-| [Magic UI](https://github.com/magicuidesign/magicui) | أنماط الحركة (توهّج، تلاشي ضبابي) |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | منهجية المكوّنات القابلة للنسخ واللصق cn() |
+| [Magic UI](https://github.com/magicuidesign/magicui) | أنماط الحركة (shimmer، blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | تخطيط لوحة إحصائيات الاستخدام |
 
 ### البنية التحتية
 
 | المشروع | الإلهام |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | تطبيع المزوّدات متعدّدة الصيغ |
 | [MCP](https://modelcontextprotocol.io) | المواصفة التي يتكلّم بها وكيل Aether |
-| [cc-switch](https://github.com/farion1231/cc-switch) | تخطيط لوحة إحصائيات الاستخدام |
-| [new-api](https://github.com/QuantumNous/new-api) | وسيط جهد الاستدلال، تتبّع الاستخدام/التكلفة |
-| [Continue](https://github.com/continuedev/continue) | التكوين كمصدر للحقيقة، تجريد المزوّد |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | تنفيذ وكيل متعدّد الأدوار، تنفيذ الأدوات في صندوق الرمل |
-| [Aider](https://github.com/Aider-AI/aider) | حلقة أدوات مساعد البرمجة بالـ LLM، التكامل مع git |
-| [Cline](https://github.com/cline/cline) | وكيل مدمج في IDE، تكامل MCP، تجربة صلاحيات |
+| [new-api](https://github.com/QuantumNous/new-api) | أشكال معامل reasoning-effort (منطق تحويل الوسيط) |
 
 ---
 

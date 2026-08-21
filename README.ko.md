@@ -192,7 +192,7 @@ node cli.js tui --smoke      # headless 상태 머신 스모크
 ### 에이전트(함수 호출)
 
 - `Beta` **42개 내장 도구** — 파일 작업(`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), 웹(`web_search`, `web_fetch`), 셸(`run_command`), git & GitHub(`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), 코드 인텔리전스(`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), 에이전트 메타(`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — Plan-Act-Observe 루프, 실시간 추론 추적 + 작업 체크리스트, 루프 감지, 도구별 타임아웃, 구성 가능한 반복 예산(기본 25라운드), 컨텍스트 압축 포함.
-- `Experimental` **계층적 플래닝** — 복잡한 요청에 대한 작업 분해 자동 생성(DS4 영감).
+- `Experimental` **계층적 플래닝** — 복잡한 요청에 대한 작업 분해 자동 생성.
 - `Experimental` **하위 에이전트 위임** — `delegate_task`를 통해 독립적인 하위 작업이 병렬로 실행.
 - `Stable` **권한 모드** — 위험도 상승 순서의 사다리:
 
@@ -393,31 +393,28 @@ Aether는 다음 프로젝트들의 어깨 위에 서 있습니다 — 그들의
 
 | 프로젝트 | 영감 |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | 에이전트 권한 모델, thinking 슬라이더, 도구 호출 시각화, 하위 에이전트 위임, hooks |
 | [OpenClaw](https://github.com/openclaw/openclaw) | 컨텍스트 압축, 도구 호출 루프 감지, 이벤트 스트림 아키텍처 |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 반복 예산, 구조화된 장기 메모리, 자율 스킬 |
-| [OpenAI Codex](https://github.com/openai/codex) | 샌드박싱, 컨텍스트 압축, 도구 호출 수리 |
-| [DS4](https://github.com/antirez/ds4) | 계층적 작업 분해 |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 반복 예산, 구조화된 장기 메모리, 자율 스킬, cron 스케줄러, FTS5 메모리 검색 |
+| [Evolver](https://github.com/EvoMap/evolver) | 자가 진화 엔진, GEP(Genome Evolution Protocol) |
+| [Aider](https://github.com/Aider-AI/aider) | LLM 코딩 어시스턴트 도구 루프, git 통합 |
+| [Cline](https://github.com/cline/cline) | IDE 내장 에이전트, MCP 통합, 권한 UX |
+| [OpenCode](https://github.com/sst/opencode) | TUI 키보드/테마/권한 UX, 프롬프트 캐시 정책 레이어 |
+| [OpenAI Codex](https://github.com/openai/codex) | 샌드박스 프로세스 트리 격리, 경과 시간/상태 표시 UX |
 
 ### UI & UX
 
 | 프로젝트 | 영감 |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva 복사-붙여넣기 컴포넌트 방법론 |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() 복사-붙여넣기 컴포넌트 방법론 |
 | [Magic UI](https://github.com/magicuidesign/magicui) | 애니메이션 패턴(shimmer, blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | 사용 통계 대시보드 레이아웃 |
 
 ### 인프라
 
 | 프로젝트 | 영감 |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | 다중 형식 프로바이더 정규화 |
 | [MCP](https://modelcontextprotocol.io) | Aether의 에이전트가 사용하는 스펙 |
-| [cc-switch](https://github.com/farion1231/cc-switch) | 사용량 통계 대시보드 레이아웃 |
-| [new-api](https://github.com/QuantumNous/new-api) | reasoning-effort 릴레이, 사용량/비용 추적 |
-| [Continue](https://github.com/continuedev/continue) | 구성-소스-최종본(config-as-source-of-truth), 프로바이더 추상화 |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | 다중 턴 에이전트 실행, 샌드박스 처리된 도구 실행 |
-| [Aider](https://github.com/Aider-AI/aider) | LLM 코딩 어시스턴트 도구 루프, git 통합 |
-| [Cline](https://github.com/cline/cline) | IDE 내장 에이전트, MCP 통합, 권한 UX |
+| [new-api](https://github.com/QuantumNous/new-api) | reasoning-effort 파라미터 형태(릴레이 변환 로직) |
 
 ---
 

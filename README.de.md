@@ -204,7 +204,7 @@ node cli.js tui --smoke      # Headless-Zustandsmaschinen-Smoke-Test
 ### Agent (Function Calling)
 
 - `Beta` **42 integrierte Tools** — Dateioperationen (`read_file`, `list_dir`, `glob_find`, `grep_search`, `write_file`, `edit_file`, `apply_patch`), Web (`web_search`, `web_fetch`), Shell (`run_command`), git & GitHub (`git_status`, `git_diff`, `git_log`, `git_commit`, `git_push`, `git_create_branch`, `github_pr_create/list/merge/review`, `github_issue_create/list`, `github_release_create`, `github_actions_status`), Code-Intelligenz (`find_symbol`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`, `lsp_code_actions`, `lsp_rename`), Agent-Meta (`use_skill`, `ask_user`, `todo_write`, `delegate_task`, `task`, `memory_save/list/search`, `get_project_context`, `review_code`, `debug_loop`, `test_first`) — mit Plan-Act-Observe-Loop, Live-Reasoning-Trace + Aufgaben-Checkliste, Loop-Erkennung, Timeouts pro Tool, konfigurierbarem Iterationsbudget (standardmäßig 25 Runden) und Kontext-Kompaktierung.
-- `Experimental` **Hierarchische Planung** — generiert automatisch Aufgabenaufschlüsselungen für komplexe Anfragen (von DS4 inspiriert).
+- `Experimental` **Hierarchische Planung** — generiert automatisch Aufgabenaufschlüsselungen für komplexe Anfragen.
 - `Experimental` **Sub-Agent-Delegation** — unabhängige Unteraufgaben laufen parallel über `delegate_task`.
 - `Stable` **Berechtigungsmodi** — aufsteigende Risikoleiter:
 
@@ -398,31 +398,28 @@ Aether steht auf den Schultern dieser Projekte — ihre Ideen haben Architektur 
 
 | Projekt | Inspiration |
 |---|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Agent-Berechtigungsmodell, Thinking-Regler, Tool-Call-Visualisierung, Sub-Agent-Delegation, Hooks |
 | [OpenClaw](https://github.com/openclaw/openclaw) | Kontext-Kompaktierung, Tool-Call-Loop-Erkennung, Event-Stream-Architektur |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iterationsbudget, strukturierter Langzeitspeicher, autonome Skills |
-| [OpenAI Codex](https://github.com/openai/codex) | Sandboxing, Kontext-Kompression, Tool-Call-Reparatur |
-| [DS4](https://github.com/antirez/ds4) | Hierarchische Aufgabenzerlegung |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Iterationsbudget, strukturierter Langzeitspeicher, autonome Skills, Cron-Scheduler, FTS5-Speichersuche |
+| [Evolver](https://github.com/EvoMap/evolver) | Selbstevolutions-Engine, GEP (Genome Evolution Protocol) |
+| [Aider](https://github.com/Aider-AI/aider) | LLM-Coding-Assistant-Tool-Loop, git-Integration |
+| [Cline](https://github.com/cline/cline) | IDE-eingebetteter Agent, MCP-Integration, Berechtigungs-UX |
+| [OpenCode](https://github.com/sst/opencode) | TUI-Tastatur-/Theme-/Berechtigungs-UX, Prompt-Cache-Policy-Layer |
+| [OpenAI Codex](https://github.com/openai/codex) | Sandbox-Prozessbaum-Isolation, Laufzeit-/Statusindikator-UX |
 
 ### UI & UX
 
 | Projekt | Inspiration |
 |---|---|
-| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() / cva Copy-Paste-Komponentenmethodik |
+| [shadcn/ui](https://github.com/shadcn-ui/ui) | cn() Copy-Paste-Komponentenmethodik |
 | [Magic UI](https://github.com/magicuidesign/magicui) | Animationsmuster (shimmer, blur-fade) |
+| [cc-switch](https://github.com/farion1231/cc-switch) | Layout des Nutzungsstatistik-Dashboards |
 
 ### Infrastruktur
 
 | Projekt | Inspiration |
 |---|---|
-| [Dify](https://github.com/langgenius/dify) | Normalisierung von Multi-Format-Anbietern |
 | [MCP](https://modelcontextprotocol.io) | Der Standard, den Aether’s Agent spricht |
-| [cc-switch](https://github.com/farion1231/cc-switch) | Layout des Nutzungsstatistik-Dashboards |
-| [new-api](https://github.com/QuantumNous/new-api) | Reasoning-Effort-Relay, Nutzungs-/Kostenverfolgung |
-| [Continue](https://github.com/continuedev/continue) | Konfiguration als Quelle der Wahrheit, Provider-Abstraktion |
-| [OpenHands](https://github.com/All-Hands-AI/OpenHands) | Mehrschrittige Agent-Ausführung, Sandbox-Tool-Ausführung |
-| [Aider](https://github.com/Aider-AI/aider) | LLM-Coding-Assistant-Tool-Loop, git-Integration |
-| [Cline](https://github.com/cline/cline) | IDE-eingebetteter Agent, MCP-Integration, Berechtigungs-UX |
+| [new-api](https://github.com/QuantumNous/new-api) | Param-Shapes für reasoning-effort (Relay-Konvertierungslogik) |
 
 ---
 
