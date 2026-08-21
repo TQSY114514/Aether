@@ -6,13 +6,18 @@
 // We re-import the module fresh per test (vi.resetModules) so the module-level
 // prefetch cache (_memCache) never leaks between tests.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 let autoMemory
 beforeEach(async () => {
   vi.resetModules()
   autoMemory = await import('../electron/llm/autoMemory')
 })
+
+// _doSync 经 providerAdapter.completeChat 调 LLM 提取 —— mock 掉，不发真实请求。
+// beforeEach 的 vi.resetModules() 会重建模块注册表；测试内重新 import 拿到的
+// 就是当前 autoMemory 实例所用的同一个 mock 实例。
+vi.mock('../electron/llm/providerAdapter', () => ({ completeChat: vi.fn() }))
 
 // ─── Fake db for search / prefetch / detectConflict / prune ────────────────
 function mkDb({ memories = [], fts = null, throwOnGet = false, runSpy = null } = {}) {
@@ -101,17 +106,47 @@ describe('detectConflict', () => {
     expect(autoMemory.detectConflict(db, 'Alice prefers Python', 'fact')).toBeNull()
   })
 
-  it('marks a conflicting memory when overlap >= 2 and content differs', () => {
+  it('marks a conflicting memory when overlap ratio >= 0.7 and content differs', () => {
+    const older = { id: 7, content: 'Alice prefers Python project', type: 'fact', created_at: '2020-01-01' }
+    const runSpy = vi.fn()
+    const db = mkDb({ memories: [older], runSpy })
+    // 新行 id=8：冲突指针必须 新→旧（8 指向 7），绝不允许旧行指向自己。
+    const res = autoMemory.detectConflict(db, 'Alice prefers JavaScript project', 'fact', 8)
+    expect(res).not.toBeNull()
+    expect(res.olderId).toBe(7)
+    expect(res.olderContent).toBe(older.content)
+    expect(res.reason).toContain('Alice prefers Python project')
+    // the NEW memory points at the OLDER one (regression: was [7, 7] self-reference)
+    expect(runSpy).toHaveBeenCalledWith('UPDATE memory SET conflicts_with = ? WHERE id = ?', [7, 8])
+  })
+
+  it('never writes a self-referencing conflict when newRowId is missing', () => {
     const older = { id: 7, content: 'Alice prefers Python project', type: 'fact', created_at: '2020-01-01' }
     const runSpy = vi.fn()
     const db = mkDb({ memories: [older], runSpy })
     const res = autoMemory.detectConflict(db, 'Alice prefers JavaScript project', 'fact')
     expect(res).not.toBeNull()
     expect(res.olderId).toBe(7)
-    expect(res.olderContent).toBe(older.content)
-    expect(res.reason).toContain('Alice prefers Python project')
-    // the older memory should be flagged as conflicting
-    expect(runSpy).toHaveBeenCalledWith('UPDATE memory SET conflicts_with = ? WHERE id = ?', [7, 7])
+    // 拿不到新行 id 时只报告冲突，绝不改写旧行 —— 旧行指向自己就是自指 bug
+    expect(runSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns null when overlap ratio is below threshold (paraphrase, not conflict)', () => {
+    const older = { id: 3, content: 'Alice prefers Python project', type: 'fact' }
+    const runSpy = vi.fn()
+    const db = mkDb({ memories: [older], runSpy })
+    // inter={alice,prefers? no — likes≠prefers} → inter={alice,python}=2, min=4, ratio=0.5 < 0.7
+    expect(autoMemory.detectConflict(db, 'Alice likes Python scripting', 'fact', 9)).toBeNull()
+    expect(runSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns null for a case/whitespace variant of the same content', () => {
+    const older = { id: 4, content: 'Alice Prefers PYTHON', type: 'fact' }
+    const runSpy = vi.fn()
+    const db = mkDb({ memories: [older], runSpy })
+    // 规范化后完全一致是去重的职责，不是冲突
+    expect(autoMemory.detectConflict(db, 'alice prefers python', 'fact', 10)).toBeNull()
+    expect(runSpy).not.toHaveBeenCalled()
   })
 
   it('returns null when there is no keyword overlap', () => {
@@ -126,6 +161,78 @@ describe('detectConflict', () => {
     const older = { id: 1, content: 'Alice prefers Python', type: 'fact' }
     const db = mkDb({ memories: [older] })
     expect(autoMemory.detectConflict(db, 'Alice prefers Python', 'fact')).toBeNull()
+  })
+})
+
+// ─── _doSync dedup (driven through the sync debounce) ──────────────────────
+describe('_doSync dedup', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  // 驱动一次完整 sync：fake timers 快进 5 秒防抖，等 _doSync 跑完。
+  async function runSync(db, reply) {
+    const { completeChat } = await import('../electron/llm/providerAdapter')
+    completeChat.mockResolvedValue(reply)
+    vi.useFakeTimers()
+    try {
+      const promise = autoMemory.sync({ db, provider: {}, model: 'test-model', userMessage: 'hi', assistantReply: 'ok' })
+      await vi.advanceTimersByTimeAsync(5000)
+      await promise.catch(() => {})
+    } finally {
+      vi.useRealTimers()
+    }
+  }
+
+  function dedupDb(memories, runSpy) {
+    const insertSpy = vi.fn(() => ({ lastInsertRowid: 99 }))
+    const db = Object.assign(mkDb({ memories, runSpy }), { addMemoryWithProvenance: insertSpy })
+    return { db, insertSpy }
+  }
+
+  it('solidifies an exact re-observation instead of inserting a copy', async () => {
+    const existing = { id: 11, content: 'Alice prefers Python project', type: 'fact', created_at: new Date().toISOString(), access_count: 0 }
+    const runSpy = vi.fn()
+    const { db, insertSpy } = dedupDb([existing], runSpy)
+    await runSync(db, '[FACT] Alice prefers Python project')
+    expect(insertSpy).not.toHaveBeenCalled()
+    expect(runSpy).toHaveBeenCalledWith(
+      'UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE type = ? AND LOWER(content) = LOWER(?)',
+      ['fact', 'Alice prefers Python project'],
+    )
+  })
+
+  it('solidifies a paraphrased re-observation instead of inserting a copy (Jaccard)', async () => {
+    // 关键词集 {user,really,likes,python,data,analysis} vs {user,likes,python,data,analysis}
+    // Jaccard = 5/6 ≈ 0.83 ≥ 0.7 → 同一事实的改写，加固已有行而非插入副本
+    const existing = { id: 12, content: 'user really likes Python for data analysis', type: 'fact', created_at: new Date().toISOString(), access_count: 0 }
+    const runSpy = vi.fn()
+    const { db, insertSpy } = dedupDb([existing], runSpy)
+    await runSync(db, '[FACT] user likes Python for data analysis')
+    expect(insertSpy).not.toHaveBeenCalled()
+    expect(runSpy).toHaveBeenCalledWith(
+      'UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?',
+      [12],
+    )
+  })
+
+  it('lets a value-swap contradiction through dedup and links new row to old', async () => {
+    // Jaccard = 3/5 = 0.6 < 0.7 —— 不是改写，是真矛盾：插入新行并 新→旧 标冲突
+    const older = { id: 7, content: 'Alice prefers Python project', type: 'fact', created_at: '2020-01-01', access_count: 0 }
+    const runSpy = vi.fn()
+    const { db, insertSpy } = dedupDb([older], runSpy)
+    await runSync(db, '[FACT] Alice prefers JavaScript project')
+    expect(insertSpy).toHaveBeenCalledTimes(1)
+    // 新行(99)指向旧行(7) —— regression: was [7, 7]
+    expect(runSpy).toHaveBeenCalledWith('UPDATE memory SET conflicts_with = ? WHERE id = ?', [7, 99])
+  })
+
+  it('inserts a genuinely new fact without any conflict marking', async () => {
+    const older = { id: 5, content: 'Bob likes Java', type: 'fact', created_at: '2020-01-01', access_count: 0 }
+    const runSpy = vi.fn()
+    const { db, insertSpy } = dedupDb([older], runSpy)
+    await runSync(db, '[FACT] Alice prefers Rust language')
+    expect(insertSpy).toHaveBeenCalledTimes(1)
+    const conflictWrites = runSpy.mock.calls.filter(c => String(c[0]).includes('conflicts_with'))
+    expect(conflictWrites).toHaveLength(0)
   })
 })
 

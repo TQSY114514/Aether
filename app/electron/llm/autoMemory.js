@@ -39,6 +39,22 @@ function normalizeContent(text) {
   return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+// 关键词 Jaccard 相似度 —— 改写级语义去重用。提取 LLM 每轮对同一事实的措辞
+// 略有不同（"user likes Python" vs "User prefers Python"），精确匹配拦不住；
+// 高相似按重复处理：solidify 已有行而不是插入副本（Hermes 式合并）。
+// 阈值取 0.7 有讲究：换值矛盾（"prefers Python" vs "prefers JavaScript"）
+// 共享主题词、只换一个值词，Jaccard ≈0.5-0.67 —— 那是真冲突，必须放行给
+// detectConflict；而同一事实的改写（增删修饰词）通常 ≥0.7。
+const SIMILAR_JACCARD = 0.7 // ≥ 此值视为同一事实的改写
+const SIMILAR_MIN_HITS = 2  // 交集绝对下限，防短文本误判
+
+function jaccard(a, b) {
+  let inter = 0
+  for (const k of a) if (b.has(k)) inter++
+  const uni = a.size + b.size - inter
+  return uni === 0 ? 0 : inter / uni
+}
+
 function keywords(text) {
   const t = String(text || '').toLowerCase()
   const set = new Set()
@@ -305,6 +321,8 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     let recent
     try { recent = db.getMemories(500) } catch { recent = [] }
     const recentKeys = new Set(recent.map(m => `${m.type || 'fact'}:${normalizeContent(m.content)}`))
+    // 预计算关键词集，供改写级近重复扫描（每 sync 一次，开销可忽略）。
+    const recentKw = recent.map(m => ({ id: m.id, type: m.type || 'fact', kw: keywords(m.content) }))
     const seenBatch = new Set()
 
     for (const entry of entries.slice(0, 5)) {
@@ -321,10 +339,26 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         } catch {}
         continue
       }
-      // Conflict detection: if a similar fact already exists in the opposite
-      // direction, the older entry is marked as conflicting.
-      if (entry.type === 'fact') {
-        try { detectConflict(db, entry.content, 'fact') } catch {}
+      // 改写级近重复（Hermes 式合并）：同类型已有记忆与本次提取的关键词
+      // Jaccard 高度重合 → 视为重新观察到同一事实，solidify 已有行而非
+      // 插入一份措辞不同的副本。这是"老记一模一样的东西"的主修复点。
+      if (entry.type !== 'relation') {
+        const entryKw = keywords(entry.content)
+        if (entryKw.size > 0) {
+          let dup = null
+          for (const m of recentKw) {
+            if (m.type !== entry.type) continue
+            let inter = 0
+            for (const k of entryKw) if (m.kw.has(k)) inter++
+            if (inter >= SIMILAR_MIN_HITS && jaccard(entryKw, m.kw) >= SIMILAR_JACCARD) { dup = m; break }
+          }
+          if (dup) {
+            try {
+              db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?', [dup.id])
+            } catch {}
+            continue
+          }
+        }
       }
       if (entry.type === 'relation') {
         try {
@@ -340,7 +374,14 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
           // 数据层尚未消费第 4 个 origin 参数时，按返回的 lastInsertRowid
           // 参数化补写（列由 H5 迁移保证存在；接线后此 UPDATE 幂等无害）。
           if (info && info.lastInsertRowid != null) {
-            try { db.run('UPDATE memory SET origin = ? WHERE id = ?', 'assistant', Number(info.lastInsertRowid)) } catch {}
+            const newId = Number(info.lastInsertRowid)
+            try { db.run('UPDATE memory SET origin = ? WHERE id = ?', 'assistant', newId) } catch {}
+            // 冲突标记在插入之后：新行指向旧行（new.conflicts_with = old.id），
+            // UI 的二选一才有真实的新旧对比。此前在插入前调用且传参
+            // [row.id, row.id]，把旧行指成了自己 —— 见 detectConflict 注释。
+            if (entry.type === 'fact') {
+              try { detectConflict(db, entry.content, 'fact', newId) } catch {}
+            }
           }
         } catch {}
       }
@@ -381,20 +422,43 @@ function search(db, query, limit = 20) {
 // ─── Conflict Detection ─────────────────────────────────────────────────────
 // Detect potential conflicts: if we already have a similar memory in the
 // opposite direction (e.g. "Alice prefers Python" vs "Alice prefers JavaScript"),
-// mark the older one as conflicting.
+// link the NEW row to the older one via conflicts_with so the UI can offer a
+// real old-vs-new resolution.
+//
+// 自指 bug 修复：此前执行 `UPDATE ... SET conflicts_with = ? WHERE id = ?`
+// 时两个参数都传 row.id，把旧行的冲突指针指向了它自己 —— getMemoryConflicts
+// 的 JOIN 把行和自身连接，UI 显示"旧 X / 新 X"两条一模一样的内容让用户二选一，
+// 且任一按钮都会把这条记忆删掉。现在由调用方传入新插入行的 id，冲突时
+// 新行指向旧行（new.conflicts_with = old.id），对比才有意义。
+//
+// 阈值收紧：重叠 ≥2 且重叠比例（相对较小 keyword 集）≥0.7 才算真冲突。
+// 此前 overlap>=2 即标记，同一事实的两个改写版本共享大量关键词，全被误判为
+// 冲突弹给用户 —— 这是"明明记过了还要二选一"的另一半来源。改写级别的相似
+// 由 _doSync 的语义去重（Jaccard solidify）处理，不该走到这里。
 
-function detectConflict(db, newContent, newType) {
+const CONFLICT_OVERLAP_MIN = 2 // 绝对下限：低于此数永不算冲突
+const CONFLICT_RATIO = 0.7     // overlap / min(|new|,|old|) 需达到的比例
+
+function detectConflict(db, newContent, newType, newRowId) {
   try {
     if (!db.allRows) return null
     const existing = db.allRows('SELECT id, content, type FROM memory WHERE type = ? ORDER BY created_at ASC LIMIT 20', [newType]) || []
     if (existing.length === 0) return null
-    const nkw = new Set(keywords(newContent))
+    const nkw = keywords(newContent)
+    if (nkw.size === 0) return null
+    const nNorm = normalizeContent(newContent)
     for (const row of existing) {
-      const ekw = new Set(keywords(row.content))
+      // 规范化后完全一致是去重的职责，不是冲突（含大小写/空白变体）。
+      if (normalizeContent(row.content) === nNorm) continue
+      const ekw = keywords(row.content)
       let overlap = 0
       for (const k of nkw) if (ekw.has(k)) overlap++
-      if (overlap >= 2 && row.content !== newContent) {
-        try { db.run('UPDATE memory SET conflicts_with = ? WHERE id = ?', [row.id, row.id]) } catch {}
+      const ratio = overlap / Math.min(nkw.size, ekw.size)
+      if (overlap >= CONFLICT_OVERLAP_MIN && ratio >= CONFLICT_RATIO) {
+        // 新行指向旧行；拿不到新行 id 时只报告、绝不动旧行（禁止自指）。
+        if (newRowId != null) {
+          try { db.run('UPDATE memory SET conflicts_with = ? WHERE id = ?', [row.id, newRowId]) } catch {}
+        }
         return { olderId: row.id, olderContent: row.content, reason: `相同主题但不同内容: "${row.content}" vs "${newContent}"` }
       }
     }
