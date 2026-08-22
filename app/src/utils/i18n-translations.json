@@ -165,7 +165,7 @@
       "evolution.loading": "加载进化历史中...",
       "evolution.ran_empty": "没有需要进化的新信号 — Agent 行为正常。",
       "evolution.strategyLib.title": "策略库（自进化）",
-      "evolution.strategyLib.desc": "反思引擎从真实会话轨迹中提炼的具体工作策略，每轮对话自动注入。",
+      "evolution.strategyLib.desc": "反思引擎从真实会话轨迹中提炼的具体工作策略，仅在启用工具的对话中注入。",
       "evolution.strategyLib.reflect": "立即反思",
       "evolution.strategyLib.reflecting": "反思中…",
       "evolution.strategyLib.empty": "还没有策略条目 —— 正常使用几轮后自动提炼，或在下方手动添加。",

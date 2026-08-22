@@ -354,10 +354,10 @@ interface Window {
       history: () => Promise<EvolutionEvent[]>
       strategy: {
         get: () => Promise<{ count: number; chars: number; maxChars: number; needsMerge: boolean; entries: { id: number; text: string }[]; file?: string; error?: string }>
-        add: (text: string) => Promise<{ ok: boolean; id?: number; reason?: string }>
-        replace: (id: number, text: string) => Promise<{ ok: boolean; reason?: string }>
-        remove: (id: number) => Promise<{ ok: boolean; reason?: string }>
-        reflectNow: () => Promise<{ ok: boolean; reason?: string; error?: string; added?: number[]; replaced?: number[]; removed?: number[] }>
+        add: (text: string) => Promise<{ ok: boolean; id?: number; chars?: number; needsMerge?: boolean; reason?: string; duplicateOf?: number }>
+        replace: (id: number, text: string) => Promise<{ ok: boolean; id?: number; chars?: number; needsMerge?: boolean; reason?: string; duplicateOf?: number }>
+        remove: (id: number) => Promise<{ ok: boolean; removed?: number; chars?: number; needsMerge?: boolean; reason?: string }>
+        reflectNow: () => Promise<{ ok: boolean; added?: number[]; replaced?: number[]; removed?: number[]; rejected?: string[]; needsMerge?: boolean; reason?: string; error?: string }>
       }
     }
     trajectory: {

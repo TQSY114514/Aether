@@ -188,6 +188,7 @@ export default function EvolutionPage() {
                   <span className="flex-1 leading-relaxed" style={{ color: 'var(--text-primary)' }}>{s.text}</span>
                   <button
                     onClick={() => window.electronAPI.evolution.strategy.remove(s.id).then(() => loadStrategies())}
+                    aria-label={`S${s.id}`}
                     className="shrink-0 opacity-40 hover:opacity-100 transition-opacity"
                     style={{ color: 'var(--text-secondary)' }}>
                     <Trash2 size={12} />
@@ -202,7 +203,7 @@ export default function EvolutionPage() {
               onChange={e => setNewEntry(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') addEntry() }}
               placeholder={t('evolution.strategyLib.placeholder')}
-              className="flex-1 min-w-[200px] text-xs px-3 py-2 rounded-lg border outline-none"
+              className="flex-1 min-w-[200px] text-xs px-3 py-2 rounded-lg border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
               style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
             />
             <button

@@ -109,6 +109,8 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   // 反思触发的节流：即使条件持续满足也最多 10 分钟尝试一次。
   let _lastReflectTry = 0
   const REFLECT_TRY_MIN_MS = 10 * 60 * 1000
+  // in-flight 防重入：上一次反思还在跑（LLM 往返可能数秒）时不重复触发。
+  let _reflectInFlight = false
   callbacks.onAudit = (trace) => {
     try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
     // 策略反思：采集轨迹摘要进环形缓冲；攒够条数或策略库超容时触发一次
@@ -119,9 +121,10 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       if (queued.queued) {
         const overCapacity = require('../evolution/strategyStore').stats().needsMerge
         const now = Date.now()
-        if ((queued.count >= reflect.REFLECT_EVERY_N_TRACES || overCapacity) && now - _lastReflectTry >= REFLECT_TRY_MIN_MS) {
+        if ((queued.count >= reflect.REFLECT_EVERY_N_TRACES || overCapacity) && now - _lastReflectTry >= REFLECT_TRY_MIN_MS && !_reflectInFlight) {
           _lastReflectTry = now
-          reflect.reflectNow(db).catch(() => {})
+          _reflectInFlight = true
+          reflect.reflectNow(db).catch(() => {}).finally(() => { _reflectInFlight = false })
         }
       }
     } catch {}

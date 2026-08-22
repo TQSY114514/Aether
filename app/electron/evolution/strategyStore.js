@@ -104,12 +104,19 @@ function totalChars(entries) { return entries.reduce((n, e) => n + e.text.length
 
 // ─── 增删改 ────────────────────────────────────────────────────────────────
 // 新增一条策略。重复（精确或改写级）直接拒绝——策展优于累积。
+// 容量是硬约束：投影超限直接拒绝不落盘（此前只标 needsMerge 仍保存，
+// 超容内容会持续膨胀）。行开销 ≈8 字符（"- [Sn] " + 换行）。
+const LINE_OVERHEAD = 8
+
 function addEntry(text) {
   const t = String(text || '').trim()
   if (!t) return { ok: false, reason: 'empty' }
   const { entries } = load()
   const dup = findSimilar(entries, t)
   if (dup) return { ok: false, reason: 'duplicate', duplicateOf: dup.id }
+  if (t.length > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
+  const projected = totalChars(entries) + t.length + LINE_OVERHEAD
+  if (entries.length > 0 && projected > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
   let nextId = entries.reduce((m, e) => Math.max(m, e.id), 0) + 1
   entries.push({ id: nextId, text: t })
   save(entries)
@@ -126,6 +133,10 @@ function replaceEntry(id, newText) {
   const others = entries.filter(e => e.id !== target.id)
   const dup = findSimilar(others, t)
   if (dup) return { ok: false, reason: 'duplicate', duplicateOf: dup.id }
+  // 投影容量检查：替换不得让库更超限（超容时只允许换得更短）。
+  if (t.length > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
+  const projected = totalChars(others) + t.length + LINE_OVERHEAD
+  if (others.length > 0 && projected > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
   target.text = t
   save(entries)
   return { ok: true, id: target.id, chars: totalChars(entries), needsMerge: totalChars(entries) > MAX_CHARS }
@@ -141,11 +152,23 @@ function removeEntry(id) {
 
 // ─── 注入与状态 ────────────────────────────────────────────────────────────
 // 冻结快照：给 system prompt 用。空库返回 null（不注入空块浪费 token）。
+// 预算感知装填：即使库已超容（needsMerge 待合并），注入也永不超 MAX_CHARS
+// ——按序贪心装填，装不下的条目留给下次反思合并。
 function freeze() {
   const { entries } = load()
   if (!entries.length) return null
-  const lines = entries.map(e => `- [S${e.id}] ${e.text}`).join('\n')
-  return `<learned_strategies>\n以下是从既往会话中提炼的有效工作策略，优先遵循：\n${lines}\n</learned_strategies>`
+  const HEADER = '<learned_strategies>\n以下是从既往会话中提炼的有效工作策略，优先遵循：\n'
+  const FOOTER = '\n</learned_strategies>'
+  let budget = MAX_CHARS - HEADER.length - FOOTER.length
+  const lines = []
+  for (const e of entries) {
+    const line = `- [S${e.id}] ${e.text}`
+    if (line.length > budget) break
+    lines.push(line)
+    budget -= line.length + 1
+  }
+  if (!lines.length) return null
+  return HEADER + lines.join('\n') + FOOTER
 }
 
 function stats() {

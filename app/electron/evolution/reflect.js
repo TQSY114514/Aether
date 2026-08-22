@@ -26,6 +26,9 @@ function getTracesFile() { return path.join(strategyStore.getStoreDir(), 'traces
 
 // ─── 轨迹采集 ──────────────────────────────────────────────────────────────
 // 从 toolLoop 回调的 trace 里提取紧凑摘要（不含工具结果全文，防泄漏/膨胀）。
+// Secret 脱敏：轨迹会自动发给 provider 做反思（CWE-200 权衡：只发摘要、
+// 错误截 160 字，且任何疑似凭据一律替换为 [REDACTED]）。
+const SECRET_RE = /\b(sk-[A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[bap]-[A-Za-z0-9-]{10,}|Bearer\s+[A-Za-z0-9._~+/=-]{10,})/g
 function digestTrace(trace) {
   try {
     const calls = Array.isArray(trace?.toolCalls) ? trace.toolCalls : []
@@ -39,7 +42,7 @@ function digestTrace(trace) {
     return {
       ts: Date.now(),
       tools,
-      error: errLine ? String(errLine.error || errLine.result || '').slice(0, 160) : null,
+      error: errLine ? String(errLine.error || errLine.result || '').slice(0, 160).replace(SECRET_RE, '[REDACTED]') : null,
     }
   } catch { return null }
 }
@@ -73,6 +76,33 @@ function pendingTraceCount() {
 
 function clearTraces() {
   try { fs.unlinkSync(getTracesFile()) } catch {}
+}
+
+// 认领语义（修复 clearTraces 竞态）：reflectNow 读入轨迹后立即清空缓冲，
+// await LLM 期间 noteTrace 追加的新轨迹留在文件里不受影响；LLM 失败时把
+// 认领的行与期间新到的行合并写回，保证任何轨迹至多被消费一次、绝不丢失。
+function claimTraces() {
+  const f = getTracesFile()
+  let lines = []
+  try { lines = fs.readFileSync(f, 'utf8').split('\n').filter(Boolean) } catch {}
+  if (!lines.length) return []
+  try {
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    fs.writeFileSync(f, '', 'utf8')
+  } catch {}
+  return lines
+}
+
+function restoreTraces(claimed) {
+  if (!claimed || !claimed.length) return
+  try {
+    const f = getTracesFile()
+    let cur = []
+    try { cur = fs.readFileSync(f, 'utf8').split('\n').filter(Boolean) } catch {}
+    const merged = claimed.concat(cur).slice(-MAX_TRACE_LINES)
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    fs.writeFileSync(f, merged.join('\n') + '\n', 'utf8')
+  } catch {}
 }
 
 // ─── 提示词 ────────────────────────────────────────────────────────────────
@@ -141,12 +171,11 @@ async function reflectNow(db, opts = {}) {
 
   const { entries } = strategyStore.load()
   const st = strategyStore.stats()
-  let traces = []
-  try {
-    traces = fs.readFileSync(getTracesFile(), 'utf8').split('\n').filter(Boolean)
-      .map(l => { try { return JSON.parse(l) } catch { return null } })
-      .filter(Boolean)
-  } catch {}
+  // 认领轨迹：读入即清空缓冲（见 claimTraces 注释）。
+  const claimedLines = claimTraces()
+  let traces = claimedLines
+    .map(l => { try { return JSON.parse(l) } catch { return null } })
+    .filter(Boolean)
 
   let text = ''
   try {
@@ -160,6 +189,7 @@ async function reflectNow(db, opts = {}) {
     })
   } catch (e) {
     log.warn('reflect: LLM call failed:', e && e.message)
+    restoreTraces(claimedLines)
     return { ok: false, reason: 'llm-error', error: e && e.message }
   }
 
@@ -180,15 +210,14 @@ async function reflectNow(db, opts = {}) {
     }
   }
 
-  // 有产出才清空缓冲并记录事件；失败保留轨迹下次重试。
+  // 有产出才记录事件；轨迹已在认领阶段消费（失败路径已写回）。
   const produced = applied.added.length + applied.replaced.length + applied.removed.length
   if (produced > 0) {
-    clearTraces()
     try {
-      db.run('INSERT INTO evolution_events (capsule_id, genes, strategy, signals, blast_radius, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [`strategy-${Date.now()}`, '[]', 'reflect',
-         JSON.stringify({ added: applied.added.length, replaced: applied.replaced.length, removed: applied.removed.length }),
-         null, new Date().toISOString()])
+      db.prepare('INSERT INTO evolution_events (capsule_id, genes, strategy, signals, blast_radius, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(`strategy-${Date.now()}`, '[]', 'reflect',
+          JSON.stringify({ added: applied.added.length, replaced: applied.replaced.length, removed: applied.removed.length }),
+          null, new Date().toISOString())
     } catch (e) { log.debug('reflect: event insert failed:', e && e.message) }
   }
   log.info(`reflect: done (+${applied.added.length} ~${applied.replaced.length} -${applied.removed.length})`)

@@ -165,7 +165,7 @@
   "evolution.loading": "Loading evolution history…",
   "evolution.ran_empty": "No new signals to evolve on — agent behavior already healthy.",
   "evolution.strategyLib.title": "Strategy Library (self-evolution)",
-  "evolution.strategyLib.desc": "Concrete strategies distilled by the reflection engine from real session traces. Injected into every conversation automatically.",
+  "evolution.strategyLib.desc": "Concrete strategies distilled by the reflection engine from real session traces. Injected into tool-enabled conversations only.",
   "evolution.strategyLib.reflect": "Reflect now",
   "evolution.strategyLib.reflecting": "Reflecting…",
   "evolution.strategyLib.empty": "No strategy entries yet — use the app for a while, or add one manually below.",
