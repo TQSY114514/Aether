@@ -54,13 +54,18 @@ class PermissionRequest {
 // ── PermissionOutcome ─────────────────────────────────────────────────────
 
 class PermissionOutcome {
-  constructor({ allowed, reason = null }) {
+  constructor({ allowed, reason = null, via = null }) {
     this.allowed = allowed
     this.reason = reason
+    this.via = via
   }
 
   static allow() {
     return new PermissionOutcome({ allowed: true })
+  }
+
+  static allowVia(via) {
+    return new PermissionOutcome({ allowed: true, via })
   }
 
   static deny(reason) {
@@ -79,8 +84,9 @@ class PermissionPrompter {
 }
 
 const PermissionPromptDecision = Object.freeze({
-  Allow: 'allow',
-  Deny:  'deny',
+  Allow:       'allow',
+  AllowAlways: 'allow_always', // P0: 本会话内总是允许（session-scoped）
+  Deny:        'deny',
 })
 
 // ── PermissionRule (internal) ─────────────────────────────────────────────
@@ -187,6 +193,7 @@ class PermissionPolicy {
     this.allowRules = []                // _PermissionRule[]
     this.denyRules = []                 // _PermissionRule[]
     this.askRules = []                  // _PermissionRule[]
+    this.sessionApproved = []           // P0: 本会话"总是允许"规则（_PermissionRule[]，随实例消亡不持久化）
     this.deniedTools = []               // unconditional deny list
     this.axisPolicies = null            // { filesystem|shell|network: 'allow'|'ask'|'deny' }
   }
@@ -219,6 +226,19 @@ class PermissionPolicy {
     this.denyRules = (config.deny || []).map(r => _PermissionRule.parse(r))
     this.askRules = (config.ask || []).map(r => _PermissionRule.parse(r))
     this.deniedTools = (config.denied_tools || []).map(t => t.toLowerCase())
+    return this
+  }
+
+  /**
+   * P0: 记录"本会话内总是允许"。规则进 sessionApproved 而非 allowRules ——
+   * 决策链里它排在 deny 规则之后（永不覆盖 deny），且随 policy 实例消亡，
+   * 不写配置不持久化。幂等：同一规则串只记一次。
+   */
+  approveAlways(ruleSpec) {
+    const rule = typeof ruleSpec === 'string' ? _PermissionRule.parse(ruleSpec) : ruleSpec
+    if (!this.sessionApproved.some(r => r.raw === rule.raw)) {
+      this.sessionApproved.push(rule)
+    }
     return this
   }
 
@@ -256,6 +276,12 @@ class PermissionPolicy {
       return PermissionOutcome.deny(`Permission to use ${toolName} has been denied by rule`)
     }
 
+    // P0: session-scoped always-allow —— 用户本会话内显式批准过。只排在
+    // deny 之后（永不覆盖 deny），压过 hook override 与 ask 规则。
+    if (_findMatchingRule(this.sessionApproved, toolName, input)) {
+      return PermissionOutcome.allowVia('session_approved')
+    }
+
     const currentMode = this.activeMode
     const requiredMode = this.requiredModeFor(toolName)
     const askRule = _findMatchingRule(this.askRules, toolName, input)
@@ -268,13 +294,13 @@ class PermissionPolicy {
 
     if (override === PermissionOverride.Ask) {
       const reason = overrideReason || `tool '${toolName}' requires approval due to hook guidance`
-      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
     }
 
     if (override === PermissionOverride.Allow) {
       if (askRule) {
         const reason = `tool '${toolName}' requires approval due to ask rule`
-        return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+        return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
       }
       if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {
         return PermissionOutcome.allow()
@@ -284,7 +310,7 @@ class PermissionPolicy {
     // No override — evaluate rules
     if (askRule) {
       const reason = `tool '${toolName}' requires approval due to ask rule`
-      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
     }
 
     // ── Capability axis policy（外部评审 P0-2）───────────────────────────
@@ -299,7 +325,7 @@ class PermissionPolicy {
           if (ax.policy === 'allow') return PermissionOutcome.allow()
           if (ax.policy === 'deny') return PermissionOutcome.deny(`capability policy: ${ax.axis} axis denies ${toolName}`)
           if (ax.policy === 'ask') {
-            return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${ax.axis} axis requires approval`, prompter)
+            return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${ax.axis} axis requires approval`, prompter, this)
           }
         }
       } catch {}
@@ -313,7 +339,7 @@ class PermissionPolicy {
     if (currentMode === PermissionMode.Prompt ||
         (currentMode === PermissionMode.WorkspaceWrite && requiredMode === PermissionMode.DangerFullAccess)) {
       const reason = `tool '${toolName}' requires approval to escalate from ${permissionModeToString(currentMode)} to ${permissionModeToString(requiredMode)}`
-      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter)
+      return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
     }
 
     // Default deny
@@ -340,17 +366,36 @@ function _findMatchingRule(rules, toolName, input) {
   return rules.find(rule => rule.matches(toolName, input)) || null
 }
 
-function _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter) {
+function _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, policy = null) {
   const request = new PermissionRequest({ tool_name: toolName, input, current_mode: currentMode, required_mode: requiredMode, reason })
 
   if (prompter && typeof prompter.decide === 'function') {
     const decision = prompter.decide(request)
+    if (decision === PermissionPromptDecision.AllowAlways) {
+      // P0: "本会话内总是允许" —— 用与 ask 规则匹配相同的 subject 提取
+      // 逻辑生成规则串（不发明第二套粒度），记入 sessionApproved。
+      if (policy) policy.approveAlways(_sessionRuleSpec(toolName, input))
+      return PermissionOutcome.allowVia('session_approved')
+    }
     if (decision === PermissionPromptDecision.Allow) return PermissionOutcome.allow()
     return PermissionOutcome.deny(decision.reason || 'denied by user')
   }
 
   // No prompter available — treat as deny
   return PermissionOutcome.deny(reason || `tool '${toolName}' requires approval to run while mode is ${permissionModeToString(currentMode)}`)
+}
+
+// P0: 从 toolName+input 生成 sessionApproved 规则串。有 subject → Exact
+// 匹配（同一命令/路径才免问），提取不到 → Any（该工具全部放行）。
+// 转义与 _parseRuleMatcher/_unescapeRuleContent 约定一致。
+function _escapeRuleContent(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+}
+
+function _sessionRuleSpec(toolName, input) {
+  const subject = _extractPermissionSubject(input)
+  if (subject === undefined || String(subject).length === 0) return `${toolName}(*)`
+  return `${toolName}(${_escapeRuleContent(subject)})`
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────

@@ -375,7 +375,10 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   isInjectedMsg: (id) => _injectedMsgIds.has(id),
 
   resolvePermission: (reqId, allowed, remember: boolean | 'session' | 'remember' = false) => {
-    window.electronAPI.chat.replyPermission({ reqId, allowed, remember: remember === 'remember' || remember === true })
+    // P0: 'session'（本会话内总是允许）与 'remember' 都进主进程的会话级
+    // allow-rules 库（该库本就随会话消亡）；此前 'session' 被吞成 false，
+    // 按钮形同仅本次。
+    window.electronAPI.chat.replyPermission({ reqId, allowed, remember: remember === 'remember' || remember === true || remember === 'session' })
     set((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
   },
 

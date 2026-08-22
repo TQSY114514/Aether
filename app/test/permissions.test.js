@@ -418,3 +418,53 @@ describe('runToolLoop permission gate wiring (P0-C1)', () => {
     expect(existsSync(target)).toBe(true)
   })
 })
+
+
+// ─── Session-scoped always-allow (P0) ────────────────────────────────────────
+describe('approveAlways / sessionApproved', () => {
+  const { PermissionMode, PermissionPromptDecision } = permissions
+
+  function countingPrompter() {
+    let asks = 0
+    return {
+      get asks() { return asks },
+      decide() {
+        asks++
+        return PermissionPromptDecision.AllowAlways
+      },
+    }
+  }
+
+  it('approving once stops asking for the same subject (asks === 1)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    const input = JSON.stringify({ command: 'npm test' })
+
+    const r1 = policy.authorize('exec', input, p)
+    expect(r1.allowed).toBe(true)
+    expect(p.asks).toBe(1)
+
+    const r2 = policy.authorize('exec', input, p)
+    expect(r2.allowed).toBe(true)
+    expect(r2.via).toBe('session_approved')
+    expect(p.asks).toBe(1) // 不再询问
+  })
+
+  it('session-approved rules can never override deny rules', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.approveAlways('exec(npm test)')
+    policy.withPermissionRules({ deny: ['exec'] })
+    const r = policy.authorize('exec', JSON.stringify({ command: 'npm test' }), null)
+    expect(r.allowed).toBe(false)
+  })
+
+  it('a different subject is asked again (asks >= 2)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    policy.authorize('exec', JSON.stringify({ command: 'npm test' }), p)
+    policy.authorize('exec', JSON.stringify({ command: 'rm -rf /tmp/x' }), p)
+    expect(p.asks).toBeGreaterThanOrEqual(2)
+  })
+})
