@@ -6,8 +6,9 @@
 // We re-import the module fresh per test (vi.resetModules) so the module-level
 // prefetch cache (_memCache) never leaks between tests.
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import Module from 'node:module'
+import path from 'node:path'
 
 let autoMemory
 beforeEach(async () => {
@@ -24,10 +25,17 @@ beforeEach(async () => {
 const completeChat = vi.fn()
 const mockedProviderAdapter = { completeChat }
 const origLoad = Module._load
-Module._load = function (request, ...args) {
-  if (request === './providerAdapter' || request === '../electron/llm/providerAdapter') return mockedProviderAdapter
-  return origLoad.apply(this, [request, ...args])
+Module._load = function (request, parent, ...rest) {
+  // 只在 autoMemory.js 自己 require providerAdapter 时返回 mock；
+  // 其余模块（含其他测试文件加载的 CJS）照常走原生 loader。
+  const fromAutoMemory = !!parent && path.basename(String(parent.filename || '')) === 'autoMemory.js'
+  if (fromAutoMemory && (request === './providerAdapter' || request === '../electron/llm/providerAdapter')) {
+    return mockedProviderAdapter
+  }
+  return origLoad.call(this, request, parent, ...rest)
 }
+// 测试文件结束时恢复原生 loader，避免 hook 泄漏到同 worker 的后续环境。
+afterAll(() => { Module._load = origLoad })
 
 // ─── Fake db for search / prefetch / detectConflict / prune ────────────────
 function mkDb({ memories = [], fts = null, throwOnGet = false, runSpy = null } = {}) {
@@ -180,6 +188,7 @@ describe('_doSync dedup', () => {
 
   // 驱动一次完整 sync：fake timers 快进 5 秒防抖，等 _doSync 跑完。
   async function runSync(db, reply) {
+    // mock 在文件顶层共享，每次驱动前重置并配置本次的提取返回值，防用例间串扰。
     completeChat.mockReset()
     completeChat.mockResolvedValue(reply)
     vi.useFakeTimers()
