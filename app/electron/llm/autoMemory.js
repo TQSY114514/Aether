@@ -327,10 +327,11 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         }
       }
       if (entry.type === 'relation') {
+        // relation 也走共享写入器：拿到 content_norm 落库 + 数据库层精确
+        // 去重。此前用裸 INSERT，content_norm 为 NULL —— 500 行 recent 窗口
+        // 淘汰后启动合并救不了它，重复 relation 会无限累积。
         try {
-          db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, source_turn_id, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, sessionId || null, null, 'assistant')
-          try { const rid = db.allRows && db.allRows('SELECT last_insert_rowid() AS rid')[0]?.rid; if (rid) db.run('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)', String(entry.content || ''), 'relation', Number(rid)) } catch {}
+          db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 })
         } catch {}
       } else {
         // H5: origin 落库 —— 自动提取自会话的记忆标记为 'assistant'，

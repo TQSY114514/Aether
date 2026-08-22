@@ -821,7 +821,7 @@ function findSolidifyTarget(content, type) {
   return null
 }
 
-function addMemoryWithProvenance(content, type, sourceSessionId, origin) {
+function addMemoryWithProvenance(content, type, sourceSessionId, origin, relationMeta) {
   const t = String(type || 'fact')
   const c = String(content || '').trim()
   if (!c) return { lastInsertRowid: null }
@@ -834,7 +834,15 @@ function addMemoryWithProvenance(content, type, sourceSessionId, origin) {
     try { db.prepare('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?').run(dupId) } catch {}
     return { lastInsertRowid: Number(dupId), duplicate: true }
   }
-  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, 1.0, ?, ?)').run(c, t, sourceSessionId, origin || 'user', memNormalize(c))
+  // relation 条目带关系三元组字段；其余类型走通用插入。两条路径都写
+  // content_norm，保证启动合并和精确查重对全类型生效。
+  let info
+  if (t === 'relation' && relationMeta) {
+    info = db.prepare('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, ?, ?, ?, 1.0, ?, ?)')
+      .run(c, t, relationMeta.entity1 || null, relationMeta.relation || null, relationMeta.entity2 || null, sourceSessionId, origin || 'user', memNormalize(c))
+  } else {
+    info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, 1.0, ?, ?)').run(c, t, sourceSessionId, origin || 'user', memNormalize(c))
+  }
   try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(c, t, Number(info.lastInsertRowid)) } catch {}
   return { lastInsertRowid: Number(info.lastInsertRowid), duplicate: false }
 }
@@ -866,17 +874,25 @@ function mergeDuplicateMemories() {
       `SELECT content_norm AS cn, MIN(id) AS keep_id
        FROM memory GROUP BY content_norm HAVING COUNT(*) > 1 AND content_norm IS NOT NULL`
     ).all()
-    for (const g of groups) {
-      const toDelete = db.prepare(
-        'SELECT id FROM memory WHERE content_norm = ? AND id <> ?'
-      ).all(g.cn, g.keep_id)
-      for (const row of toDelete) {
-        try { db.prepare('UPDATE memory SET conflicts_with = ? WHERE conflicts_with = ?').run(g.keep_id, row.id) } catch {}
-        db.prepare('DELETE FROM memory WHERE id = ?').run(row.id)
-        try { db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(row.id)) } catch {}
-        removed++
+    // 原子合并：conflicts_with 改指、删行、清 FTS 三步同生共死。此前各自
+    // 独立执行且 FTS 清理失败被吞掉 —— 中途出错会留下"记忆已删但 FTS 残留
+    // /指针改了一半"的半成品状态。事务内任一步失败即整体回滚。
+    let txRemoved = 0
+    const mergeTx = db.transaction(() => {
+      for (const g of groups) {
+        const toDelete = db.prepare(
+          'SELECT id FROM memory WHERE content_norm = ? AND id <> ?'
+        ).all(g.cn, g.keep_id)
+        for (const row of toDelete) {
+          db.prepare('UPDATE memory SET conflicts_with = ? WHERE conflicts_with = ?').run(g.keep_id, row.id)
+          db.prepare('DELETE FROM memory WHERE id = ?').run(row.id)
+          db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(row.id))
+          txRemoved++
+        }
       }
-    }
+    })
+    mergeTx()
+    removed += txRemoved
   } catch (e) {
     log.warn('mergeDuplicateMemories failed:', e && e.message)
   }
