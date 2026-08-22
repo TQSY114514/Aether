@@ -43,14 +43,17 @@ const mkAssistants = n => Array.from({ length: n }, () => ({ role: 'assistant', 
 
 // ─── Incremental compaction ─────────────────────────────────────────────────
 describe('incremental compaction', () => {
-  it('only summarizes new messages and appends a [Later] section', async () => {
+  it('only summarizes new messages: rolling mode feeds previous summary via buildSummarizePrompt', async () => {
     completeChatMock.mockResolvedValueOnce('SUMMARY-A').mockResolvedValueOnce('SUMMARY-B')
     await maybeCompact({ provider, model, messages: mkAssistants(10), budget: 100, sessionId: 's-inc' })
     const second = await maybeCompact({ provider, model, messages: mkAssistants(14), budget: 100, sessionId: 's-inc' })
     expect(completeChatMock).toHaveBeenCalledTimes(2)
+    // Task5 滚动合并：第二次调用的提示词必须携带上一次摘要（替代旧的 [Later] 拼接）
+    const secondPrompt = JSON.stringify(completeChatMock.mock.calls[1])
+    expect(secondPrompt).toContain('SUMMARY-A')
     const summaryMsg = second.find(m => m.role === 'system' && m.content.startsWith('Summary of earlier'))
-    expect(summaryMsg.content).toContain('[Later]')
     expect(summaryMsg.content).toContain('SUMMARY-B')
+    expect(summaryMsg.content).not.toContain('[Later]')
   })
 
   it('falls back to full re-summarization when no messages were added since boundary', async () => {
@@ -117,8 +120,11 @@ describe('smart retention', () => {
 
 // ─── Boundary cases ─────────────────────────────────────────────────────────
 describe('compaction boundary cases', () => {
-  it('returns messages unchanged when everything fits in the recent window', async () => {
-    const messages = mkAssistants(5)
+  it('returns messages unchanged when everything fits in the token keep-tail', async () => {
+    // Task4 语义迁移：保尾从固定8条改为 token 预算（下限4000tok）。
+    // 用小消息让总量低于保尾目标 → 切点为0 → 原样返回。
+    const small = 'x'.repeat(600) // ≈150 tok ×1.2 margin
+    const messages = Array.from({ length: 5 }, () => ({ role: 'assistant', content: small }))
     const result = await maybeCompact({ provider, model, messages, budget: 100, sessionId: 's-window' })
     expect(result).toBe(messages)
   })

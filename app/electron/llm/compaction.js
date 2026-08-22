@@ -235,7 +235,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
 
   // Update compaction state for next incremental run
   if (sessionId) {
-    defaultStore.set(sessionId, nonSystemOlder.length, summary)
+    compactionState.set(sessionId, nonSystemOlder.length, summary)
   }
 
   const summaryMsg = { role: 'system', content: `Summary of earlier conversation:\n${summary}` }
