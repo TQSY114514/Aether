@@ -137,10 +137,14 @@ class _PermissionRule {
 }
 
 function _parseRuleMatcher(content) {
-  const unescaped = _unescapeRuleContent(content.trim())
-  if (unescaped.length === 0 || unescaped === '*') {
+  const trimmed = content.trim()
+  // 通配判定在反转义之前：只有裸 '*'（或空）才是 Any；转义过的 '\*'
+  // 反转义为字面 '*'，落 Exact —— 否则 subject 恰为 "*" 时 approveAlways
+  // 会生成过宽的全匹配规则。
+  if (trimmed.length === 0 || trimmed === '*') {
     return [_RuleMatcher.Any, null]
   }
+  const unescaped = _unescapeRuleContent(trimmed)
   if (unescaped.endsWith(':*')) {
     return [_RuleMatcher.Prefix, unescaped.slice(0, -2)]
   }
@@ -148,7 +152,7 @@ function _parseRuleMatcher(content) {
 }
 
 function _unescapeRuleContent(content) {
-  return content.replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\')
+  return content.replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\*/g, '*').replace(/\\\\/g, '\\')
 }
 
 function _findFirstUnescaped(value, needle) {
@@ -276,12 +280,6 @@ class PermissionPolicy {
       return PermissionOutcome.deny(`Permission to use ${toolName} has been denied by rule`)
     }
 
-    // P0: session-scoped always-allow —— 用户本会话内显式批准过。只排在
-    // deny 之后（永不覆盖 deny），压过 hook override 与 ask 规则。
-    if (_findMatchingRule(this.sessionApproved, toolName, input)) {
-      return PermissionOutcome.allowVia('session_approved')
-    }
-
     const currentMode = this.activeMode
     const requiredMode = this.requiredModeFor(toolName)
     const askRule = _findMatchingRule(this.askRules, toolName, input)
@@ -290,6 +288,14 @@ class PermissionPolicy {
     // Process hook override
     if (override === PermissionOverride.Deny) {
       return PermissionOutcome.deny(overrideReason || `tool '${toolName}' denied by hook`)
+    }
+
+    // P0: session-scoped always-allow —— 用户本会话内显式批准过。排在全部
+    // 确定性拒绝（deniedTools / denyRules / hook Deny）之后：永不覆盖任何
+    // 拒绝通道，但压过 ask 规则、能力轴询问与模式升档确认（这正是它的
+    // 存在意义——"本会话内不再问"）。
+    if (_findMatchingRule(this.sessionApproved, toolName, input)) {
+      return PermissionOutcome.allowVia('session_approved')
     }
 
     if (override === PermissionOverride.Ask) {
@@ -389,7 +395,7 @@ function _promptOrDeny(toolName, input, currentMode, requiredMode, reason, promp
 // 匹配（同一命令/路径才免问），提取不到 → Any（该工具全部放行）。
 // 转义与 _parseRuleMatcher/_unescapeRuleContent 约定一致。
 function _escapeRuleContent(s) {
-  return String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+  return String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)').replace(/\*/g, '\\*')
 }
 
 function _sessionRuleSpec(toolName, input) {

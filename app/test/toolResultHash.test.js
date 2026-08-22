@@ -49,4 +49,13 @@ describe('hashToolResult', () => {
     const r2 = hashToolResult('delegate_task', { ok: true, messageId: 'bbb', ts: 2 })
     expect(r1).toBe(r2)
   })
+  it('exec 类：stdout 相同但 stderr 不同 → 哈希不同（回归：不得只看单回退链）', () => {
+    const silentOk = { exitCode: 0, stdout: '', stderr: '' }
+    const failA = { exitCode: 0, stdout: '', stderr: 'boom A' }
+    const failB = { exitCode: 0, stdout: '', stderr: 'boom B' }
+    expect(hashToolResult('run_command', failA)).not.toBe(hashToolResult('run_command', silentOk))
+    expect(hashToolResult('run_command', failA)).not.toBe(hashToolResult('run_command', failB))
+    // 同输入仍稳定
+    expect(hashToolResult('run_command', failA)).toBe(hashToolResult('run_command', { exitCode: 0, stdout: '', stderr: 'boom A', noise: 'x'.repeat(900) }))
+  })
 })

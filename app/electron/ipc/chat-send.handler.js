@@ -443,7 +443,14 @@ ipcMain.handle('chat:complete', handleChatComplete)
               if (cls?.recover?.action !== 'compact_retry' || overflowRetries >= OVERFLOW_MAX_RETRIES || !cooled) throw err
               overflowRetries++
               _lastOverflowCompactAt.set(sessionId, Date.now())
-              const forced = await maybeCompact({ provider, model, messages: compacted, budget: ctxBudget, sessionId, force: true })
+              // 失败循环内已执行的工具调用/结果在 toolMessages 尾部——必须并入
+              // 压缩输入，否则重试时这段历史丢失，非幂等工具会被重复执行。
+              // 尾部可能不成对（失败点恰在 assistant(tool_calls) 与 tool 结果
+              // 之间），maybeCompact/safeSplitIndex 本就有配对回退，直接喂入。
+              const seedLen = skillsBlock ? 1 : 0
+              const loopTail = (Array.isArray(toolMessages) && toolMessages.length > seedLen) ? toolMessages.slice(seedLen) : []
+              const mergeBase = loopTail.length ? [...compacted, ...loopTail] : [...compacted]
+              const forced = await maybeCompact({ provider, model, messages: mergeBase, budget: ctxBudget, sessionId, force: true })
               if (!forced) throw err // 压缩无可压 → 原样抛给上层既有处理
               compacted.length = 0
               compacted.push(...forced)

@@ -46,9 +46,19 @@ const KEEP_TAIL_BUDGET_SHARE = 0.25
 // reached, then let safeSplitIndex back off to the nearest legal cut point
 // (never orphaning a tool-call/tool-result pair).
 function findKeepPoint(messages, budget) {
+  const b = budget || 0
+  // Keep-tail must leave room for the summary itself: tail + overhead has to
+  // fit inside the budget, otherwise small-budget compaction can never bring
+  // the context under its limit. The 4000-token floor only applies while
+  // there is room for it. SUMMARIZATION_OVERHEAD is declared below; this is
+  // safe because findKeepPoint runs after module init.
+  // Divide by 1.2: maybeCompact measures with estimateMessagesTokens, which
+  // pads raw estimates with a 1.2x safety margin — align raw targets so the
+  // margin'd accounting still fits.
+  const headroom = Math.max(0, Math.floor((b - SUMMARIZATION_OVERHEAD) / 1.2))
   const target = Math.min(
     KEEP_RECENT_TOKENS_DEFAULT,
-    Math.max(MIN_KEEP_TOKENS, Math.floor((budget || 0) * KEEP_TAIL_BUDGET_SHARE))
+    Math.max(Math.min(MIN_KEEP_TOKENS, headroom), Math.floor(b * KEEP_TAIL_BUDGET_SHARE))
   )
   let acc = 0
   let count = 0

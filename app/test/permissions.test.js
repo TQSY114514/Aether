@@ -467,4 +467,29 @@ describe('approveAlways / sessionApproved', () => {
     policy.authorize('exec', JSON.stringify({ command: 'rm -rf /tmp/x' }), p)
     expect(p.asks).toBeGreaterThanOrEqual(2)
   })
+
+  it('hook Deny beats session-approved rules (approval cannot bypass overrides)', () => {
+    const { PermissionOverride } = permissions
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.approveAlways('exec(npm test)')
+    const r = policy.authorizeWithContext(
+      'exec',
+      JSON.stringify({ command: 'npm test' }),
+      { permissionOverride: PermissionOverride.Deny, overrideReason: 'hook says no' },
+      null,
+    )
+    expect(r.allowed).toBe(false)
+  })
+
+  it('a literal "*" subject stays exact and does not become a match-all rule', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    // 批准 subject 恰为字面 "*" 的命令
+    policy.authorize('exec', JSON.stringify({ command: '*' }), p)
+    expect(p.asks).toBe(1)
+    // 其他命令不得被波及——若 "(\*)" 被解析成 Any，这里就不会再问
+    policy.authorize('exec', JSON.stringify({ command: 'rm -rf /' }), p)
+    expect(p.asks).toBe(2)
+  })
 })

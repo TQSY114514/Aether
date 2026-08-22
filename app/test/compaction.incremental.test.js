@@ -120,12 +120,15 @@ describe('smart retention', () => {
 
 // ─── Boundary cases ─────────────────────────────────────────────────────────
 describe('compaction boundary cases', () => {
-  it('returns messages unchanged when everything fits in the token keep-tail', async () => {
-    // Task4 语义迁移：保尾从固定8条改为 token 预算（下限4000tok）。
-    // 用小消息让总量低于保尾目标 → 切点为0 → 原样返回。
-    const small = 'x'.repeat(600) // ≈150 tok ×1.2 margin
-    const messages = Array.from({ length: 5 }, () => ({ role: 'assistant', content: small }))
-    const result = await maybeCompact({ provider, model, messages, budget: 100, sessionId: 's-window' })
+  it('returns messages unchanged while estimated tokens stay under COMPACT_AT_RATIO', async () => {
+    // CR 一轮发现2语义迁移注记：保尾目标上限是 25%×budget，而触发门槛是 80%×budget
+    // —— 一旦触发压缩，保尾在数学上不可能覆盖全部消息（0.25b < 0.667b）。
+    // 旧「everything fits」分支已随 headroom cap 消失；本边界现守护的是
+    // 另一条 unchanged 路径：估算总量低于门槛时完全不碰历史。
+    const chunk = 'x'.repeat(1800) // ≈450 tok/条
+    const messages = Array.from({ length: 30 }, () => ({ role: 'assistant', content: chunk }))
+    // 30×450=13500 raw，est=⌈13500×1.2⌉=16200 < floor(21000×0.8)=16800 → 原样返回
+    const result = await maybeCompact({ provider, model, messages, budget: 21000, sessionId: 's-window' })
     expect(result).toBe(messages)
   })
 

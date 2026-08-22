@@ -227,10 +227,19 @@ describe('findKeepPoint（token 保尾）', () => {
     expect(small).toBeGreaterThan(0) // 小预算下确实有前缀被摘走
   })
 
-  it('极小预算也不低于下限（MIN_KEEP_TOKENS 兜底）', () => {
+  it('小预算时保尾让位于预算上限（budget−overhead）', () => {
+    const messages = Array.from({ length: 20 }, (_, i) => m(i % 2 ? 'assistant' : 'user', 'x'.repeat(2000))) // 每条约500tok
+    const idx = findKeepPoint(messages, 6000)
+    // headroom=floor((6000-2048)/1.2)=3293 → 保尾≤7条；旧4000下限会保8条
+    expect(messages.length - idx).toBeLessThanOrEqual(7)
+    expect(idx).toBeGreaterThan(0)
+  })
+
+  it('极小预算只保最后一条（headroom=0，25%份额仍生效）', () => {
     const messages = Array.from({ length: 10 }, (_, i) => m(i % 2 ? 'assistant' : 'user', 'x'.repeat(2000)))
-    const idx = findKeepPoint(messages, 500) // 0.25×500 远低于下限
-    expect(messages.length - idx).toBeGreaterThanOrEqual(2)
+    const idx = findKeepPoint(messages, 500) // b−2048<0 → target 仅剩 125
+    // 第一条(约500tok)即达 target → 只保尾部1条
+    expect(idx).toBe(messages.length - 1)
   })
 
   it('切点永不孤立 tool 配对', () => {

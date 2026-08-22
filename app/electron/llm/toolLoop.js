@@ -900,6 +900,16 @@ Reply in this format:
             loopGuard.record({ toolName: entry.name, argsHash: aHash, resultHash: rHash })
             const verdict = loopGuard.evaluate()
             if (verdict.action === 'block') {
+              // 与正常/预算退出同款收尾（eventStream.agentEnd + steering 复位
+              // + toolMetrics），否则 UI 停在 running 态、本次运行无指标。
+              eventStream.agentEnd({ sessionId, finalStatus: 'loop_detected_no_progress', totalIterations: budget.used })
+              steering.setRunning(sessionId, false)
+              try {
+                toolMetrics.updateRun(metricsRunId, {
+                  iterations: budget.used, durationMs: Date.now() - loopStart,
+                  inputTokens: budget.tokens || 0, errorKind: 'loop_detected_no_progress',
+                })
+              } catch {}
               if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected_no_progress', planId: plan?.id }) } catch {}
               return '（检测到工具调用无进展循环，已停止）'
             }
