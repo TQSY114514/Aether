@@ -54,7 +54,7 @@ function classifyError(err) {
   }
   // Context-length overruns usually come back as 400 with a token mention.
   if (status === 400 && /context length|too many tokens|maximum context/i.test(msg)) {
-    return { kind: 'context_length', retryable: true, recover: { action: 'new_chat', hint: '上下文过长，建议开启「新对话」再试' } }
+    return { kind: 'context_length', retryable: true, recover: { action: 'compact_retry', hint: '上下文超长，自动压缩后重试' } }
   }
   // Content-policy refusals (OpenAI: content_filter; some proxies 400 "content").
   if (/content_filter|content policy|content management policy|safety/i.test(msg)) {

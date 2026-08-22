@@ -24,7 +24,7 @@ jobs:
           set -e
           fetch() {
             local endpoint=$1 out=$2 code
-            for i in 1 2 3; do
+            for _ in 1 2 3; do
               code=$(curl -s -o "$out" -w "%{http_code}" \
                 -H "Authorization: Bearer $GH_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
@@ -54,20 +54,16 @@ jobs:
             git remote add origin "https://x-access-token:$GH_TOKEN@github.com/$REPO.git"
           fi
 
-          if [ -f history.jsonl ]; then
-            LAST_TOTAL=$(tail -1 history.jsonl | jq -r '.clones_total // 0')
-          else
-            LAST_TOTAL=0
-          fi
-          TOTAL=$((LAST_TOTAL + CLONES_U))
-
+          # 注：不做 lifetime clones_total 累加——API 返回的是滚动 14 天窗口，
+          # 逐日累加会把重叠窗口重复计数虚增"总数"。history.jsonl 保留原始
+          # 滚动值供后续分析，badge 只展示 14 天口径。
           jq -n --arg d "$DATE" --argjson c "$CLONES" --argjson cu "$CLONES_U" \
-             --argjson v "$VIEWS" --argjson vu "$VIEWS_U" --argjson t "$TOTAL" \
+             --argjson v "$VIEWS" --argjson vu "$VIEWS_U" \
              '{schemaVersion: 1, label: "clones (14d)", message: "\($cu) unique / \($c)",
                clones_14d: $c, clones_uniques_14d: $cu,
                views_14d: $v, views_uniques_14d: $vu,
                updated: $d}' > traffic.json
-          echo "{\"date\": \"$DATE\", \"clones_14d\": $CLONES, \"clones_uniques_14d\": $CLONES_U, \"views_14d\": $VIEWS, \"views_uniques_14d\": $VIEWS_U, \"clones_total\": $TOTAL}" >> history.jsonl
+          echo "{\"date\": \"$DATE\", \"clones_14d\": $CLONES, \"clones_uniques_14d\": $CLONES_U, \"views_14d\": $VIEWS, \"views_uniques_14d\": $VIEWS_U}" >> history.jsonl
 
           git config user.name "traffic-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -79,7 +75,7 @@ jobs:
         run: |
           [ -d badges-branch ] || exit 0
           cd badges-branch
-          [ -f history.jsonl ] && tail -400 history.jsonl > h.tmp && mv h.tmp history.jsonl || true
+          [ -f history.jsonl ] && tail -400 history.jsonl > h.tmp && mv h.tmp history.jsonl
           if ! git diff --quiet; then
-            git add history.jsonl && git commit -m "chore: trim history" && git push origin badges || true
+            git add history.jsonl && git commit -m "chore: trim history" && git push origin badges
           fi

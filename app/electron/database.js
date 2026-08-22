@@ -143,6 +143,12 @@ function createEmptyDatabase(dbPath) {
   target.exec("CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
   target.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+  target.exec(`CREATE TABLE IF NOT EXISTS compaction_state (
+    session_id TEXT PRIMARY KEY,
+    split_index INTEGER NOT NULL,
+    summary TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`)
   target.exec(`CREATE TABLE IF NOT EXISTS scheduled_task (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -1216,6 +1222,25 @@ function closeDatabase() {
   dbPath = null
 }
 
+// ── Compaction state (session → { split_index, summary }) ──────────────────
+function getCompactionState(sessionId) {
+  return db.prepare('SELECT split_index, summary FROM compaction_state WHERE session_id = ?').get(sessionId)
+}
+
+function saveCompactionState(sessionId, splitIndex, summary) {
+  db.prepare(`INSERT INTO compaction_state (session_id, split_index, summary, updated_at)
+              VALUES (?, ?, ?, datetime('now'))
+              ON CONFLICT(session_id) DO UPDATE SET
+                split_index = excluded.split_index,
+                summary = excluded.summary,
+                updated_at = excluded.updated_at`)
+    .run(sessionId, splitIndex, summary)
+}
+
+function deleteCompactionState(sessionId) {
+  db.prepare('DELETE FROM compaction_state WHERE session_id = ?').run(sessionId)
+}
+
 module.exports = {
   initDatabase, createEmptyDatabase, closeDatabase, getProviders, getProvidersDecrypted, getProvider, getProviderDecrypted, addProvider, updateProvider, deleteProvider,
   maskKey, isMaskedOrEmptyKey, sanitizeSkillName,
@@ -1231,6 +1256,7 @@ listArenaBenchmarks, saveArenaBenchmark, deleteArenaBenchmark, updateArenaBenchm
 saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
   getMemories, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess, mergeDuplicateMemories,
+  getCompactionState, saveCompactionState, deleteCompactionState,
   getMemoryConflicts, resolveMemoryConflict,
   recordSkillResult, getSkillStats,
   logUsage, getUsageStats, getUsageByProvider, getUsageByModel, getUsageDaily, getUsageLog,
