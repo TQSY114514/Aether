@@ -511,6 +511,8 @@ describe('approveAlways / sessionApproved', () => {
     const p = countingPrompter()
     const input = JSON.stringify({ command: 'npm test' })
     policy.withToolRequirement('run_command', PermissionMode.DangerFullAccess);
+    // 必须真的声明轴策略——否则走的是 askRule/模式询问路径而非轴 ask 绕行分支（CodeRabbit r3）。
+    policy.withAxisPolicies({ shell: 'ask' });
     policy.authorize('run_command', input, p) // 第一次：轴 ask → 询问并 AllowAlways
     expect(p.asks).toBe(1)
     const r2 = policy.authorize('run_command', input, p) // 第二次：会话批准代替轴询问

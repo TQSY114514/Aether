@@ -187,6 +187,16 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
   const prev = sessionId ? compactionState.get(sessionId) : null
   const split = findKeepPoint(messages, budget)
   if (split <= 0) return force ? null : messages // force：无可压 → null（防死循环）
+  // 配对回退复核（仅 force）：safeSplitIndex 为避免孤儿 tool 结果会向前扩窗，
+  // 可能把超大 assistant(tool_calls)+tool 对拉回保留窗。自愈重试必须保证
+  // 压缩产物真能降到预算下——装不下就返回 null 让上层放弃而非无限重试。
+  // 非 force 不做此检查：常规压缩宁可略超预算也不能躺平不压。
+  if (force) {
+    const keptTokens = estimateMessagesTokens(messages.slice(split))
+    if (keptTokens * SAFETY_MARGIN + SUMMARIZATION_OVERHEAD > budget) {
+      return null
+    }
+  }
 
   // ── Smart retention: pull important messages from the older block ──────
   const older = messages.slice(0, split)

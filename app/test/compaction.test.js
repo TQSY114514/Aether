@@ -279,3 +279,27 @@ describe('buildSummarizePrompt', () => {
     expect(p).toMatch(/滚动|更新/)
   })
 })
+
+// CodeRabbit round-3: safeSplitIndex 的工具配对回退会把超大 assistant(tool_calls)
+// + tool 结果对拉回保留窗——此时 force 压缩装不下该窗口，必须返 null 而不是
+// 给出一个注定再次溢出的"可重试"结果。
+describe('maybeCompact force + oversized tool pair', () => {
+  it('returns null when the newest message is an oversized tool pair that cannot fit', async () => {
+    const big = 'x'.repeat(5000)
+    const msgs = [
+      { role: 'system', content: 'sys' },
+      m('user', big),
+      { role: 'assistant', content: '', tool_calls: [{ id: 't9', type: 'function', function: { name: 'x', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 't9', content: big },
+      m('user', 'final'),
+    ]
+    const result = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: msgs,
+      budget: 100,
+      force: true,
+    })
+    expect(result).toBeNull()
+  })
+})

@@ -580,6 +580,17 @@ Reply in this format:
       try { _cls = classifyError(e) } catch {}
       if (_cls && _cls.recover && _cls.recover.action === 'compact_retry') {
         try { e.convo = convo.slice() } catch {}
+        // 重抛前与正常退出同款收尾：错误传播（含上层自愈重试/放弃）时
+        // UI 不停留在 running 态，本次运行仍有指标记录。重试由上层新建
+        // 循环，steering/eventStream 状态会随之重建。
+        try { eventStream.agentEnd({ sessionId, finalStatus: 'context_overflow', totalIterations: budget.used }) } catch {}
+        try { steering.setRunning(sessionId, false) } catch {}
+        try {
+          toolMetrics.updateRun(metricsRunId, {
+            iterations: budget.used, durationMs: Date.now() - loopStart,
+            inputTokens: budget.tokens || 0, errorKind: 'context_overflow',
+          })
+        } catch {}
         throw e
       }
       return `[agent error: ${e && e.message ? e.message : String(e)}]`
