@@ -59,3 +59,12 @@ describe('hashToolResult', () => {
     expect(hashToolResult('run_command', failA)).toBe(hashToolResult('run_command', { exitCode: 0, stdout: '', stderr: 'boom A', noise: 'x'.repeat(900) }))
   })
 })
+
+  it('distinguishes empty-stdout results by their output field (no nullish-chain collision)', () => {
+    const a = { exitCode: 0, stdout: '', output: 'result A' }
+    const b = { exitCode: 0, stdout: '', output: 'result B' }
+    expect(hashToolResult('run_command', a)).not.toBe(hashToolResult('run_command', b))
+    // stdout 缺失时仍回落 output（旧行为保留）
+    expect(hashToolResult('run_command', { exitCode: 0, output: 'result A' }))
+      .toBe(hashToolResult('run_command', { exitCode: 0, stdout: '', output: 'result A' }))
+  })

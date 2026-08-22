@@ -56,14 +56,22 @@ function findKeepPoint(messages, budget) {
   // pads raw estimates with a 1.2x safety margin — align raw targets so the
   // margin'd accounting still fits.
   const headroom = Math.max(0, Math.floor((b - SUMMARIZATION_OVERHEAD) / 1.2))
-  const target = Math.min(
+  // Hard-cap the target at headroom BEFORE accumulating: with a post-add
+  // break, one oversized tail message can overshoot and push
+  // tail*1.2 + overhead above the budget (CodeRabbit r2).
+  let target = Math.min(
     KEEP_RECENT_TOKENS_DEFAULT,
     Math.max(Math.min(MIN_KEEP_TOKENS, headroom), Math.floor(b * KEEP_TAIL_BUDGET_SHARE))
   )
+  if (target > headroom) target = headroom
   let acc = 0
   let count = 0
   for (let i = messages.length - 1; i >= 0; i--) {
-    acc += estimateMessageTokens(messages[i])
+    const t = estimateMessageTokens(messages[i])
+    // Pre-check BEFORE adding: never let the newest message alone exceed the
+    // target — count stays >= 1 so the tail is never empty.
+    if (count > 0 && acc + t > target) break
+    acc += t
     count++
     if (acc >= target) break
   }

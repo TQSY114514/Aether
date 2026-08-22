@@ -493,3 +493,45 @@ describe('approveAlways / sessionApproved', () => {
     expect(p.asks).toBe(2)
   })
 })
+  const { PermissionMode } = permissions // 本块在共用 describe 之外，需自行解构
+  function countingPrompter() {
+    let asks = 0
+    return { get asks() { return asks }, decide() { asks++; return permissions.PermissionPromptDecision.AllowAlways } }
+  }
+  it('capability axis deny beats session-approved rules', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.approveAlways('run_command(npm test)')
+    policy.withAxisPolicies({ shell: 'deny' })
+    const r = policy.authorize('run_command', JSON.stringify({ command: 'npm test' }), null)
+    expect(r.allowed).toBe(false)
+  })
+
+  it('session approval substitutes for capability axis ask (no second prompt)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    const p = countingPrompter()
+    const input = JSON.stringify({ command: 'npm test' })
+    policy.withToolRequirement('run_command', PermissionMode.DangerFullAccess);
+    policy.authorize('run_command', input, p) // 第一次：轴 ask → 询问并 AllowAlways
+    expect(p.asks).toBe(1)
+    const r2 = policy.authorize('run_command', input, p) // 第二次：会话批准代替轴询问
+    expect(r2.allowed).toBe(true)
+    expect(r2.via).toBe('session_approved')
+    expect(p.asks).toBe(1)
+  })
+
+  it('a subject containing an escaped colon-star stays Exact (no prefix bypass)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    // 注入 approveAlways 转义产物形态的字面星号（_sessionRuleSpec 对
+    // subject 'npm run:*' 会产出 'run_command(npm run:\\*)'）
+    policy.approveAlways('exec(npm run:\\*)')
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    // 同前缀但不同完整命令——若被误解析为 Prefix('npm run') 这里会被放行
+    const r = policy.authorize('exec', JSON.stringify({ command: 'npm run unsafe' }), p)
+    expect(p.asks).toBe(1) // 首次询问（未被规则静默放行）
+    // 无前缀绕过的真正断言：同前缀另一条命令必须再次询问
+    //（若 Exact 被误解析为 Prefix('npm run')，这里 asks 会停在 1）
+    const r2 = policy.authorize('exec', JSON.stringify({ command: 'npm run other' }), p)
+    expect(p.asks).toBe(2)
+    expect(r2.allowed).toBe(true)
+  })

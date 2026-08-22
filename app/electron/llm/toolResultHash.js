@@ -58,10 +58,16 @@ function hashToolResult(toolName, result) {
   // exec-like: any result carrying an exit code
   if (r.exitCode !== undefined || r.exit_code !== undefined) {
     const exitCode = r.exitCode ?? r.exit_code
-    // Hash every available output stream separately — an exec that prints
-    // nothing to stdout but fails on stderr must not collide with a silent
-    // success (CodeRabbit round-1 finding).
-    return `exec:${_sha1(stableStringify({ e: exitCode, t: !!r.timedOut, o: _tail(r.stdout ?? r.output ?? ''), s: _tail(r.stderr) }))}`
+    // Hash every available output stream independently — nullish-fallback
+    // chains let distinct results collide (empty stdout + differing output,
+    // or silent success vs stderr-only failure). CodeRabbit rounds 1-2.
+    return `exec:${_sha1(stableStringify({
+      e: exitCode,
+      t: !!r.timedOut,
+      o: _tail(r.stdout),
+      p: _tail(r.output),
+      s: _tail(r.stderr),
+    }))}`
   }
   // write-like: mutation tools — only whether state changed matters
   if (r.changed !== undefined) {

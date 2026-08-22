@@ -138,17 +138,19 @@ class _PermissionRule {
 
 function _parseRuleMatcher(content) {
   const trimmed = content.trim()
-  // 通配判定在反转义之前：只有裸 '*'（或空）才是 Any；转义过的 '\*'
-  // 反转义为字面 '*'，落 Exact —— 否则 subject 恰为 "*" 时 approveAlways
-  // 会生成过宽的全匹配规则。
+  // 通配判定全部在反转义之前、基于转义后原文：
+  //  - 裸 '*'（或空）→ Any；
+  //  - endsWith(':*') 只命中 config 字面写的 'prefix:*'（尾两字符 ':','*'）；
+  //    approveAlways 对含 ':' 结尾 subject 的转义形 'npm run:\*' 尾两字符
+  //    是 '\','*'，不会误判 Prefix —— 否则字面 'npm run:*' 的 Exact 批准
+  //    会被解析成 'npm run' 前缀放行（CWE-863）。
   if (trimmed.length === 0 || trimmed === '*') {
     return [_RuleMatcher.Any, null]
   }
-  const unescaped = _unescapeRuleContent(trimmed)
-  if (unescaped.endsWith(':*')) {
-    return [_RuleMatcher.Prefix, unescaped.slice(0, -2)]
+  if (trimmed.endsWith(':*')) {
+    return [_RuleMatcher.Prefix, _unescapeRuleContent(trimmed.slice(0, -2))]
   }
-  return [_RuleMatcher.Exact, unescaped]
+  return [_RuleMatcher.Exact, _unescapeRuleContent(trimmed)]
 }
 
 function _unescapeRuleContent(content) {
@@ -294,7 +296,18 @@ class PermissionPolicy {
     // 确定性拒绝（deniedTools / denyRules / hook Deny）之后：永不覆盖任何
     // 拒绝通道，但压过 ask 规则、能力轴询问与模式升档确认（这正是它的
     // 存在意义——"本会话内不再问"）。
-    if (_findMatchingRule(this.sessionApproved, toolName, input)) {
+    // 唯一例外：capability axis 的 deny 是确定性拒绝，必须先探测——否则
+    // sessionApproved 在此早退会越过轴策略（CWE-863）。deny 轴命中时本块
+    // 直接放行失败；ask 轴的绕行在下方 axis 块内单独处理。
+    let _axisDenies = false
+    try {
+      if (this.axisPolicies) {
+        const { decideAxisPolicy } = require('./capabilityPolicy')
+        const ax = decideAxisPolicy(toolName, this.axisPolicies)
+        _axisDenies = !!(ax.matched && ax.policy === 'deny')
+      }
+    } catch {}
+    if (!_axisDenies && _findMatchingRule(this.sessionApproved, toolName, input)) {
       return PermissionOutcome.allowVia('session_approved')
     }
 
@@ -331,6 +344,10 @@ class PermissionPolicy {
           if (ax.policy === 'allow') return PermissionOutcome.allow()
           if (ax.policy === 'deny') return PermissionOutcome.deny(`capability policy: ${ax.axis} axis denies ${toolName}`)
           if (ax.policy === 'ask') {
+            // 会话批准可代替轴询问（deny 已在 :343 拦下，永不越过）。
+            if (_findMatchingRule(this.sessionApproved, toolName, input)) {
+              return PermissionOutcome.allowVia('session_approved')
+            }
             return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${ax.axis} axis requires approval`, prompter, this)
           }
         }

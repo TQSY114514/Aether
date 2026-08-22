@@ -443,18 +443,28 @@ ipcMain.handle('chat:complete', handleChatComplete)
               if (cls?.recover?.action !== 'compact_retry' || overflowRetries >= OVERFLOW_MAX_RETRIES || !cooled) throw err
               overflowRetries++
               _lastOverflowCompactAt.set(sessionId, Date.now())
-              // 失败循环内已执行的工具调用/结果在 toolMessages 尾部——必须并入
-              // 压缩输入，否则重试时这段历史丢失，非幂等工具会被重复执行。
-              // 尾部可能不成对（失败点恰在 assistant(tool_calls) 与 tool 结果
-              // 之间），maybeCompact/safeSplitIndex 本就有配对回退，直接喂入。
-              const seedLen = skillsBlock ? 1 : 0
-              const loopTail = (Array.isArray(toolMessages) && toolMessages.length > seedLen) ? toolMessages.slice(seedLen) : []
-              const mergeBase = loopTail.length ? [...compacted, ...loopTail] : [...compacted]
+              // 失败循环内已执行的工具调用/结果必须并入压缩输入，否则重试时
+              // 这段历史丢失、非幂等工具会被重复执行。runToolLoop 在上下文
+              // 超长抛错时会携带 err.convo（完整对话快照，含 skillsBlock 种子
+              // 与全部工具历史）——优先用它。无快照时回退 toolMessages 尾部
+              //（旧路径：尾部可能不成对，maybeCompact/safeSplitIndex 有配对回退）。
+              const failedConvo = Array.isArray(err && err.convo) ? err.convo : null
+              let mergeBase
+              if (failedConvo) {
+                mergeBase = failedConvo
+              } else {
+                const seedLen = skillsBlock ? 1 : 0
+                const loopTail = (Array.isArray(toolMessages) && toolMessages.length > seedLen) ? toolMessages.slice(seedLen) : []
+                mergeBase = loopTail.length ? [...compacted, ...loopTail] : [...compacted]
+              }
               const forced = await maybeCompact({ provider, model, messages: mergeBase, budget: ctxBudget, sessionId, force: true })
               if (!forced) throw err // 压缩无可压 → 原样抛给上层既有处理
               compacted.length = 0
               compacted.push(...forced)
-              toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
+              // failedConvo 已含种子 system 消息——重建时不再 prepend。
+              toolMessages = failedConvo
+                ? compacted
+                : (skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted)
               try { wc?.send('chat:status', { messageId: msgId, sessionId, text: cls.recover.hint, kind: cls.kind }) } catch {}
             }
           }

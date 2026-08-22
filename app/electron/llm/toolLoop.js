@@ -572,6 +572,16 @@ Reply in this format:
       }
     } catch (e) {
       try { onThinkingEnd?.() } catch {}
+      // 上下文超长：不在本层吞成字符串——带上完整 convo 快照抛给上层
+      // 溢出自愈（chat-send runWithOverflowHeal）做 force 压缩后重试，
+      // 已执行的工具历史得以保留（否则非幂等工具会被重复执行）。
+      // 其余错误维持原有字符串返回（UI 内联展示）。
+      let _cls = null
+      try { _cls = classifyError(e) } catch {}
+      if (_cls && _cls.recover && _cls.recover.action === 'compact_retry') {
+        try { e.convo = convo.slice() } catch {}
+        throw e
+      }
       return `[agent error: ${e && e.message ? e.message : String(e)}]`
     }
     if (!msg) msg = { content: '', tool_calls: undefined }
