@@ -7,6 +7,7 @@
 // prefetch cache (_memCache) never leaks between tests.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import Module from 'node:module'
 
 let autoMemory
 beforeEach(async () => {
@@ -15,9 +16,18 @@ beforeEach(async () => {
 })
 
 // _doSync 经 providerAdapter.completeChat 调 LLM 提取 —— mock 掉，不发真实请求。
-// beforeEach 的 vi.resetModules() 会重建模块注册表；测试内重新 import 拿到的
-// 就是当前 autoMemory 实例所用的同一个 mock 实例。
-vi.mock('../electron/llm/providerAdapter', () => ({ completeChat: vi.fn() }))
+// 本仓库的 vitest 管道把嵌套 CJS require() 走 Node 原生 loader，vi.mock 拦不住
+// autoMemory 内部的 require('./providerAdapter')（同 autoMemoryOrigin.test.js /
+// testFirst.test.js 的注释），必须钩 Module._load。此前用 vi.mock 工厂 +
+// 测试内重新 import 配置 mock，两侧实例错位导致 completeChat 落空 —— CI 上
+// 整组 "0 times" 失败即此因。
+const completeChat = vi.fn()
+const mockedProviderAdapter = { completeChat }
+const origLoad = Module._load
+Module._load = function (request, ...args) {
+  if (request === './providerAdapter' || request === '../electron/llm/providerAdapter') return mockedProviderAdapter
+  return origLoad.apply(this, [request, ...args])
+}
 
 // ─── Fake db for search / prefetch / detectConflict / prune ────────────────
 function mkDb({ memories = [], fts = null, throwOnGet = false, runSpy = null } = {}) {
@@ -170,7 +180,7 @@ describe('_doSync dedup', () => {
 
   // 驱动一次完整 sync：fake timers 快进 5 秒防抖，等 _doSync 跑完。
   async function runSync(db, reply) {
-    const { completeChat } = await import('../electron/llm/providerAdapter')
+    completeChat.mockReset()
     completeChat.mockResolvedValue(reply)
     vi.useFakeTimers()
     try {
