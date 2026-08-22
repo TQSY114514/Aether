@@ -253,6 +253,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   evolution: {
     runCycle: (params) => ipcRenderer.invoke('evolution:run-cycle', params),
     history: () => ipcRenderer.invoke('evolution:history'),
+    strategy: {
+      get: () => ipcRenderer.invoke('evolution:strategy:get'),
+      add: (text) => ipcRenderer.invoke('evolution:strategy:add', text),
+      replace: (id, text) => ipcRenderer.invoke('evolution:strategy:replace', { id, text }),
+      remove: (id) => ipcRenderer.invoke('evolution:strategy:remove', id),
+      reflectNow: () => ipcRenderer.invoke('evolution:strategy:reflect'),
+    },
   },
   trajectory: {
     getStats: (sessionId) => ipcRenderer.invoke('trajectory:stats', sessionId),

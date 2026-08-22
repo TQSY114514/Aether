@@ -71,6 +71,22 @@ defineTask('skill-autodraft', 4 * 3600 * 1000, async (db) => {
   }
 })
 
+// 自进化反思：从最近会话轨迹提炼策略条目进有界 STRATEGY.md。每 6 小时；
+// 无待处理轨迹且未超容时直接跳过，无 provider/model 配置时 reflectNow 静默跳过。
+defineTask('strategy-reflect', 6 * 3600 * 1000, async (db) => {
+  try {
+    const reflect = require('../evolution/reflect')
+    const pending = reflect.pendingTraceCount()
+    const needsMerge = require('../evolution/strategyStore').stats().needsMerge
+    if (pending === 0 && !needsMerge) return
+    const r = await reflect.reflectNow(db)
+    if (r.ok) log.info(`cron: strategy-reflect done (+${r.added.length} ~${r.replaced.length} -${r.removed.length})`)
+    else log.info(`cron: strategy-reflect skipped (${r.reason})`)
+  } catch (e) {
+    log.warn('cron: strategy-reflect failed:', e.message)
+  }
+})
+
 // ─── User-Configurable Tasks (Task 4.3) ────────────────────────────────────
 //
 // These types are user-schedulable from Settings → Scheduled Tasks. Each runner

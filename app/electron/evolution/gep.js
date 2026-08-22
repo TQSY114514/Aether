@@ -50,8 +50,14 @@ function setCapsuleDir(dir) {
 
 function getCapsuleDir() {
   if (BASE_CAPSULE_DIR) return BASE_CAPSULE_DIR;
-  // Default fallback: local evolution-skills directory
-  return path.join(__dirname, '..', '..', '..', 'evolution-skills');
+  // Default: userData（应用数据目录）。此前落在 <repo>/evolution-skills，
+  // 每个周期都往 git 工作区里写文件污染状态。测试/非 Electron 环境回退旧路径。
+  try {
+    const { app } = require('electron');
+    return path.join(app.getPath('userData'), 'evolution', 'capsules');
+  } catch {
+    return path.join(__dirname, '..', '..', '..', 'evolution-skills');
+  }
 }
 
 // ─── Signal History ────────────────────────────────────────────────────────
