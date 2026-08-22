@@ -352,6 +352,13 @@ interface Window {
     evolution: {
       runCycle: (params: { strategy?: string; auditTrail?: { name: string; args?: Record<string, unknown>; error?: string | null }[] }) => Promise<{ ok: boolean; result?: unknown; error?: string }>
       history: () => Promise<EvolutionEvent[]>
+      strategy: {
+        get: () => Promise<{ count: number; chars: number; maxChars: number; needsMerge: boolean; entries: { id: number; text: string }[]; file?: string; error?: string }>
+        add: (text: string) => Promise<{ ok: boolean; id?: number; reason?: string }>
+        replace: (id: number, text: string) => Promise<{ ok: boolean; reason?: string }>
+        remove: (id: number) => Promise<{ ok: boolean; reason?: string }>
+        reflectNow: () => Promise<{ ok: boolean; reason?: string; error?: string; added?: number[]; replaced?: number[]; removed?: number[] }>
+      }
     }
     trajectory: {
       getStats: (sessionId: number) => Promise<{ totalCompressed: number; turnsSinceCompression: number }>

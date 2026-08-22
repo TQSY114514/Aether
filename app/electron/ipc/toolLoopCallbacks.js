@@ -106,8 +106,25 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   // between "learned strategies" and "applied strategies".
   let _lastGepFeed = 0
   const GEP_FEED_MIN_MS = 10 * 60 * 1000
+  // 反思触发的节流：即使条件持续满足也最多 10 分钟尝试一次。
+  let _lastReflectTry = 0
+  const REFLECT_TRY_MIN_MS = 10 * 60 * 1000
   callbacks.onAudit = (trace) => {
     try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
+    // 策略反思：采集轨迹摘要进环形缓冲；攒够条数或策略库超容时触发一次
+    // LLM 反思（异步、绝不阻塞当前回合；无 provider 时静默跳过）。
+    try {
+      const reflect = require('../evolution/reflect')
+      const queued = reflect.noteTrace(trace)
+      if (queued.queued) {
+        const overCapacity = require('../evolution/strategyStore').stats().needsMerge
+        const now = Date.now()
+        if ((queued.count >= reflect.REFLECT_EVERY_N_TRACES || overCapacity) && now - _lastReflectTry >= REFLECT_TRY_MIN_MS) {
+          _lastReflectTry = now
+          reflect.reflectNow(db).catch(() => {})
+        }
+      }
+    } catch {}
     try {
       const toolCalls = Array.isArray(trace?.toolCalls) ? trace.toolCalls : []
       if (toolCalls.length === 0) return

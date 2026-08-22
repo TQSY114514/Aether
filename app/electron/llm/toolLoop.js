@@ -391,6 +391,16 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // capsule for this session (or a manual cycle ran globally), splice its
   // <evolution_guidance> block into the system context so the learned
   // strategies actually steer this turn. Best-effort — never blocks.
+  // Inject learned strategies: 有界策略库（自进化反思器从真实轨迹提炼，
+  // 持久化在 userData/evolution/STRATEGY.md）。空库不注入。Best-effort。
+  try {
+    const snap = require('../evolution/strategyStore').freeze()
+    if (snap) {
+      const sysIdx = convo.findIndex(m => m.role === 'system')
+      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, { role: 'system', content: snap })
+    }
+  } catch {}
+
   try {
     const gep = require('../evolution/gep')
     const g = gep.getActiveGuidance ? gep.getActiveGuidance(sessionId) : null

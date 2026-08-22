@@ -443,6 +443,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
         if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent, sessionId })
+        // 回写本次使用的 provider/model：定时反思（strategy-reflect）等
+        // 后台 LLM 任务的数据源。fire-and-forget，失败不影响回复。
+        try { db.setSetting('llm.lastProvider', String(provider?.id || provider || '')); db.setSetting('llm.lastModel', String(model || '')) } catch {}
         // Habit learner: detect recurring preferences and promote them to a
         // user-habits skill once they repeat. Also fire-and-forget.
         if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
@@ -564,6 +567,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
         if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, sessionId })
+        try { db.setSetting('llm.lastProvider', String(p?.id || p || '')); db.setSetting('llm.lastModel', String(m || '')) } catch {}
         if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
         log.info('DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
         providerHealth.recordResult(p.id, true)

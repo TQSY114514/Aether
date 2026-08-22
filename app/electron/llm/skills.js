@@ -90,7 +90,8 @@ function scanSkills() {
   // Built-in skills shipped with the app (lowest precedence — user copies override).
   roots.push(path.join(__dirname, '..', '..', 'skills'))
   // GEP 自进化胶囊目录(进化产物也作为 skill 加载, 最低优先级)。
-  try { roots.push(require('../evolution/gep').getCapsuleDir()) } catch {}
+  // GEP capsule 目录不再作为 skill root 加载：进化产物是内部状态不是用户技能，
+  // 混进技能列表只会污染（此前 evo-* 罐头 SKILL.md 全部出现在技能面板）。
   const byName = new Map()
   for (const root of roots) {
     for (const s of loadSkillsFromDir(root)) {

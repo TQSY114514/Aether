@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useUI } from '@/components/ui/feedback'
-import { GitBranch, History, Loader2, Play, Sparkles, AlertTriangle } from 'lucide-react'
+import { GitBranch, History, Loader2, Play, Sparkles, AlertTriangle, BookOpen, Plus, Trash2 } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // ──────────────────────────── Evolution ─────────────────────────────────────
@@ -50,6 +50,43 @@ export default function EvolutionPage() {
   const [strategy, setStrategy] = useState<Strategy>('balanced')
   const [running, setRunning] = useState(false)
   const [loading, setLoading] = useState(true)
+  // 策略库（自进化反思产物）
+  const [strategies, setStrategies] = useState<{ id: number; text: string }[]>([])
+  const [cap, setCap] = useState({ chars: 0, maxChars: 2200, needsMerge: false })
+  const [reflecting, setReflecting] = useState(false)
+  const [newEntry, setNewEntry] = useState('')
+
+  const loadStrategies = useCallback(() => {
+    return window.electronAPI.evolution.strategy.get().then(r => {
+      setStrategies(Array.isArray(r?.entries) ? r.entries : [])
+      setCap({ chars: r?.chars || 0, maxChars: r?.maxChars || 2200, needsMerge: !!r?.needsMerge })
+    }).catch(() => {})
+  }, [])
+
+  const reflectNow = async () => {
+    setReflecting(true)
+    try {
+      const r = await window.electronAPI.evolution.strategy.reflectNow()
+      if (r?.ok) toast(t('evolution.strategyLib.done'), { type: 'success' })
+      else if (r?.reason === 'no-provider') toast(t('evolution.strategyLib.noProvider'), { type: 'info' })
+      else if (r) toast(String(r?.error || r?.reason || ''), { type: 'error' })
+    } catch (e) {
+      toast(String((e as Error)?.message || e), { type: 'error' })
+    } finally {
+      setReflecting(false)
+      loadStrategies()
+    }
+  }
+
+  const addEntry = () => {
+    const text = newEntry.trim()
+    if (!text) return
+    window.electronAPI.evolution.strategy.add(text).then(r => {
+      if (r?.ok) setNewEntry('')
+      else if (r?.reason === 'duplicate') toast(t('evolution.strategyLib.duplicate'), { type: 'info' })
+      loadStrategies()
+    }).catch(() => {})
+  }
 
   const load = useCallback(() => {
     return window.electronAPI.evolution.history().then(list => {
@@ -58,6 +95,7 @@ export default function EvolutionPage() {
   }, [])
 
   useEffect(() => { load().finally(() => setLoading(false)) }, [load])
+  useEffect(() => { loadStrategies() }, [loadStrategies])
 
   const runCycle = async (strat: Strategy) => {
     setRunning(true)
@@ -121,6 +159,68 @@ export default function EvolutionPage() {
             {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
             {running ? t('evolution.running') : t('evolution.run')}
           </button>
+        </div>
+
+        {/* Strategy library — reflection-distilled entries (bounded STRATEGY.md) */}
+        <div className="rounded-xl border p-4 mb-6" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-1.5">
+              <BookOpen size={14} style={{ color: 'var(--accent)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('evolution.strategyLib.title')}</span>
+            </div>
+            <span className="text-xs tabular-nums" style={{ color: cap.needsMerge ? '#d97706' : 'var(--text-muted)' }}>
+              {strategies.length} · {cap.chars}/{cap.maxChars}
+            </span>
+          </div>
+          {cap.needsMerge && (
+            <div className="text-xs mb-2" style={{ color: '#d97706' }}>{t('evolution.strategyLib.overCapacity')}</div>
+          )}
+          <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('evolution.strategyLib.desc')}</p>
+          {strategies.length === 0 ? (
+            <div className="text-xs py-3 text-center rounded-lg border border-dashed mb-3" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              {t('evolution.strategyLib.empty')}
+            </div>
+          ) : (
+            <div className="space-y-1.5 mb-3">
+              {strategies.map(s => (
+                <div key={s.id} className="flex items-start gap-2 text-xs px-2.5 py-2 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                  <span className="shrink-0 tabular-nums pt-px" style={{ color: 'var(--accent)' }}>S{s.id}</span>
+                  <span className="flex-1 leading-relaxed" style={{ color: 'var(--text-primary)' }}>{s.text}</span>
+                  <button
+                    onClick={() => window.electronAPI.evolution.strategy.remove(s.id).then(() => loadStrategies())}
+                    className="shrink-0 opacity-40 hover:opacity-100 transition-opacity"
+                    style={{ color: 'var(--text-secondary)' }}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={newEntry}
+              onChange={e => setNewEntry(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addEntry() }}
+              placeholder={t('evolution.strategyLib.placeholder')}
+              className="flex-1 min-w-[200px] text-xs px-3 py-2 rounded-lg border outline-none"
+              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+            />
+            <button
+              onClick={addEntry}
+              disabled={!newEntry.trim()}
+              className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-lg border transition-opacity disabled:opacity-40"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <Plus size={12} />{t('evolution.strategyLib.add')}
+            </button>
+            <button
+              onClick={reflectNow}
+              disabled={reflecting}
+              className="inline-flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg font-medium transition-opacity disabled:opacity-50"
+              style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+              {reflecting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              {reflecting ? t('evolution.strategyLib.reflecting') : t('evolution.strategyLib.reflect')}
+            </button>
+          </div>
         </div>
 
         {/* History list */}
