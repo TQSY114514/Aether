@@ -302,6 +302,10 @@ function initDatabase() {
   try { db.exec("ALTER TABLE memory ADD COLUMN source_turn_id INTEGER") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN confidence REAL DEFAULT 1.0") } catch {}
   try { db.exec("ALTER TABLE memory ADD COLUMN conflicts_with INTEGER") } catch {}
+  // 存量自指清理：历史 bug 中 detectConflict 曾把 conflicts_with 指向行自身
+  //（[row.id, row.id]），导致 UI 出现"自己和自己冲突"的二选一，且任一按钮
+  // 都会删掉这条记忆。此语句幂等，每次启动跑一遍无害。
+  try { db.prepare('UPDATE memory SET conflicts_with = NULL WHERE conflicts_with = id').run() } catch {}
   // H5 记忆来源标注：user/assistant/external/review — autoMemory 写此列，
   // 注入时 external 来源以 untrusted 包裹降权。
   try { db.exec("ALTER TABLE memory ADD COLUMN origin TEXT DEFAULT 'user'") } catch {}
