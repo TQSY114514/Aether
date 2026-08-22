@@ -324,6 +324,10 @@ function initDatabase() {
     }
     db.exec('CREATE INDEX IF NOT EXISTS idx_memory_content_norm ON memory(content_norm)')
   } catch {}
+  // Jaccard 扫描的取数查询（findSolidifyTarget :811）按 LOWER(TRIM(type))
+  // 过滤 + created_at DESC, id DESC 排序取近 500 条 —— 表达式索引避免主线程
+  // 上全表扫描 + 临时排序。
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_memory_type_time ON memory (LOWER(TRIM(type)), created_at DESC, id DESC)') } catch {}
   // 启动时自动合并完全重复的记忆（幂等）：历史去重漏洞积累的存量在升级后
   // 首次启动即清零，无需再手动点"记忆去重"。个人应用规模的全表 GROUP BY
   // 开销可忽略；函数声明在模块内提升，运行期调用安全。
