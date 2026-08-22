@@ -3,6 +3,8 @@ const fs = require('fs')
 const path = require('path')
 const { app, safeStorage } = require('electron')
 const log = require('./logger')
+// 写入层去重与 llm/autoMemory 共用同一套文本比较逻辑（单一来源，防止漂移）。
+const { normalizeContent: memNormalize, keywords: memKeywords, jaccard: memJaccard, SIMILAR_JACCARD: MEM_SIMILAR_JACCARD } = require('./memoryText')
 
 let db = null
 let dbPath = null
@@ -306,6 +308,30 @@ function initDatabase() {
   //（[row.id, row.id]），导致 UI 出现"自己和自己冲突"的二选一，且任一按钮
   // 都会删掉这条记忆。此语句幂等，每次启动跑一遍无害。
   try { db.prepare('UPDATE memory SET conflicts_with = NULL WHERE conflicts_with = id').run() } catch {}
+  // 规范化内容列 + 索引：精确查重从全表 LOWER(TRIM(content)) 扫描降为索引
+  // 查找；mergeDuplicateMemories 分组同样走它（跨类型，与 findSolidifyTarget
+  // 语义一致）。回填必须用共享 memNormalize（含内部空白折叠）：SQL 的
+  // LOWER(TRIM()) 不折叠多空格，存量 "user likes  tea" 会得到与新写入
+  // "user likes tea" 不一致的键，精确查重和启动合并都会漏。全量重算幂等，
+  // 值未变的行不写，个人应用规模开销可忽略。
+  try { db.exec("ALTER TABLE memory ADD COLUMN content_norm TEXT") } catch {}
+  try {
+    const rows = db.prepare('SELECT id, content, content_norm FROM memory').all()
+    const upd = db.prepare('UPDATE memory SET content_norm = ? WHERE id = ?')
+    for (const r of rows) {
+      const norm = memNormalize(r.content)
+      if (r.content_norm !== norm) upd.run(norm, r.id)
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_memory_content_norm ON memory(content_norm)')
+  } catch {}
+  // Jaccard 扫描的取数查询（findSolidifyTarget :811）按 LOWER(TRIM(type))
+  // 过滤 + created_at DESC, id DESC 排序取近 500 条 —— 表达式索引避免主线程
+  // 上全表扫描 + 临时排序。
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_memory_type_time ON memory (LOWER(TRIM(type)), created_at DESC, id DESC)') } catch {}
+  // 启动时自动合并完全重复的记忆（幂等）：历史去重漏洞积累的存量在升级后
+  // 首次启动即清零，无需再手动点"记忆去重"。个人应用规模的全表 GROUP BY
+  // 开销可忽略；函数声明在模块内提升，运行期调用安全。
+  try { mergeDuplicateMemories() } catch {}
   // H5 记忆来源标注：user/assistant/external/review — autoMemory 写此列，
   // 注入时 external 来源以 untrusted 包裹降权。
   try { db.exec("ALTER TABLE memory ADD COLUMN origin TEXT DEFAULT 'user'") } catch {}
@@ -769,57 +795,108 @@ function getMemories(limit) {
   return db.prepare(`SELECT * FROM memory ORDER BY created_at DESC ${q}`).all()
 }
 function addMemory({ content, type }) {
-  const info = db.prepare('INSERT INTO memory (content, type) VALUES (?, ?)').run(content, type || 'fact')
-  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
-  return { lastInsertRowid: Number(info.lastInsertRowid) }
+  // 手动添加与自动写入共用同一条去重入口（Hermes 式：重复在写入时拦截）。
+  return addMemoryWithProvenance(content, type, null, 'user')
 }
-function addMemoryWithProvenance(content, type, sourceSessionId, origin) {
-  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin) VALUES (?, ?, ?, 1.0, ?)').run(content, type || 'fact', sourceSessionId, origin || 'user')
-  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
-  return { lastInsertRowid: Number(info.lastInsertRowid) }
+
+// 写入层查重：返回应 solidify 的已有行 id，无重复返回 null。
+// 精确匹配不限类型 —— 同一句话换个类型标签（fact/context）仍是同一条记忆；
+// 改写级 Jaccard 扫描仅限同类型近 500 条；relation 是结构化三元组，只做精确。
+function findSolidifyTarget(content, type) {
+  try {
+    const t = String(type || 'fact').toLowerCase()
+    // content_norm 列（迁移回填 + 写入维护）带索引，精确匹配 O(log n)。
+    const exact = db.prepare('SELECT id FROM memory WHERE content_norm = ? ORDER BY id ASC LIMIT 1')
+      .get(memNormalize(String(content)))
+    if (exact) return exact.id
+    if (t === 'relation') return null
+    const kw = memKeywords(content)
+    if (kw.size === 0) return null
+    const rows = db.prepare('SELECT id, content FROM memory WHERE LOWER(TRIM(type)) = ? ORDER BY created_at DESC, id DESC LIMIT 500').all(t)
+    const nTarget = memNormalize(content)
+    for (const r of rows) {
+      if (memNormalize(r.content) === nTarget) return r.id // 大小写/空白变体
+      const rk = memKeywords(r.content)
+      let inter = 0
+      for (const k of kw) if (rk.has(k)) inter++
+      if (inter >= 2 && memJaccard(kw, rk) >= MEM_SIMILAR_JACCARD) return r.id
+    }
+  } catch {}
+  return null
+}
+
+function addMemoryWithProvenance(content, type, sourceSessionId, origin, relationMeta) {
+  const t = String(type || 'fact')
+  const c = String(content || '').trim()
+  if (!c) return { lastInsertRowid: null }
+  // 写入层去重（Hermes 式）：自动提取 / memory_save 工具 / 手动添加 /
+  // 备份导入四条路径全部经此处。命中已有记忆时 solidify（confidence +0.1
+  // 封顶 1.0）而不是插入副本。duplicate 标记供调用方跳过后续的 origin
+  // 改写与冲突标记（重新观察到同一事实不是冲突，也不能覆盖原始来源）。
+  const dupId = findSolidifyTarget(c, t)
+  if (dupId != null) {
+    try { db.prepare('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?').run(dupId) } catch {}
+    return { lastInsertRowid: Number(dupId), duplicate: true }
+  }
+  // relation 条目带关系三元组字段；其余类型走通用插入。两条路径都写
+  // content_norm，保证启动合并和精确查重对全类型生效。
+  let info
+  if (t === 'relation' && relationMeta) {
+    info = db.prepare('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, ?, ?, ?, 1.0, ?, ?)')
+      .run(c, t, relationMeta.entity1 || null, relationMeta.relation || null, relationMeta.entity2 || null, sourceSessionId, origin || 'user', memNormalize(c))
+  } else {
+    info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, 1.0, ?, ?)').run(c, t, sourceSessionId, origin || 'user', memNormalize(c))
+  }
+  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(c, t, Number(info.lastInsertRowid)) } catch {}
+  return { lastInsertRowid: Number(info.lastInsertRowid), duplicate: false }
 }
 function addMemoriesBatch(entries) {
   const insert = db.transaction((list) => {
-    const stmt = db.prepare('INSERT INTO memory (content, type, source_session_id) VALUES (?, ?, ?)')
-    const ftsStmt = db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)')
-    for (const e of list) {
-      const info = stmt.run(e.content, e.type || 'fact', e.sourceSessionId || null)
-      try { ftsStmt.run(String(e.content || ''), e.type || 'fact', Number(info.lastInsertRowid)) } catch {}
-    }
+    for (const e of list) addMemoryWithProvenance(e.content, e.type, e.sourceSessionId)
     return list.length
   })
   return insert(entries || [])
 }
 function updateMemory(id, { content }) {
   if (!content) return
-  db.prepare('UPDATE memory SET content = ? WHERE id = ?').run(content, id)
+  // 内容变更时同步维护 content_norm，否则该行的精确查重从此失准。
+  db.prepare('UPDATE memory SET content = ?, content_norm = ? WHERE id = ?').run(content, memNormalize(content), id)
   try { db.prepare('UPDATE memories_fts SET content = ? WHERE memory_id = ?').run(String(content || ''), Number(id)) } catch {}
 }
 function deleteMemory(id) {
   db.prepare('DELETE FROM memory WHERE id = ?').run(id)
   try { db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(id)) } catch {}
 }
-// 合并完全重复的记忆：按 (LOWER(type), LOWER(content)) 分组，内容完全一致
-// 的保留最早一条(id 最小)，删除其余并同步清理 FTS、把 conflicts_with 引用
-// 改指保留行。修复自动记忆去重失效后积累的重复数据。返回 { removed }。
+// 合并完全重复的记忆：按 content_norm 分组（不分类型 —— 与 findSolidifyTarget
+// 的精确层语义一致，同一句话换个类型标签仍是同一条记忆），保留最早一条
+// (id 最小)，删除其余并同步清理 FTS、把 conflicts_with 引用改指保留行。
+// NULL content_norm 的行不参与合并（防御异常数据被整组误删）。
 function mergeDuplicateMemories() {
   let removed = 0
   try {
     const groups = db.prepare(
-      `SELECT LOWER(type) AS lt, LOWER(content) AS lc, MIN(id) AS keep_id
-       FROM memory GROUP BY LOWER(type), LOWER(content) HAVING COUNT(*) > 1`
+      `SELECT content_norm AS cn, MIN(id) AS keep_id
+       FROM memory GROUP BY content_norm HAVING COUNT(*) > 1 AND content_norm IS NOT NULL`
     ).all()
-    for (const g of groups) {
-      const toDelete = db.prepare(
-        'SELECT id FROM memory WHERE LOWER(type) = ? AND LOWER(content) = ? AND id <> ?'
-      ).all(g.lt, g.lc, g.keep_id)
-      for (const row of toDelete) {
-        try { db.prepare('UPDATE memory SET conflicts_with = ? WHERE conflicts_with = ?').run(g.keep_id, row.id) } catch {}
-        db.prepare('DELETE FROM memory WHERE id = ?').run(row.id)
-        try { db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(row.id)) } catch {}
-        removed++
+    // 原子合并：conflicts_with 改指、删行、清 FTS 三步同生共死。此前各自
+    // 独立执行且 FTS 清理失败被吞掉 —— 中途出错会留下"记忆已删但 FTS 残留
+    // /指针改了一半"的半成品状态。事务内任一步失败即整体回滚。
+    let txRemoved = 0
+    const mergeTx = db.transaction(() => {
+      for (const g of groups) {
+        const toDelete = db.prepare(
+          'SELECT id FROM memory WHERE content_norm = ? AND id <> ?'
+        ).all(g.cn, g.keep_id)
+        for (const row of toDelete) {
+          db.prepare('UPDATE memory SET conflicts_with = ? WHERE conflicts_with = ?').run(g.keep_id, row.id)
+          db.prepare('DELETE FROM memory WHERE id = ?').run(row.id)
+          db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(row.id))
+          txRemoved++
+        }
       }
-    }
+    })
+    mergeTx()
+    removed += txRemoved
   } catch (e) {
     log.warn('mergeDuplicateMemories failed:', e && e.message)
   }
