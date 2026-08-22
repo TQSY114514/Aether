@@ -38,18 +38,28 @@ function keywords(text) {
   for (const w of t.match(/[a-z][a-z0-9_-]{1,}/g) || []) {
     if (!STOP.has(w)) set.add(w)
   }
-  // CJK bigrams: two consecutive CJK characters form a token instead of
-  // single chars, which produces false-positive matches for any shared character.
-  const chars = [...t]
-  for (let i = 0; i < chars.length - 1; i++) {
-    const a = chars[i], b = chars[i + 1]
-    if ((a >= '一' && a <= '鿿') && (b >= '一' && b <= '鿿')) {
-      set.add(a + b)
-      i++ // skip next char (already consumed)
-    } else if (a >= '一' && a <= '鿿') {
-      set.add(a) // standalone CJK (adjacent to non-CJK)
-    }
+  // CJK：按极大连续段切分 —— 段长 ≥2 取段内全部相邻 bigram（中国人 →
+  // 中国/国人），段长 =1 取单字。旧实现边走边 i++ 跳过配对字符，尾字永远
+  // 丢失（"中国人"只出「中国」，"好的"只出「好」），不同文本可能因丢尾字
+  // 而 token 集合相同造成误判重。
+  const isCjk = (ch) => {
+    const c = ch.codePointAt(0)
+    return c >= 0x4e00 && c <= 0x9fff
   }
+  let run = []
+  const flushRun = () => {
+    if (run.length === 1) {
+      set.add(run[0])
+    } else {
+      for (let i = 0; i + 1 < run.length; i++) set.add(run[i] + run[i + 1])
+    }
+    run = []
+  }
+  for (const ch of t) {
+    if (isCjk(ch)) run.push(ch)
+    else flushRun()
+  }
+  flushRun()
   return set
 }
 

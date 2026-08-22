@@ -278,7 +278,9 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     // 500，避免重复积累后被挤出窗口；并拦截同一批 sync 内的重复条目。
     let recent
     try { recent = db.getMemories(500) } catch { recent = [] }
-    const recentKeys = new Set(recent.map(m => `${m.type || 'fact'}:${normalizeContent(m.content)}`))
+    // recentKeys 与下方同批键用同一套 rel:/txt: 命名空间 —— 此前这里还用
+    // `${m.type}:` 前缀，跨同步的精确重复永远撞不上（CI 用例抓到的回归）。
+    const recentKeys = new Set(recent.map(m => `${m.type === 'relation' ? 'rel' : 'txt'}:${normalizeContent(m.content)}`))
     // 预计算关键词集，供改写级近重复扫描（每 sync 一次，开销可忽略）。
     const recentKw = recent.map(m => ({ id: m.id, type: m.type || 'fact', kw: keywords(m.content) }))
     const seenBatch = new Set()

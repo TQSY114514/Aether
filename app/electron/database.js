@@ -308,6 +308,14 @@ function initDatabase() {
   //（[row.id, row.id]），导致 UI 出现"自己和自己冲突"的二选一，且任一按钮
   // 都会删掉这条记忆。此语句幂等，每次启动跑一遍无害。
   try { db.prepare('UPDATE memory SET conflicts_with = NULL WHERE conflicts_with = id').run() } catch {}
+  // 规范化内容列 + 索引：精确查重从全表 LOWER(TRIM(content)) 扫描降为索引
+  // 查找；mergeDuplicateMemories 分组同样走它（跨类型，与 findSolidifyTarget
+  // 语义一致）。回填幂等只填空值，索引 IF NOT EXISTS。
+  try { db.exec("ALTER TABLE memory ADD COLUMN content_norm TEXT") } catch {}
+  try {
+    db.prepare('UPDATE memory SET content_norm = LOWER(TRIM(content)) WHERE content_norm IS NULL').run()
+    db.exec('CREATE INDEX IF NOT EXISTS idx_memory_content_norm ON memory(content_norm)')
+  } catch {}
   // 启动时自动合并完全重复的记忆（幂等）：历史去重漏洞积累的存量在升级后
   // 首次启动即清零，无需再手动点"记忆去重"。个人应用规模的全表 GROUP BY
   // 开销可忽略；函数声明在模块内提升，运行期调用安全。
@@ -785,8 +793,9 @@ function addMemory({ content, type }) {
 function findSolidifyTarget(content, type) {
   try {
     const t = String(type || 'fact').toLowerCase()
-    const exact = db.prepare('SELECT id FROM memory WHERE LOWER(TRIM(content)) = ? ORDER BY id ASC LIMIT 1')
-      .get(String(content).toLowerCase().trim())
+    // content_norm 列（迁移回填 + 写入维护）带索引，精确匹配 O(log n)。
+    const exact = db.prepare('SELECT id FROM memory WHERE content_norm = ? ORDER BY id ASC LIMIT 1')
+      .get(memNormalize(String(content)))
     if (exact) return exact.id
     if (t === 'relation') return null
     const kw = memKeywords(content)
@@ -817,7 +826,7 @@ function addMemoryWithProvenance(content, type, sourceSessionId, origin) {
     try { db.prepare('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?').run(dupId) } catch {}
     return { lastInsertRowid: Number(dupId), duplicate: true }
   }
-  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin) VALUES (?, ?, ?, 1.0, ?)').run(c, t, sourceSessionId, origin || 'user')
+  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, 1.0, ?, ?)').run(c, t, sourceSessionId, origin || 'user', memNormalize(c))
   try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(c, t, Number(info.lastInsertRowid)) } catch {}
   return { lastInsertRowid: Number(info.lastInsertRowid), duplicate: false }
 }
@@ -830,27 +839,29 @@ function addMemoriesBatch(entries) {
 }
 function updateMemory(id, { content }) {
   if (!content) return
-  db.prepare('UPDATE memory SET content = ? WHERE id = ?').run(content, id)
+  // 内容变更时同步维护 content_norm，否则该行的精确查重从此失准。
+  db.prepare('UPDATE memory SET content = ?, content_norm = ? WHERE id = ?').run(content, memNormalize(content), id)
   try { db.prepare('UPDATE memories_fts SET content = ? WHERE memory_id = ?').run(String(content || ''), Number(id)) } catch {}
 }
 function deleteMemory(id) {
   db.prepare('DELETE FROM memory WHERE id = ?').run(id)
   try { db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(Number(id)) } catch {}
 }
-// 合并完全重复的记忆：按 (LOWER(type), LOWER(content)) 分组，内容完全一致
-// 的保留最早一条(id 最小)，删除其余并同步清理 FTS、把 conflicts_with 引用
-// 改指保留行。修复自动记忆去重失效后积累的重复数据。返回 { removed }。
+// 合并完全重复的记忆：按 content_norm 分组（不分类型 —— 与 findSolidifyTarget
+// 的精确层语义一致，同一句话换个类型标签仍是同一条记忆），保留最早一条
+// (id 最小)，删除其余并同步清理 FTS、把 conflicts_with 引用改指保留行。
+// NULL content_norm 的行不参与合并（防御异常数据被整组误删）。
 function mergeDuplicateMemories() {
   let removed = 0
   try {
     const groups = db.prepare(
-      `SELECT LOWER(type) AS lt, LOWER(content) AS lc, MIN(id) AS keep_id
-       FROM memory GROUP BY LOWER(type), LOWER(content) HAVING COUNT(*) > 1`
+      `SELECT content_norm AS cn, MIN(id) AS keep_id
+       FROM memory GROUP BY content_norm HAVING COUNT(*) > 1 AND content_norm IS NOT NULL`
     ).all()
     for (const g of groups) {
       const toDelete = db.prepare(
-        'SELECT id FROM memory WHERE LOWER(type) = ? AND LOWER(content) = ? AND id <> ?'
-      ).all(g.lt, g.lc, g.keep_id)
+        'SELECT id FROM memory WHERE content_norm = ? AND id <> ?'
+      ).all(g.cn, g.keep_id)
       for (const row of toDelete) {
         try { db.prepare('UPDATE memory SET conflicts_with = ? WHERE conflicts_with = ?').run(g.keep_id, row.id) } catch {}
         db.prepare('DELETE FROM memory WHERE id = ?').run(row.id)
