@@ -310,10 +310,18 @@ function initDatabase() {
   try { db.prepare('UPDATE memory SET conflicts_with = NULL WHERE conflicts_with = id').run() } catch {}
   // 规范化内容列 + 索引：精确查重从全表 LOWER(TRIM(content)) 扫描降为索引
   // 查找；mergeDuplicateMemories 分组同样走它（跨类型，与 findSolidifyTarget
-  // 语义一致）。回填幂等只填空值，索引 IF NOT EXISTS。
+  // 语义一致）。回填必须用共享 memNormalize（含内部空白折叠）：SQL 的
+  // LOWER(TRIM()) 不折叠多空格，存量 "user likes  tea" 会得到与新写入
+  // "user likes tea" 不一致的键，精确查重和启动合并都会漏。全量重算幂等，
+  // 值未变的行不写，个人应用规模开销可忽略。
   try { db.exec("ALTER TABLE memory ADD COLUMN content_norm TEXT") } catch {}
   try {
-    db.prepare('UPDATE memory SET content_norm = LOWER(TRIM(content)) WHERE content_norm IS NULL').run()
+    const rows = db.prepare('SELECT id, content, content_norm FROM memory').all()
+    const upd = db.prepare('UPDATE memory SET content_norm = ? WHERE id = ?')
+    for (const r of rows) {
+      const norm = memNormalize(r.content)
+      if (r.content_norm !== norm) upd.run(norm, r.id)
+    }
     db.exec('CREATE INDEX IF NOT EXISTS idx_memory_content_norm ON memory(content_norm)')
   } catch {}
   // 启动时自动合并完全重复的记忆（幂等）：历史去重漏洞积累的存量在升级后

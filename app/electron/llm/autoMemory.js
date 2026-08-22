@@ -278,9 +278,11 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     // 500，避免重复积累后被挤出窗口；并拦截同一批 sync 内的重复条目。
     let recent
     try { recent = db.getMemories(500) } catch { recent = [] }
-    // recentKeys 与下方同批键用同一套 rel:/txt: 命名空间 —— 此前这里还用
+    // recentKeyIds 与下方同批键用同一套 rel:/txt: 命名空间 —— 此前这里还用
     // `${m.type}:` 前缀，跨同步的精确重复永远撞不上（CI 用例抓到的回归）。
-    const recentKeys = new Set(recent.map(m => `${m.type === 'relation' ? 'rel' : 'txt'}:${normalizeContent(m.content)}`))
+    // 值存已有行 id：命中后按 id 加固。此前 UPDATE 按 type+原始空白匹配，
+    // 跨类型变体（库里存 fact、这次来 context）和空白差异都会 0 行更新空跳过。
+    const recentKeyIds = new Map(recent.map(m => [`${m.type === 'relation' ? 'rel' : 'txt'}:${normalizeContent(m.content)}`, m.id]))
     // 预计算关键词集，供改写级近重复扫描（每 sync 一次，开销可忽略）。
     const recentKw = recent.map(m => ({ id: m.id, type: m.type || 'fact', kw: keywords(m.content) }))
     const seenBatch = new Set()
@@ -293,12 +295,13 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
       // 同批重复：模型在同一次提取里输出多个相同条目 → 只记第一条。
       if (seenBatch.has(key)) continue
       seenBatch.add(key)
-      if (recentKeys.has(key)) {
+      const dupId = recentKeyIds.get(key)
+      if (dupId != null) {
         // Solidify (Hermes): the same memory was re-observed in a new session
         // — bump its confidence (cap 1.0) so prefetch ranks it higher.
-        // LOWER 比较保证命中原行（存的是原始大小写，提取的是小写）。
+        // 按 id 定位：跨类型（fact 存/context 来）与空白变体也命中。
         try {
-          db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE type = ? AND LOWER(content) = LOWER(?)', [entry.type, entry.content])
+          db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?', [dupId])
         } catch {}
         continue
       }
