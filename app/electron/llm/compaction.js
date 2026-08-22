@@ -68,7 +68,9 @@ const FETCH_CONNECT_TIMEOUT_MS = 3000   // short guard: reject before the test f
 // ── Incremental compaction state ──────────────────────────────────────────
 // Keyed by sessionId. Tracks the last compaction boundary so subsequent
 // compactions only summarize new messages, reusing the existing summary.
-const compactionState = new Map() // sessionId → { splitIndex: number, summary: string }
+// P0: persisted via compactionStore (memory L1 + sqlite L2, silent degrade) —
+// survives app restarts so the first post-restart compaction stays incremental.
+const { defaultStore: compactionState } = require('./compactionStore')
 
 // ── Smart retention: which tool names indicate high-impact actions ────────
 const HIGH_IMPACT_TOOLS = new Set([
@@ -229,7 +231,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
 
   // Update compaction state for next incremental run
   if (sessionId) {
-    compactionState.set(sessionId, { splitIndex: nonSystemOlder.length, summary })
+    defaultStore.set(sessionId, nonSystemOlder.length, summary)
   }
 
   const summaryMsg = { role: 'system', content: `Summary of earlier conversation:\n${summary}` }
@@ -315,7 +317,7 @@ async function summarizeHistory({ provider, model, history, signal, prevSummary 
 
 // Clear compaction state for a session (e.g., when session is deleted).
 function clearCompactionState(sessionId) {
-  if (sessionId) compactionState.delete(sessionId)
+  if (sessionId) compactionState.clear(sessionId)
 }
 
 module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, buildSummarizePrompt, clearCompactionState, applyTieredTruncation }
