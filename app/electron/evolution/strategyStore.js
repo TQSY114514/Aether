@@ -100,27 +100,24 @@ function findSimilar(existing, text) {
   return null
 }
 
-function totalChars(entries) { return entries.reduce((n, e) => n + e.text.length, 0) }
-
 // ─── 增删改 ────────────────────────────────────────────────────────────────
 // 新增一条策略。重复（精确或改写级）直接拒绝——策展优于累积。
-// 容量是硬约束：投影超限直接拒绝不落盘（此前只标 needsMerge 仍保存，
-// 超容内容会持续膨胀）。行开销 ≈8 字符（"- [Sn] " + 换行）。
-const LINE_OVERHEAD = 8
-
+// 容量是硬约束：投影一律用 serialize().length（含文件头和行格式开销），
+// 空库的第一条也受同一上限约束（此前只算正文长度，首条可超限落盘，
+// 且 stats() 报告的 chars 不含头部长度，与真实文件不符）。
 function addEntry(text) {
   const t = String(text || '').trim()
   if (!t) return { ok: false, reason: 'empty' }
   const { entries } = load()
   const dup = findSimilar(entries, t)
   if (dup) return { ok: false, reason: 'duplicate', duplicateOf: dup.id }
-  if (t.length > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
-  const projected = totalChars(entries) + t.length + LINE_OVERHEAD
-  if (entries.length > 0 && projected > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
-  let nextId = entries.reduce((m, e) => Math.max(m, e.id), 0) + 1
-  entries.push({ id: nextId, text: t })
-  save(entries)
-  return { ok: true, id: nextId, chars: totalChars(entries), needsMerge: totalChars(entries) > MAX_CHARS }
+  const nextId = entries.reduce((m, e) => Math.max(m, e.id), 0) + 1
+  const candidates = entries.concat([{ id: nextId, text: t }])
+  if (serialize(candidates).length > MAX_CHARS) {
+    return { ok: false, reason: 'over-capacity', needsMerge: true }
+  }
+  save(candidates)
+  return { ok: true, id: nextId, chars: serialize(candidates).length, needsMerge: false }
 }
 
 function replaceEntry(id, newText) {
@@ -133,13 +130,16 @@ function replaceEntry(id, newText) {
   const others = entries.filter(e => e.id !== target.id)
   const dup = findSimilar(others, t)
   if (dup) return { ok: false, reason: 'duplicate', duplicateOf: dup.id }
-  // 投影容量检查：替换不得让库更超限（超容时只允许换得更短）。
-  if (t.length > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
-  const projected = totalChars(others) + t.length + LINE_OVERHEAD
-  if (others.length > 0 && projected > MAX_CHARS) return { ok: false, reason: 'over-capacity', needsMerge: true }
-  target.text = t
-  save(entries)
-  return { ok: true, id: target.id, chars: totalChars(entries), needsMerge: totalChars(entries) > MAX_CHARS }
+  // 投影容量检查：结果必须装进上限内，或在库已超容时严格变小——
+  // 后者保证 needsMerge 的"合并/删减"恢复路径不会被卡死。
+  const before = serialize(entries).length
+  const merged = entries.map(e => e.id === target.id ? { ...e, text: t } : e)
+  const after = serialize(merged).length
+  if (after > MAX_CHARS && after >= before) {
+    return { ok: false, reason: 'over-capacity', needsMerge: true }
+  }
+  save(merged)
+  return { ok: true, id: target.id, chars: after, needsMerge: after > MAX_CHARS }
 }
 
 function removeEntry(id) {
@@ -147,7 +147,8 @@ function removeEntry(id) {
   const kept = entries.filter(e => e.id !== Number(id))
   if (kept.length === entries.length) return { ok: false, reason: 'not-found' }
   save(kept)
-  return { ok: true, removed: Number(id), chars: totalChars(kept), needsMerge: totalChars(kept) > MAX_CHARS }
+  const chars = serialize(kept).length
+  return { ok: true, removed: Number(id), chars, needsMerge: chars > MAX_CHARS }
 }
 
 // ─── 注入与状态 ────────────────────────────────────────────────────────────
@@ -172,7 +173,9 @@ function freeze() {
 }
 
 function stats() {
-  const { entries, chars } = load()
+  const { entries } = load()
+  // chars 用序列化长度（含文件头），与真实文件大小和写入路径的容量判定一致。
+  const chars = serialize(entries).length
   return { count: entries.length, chars, maxChars: MAX_CHARS, needsMerge: chars > MAX_CHARS }
 }
 
