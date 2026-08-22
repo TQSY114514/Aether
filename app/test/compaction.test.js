@@ -5,7 +5,7 @@
 // the summarization HTTP call fails).
 
 import { describe, it, expect } from 'vitest'
-import { estimateTextTokens, estimateMessageTokens, estimateMessagesTokens, safeSplitIndex, maybeCompact } from '../electron/llm/compaction'
+import { estimateTextTokens, estimateMessageTokens, estimateMessagesTokens, safeSplitIndex, maybeCompact, findKeepPoint } from '../electron/llm/compaction'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function m(role, content = '') { return { role, content } }
@@ -170,5 +170,38 @@ describe('maybeCompact', () => {
         expect(hasResult).toBe(true)
       }
     }
+  })
+})
+
+// ─── findKeepPoint（token 保尾） ─────────────────────────────────────────────
+describe('findKeepPoint（token 保尾）', () => {
+  it('导出存在', () => {
+    expect(typeof findKeepPoint).toBe('function')
+  })
+
+  it('预算越大保留越多（splitIndex 单调不增）', () => {
+    const messages = Array.from({ length: 40 }, (_, i) => m(i % 2 ? 'assistant' : 'user', 'x'.repeat(600)))
+    const small = findKeepPoint(messages, 8000)
+    const large = findKeepPoint(messages, 160000)
+    expect(large).toBeLessThanOrEqual(small)
+    expect(small).toBeGreaterThan(0) // 小预算下确实有前缀被摘走
+  })
+
+  it('极小预算也不低于下限（MIN_KEEP_TOKENS 兜底）', () => {
+    const messages = Array.from({ length: 10 }, (_, i) => m(i % 2 ? 'assistant' : 'user', 'x'.repeat(2000)))
+    const idx = findKeepPoint(messages, 500) // 0.25×500 远低于下限
+    expect(messages.length - idx).toBeGreaterThanOrEqual(2)
+  })
+
+  it('切点永不孤立 tool 配对', () => {
+    const messages = [
+      m('system', 'x'.repeat(10)),
+      m('user', 'x'.repeat(500)),
+      { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'x', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 't1', content: 'y'.repeat(1200) },
+      m('assistant', 'x'.repeat(80)),
+    ]
+    const idx = findKeepPoint(messages, 9000)
+    expect(messages[idx].role).not.toBe('tool') // 保尾的第一条不是无主的 tool 结果
   })
 })

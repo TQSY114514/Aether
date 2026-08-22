@@ -35,7 +35,32 @@ const { pruneOlderBlock, applyTieredTruncation } = require('./contextBudget')
 
 const SAFETY_MARGIN = 1.2          // estimateTokens is rough; pad it
 const COMPACT_AT_RATIO = 0.8      // compact when estimated tokens ≥ 80% of budget
-const RECENT_WINDOW = 8           // messages always kept verbatim at the tail
+// Keep-recent tail sizing. Sources: OpenClaw keeps 20000 tokens by default;
+// OpenCode clamps usable*25% into 2000..15000. We take the conservative
+// intersection shape: 25% of budget, floored at 4000, capped at 20000.
+const KEEP_RECENT_TOKENS_DEFAULT = 20000
+const MIN_KEEP_TOKENS = 4000
+const KEEP_TAIL_BUDGET_SHARE = 0.25
+
+// Token-budgeted keep-tail: accumulate from the tail until the target is
+// reached, then let safeSplitIndex back off to the nearest legal cut point
+// (never orphaning a tool-call/tool-result pair).
+function findKeepPoint(messages, budget) {
+  const target = Math.min(
+    KEEP_RECENT_TOKENS_DEFAULT,
+    Math.max(MIN_KEEP_TOKENS, Math.floor((budget || 0) * KEEP_TAIL_BUDGET_SHARE))
+  )
+  let acc = 0
+  let count = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    acc += estimateMessageTokens(messages[i])
+    count++
+    if (acc >= target) break
+  }
+  if (count > messages.length) count = messages.length
+  return safeSplitIndex(messages, count)
+}
+
 const SUMMARIZATION_OVERHEAD = 2048 // reserve for the summary prompt + system + reply
 const SUMMARIZATION_TIMEOUT_MS = 15000 // guard timeout for the summarization HTTP call
 const FETCH_CONNECT_TIMEOUT_MS = 3000   // short guard: reject before the test framework times out
@@ -139,7 +164,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
   }
 
   const prev = sessionId ? compactionState.get(sessionId) : null
-  const split = safeSplitIndex(messages, RECENT_WINDOW)
+  const split = findKeepPoint(messages, budget)
   if (split <= 0) return messages
 
   // ── Smart retention: pull important messages from the older block ──────
@@ -189,8 +214,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     try {
       summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal })
     } catch {
-      const targetRecent = Math.floor(RECENT_WINDOW * 1.5)
-      const fallbackSplit = safeSplitIndex(nonSystemOlder, targetRecent)
+      const fallbackSplit = findKeepPoint(nonSystemOlder, budget)
       const keep = nonSystemOlder.slice(fallbackSplit)
       const dropped = fallbackSplit
       const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
@@ -265,4 +289,4 @@ function clearCompactionState(sessionId) {
   if (sessionId) compactionState.delete(sessionId)
 }
 
-module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, clearCompactionState, applyTieredTruncation }
+module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, clearCompactionState, applyTieredTruncation }
