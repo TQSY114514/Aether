@@ -171,6 +171,46 @@ describe('maybeCompact', () => {
       }
     }
   })
+
+  it('force=true skips the ratio gate: low-water messages get compacted', async () => {
+    // 远低于 COMPACT_AT_RATIO×budget 的水位；非 force 时会原样返回。
+    // 规模必须让 fallback 也必须丢东西（older 块 token 总量 > 保尾目标
+    // KEEP_RECENT_TOKENS_DEFAULT=20000），否则正确语义是返回 null 而非收缩。
+    const big = 'x'.repeat(5000)
+    const lowWater = [
+      { role: 'system', content: 'sys' },
+      m('user', big),
+      ...Array.from({ length: 58 }, (_, i) => m(i % 2 ? 'assistant' : 'user', big)),
+    ]
+    const untouched = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: lowWater,
+      budget: 1_000_000,
+    })
+    expect(untouched.length).toBe(lowWater.length) // 正常门槛下不压缩
+
+    const forced = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: lowWater,
+      budget: 1_000_000,
+      force: true,
+    })
+    expect(forced).not.toBeNull()
+    expect(forced.length).toBeLessThan(lowWater.length)
+  }, 20000)
+
+  it('force=true returns null when nothing can be compacted (anti-loop)', async () => {
+    const result = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: [{ role: 'user', content: 'hi' }],
+      budget: 100_000,
+      force: true,
+    })
+    expect(result).toBeNull()
+  })
 })
 
 // ─── findKeepPoint（token 保尾） ─────────────────────────────────────────────

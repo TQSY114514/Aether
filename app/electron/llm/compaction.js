@@ -153,11 +153,12 @@ function safeSplitIndex(messages, recentCount) {
 
 // Core entry point. Returns the (possibly compacted) message array.
 // `budget` is the model's context window in tokens (approx). 0 = no compaction.
-async function maybeCompact({ provider, model, messages, budget, signal, sessionId }) {
+async function maybeCompact({ provider, model, messages, budget, signal, sessionId, force = false }) {
   if (!budget) return messages
   const threshold = Math.floor(budget * COMPACT_AT_RATIO)
   const est = estimateMessagesTokens(messages, provider, model)
-  if (est < threshold) return messages
+  // force=true（溢出自愈重试）跳过比例门槛直接压。
+  if (!force && est < threshold) return messages
 
   // Hooks: PreCompact — allow blocking or modification.
   let ctx = { provider, model, messages, budget, est, threshold, sessionId }
@@ -167,7 +168,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
 
   const prev = sessionId ? compactionState.get(sessionId) : null
   const split = findKeepPoint(messages, budget)
-  if (split <= 0) return messages
+  if (split <= 0) return force ? null : messages // force：无可压 → null（防死循环）
 
   // ── Smart retention: pull important messages from the older block ──────
   const older = messages.slice(0, split)
@@ -223,7 +224,10 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
       const dropped = fallbackSplit
       const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
       const truncated = `[Earlier conversation truncated — summarization failed. ${keep.length} of ${nonSystemOlder.length} older messages retained.${note}]`
-      return [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
+      const fbResult = [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
+      // force 语义同样适用于 fallback 路径：压完反而更多 = 无可压，返回 null。
+      if (force && fbResult.length >= messages.length) return null
+      return fbResult
     }
   }
 
@@ -236,6 +240,8 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
 
   const summaryMsg = { role: 'system', content: `Summary of earlier conversation:\n${summary}` }
   const result = [...systemMsgs, summaryMsg, ...recent]
+  // force 语义：压完没变小 = 无可压，返回 null 让调用方放弃（防死循环）。
+  if (force && result.length >= messages.length) return null
 
   // Hooks: PostCompact
   try { await hooks.runHooks('PostCompact', { ...ctx, summary, olderCount: older.length, recentCount: recent.length }) } catch {}
