@@ -43,14 +43,17 @@ const mkAssistants = n => Array.from({ length: n }, () => ({ role: 'assistant', 
 
 // ─── Incremental compaction ─────────────────────────────────────────────────
 describe('incremental compaction', () => {
-  it('only summarizes new messages and appends a [Later] section', async () => {
+  it('only summarizes new messages: rolling mode feeds previous summary via buildSummarizePrompt', async () => {
     completeChatMock.mockResolvedValueOnce('SUMMARY-A').mockResolvedValueOnce('SUMMARY-B')
     await maybeCompact({ provider, model, messages: mkAssistants(10), budget: 100, sessionId: 's-inc' })
     const second = await maybeCompact({ provider, model, messages: mkAssistants(14), budget: 100, sessionId: 's-inc' })
     expect(completeChatMock).toHaveBeenCalledTimes(2)
+    // Task5 滚动合并：第二次调用的提示词必须携带上一次摘要（替代旧的 [Later] 拼接）
+    const secondPrompt = JSON.stringify(completeChatMock.mock.calls[1])
+    expect(secondPrompt).toContain('SUMMARY-A')
     const summaryMsg = second.find(m => m.role === 'system' && m.content.startsWith('Summary of earlier'))
-    expect(summaryMsg.content).toContain('[Later]')
     expect(summaryMsg.content).toContain('SUMMARY-B')
+    expect(summaryMsg.content).not.toContain('[Later]')
   })
 
   it('falls back to full re-summarization when no messages were added since boundary', async () => {
@@ -117,9 +120,15 @@ describe('smart retention', () => {
 
 // ─── Boundary cases ─────────────────────────────────────────────────────────
 describe('compaction boundary cases', () => {
-  it('returns messages unchanged when everything fits in the recent window', async () => {
-    const messages = mkAssistants(5)
-    const result = await maybeCompact({ provider, model, messages, budget: 100, sessionId: 's-window' })
+  it('returns messages unchanged while estimated tokens stay under COMPACT_AT_RATIO', async () => {
+    // CR 一轮发现2语义迁移注记：保尾目标上限是 25%×budget，而触发门槛是 80%×budget
+    // —— 一旦触发压缩，保尾在数学上不可能覆盖全部消息（0.25b < 0.667b）。
+    // 旧「everything fits」分支已随 headroom cap 消失；本边界现守护的是
+    // 另一条 unchanged 路径：估算总量低于门槛时完全不碰历史。
+    const chunk = 'x'.repeat(1800) // ≈450 tok/条
+    const messages = Array.from({ length: 30 }, () => ({ role: 'assistant', content: chunk }))
+    // 30×450=13500 raw，est=⌈13500×1.2⌉=16200 < floor(21000×0.8)=16800 → 原样返回
+    const result = await maybeCompact({ provider, model, messages, budget: 21000, sessionId: 's-window' })
     expect(result).toBe(messages)
   })
 

@@ -418,3 +418,122 @@ describe('runToolLoop permission gate wiring (P0-C1)', () => {
     expect(existsSync(target)).toBe(true)
   })
 })
+
+
+// ─── Session-scoped always-allow (P0) ────────────────────────────────────────
+describe('approveAlways / sessionApproved', () => {
+  const { PermissionMode, PermissionPromptDecision } = permissions
+
+  function countingPrompter() {
+    let asks = 0
+    return {
+      get asks() { return asks },
+      decide() {
+        asks++
+        return PermissionPromptDecision.AllowAlways
+      },
+    }
+  }
+
+  it('approving once stops asking for the same subject (asks === 1)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    const input = JSON.stringify({ command: 'npm test' })
+
+    const r1 = policy.authorize('exec', input, p)
+    expect(r1.allowed).toBe(true)
+    expect(p.asks).toBe(1)
+
+    const r2 = policy.authorize('exec', input, p)
+    expect(r2.allowed).toBe(true)
+    expect(r2.via).toBe('session_approved')
+    expect(p.asks).toBe(1) // 不再询问
+  })
+
+  it('session-approved rules can never override deny rules', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.approveAlways('exec(npm test)')
+    policy.withPermissionRules({ deny: ['exec'] })
+    const r = policy.authorize('exec', JSON.stringify({ command: 'npm test' }), null)
+    expect(r.allowed).toBe(false)
+  })
+
+  it('a different subject is asked again (asks >= 2)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    policy.authorize('exec', JSON.stringify({ command: 'npm test' }), p)
+    policy.authorize('exec', JSON.stringify({ command: 'rm -rf /tmp/x' }), p)
+    expect(p.asks).toBeGreaterThanOrEqual(2)
+  })
+
+  it('hook Deny beats session-approved rules (approval cannot bypass overrides)', () => {
+    const { PermissionOverride } = permissions
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.approveAlways('exec(npm test)')
+    const r = policy.authorizeWithContext(
+      'exec',
+      JSON.stringify({ command: 'npm test' }),
+      { permissionOverride: PermissionOverride.Deny, overrideReason: 'hook says no' },
+      null,
+    )
+    expect(r.allowed).toBe(false)
+  })
+
+  it('a literal "*" subject stays exact and does not become a match-all rule', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    // 批准 subject 恰为字面 "*" 的命令
+    policy.authorize('exec', JSON.stringify({ command: '*' }), p)
+    expect(p.asks).toBe(1)
+    // 其他命令不得被波及——若 "(\*)" 被解析成 Any，这里就不会再问
+    policy.authorize('exec', JSON.stringify({ command: 'rm -rf /' }), p)
+    expect(p.asks).toBe(2)
+  })
+})
+  const { PermissionMode } = permissions // 本块在共用 describe 之外，需自行解构
+  function countingPrompter() {
+    let asks = 0
+    return { get asks() { return asks }, decide() { asks++; return permissions.PermissionPromptDecision.AllowAlways } }
+  }
+  it('capability axis deny beats session-approved rules', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    policy.approveAlways('run_command(npm test)')
+    policy.withAxisPolicies({ shell: 'deny' })
+    const r = policy.authorize('run_command', JSON.stringify({ command: 'npm test' }), null)
+    expect(r.allowed).toBe(false)
+  })
+
+  it('session approval substitutes for capability axis ask (no second prompt)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    const p = countingPrompter()
+    const input = JSON.stringify({ command: 'npm test' })
+    policy.withToolRequirement('run_command', PermissionMode.DangerFullAccess);
+    // 必须真的声明轴策略——否则走的是 askRule/模式询问路径而非轴 ask 绕行分支（CodeRabbit r3）。
+    policy.withAxisPolicies({ shell: 'ask' });
+    policy.authorize('run_command', input, p) // 第一次：轴 ask → 询问并 AllowAlways
+    expect(p.asks).toBe(1)
+    const r2 = policy.authorize('run_command', input, p) // 第二次：会话批准代替轴询问
+    expect(r2.allowed).toBe(true)
+    expect(r2.via).toBe('session_approved')
+    expect(p.asks).toBe(1)
+  })
+
+  it('a subject containing an escaped colon-star stays Exact (no prefix bypass)', () => {
+    const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+    // 注入 approveAlways 转义产物形态的字面星号（_sessionRuleSpec 对
+    // subject 'npm run:*' 会产出 'run_command(npm run:\\*)'）
+    policy.approveAlways('exec(npm run:\\*)')
+    policy.withToolRequirement('exec', PermissionMode.DangerFullAccess)
+    const p = countingPrompter()
+    // 同前缀但不同完整命令——若被误解析为 Prefix('npm run') 这里会被放行
+    const r = policy.authorize('exec', JSON.stringify({ command: 'npm run unsafe' }), p)
+    expect(p.asks).toBe(1) // 首次询问（未被规则静默放行）
+    // 无前缀绕过的真正断言：同前缀另一条命令必须再次询问
+    //（若 Exact 被误解析为 Prefix('npm run')，这里 asks 会停在 1）
+    const r2 = policy.authorize('exec', JSON.stringify({ command: 'npm run other' }), p)
+    expect(p.asks).toBe(2)
+    expect(r2.allowed).toBe(true)
+  })

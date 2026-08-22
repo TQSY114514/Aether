@@ -5,7 +5,7 @@
 // the summarization HTTP call fails).
 
 import { describe, it, expect } from 'vitest'
-import { estimateTextTokens, estimateMessageTokens, estimateMessagesTokens, safeSplitIndex, maybeCompact } from '../electron/llm/compaction'
+import { estimateTextTokens, estimateMessageTokens, estimateMessagesTokens, safeSplitIndex, maybeCompact, findKeepPoint, buildSummarizePrompt } from '../electron/llm/compaction'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function m(role, content = '') { return { role, content } }
@@ -170,5 +170,136 @@ describe('maybeCompact', () => {
         expect(hasResult).toBe(true)
       }
     }
+  })
+
+  it('force=true skips the ratio gate: low-water messages get compacted', async () => {
+    // 远低于 COMPACT_AT_RATIO×budget 的水位；非 force 时会原样返回。
+    // 规模必须让 fallback 也必须丢东西（older 块 token 总量 > 保尾目标
+    // KEEP_RECENT_TOKENS_DEFAULT=20000），否则正确语义是返回 null 而非收缩。
+    const big = 'x'.repeat(5000)
+    const lowWater = [
+      { role: 'system', content: 'sys' },
+      m('user', big),
+      ...Array.from({ length: 58 }, (_, i) => m(i % 2 ? 'assistant' : 'user', big)),
+    ]
+    const untouched = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: lowWater,
+      budget: 1_000_000,
+    })
+    expect(untouched.length).toBe(lowWater.length) // 正常门槛下不压缩
+
+    const forced = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: lowWater,
+      budget: 1_000_000,
+      force: true,
+    })
+    expect(forced).not.toBeNull()
+    expect(forced.length).toBeLessThan(lowWater.length)
+  }, 20000)
+
+  it('force=true returns null when nothing can be compacted (anti-loop)', async () => {
+    const result = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: [{ role: 'user', content: 'hi' }],
+      budget: 100_000,
+      force: true,
+    })
+    expect(result).toBeNull()
+  })
+})
+
+// ─── findKeepPoint（token 保尾） ─────────────────────────────────────────────
+describe('findKeepPoint（token 保尾）', () => {
+  it('导出存在', () => {
+    expect(typeof findKeepPoint).toBe('function')
+  })
+
+  it('预算越大保留越多（splitIndex 单调不增）', () => {
+    const messages = Array.from({ length: 40 }, (_, i) => m(i % 2 ? 'assistant' : 'user', 'x'.repeat(600)))
+    const small = findKeepPoint(messages, 8000)
+    const large = findKeepPoint(messages, 160000)
+    expect(large).toBeLessThanOrEqual(small)
+    expect(small).toBeGreaterThan(0) // 小预算下确实有前缀被摘走
+  })
+
+  it('小预算时保尾让位于预算上限（tail×1.2+overhead≤budget）', () => {
+    const messages = Array.from({ length: 20 }, (_, i) => m(i % 2 ? 'assistant' : 'user', 'x'.repeat(2000))) // 每条约500tok
+    const idx = findKeepPoint(messages, 6000)
+    const kept = messages.length - idx
+    // 真实不变量：保尾原始估算 ×1.2 裕量 + 2048 overhead 必须装进预算。
+    // b=6000 → headroom=3293 → 旧实现加完才检查会留7条（3500×1.2+2048=6248>6000）；
+    // 加前预检查应留6条（3000×1.2+2048=5648≤6000）。
+    expect(kept * 500 * 1.2 + 2048).toBeLessThanOrEqual(6000)
+    expect(kept).toBeLessThanOrEqual(6)
+    expect(idx).toBeGreaterThan(0)
+  })
+
+  it('极小预算只保最后一条（headroom=0，target 归零仍保最新消息）', () => {
+    const messages = Array.from({ length: 10 }, (_, i) => m(i % 2 ? 'assistant' : 'user', 'x'.repeat(2000)))
+    const idx = findKeepPoint(messages, 500) // b−2048<0 → headroom=0 → target 被 cap 到 0
+    // 预检查只对 count>0 生效：最新的那条永远保留，第二条即超限 → 只保尾部1条
+    expect(idx).toBe(messages.length - 1)
+  })
+
+  it('切点永不孤立 tool 配对', () => {
+    const messages = [
+      m('system', 'x'.repeat(10)),
+      m('user', 'x'.repeat(500)),
+      { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'x', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 't1', content: 'y'.repeat(1200) },
+      m('assistant', 'x'.repeat(80)),
+    ]
+    const idx = findKeepPoint(messages, 9000)
+    expect(messages[idx].role).not.toBe('tool') // 保尾的第一条不是无主的 tool 结果
+  })
+})
+
+// --- buildSummarizePrompt ---
+describe('buildSummarizePrompt', () => {
+  it('full mode: six headings, chunk text, verbatim rule, no previous_summary', () => {
+    const p = buildSummarizePrompt(null, 'CHUNK_TEXT')
+    for (const s of ['## Goal', '## Constraints', '## Progress', '## Key Decisions', '## Next Steps', '## Critical Context']) {
+      expect(p).toContain(s)
+    }
+    expect(p).toContain('CHUNK_TEXT')
+    expect(p).toContain('逐字保留') 
+    expect(p).not.toContain('<previous_summary>')
+  })
+  it('UPDATE mode: both inputs present and rolling-merge instruction explicit', () => {
+    const p = buildSummarizePrompt('PREV_SUMMARY', 'NEW_DELTA')
+    expect(p).toContain('<previous_summary>')
+    expect(p).toContain('PREV_SUMMARY')
+    expect(p).toContain('<new_conversation_segment>')
+    expect(p).toContain('NEW_DELTA')
+    expect(p).toMatch(/滚动|更新/)
+  })
+})
+
+// CodeRabbit round-3: safeSplitIndex 的工具配对回退会把超大 assistant(tool_calls)
+// + tool 结果对拉回保留窗——此时 force 压缩装不下该窗口，必须返 null 而不是
+// 给出一个注定再次溢出的"可重试"结果。
+describe('maybeCompact force + oversized tool pair', () => {
+  it('returns null when the newest message is an oversized tool pair that cannot fit', async () => {
+    const big = 'x'.repeat(5000)
+    const msgs = [
+      { role: 'system', content: 'sys' },
+      m('user', big),
+      { role: 'assistant', content: '', tool_calls: [{ id: 't9', type: 'function', function: { name: 'x', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 't9', content: big },
+      m('user', 'final'),
+    ]
+    const result = await maybeCompact({
+      provider: { api_url: 'http://test', api_format: 'openai' },
+      model: { model_name: 'test' },
+      messages: msgs,
+      budget: 100,
+      force: true,
+    })
+    expect(result).toBeNull()
   })
 })

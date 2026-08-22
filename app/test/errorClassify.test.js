@@ -150,8 +150,8 @@ describe('classifyError — context_length', () => {
     const r = classifyError(err('context length exceeded', 400))
     expect(r.kind).toBe('context_length')
     expect(r.retryable).toBe(true)
-    expect(r.recover.action).toBe('new_chat')
-    expect(r.recover.hint).toContain('新对话')
+    expect(r.recover.action).toBe('compact_retry')
+    expect(r.recover.hint).toContain('压缩')
   })
 
   it('detects too many tokens with 400', () => {

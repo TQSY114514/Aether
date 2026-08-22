@@ -25,6 +25,11 @@ const { orchestrate } = require('../llm/orchestrator')
 const { isComplexRequest } = require('../llm/planning')
 const featureFlags = require('../featureFlags')
 
+// ── Overflow self-heal (P0): bounded compact → retry ───────────────────────
+const OVERFLOW_MAX_RETRIES = 2            // OpenClaw 同款有界重试
+const OVERFLOW_RETRY_COOLDOWN_MS = 10000  // 冷却：压缩无效时不无限打转
+const _lastOverflowCompactAt = new Map()  // sessionId -> ts，进程级即可
+
 const DEFAULT_CTX_BUDGET = 32000
 const DEFAULT_FALLBACK_TIMEOUT_MS = 30000
 
@@ -382,7 +387,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
       // is never summarized away.
       const skillsBlock = skills.formatSkillsForPrompt()
       // memBlock was already injected into `compacted` above (shared by both paths).
-      const toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
+      // toolMessages 可被溢出自愈重试重建（force 压缩后），故用 let。
+      let toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
       const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
       const msgId = asstMsg.lastInsertRowid
       // Track msgId → session mapping for abortControllers cleanup on session delete
@@ -422,13 +428,54 @@ ipcMain.handle('chat:complete', handleChatComplete)
           getPendingInjections: () => pendingInjections.get(sessionId) || [],
           clearPendingInjections: () => pendingInjections.delete(sessionId),
         })
+        // ── Overflow self-heal（P0）：compact → retry，三重防误触 ──────────
+        // ①分类器只认 context_length；②每会话 10s 冷却；③force 压缩无效即放弃；
+        // 外加 OVERFLOW_MAX_RETRIES 有界。
+        const runWithOverflowHeal = async () => {
+          let overflowRetries = 0
+          for (;;) {
+            try {
+              return await runSingleLoop()
+            } catch (err) {
+              const cls = classifyError(err)
+              const lastAt = _lastOverflowCompactAt.get(sessionId) || 0
+              const cooled = Date.now() - lastAt >= OVERFLOW_RETRY_COOLDOWN_MS
+              if (cls?.recover?.action !== 'compact_retry' || overflowRetries >= OVERFLOW_MAX_RETRIES || !cooled) throw err
+              overflowRetries++
+              _lastOverflowCompactAt.set(sessionId, Date.now())
+              // 失败循环内已执行的工具调用/结果必须并入压缩输入，否则重试时
+              // 这段历史丢失、非幂等工具会被重复执行。runToolLoop 在上下文
+              // 超长抛错时会携带 err.convo（完整对话快照，含 skillsBlock 种子
+              // 与全部工具历史）——优先用它。无快照时回退 toolMessages 尾部
+              //（旧路径：尾部可能不成对，maybeCompact/safeSplitIndex 有配对回退）。
+              const failedConvo = Array.isArray(err && err.convo) ? err.convo : null
+              let mergeBase
+              if (failedConvo) {
+                mergeBase = failedConvo
+              } else {
+                const seedLen = skillsBlock ? 1 : 0
+                const loopTail = (Array.isArray(toolMessages) && toolMessages.length > seedLen) ? toolMessages.slice(seedLen) : []
+                mergeBase = loopTail.length ? [...compacted, ...loopTail] : [...compacted]
+              }
+              const forced = await maybeCompact({ provider, model, messages: mergeBase, budget: ctxBudget, sessionId, force: true })
+              if (!forced) throw err // 压缩无可压 → 原样抛给上层既有处理
+              compacted.length = 0
+              compacted.push(...forced)
+              // failedConvo 已含种子 system 消息——重建时不再 prepend。
+              toolMessages = failedConvo
+                ? compacted
+                : (skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted)
+              try { wc?.send('chat:status', { messageId: msgId, sessionId, text: cls.recover.hint, kind: cls.kind }) } catch {}
+            }
+          }
+        }
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
             const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: cb })
-            finalContent = (orc && orc.ok && orc.summary) ? orc.summary : await runSingleLoop()
-          } catch { finalContent = await runSingleLoop() }
+            finalContent = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
+          } catch { finalContent = await runWithOverflowHeal() }
         } else {
-          finalContent = await runSingleLoop()
+          finalContent = await runWithOverflowHeal()
         }
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.

@@ -155,3 +155,14 @@ describe('agentModeToPermissionMode', () => {
     expect(toolLoop.agentModeToPermissionMode('non-existent-mode')).toBe('Prompt')
   })
 })
+
+// ─── LoopGuard wiring ────────────────────────────────────────────────────────
+// Smoke test: runToolLoop is too heavy to unit test, so we only verify the
+// typed-hash guard module is exported and the existing API surface survived.
+describe('LoopGuard wiring', () => {
+  it('exports LoopGuard and keeps the legacy loop-detection surface intact', () => {
+    expect(typeof toolLoop.LoopGuard).toBe('function')
+    expect(typeof toolLoop.SemanticLoopDetector).toBe('function')
+    expect(typeof toolLoop.classifyToolError).toBe('function')
+  })
+})
