@@ -108,6 +108,9 @@ function findSimilar(existing, text) {
 function addEntry(text) {
   const t = String(text || '').trim()
   if (!t) return { ok: false, reason: 'empty' }
+  // 单行约束：STRATEGY.md 一行一条（"- [S1] 内容"），文本内嵌换行/Unicode
+  // 行分隔符会让 serialize 后的文件被 parseStore 拆成多条伪造条目。
+  if (/[\r\n\u0085\u2028\u2029]/.test(t)) return { ok: false, reason: 'invalid-input' }
   const { entries } = load()
   const dup = findSimilar(entries, t)
   if (dup) return { ok: false, reason: 'duplicate', duplicateOf: dup.id }
@@ -123,6 +126,8 @@ function addEntry(text) {
 function replaceEntry(id, newText) {
   const t = String(newText || '').trim()
   if (!t) return { ok: false, reason: 'empty' }
+  // 单行约束，同 addEntry（防内嵌换行伪造多条目）。
+  if (/[\r\n\u0085\u2028\u2029]/.test(t)) return { ok: false, reason: 'invalid-input' }
   const { entries } = load()
   const target = entries.find(e => e.id === Number(id))
   if (!target) return { ok: false, reason: 'not-found' }

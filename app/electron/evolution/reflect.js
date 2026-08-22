@@ -49,7 +49,9 @@ function digestTrace(trace) {
         ? String(errLine.error || errLine.result || '')
             .slice(0, 160)
             .replace(SECRET_RE, '[REDACTED]')
-            .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+            // U+0085/U+2028/U+2029 也是合法行分隔符，一并折叠，
+            // 否则含它们的错误信息仍能破坏轨迹单行格式。
+            .replace(/[\u0000-\u001f\u007f\u0085\u2028\u2029]+/g, ' ')
         : null,
     }
   } catch { return null }
