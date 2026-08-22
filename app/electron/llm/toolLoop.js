@@ -17,6 +17,8 @@
 const { completeChatMessage } = require('./providerAdapter')
 const { safeParseToolCallArgs, validateToolArgs } = require('./toolArgs')
 const { applyMiddleware, enrichWithSummary } = require('./toolResultMiddleware')
+const { LoopGuard } = require('./loopGuard') // P0: sliding-window no-progress detector
+const { hashToolArgs, hashToolResult } = require('./toolResultHash')
 const { classifyError } = require('./errorClassify')
 const toolCache = require('./toolCache')
 const toolMetrics = require('./toolLoopMetrics')
@@ -363,6 +365,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   let totalChars = 0
   let lastSig = ''
   let sigRepeat = 0
+  const loopGuard = new LoopGuard() // P0: typed-hash no-progress guard (sliding window)
+  let loopWarnedKey = null // warn 每个签名只注入一次
   const convo = messages.slice()
   if (!convo.some(m => m.role === 'system')) convo.unshift({ role: 'system', content: AGENT_SYSTEM_PROMPT })
 
@@ -885,6 +889,27 @@ Reply in this format:
             verificationEvidence.push({ ...evidenceEntry, isTestFailure: true })
           }
         } catch {}
+        // 双哈希循环守卫（P0）：同工具+同参数+同结果连续出现 = 无进展。
+        // 哈希喂的是中间件变换前的 entry.result —— 截断/摘要层会抹平差异。
+        if (!isPlan) {
+          try {
+            const aHash = hashToolArgs(entry.name, entry.args)
+            const rHash = entry.error
+              ? 'error:' + hashToolResult(entry.name, { exitCode: 1, stdout: String(entry.error).slice(-200) })
+              : hashToolResult(entry.name, entry.result ?? '')
+            loopGuard.record({ toolName: entry.name, argsHash: aHash, resultHash: rHash })
+            const verdict = loopGuard.evaluate()
+            if (verdict.action === 'block') {
+              if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected_no_progress', planId: plan?.id }) } catch {}
+              return '（检测到工具调用无进展循环，已停止）'
+            }
+            if (verdict.action === 'warn' && loopWarnedKey !== aHash + ':' + rHash) {
+              loopWarnedKey = aHash + ':' + rHash
+              // 与 semanticLoopDetector 同姿势：中段 system 提示（本文件既有约定）。
+              convo.push({ role: 'system', content: `[⚠ Repeated tool call detected: same arguments and identical results ${verdict.streak} times in a row. Change your approach — different tool, different arguments — or stop.]` })
+            }
+          } catch {}
+        }
         totalChars += rawContent.length
         convo.push({ role: 'tool', tool_call_id: tc.id, content: rawContent })
       }
@@ -1053,6 +1078,7 @@ module.exports = {
   generatePlan: planning.generatePlan,
   MAX_CONCURRENT_TOOLS,
   SemanticLoopDetector,
+  LoopGuard,
   classifyToolError,
   getMaxConcurrent,
   agentModeToPermissionMode,
