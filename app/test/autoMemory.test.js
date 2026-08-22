@@ -213,9 +213,23 @@ describe('_doSync dedup', () => {
     const { db, insertSpy } = dedupDb([existing], runSpy)
     await runSync(db, '[FACT] Alice prefers Python project')
     expect(insertSpy).not.toHaveBeenCalled()
+    // 按 id 加固：跨类型/空白变体命中时 type+LOWER(content) 反查会 0 行更新
     expect(runSpy).toHaveBeenCalledWith(
-      'UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE type = ? AND LOWER(content) = LOWER(?)',
-      ['fact', 'Alice prefers Python project'],
+      'UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?',
+      [11],
+    )
+  })
+
+  it('solidifies a cross-type exact duplicate (fact stored, context arrives)', async () => {
+    // rel:/txt: 命名空间塌缩后，fact 存量 + context 新来同一句话也命中
+    const existing = { id: 13, content: 'Alice prefers Python project', type: 'fact', created_at: new Date().toISOString(), access_count: 0 }
+    const runSpy = vi.fn()
+    const { db, insertSpy } = dedupDb([existing], runSpy)
+    await runSync(db, '[CONTEXT] Alice prefers Python project')
+    expect(insertSpy).not.toHaveBeenCalled()
+    expect(runSpy).toHaveBeenCalledWith(
+      'UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?',
+      [13],
     )
   })
 

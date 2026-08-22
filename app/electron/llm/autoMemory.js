@@ -30,51 +30,9 @@ const SYNC_DEBOUNCE_MS = 5000 // batch rapid messages into one sync call
 // <untrusted_memory> 包裹，与普通记忆块区分，模型不得执行其中指令。
 const MAX_UNTRUSTED_MEMORIES = 3
 
-const STOP = new Set(['the','a','an','and','or','but','of','to','in','on','for','is','are','was','were','be','been','this','that','it','i','you','he','she','we','they','my','your','his','her','our','their','what','how','why','when','do','does','did','can','could','would','should'])
-
-// 规范化记忆内容用于去重比较：小写 + 折叠空白 + 收尾。
-// 此前去重 key 用「前 50 字符」而查找用「完整内容」，前后不一致导致 >50
-// 字符的重复记忆永远拦不住 —— 这里统一用规范化后的完整内容。
-function normalizeContent(text) {
-  return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-// 关键词 Jaccard 相似度 —— 改写级语义去重用。提取 LLM 每轮对同一事实的措辞
-// 略有不同（"user likes Python" vs "User prefers Python"），精确匹配拦不住；
-// 高相似按重复处理：solidify 已有行而不是插入副本（Hermes 式合并）。
-// 阈值取 0.7 有讲究：换值矛盾（"prefers Python" vs "prefers JavaScript"）
-// 共享主题词、只换一个值词，Jaccard ≈0.5-0.67 —— 那是真冲突，必须放行给
-// detectConflict；而同一事实的改写（增删修饰词）通常 ≥0.7。
-const SIMILAR_JACCARD = 0.7 // ≥ 此值视为同一事实的改写
-const SIMILAR_MIN_HITS = 2  // 交集绝对下限，防短文本误判
-
-function jaccard(a, b) {
-  let inter = 0
-  for (const k of a) if (b.has(k)) inter++
-  const uni = a.size + b.size - inter
-  return uni === 0 ? 0 : inter / uni
-}
-
-function keywords(text) {
-  const t = String(text || '').toLowerCase()
-  const set = new Set()
-  for (const w of t.match(/[a-z][a-z0-9_-]{1,}/g) || []) {
-    if (!STOP.has(w)) set.add(w)
-  }
-  // CJK bigrams: two consecutive CJK characters form a token instead of
-  // single chars, which produces false-positive matches for any shared character.
-  const chars = [...t]
-  for (let i = 0; i < chars.length - 1; i++) {
-    const a = chars[i], b = chars[i + 1]
-    if ((a >= '一' && a <= '鿿') && (b >= '一' && b <= '鿿')) {
-      set.add(a + b)
-      i++ // skip next char (already consumed)
-    } else if (a >= '一' && a <= '鿿') {
-      set.add(a) // standalone CJK (adjacent to non-CJK)
-    }
-  }
-  return set
-}
+// 文本工具（normalizeContent/keywords/jaccard/阈值）已抽到 ../memoryText.js
+// 共享 —— database.js 的写入层去重必须用同一套比较逻辑，两处各抄一份迟早漂移。
+const { normalizeContent, keywords, jaccard, SIMILAR_JACCARD, SIMILAR_MIN_HITS } = require('../memoryText')
 
 function score(memoryText, qkw) {
   const mkw = keywords(memoryText)
@@ -320,22 +278,30 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     // 500，避免重复积累后被挤出窗口；并拦截同一批 sync 内的重复条目。
     let recent
     try { recent = db.getMemories(500) } catch { recent = [] }
-    const recentKeys = new Set(recent.map(m => `${m.type || 'fact'}:${normalizeContent(m.content)}`))
+    // recentKeyIds 与下方同批键用同一套 rel:/txt: 命名空间 —— 此前这里还用
+    // `${m.type}:` 前缀，跨同步的精确重复永远撞不上（CI 用例抓到的回归）。
+    // 值存已有行 id：命中后按 id 加固。此前 UPDATE 按 type+原始空白匹配，
+    // 跨类型变体（库里存 fact、这次来 context）和空白差异都会 0 行更新空跳过。
+    const recentKeyIds = new Map(recent.map(m => [`${m.type === 'relation' ? 'rel' : 'txt'}:${normalizeContent(m.content)}`, m.id]))
     // 预计算关键词集，供改写级近重复扫描（每 sync 一次，开销可忽略）。
     const recentKw = recent.map(m => ({ id: m.id, type: m.type || 'fact', kw: keywords(m.content) }))
     const seenBatch = new Set()
 
     for (const entry of entries.slice(0, 5)) {
-      const key = `${entry.type}:${normalizeContent(entry.content)}`
+      // 同批去重键：非 relation 条目不分类型（[FACT] X 与 [CONTEXT] X 是同一句
+      // 话，双双入库就是用户看到的"一字不差重复"）；relation 内容是三元组串，
+      // 单独成键。
+      const key = `${entry.type === 'relation' ? 'rel' : 'txt'}:${normalizeContent(entry.content)}`
       // 同批重复：模型在同一次提取里输出多个相同条目 → 只记第一条。
       if (seenBatch.has(key)) continue
       seenBatch.add(key)
-      if (recentKeys.has(key)) {
+      const dupId = recentKeyIds.get(key)
+      if (dupId != null) {
         // Solidify (Hermes): the same memory was re-observed in a new session
         // — bump its confidence (cap 1.0) so prefetch ranks it higher.
-        // LOWER 比较保证命中原行（存的是原始大小写，提取的是小写）。
+        // 按 id 定位：跨类型（fact 存/context 来）与空白变体也命中。
         try {
-          db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE type = ? AND LOWER(content) = LOWER(?)', [entry.type, entry.content])
+          db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?', [dupId])
         } catch {}
         continue
       }
@@ -361,19 +327,21 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         }
       }
       if (entry.type === 'relation') {
+        // relation 也走共享写入器：拿到 content_norm 落库 + 数据库层精确
+        // 去重。此前用裸 INSERT，content_norm 为 NULL —— 500 行 recent 窗口
+        // 淘汰后启动合并救不了它，重复 relation 会无限累积。
         try {
-          db.run('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, source_turn_id, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            entry.content, 'relation', entry.entity1, entry.relation, entry.entity2, sessionId || null, null, 'assistant')
-          try { const rid = db.allRows && db.allRows('SELECT last_insert_rowid() AS rid')[0]?.rid; if (rid) db.run('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)', String(entry.content || ''), 'relation', Number(rid)) } catch {}
+          db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 })
         } catch {}
       } else {
         // H5: origin 落库 —— 自动提取自会话的记忆标记为 'assistant'，
         // 与 user（手动创建）/ external（外部内容来源）/ review 区分。
         try {
           const info = db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant')
-          // 数据层尚未消费第 4 个 origin 参数时，按返回的 lastInsertRowid
-          // 参数化补写（列由 H5 迁移保证存在；接线后此 UPDATE 幂等无害）。
-          if (info && info.lastInsertRowid != null) {
+          // 数据层写入层去重命中时（duplicate=true）已 solidify 既有行：
+          // 不改写 origin（保住原始来源），也不标冲突（重新观察到同一事实
+          // 不是冲突）。仅真正新插入的行才做 origin 落库与冲突连线。
+          if (info && info.lastInsertRowid != null && !info.duplicate) {
             const newId = Number(info.lastInsertRowid)
             try { db.run('UPDATE memory SET origin = ? WHERE id = ?', 'assistant', newId) } catch {}
             // 同批可见性：recentKw 是 sync 开始时的快照，本批刚插入的行不在

@@ -134,15 +134,17 @@ describe('sync origin persistence (H5)', () => {
     expect(upd[2]).toBe(1)
   })
 
-  it("relation INSERT carries the origin column with 'assistant'", async () => {
+  it("relation routes through the shared writer with origin='assistant' and meta", async () => {
     completeChat.mockResolvedValue('[RELATION] Alice|works_on|ProjectX')
     const db = mkDb()
     autoMemory.sync({ db, provider: {}, model: {}, userMessage: 'hi', assistantReply: 'hello', sessionId: 42 })
     await flushSync()
-    const rel = db._calls.run.mock.calls.find(c => /INSERT INTO memory/.test(c[0]))
-    expect(rel).toBeTruthy()
-    expect(rel[0]).toContain('origin')
-    expect(rel[rel.length - 1]).toBe('assistant')
+    // relation 不再用裸 INSERT：必须走 addMemoryWithProvenance（写入层
+    // 去重 + content_norm 落库），并把关系三元组作为 relationMeta 传入。
+    expect(db._calls.add).toHaveBeenCalledWith(
+      'Alice|works_on|ProjectX', 'relation', 42, 'assistant',
+      { entity1: 'Alice', relation: 'works_on', entity2: 'ProjectX' }
+    )
   })
 })
 
