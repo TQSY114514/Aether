@@ -199,9 +199,11 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     const alreadySummarized = nonSystemOlder.slice(0, prev.splitIndex)
     if (newSinceLast.length > 0 && alreadySummarized.length > 0) {
       try {
-        const newSummary = await summarizeHistory({ provider, model, history: newSinceLast, signal })
+        // UPDATE 滚动合并：把上一版摘要交给模型，在它基础上并入增量段落，
+        // 摘要永远只有一份最新六段结构版本（替代 [Later] 字符串拼接）。
+        const newSummary = await summarizeHistory({ provider, model, history: newSinceLast, signal, prevSummary: prev.summary })
         if (newSummary) {
-          summary = prev.summary + '\n\n[Later]\n' + newSummary
+          summary = newSummary
         }
       } catch {
         // Fall through to full summarization
@@ -244,7 +246,35 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
 // UUIDs, hashes, IDs, paths, URLs, IPs, ports must survive verbatim so the
 // agent can still act on them after compaction. Summarize in the conversation's
 // primary language.
-async function summarizeHistory({ provider, model, history, signal }) {
+// Six-section structured summary (OpenClaw SUMMARIZATION_PROMPT shape).
+// Fixed headings keep summaries diffable across rolls; UPDATE mode merges
+// into the previous summary instead of concatenating "[Later]" blocks,
+// which drifted structurally after several rounds.
+const SUMMARY_SECTIONS = ['Goal', 'Constraints', 'Progress', 'Key Decisions', 'Next Steps', 'Critical Context']
+
+const _SUMMARY_RULES =
+  '规则：总长 ≤300 词；Progress 用 "- [x]"/"- [ ]" 复选框；UUID、哈希、文件路径、命令、报错关键字等标识符必须逐字保留，不得意译；不确定的内容不写。'
+
+function buildSummarizePrompt(prevSummary, chunkText) {
+  const header = `你是会话压缩器。将给定对话内容压缩为以下 ${SUMMARY_SECTIONS.length} 个 Markdown 段落，标题逐字使用：\n` +
+    SUMMARY_SECTIONS.map(s => `## ${s}`).join('\n') + `\n${_SUMMARY_RULES}`
+  if (!prevSummary) {
+    return `${header}\n\n<conversation>\n${chunkText}\n</conversation>`
+  }
+  return `${header}
+
+已有本会话更早前缀的上一版摘要。不要从零重写：在其基础上滚动更新——仍相关的条目保留、Progress 复选框按新进展更新、新信息并入对应段落、已不再相关的内容删除。输出合并后的完整新版本（仍是同样的六段结构）。
+
+<previous_summary>
+${prevSummary}
+</previous_summary>
+
+<new_conversation_segment>
+${chunkText}
+</new_conversation_segment>`
+}
+
+async function summarizeHistory({ provider, model, history, signal, prevSummary }) {
   // Drop non-conversational noise (empty tool results, silent assistant turns)
   // so the summary budget goes to real content.
   const realHistory = history.filter(m => {
@@ -264,11 +294,10 @@ async function summarizeHistory({ provider, model, history, signal }) {
   const fetchPromise = completeChat({
     provider, model,
     messages: [
-      { role: 'system', content: 'Summarize the following conversation history into a concise paragraph (≤300 words). Preserve all opaque identifiers exactly as written (UUIDs, hashes, IDs, hostnames, IPs, ports, URLs, file paths). Focus on factual content, decisions made, current state, and unresolved questions. Do not translate code, paths, or identifiers. Write the summary in the conversation\'s primary language. Do not add commentary.' },
-      { role: 'user', content: transcript.slice(0, 24000) },
+      { role: 'user', content: buildSummarizePrompt(prevSummary || null, transcript.slice(0, 24000)) },
     ],
     signal: ctrl.signal,
-    options: { max_tokens: 600, temperature: 0.2 },
+    options: { max_tokens: 900, temperature: 0.2 },
   })
   let text
   try {
@@ -289,4 +318,4 @@ function clearCompactionState(sessionId) {
   if (sessionId) compactionState.delete(sessionId)
 }
 
-module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, clearCompactionState, applyTieredTruncation }
+module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, buildSummarizePrompt, clearCompactionState, applyTieredTruncation }

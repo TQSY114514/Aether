@@ -5,7 +5,7 @@
 // the summarization HTTP call fails).
 
 import { describe, it, expect } from 'vitest'
-import { estimateTextTokens, estimateMessageTokens, estimateMessagesTokens, safeSplitIndex, maybeCompact, findKeepPoint } from '../electron/llm/compaction'
+import { estimateTextTokens, estimateMessageTokens, estimateMessagesTokens, safeSplitIndex, maybeCompact, findKeepPoint, buildSummarizePrompt } from '../electron/llm/compaction'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function m(role, content = '') { return { role, content } }
@@ -203,5 +203,26 @@ describe('findKeepPoint（token 保尾）', () => {
     ]
     const idx = findKeepPoint(messages, 9000)
     expect(messages[idx].role).not.toBe('tool') // 保尾的第一条不是无主的 tool 结果
+  })
+})
+
+// --- buildSummarizePrompt ---
+describe('buildSummarizePrompt', () => {
+  it('full mode: six headings, chunk text, verbatim rule, no previous_summary', () => {
+    const p = buildSummarizePrompt(null, 'CHUNK_TEXT')
+    for (const s of ['## Goal', '## Constraints', '## Progress', '## Key Decisions', '## Next Steps', '## Critical Context']) {
+      expect(p).toContain(s)
+    }
+    expect(p).toContain('CHUNK_TEXT')
+    expect(p).toContain('逐字保留') 
+    expect(p).not.toContain('<previous_summary>')
+  })
+  it('UPDATE mode: both inputs present and rolling-merge instruction explicit', () => {
+    const p = buildSummarizePrompt('PREV_SUMMARY', 'NEW_DELTA')
+    expect(p).toContain('<previous_summary>')
+    expect(p).toContain('PREV_SUMMARY')
+    expect(p).toContain('<new_conversation_segment>')
+    expect(p).toContain('NEW_DELTA')
+    expect(p).toMatch(/滚动|更新/)
   })
 })
