@@ -17,6 +17,10 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const log = require('../logger')
+// 关键词提取统一走共享模块：英文词 + CJK bigram。此前本文件自带的
+// _keywords 只匹配 [a-z][a-z0-9_-]{1,}，中文查询零关键词 → 图谱对
+// 中文用户完全失效（searchGraph/injectContext 恒空）。
+const { keywords: sharedKeywords } = require('../memoryText')
 
 const MAX_GRAPH_RESULTS = 10
 const MIN_CONFIDENCE = 0.3
@@ -62,16 +66,19 @@ function buildGraph(db) {
         }
       }
 
-      // FACT lines: try to extract implicit entities (capitalised words that look like names).
+      // FACT lines: extract implicit entities. Two patterns:
+      //   - Capitalised English words that look like names ("Alice works on X").
+      //   - CJK runs of 2-8 chars（中文实体此前完全进不了图——正则只认大写英文词）。
       if (type === 'fact') {
-        const matches = content.match(/\b([A-Z][a-zA-Z]{2,})\b/g)
-        if (matches) {
-          for (const name of matches) {
-            const lower = name.toLowerCase()
-            const entry = nodeSet.get(lower)
-            if (entry) entry.count++
-            else nodeSet.set(lower, { type: 'fact_entity', count: 1 })
-          }
+        const matches = [
+          ...(content.match(/\b([A-Z][a-zA-Z]{2,})\b/g) || []),
+          ...(content.match(/[\u4e00-\u9fff]{2,8}/g) || []),
+        ]
+        for (const name of matches) {
+          const lower = name.toLowerCase()
+          const entry = nodeSet.get(lower)
+          if (entry) entry.count++
+          else nodeSet.set(lower, { type: 'fact_entity', count: 1 })
         }
       }
     }
@@ -116,11 +123,22 @@ function searchGraph(db, query, limit = 5) {
     const qkws = _keywords(query)
     if (qkws.length === 0) return []
 
-    // Find entities matching the query.
-    const matchingNodes = db.allRows(
-      `SELECT entity, type FROM kg_nodes WHERE LOWER(entity) LIKE ? LIMIT 20`,
-      [`%${qkws[0]}%`]
-    ) || []
+    // Find entities matching ANY query keyword（此前只用 qkws[0]，多词查询漏配）。
+    const matchingNodes = []
+    const seenEntities = new Set()
+    for (const kw of qkws) {
+      const rows = db.allRows(
+        `SELECT entity, type FROM kg_nodes WHERE LOWER(entity) LIKE ? LIMIT 20`,
+        [`%${kw}%`]
+      ) || []
+      for (const r of rows) {
+        if (r && r.entity && !seenEntities.has(r.entity)) {
+          seenEntities.add(r.entity)
+          matchingNodes.push(r)
+        }
+      }
+      if (matchingNodes.length >= 20) break
+    }
 
     if (matchingNodes.length === 0) return []
 
@@ -311,22 +329,22 @@ function injectContext(db, userMessage, limit = 5) {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+// 关键词：共享模块的英文词 + CJK bigram，转数组供 includes 比对。
 function _keywords(text) {
-  const t = String(text || '').toLowerCase()
-  const words = t.match(/[a-z][a-z0-9_-]{1,}/g) || []
-  return [...new Set(words)]
+  return [...sharedKeywords(String(text || ''))]
 }
 
 // ─── Cleanup ───────────────────────────────────────────────────────────────
+// 删除超过 maxAgeDays 且没有任何边引用的孤立节点。
+// 旧实现把 kg_nodes.id 和 kg_edges."from"/"to"（存的是实体名）拿来比较，
+// 永远不相等 → 子查询恒空 → NOT IN 恒真，prune 实际上什么都没删过。
 function prune(db, maxAgeDays = 90) {
   try {
-    db.run(`DELETE FROM kg_nodes WHERE id NOT IN (
-      SELECT DISTINCT id FROM (
-        SELECT id FROM kg_edges WHERE "to" = kg_nodes.entity
-        UNION
-        SELECT id FROM kg_edges WHERE "from" = kg_nodes.entity
-      )
-    ) AND created_at < ?`,
+    db.run(`DELETE FROM kg_nodes WHERE created_at < ? AND entity NOT IN (
+      SELECT "from" FROM kg_edges
+      UNION
+      SELECT "to" FROM kg_edges
+    )`,
       [new Date(Date.now() - maxAgeDays * 86400000).toISOString()])
   } catch {}
 }

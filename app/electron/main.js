@@ -355,6 +355,8 @@ function setupIpcHandlers() {
       return []
     }
   })
+  // ── 策略库（自进化反思产物，有界 STRATEGY.md）────────────────────────
+  try { require('./ipc/evolutionStrategy.handler').registerStrategyHandlers(ipcMain, db) } catch (e) { log.warn('strategy handlers failed:', e.message) }
   const { registerUsageHandlers } = require('./ipc/usage.handler')
   registerUsageHandlers(ipcMain, db)
   // Search (FTS5) handler
