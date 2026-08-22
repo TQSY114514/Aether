@@ -3,6 +3,8 @@ const fs = require('fs')
 const path = require('path')
 const { app, safeStorage } = require('electron')
 const log = require('./logger')
+// 写入层去重与 llm/autoMemory 共用同一套文本比较逻辑（单一来源，防止漂移）。
+const { normalizeContent: memNormalize, keywords: memKeywords, jaccard: memJaccard, SIMILAR_JACCARD: MEM_SIMILAR_JACCARD } = require('./memoryText')
 
 let db = null
 let dbPath = null
@@ -306,6 +308,10 @@ function initDatabase() {
   //（[row.id, row.id]），导致 UI 出现"自己和自己冲突"的二选一，且任一按钮
   // 都会删掉这条记忆。此语句幂等，每次启动跑一遍无害。
   try { db.prepare('UPDATE memory SET conflicts_with = NULL WHERE conflicts_with = id').run() } catch {}
+  // 启动时自动合并完全重复的记忆（幂等）：历史去重漏洞积累的存量在升级后
+  // 首次启动即清零，无需再手动点"记忆去重"。个人应用规模的全表 GROUP BY
+  // 开销可忽略；函数声明在模块内提升，运行期调用安全。
+  try { mergeDuplicateMemories() } catch {}
   // H5 记忆来源标注：user/assistant/external/review — autoMemory 写此列，
   // 注入时 external 来源以 untrusted 包裹降权。
   try { db.exec("ALTER TABLE memory ADD COLUMN origin TEXT DEFAULT 'user'") } catch {}
@@ -769,23 +775,55 @@ function getMemories(limit) {
   return db.prepare(`SELECT * FROM memory ORDER BY created_at DESC ${q}`).all()
 }
 function addMemory({ content, type }) {
-  const info = db.prepare('INSERT INTO memory (content, type) VALUES (?, ?)').run(content, type || 'fact')
-  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
-  return { lastInsertRowid: Number(info.lastInsertRowid) }
+  // 手动添加与自动写入共用同一条去重入口（Hermes 式：重复在写入时拦截）。
+  return addMemoryWithProvenance(content, type, null, 'user')
 }
+
+// 写入层查重：返回应 solidify 的已有行 id，无重复返回 null。
+// 精确匹配不限类型 —— 同一句话换个类型标签（fact/context）仍是同一条记忆；
+// 改写级 Jaccard 扫描仅限同类型近 500 条；relation 是结构化三元组，只做精确。
+function findSolidifyTarget(content, type) {
+  try {
+    const t = String(type || 'fact').toLowerCase()
+    const exact = db.prepare('SELECT id FROM memory WHERE LOWER(TRIM(content)) = ? ORDER BY id ASC LIMIT 1')
+      .get(String(content).toLowerCase().trim())
+    if (exact) return exact.id
+    if (t === 'relation') return null
+    const kw = memKeywords(content)
+    if (kw.size === 0) return null
+    const rows = db.prepare('SELECT id, content FROM memory WHERE LOWER(TRIM(type)) = ? ORDER BY created_at DESC, id DESC LIMIT 500').all(t)
+    const nTarget = memNormalize(content)
+    for (const r of rows) {
+      if (memNormalize(r.content) === nTarget) return r.id // 大小写/空白变体
+      const rk = memKeywords(r.content)
+      let inter = 0
+      for (const k of kw) if (rk.has(k)) inter++
+      if (inter >= 2 && memJaccard(kw, rk) >= MEM_SIMILAR_JACCARD) return r.id
+    }
+  } catch {}
+  return null
+}
+
 function addMemoryWithProvenance(content, type, sourceSessionId, origin) {
-  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin) VALUES (?, ?, ?, 1.0, ?)').run(content, type || 'fact', sourceSessionId, origin || 'user')
-  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(String(content || ''), type || 'fact', Number(info.lastInsertRowid)) } catch {}
-  return { lastInsertRowid: Number(info.lastInsertRowid) }
+  const t = String(type || 'fact')
+  const c = String(content || '').trim()
+  if (!c) return { lastInsertRowid: null }
+  // 写入层去重（Hermes 式）：自动提取 / memory_save 工具 / 手动添加 /
+  // 备份导入四条路径全部经此处。命中已有记忆时 solidify（confidence +0.1
+  // 封顶 1.0）而不是插入副本。duplicate 标记供调用方跳过后续的 origin
+  // 改写与冲突标记（重新观察到同一事实不是冲突，也不能覆盖原始来源）。
+  const dupId = findSolidifyTarget(c, t)
+  if (dupId != null) {
+    try { db.prepare('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?').run(dupId) } catch {}
+    return { lastInsertRowid: Number(dupId), duplicate: true }
+  }
+  const info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin) VALUES (?, ?, ?, 1.0, ?)').run(c, t, sourceSessionId, origin || 'user')
+  try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(c, t, Number(info.lastInsertRowid)) } catch {}
+  return { lastInsertRowid: Number(info.lastInsertRowid), duplicate: false }
 }
 function addMemoriesBatch(entries) {
   const insert = db.transaction((list) => {
-    const stmt = db.prepare('INSERT INTO memory (content, type, source_session_id) VALUES (?, ?, ?)')
-    const ftsStmt = db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)')
-    for (const e of list) {
-      const info = stmt.run(e.content, e.type || 'fact', e.sourceSessionId || null)
-      try { ftsStmt.run(String(e.content || ''), e.type || 'fact', Number(info.lastInsertRowid)) } catch {}
-    }
+    for (const e of list) addMemoryWithProvenance(e.content, e.type, e.sourceSessionId)
     return list.length
   })
   return insert(entries || [])
