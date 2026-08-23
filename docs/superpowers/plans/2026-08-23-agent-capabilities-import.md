@@ -110,6 +110,11 @@ function formatSkillsForPrompt() {
 ```
 
   导出 `formatSkillEntries, SKILL_PROMPT_CHAR_BUDGET`。
+
+  > **执行偏差（2026-08-23）**：纯函数最终落在独立新模块 `app/electron/llm/skillsEntries.js`（而非
+  > skills.js 内联）——skills.js 顶层 `require('electron')`，内联则纯函数仍不可单测；skills.js 的
+  > `formatSkillsForPrompt` 变为薄包装。另：pass1 采用 75% 配额 + pass2 预留告示位（64 字符），
+  > 保证大语料下降级名与溢出告示共存——贪婪填满会饿死降级层（红测阶段实测）。
 - [ ] 3.3 commit `feat(skills): char-budget cap on <available_skills> prompt block with usage-ranked degradation`。
 
 ### Task 4: 预算耗尽宽限收尾调用（T1）
