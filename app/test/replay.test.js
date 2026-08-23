@@ -44,7 +44,7 @@ describe('isReplayEnabled', () => {
   it('honors the feature flag', () => {
     expect(isReplayEnabled(mkDb({ enabled: true }))).toBe(true)
     expect(isReplayEnabled(mkDb({ enabled: false }))).toBe(false)
-    expect(isReplayEnabled(null)).toBe(true) // 无 db/未存储 → 回落到 featureFlags 默认值(true)
+    expect(isReplayEnabled(null)).toBe(false) // 无 db/未存储 → 回落到 featureFlags 默认值(false, safe-by-default)
   })
 })
 

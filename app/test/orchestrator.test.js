@@ -29,10 +29,10 @@ const fakeRunner = () => (tasks) => tasks.map((t, i) => ({ success: true, output
 // ─── flag ───────────────────────────────────────────────────────────────────
 
 describe('isEnabled', () => {
-  it('honors the agent.orchestrator flag (default true when unset)', () => {
+  it('honors the agent.orchestrator flag (default false when unset — safe-by-default)', () => {
     expect(isEnabled(mkDb(true))).toBe(true)
     expect(isEnabled(mkDb(false))).toBe(false)
-    expect(isEnabled(null)).toBe(true) // 无 db/未存储 → 回落到 featureFlags 默认值(true)
+    expect(isEnabled(null)).toBe(false) // 无 db/未存储 → 回落到 featureFlags 默认值(false)
   })
 })
 
