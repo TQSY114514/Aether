@@ -1058,7 +1058,10 @@ Reply in this format:
       role: 'system',
       content: '[budget exhausted] You can no longer call any tools. Based on the progress above, write a final wrap-up: what was accomplished, key results, what remains unfinished, and the concrete next step for whoever picks this up.',
     }])
-    const g = await completeChatMessage({ provider, model, messages: graceConvo, signal, options: { ...options } })
+    // Strip caller tools/tool_choice so this "tools-free" wrap-up request
+    // cannot be answered with yet another tool call (CodeRabbit follow-up).
+    const { tools: _graceTools, tool_choice: _graceToolChoice, ...graceOptions } = options
+    const g = await completeChatMessage({ provider, model, messages: graceConvo, signal, options: graceOptions })
     if (g && g.content && String(g.content).trim()) {
       graceNote = `\n\n---\n📋 收尾总结：\n${String(g.content).trim()}`
     }

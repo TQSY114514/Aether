@@ -56,7 +56,7 @@ beforeEach(async () => {
   toolLoop = await import('../electron/llm/toolLoop')
 })
 
-async function runToExhaustion() {
+async function runToExhaustion(extra = {}) {
   return toolLoop.runToolLoop({
     provider: { name: 'fake-provider', api_format: 'openai', base_url: 'http://fake' },
     model: { model_name: 'fake-model' },
@@ -78,6 +78,7 @@ async function runToExhaustion() {
     onAskUser: async () => '[]',
     onAudit: () => {},
     onStream: () => {},
+    ...extra,
   })
 }
 
@@ -96,6 +97,24 @@ describe('runToolLoop grace wrap-up on budget exhaustion', () => {
     // reaching here with exactly one grace call proves the contract.
     expect(graceCalls).toHaveLength(1)
     expect(graceCalls[0].hadTools).toBe(false)
+  })
+
+  it('strips caller tools/tool_choice from the grace call', { timeout: 30000 }, async () => {
+    // Regression (CodeRabbit #43 follow-up): real callers pass their tool
+    // payload via options — forwarding it would let the provider answer the
+    // "tools-free" wrap-up with yet another tool call. With tools still
+    // forwarded, the fake misreads the grace call as a main-loop round and
+    // GRACE-WRAPUP-MARKER never appears.
+    const result = await runToExhaustion({
+      options: {
+        tools: [{ type: 'function', function: { name: 'read_file', arguments: '{}' } }],
+        tool_choice: 'auto',
+      },
+    })
+    expect(result).toContain('已达到最大迭代次数')
+    expect(result).toContain('GRACE-WRAPUP-MARKER')
+    expect(graceCalls).toHaveLength(1)
+    expect(graceCalls[0].sawMarker).toBe(true)
   })
 
   it('falls back to the static string when the grace call fails', { timeout: 30000 }, async () => {
