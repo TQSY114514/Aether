@@ -266,7 +266,13 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     compactionState.set(sessionId, nonSystemOlder.length, summary)
   }
 
-  const summaryMsg = { role: 'system', content: `Summary of earlier conversation:\n${summary}` }
+  // Aider/opencode-style handoff framing: tell the model explicitly that
+  // compaction happened, what was lost, and where to resume — otherwise the
+  // summary reads as ordinary context and pruned tool outputs look "missing".
+  const COMPACTION_HANDOFF_PREFIX =
+    '[context compaction] Earlier messages were summarized to fit the context window. ' +
+    'Their raw tool outputs were pruned and file contents mentioned in the summary may be stale — re-read files before editing. Resume from "Next Steps".'
+  const summaryMsg = { role: 'system', content: `${COMPACTION_HANDOFF_PREFIX}\n\nSummary of earlier conversation:\n${summary}` }
   const result = [...systemMsgs, summaryMsg, ...recent]
   // force 语义：压完没变小 = 无可压，返回 null 让调用方放弃（防死循环）。
   if (force && result.length >= messages.length) return null
