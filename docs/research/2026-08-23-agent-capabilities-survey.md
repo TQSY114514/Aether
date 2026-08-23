@@ -1,12 +1,12 @@
 # Agent 能力调研：五个开源项目的可学习点（2026-08-23）
 
 > 调研对象：openclaw、NousResearch/hermes-agent、sst/opencode、aider、goose（Block）。
-> 方法：五仓库浅克隆到 `%TEMP%\agent-survey\`，每个仓库由独立子代理做只读深读（Glob/Grep/Read），产出带 file:line 引用的机制描述；本文件为综合对照。
+> 方法：五仓库浅克隆到 `%TEMP%\agent-survey\`，每个仓库由独立子代理做只读深读（Glob/Grep/Read），产出带 file 引用的机制描述；本文件为综合对照（引用到文件粒度，未保留行号）。
 > 用途：给 Aether 的模块演进提供「直接可抄 / 改造后抄 / 不学」三档清单。引用的 Aether 模块均在 `app/electron/llm/`。
 
 ## 0. 一页结论（TL;DR）
 
-按「对 Aether 现有痛点的杠杆率」排序的前十项：
+按「对 Aether 现有痛点的杠杆率」排序的前十二项：
 
 | # | 学什么 | 从哪学 | 映射到 Aether | 量级 |
 |---|--------|--------|---------------|------|
@@ -14,7 +14,7 @@
 | 2 | prune 先于 summarize 的两级减压 | opencode | `compaction.js` 前置 pass | M |
 | 3 | 失败补丁的结构化反思消息（教学式报错+3 轮自纠） | aider | edit/write 失败路径 | S |
 | 4 | edit/write 后 LSP 诊断推回工具结果 | opencode | W3-W4 编程闭环主菜 | S |
-| 5 | 预算耗尽的宽限调用+无工具总结兜底（交接而非沉默） | hermes | `iterationBudget.js` | S |
+| 5 | 预算耗尽的宽限调用+无工具总结兜底（交接而非沉默） | hermes | `toolLoop.js` 耗尽出口 | S |
 | 6 | SmartApprove 分层审批（注解→批量 LLM 分类器→兜底必问，缓存不对称） | goose | `permissions.js` 增强 | M |
 | 7 | 权限规则 findLast-wins + always 级联放行/reject 级联拒绝 | opencode | `permissions.js` 决策链 | S |
 | 8 | system-reminder 每请求重塞（格式规则防遗忘） | aider | `toolLoop.js` prompt 组装 | S |
@@ -228,9 +228,9 @@
 1. **edit/write 后诊断回灌**（opencode §2.3）：W3-W4 本来就规划了 diagnostics 回灌，抄它的实现形态——错误块直接附进该次工具结果而非旁路消息；read 时预热不阻塞。验收挂 S6。
 2. **system_reminder 每请求重塞**（aider §3.4）：toolLoop 组装 payload 时，把关键格式规则/模式约束在有 token 余量时作为尾消息重申。
 3. **权限 findLast-wins + always/reject 级联**（opencode §2.1)：`permissions.js` 决策链已是 deny-first，补 always 批准自动清算同会话 pending、reject 附反馈级联拒绝。验收挂 S13/S18 强化。
-4. **技能目录预算二分降级**（openclaw §1.6）：`skills.js` 注入加 18k 字符帽 + 数量帽 + 可见截断告示。
+4. **技能目录预算二分降级**（openclaw §1.6）：`skills.js` 注入加字符帽 + 数量帽 + 可见截断告示（落地取 6000 字符 + 用量排序降级；openclaw 原版为 150 条/18k，见 §1.6）。
 5. **模型怪癖开关**（aider §3.4）：`modelRouter.js` 加 per-model lazy/overeager 两比特 → prompt 补丁字符串表。
-6. **预算耗尽宽限调用**（hermes §5.1）：`iterationBudget.js` 耗尽路径加一次无工具总结调用——用户拿到交接说明而不是戛然而止。落地前先核对本模块现有耗尽行为。
+6. **预算耗尽宽限调用**（hermes §5.1）：`toolLoop.js` 耗尽出口（`iterationBudget.js` 计数用尽后的 return 路径）加一次无工具总结调用——用户拿到交接说明而不是戛然而止。已落地：见 `feat/agent-capabilities` 宽限收尾。
 7. **冻结快照记忆注入**（hermes §5.2）：记忆快照在会话开始注入一次，会话中写入只落盘不改 prompt——整会话 provider prefix cache 有效。对照 `autoMemory.js` 现有注入时机。
 8. **子代理审批默认拒绝**（hermes §5.7）：`subAgent.js` 工作线程不继承交互回调时显式装 auto-deny 回调，opt-in 放行并审计。
 9. **YOLO 式开关 import 时冻结**（hermes §5.7）：危险全局开关（如 applySafeMode 的绕过位）启动读一次冻结，堵「技能/工具中途改设置提权」的洞。
@@ -259,6 +259,6 @@
 
 ## 7. 与路线图的衔接
 
-- **W3-W4（编程闭环）**：吸收 #1 诊断回灌、#11 教学式反思、#5 怪癖开关——全是 S/M 级，正好填计划里的 edit/write 失败路径与 diagnostics 通道两项发现任务。
-- **可靠性主线（W2 剩余）**：#6 loopGuard v2 是 S9 的自然延伸，建议作为独立小计划先行。
+- **W3-W4（编程闭环）**：吸收 #1 诊断回灌、#15 教学式反思、#5 怪癖开关——全是 S/M 级，正好填计划里的 edit/write 失败路径与 diagnostics 通道两项发现任务。
+- **可靠性主线（W2 剩余）**：#10 loopGuard v2 是 S9 的自然延伸，建议作为独立小计划先行。
 - **Arena（W5-W6）前置**：#7/#10 压缩改进直接影响长任务基准的稳定性；#8 子代理租约在 orchestrator 默认关的情况下不阻塞。
