@@ -130,3 +130,40 @@ describe('promoteToLiveFromHabit', () => {
     expect(ssc.promoteToLiveFromHabit(fakeDb, '完全无关')).toEqual([])
   })
 })
+
+describe('detectAndDraft gating', () => {
+  // Regression: detectAndDraft referenced `featureFlags` without requiring it,
+  // so the cron task died with "featureFlags is not defined" on every run
+  // while unit coverage never exercised this entry point.
+  // WS is assigned in beforeAll — build sequences lazily.
+  const SEQ = () => ([
+    { name: 'read_file', args: { path: path.join(WS, 'src', 'a.ts') } },
+    { name: 'edit_file', args: { path: path.join(WS, 'src', 'a.ts') } },
+  ])
+  const cross = () => { for (let i = 0; i < ssc.PATTERN_THRESHOLD; i++) ssc.recordPattern(SEQ()) }
+
+  it('flag off → returns [] instead of throwing', () => {
+    cross()
+    const fakeDb = { run: () => {}, allRows: () => [], getSetting: () => '0' }
+    expect(() => ssc.detectAndDraft(fakeDb)).not.toThrow()
+    expect(ssc.detectAndDraft(fakeDb)).toEqual([])
+  })
+
+  it('flag on → drafts the threshold-crossing pattern into <ws>/.aetherai/skills/auto/', () => {
+    cross()
+    let inserts = 0
+    const fakeDb = { run: () => { inserts++ }, allRows: () => [], getSetting: () => '1' }
+    const drafted = ssc.detectAndDraft(fakeDb)
+    expect(drafted).toHaveLength(1)
+    expect(drafted[0].name).toMatch(/^auto-/)
+    expect(inserts).toBe(1)
+    const skillFile = path.join(WS, '.aetherai', 'skills', 'auto', drafted[0].name, 'SKILL.md')
+    expect(fs.existsSync(skillFile)).toBe(true)
+  })
+
+  it('no pattern crosses the threshold → no draft even with the flag on', () => {
+    ssc.recordPattern(SEQ) // below PATTERN_THRESHOLD
+    const fakeDb = { run: () => {}, allRows: () => [], getSetting: () => '1' }
+    expect(ssc.detectAndDraft(fakeDb)).toEqual([])
+  })
+})
