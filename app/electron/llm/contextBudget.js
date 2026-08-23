@@ -106,12 +106,31 @@ function getTruncationLimit(toolName) {
   return TOOL_TRUNCATION[toolName] || TOOL_TRUNCATION.default
 }
 
+// ── Tool-name resolution ─────────────────────────────────────────────────
+// toolLoop stores the provider call ID in msg.tool_call_id; the tool NAME
+// lives on the preceding assistant message's tool_calls entries. Without
+// this mapping every TOOL_TRUNCATION lookup missed (dead code) and pruned
+// results showed "[call_xxx result pruned]" instead of the tool name.
+
+function buildCallIdToNameMap(messages) {
+  const map = new Map()
+  for (const msg of messages || []) {
+    if (msg && msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls) {
+        if (tc && tc.id) map.set(tc.id, (tc.function && tc.function.name) || tc.name || '')
+      }
+    }
+  }
+  return map
+}
+
 // ── Apply tiered truncation to a message list ────────────────────────────
 // Called BEFORE compaction. Walks messages from oldest to newest, applying
 // per-tier truncation limits. System messages are never touched.
 
 function applyTieredTruncation(messages, provider, model) {
   if (!messages || messages.length === 0) return messages
+  const nameMap = buildCallIdToNameMap(messages)
 
   const now = Date.now()
   const result = []
@@ -131,7 +150,7 @@ function applyTieredTruncation(messages, provider, model) {
     // Determine tier
     let tier = TIER_RELEVANT
     if (msg.role === 'tool') {
-      const toolName = msg.tool_call_id || ''
+      const toolName = nameMap.get(msg.tool_call_id) || msg.tool_call_id || ''
       tier = classifyToolResult(toolName, content)
     } else if (msg.role === 'assistant' && msg.tool_calls) {
       tier = TIER_RELEVANT  // assistant tool-call messages are always relevant
@@ -150,7 +169,7 @@ function applyTieredTruncation(messages, provider, model) {
 
     // Tool-specific limit
     const toolLimit = msg.role === 'tool'
-      ? getTruncationLimit(msg.tool_call_id || '')
+      ? getTruncationLimit(nameMap.get(msg.tool_call_id) || '')
       : cfg.maxChars
 
     const limit = Math.floor(toolLimit * ageFactor)
@@ -196,12 +215,13 @@ function calculateBudget(messages, provider, model) {
 
 function pruneOlderBlock(olderMessages, provider, model) {
   if (!olderMessages || olderMessages.length === 0) return olderMessages
+  const nameMap = buildCallIdToNameMap(olderMessages)
 
   return olderMessages.map(msg => {
     if (msg.role !== 'tool') return msg
 
     const content = typeof msg.content === 'string' ? msg.content : ''
-    const toolName = msg.tool_call_id || ''
+    const toolName = nameMap.get(msg.tool_call_id) || msg.tool_call_id || ''
     const tier = classifyToolResult(toolName, content)
 
     // Only prune NOISE tier messages
@@ -225,6 +245,7 @@ module.exports = {
   TIER_NOISE,
   classifyToolResult,
   getTruncationLimit,
+  buildCallIdToNameMap,
   applyTieredTruncation,
   calculateBudget,
   pruneOlderBlock,
