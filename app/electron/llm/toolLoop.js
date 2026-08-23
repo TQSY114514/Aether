@@ -1048,7 +1048,22 @@ Reply in this format:
     try { runVerification().then(v => { if (v && !v.includes('STATUS: COMPLETE')) onStatus?.({ text: `⚠ ${v.slice(0, 200)}`, kind: 'verification' }) }).catch(() => {}) } catch {}
   }
   const planNote = plan ? `\n\n${planning.planSummary(plan)}` : ''
-  return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${planNote}`
+  // Hermes-style grace call: budget exhausted mid-task → ONE final tools-free
+  // call asking for a wrap-up (progress / results / what's left), instead of
+  // a dead-end static string. Best-effort: any failure falls back below.
+  let graceNote = ''
+  try {
+    try { onStatus?.({ text: '⏳ 预算耗尽，正在生成收尾总结…', kind: 'warn' }) } catch {}
+    const graceConvo = convo.concat([{
+      role: 'system',
+      content: '[budget exhausted] You can no longer call any tools. Based on the progress above, write a final wrap-up: what was accomplished, key results, what remains unfinished, and the concrete next step for whoever picks this up.',
+    }])
+    const g = await completeChatMessage({ provider, model, messages: graceConvo, signal, options: { ...options } })
+    if (g && g.content && String(g.content).trim()) {
+      graceNote = `\n\n---\n📋 收尾总结：\n${String(g.content).trim()}`
+    }
+  } catch {}
+  return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${graceNote}${planNote}`
 }
 
 // Execute a tool with timeout, retry on transient errors (Claude Code-style
