@@ -144,4 +144,28 @@ describe('featureFlags registry', () => {
     expect(again.length).toBe(0) // 已全部关闭, 第二次无事可写
     expect(flags.applySafeMode(null)).toEqual([]) // 无 db → 空, 不抛错
   })
+
+  describe('safe-by-default: experimental flags default OFF', () => {
+    const EXPERIMENTAL = [
+      'memory.experienceReplay',
+      'skills.selfEvolution',
+      'memory.codeUnderstanding',
+      'agent.orchestrator',
+    ]
+    it('四个实验能力声明默认值为 false', () => {
+      for (const key of EXPERIMENTAL) {
+        const def = flags.defs().find(d => d.key === key)
+        expect(def, `flag ${key} 应存在于 FLAG_DEFS`).toBeTruthy()
+        expect(def.default, `${key} 默认应为 false`).toBe(false)
+      }
+    })
+    it('无 DB 时 isEnabled 落到新默认值 false', () => {
+      for (const key of EXPERIMENTAL) expect(flags.isEnabled(null, key)).toBe(false)
+    })
+    it('稳定能力默认值不被误伤', () => {
+      expect(flags.isEnabled(null, 'repoMap.enabled')).toBe(true)
+      expect(flags.isEnabled(null, 'agent.toolRouter')).toBe(true)
+      expect(flags.isEnabled(null, 'ux.firstRunWizard')).toBe(true)
+    })
+  })
 })
