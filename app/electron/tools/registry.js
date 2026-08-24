@@ -313,7 +313,7 @@ const TOOLS = [
     const name = String(args.skill_name || ''); if (!name) throw new Error('skill_name required')
     const skill = require('./skills').getSkill(name); if (!skill) throw new Error(`unknown skill: ${name}`); return skill.content
   }},
-  { name: 'gateway', description: 'Start/stop/get status of gateway channels (webhook/telegram/discord).', risk: 'safe', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['start', 'stop', 'status', 'send'] }, channel: { type: 'string' }, type: { type: 'string', enum: ['webhook', 'telegram', 'discord'] }, config: { type: 'object' }, message: { type: 'string' } } }, run: async (args, ctx) => {
+  { name: 'gateway', description: 'Start/stop/get status of gateway channels (webhook/telegram/discord).', risk: 'dangerous', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['start', 'stop', 'status', 'send'] }, channel: { type: 'string' }, type: { type: 'string', enum: ['webhook', 'telegram', 'discord'] }, config: { type: 'object' }, message: { type: 'string' } } }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
     const gw = require('../gateway/index'); const a = String(args.action || 'status')
     try {
