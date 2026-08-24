@@ -71,10 +71,29 @@ function policyActive(db) {
   // Intentional disabled state: unset / corrupt flag resolves through the
   // centralized registry to its declared default (false).
   if (!featureFlags.isEnabled(db, 'network.policy')) return false
+  // Malformed whitelist config must fail closed too — only an absent/empty
+  // list counts as "no hosts configured" (CodeRabbit PR #44: invalid JSON
+  // previously became [] and both web tools skipped the check entirely).
+  let whitelist
+  try {
+    const rawWl = db.getSetting(WHITELIST_KEY)
+    if (rawWl == null || String(rawWl).trim() === '') {
+      whitelist = []
+    } else {
+      whitelist = JSON.parse(String(rawWl))
+      if (!Array.isArray(whitelist)) throw new Error('not an array')
+      whitelist = whitelist.filter(s => typeof s === 'string' && s.trim())
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError || /network\.whitelist/.test(String(e && e.message))) {
+      throw new Error('network policy evaluation failed: malformed ' + WHITELIST_KEY + ': ' + (e && e.message ? e.message : String(e)))
+    }
+    throw e
+  }
   // block mode rejects EVERY url in checkUrlPolicy regardless of whitelist
   // contents — an empty whitelist must not silently deactivate it.
   if (getPolicy(db) === 'block') return true
-  return getWhitelist(db).length > 0
+  return whitelist.length > 0
 }
 
 function setPolicy(db, mode) {
