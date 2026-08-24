@@ -318,3 +318,25 @@ describe('buildSummarizePrompt safety boundary', () => {
     expect(p.indexOf('安全边界')).toBeLessThan(p.indexOf(injected))
   })
 })
+
+// ─── NOISE pruning must precede important-retention (CodeRabbit PR #43) ────
+// A 9k-char list_dir result is NOISE tier; the >200-char "important" rule
+// used to promote it into the kept block before pruneOlderBlock ever ran.
+describe('maybeCompact prunes NOISE before retention', () => {
+  it('compaction replaces a large list_dir result with a one-line stub', async () => {
+    const big = 'x'.repeat(9000)
+    const msgs = [
+      m('user', 'list the files then keep going'),
+      { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'list_dir', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 't1', content: big },
+      m('user', 'final answer please'),
+    ]
+    const out = await maybeCompact({
+      provider: { api_url: 'http://127.0.0.1:9', api_format: 'openai' },
+      model: { model_name: 't' },
+      messages: msgs,
+      budget: 800,
+    })
+    expect(JSON.stringify(out)).toContain('result pruned')
+  })
+})
