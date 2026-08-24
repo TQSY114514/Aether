@@ -1,7 +1,8 @@
 # Agent Capabilities Import — 调研落地计划
 
 > **For agentic workers:** 本计划是五项目调研（`docs/research/2026-08-23-agent-capabilities-survey.md`）的执行部分。
-> 前置事实核查已完成（2026-08-23，逐模块实读）：调研清单中 loopGuard 双哈希、toolResultHash 类型化、
+> 前置事实核查已完成（2026-08-23，逐模块实读）：调研清单中 loopGuard 通用三元组哈希（toolResultHash
+> 的通用 resultHash 支持——注意：openclaw 式**按工具类型的结果归一化**仍缺，见调研 §1.1 对照）、
 > 压缩保尾+增量+剪枝、lintTestRepair 回灌、curator 生命周期、permissions 五档等**已存在，不重复实现**；
 > ping-pong 检测（代码注释明确 YAGNI）、权限级联（工具串行 N/A）、SmartApprove、租约队列、FTS5 高水位、
 > LSP push 诊断（pull 已有 + lintTestRepair 已覆盖编辑后校验）、子代理审批冻结（推测性风险，YAGNI）
