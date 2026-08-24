@@ -150,4 +150,4 @@ radar-beta
 | OpenHands | <https://github.com/All-Hands-AI/OpenHands> |
 | Kimi CLI | <https://github.com/MoonshotAI/kimi-cli> |
 
-公开评测参照：Aider polyglot benchmark（aider.chat/docs/leaderboards）、SWE-bench（swebench.com）、Terminal-Bench（tbench.ai）。季度复评时按上表逐一核对各工具最新文档即可定位需要调整的维度分数。
+公开评测参照：Aider polyglot benchmark（<https://aider.chat/docs/leaderboards/>）、SWE-bench（<https://www.swebench.com/>）、Terminal-Bench（<https://www.tbench.ai/>）。季度复评时按上表逐一核对各工具最新文档即可定位需要调整的维度分数。
