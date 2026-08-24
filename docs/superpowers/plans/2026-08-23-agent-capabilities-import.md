@@ -115,14 +115,15 @@ function formatSkillsForPrompt() {
 
   > **执行偏差（2026-08-23）**：纯函数最终落在独立新模块 `app/electron/llm/skillsEntries.js`（而非
   > skills.js 内联）——skills.js 顶层 `require('electron')`，内联则纯函数仍不可单测；skills.js 的
-  > `formatSkillsForPrompt` 变为薄包装。另：pass1 采用 75% 配额 + pass2 预留告示位（64 字符），
-  > 保证大语料下降级名与溢出告示共存——贪婪填满会饿死降级层（红测阶段实测）。
+  > `formatSkillsForPrompt` 变为薄包装。另：上方示例为初稿（pass1 贪婪填满预算），**已被实测推翻**——
+  > 最终算法 pass1 采用 75% 配额 + pass2 预留告示位（64 字符），保证大语料下降级名与溢出告示共存，
+  > 贪婪填满会饿死降级层（红测阶段实测）。以 `skillsEntries.js` 实现与 L69 测试为准。
 - [ ] 3.3 commit `feat(skills): char-budget cap on <available_skills> prompt block with usage-ranked degradation`。
 
 ### Task 4: 预算耗尽宽限收尾调用（T1）
 
 **现场**：toolLoop.js L1032-1051 耗尽路径直接返回写死字符串，半途的工作没有收束（hermes grace-call 模式的目标场景）。循环可能从两处退出：L529 `while(budget.consume())` 用尽、L531-535 多维 `budget.exhausted()` break——都落到同一出口。
-- [ ] 4.1 红测：在 `app/test/toolLoop.test.js` 追加用例（沿用其 fake provider 模式，先读该文件确认注入方式）：fake provider 前 N 轮恒返 tool_calls 使预算耗尽；断言最终返回串包含 fake provider 对"收尾请求"的回复内容；并断言收尾调用的 options 中**不含 tools**；再断言 provider 收尾调用抛错时回退到原静态字符串（含「已达到最大迭代次数」）。
+- [ ] 4.1 红测：在 `app/test/toolLoopGrace.test.js` 追加用例（该文件即本任务的预算耗尽 grace-call 用例集；toolLoop.test.js 只放导出辅助函数的单测）：fake provider 前 N 轮恒返 tool_calls 使预算耗尽；断言最终返回串包含 fake provider 对"收尾请求"的回复内容；并断言收尾调用的 options 中**不含 tools 与 tool_choice**；再断言 provider 收尾调用抛错时回退到原静态字符串（含「已达到最大迭代次数」）。
 - [ ] 4.2 绿：L1050 return 之前插入：
 
 ```js
