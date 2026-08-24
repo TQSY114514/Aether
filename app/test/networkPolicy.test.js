@@ -153,6 +153,17 @@ describe('policyActive', () => {
     const badDb = { getSetting: () => { throw new Error('db corrupted') } }
     expect(() => policyActive(badDb)).toThrow('db corrupted')
   })
+
+  it('malformed network.whitelist fails closed instead of reading as empty (regression)', () => {
+    // CodeRabbit PR #44 round-9: invalid JSON became [] and deactivated the
+    // policy entirely; malformed config must throw to the caller's handler.
+    const db = mkDb({ 'feature_flag.network.policy': '1', 'network.whitelist': 'not-json' })
+    expect(() => policyActive(db)).toThrow(/network policy evaluation failed/)
+  })
+
+  it('genuinely empty whitelist still reads as inactive', () => {
+    expect(policyActive(mkDb({ 'feature_flag.network.policy': '1' }))).toBe(false)
+  })
 })
 
 describe('summary', () => {
