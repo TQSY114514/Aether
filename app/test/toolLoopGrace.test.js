@@ -16,7 +16,7 @@ import Module from 'module'
 
 const origLoad = Module._load
 
-let graceCalls = [] // { hadTools, sawMarker }
+let graceCalls = [] // { hadTools, hadToolChoice, sawMarker }
 let graceShouldThrow = false
 
 function fakeCompleteChatMessage({ messages, options }) {
@@ -24,7 +24,7 @@ function fakeCompleteChatMessage({ messages, options }) {
   const sawMarker = !!(last && last.role === 'system' && String(last.content).startsWith('[budget exhausted]'))
   if (!options || !options.tools) {
     if (sawMarker) {
-      graceCalls.push({ hadTools: false, sawMarker })
+      graceCalls.push({ hadTools: false, hadToolChoice: !!(options && options.tool_choice), sawMarker })
       if (graceShouldThrow) return Promise.reject(new Error('provider down'))
       return Promise.resolve({ content: 'GRACE-WRAPUP-MARKER: finished X; Y remains' })
     }
@@ -114,6 +114,8 @@ describe('runToolLoop grace wrap-up on budget exhaustion', () => {
     expect(result).toContain('已达到最大迭代次数')
     expect(result).toContain('GRACE-WRAPUP-MARKER')
     expect(graceCalls).toHaveLength(1)
+    expect(graceCalls[0].hadTools).toBe(false)
+    expect(graceCalls[0].hadToolChoice).toBe(false)
     expect(graceCalls[0].sawMarker).toBe(true)
   })
 
