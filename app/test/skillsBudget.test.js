@@ -54,3 +54,19 @@ describe('formatSkillEntries budget', () => {
     expect(out.indexOf('skill-002')).toBeLessThan(out.indexOf('skill-003'))
   })
 })
+
+describe('formatSkillEntries minimum budget', () => {
+  it('clamps sub-scaffolding budgets to a well-formed block (regression)', () => {
+    // CodeRabbit PR #43: a budget smaller than the HEADER+CLOSE overhead used
+    // to overflow it. The clamp keeps output well-formed XML scaffolding.
+    const out = formatSkillEntries([mk(1)], {}, 10)
+    expect(out.startsWith('<available_skills>')).toBe(true)
+    expect(out.endsWith('</available_skills>')).toBe(true)
+  })
+
+  it('default-budget output still fits SKILL_PROMPT_CHAR_BUDGET', () => {
+    const skills = Array.from({ length: 200 }, (_, i) => mk(i + 1))
+    const out = formatSkillEntries(skills, {}, SKILL_PROMPT_CHAR_BUDGET)
+    expect(out.length).toBeLessThanOrEqual(SKILL_PROMPT_CHAR_BUDGET)
+  })
+})
