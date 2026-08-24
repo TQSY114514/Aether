@@ -11,7 +11,8 @@
 //     （getMergedTool 不变, 只是不在 payload 里 —— 路由失败 ≠ 任务失败）。
 //   - 未分类工具（MCP/新内置/gateway 等）恒注入 —— 路由只降级认识的类别,
 //     不做黑盒裁剪。
-//   - plan 模式: 保持只读过滤（既有 toolsPayload 逻辑, 路由在过滤之后应用）。
+//   - plan 模式: 保持只读过滤（既有 toolsPayload 逻辑, 路由在过滤之后应用）;
+//     safeNames 缺席时拒绝路由（fail-closed, 返回空集）。
 //
 // 纯函数、无 IO、可单测。feature flag 'agent.toolRouter' 门控（默认开）。
 // 注意: 本模块在 electron/ 下, 必须用 CommonJS（AGENTS.md 硬规则）。
@@ -67,17 +68,25 @@ const KNOWN_TOOLS = new Set([
  * @param {string} [opts.mode]       'plan' | 其他(全量风险放行由调用方处理)
  * @param {string} [opts.prompt]     用户消息(路由依据)
  * @param {string[]} [opts.allToolNames] 全部可用工具名(含 MCP)
- * @param {Set<string>} [opts.safeNames] plan 模式下允许的只读工具名
+ * @param {Set<string>} [opts.safeNames] plan 模式下允许的只读工具名(必填 ——
+ *   plan 模式缺失时拒绝路由返回空集, 绝不在只读边界未知时放行任何工具)
  * @returns {Set<string>} 应注入的工具名
  */
 function routeTools({ mode, prompt, allToolNames, safeNames }) {
   const names = allToolNames || []
   const want = new Set()
+  const plan = mode === 'plan'
+
+  // 0. plan 模式必须提供只读边界（fail-closed）: safeNames 缺席 = 调用方
+  //    未经过只读过滤 → 拒绝路由, 返回空集。宁可 payload 为空, 不放行
+  //    未经验证的写类工具。（调用方对空集的约定是"保持原 payload", 而
+  //    原 payload 在 plan 下本就该由 toolsPayload 过滤过。）
+  if (plan && !safeNames) return want
 
   // 1. 核心工具 + plan 模式只读过滤
   for (const n of names) {
     if (CORE_TOOLS.has(n)) {
-      if (mode === 'plan' && safeNames && !safeNames.has(n)) continue
+      if (plan && !safeNames.has(n)) continue
       want.add(n)
     }
   }
@@ -88,15 +97,16 @@ function routeTools({ mode, prompt, allToolNames, safeNames }) {
     if (!re.test(text)) continue
     for (const t of CATEGORY_TOOLS[category] || []) {
       if (!names.includes(t)) continue
-      if (mode === 'plan' && safeNames && !safeNames.has(t)) continue
+      if (plan && !safeNames.has(t)) continue
       want.add(t)
     }
   }
 
-  // 3. 保守兜底: 不在 KNOWN_TOOLS 里的工具恒注入（plan 模式仍受只读过滤）。
+  // 3. 保守兜底: 不在 KNOWN_TOOLS 里的工具恒注入（plan 模式仍受只读过滤,
+  //    未知名单同样无法绕过 —— 见第 0 条守卫）。
   for (const n of names) {
     if (KNOWN_TOOLS.has(n)) continue
-    if (mode === 'plan' && safeNames && !safeNames.has(n)) continue
+    if (plan && !safeNames.has(n)) continue
     want.add(n)
   }
   return want
