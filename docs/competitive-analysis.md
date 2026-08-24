@@ -131,3 +131,23 @@ radar-beta
 - **评分锚点**：1 = 基本无此能力或形同虚设；3 = 能力可用但有明显限制；5 = 同类最佳实践。2 / 4 为中间过渡档。
 - **覆盖限制**：评分反映各工具**公开默认形态**；企业版 / 私有部署能力未单独计分。
 - **时效**：Agent 工具迭代极快，本文结论有效期约一个季度，**建议每季度复评一次**（重点复核 Autonomy、Extensibility、Ecosystem 三个变动最快的维度）。
+
+### 来源清单（2026-08-24 访问）
+
+评分的**事实依据**以各工具官方文档 / 仓库为准；具体分数值为作者基于这些资料的主观判断。文中提及的公开评测另列于表后。
+
+| 工具 | 主要来源（官方文档 / 仓库） |
+|------|------------------------------|
+| Claude Code | <https://docs.anthropic.com/en/docs/claude-code> |
+| Codex CLI | <https://github.com/openai/codex> |
+| Gemini CLI | <https://github.com/google-gemini/gemini-cli> |
+| OpenCode | <https://opencode.ai> |
+| Aider | <https://aider.chat> |
+| Cline | <https://github.com/cline/cline> |
+| Cursor | <https://cursor.com> |
+| GitHub Copilot | <https://github.com/features/copilot> |
+| Devin | <https://devin.ai> |
+| OpenHands | <https://github.com/All-Hands-AI/OpenHands> |
+| Kimi CLI | <https://github.com/MoonshotAI/kimi-cli> |
+
+公开评测参照：Aider polyglot benchmark（aider.chat/docs/leaderboards）、SWE-bench（swebench.com）、Terminal-Bench（tbench.ai）。季度复评时按上表逐一核对各工具最新文档即可定位需要调整的维度分数。
