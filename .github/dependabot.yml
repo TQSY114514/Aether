@@ -8,13 +8,21 @@ updates:
     open-pull-requests-limit: 10
     # 按依赖性质分组，避免"所有更新一个 PR"；运行时依赖单独出 PR
     # （js-yaml CVE 修复就属于 runtime，若被卷进 dev 组会延迟合并）。
+    # 分组只收 patch/minor：major 升级常带破坏性迁移（TS7 移除 baseUrl、
+    # tailwind v4 重写配置），必须单独出 PR 单独评估。
     groups:
       production-dependencies:
         dependency-type: production
+        update-types:
+          - "patch"
+          - "minor"
         patterns:
           - "*"
       dev-dependencies:
         dependency-type: development
+        update-types:
+          - "patch"
+          - "minor"
         patterns:
           - "*"
     commit-message:
@@ -31,10 +39,16 @@ updates:
     groups:
       production-dependencies:
         dependency-type: production
+        update-types:
+          - "patch"
+          - "minor"
         patterns:
           - "*"
       dev-dependencies:
         dependency-type: development
+        update-types:
+          - "patch"
+          - "minor"
         patterns:
           - "*"
     commit-message:

@@ -73,3 +73,7 @@ fix_test.js
 .trae/
 
 .obsidian/
+
+# ── Agent tooling runtime state (auto-generated, never commit) ──
+/.evolver/
+/evolution-skills/
