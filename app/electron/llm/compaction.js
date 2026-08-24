@@ -198,11 +198,15 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     }
   }
 
-  // ── Smart retention: pull important messages from the older block ──────
+  // ── Context Budget: prune low-value tool results from older block ────────
+  // BEFORE smart retention (CodeRabbit PR #43): NOISE-tier results are ≥4k
+  // chars, so the >200-char "important" rule below would otherwise promote
+  // every one of them into the kept block and pruneOlderBlock would never see
+  // a single NOISE message. Pruning first turns them into short one-liners.
   const older = messages.slice(0, split)
-  const recent = messages.slice(split)
+  let nonSystemOlder = pruneOlderBlock(older.filter(m => m.role !== 'system'), provider, model)
   const systemMsgs = older.filter(m => m.role === 'system')
-  let nonSystemOlder = older.filter(m => m.role !== 'system')
+  const recent = messages.slice(split)
 
   // Identify important messages in the older block and move them to recent
   const important = []
@@ -216,11 +220,6 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     nonSystemOlder = rest
     recent.unshift(...important)
   }
-
-  // ── Context Budget: prune low-value tool results from older block ────────
-  // Before summarization, replace verbose tool results (NOISE tier) with
-  // one-line summaries to free up tokens for the actual conversation.
-  nonSystemOlder = pruneOlderBlock(nonSystemOlder, provider, model)
 
   // ── Incremental compaction: only summarize new messages ─────────────────
   let summary
