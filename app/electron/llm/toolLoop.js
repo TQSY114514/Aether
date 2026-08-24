@@ -480,6 +480,12 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const SHRINK_EXTRA_ITERATIONS = 4
   const tryShrinkRetry = (reasonText) => {
     if (shrinkUsed || !shrinkEnabled) return false
+    // 外部预算可能是没有 extendIterations 的基类实例——先验证可扩展,
+    // 全部状态变更放在验证之后, 失败路径不留半套改动（CodeRabbit #48 R3）。
+    if (typeof budget.extendIterations !== 'function') return false
+    let extended = false
+    try { extended = budget.extendIterations(SHRINK_EXTRA_ITERATIONS) === true } catch { extended = false }
+    if (!extended) return false
     shrinkUsed = true
     lastSig = ''
     sigRepeat = 0
@@ -487,7 +493,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     loopGuard.history.length = 0
     convo.push({ role: 'system', content: '[scope reduction] You hit a limit mid-task. Do NOT try to finish everything. Pick the smallest useful increment you can complete cleanly with the remaining rounds, execute it, then clearly summarize: what is done, what remains.' })
     try { onStatus?.({ kind: 'shrink_retry', text: `♻️ ${reasonText}——自动缩围：聚焦最小可完成增量，追加 ${SHRINK_EXTRA_ITERATIONS} 轮` }) } catch {}
-    return budget.extendIterations(SHRINK_EXTRA_ITERATIONS)
+    return true
   }
 
   // Evidence-based verification (Codex-inspired): uses test results and git diffs

@@ -23,7 +23,7 @@ The AI workbench that refuses to surprise you — an agent that asks before it a
 
 One real loop instead of a feature list — pick a model with evidence, hand over a real task, stay in control:
 
-**1 · Pick a model with your own benchmark.** Open **Arena**, paste one prompt, and it fans out to every configured model concurrently. Vote the best answer; ELO rankings update per intent (coding / math / translation / ...). "Which model is best" becomes "which model is best for you".
+**1 · Pick a model with your own benchmark.** Open **Arena**, paste one prompt, and it fans out to every selected model concurrently. Vote the best answer; ELO rankings update per intent (coding / math / translation / ...). "Which model is best" becomes "which model is best for you".
 
 **2 · Hand the agent a real task in Ask mode.** Point Aether at your project folder and ask *"tests are failing after my last commit — find out why and fix it"*. The agent plans, reads code, runs commands — and asks before every risky step.
 
