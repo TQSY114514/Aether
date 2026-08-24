@@ -57,15 +57,21 @@ function getWhitelist(db) {
 function policyActive(db) {
   if (!db || typeof db.getSetting !== 'function') return false
   try {
-    // Fail closed: an unset / corrupt network.policy flag resolves through the
-    // centralized registry to its declared default (false). No ad-hoc string
-    // blacklist here — a case variant like 'TRUE' must not sneak the policy on.
-    if (!featureFlags.isEnabled(db, 'network.policy')) return false
-    // block mode rejects EVERY url in checkUrlPolicy regardless of whitelist
-    // contents — an empty whitelist must not silently deactivate it.
-    if (getPolicy(db) === 'block') return true
-    return getWhitelist(db).length > 0
-  } catch { return false }
+    // Evaluation-failure probe: a broken settings store must FAIL CLOSED
+    // (throw → callers block) instead of reading as "policy disabled".
+    // featureFlags.isEnabled deliberately never throws, so probe the raw
+    // accessor once here to surface storage corruption.
+    db.getSetting('feature_flag.network.policy')
+  } catch (e) {
+    throw new Error('network policy evaluation failed: ' + (e && e.message ? e.message : String(e)))
+  }
+  // Intentional disabled state: unset / corrupt flag resolves through the
+  // centralized registry to its declared default (false).
+  if (!featureFlags.isEnabled(db, 'network.policy')) return false
+  // block mode rejects EVERY url in checkUrlPolicy regardless of whitelist
+  // contents — an empty whitelist must not silently deactivate it.
+  if (getPolicy(db) === 'block') return true
+  return getWhitelist(db).length > 0
 }
 
 function setPolicy(db, mode) {

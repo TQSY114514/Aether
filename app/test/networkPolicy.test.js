@@ -145,6 +145,14 @@ describe('policyActive', () => {
     const verdict = checkUrlPolicy(db, 'https://example.com')
     expect(verdict.ok).toBe(false)
   })
+
+  it('propagates evaluation errors instead of masking them as disabled (regression)', () => {
+    // CodeRabbit PR #44 round-6: swallowing here made "evaluation failed"
+    // indistinguishable from "policy off", letting fetch() run unchecked. The
+    // tool layer's fail-closed catch needs to see the throw.
+    const badDb = { getSetting: () => { throw new Error('db corrupted') } }
+    expect(() => policyActive(badDb)).toThrow('db corrupted')
+  })
 })
 
 describe('summary', () => {
