@@ -19,6 +19,22 @@ The AI workbench that refuses to surprise you — an agent that asks before it a
 
 ---
 
+## Aether in 60 seconds
+
+One real loop instead of a feature list — pick a model with evidence, hand over a real task, stay in control:
+
+**1 · Pick a model with your own benchmark.** Open **Arena**, paste one prompt, and it fans out to every configured model concurrently. Vote the best answer; ELO rankings update per intent (coding / math / translation / ...). "Which model is best" becomes "which model is best for you".
+
+**2 · Hand the agent a real task in Ask mode.** Point Aether at your project folder and ask *"tests are failing after my last commit — find out why and fix it"*. The agent plans, reads code, runs commands — and asks before every risky step.
+
+**3 · Review before anything lands.** Every proposed write shows a diff; every command shows its exact text before running. Approve once or for the session, or deny. Writes outside the workspace root and destructive shell patterns are refused outright.
+
+**4 · Commit when you say so.** The agent uses git tools (`git_status`, `git_diff`, `git_commit`) only within what you approve — nothing is pushed without an explicit request.
+
+> Started in the desktop? Continue in the terminal: `aether tui --session <id>` — same session store, same memory.
+
+---
+
 > **Status: Beta.** Aether is a solo/hobby project. It works, but expect rough
 > edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
 > [SECURITY.md](./SECURITY.md).
