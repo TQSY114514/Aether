@@ -153,17 +153,15 @@ function loadSkillUsage() {
 
 // Build the <available_skills> system-prompt block. Only name + description
 // appear (progressive-disclosure level 1). The use_skill tool loads the body.
-// Compact the home-dir prefix to ~ to save tokens (from OpenClaw's
-// compactSkillPaths idea).
+// Formatting/budget policy lives in ./skillsEntries (pure, electron-free so
+// it stays unit-testable): usage-ranked entries under a char budget, with
+// overflow degraded to name-only lines plus an omission notice.
+const { formatSkillEntries, SKILL_PROMPT_CHAR_BUDGET } = require('./skillsEntries')
+
 function formatSkillsForPrompt() {
   const skills = getSkills()
   if (skills.length === 0) return ''
-  const home = app.getPath('home')
-  const compact = (p) => {
-    try { return p.replace(home, '~') } catch { return p }
-  }
-  const items = skills.map(s => `  - name: ${s.name}\n    description: ${s.description}\n    path: ${compact(s.filePath)}`).join('\n')
-  return `<available_skills>\nThe following skills are available. When the user's request matches a skill's description, call the use_skill tool with the skill name to load its full instructions, then follow them. Only load a skill when it is relevant to the task.\n${items}\n</available_skills>`
+  return formatSkillEntries(skills, _usage, SKILL_PROMPT_CHAR_BUDGET, app.getPath('home'))
 }
 
 // ───────────────────────────────────────────────────────────────────────────
