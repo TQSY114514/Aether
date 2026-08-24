@@ -51,9 +51,11 @@ describe('incremental compaction', () => {
     // Task5 滚动合并：第二次调用的提示词必须携带上一次摘要（替代旧的 [Later] 拼接）
     const secondPrompt = JSON.stringify(completeChatMock.mock.calls[1])
     expect(secondPrompt).toContain('SUMMARY-A')
-    const summaryMsg = second.find(m => m.role === 'system' && m.content.startsWith('Summary of earlier'))
+    const summaryMsg = second.find(m => m.role === 'system' && m.content.includes('Summary of earlier conversation:'))
     expect(summaryMsg.content).toContain('SUMMARY-B')
     expect(summaryMsg.content).not.toContain('[Later]')
+    // capabilities-import T2: summary carries an explicit handoff prefix
+    expect(summaryMsg.content.startsWith('[context compaction]')).toBe(true)
   })
 
   it('falls back to full re-summarization when no messages were added since boundary', async () => {
@@ -61,9 +63,10 @@ describe('incremental compaction', () => {
     await maybeCompact({ provider, model, messages: mkAssistants(10), budget: 100, sessionId: 's-full' })
     const second = await maybeCompact({ provider, model, messages: mkAssistants(10), budget: 100, sessionId: 's-full' })
     expect(completeChatMock).toHaveBeenCalledTimes(2)
-    const summaryMsg = second.find(m => m.role === 'system' && m.content.startsWith('Summary of earlier'))
+    const summaryMsg = second.find(m => m.role === 'system' && m.content.includes('Summary of earlier conversation:'))
     expect(summaryMsg.content).not.toContain('[Later]')
     expect(summaryMsg.content).toContain('SUMMARY-C')
+    expect(summaryMsg.content.startsWith('[context compaction]')).toBe(true)
   })
 
   it('clearCompactionState resets the incremental boundary', async () => {
@@ -71,9 +74,10 @@ describe('incremental compaction', () => {
     await maybeCompact({ provider, model, messages: mkAssistants(10), budget: 100, sessionId: 's-clear' })
     clearCompactionState('s-clear')
     const second = await maybeCompact({ provider, model, messages: mkAssistants(14), budget: 100, sessionId: 's-clear' })
-    const summaryMsg = second.find(m => m.role === 'system' && m.content.startsWith('Summary of earlier'))
+    const summaryMsg = second.find(m => m.role === 'system' && m.content.includes('Summary of earlier conversation:'))
     expect(summaryMsg.content).not.toContain('[Later]')
     expect(summaryMsg.content).toContain('SUMMARY-D')
+    expect(summaryMsg.content.startsWith('[context compaction]')).toBe(true)
   })
 })
 
