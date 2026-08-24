@@ -193,7 +193,7 @@ Expected: 全绿；typecheck exit 0。若 orchestrator/experienceReplay 相关�
 - [ ] **Step 6: Commit**
 
 ```bash
-git add app/electron/featureFlags.js app/test/featureFlags.test.js
+git add app/electron/featureFlags.js app/test/featureFlags.test.js app/test/orchestrator.test.js app/test/replay.test.js
 git commit -m "fix(flags): default experimental capabilities off (evolution/kg/orchestrator/replay)"
 ```
 

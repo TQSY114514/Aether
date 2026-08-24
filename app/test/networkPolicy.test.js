@@ -136,6 +136,15 @@ describe('policyActive', () => {
     expect(policyActive(mkDb({ 'feature_flag.network.policy': '1' }))).toBe(false)
     expect(policyActive(mkDb({ 'feature_flag.network.policy': '1', 'network.whitelist': JSON.stringify(['a.com']) }))).toBe(true)
   })
+
+  it('block mode stays active with an EMPTY whitelist (regression)', () => {
+    // CodeRabbit PR #44: block mode rejects every URL in checkUrlPolicy, so an
+    // empty whitelist must not deactivate the policy and let fetch through.
+    const db = mkDb({ 'feature_flag.network.policy': '1', 'network.policy': 'block' })
+    expect(policyActive(db)).toBe(true)
+    const verdict = checkUrlPolicy(db, 'https://example.com')
+    expect(verdict.ok).toBe(false)
+  })
 })
 
 describe('summary', () => {
