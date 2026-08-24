@@ -580,10 +580,12 @@ Reply in this format:
       const _st0 = budget.exhausted()
       if (!(_st0.exhausted && _st0.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) break
     }
-    // Phase 4: Multi-dimensional budget check (iterations, tokens, time, errors).
+    // 预算检查: 仅 iterations 耗尽且缩围可用时放行本轮——直接落到本轮 body,
+    // 不再 continue(那会先 consume 掉刚追加的额度, 实际只多跑 3 轮; 落地
+    // 才是承诺的 +4 执行轮, CodeRabbit #48 复审 R2)。其余维度或缩围不可用:
+    // 照旧上报并终止。
     const budgetStatus = budget.exhausted()
-    if (budgetStatus.exhausted) {
-      if (budgetStatus.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽')) continue
+    if (budgetStatus.exhausted && !(budgetStatus.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) {
       try { onStatus?.({ kind: 'budget_exhausted', text: `预算耗尽: ${budgetStatus.reason}` }) } catch {}
       break
     }
@@ -631,7 +633,9 @@ Reply in this format:
               safeNames: stageState.safeNames,
               extraCategories: stageState.seenCategories,
             })
-            if (want.size > 0 && want.size < stageState.allNames.length) {
+            // want 涨满(覆盖全部工具)时也要重建 payload——否则基础路由先前
+            // 砍掉的类别永远回不来（CodeRabbit #48 复审 R2）。
+            if (want.size > 0) {
               routedPayload = stageState.fullPayload.filter(p => want.has(p.function.name))
               try { onStatus?.({ kind: 'tool_router', text: `阶段路由[${stage}]: 注入 ${routedPayload.length}/${stageState.allNames.length} 个工具` }) } catch {}
             }
