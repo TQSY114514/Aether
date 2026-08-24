@@ -46,7 +46,7 @@
 - **否决本身类型化为 `tool-loop-veto`**：延长 streak 但永不重置它——阻断不能被反复否决博弈掉
 - **压缩后守卫**（`post-compaction-loop-guard.ts`）：auto-compaction 后 3 次工具观察窗内，若 args+result 双哈希仍完全相同 ≥3 次 → 整个 run 硬中止。理由：「如果压缩没能打断循环，别再花钱压缩了」
 
-> **对照 Aether**：`loopGuard.js` 现状（P0 已落地）：warn10/block20、toolName+argsHash+resultHash 三元组精确哈希比对、veto 延长 streak 不重置。尚缺：①ping-pong 检测器；②压缩后观察窗。工作量 M。
+> **对照 Aether**：`loopGuard.js` 现状（P0 已落地）：warn10/block20、toolName+argsHash+resultHash 三元组精确哈希比对、veto 延长 streak 不重置。尚缺：①ping-pong 检测器；②unknown-repeat（未知工具重复计数）；③压缩后观察窗。工作量 M。
 
 ### 1.2 压缩
 
