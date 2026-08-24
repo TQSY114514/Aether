@@ -304,7 +304,7 @@ Run: `npx vitest run app/test/toolRouter.test.js`
 
 Run: `npm test && npm run typecheck`
 Expected: 全绿。
-随后在真实会话里验证一次冒烟 **S17**（配 MCP 或直接观察状态栏 `tool_router` 提示里注入数上升）：`onStatus({ kind: 'tool_router', text: 注入 X/Y 个工具 })` 的 X 相比改动前不应减少。
+随后在真实会话里验证一次冒烟 **S17**——注意这只是**诊断性证据**，不替代 S17 的正式验收（正式标准见 docs/evals/smoke-tasks.md：需配置至少暴露 1 个可调用 tool 的真实 MCP server，确认工具出现在可用集并被实际调用一次）。此处仅观察状态栏 `tool_router` 提示里注入数上升：`onStatus({ kind: 'tool_router', text: 注入 X/Y 个工具 })` 的 X 相比改动前不应减少。
 
 - [ ] **Step 6: Commit**
 
@@ -369,7 +369,7 @@ Task 0 / 1 / 2 相互独立；Task 3 独立且已先行完成（hotfix）。建�
 
 ## 发版纪律
 
-1. 合 PR 标准：smoke-tasks.md 相关项不退 + `npm test` 全绿。
+1. 合 PR 标准：`npm test` 全绿（独立条件）+ smoke-tasks.md 相关项不整体变差——其中 [auto] 行以 CI 绿 + 执行记录登记 commit 为凭，手动行须附通过证据或仓库所有者豁免（详见 docs/evals/smoke-tasks.md 合入门槛）。
 2. 每周一主线；审查意见/bug 插队 ≤30% 时间。
 3. 分支卫生：`fix/memory-dedup-write-layer` 疑似 #40 合入后的孤儿分支（master 已含 c9ad0e3），核实 `git log master..fix/memory-dedup-write-layer` 为空后删除；`feat/strategy-evolution`、`feat/ux-polish-p0p1`、`fix/desktop-agent-ux-polish` 为活跃分支，勿动。
 4. 实验模块策略不变：代码可留，默认关（Task 1 即此原则的落地），高级设置里可开。
