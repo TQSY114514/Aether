@@ -109,7 +109,9 @@ const permDecide = (ctx, decision, scope = 'once') => {
   if (scope === 'always' && ctx.persistPendingAllow) ctx.persistPendingAllow()
   ctx.decidePermission({
     decision, remember: scope !== 'once',
-    allowRules: ctx.allowRulesRef.current, sessionId: 'tui', resolveRef: ctx.resolveRef, dispatch: ctx.dispatch,
+    // 会话隔离: 用当前 DB 会话派生的 scope id（App 层注入 ctx.permScope）,
+    // SESSION_USE 切换会话后本会话级审批不再跨会话生效（CodeRabbit #48 复审）。
+    allowRules: ctx.allowRulesRef.current, sessionId: ctx.permScope || 'tui', resolveRef: ctx.resolveRef, dispatch: ctx.dispatch,
   })
 }
 

@@ -326,19 +326,23 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   // plan=写工具直接拒绝(只读规划) / dontask=仅 allow 规则放行（W4-t26）。
   // W4-t24 决策顺序（写死语义）: deny 规则 > 只读自动放行 > 审批模式 > allow 规则 > 询问。
   // 保留 takeSnapshot 挂载。
+  // 权限规则作用域 id: 跟随当前 DB 会话派生——SESSION_USE/RESET 切换会话后,
+  // 会话级审批不再跨会话生效（CodeRabbit #48 复审意见）。持久化层不带会话
+  // 维度, 'always' 的双写副本仍全局有效。
+  const permScope = `tui:${state.dbSessionId ?? 'anon'}`
   const basePermission = useMemo(
-    () => createTuiPermissionHandler({ dispatch, allowRules: allowRulesRef.current, sessionId: 'tui', resolveRef }),
-    [dispatch],
+    () => createTuiPermissionHandler({ dispatch, allowRules: allowRulesRef.current, sessionId: permScope, resolveRef }),
+    [dispatch, permScope],
   )
   const tuiPermission = useCallback((perm) => {
     // W4-t24/26: 决策核心收敛到纯函数 decideTuiPermission（allowRules.js, 可单测）:
     // deny 规则 > 只读自动放行 > 审批模式 > dontask(仅 allow) > allow 规则 > 询问;
     // 返回 null 表示 ask/无规则 → 走 basePermission 询问面板（弹窗）。
-    const d = allowRulesRef.current.decision('tui', perm.name, perm.args)
+    const d = allowRulesRef.current.decision(permScope, perm.name, perm.args)
     const r = decideTuiPermission({ decision: d, name: perm.name, approvalMode: state.approvalMode })
     if (r == null) return basePermission(perm)
     return Promise.resolve(r)
-  }, [basePermission, state.approvalMode])
+  }, [basePermission, state.approvalMode, permScope])
   tuiPermission.takeSnapshot = basePermission.takeSnapshot
 
   // ask_user 工具应答: 结构化提问面板(↑↓ 选择 / Enter 确认 / Esc 取消)
@@ -422,7 +426,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       // ── W4 钩子: deny 规则接入点（!shell 与 run_command 同规则; 持久化 deny
       // 层命中即拒绝, 不执行不注入上下文——会话级规则目前只有 'a' 产生的 allow,
       // 故此处实际生效的是持久化 deny）──
-      const deny = allowRulesRef.current.decision('tui', 'run_command', { command: parsed.line })
+      const deny = allowRulesRef.current.decision(permScope, 'run_command', { command: parsed.line })
       if (deny === 'deny') {
         const key = `${allowRulesRef.current.keyOf('run_command', { command: parsed.line })}`
         dispatch({ type: 'APPEND_SYSTEM', text: `!shell denied: run_command:${key} (permission rule)` })
@@ -466,7 +470,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       dispatch({ type: 'STATUS', text: `!shell: exit ${exitCode}` })
     }
     run()
-  }, [dispatch])
+  }, [dispatch, permScope])
 
   // ── W3-t20: 外部编辑器（Ctrl+X e; $EDITOR/$VISUAL, 回退 notepad.exe）──────
   // 流程: 当前输入写入临时文件 → 生成编辑器（detached, TUI 保持响应）→
@@ -790,19 +794,19 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   // 打开: 合并 会话级 + 持久化 规则（来源标注 session/persisted）
   const openPermDialog = useCallback(() => {
     setPermDialog({
-      rules: mergeRules(allowRulesRef.current.list('tui'), allowRulesRef.current.listPersisted()),
+      rules: mergeRules(allowRulesRef.current.list(permScope), allowRulesRef.current.listPersisted()),
       idx: 0, filter: '',
     })
-  }, [])
+  }, [permScope])
 
   // 重建对话框规则列表（增删后调用; 保持 filter, idx 钳制在界内）
   const refreshPermDialog = useCallback(() => {
     setPermDialog((prev) => {
       if (!prev) return prev
-      const rules = mergeRules(allowRulesRef.current.list('tui'), allowRulesRef.current.listPersisted())
+      const rules = mergeRules(allowRulesRef.current.list(permScope), allowRulesRef.current.listPersisted())
       return { ...prev, rules, idx: Math.min(prev.idx, Math.max(0, rules.length - 1)) }
     })
-  }, [])
+  }, [permScope])
 
   // 'd' 删除选中规则: session → remove; persisted → removePersisted（DB + 内存同步）
   const permDialogDelete = useCallback(() => {
@@ -815,7 +819,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     }
     try {
       if (rule.source === 'session') {
-        allowRulesRef.current.remove('tui', rule.key)
+        allowRulesRef.current.remove(permScope, rule.key)
       } else {
         // persisted 行: key 形如 'run_command:git_status' → 按 name/ruleKey 落库删除
         const db = openSessionDb(dbPath)
@@ -828,7 +832,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     }
     dispatch({ type: 'STATUS', text: `rule deleted: ${rule.key} (${rule.source})` })
     refreshPermDialog()
-  }, [permDialog, dbPath, dispatch, refreshPermDialog])
+  }, [permDialog, dbPath, dispatch, refreshPermDialog, permScope])
 
   // ── W4-t24 #4: 权限面板 'a'（always allow）→ 会话规则 + 持久化规则双写 ──
   // 在 decidePermission 消费 pending 之前调用（keyHandlers permDecide 顺序保证）;
@@ -1338,6 +1342,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     openEditor, // W3-t20: 外部编辑器（leader 'e'）
     toggleModelFavorite, cycleRecentModel, // W3-t22: Ctrl+F 收藏 / F2 循环
     decidePermission, allowRulesRef, resolveRef, injectSteering,
+    permScope, // 权限作用域 id（keyHandlers permDecide 会话隔离用）
   }
   useInput((input, key) => {
     // 鼠标/未知转义序列(如 CSI <...M)不作为字符输入, 直接忽略(鼠标事件走专用 data 监听)

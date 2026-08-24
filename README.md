@@ -27,7 +27,7 @@ One real loop instead of a feature list — pick a model with evidence, hand ove
 
 **2 · Hand the agent a real task in Ask mode.** Point Aether at your project folder and ask *"tests are failing after my last commit — find out why and fix it"*. The agent plans, reads code, runs commands — and asks before every risky step.
 
-**3 · Review before anything lands.** Every proposed write shows a diff; every command shows its exact text before running. Approve once or for the session, or deny. Writes outside the workspace root and destructive shell patterns are refused outright.
+**3 · Review before anything lands.** Every proposed write shows a diff; every command shows its exact text before running. Approve once, for the session, always — or deny. Writes outside the workspace root and destructive shell patterns are refused outright.
 
 **4 · Commit when you say so.** The agent uses git tools (`git_status`, `git_diff`, `git_commit`) only within what you approve — nothing is pushed without an explicit request.
 
