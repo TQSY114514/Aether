@@ -149,7 +149,7 @@ function DiffView({ diff }) {
   )
 }
 
-// 权限审批面板（opencode 风格）：←→ 选择 Allow once / Always / Reject，Enter 确认。
+// 权限审批面板（opencode 风格）：←→ 选择四档（once/session/always/reject），Enter 确认。
 // tool-specific 详情(opencode permission body): bash 显命令 / edit·write 显文件 / 读类显路径
 function PermissionDetail({ perm }) {
   const a = perm.args || {}
@@ -161,7 +161,9 @@ function PermissionDetail({ perm }) {
 }
 
 function PermissionPanel({ perm, permIdx }) {
-  const options = ['Allow once', 'Allow always', 'Reject']
+  // 四档对齐桌面端（PermissionDialog）: once 本次放行 / session 会话规则
+  // （重启失效）/ always 落持久化 / Reject 拒绝。单键 y/s/a/n 直达。
+  const options = ['Allow once', 'Allow session', 'Allow always', 'Reject']
   return h(Box, { borderStyle: 'round', borderColor: C.warning, paddingX: 1, marginTop: 1, flexDirection: 'column' },
     h(Text, { bold: true, color: C.warning }, `△ [权限请求] ${perm.name}`),
     h(PermissionDetail, { perm }),
@@ -173,7 +175,7 @@ function PermissionPanel({ perm, permIdx }) {
         paddingX: 1,
         backgroundColor: i === permIdx ? C.bgHighlight : undefined,
       }, h(Text, { color: i === permIdx ? C.warning : 'gray', bold: i === permIdx }, ` ${opt} `)))),
-    h(Text, { color: 'gray' }, '←→ 选择 · Enter 确认 · Esc/Ctrl+C 拒绝'),
+    h(Text, { color: 'gray' }, '←→ 选择 · Enter 确认 · y/s/a/n 直达 · Esc/Ctrl+C 拒绝'),
   )
 }
 
