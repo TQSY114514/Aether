@@ -43,7 +43,7 @@
 
 文档型任务，无 TDD。核心价值：把 #42 的四条 GUI 冒烟、既有 checkpoint/undo 验证、以及日常编程任务全部收进一份可勾选清单。
 
-- [ ] **Step 1: 创建目录与文件**
+- [x] **Step 1: 创建目录与文件**
 
 写入以下完整内容到 `docs/evals/smoke-tasks.md`：
 
@@ -104,11 +104,11 @@
 |      |             |      |      |
 ````
 
-- [ ] **Step 2: 核对**
+- [x] **Step 2: 核对**
 
 Run: `ls docs/evals/` — 文件存在；表格 20 行齐全（S1–S20）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/evals/smoke-tasks.md
@@ -129,7 +129,7 @@ git commit -m "docs(evals): add 20-task release smoke baseline"
 
 **理由:** 战略拍板「编排/进化/图谱等实验能力默认关」。safe-by-default 是产品锚点；这四个属于 learning/code-intel/agent 实验类。已存用户若显式开过不受影响（DB 值优先于默认值，见 `isEnabled` 实现）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `app/test/featureFlags.test.js` 追加：
 
@@ -163,12 +163,12 @@ describe('safe-by-default: experimental flags default OFF', () => {
 
 （按该文件既有 import 风格引入 `featureFlags`；文件顶部已有就复用。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run app/test/featureFlags.test.js`
 Expected: 新增 describe 内 FAIL——`memory.experienceReplay 默认应为 false` 收到 `true`。
 
-- [ ] **Step 3: 改 FLAG_DEFS**
+- [x] **Step 3: 改 FLAG_DEFS**
 
 `app/electron/featureFlags.js` 中四行，`default: true` → `default: false`（key/category/description 不动）：
 
@@ -182,18 +182,18 @@ Expected: 新增 describe 内 FAIL——`memory.experienceReplay 默认应为 fa
 保持不变：`debug.fileLog`(true)、`repoMap.enabled`(true)、`agent.toolRouter`(true)、`ux.firstRunWizard`(true)、其余本就是 false 的项。
 `applySafeMode` 无需改：它本来就关掉 debug/ux 以外的一切。
 
-- [ ] **Step 4: 清理断言旧默认值的存量测试**
+- [x] **Step 4: 清理断言旧默认值的存量测试**
 
 Run: `grep -rn "experienceReplay\|skills.selfEvolution\|codeUnderstanding\|agent.orchestrator" app/test/`
 凡断言这些 flag **未存储时 enabled === true** 的用例改为 `false`；断言「显式 set 后可开」的用例不动（set('1') 行为没变）。
 注意：若有测试用「默认全开的 flag」当夹具验证调用方行为（如 orchestrator 接线测试），改为在该测试里显式 `featureFlags.set(db, key, '1')` 再断言开启。
 
-- [ ] **Step 5: 全量回归**
+- [x] **Step 5: 全量回归**
 
 Run: `npm test && npm run typecheck`
 Expected: 全绿；typecheck exit 0。若 orchestrator/experienceReplay 相关接线测试因默认关闭而挂掉，回到 Step 4 的夹具处理，不许改产品代码迁就测试。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/electron/featureFlags.js app/test/featureFlags.test.js app/test/orchestrator.test.js app/test/replay.test.js
@@ -217,7 +217,7 @@ git commit -m "fix(flags): default experimental capabilities off (evolution/kg/o
 **问题实况（2026-08-23 核对 registry.js）:** 当前 `routeTools` 只注入 CORE + 关键词命中类别。以下已注册工具既不在 CORE 也不在任何类别，路由开着 + prompt 无关键词时**模型 payload 里永远看不到它们**：
 `codebase_graph`、`workspace_files`、`run_agent`、`run_workflow`、`run_long_task`、`run_arena`、`gateway`；MCP 动态注册的工具同理全灭。注释声称「路由失败 ≠ 任务失败」只对执行层成立，模型根本无法请求一个看不见的工具——这是 P0 级功能回归。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `app/test/toolRouter.test.js` 追加：
 
@@ -252,12 +252,12 @@ describe('conservative fallback: unknown tools stay injected', () => {
 
 （按该文件既有方式 import `routeTools`。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run app/test/toolRouter.test.js`
 Expected: 第 1 条 FAIL——`run_arena 应被兜底注入` 收到 false。第 2–4 条应 PASS（锁定既有行为不被本次改动破坏）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `app/electron/llm/toolRouter.js`：
 
@@ -295,18 +295,18 @@ const KNOWN_TOOLS = new Set([
 
 3c. 同步更新文件头注释第 9–12 行的路由策略描述，补一句：「未分类工具（MCP/新内置）恒注入——路由只降级认识的类别，不做黑盒裁剪。」
 
-- [ ] **Step 4: 清理断言旧行为的存量测试**
+- [x] **Step 4: 清理断言旧行为的存量测试**
 
 Run: `npx vitest run app/test/toolRouter.test.js`
 若存量用例里有「中性 prompt → 未分类工具不出现在 want」的断言，改其预期为 true 并注明「Task 2 兜底语义」。其余不动。
 
-- [ ] **Step 5: 全量回归 + GUI 冒烟挂钩**
+- [x] **Step 5: 全量回归 + GUI 冒烟挂钩**
 
 Run: `npm test && npm run typecheck`
 Expected: 全绿。
 随后在真实会话里验证一次冒烟 **S17**——注意这只是**诊断性证据**，不替代 S17 的正式验收（正式标准见 docs/evals/smoke-tasks.md：需配置至少暴露 1 个可调用 tool 的真实 MCP server，确认工具出现在可用集并被实际调用一次）。此处仅观察状态栏 `tool_router` 提示里注入数上升：`onStatus({ kind: 'tool_router', text: 注入 X/Y 个工具 })` 的 X 相比改动前不应减少。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/electron/llm/toolRouter.js app/test/toolRouter.test.js
@@ -353,7 +353,7 @@ Task 0 / 1 / 2 相互独立；Task 3 独立且已先行完成（hotfix）。建�
 | Task 1 实验 flag 默认关 | `6a65096` | 同步更新 orchestrator/replay 两处旧默认断言 |
 | Task 0 冒烟基线 | `b3afa20` | docs/evals/smoke-tasks.md S1–S20 |
 
-全量回归：**115 文件 / 1636 通过 / 0 失败**（基线 1626，净增 10）。`npx tsc --noEmit`：**exit 0，无类型错误**（2026-08-24 本地实测，覆盖本分支全部改动）。
+全量回归：**115 文件 / 1636 通过 / 0 失败**（基线 1626，净增 10）。`npm run typecheck`（= tsc --noEmit）：**exit 0，无类型错误**（2026-08-24 本地实测，覆盖本分支全部改动）。
 
 遗留提醒：默认值翻转只影响「从未显式设置过」的安装。作者本机若想继续用自进化/记忆图谱，需在设置里显式打开（写入 `feature_flag.*`='1'），或等首次启动向导引导。
 
