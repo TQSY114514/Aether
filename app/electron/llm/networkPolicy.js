@@ -60,8 +60,11 @@ function policyActive(db) {
     // Fail closed: an unset / corrupt network.policy flag resolves through the
     // centralized registry to its declared default (false). No ad-hoc string
     // blacklist here — a case variant like 'TRUE' must not sneak the policy on.
-    const flagOn = featureFlags.isEnabled(db, 'network.policy')
-    return flagOn && getWhitelist(db).length > 0
+    if (!featureFlags.isEnabled(db, 'network.policy')) return false
+    // block mode rejects EVERY url in checkUrlPolicy regardless of whitelist
+    // contents — an empty whitelist must not silently deactivate it.
+    if (getPolicy(db) === 'block') return true
+    return getWhitelist(db).length > 0
   } catch { return false }
 }
 
