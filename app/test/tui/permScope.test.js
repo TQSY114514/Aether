@@ -33,4 +33,15 @@ describe('permission scope isolation between sessions', () => {
     expect(store.decision('tui:101', 'run_command', ARGS)).toBe('allow')
     expect(store.decision('tui:202', 'run_command', ARGS)).toBe('allow')
   })
+
+  it('first-turn anon approvals migrate to the real session scope', () => {
+    const store = createAllowRulesStore({ db: null })
+    store.add('tui:anon', 'run_command', ARGS)
+    // App.mjs 迁移 effect 的存储层契约: list → setSessionRule → clear
+    const scope = 'tui:301'
+    for (const r of store.list('tui:anon')) store.setSessionRule(scope, r.key, r.decision)
+    store.clear('tui:anon')
+    expect(store.decision(scope, 'run_command', ARGS)).toBe('allow')
+    expect(store.list('tui:anon').length).toBe(0)
+  })
 })

@@ -330,6 +330,18 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   // 会话级审批不再跨会话生效（CodeRabbit #48 复审意见）。持久化层不带会话
   // 维度, 'always' 的双写副本仍全局有效。
   const permScope = `tui:${state.dbSessionId ?? 'anon'}`
+
+  // 首轮审批落在 tui:anon（DB 会话行尚未建立）; 会话行建好后把孤儿规则迁移
+  // 到正式作用域, 保证「本会话免问」跨轮次持续生效（CodeRabbit #48 复审 R2）。
+  useEffect(() => {
+    if (!state.dbSessionId) return
+    const store = allowRulesRef.current
+    const orphan = store.list('tui:anon')
+    if (!orphan.length) return
+    for (const r of orphan) store.setSessionRule(`tui:${state.dbSessionId}`, r.key, r.decision)
+    store.clear('tui:anon')
+  }, [state.dbSessionId])
+
   const basePermission = useMemo(
     () => createTuiPermissionHandler({ dispatch, allowRules: allowRulesRef.current, sessionId: permScope, resolveRef }),
     [dispatch, permScope],

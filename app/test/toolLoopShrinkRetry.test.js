@@ -83,12 +83,11 @@ describe('shrink-retry extends an exhausted iteration budget exactly once', () =
     const { res, statuses } = await runLoop({ shrink: true })
     const shrinks = statuses.filter((s) => s && s.kind === 'shrink_retry')
     expect(shrinks.length).toBe(1)
-    // Loop semantics: each pass consumes one iteration, but the top-of-pass
-    // exhaustion check kills the pass AFTER the budget is spent — so N budget
-    // yields N-1 executed rounds. 2 initial → 1 round; +4 extension lifts
-    // maxTotal to 6 → 5 further passes → 4 more rounds. Total = 5? Verified
-    // empirically via replica; assert exact contract:
-    expect(mainRounds).toBe(4)
+    // Retry falls through to the current pass instead of re-entering the loop
+    // (re-entry would burn one of the granted iterations on consume()).
+    // Baseline flag-off yields 1 executed round; +4 granted rounds land as
+    // 4 additional bodies → 5 total.
+    expect(mainRounds).toBe(5)
     // Budget path exits into the grace wrap-up (#43), which must survive.
     expect(String(res)).toContain('SHRINK-WRAPUP-MARKER')
   })
