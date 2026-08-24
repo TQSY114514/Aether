@@ -386,6 +386,12 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
         ...fileRefResult.refs.filter((r) => r.ok && r.content).map((r) => ({ kind: 'file', label: r.token, content: r.content })),
         ...shellContextRef.current.slice(-SHELL_CONTEXT_MAX).map((e) => ({ kind: 'shell', label: `!${e.command}`, content: e.output })),
       ]
+      // 新一轮且尚无 DB 会话 = 上一次尝试未走到 SESSION_ID_SET（失败/中断）:
+      // 清掉其遗留在临时作用域 tui:anon 的审批, 不让后续尝试继承
+      // （CodeRabbit #48 复审 R3; 成功尝试的规则已迁移走, 这里只清孤儿）。
+      if (!state.dbSessionId && allowRulesRef.current.list('tui:anon').length) {
+        allowRulesRef.current.clear('tui:anon')
+      }
       const result = await runSession({
         dbPath,
         modelName: state.modelName || modelName,   // /model 优先于 CLI 参数

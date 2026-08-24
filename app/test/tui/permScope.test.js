@@ -44,4 +44,12 @@ describe('permission scope isolation between sessions', () => {
     expect(store.decision(scope, 'run_command', ARGS)).toBe('allow')
     expect(store.list('tui:anon').length).toBe(0)
   })
+
+  it('a rejected attempt leaves no approvals for the next attempt to inherit', () => {
+    const store = createAllowRulesStore({ db: null })
+    store.add('tui:anon', 'run_command', ARGS) // 尝试 A 中途批准, 随后失败
+    store.clear('tui:anon')                    // App.mjs 新一轮启动时的清理动作
+    expect(store.list('tui:anon').length).toBe(0)
+    expect(store.decision('tui:anon', 'run_command', ARGS)).not.toBe('allow')
+  })
 })

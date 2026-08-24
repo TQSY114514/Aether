@@ -47,7 +47,7 @@ beforeAll(() => {
 })
 afterAll(() => { Module._load = origLoad })
 
-async function runLoop({ shrink }) {
+async function runLoop({ shrink, externalBudget }) {
   // Fresh module per scenario so internal single-shot state cannot leak.
   delete require.cache[require.resolve('../electron/llm/toolLoop')]
   const toolLoop = await import('../electron/llm/toolLoop')
@@ -62,6 +62,7 @@ async function runLoop({ shrink }) {
     sessionId: 1,
     messageId: 1,
     db: makeDb({ shrink }),
+    externalBudget,
     onStatus: (s) => statuses.push(s),
     onToolCall: () => {},
     onPlanStep: () => {},
@@ -97,5 +98,23 @@ describe('shrink-retry extends an exhausted iteration budget exactly once', () =
     const { statuses } = await runLoop({ shrink: false })
     expect(statuses.filter((s) => s && s.kind === 'shrink_retry').length).toBe(0)
     expect(mainRounds).toBe(1)
+  })
+
+  it('external budget without extendIterations is treated as non-shrinkable', { timeout: 30000 }, async () => {
+    mainRounds = 0
+    let used = 0
+    const plainBase = {
+      start() {}, on() {},
+      get used() { return used },
+      get remaining() { return 0 },
+      consume() { used += 1; return used <= 1 },
+      exhausted() { return { exhausted: used >= 1, reason: used >= 1 ? 'iterations' : null } },
+    }
+    const { statuses } = await runLoop({ shrink: true, budget: plainBase })
+    // No crash, no half-applied retry state; a 1-shot external budget yields
+    // zero executed rounds (top-of-pass exhaustion check stops it), and —
+    // critically — NO shrink_retry event despite the flag being ON.
+    expect(statuses.filter((s) => s && s.kind === 'shrink_retry').length).toBe(0)
+    expect(mainRounds).toBe(0)
   })
 })
