@@ -4,7 +4,7 @@
 
 **Goal:** 把 P0 可靠性落地后的收尾做完——建回归基线、把实验 flag 拨回安全默认、修掉 tool router 的兜底窟窿——让「敢用」成立。
 
-**Architecture:** 三个独立小任务：①文档型回归任务集（发版基准）；②featureFlags 默认值翻转（纯数据改动）；③toolRouter 增加保守兜底规则（未分类工具恒注入）。互不依赖，可并行执行。
+**Architecture:** 四个小任务：①文档型回归任务集（发版基准）；②featureFlags 默认值翻转（纯数据改动）；③toolRouter 增加保守兜底规则（未分类工具恒注入）；外加 Task 3 自进化 cron 修复——系计划定稿后发现的先行热修复，独立于①②③架构，已完成于同一分支。①②③互不依赖可并行。
 
 **Tech Stack:** Electron main 进程 CommonJS、Vitest、无新增依赖。
 
@@ -49,6 +49,9 @@
 
 ````markdown
 # 发版冒烟任务集（Smoke Evals v1）
+
+【历史草稿——以下规则为本计划起草时的初版，已被 docs/evals/smoke-tasks.md 的正式版本取代：
+正式版要求 npm test 全绿为独立条件、[auto] 行登记 commit、手动行附证据或豁免。本节仅存档。】
 
 每次发版前人工过一遍。规则：**相关项不整体变差 + `npm test` 全绿** 即可合入。
 标注 [auto] 的项有单测覆盖，只需确认 CI 绿；其余为 Electron GUI 内手动操作。

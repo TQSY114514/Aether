@@ -59,9 +59,12 @@ function policyActive(db) {
   try {
     // Evaluation-failure probe: a broken settings store must FAIL CLOSED
     // (throw → callers block) instead of reading as "policy disabled".
-    // featureFlags.isEnabled deliberately never throws, so probe the raw
-    // accessor once here to surface storage corruption.
+    // featureFlags.isEnabled deliberately never throws, and getPolicy /
+    // getWhitelist swallow their own read errors, so probe all three raw
+    // keys here to surface storage corruption from any of them.
     db.getSetting('feature_flag.network.policy')
+    db.getSetting(POLICY_KEY)
+    db.getSetting(WHITELIST_KEY)
   } catch (e) {
     throw new Error('network policy evaluation failed: ' + (e && e.message ? e.message : String(e)))
   }
