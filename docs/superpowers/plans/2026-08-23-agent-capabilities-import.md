@@ -118,7 +118,7 @@ function formatSkillsForPrompt() {
   > skills.js 内联）——skills.js 顶层 `require('electron')`，内联则纯函数仍不可单测；skills.js 的
   > `formatSkillsForPrompt` 变为薄包装。另：上方示例为初稿（pass1 贪婪填满预算），**已被实测推翻**——
   > 最终算法 pass1 采用 75% 配额 + pass2 预留告示位（64 字符），保证大语料下降级名与溢出告示共存，
-  > 贪婪填满会饿死降级层（红测阶段实测）。以 `skillsEntries.js` 实现与 L69 测试为准。
+  > 贪婪填满会饿死降级层（红测阶段实测）。以 `skillsEntries.js` 实现与 Task 3.1（L70）测试为准。
 - [ ] 3.3 commit `feat(skills): char-budget cap on <available_skills> prompt block with usage-ranked degradation`。
 
 ### Task 4: 预算耗尽宽限收尾调用（T1）

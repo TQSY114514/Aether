@@ -230,7 +230,7 @@
 3. **权限 findLast-wins + always/reject 级联**（opencode §2.1)：`permissions.js` 决策链已是 deny-first，补 always 批准自动清算同会话 pending、reject 附反馈级联拒绝。验收挂 S13/S18 强化。
 4. **技能目录预算降级**（openclaw §1.6）：`formatSkillEntries` 注入加 6000 字符预算 + 用量排序 + 仅按名称逐项剔除的确定性降级 + 可见省略告示。
 5. **模型怪癖开关**（aider §3.4）：`modelRouter.js` 加 per-model lazy/overeager 两比特 → prompt 补丁字符串表。
-6. **预算耗尽宽限调用**（hermes §5.1）：`toolLoop.js` 耗尽出口加一次无工具总结调用——用户拿到交接说明而不是戛然而止。已落地：见 `feat/agent-capabilities` 宽限收尾。
+6. **预算耗尽宽限调用**（hermes §5.1）：`toolLoop.js` 耗尽出口加一次无工具总结调用——用户拿到交接说明而不是戛然而止。已落地（PR #43，本分支宽限收尾提交）。
 7. **冻结快照记忆注入**（hermes §5.2）：记忆快照在会话开始注入一次，会话中写入只落盘不改 prompt——整会话 provider prefix cache 有效。对照 `autoMemory.js` 现有注入时机。
 8. **子代理审批默认拒绝**（hermes §5.7）：`subAgent.js` 工作线程不继承交互回调时显式装 auto-deny 回调，opt-in 放行并审计。
 9. **YOLO 式开关 import 时冻结**（hermes §5.7）：危险全局开关（如 applySafeMode 的绕过位）启动读一次冻结，堵「技能/工具中途改设置提权」的洞。
