@@ -46,7 +46,7 @@
 - **否决本身类型化为 `tool-loop-veto`**：延长 streak 但永不重置它——阻断不能被反复否决博弈掉
 - **压缩后守卫**（`post-compaction-loop-guard.ts`）：auto-compaction 后 3 次工具观察窗内，若 args+result 双哈希仍完全相同 ≥3 次 → 整个 run 硬中止。理由：「如果压缩没能打断循环，别再花钱压缩了」
 
-> **对照 Aether**：`loopGuard.js` 现状是 warn10/block20 的 args 相似度检测（S9）。升级方向：①加结果哈希维度（同参不同果=合法轮询不算循环）；②ping-pong 检测器；③压缩后观察窗。工作量 M。
+> **对照 Aether**：`loopGuard.js` 现状（P0 已落地）：warn10/block20、toolName+argsHash+resultHash 三元组精确哈希比对、veto 延长 streak 不重置。尚缺：①openclaw 式按工具类型的结果归一化哈希（exec/write/send 各自裁剪易变字段）；②ping-pong 检测器；③压缩后观察窗。工作量 M。
 
 ### 1.2 压缩
 
@@ -228,7 +228,7 @@
 1. **edit/write 后诊断回灌**（opencode §2.3）：W3-W4 本来就规划了 diagnostics 回灌，抄它的实现形态——错误块直接附进该次工具结果而非旁路消息；read 时预热不阻塞。验收挂 S6。
 2. **system_reminder 每请求重塞**（aider §3.4）：toolLoop 组装 payload 时，把关键格式规则/模式约束在有 token 余量时作为尾消息重申。
 3. **权限 findLast-wins + always/reject 级联**（opencode §2.1)：`permissions.js` 决策链已是 deny-first，补 always 批准自动清算同会话 pending、reject 附反馈级联拒绝。验收挂 S13/S18 强化。
-4. **技能目录预算二分降级**（openclaw §1.6）：`skills.js` 注入加字符帽 + 数量帽 + 可见截断告示（落地取 6000 字符 + 用量排序降级；openclaw 原版为 150 条/18k，见 §1.6）。
+4. **技能目录预算降级**（openclaw §1.6）：`formatSkillEntries` 注入加 6000 字符预算 + 用量排序 + 仅按名称逐项剔除的确定性降级 + 可见省略告示。
 5. **模型怪癖开关**（aider §3.4）：`modelRouter.js` 加 per-model lazy/overeager 两比特 → prompt 补丁字符串表。
 6. **预算耗尽宽限调用**（hermes §5.1）：`toolLoop.js` 耗尽出口（`iterationBudget.js` 计数用尽后的 return 路径）加一次无工具总结调用——用户拿到交接说明而不是戛然而止。已落地：见 `feat/agent-capabilities` 宽限收尾。
 7. **冻结快照记忆注入**（hermes §5.2）：记忆快照在会话开始注入一次，会话中写入只落盘不改 prompt——整会话 provider prefix cache 有效。对照 `autoMemory.js` 现有注入时机。

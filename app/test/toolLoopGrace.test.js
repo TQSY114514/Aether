@@ -22,12 +22,18 @@ let graceShouldThrow = false
 function fakeCompleteChatMessage({ messages, options }) {
   const last = messages[messages.length - 1]
   const sawMarker = !!(last && last.role === 'system' && String(last.content).startsWith('[budget exhausted]'))
+  if (sawMarker && (!options || !options.tools)) {
+    // Record what the grace call ACTUALLY received — derived from the options
+    // object, not hardcoded, so a future regression in either strip fails here.
+    graceCalls.push({
+      hadTools: Object.prototype.hasOwnProperty.call(options ?? {}, 'tools'),
+      hadToolChoice: Object.prototype.hasOwnProperty.call(options ?? {}, 'tool_choice'),
+      sawMarker,
+    })
+    if (graceShouldThrow) return Promise.reject(new Error('provider down'))
+    return Promise.resolve({ content: 'GRACE-WRAPUP-MARKER: finished X; Y remains' })
+  }
   if (!options || !options.tools) {
-    if (sawMarker) {
-      graceCalls.push({ hadTools: false, hadToolChoice: !!(options && options.tool_choice), sawMarker })
-      if (graceShouldThrow) return Promise.reject(new Error('provider down'))
-      return Promise.resolve({ content: 'GRACE-WRAPUP-MARKER: finished X; Y remains' })
-    }
     // Plan-phase style call without tools — harmless text answer.
     return Promise.resolve({ content: 'plan text', tool_calls: undefined })
   }

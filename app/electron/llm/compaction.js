@@ -242,6 +242,14 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     }
   }
 
+  // Aider/opencode-style handoff framing: tell the model explicitly that
+  // compaction happened, what was lost, and where to resume — otherwise the
+  // summary reads as ordinary context and pruned tool outputs look "missing".
+  // Applies to BOTH paths below: the LLM summary and the truncate-only fallback.
+  const COMPACTION_HANDOFF_PREFIX =
+    '[context compaction] Earlier messages were summarized to fit the context window. ' +
+    'Their raw tool outputs were pruned and file contents mentioned in the summary may be stale — re-read files before editing. Resume from "Next Steps".'
+
   // Full summarization if incremental didn't produce a result
   if (!summary) {
     try {
@@ -251,7 +259,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
       const keep = nonSystemOlder.slice(fallbackSplit)
       const dropped = fallbackSplit
       const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
-      const truncated = `[Earlier conversation truncated — summarization failed. ${keep.length} of ${nonSystemOlder.length} older messages retained.${note}]`
+      const truncated = `${COMPACTION_HANDOFF_PREFIX}\n\n[Earlier conversation truncated — summarization failed. ${keep.length} of ${nonSystemOlder.length} older messages retained.${note}]`
       const fbResult = [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
       // force 语义同样适用于 fallback 路径：压完反而更多 = 无可压，返回 null。
       if (force && fbResult.length >= messages.length) return null
@@ -266,12 +274,6 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     compactionState.set(sessionId, nonSystemOlder.length, summary)
   }
 
-  // Aider/opencode-style handoff framing: tell the model explicitly that
-  // compaction happened, what was lost, and where to resume — otherwise the
-  // summary reads as ordinary context and pruned tool outputs look "missing".
-  const COMPACTION_HANDOFF_PREFIX =
-    '[context compaction] Earlier messages were summarized to fit the context window. ' +
-    'Their raw tool outputs were pruned and file contents mentioned in the summary may be stale — re-read files before editing. Resume from "Next Steps".'
   const summaryMsg = { role: 'system', content: `${COMPACTION_HANDOFF_PREFIX}\n\nSummary of earlier conversation:\n${summary}` }
   const result = [...systemMsgs, summaryMsg, ...recent]
   // force 语义：压完没变小 = 无可压，返回 null 让调用方放弃（防死循环）。
