@@ -287,7 +287,7 @@ const TOOLS = [
     const ctrl = new AbortController(); const timeout = setTimeout(() => ctrl.abort(), 15000)
     try {
       const url = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q)
-      if (ctx?.db) { try { const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy'); if (policyActive(ctx.db)) { const a2 = checkUrlPolicy(ctx.db, url); if (!a2.ok) return `[blocked]` } } catch { /* ignore */ } }
+      if (ctx?.db) { try { const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy'); if (policyActive(ctx.db)) { const a2 = checkUrlPolicy(ctx.db, url); if (!a2.ok) return `[blocked]` } } catch { return `[blocked: network policy check failed]` } }
       await checkSSRFHostname(new URL(url).hostname)
       const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Aether/0.1' }, redirect: 'error' })
       if (!res.ok) return `[failed: HTTP ${res.status}]`; const html = await res.text(); return `<!-- EXTERNAL_WEB_SEARCH -->\n${extractDdgSnippets(html, q)}`
@@ -295,7 +295,7 @@ const TOOLS = [
   }},
   { name: 'web_fetch', description: 'Fetch URL content (up to 16KB).', risk: 'safe', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }, run: async (args, ctx) => {
     const url = String(args.url || ''); if (!url) throw new Error('url required')
-    if (ctx?.db) { try { const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy'); if (policyActive(ctx.db)) { const a2 = checkUrlPolicy(ctx.db, url); if (!a2.ok) return `[blocked]` } } catch { /* ignore */ } }
+    if (ctx?.db) { try { const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy'); if (policyActive(ctx.db)) { const a2 = checkUrlPolicy(ctx.db, url); if (!a2.ok) return `[blocked]` } } catch { return `[blocked: network policy check failed]` } }
     const ssrf = checkSSRF(url); if (!ssrf.ok) return `[blocked]`
     let parsed; try { parsed = new URL(url) } catch { return '[invalid]' }
     try { await checkSSRFHostname(parsed.hostname) } catch (e) { return `[blocked: ${e.message}]` }
