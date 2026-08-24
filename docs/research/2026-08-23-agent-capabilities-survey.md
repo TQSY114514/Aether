@@ -46,7 +46,7 @@
 - **否决本身类型化为 `tool-loop-veto`**：延长 streak 但永不重置它——阻断不能被反复否决博弈掉
 - **压缩后守卫**（`post-compaction-loop-guard.ts`）：auto-compaction 后 3 次工具观察窗内，若 args+result 双哈希仍完全相同 ≥3 次 → 整个 run 硬中止。理由：「如果压缩没能打断循环，别再花钱压缩了」
 
-> **对照 Aether**：`loopGuard.js` 现状（P0 已落地）：warn10/block20、toolName+argsHash+resultHash 三元组精确哈希比对、veto 延长 streak 不重置。尚缺：①openclaw 式按工具类型的结果归一化哈希（exec/write/send 各自裁剪易变字段）；②ping-pong 检测器；③压缩后观察窗。工作量 M。
+> **对照 Aether**：`loopGuard.js` 现状（P0 已落地）：warn10/block20、toolName+argsHash+resultHash 三元组精确哈希比对、veto 延长 streak 不重置。尚缺：①ping-pong 检测器；②压缩后观察窗。工作量 M。
 
 ### 1.2 压缩
 
@@ -111,7 +111,7 @@
 
 ### 2.4 其他
 
-- Agent = 纯配置对象 `{name, mode:'subagent'|'primary'|'all', permission: Ruleset, model?, prompt?, options}`，七内建（build/plan/general/explore/compaction/title/summary）+ 用户 markdown 合并覆盖；隐藏内部 agent（title/summary）复用同一执行管线
+- Agent = 纯配置对象 `{name, mode:'subagent'|'primary'|'all', permission: Ruleset, model?, prompt?, options}`，六内建（build/plan/general/explore/compaction/title/summary）+ 用户 markdown 合并覆盖；隐藏内部 agent（title/summary）复用同一执行管线
 - 自定义工具：配置目录 `{tool,tools}/*.{js,ts}` 动态 import（显式为 Windows 用 pathToFileURL）
 - MCP：官方 SDK 三种 transport，OAuth 本地回调路由，超时可配；MCP 工具与内建走同一权限过滤
 
@@ -228,16 +228,16 @@
 1. **edit/write 后诊断回灌**（opencode §2.3）：W3-W4 本来就规划了 diagnostics 回灌，抄它的实现形态——错误块直接附进该次工具结果而非旁路消息；read 时预热不阻塞。验收挂 S6。
 2. **system_reminder 每请求重塞**（aider §3.4）：toolLoop 组装 payload 时，把关键格式规则/模式约束在有 token 余量时作为尾消息重申。
 3. **权限 findLast-wins + always/reject 级联**（opencode §2.1)：`permissions.js` 决策链已是 deny-first，补 always 批准自动清算同会话 pending、reject 附反馈级联拒绝。验收挂 S13/S18 强化。
-4. **技能目录预算降级**（openclaw §1.6）：`formatSkillEntries` 注入加 6000 字符预算 + 用量排序 + 仅按名称逐项剔除的确定性降级 + 可见省略告示。
+4. **技能目录预算二分降级**（openclaw §1.6）：`skills.js` 注入加字符帽 + 数量帽 + 可见截断告示（落地取 6000 字符 + 用量排序降级；openclaw 原版为 150 条/18k，见 §1.6）。
 5. **模型怪癖开关**（aider §3.4）：`modelRouter.js` 加 per-model lazy/overeager 两比特 → prompt 补丁字符串表。
-6. **预算耗尽宽限调用**（hermes §5.1）：`toolLoop.js` 耗尽出口加一次无工具总结调用——用户拿到交接说明而不是戛然而止。已落地（PR #43，本分支宽限收尾提交）。
+6. **预算耗尽宽限调用**（hermes §5.1）：`toolLoop.js` 耗尽出口（`iterationBudget.js` 计数用尽后的 return 路径）加一次无工具总结调用——用户拿到交接说明而不是戛然而止。已落地：见 `feat/agent-capabilities` 宽限收尾。
 7. **冻结快照记忆注入**（hermes §5.2）：记忆快照在会话开始注入一次，会话中写入只落盘不改 prompt——整会话 provider prefix cache 有效。对照 `autoMemory.js` 现有注入时机。
 8. **子代理审批默认拒绝**（hermes §5.7）：`subAgent.js` 工作线程不继承交互回调时显式装 auto-deny 回调，opt-in 放行并审计。
 9. **YOLO 式开关 import 时冻结**（hermes §5.7）：危险全局开关（如 applySafeMode 的绕过位）启动读一次冻结，堵「技能/工具中途改设置提权」的洞。
 
 ### 改造后抄（M）
 
-10. **loopGuard v2 = 检测器补全**（openclaw §1.1）：通用 resultHash 三元组比对与 veto 语义已随 P0 落地；剩余升级为按工具类型的结果归一化哈希（exec/write/send 各自裁剪易变字段）、六检测器里的 ping-pong 与 unknown-repeat、压缩后 3 观察窗守卫。这是 S9 的纵深版，也是 Arena 基准前最值的可靠性投资。
+10. **loopGuard v2 = 检测器补全**（openclaw §1.1）：结果类型化哈希与 veto 语义已随 P0 落地；剩余升级为六检测器里的 ping-pong 与 unknown-repeat、压缩后 3 观察窗守卫。这是 S9 的纵深版，也是 Arena 基准前最值的可靠性投资。
 11. **prune-before-summarize**（opencode §2.2）：`compaction.js` 前加免费的旧工具输出回删 pass（保最近 40k、可回收 >20k 才动手、清空占位符诚实标注），常常直接免掉一次昂贵摘要。S10/S12 受益。
 12. **SmartApprove 分层**（goose §4.1）：`permissions.js` 在 ask/deny 之间插一层「注解+批量 LLM 只读分类」，缓存不对称设计照抄（负面缓存/正面重判）。依赖 provider 上报工具只读性，MCP 工具天然有 read_only_hint。
 13. **子代理结果租约队列**（openclaw §1.4）：`subAgent.js` 结果回传加 lease/ack/release 状态机 + 数据非指令前缀标签 + 单结果字符预算。编排器并行派发时防丢防重。

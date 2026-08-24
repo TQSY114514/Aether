@@ -74,6 +74,18 @@ describe('routeTools', () => {
     expect(want.has('read_file')).toBe(true)
   })
 
+  it('plan mode without safeNames rejects the route entirely (fail-closed)', () => {
+    // CodeRabbit PR #44 follow-up: safeNames 缺席时绝不能全量放行 ——
+    // 只读边界未知 = 拒绝路由, 返回空集。
+    const want = routeTools({ prompt: 'create a PR and commit', allToolNames: ALL, mode: 'plan' })
+    expect(want.size).toBe(0)
+  })
+
+  it('plan mode without safeNames cannot leak unknown tools via fallback', () => {
+    const want = routeTools({ prompt: '帮我看看这个函数', allToolNames: ['read_file', 'run_command', 'mcp_notion_write'], mode: 'plan' })
+    expect(want.size).toBe(0)
+  })
+
   it('unknown tool names in categories are skipped safely', () => {
     const want = routeTools({ prompt: 'create a PR', allToolNames: ['read_file', 'run_command'] })
     expect(want.has('read_file')).toBe(true)

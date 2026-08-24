@@ -162,7 +162,7 @@ describe('detectAndDraft gating', () => {
   })
 
   it('no pattern crosses the threshold → no draft even with the flag on', () => {
-    ssc.recordPattern(SEQ) // below PATTERN_THRESHOLD
+    ssc.recordPattern(SEQ()) // count 1, below PATTERN_THRESHOLD
     const fakeDb = { run: () => {}, allRows: () => [], getSetting: () => '1' }
     expect(ssc.detectAndDraft(fakeDb)).toEqual([])
   })
