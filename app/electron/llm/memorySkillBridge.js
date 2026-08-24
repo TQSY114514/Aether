@@ -128,9 +128,21 @@ async function generateDraftSkill({ provider, model, memories, signal }) {
 function saveDraftSkill(draftContent, skillsBaseDir) {
   if (!draftContent || !skillsBaseDir) return null
 
-  // Extract name from frontmatter (safe regex — no backtracking risk)
-  const nameMatch = draftContent.match(/^name:[ \t]+([^\t\n\r]+?)[ \t]*$/m)
-  const name = nameMatch ? nameMatch[1].trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') : `draft-${Date.now()}`
+  // Extract name from frontmatter. Fixed-prefix match + manual slice to
+  // end-of-line (linear scan). CodeQL js/polynomial-redos flagged the old
+  // `/^name:[ \t]+([^\t\n\r]+?)[ \t]*$/m`: its lazy group overlaps the tail
+  // `[ \t]*$` (both accept spaces), so "name:" + many spaces with no newline
+  // backtracked quadratically. Semantics preserved for well-formed input;
+  // malformed values (tabs mid-value) now sanitize through instead of stopping.
+  const prefixMatch = draftContent.match(/(^|\n)name:[ \t]+/)
+  let name = ''
+  if (prefixMatch) {
+    const start = prefixMatch.index + prefixMatch[0].length
+    const end = draftContent.indexOf('\n', start)
+    const rawValue = end === -1 ? draftContent.slice(start) : draftContent.slice(start, end)
+    name = rawValue.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  }
+  if (!name) name = `draft-${Date.now()}`
 
   const dir = path.join(skillsBaseDir, AUTO_DRAFT_DIR, name)
   try {
