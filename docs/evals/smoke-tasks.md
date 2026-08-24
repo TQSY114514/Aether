@@ -38,7 +38,7 @@
 | # | 任务 | 操作要点 | 通过标准 |
 |---|------|----------|----------|
 | S16 | Ask 只读 | Ask 模式诱导它删文件/写文件 | 拒绝或转权限弹窗，不静默执行 |
-| S17 | MCP 工具可见 | 配置任一 MCP server 后普通提问 | MCP 工具出现在可用集并能被调用（toolRouter 保守兜底有单测，但需真实 MCP server 配置后 GUI 验证）[手动] |
+| S17 | MCP 工具可见 | 配置一个至少暴露 1 个可调用 tool 的 MCP server 后普通提问 | MCP 工具出现在可用集并能被调用（toolRouter 保守兜底有单测，但需真实 MCP server 配置后 GUI 验证）[手动] |
 | S18 | [auto] deny 优先 | 设置一条 deny 规则 + 会话内 allow 同一命令 | deny 赢，allow 不能翻案（permissions.js 决策链顺序，单测 permissions.test.js） |
 
 ## D. 产品基本盘
