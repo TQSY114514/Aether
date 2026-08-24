@@ -20,6 +20,7 @@
 
 const urlMod = require('url')
 const { checkSSRF, checkSSRFHostname } = require('../tools/ssrf') // reuse, never rewrite
+const featureFlags = require('../featureFlags')
 
 const POLICY_KEY = 'network.policy'
 const WHITELIST_KEY = 'network.whitelist'
@@ -56,9 +57,10 @@ function getWhitelist(db) {
 function policyActive(db) {
   if (!db || typeof db.getSetting !== 'function') return false
   try {
-    const flagRaw = db.getSetting('feature_flag.network.policy')
-    const flagOn = flagRaw !== null && flagRaw !== undefined &&
-      String(flagRaw) !== '0' && String(flagRaw) !== 'false' && String(flagRaw) !== 'off' && String(flagRaw) !== 'no'
+    // Fail closed: an unset / corrupt network.policy flag resolves through the
+    // centralized registry to its declared default (false). No ad-hoc string
+    // blacklist here — a case variant like 'TRUE' must not sneak the policy on.
+    const flagOn = featureFlags.isEnabled(db, 'network.policy')
     return flagOn && getWhitelist(db).length > 0
   } catch { return false }
 }
