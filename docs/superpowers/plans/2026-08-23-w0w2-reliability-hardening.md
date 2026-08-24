@@ -276,13 +276,22 @@ const KNOWN_TOOLS = new Set([
 3b. `routeTools` 内，在第 2 步类别循环之后、`return want` 之前加：
 
 ```js
-  // 3. 保守兜底: 不在 KNOWN_TOOLS 里的工具恒注入（plan 模式仍受只读过滤）。
+  // 0. plan 模式 fail-closed 守卫（CodeRabbit 复审补充，已落地实现同款）：
+  //    safeNames 缺席 = 只读边界未知 → 拒绝路由返回空集。
+  //    【注意】本段示例为初稿形态；最终实现把守卫放在函数最前，
+  //    且三处过滤均为 `if (plan && !safeNames.has(n)) continue`——
+  //    以 app/electron/llm/toolRouter.js 当前代码为准。
   for (const n of names) {
     if (KNOWN_TOOLS.has(n)) continue
     if (mode === 'plan' && safeNames && !safeNames.has(n)) continue
     want.add(n)
   }
 ```
+
+> **执行偏差（2026-08-24，CodeRabbit PR #44 复审）**：初稿的 `safeNames &&` 短路写法会让 plan 模式在
+> safeNames 缺失时全量放行。最终实现：函数入口处 `if (plan && !safeNames) return new Set()` 拒绝路由，
+> 三处过滤简化为 `plan && !safeNames.has(n)`；配套回归测试见 `app/test/toolRouter.test.js`
+> 「plan mode without safeNames rejects the route entirely」。
 
 3c. 同步更新文件头注释第 9–12 行的路由策略描述，补一句：「未分类工具（MCP/新内置）恒注入——路由只降级认识的类别，不做黑盒裁剪。」
 
