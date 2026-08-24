@@ -26,6 +26,7 @@ const fs = require('fs')
 const path = require('path')
 const { getWorkspaceRoot } = require('../tools/sandbox')
 const log = require('../logger')
+const featureFlags = require('../featureFlags')
 
 const PATTERN_THRESHOLD = 3    // seen 3 times → auto-draft
 const MIN_SEQUENCE_LEN = 2     // at least 2 consecutive tool calls

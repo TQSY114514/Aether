@@ -20,6 +20,7 @@
 
 const urlMod = require('url')
 const { checkSSRF, checkSSRFHostname } = require('../tools/ssrf') // reuse, never rewrite
+const featureFlags = require('../featureFlags')
 
 const POLICY_KEY = 'network.policy'
 const WHITELIST_KEY = 'network.whitelist'
@@ -56,11 +57,43 @@ function getWhitelist(db) {
 function policyActive(db) {
   if (!db || typeof db.getSetting !== 'function') return false
   try {
-    const flagRaw = db.getSetting('feature_flag.network.policy')
-    const flagOn = flagRaw !== null && flagRaw !== undefined &&
-      String(flagRaw) !== '0' && String(flagRaw) !== 'false' && String(flagRaw) !== 'off' && String(flagRaw) !== 'no'
-    return flagOn && getWhitelist(db).length > 0
-  } catch { return false }
+    // Evaluation-failure probe: a broken settings store must FAIL CLOSED
+    // (throw → callers block) instead of reading as "policy disabled".
+    // featureFlags.isEnabled deliberately never throws, and getPolicy /
+    // getWhitelist swallow their own read errors, so probe all three raw
+    // keys here to surface storage corruption from any of them.
+    db.getSetting('feature_flag.network.policy')
+    db.getSetting(POLICY_KEY)
+    db.getSetting(WHITELIST_KEY)
+  } catch (e) {
+    throw new Error('network policy evaluation failed: ' + (e && e.message ? e.message : String(e)))
+  }
+  // Intentional disabled state: unset / corrupt flag resolves through the
+  // centralized registry to its declared default (false).
+  if (!featureFlags.isEnabled(db, 'network.policy')) return false
+  // Malformed whitelist config must fail closed too — only an absent/empty
+  // list counts as "no hosts configured" (CodeRabbit PR #44: invalid JSON
+  // previously became [] and both web tools skipped the check entirely).
+  let whitelist
+  try {
+    const rawWl = db.getSetting(WHITELIST_KEY)
+    if (rawWl == null || String(rawWl).trim() === '') {
+      whitelist = []
+    } else {
+      whitelist = JSON.parse(String(rawWl))
+      if (!Array.isArray(whitelist)) throw new Error('not an array')
+      whitelist = whitelist.filter(s => typeof s === 'string' && s.trim())
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError || /network\.whitelist/.test(String(e && e.message))) {
+      throw new Error('network policy evaluation failed: malformed ' + WHITELIST_KEY + ': ' + (e && e.message ? e.message : String(e)))
+    }
+    throw e
+  }
+  // block mode rejects EVERY url in checkUrlPolicy regardless of whitelist
+  // contents — an empty whitelist must not silently deactivate it.
+  if (getPolicy(db) === 'block') return true
+  return whitelist.length > 0
 }
 
 function setPolicy(db, mode) {

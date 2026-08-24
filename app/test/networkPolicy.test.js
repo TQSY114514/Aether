@@ -136,6 +136,34 @@ describe('policyActive', () => {
     expect(policyActive(mkDb({ 'feature_flag.network.policy': '1' }))).toBe(false)
     expect(policyActive(mkDb({ 'feature_flag.network.policy': '1', 'network.whitelist': JSON.stringify(['a.com']) }))).toBe(true)
   })
+
+  it('block mode stays active with an EMPTY whitelist (regression)', () => {
+    // CodeRabbit PR #44: block mode rejects every URL in checkUrlPolicy, so an
+    // empty whitelist must not deactivate the policy and let fetch through.
+    const db = mkDb({ 'feature_flag.network.policy': '1', 'network.policy': 'block' })
+    expect(policyActive(db)).toBe(true)
+    const verdict = checkUrlPolicy(db, 'https://example.com')
+    expect(verdict.ok).toBe(false)
+  })
+
+  it('propagates evaluation errors instead of masking them as disabled (regression)', () => {
+    // CodeRabbit PR #44 round-6: swallowing here made "evaluation failed"
+    // indistinguishable from "policy off", letting fetch() run unchecked. The
+    // tool layer's fail-closed catch needs to see the throw.
+    const badDb = { getSetting: () => { throw new Error('db corrupted') } }
+    expect(() => policyActive(badDb)).toThrow('db corrupted')
+  })
+
+  it('malformed network.whitelist fails closed instead of reading as empty (regression)', () => {
+    // CodeRabbit PR #44 round-9: invalid JSON became [] and deactivated the
+    // policy entirely; malformed config must throw to the caller's handler.
+    const db = mkDb({ 'feature_flag.network.policy': '1', 'network.whitelist': 'not-json' })
+    expect(() => policyActive(db)).toThrow(/network policy evaluation failed/)
+  })
+
+  it('genuinely empty whitelist still reads as inactive', () => {
+    expect(policyActive(mkDb({ 'feature_flag.network.policy': '1' }))).toBe(false)
+  })
 })
 
 describe('summary', () => {
