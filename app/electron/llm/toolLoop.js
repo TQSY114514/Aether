@@ -286,6 +286,12 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     .map(m => m.content)
     .join('\n')
   if (tools && toolPayload.length) {
+    // 阶段路由与基础路由相互独立: 无论基础路由开关如何, 先无条件填充全量
+    // 工具清单, 保证单独开启 'agent.toolRouter.staged' 时也能基于完整集合
+    // 做阶段重估（CodeRabbit #48 复审意见）。
+    stageState.allNames = toolPayload.map(p => p.function.name)
+    stageState.safeNames = new Set(stageState.allNames) // plan 已过滤
+    stageState.fullPayload = toolPayload
     try {
       const flag = db && typeof db.getSetting === 'function'
         ? db.getSetting('feature_flag.agent.toolRouter')
@@ -294,9 +300,6 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       if (routerOn && userText) {
         const { routeTools, routerEnabled } = require('./toolRouter')
         if (routerEnabled(routerOn)) {
-          stageState.allNames = toolPayload.map(p => p.function.name)
-          stageState.safeNames = new Set(stageState.allNames) // plan 已过滤
-          stageState.fullPayload = toolPayload
           const want = routeTools({
             mode: agentMode === 'plan' ? 'plan' : undefined,
             prompt: userText,
@@ -312,7 +315,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       // 阶段路由开关独立于基础路由（默认关，保守上线）。
       try {
         if (tools && toolPayload.length && db) {
-          stageState.enabled = require('./featureFlags').isEnabled(db, 'agent.toolRouter.staged') === true
+          stageState.enabled = require('../featureFlags').isEnabled(db, 'agent.toolRouter.staged') === true
         }
       } catch {}
     } catch {}
@@ -473,7 +476,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // 整个运行至多触发一次，避免把死循环变成无限续命。
   let shrinkUsed = false
   let shrinkEnabled = false
-  try { shrinkEnabled = !!(db && require('./featureFlags').isEnabled(db, 'agent.shrinkRetry')) } catch {}
+  try { shrinkEnabled = !!(db && require('../featureFlags').isEnabled(db, 'agent.shrinkRetry')) } catch {}
   const SHRINK_EXTRA_ITERATIONS = 4
   const tryShrinkRetry = (reasonText) => {
     if (shrinkUsed || !shrinkEnabled) return false
@@ -569,10 +572,18 @@ Reply in this format:
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
-  while (budget.consume()) {
+  while (true) {
+    // consume() 返回 false = 迭代预算在上一轮用尽。缩围重试在此与下方
+    // exhausted 检查两条出口都有机会续期（CodeRabbit #48 复审意见）;
+    // tryShrinkRetry 单发闩锁保证最多追加一次, 不会无限循环。
+    if (!budget.consume()) {
+      const _st0 = budget.exhausted()
+      if (!(_st0.exhausted && _st0.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) break
+    }
     // Phase 4: Multi-dimensional budget check (iterations, tokens, time, errors).
     const budgetStatus = budget.exhausted()
     if (budgetStatus.exhausted) {
+      if (budgetStatus.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽')) continue
       try { onStatus?.({ kind: 'budget_exhausted', text: `预算耗尽: ${budgetStatus.reason}` }) } catch {}
       break
     }
@@ -967,8 +978,10 @@ Reply in this format:
           try { onToolCall?.(entry) } catch {}
           // Event stream: tool end
           eventStream.toolEnd({ sessionId, name: entry.name, args: entry.args, result: entry.result, error: entry.error, latencyMs: entry.latencyMs, depth })
-          // Audit log: record each tool call.
-          if (onAudit && !isPlan) {
+          // Audit trail: 记录所有非 plan 工具调用——阶段感知路由从这条轨迹
+          // 推断阶段, 无外部审计者(onAudit 未接)时也不能饿死;
+          // onAudit 只负责外部持久化（CodeRabbit #48 复审意见）。
+          if (!isPlan) {
             auditTrail.push({ name: entry.name, args: entry.args, result: entry.result, error: entry.error, failure_kind: entry.failure_kind, recovery_hint: entry.recovery_hint, latencyMs: entry.latencyMs, depth })
           }
         }
