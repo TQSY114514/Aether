@@ -100,14 +100,18 @@ const paletteRun = (ctx, item) => {
 const timelineMove = (ctx, d) => ctx.setTimeline((t) => ({ ...t, idx: wrap(t.idx, t.sessions.length, d) }))
 
 // ── 权限: ←→ 或 h/l 选择, Enter 确认, Esc/Ctrl+C 拒绝 ───────────────────────
-const permDecide = (ctx, decision, remember = false) => {
-  // W4-t24 #4: 'a'（always allow）在写入会话规则前, 先同步落持久化层
-  // （persistPendingAllow 从 resolveRef 读取待决 perm; 必须在 decidePermission
-  // 消费前调用, 否则 pending 已清空）
-  if (remember && ctx.persistPendingAllow) ctx.persistPendingAllow()
+// scope 三档（对齐 GUI 四选项）: 'once' 仅本次放行; 'session' 写会话级规则
+// （decidePermission remember:true → allowRules.add, 重启失效、不落库）;
+// 'always' 在会话规则之上再落持久化层（persistPendingAllow, settings 表）。
+const permDecide = (ctx, decision, scope = 'once') => {
+  // W4-t24 #4: 持久化写入必须在 decidePermission 消费 pending 之前调用,
+  // 否则 resolveRef 已被清空、pending 无从读取。
+  if (scope === 'always' && ctx.persistPendingAllow) ctx.persistPendingAllow()
   ctx.decidePermission({
-    decision, remember,
-    allowRules: ctx.allowRulesRef.current, sessionId: 'tui', resolveRef: ctx.resolveRef, dispatch: ctx.dispatch,
+    decision, remember: scope !== 'once',
+    // 会话隔离: 用当前 DB 会话派生的 scope id（App 层注入 ctx.permScope）,
+    // SESSION_USE 切换会话后本会话级审批不再跨会话生效（CodeRabbit #48 复审）。
+    allowRules: ctx.allowRulesRef.current, sessionId: ctx.permScope || 'tui', resolveRef: ctx.resolveRef, dispatch: ctx.dispatch,
   })
 }
 
@@ -210,20 +214,22 @@ export const modeHandlers = {
   },
 
   permission: {
-    left: (ctx) => ctx.setPermIdx((i) => wrap(i, 3, -1)),
-    'char:h': (ctx) => ctx.setPermIdx((i) => wrap(i, 3, -1)),
-    right: (ctx) => ctx.setPermIdx((i) => wrap(i, 3, 1)),
-    'char:l': (ctx) => ctx.setPermIdx((i) => wrap(i, 3, 1)),
-    // 单键直达(Codex 模式): y=once / a=always / n=deny
+    left: (ctx) => ctx.setPermIdx((i) => wrap(i, 4, -1)),
+    'char:h': (ctx) => ctx.setPermIdx((i) => wrap(i, 4, -1)),
+    right: (ctx) => ctx.setPermIdx((i) => wrap(i, 4, 1)),
+    'char:l': (ctx) => ctx.setPermIdx((i) => wrap(i, 4, 1)),
+    // 单键直达(Codex 模式): y=once / s=session / a=always / n=deny
     'char:y': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'allow') },
-    'char:a': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'allow', true) },
+    'char:s': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'allow', 'session') },
+    'char:a': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'allow', 'always') },
     'char:n': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'deny') },
     esc: (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'deny') },
     'ctrl-c': (ctx) => { ctx.setPermIdx(0); permDecide(ctx, 'deny') },
     enter: (ctx) => {
-      const decision = ['allow', 'always', 'deny'][ctx.permIdx]
+      const choice = ['allow', 'session', 'always', 'deny'][ctx.permIdx]
       ctx.setPermIdx(0)
-      permDecide(ctx, decision === 'always' ? 'allow' : decision, decision === 'always')
+      if (choice === 'deny') permDecide(ctx, 'deny')
+      else permDecide(ctx, 'allow', choice === 'allow' ? 'once' : choice)
     },
   },
 
