@@ -414,6 +414,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           source: 'chat',
           allowRules: allowRulesStore,
           thinkingSupported,
+          model,
         })
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。

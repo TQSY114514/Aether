@@ -5,6 +5,7 @@ import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw } from 'lucide-react'
 import AgentStatusBar from './AgentStatusBar'
+import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -663,8 +664,14 @@ function AgentModeSelector({ mode, onChange }: { mode: AgentMode; onChange: (v: 
   )
 }
 
+// Budget-warning presentation is owned by usageSlice.recordUsage (status line
+// for AgentStatusBar + one 'warning' toast). The former <BudgetWarningToast />
+// component here double-fired the same notification and was removed.
+
 function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   const statusLines = useStore((s) => s.statusLinesByMessage)
+  const turnUsage = useStore((s) => (sessionId ? s.turnUsageBySession[sessionId] : null))
+  const cumUsage = useStore((s) => (sessionId ? s.usageBySession[sessionId] : null))
   const [status, setStatus] = useState('')
   const [stopped, setStopped] = useState(false)
 
@@ -692,6 +699,9 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   }, [status])
 
   if (!status && !stopped) return null
+  const turnCost = turnUsage?.costUsd || 0
+  const cumCost = cumUsage?.costUsd || 0
+  const showCost = turnCost > 0 || cumCost > 0
   return (
     <div className="px-0.5 mt-1.5 animate-blur-fade">
       <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
@@ -705,6 +715,11 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
             <span>{status}</span>
           </>
+        )}
+        {showCost && (
+          <span className="tabular-nums shrink-0 ml-auto">
+            {t('usage.cost_line', `$${turnCost.toFixed(4)}`, `$${cumCost.toFixed(3)}`)}
+          </span>
         )}
       </div>
     </div>

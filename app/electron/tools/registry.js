@@ -7,6 +7,8 @@ const { glob } = require('glob')
 const { checkWritePath, checkCommand, isInsideWorkspace } = require('./sandbox')
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
 const { checkSSRF, checkSSRFHostname } = require('./ssrf')
+const { resolveBackendForMode } = require('../exec/resolveBackend')
+const { dockerBackend } = require('../exec/dockerBackend')
 
 const MAX_READ_BYTES = 64 * 1024
 const MAX_GREP_BYTES = 32 * 1024
@@ -107,6 +109,102 @@ function applyHunks(fileLines, hunks) {
     lineDelta += replacement.length - oldSpan; applied++
   }
   return { content: result.join('\n'), applied, conflicts }
+}
+
+// ── Shell result formatting + optional Docker sandbox for run_command ───
+
+function formatShellResult(stdout, stderr, exitCode, timedOut) {
+  const out = stdout?.trim() || ''; const err = stderr?.trim() || ''; const parts = []
+  if (out) parts.push('[stdout]\n' + out.slice(0, 4096)); if (err) parts.push('[stderr]\n' + err.slice(0, 4096))
+  const r = parts.join('\n\n') || '(no output)'
+  if (timedOut) return `[timed out] ${r}`
+  if (exitCode !== 0) return `[exit code: ${exitCode}]\n${r}`
+  return r
+}
+
+const DOCKER_EXIT_MARKER = 'AETHER_EXIT_CODE:'
+// Sentinel for "our time budget ran out" — distinct from backend errors so
+// races between backend calls and the deadline resolve unambiguously.
+const DOCKER_DEADLINE_LOST = { __deadlineLost: true }
+
+// Run a command inside an ephemeral no-network container (docker backend).
+// Wraps the command so the container's real exit code survives `sh -lc`,
+// polls status() until the container exits or the deadline hits, then
+// normalizes the output into the same shape as the local run_command path.
+async function runInDocker(cmd, timeoutMs, db) {
+  let image = 'node:22-alpine'
+  try { image = String(db?.getSetting('exec.docker.image') || image) } catch { /* keep default image */ }
+  // One budget covers the WHOLE operation. Probe (~8s), `docker run` (~30s)
+  // and each inspect/logs poll (their own CLI timeouts) all burn wall-clock
+  // time, so the deadline must start BEFORE execute() and race every await —
+  // otherwise a 1s request could realistically take a minute.
+  const deadline = Date.now() + Math.max(timeoutMs, 1000)
+  const remaining = () => deadline - Date.now()
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+  const execPromise = dockerBackend.execute({
+    image,
+    command: 'sh',
+    args: ['-lc', `${cmd}\n__aether_rc=$?\necho ${DOCKER_EXIT_MARKER}$__aether_rc\nexit $__aether_rc`],
+    network: 'none',
+  }).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+
+  let started = await Promise.race([
+    execPromise,
+    sleep(Math.max(remaining(), 1)).then(() => DOCKER_DEADLINE_LOST),
+  ])
+  if (started === DOCKER_DEADLINE_LOST) {
+    // execute() may still land later — reap its container in the background
+    // so nothing lingers past our budget.
+    void execPromise.then((s) => { if (s && s.ok) { try { dockerBackend.dispose(s.execId) } catch { /* best effort */ } } })
+    return formatShellResult('', '', '', true)
+  }
+  if (!started.ok) return `[docker unavailable] ${started.error || 'docker execute failed'}`
+
+  // Containers run without --rm so a fast exit can't beat the first poll
+  // (logs + exit marker survive); dispose() below is the cleanup point on
+  // every path: result, timeout, or error return.
+  try {
+    let timedOut = false
+    let st = null
+    while (true) {
+      await sleep(Math.min(500, Math.max(remaining(), 1)))
+      if (remaining() <= 0) { timedOut = true; break }
+      const polled = await Promise.race([
+        dockerBackend.status(started.execId).catch(() => null),
+        sleep(remaining()).then(() => DOCKER_DEADLINE_LOST),
+      ])
+      if (polled === DOCKER_DEADLINE_LOST) { timedOut = true; break }
+      st = polled
+      if (!st || (st.state !== 'running' && st.state !== 'paused')) break
+    }
+    if (timedOut) {
+      try { await dockerBackend.terminate(started.execId) } catch { /* best effort */ }
+      st = await Promise.race([
+        dockerBackend.status(started.execId).catch(() => null),
+        sleep(Math.max(remaining(), 1)).then(() => DOCKER_DEADLINE_LOST),
+      ]).then((v) => (v === DOCKER_DEADLINE_LOST ? null : v))
+    }
+    if (!st || !st.ok) {
+      return timedOut ? formatShellResult('', '', '', true) : '[docker unavailable] command execution failed'
+    }
+
+    const raw = `${st.stdoutTail || ''}\n${st.stderrTail || ''}`
+    const idx = raw.lastIndexOf(DOCKER_EXIT_MARKER)
+    // Exit code priority: in-band marker (command ran to completion) →
+    // the container's real .State.ExitCode from docker inspect. Never default
+    // an exited container to 0 — a failed entrypoint or a kill must surface.
+    let exitCode = typeof st.exitCode === 'number' ? st.exitCode : undefined
+    let combined = raw
+    if (idx !== -1) {
+      const parsed = parseInt(raw.slice(idx + DOCKER_EXIT_MARKER.length).trim(), 10)
+      if (Number.isFinite(parsed)) exitCode = parsed
+      combined = raw.slice(0, idx)
+    }
+    return formatShellResult(combined, '', exitCode ?? '', timedOut)
+  } finally {
+    try { await dockerBackend.dispose(started.execId) } catch { /* best effort */ }
+  }
 }
 
 // ── Tool definitions ────────────────────────────────────────────────────
@@ -210,11 +308,20 @@ const TOOLS = [
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
-    return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
-    .then(({ stdout, stderr, exitCode, timedOut }) => {
-      const out = stdout?.trim() || ''; const err = stderr?.trim() || ''; const parts = []
-      if (out) parts.push('[stdout]\n' + out.slice(0, 4096)); if (err) parts.push('[stderr]\n' + err.slice(0, 4096))
-      const r = parts.join('\n\n') || '(no output)'; if (timedOut) return `[timed out] ${r}`; if (exitCode !== 0) return `[exit code: ${exitCode}]\n${r}`; return r
+    // Explicit backend selection: ctx.executionBackend (future wiring) or the
+    // exec.backend setting — makes the resolver's configured branch reachable
+    // from this tool instead of dead code.
+    let configured = ctx?.executionBackend || ''
+    if (!configured && ctx?.db) { try { configured = String(ctx.db.getSetting('exec.backend') || '') } catch { /* fall through to mode-based resolution */ } }
+    // Docker-as-safe-default (flag exec.docker.defaultForAuto, default off):
+    // in auto/auto_confirm with the flag enabled and a reachable daemon the
+    // command runs inside an ephemeral no-network container instead of the host shell.
+    return resolveBackendForMode(ctx?.agentMode, { db: ctx?.db, configured }).then((backendId) => {
+      if (backendId !== 'docker') {
+        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
+          .then(({ stdout, stderr, exitCode, timedOut }) => formatShellResult(stdout, stderr, exitCode, timedOut))
+      }
+      return runInDocker(cmd, timeoutMs, ctx?.db)
     })
   }},
 

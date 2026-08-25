@@ -57,6 +57,24 @@ function runCli(args, timeoutMs = 15_000) {
   })
 }
 
+// Cached availability probe for other modules (e.g. backend resolution):
+// 'docker version --format {{.Server.Version}}'. A positive result is cached
+// for the process lifetime; a negative one is retried every TTL so plugging
+// Docker in later is picked up without a restart.
+let dockerAvailableCache = null // null = not probed yet, true / false after
+let lastProbeAt = 0
+const DOCKER_PROBE_RETRY_MS = 60_000
+
+async function isDockerAvailable() {
+  const now = Date.now()
+  if (dockerAvailableCache === true) return true
+  if (dockerAvailableCache === false && now - lastProbeAt < DOCKER_PROBE_RETRY_MS) return false
+  const probe = await runCli(['version', '--format', '{{.Server.Version}}'], 8_000)
+  dockerAvailableCache = probe.code === 0
+  lastProbeAt = now
+  return dockerAvailableCache
+}
+
 const dockerBackend = {
   id: 'docker',
   name: 'Docker Sandbox',
@@ -72,7 +90,9 @@ const dockerBackend = {
       return { ok: false, error: hint }
     }
 
-    const runArgs = ['run', '-d', '--rm', '--network', network]
+    // No --rm: a fast-exiting command must stay inspectable until the caller
+    // collects logs + the exit marker (dispose() removes the container).
+    const runArgs = ['run', '-d', '--network', network]
     for (const [k, v] of Object.entries(env)) {
       runArgs.push('-e', `${k}=${v}`)
     }
@@ -95,13 +115,19 @@ const dockerBackend = {
   async status(execId) {
     const e = executions.get(execId)
     if (!e) return { ok: false, error: 'unknown execId' }
-    const inspect = await runCli(['inspect', '-f', '{{.State.Status}}', e.containerId])
+    // Fetch status AND the container's real exit code in one inspect: callers
+    // (registry.runInDocker) must not assume 0 when a container exited without
+    // producing our exit marker (image entrypoint failure, docker kill, …).
+    const inspect = await runCli(['inspect', '-f', '{{.State.Status}}|{{.State.ExitCode}}', e.containerId])
     let state
     if (inspect.code !== 0) {
       // Container gone (--rm after exit). Fall back to last known state.
       state = e.finishedAt ? 'exited' : 'error'
     } else {
-      const status = inspect.stdout.trim()
+      const out = inspect.stdout.trim().split('|')
+      const status = out[0]
+      const parsedExit = parseInt(out[1], 10)
+      if (Number.isFinite(parsedExit)) e.exitCode = parsedExit
       state = status === 'paused' ? 'paused'
         : status === 'running' ? 'running'
         : (e.finishedAt ? 'exited' : status === 'exited' ? 'exited' : 'error')
@@ -111,6 +137,7 @@ const dockerBackend = {
     return {
       ok: true,
       state,
+      exitCode: typeof e.exitCode === 'number' ? e.exitCode : undefined,
       stdoutTail: logs.stdout.slice(0, 64 * 1024),
       stderrTail: logs.stderr.slice(0, 64 * 1024),
       startedAt: e.startedAt,
@@ -145,8 +172,9 @@ const dockerBackend = {
     const e = executions.get(execId)
     if (!e) return
     await dockerBackend.terminate(execId)
+    try { await runCli(['rm', '-f', e.containerId]) } catch { /* best effort */ }
     executions.delete(execId)
   },
 }
 
-module.exports = { dockerBackend }
+module.exports = { dockerBackend, isDockerAvailable }
