@@ -18,22 +18,38 @@ const ORIGIN_META: Record<string, { label: string; color: string }> = {
 }
 
 export default function MemoryPage() {
-  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string }[]>([])
+  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string; workspace?: string | null }[]>([])
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState('fact')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  // Project Brain: 作用域过滤 —— all=全部 / global=非项目作用域记忆 /
+  // project=带 workspace 的项目记忆。列表已在服务端按当前 workspace 预限定
+  // （memory.list({workspace})），这里只做展示层二次过滤。
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'global' | 'project'>('all')
   const [conflicts, setConflicts] = useState<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>([])
   const [showConflicts, setShowConflicts] = useState(false)
   const [resolving, setResolving] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deleted, setDeleted] = useState<{ content: string; type: string; source_session_id: number | null } | null>(null)
+  const [deleted, setDeleted] = useState<{ content: string; type: string; source_session_id: number | null; workspace: string | null } | null>(null)
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { toast } = useUI()
 
+  // Active session's workspace (session.config `workspace`, falling back to
+  // the global agent_workspace_root). memory.list({workspace}) pre-scopes at
+  // the source so rows from *other* workspaces never reach this page —
+  // the all/global/project pills only shape what is already scoped.
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null)
+
   const loadEntries = async () => {
-    const memories = await window.electronAPI.memory.list()
+    let workspace: string | null = null
+    try {
+      const sessionId = useStore.getState().currentSessionId
+      if (sessionId) workspace = (await window.electronAPI.agent.getWorkspace(sessionId)) || null
+    } catch { /* no workspace context — fall back to global list */ }
+    setActiveWorkspace(workspace)
+    const memories = await window.electronAPI.memory.list(workspace ? { workspace } : undefined)
     setEntries(memories || [])
     const conf = await window.electronAPI.memory.conflicts()
     setConflicts(conf)
@@ -62,7 +78,9 @@ export default function MemoryPage() {
     const target = entries.find(e => e.id === id)
     await window.electronAPI.memory.delete(id)
     if (target) {
-      setDeleted({ content: target.content, type: target.type, source_session_id: target.source_session_id ?? null })
+      // Keep the workspace scope in the undo payload: recreating a project
+      // memory as global would silently change injection behavior.
+      setDeleted({ content: target.content, type: target.type, source_session_id: target.source_session_id ?? null, workspace: target.workspace ?? null })
       if (undoTimer.current) clearTimeout(undoTimer.current)
       undoTimer.current = setTimeout(() => setDeleted(null), 8000)
     }
@@ -76,6 +94,7 @@ export default function MemoryPage() {
         content: deleted.content,
         type: deleted.type,
         source_session_id: deleted.source_session_id ?? undefined,
+        workspace: deleted.workspace ?? undefined,
       })
       toast('已恢复删除的记忆')
     } catch { toast('恢复失败', { type: 'error' }) }
@@ -107,7 +126,7 @@ export default function MemoryPage() {
       try {
         const items = parseMemoryImport(await file.text())
         for (const item of items) {
-          await window.electronAPI.memory.create({ content: item.content, type: item.type })
+          await window.electronAPI.memory.create({ content: item.content, type: item.type, workspace: item.workspace ?? null })
         }
         loadEntries()
       } catch { toast('Invalid JSON file', { type: 'error' }) }
@@ -123,9 +142,13 @@ export default function MemoryPage() {
     } catch { toast('合并重复失败', { type: 'error' }) }
   }
 
+  // Project Brain: 先按作用域筛(all/global/project)，再套搜索关键词。
+  const scoped = scopeFilter === 'all' ? entries
+    : scopeFilter === 'global' ? entries.filter(e => !e.workspace)
+    : entries.filter(e => !!e.workspace)
   const filtered = searchQuery.trim()
-    ? entries.filter(e => e.content.toLowerCase().includes(searchQuery.toLowerCase()))
-    : entries
+    ? scoped.filter(e => e.content.toLowerCase().includes(searchQuery.toLowerCase()))
+    : scoped
 
   const counts = entries.reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc }, {} as Record<string, number>)
   const originCounts = entries.reduce((acc, e) => { const o = e.origin || 'user'; acc[o] = (acc[o] || 0) + 1; return acc }, {} as Record<string, number>)
@@ -223,6 +246,19 @@ export default function MemoryPage() {
           )}
         </div>
 
+        {/* Scope filter (Project Brain) */}
+        <div className="flex gap-1 mb-3" role="group" aria-label="记忆作用域">
+          {([['all', '全部'], ['global', '全局'], ['project', '项目']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setScopeFilter(v)} disabled={scopeFilter === v}
+              className="px-2.5 py-1 text-[11px] rounded-lg border transition-colors motion-reduce:transition-none active:opacity-70 hover:bg-[var(--bg-secondary)] disabled:opacity-60 disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:focus-visible:outline-none"
+              style={scopeFilter === v
+                ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)', color: '#fff' }
+                : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Search */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--content-bg)] border text-sm mb-4" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-gray-400 shrink-0" />
@@ -283,6 +319,12 @@ export default function MemoryPage() {
                       {(entry.origin === 'assistant' || entry.origin === 'external') && ORIGIN_META[entry.origin] && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: ORIGIN_META[entry.origin].color, color: '#fff' }}>
                           {ORIGIN_META[entry.origin].label}
+                        </span>
+                      )}
+                      {entry.workspace && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0" title={entry.workspace}
+                          style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+                          项目
                         </span>
                       )}
                       <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{entry.created_at?.slice(0, 16) || ''}</p>

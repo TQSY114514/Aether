@@ -35,6 +35,7 @@ let _habitSuggestionInstalled = false
 let _thinkingListenerInstalled = false
 let _loopStateListenerInstalled = false
 let _planStepListenerInstalled = false
+let _usageListenerInstalled = false
 
 // Chunk listener
 
@@ -252,6 +253,17 @@ export function ensureLoopStateListener() {
   })
 }
 
+// Live usage listener (chat:usage — tool turns). The payload carries the
+// loop-accumulated totals; recordUsageEvent computes the per-round delta so
+// multiple rounds within one turn sum correctly.
+export function ensureUsageListener() {
+  if (_usageListenerInstalled) return
+  _usageListenerInstalled = true
+  window.electronAPI.chat.onUsage?.(({ sessionId, messageId, inputTokens, outputTokens, costUsd }) => {
+    getStore().getState().recordUsageEvent(sessionId, messageId, inputTokens, outputTokens, costUsd)
+  })
+}
+
 // Task listeners
 
 let _taskListenerInstalled = false
@@ -303,5 +315,6 @@ export function ensureAllListeners() {
   ensureHabitSuggestionListener()
   ensureThinkingListener()
   ensureLoopStateListener()
+  ensureUsageListener()
   ensureTaskListeners()
 }

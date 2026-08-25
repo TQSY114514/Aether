@@ -35,6 +35,7 @@ const FLAG_DEFS = [
   { key: 'exec.docker',          default: false, category: 'exec',        description: 'Docker sandbox execution backend' },
   { key: 'exec.ssh',             default: false, category: 'exec',        description: 'SSH remote execution backend' },
   { key: 'exec.cloud',           default: false, category: 'exec',        description: 'Cloud sandbox execution backend' },
+  { key: 'exec.docker.defaultForAuto', default: false, category: 'exec',   description: 'Auto mode prefers the Docker sandbox for shell commands when Docker is available (falls back to local)' },
   { key: 'scheduler.queue',      default: false, category: 'exec',        description: 'Task queue with priority / retry / resume' },
   { key: 'agent.worktreeIsolation', default: false, category: 'agent',    description: 'Per-agent git worktree isolation' },
   // Phase 2 — background code intelligence

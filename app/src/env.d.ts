@@ -145,6 +145,7 @@ interface Window {
       onInjectionQueued: (callback: (payload: { sessionId: number; content: string }) => void) => () => void
       onToolLoopStart: (callback: (payload: { sessionId: number }) => void) => () => void
       onToolLoopEnd: (callback: (payload: { sessionId: number }) => void) => () => void
+      onUsage: (callback: (payload: { sessionId: number; messageId: number; inputTokens: number; outputTokens: number; costUsd: number }) => void) => () => void
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void
@@ -190,8 +191,8 @@ interface Window {
       onEntry: (callback: (entry: { level: string; time: string; msg: string }) => void) => () => void
     }
     memory: {
-      list: () => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string }[]>
-      create: (data: { content: string; type?: string; source_session_id?: number | null }) => Promise<{ lastInsertRowid: number }>
+      list: (opts?: { workspace?: string }) => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string; workspace?: string | null }[]>
+      create: (data: { content: string; type?: string; source_session_id?: number | null; workspace?: string | null }) => Promise<{ lastInsertRowid: number }>
       update: (id: number, data: { content: string }) => Promise<void>
       delete: (id: number) => Promise<void>
       conflicts: () => Promise<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>
@@ -233,6 +234,7 @@ interface Window {
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
       import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
+      importExternal: () => Promise<{ created: { providers: number; models: number }; skipped: string[]; errors: string[] }>
     }
     protocol: {
       // aetherai:// 协议事件(todo 17): open(workspace 路径) / tui / new / chat

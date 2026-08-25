@@ -15,6 +15,16 @@ export interface SessionConfig {
   workspace?: string | null
 }
 
+// Live per-session cost tracking (usageSlice). `turns` counts the number of
+// model rounds folded in; inputTokens/outputTokens/costUsd are cumulative for
+// the session's lifetime in the renderer (not persisted — usage_log owns that).
+export interface SessionUsage {
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Feature A — background tasks (docs/p0-agent-workbench.md 功能 A).
 // A task runs `runToolLoop` in its own child session in the main process; the
@@ -375,6 +385,20 @@ export interface AppState {
   // Agent workspace root (global, set from settings).
   agentWorkspace: string
   setAgentWorkspace: (dir: string) => Promise<void>
+
+  // Live per-turn + cumulative cost (usageSlice). usageBySession is cumulative
+  // per session; turnUsageBySession is the current turn's running total (reset
+  // at each sendMessage). budgetWarnedSessions tracks which sessions already
+  // fired the one-time budget-cap warning.
+  usageBySession: Record<number, SessionUsage>
+  turnUsageBySession: Record<number, { inputTokens: number; outputTokens: number; costUsd: number }>
+  budgetWarnedSessions: Set<number>
+  sessionBudgetUsd: number
+  setSessionBudgetUsd: (v: number) => void
+  resetTurnUsage: (sessionId: number) => void
+  recordUsage: (sessionId: number, usage: { inputTokens?: number; outputTokens?: number; costUsd?: number }, messageId?: number) => void
+  recordUsageEvent: (sessionId: number, messageId: number, inputTokens: number, outputTokens: number, costUsd: number) => void
+  recordReturnUsage: (sessionId: number, messageId: number, usage: { prompt_tokens?: number; completion_tokens?: number; cost?: number }) => void
 }
 
 // Apply the font-scale multiplier as a root CSS var; index.css uses it on html.

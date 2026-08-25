@@ -5,6 +5,9 @@
 export interface MemoryImportItem {
   content: string
   type: string
+  /** Optional workspace scope — exports carry it, and re-import must not
+   * silently downgrade project memories to global. */
+  workspace?: string | null
 }
 
 /**
@@ -26,7 +29,15 @@ export function parseMemoryImport(jsonText: string): MemoryImportItem[] {
     const o = item as Record<string, unknown>
     const content = typeof o.content === 'string' ? o.content.trim() : ''
     if (!content) continue
-    out.push({ content, type: typeof o.type === 'string' && o.type ? o.type : 'fact' })
+    // Only attach `workspace` when the source actually carried one — keeping
+    // the key absent for global memories preserves the historical item shape
+    // (exact-shape equality tests) instead of injecting `workspace: null`.
+    const parsed: MemoryImportItem = {
+      content,
+      type: typeof o.type === 'string' && o.type ? o.type : 'fact',
+    }
+    if (typeof o.workspace === 'string' && o.workspace) parsed.workspace = o.workspace
+    out.push(parsed)
   }
   return out
 }

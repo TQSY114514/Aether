@@ -4,7 +4,13 @@
 const MEMORY_TYPES = new Set(['fact', 'context', 'project', 'preference', 'review'])
 
 function registerMemoryHandlers(ipcMain, db) {
-  ipcMain.handle('memory:list', () => db.getMemories())
+  // Project Brain: memory:list 接受可选 {workspace} 过滤 —— 传入时返回全局行
+  // (workspace IS NULL) + 当前 workspace 行(getMemoriesScoped)，workspace 字段
+  // 随行可见供 UI 区分 Global/Project；未传时回退全量列表(旧行为)。
+  ipcMain.handle('memory:list', (_e, opts) => {
+    const workspace = opts && opts.workspace ? String(opts.workspace) : null
+    return workspace ? db.getMemoriesScoped(workspace) : db.getMemories()
+  })
   ipcMain.handle('memory:create', (_e, data) => {
     const type = data && data.type != null && data.type !== '' ? String(data.type) : 'fact'
     if (!MEMORY_TYPES.has(type)) throw new Error(`invalid memory type: ${type}`)

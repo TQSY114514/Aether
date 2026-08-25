@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onInjectionQueued: (cb) => subscribe('chat:injection-queued', cb),
     onToolLoopStart: (cb) => subscribe('chat:tool-loop-start', cb),
     onToolLoopEnd: (cb) => subscribe('chat:tool-loop-end', cb),
+    onUsage: (cb) => subscribe('chat:usage', cb),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
@@ -153,7 +154,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onEntry: (cb) => subscribe('main:log', cb),
   },
   memory: {
-    list: () => ipcRenderer.invoke('memory:list'),
+    list: (opts) => ipcRenderer.invoke('memory:list', opts),
     create: (data) => ipcRenderer.invoke('memory:create', data),
     update: (id, data) => ipcRenderer.invoke('memory:update', id, data),
     delete: (id) => ipcRenderer.invoke('memory:delete', id),
@@ -186,6 +187,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
+    importExternal: () => ipcRenderer.invoke('config:import-external'),
   },
   protocol: {
     onOpen: (cb) => subscribe('protocol:open', cb),
@@ -228,7 +230,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onDone: (cb) => subscribe('task:done', cb),
     onCancelled: (cb) => subscribe('task:cancelled', cb),
     onError: (cb) => subscribe('task:error', cb),
-    // todo 16：托盘"新建任务"→ 打开 TaskPanel
+    // todo 16锛氭墭鐩?鏂板缓浠诲姟"鈫?鎵撳紑 TaskPanel
     onOpenTasks: (cb) => subscribe('ui:open-tasks', cb),
   },
   cron: {

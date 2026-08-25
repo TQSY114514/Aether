@@ -3,7 +3,41 @@ import { PROVIDER_PRESETS } from './providerPresets'
 
 export type Preset = (typeof PROVIDER_PRESETS)[number]
 
-export type WizardStep = 'template' | 'provider' | 'permission'
+// First-run "how do you want to use Aether?" choice. Each card routes to the
+// provider step with a preset preselected, or to the template picker.
+export type Choice = 'chat' | 'code' | 'compare' | 'local'
+
+export type WizardStep = 'choice' | 'template' | 'provider' | 'permission'
+
+// The preset a choice preselects when it jumps straight to the provider step.
+// Returns null when the choice routes to the template picker instead.
+export function presetForChoice(choice: Choice): Preset | null {
+  switch (choice) {
+    case 'chat': return PROVIDER_PRESETS.find((p) => p.name === 'OpenRouter') ?? null
+    case 'code': return PROVIDER_PRESETS.find((p) => p.name === 'OpenAI') ?? null
+    case 'local': return PROVIDER_PRESETS.find((p) => p.name === 'Ollama') ?? null
+    case 'compare': return null
+  }
+}
+
+// The step a choice lands on: provider (preset preselected) or template picker.
+export function stepForChoice(choice: Choice): WizardStep {
+  return presetForChoice(choice) ? 'provider' : 'template'
+}
+
+// Chat / Code offer the one-click "import from Claude Code / OpenCode" action.
+export function choiceOffersImport(choice: Choice): boolean {
+  return choice === 'chat' || choice === 'code'
+}
+
+// After an external-config import, decide the next wizard step. If at least
+// one provider was created, jump straight to the permission step — the App
+// mount gate (showWizard && onboardingDone === false && providers.length === 0)
+// closes once providers exist, so the user isn't stuck mid-state. Otherwise
+// fall back to the template picker so they can add a provider manually.
+export function stepAfterImport(createdProviders: number): WizardStep {
+  return createdProviders > 0 ? 'permission' : 'template'
+}
 
 export interface ProviderForm {
   name: string
