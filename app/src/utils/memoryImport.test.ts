@@ -71,6 +71,6 @@ describe('parseMemoryImport', () => {
       { content: 'also global', type: 'fact' },
       { content: 'no field', type: 'fact' },
     ])
-    expect(Object.hasOwn(items[0], 'workspace')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(items[0], 'workspace')).toBe(false)
   })
 })
