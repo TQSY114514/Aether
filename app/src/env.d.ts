@@ -154,6 +154,7 @@ interface Window {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
+      metrics: () => Promise<ArenaModelMetrics[]>
       stop: (sessionId?: number) => Promise<void>
       benchmarkList: () => Promise<ArenaBenchmark[]>
       benchmarkSave: (data: { id?: number | null; name: string; tasks: string[]; modelIds: number[] }) => Promise<{ id: number; error?: string }>

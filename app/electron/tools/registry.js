@@ -418,7 +418,13 @@ const TOOLS = [
   // ── Platform tools ──────────────────────────────────────────────────────
   { name: 'use_skill', description: 'Load a skill by name.', risk: 'safe', parameters: { type: 'object', properties: { skill_name: { type: 'string' } }, required: ['skill_name'] }, run: (args) => {
     const name = String(args.skill_name || ''); if (!name) throw new Error('skill_name required')
-    const skill = require('./skills').getSkill(name); if (!skill) throw new Error(`unknown skill: ${name}`); return skill.content
+    const skillsMod = require('../llm/skills')
+    const skill = skillsMod.getSkill(name); if (!skill) throw new Error(`unknown skill: ${name}`)
+    try { skillsMod.recordSkillUse(name) } catch { }
+    const perms = Array.isArray(skill.permissions) && skill.permissions.length > 0
+      ? `\n\n[skill declares permissions: ${skill.permissions.join(', ')}]`
+      : ''
+    return skill.body + perms
   }},
   { name: 'gateway', description: 'Start/stop/get status of gateway channels (webhook/telegram/discord).', risk: 'dangerous', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['start', 'stop', 'status', 'send'] }, channel: { type: 'string' }, type: { type: 'string', enum: ['webhook', 'telegram', 'discord'] }, config: { type: 'object' }, message: { type: 'string' } } }, run: async (args, ctx) => {
     if (!ctx) return 'no context'

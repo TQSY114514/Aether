@@ -1,11 +1,44 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { scoresToCsv, scoresToMarkdown, downloadText } from '@/utils/arenaExport'
 import BenchmarkPanel from '@/components/arena/BenchmarkPanel'
 
+// Real-traffic metrics per model (usage_log aggregates via arena:metrics).
+interface ModelMetricsRow {
+  model_id: number
+  model_name: string
+  provider_name: string
+  run_count: number
+  avg_latency_ms: number | null
+  total_cost_usd: number | null
+  success_rate: number | null
+}
+
+function fmtMs(v: number | null): string {
+  return v == null ? '—' : `${Math.round(v)} ms`
+}
+function fmtCost(v: number | null): string {
+  if (v == null) return '—'
+  const abs = Math.abs(v)
+  const digits = abs >= 1 ? 2 : abs >= 0.01 ? 3 : 4
+  return `$${v.toFixed(digits)}`
+}
+function fmtRate(v: number | null): string {
+  return v == null ? '—' : `${Math.round(v * 100)}%`
+}
+
 export default function ScoresPage() {
   const scores = useStore((s) => s.scores)
+  const [metrics, setMetrics] = useState<ModelMetricsRow[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI.arena.metrics()
+      .then((rows) => { if (!cancelled) setMetrics(rows || []) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const byIntent = useMemo(() => {
     const grouped: Record<string, typeof scores> = {}
@@ -72,6 +105,39 @@ export default function ScoresPage() {
             </div>
           )}
         </div>
+        {metrics.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>{t('scores.metrics.title')}</h2>
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
+                    <th className="text-left px-4 py-2 font-medium">{t('scores.model')}</th>
+                    <th className="text-right px-4 py-2 font-medium">{t('scores.metrics.runs')}</th>
+                    <th className="text-right px-4 py-2 font-medium">{t('scores.metrics.latency')}</th>
+                    <th className="text-right px-4 py-2 font-medium">{t('scores.metrics.cost')}</th>
+                    <th className="text-right px-4 py-2 font-medium">{t('scores.metrics.success')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {metrics.map((m) => (
+                    <tr key={m.model_id} className="hover:bg-[var(--bg-secondary)] transition-colors">
+                      <td className="px-4 py-2.5">
+                        <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{m.model_name}</span>
+                        <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>{m.provider_name}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{m.run_count}</td>
+                      <td className="px-4 py-2.5 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{fmtMs(m.avg_latency_ms)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{fmtCost(m.total_cost_usd)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono" style={{ color: 'var(--text-secondary)' }}>{fmtRate(m.success_rate)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>{t('scores.metrics.hint')}</p>
+          </div>
+        )}
         {Object.keys(byIntent).length === 0 && (
           <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>{t('scores.empty')}</div>
         )}

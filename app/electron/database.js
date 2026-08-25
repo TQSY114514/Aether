@@ -778,6 +778,31 @@ function getModelLatency() {
   }
   return out
 }
+// ── Arena 2.0 leaderboard: per-model usage metrics from real traffic ────────
+// Aggregates usage_log rows per configured model: request count, average
+// latency, accumulated cost, success share. Read-only; no new tables.
+function getModelUsageMetrics() {
+  return db.prepare(`
+    SELECT m.id AS model_id, m.model_name, p.name AS provider_name,
+           COUNT(*) AS run_count,
+           AVG(u.latency_ms) AS avg_latency_ms,
+           SUM(u.cost) AS total_cost_usd,
+           SUM(CASE WHEN u.status = 200 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) AS success_rate
+    FROM usage_log u
+    JOIN model m ON m.model_name = u.model_name AND m.provider_id = u.provider_id
+    JOIN provider p ON p.id = m.provider_id
+    GROUP BY m.id
+    ORDER BY run_count DESC`).all()
+    .map(r => ({
+      model_id: Number(r.model_id),
+      model_name: r.model_name,
+      provider_name: r.provider_name,
+      run_count: Number(r.run_count),
+      avg_latency_ms: r.avg_latency_ms == null ? null : Number(r.avg_latency_ms),
+      total_cost_usd: r.total_cost_usd == null ? null : Number(r.total_cost_usd),
+      success_rate: r.success_rate == null ? null : Number(r.success_rate),
+    }))
+}
 function getPrimaryModel() {
   const row = db.prepare('SELECT m.id, m.provider_id FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.is_primary DESC, m.id ASC LIMIT 1').get()
   return row ? { id: Number(row.id), provider_id: Number(row.provider_id) } : null
@@ -1271,7 +1296,7 @@ module.exports = {
   getSetting, setSetting, getAllSettings,
   getScheduledTasks, addScheduledTask, getScheduledTask, deleteScheduledTask, markScheduledTaskRun,
   createAgentTask, getAgentTask, updateAgentTask, listAgentTasks,
-  getModelScores, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute,
+  getModelScores, getModelUsageMetrics, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute,
 listArenaBenchmarks, saveArenaBenchmark, deleteArenaBenchmark, updateArenaBenchmarkResults,
 saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,

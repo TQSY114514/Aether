@@ -65,6 +65,21 @@ jobs:
           if ($yml -notmatch 'aetherai-setup-[\d.]+\.exe') { throw "latest.yml does not reference the NSIS setup exe (electron-updater would download the portable exe):`n$yml" }
           echo 'Artifacts OK:'; Get-ChildItem -Filter *.exe | Select-Object -ExpandProperty Name
 
+      # Checksums give users a way to verify downloads without code signing
+      # (see docs/smart-screen-faq.md). Generated AFTER the guard above so a
+      # failed verification never publishes hashes of wrong artifacts.
+      - name: Generate SHA256 checksums
+        working-directory: app/release
+        run: |
+          $files = Get-ChildItem -Filter '*.exe' | Sort-Object Name
+          $lines = $files | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+            "$hash  $($_.Name)"
+          }
+          # Content is pure ASCII (hex hash + filename); no encoding hazards.
+          $lines | Set-Content -Path SHA256SUMS.txt -Encoding ascii
+          Get-Content SHA256SUMS.txt
+
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
@@ -72,6 +87,7 @@ jobs:
             app/release/*.exe
             app/release/latest*.yml
             app/release/*.blockmap
+            app/release/SHA256SUMS.txt
           generate_release_notes: true
 
       # Safety net: upload artifacts even if publish fails.
@@ -84,4 +100,5 @@ jobs:
             app/release/*.exe
             app/release/latest*.yml
             app/release/*.blockmap
+            app/release/SHA256SUMS.txt
           if-no-files-found: warn
