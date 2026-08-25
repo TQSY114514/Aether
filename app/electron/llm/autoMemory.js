@@ -343,13 +343,21 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         // 去重。此前用裸 INSERT，content_norm 为 NULL —— 500 行 recent 窗口
         // 淘汰后启动合并救不了它，重复 relation 会无限累积。
         try {
-          db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 }, workspace)
+          // workspace 仅在传入时追加为第 6 参 —— 旧路径保持原调用形状，
+          // 数据层对第 6 参的兼容写法（列存在才落 workspace 列）不受影响。
+          if (workspace) {
+            db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 }, workspace)
+          } else {
+            db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 })
+          }
         } catch {}
       } else {
         // H5: origin 落库 —— 自动提取自会话的记忆标记为 'assistant'，
         // 与 user（手动创建）/ external（外部内容来源）/ review 区分。
         try {
-          const info = db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant', null, workspace)
+          const info = workspace
+            ? db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant', null, workspace)
+            : db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant')
           // 数据层写入层去重命中时（duplicate=true）已 solidify 既有行：
           // 不改写 origin（保住原始来源），也不标冲突（重新观察到同一事实
           // 不是冲突）。仅真正新插入的行才做 origin 落库与冲突连线。
