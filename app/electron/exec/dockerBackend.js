@@ -115,13 +115,19 @@ const dockerBackend = {
   async status(execId) {
     const e = executions.get(execId)
     if (!e) return { ok: false, error: 'unknown execId' }
-    const inspect = await runCli(['inspect', '-f', '{{.State.Status}}', e.containerId])
+    // Fetch status AND the container's real exit code in one inspect: callers
+    // (registry.runInDocker) must not assume 0 when a container exited without
+    // producing our exit marker (image entrypoint failure, docker kill, …).
+    const inspect = await runCli(['inspect', '-f', '{{.State.Status}}|{{.State.ExitCode}}', e.containerId])
     let state
     if (inspect.code !== 0) {
       // Container gone (--rm after exit). Fall back to last known state.
       state = e.finishedAt ? 'exited' : 'error'
     } else {
-      const status = inspect.stdout.trim()
+      const out = inspect.stdout.trim().split('|')
+      const status = out[0]
+      const parsedExit = parseInt(out[1], 10)
+      if (Number.isFinite(parsedExit)) e.exitCode = parsedExit
       state = status === 'paused' ? 'paused'
         : status === 'running' ? 'running'
         : (e.finishedAt ? 'exited' : status === 'exited' ? 'exited' : 'error')
@@ -131,6 +137,7 @@ const dockerBackend = {
     return {
       ok: true,
       state,
+      exitCode: typeof e.exitCode === 'number' ? e.exitCode : undefined,
       stdoutTail: logs.stdout.slice(0, 64 * 1024),
       stderrTail: logs.stderr.slice(0, 64 * 1024),
       startedAt: e.startedAt,

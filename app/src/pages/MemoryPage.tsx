@@ -233,8 +233,8 @@ export default function MemoryPage() {
         {/* Scope filter (Project Brain) */}
         <div className="flex gap-1 mb-3" role="group" aria-label="记忆作用域">
           {([['all', '全部'], ['global', '全局'], ['project', '项目']] as const).map(([v, label]) => (
-            <button key={v} onClick={() => setScopeFilter(v)}
-              className="px-2.5 py-1 text-[11px] rounded-lg border transition-colors active:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+            <button key={v} onClick={() => setScopeFilter(v)} disabled={scopeFilter === v}
+              className="px-2.5 py-1 text-[11px] rounded-lg border transition-colors motion-reduce:transition-none active:opacity-70 hover:bg-[var(--bg-secondary)] disabled:opacity-60 disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:focus-visible:outline-none"
               style={scopeFilter === v
                 ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)', color: '#fff' }
                 : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
