@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onInjectionQueued: (cb) => subscribe('chat:injection-queued', cb),
     onToolLoopStart: (cb) => subscribe('chat:tool-loop-start', cb),
     onToolLoopEnd: (cb) => subscribe('chat:tool-loop-end', cb),
+    onUsage: (cb) => subscribe('chat:usage', cb),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
@@ -186,6 +187,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
+    importExternal: () => ipcRenderer.invoke('config:import-external'),
   },
   protocol: {
     onOpen: (cb) => subscribe('protocol:open', cb),

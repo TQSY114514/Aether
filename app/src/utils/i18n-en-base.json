@@ -581,5 +581,19 @@
   "onboarding.fetch": "Fetch models",
   "onboarding.permission": "Agent permissions",
   "onboarding.ask_recommended": "Ask — confirm each risky action before it runs. Recommended for safety.",
-  "onboarding.error": "Something went wrong while saving. Check the API URL and key."
+  "onboarding.error": "Something went wrong while saving. Check the API URL and key.",
+  "onboarding.choice.title": "How do you want to use Aether?",
+  "onboarding.choice.chat": "Chat",
+  "onboarding.choice.chat.desc": "Chat with a cloud model — pick OpenRouter or OpenAI.",
+  "onboarding.choice.code": "Code",
+  "onboarding.choice.code.desc": "Code with agent modes — pick a provider, then set permissions.",
+  "onboarding.choice.compare": "Compare Models",
+  "onboarding.choice.compare.desc": "Run the Arena to compare models — set up providers first.",
+  "onboarding.choice.local": "Use Local Model",
+  "onboarding.choice.local.desc": "Run models on your machine — Ollama or LM Studio.",
+  "onboarding.import": "Import from Claude Code / OpenCode",
+  "onboarding.importing": "Importing…",
+  "onboarding.import.none": "No providers found in Claude Code / OpenCode configs.",
+  "onboarding.import.imported": "Imported {0} providers and {1} models.",
+  "onboarding.import_error": "Import failed. Check the config files and try again."
 }

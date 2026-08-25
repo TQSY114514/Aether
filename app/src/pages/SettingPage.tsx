@@ -178,6 +178,8 @@ export default function SettingPage() {
   const setLanguage = useStore((s) => s.setLanguage)
   const setTheme = useStore((s) => s.setTheme)
   const setFallbackTimeout = useStore((s) => s.setFallbackTimeout)
+  const sessionBudgetUsd = useStore((s) => s.sessionBudgetUsd)
+  const setSessionBudgetUsd = useStore((s) => s.setSessionBudgetUsd)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const backgroundOpacity = useStore((s) => s.backgroundOpacity)
   const backgroundBlur = useStore((s) => s.backgroundBlur)
@@ -195,15 +197,25 @@ export default function SettingPage() {
 
   const [saved, setSaved] = useState(false)
   const [localTimeout, setLocalTimeout] = useState(String(fallbackTimeout))
+  const [localBudget, setLocalBudget] = useState(String(sessionBudgetUsd))
   const [toolsPanel, setToolsPanel] = useState<ToolsPanel>(null)
   const { toast } = useUI()
 
   useEffect(() => { setLocalTimeout(String(fallbackTimeout)) }, [fallbackTimeout])
+  useEffect(() => { setLocalBudget(String(sessionBudgetUsd)) }, [sessionBudgetUsd])
 
   const handleSaveTimeout = async () => {
     const ms = parseInt(localTimeout, 10)
     if (ms > 0 && ms <= 300000) {
       await setFallbackTimeout(ms)
+      setSaved(true); setTimeout(() => setSaved(false), 2000)
+    }
+  }
+
+  const handleSaveBudget = async () => {
+    const v = parseFloat(localBudget)
+    if (!isNaN(v) && v >= 0) {
+      await setSessionBudgetUsd(v)
       setSaved(true); setTimeout(() => setSaved(false), 2000)
     }
   }
@@ -406,6 +418,23 @@ export default function SettingPage() {
                   </div>
                 </div>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.advanced.timeout_desc')}</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.advanced.budget')}</p>
+                  <div className="flex items-center gap-2">
+                    <input value={localBudget} onChange={(e) => setLocalBudget(e.target.value)}
+                      type="number" min="0" step="0.01"
+                      className="w-24 px-2 py-1 text-xs rounded-lg border outline-none bg-[var(--content-bg)] text-right"
+                      style={{ borderColor: 'var(--border)' }} />
+                    <button onClick={handleSaveBudget}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-black text-white hover:opacity-80 transition-opacity">
+                      {saved ? <Check size={12} /> : <Save size={12} />}
+                      {saved ? t('settings.advanced.saved') : t('settings.advanced.save')}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.advanced.budget_desc')}</p>
               </div>
             </div>
           </div>

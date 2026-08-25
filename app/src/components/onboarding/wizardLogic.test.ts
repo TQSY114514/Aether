@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildProviderPayload, isComplete, EMPTY_FORM } from './wizardLogic'
+import { buildProviderPayload, isComplete, EMPTY_FORM, presetForChoice, stepForChoice, choiceOffersImport, stepAfterImport } from './wizardLogic'
 import { PROVIDER_PRESETS } from './providerPresets'
 
 const preset = (name: string) => {
@@ -56,5 +56,58 @@ describe('isComplete', () => {
     expect(isComplete(openai, { ...EMPTY_FORM, name: ' ' })).toBe(false)
     // Preset values satisfy the gate when the form fields are empty.
     expect(isComplete(openai, EMPTY_FORM)).toBe(true)
+  })
+})
+
+describe('presetForChoice', () => {
+  it('maps chat → OpenRouter (default cloud preset)', () => {
+    expect(presetForChoice('chat')?.name).toBe('OpenRouter')
+  })
+
+  it('maps code → OpenAI', () => {
+    expect(presetForChoice('code')?.name).toBe('OpenAI')
+  })
+
+  it('maps local → Ollama', () => {
+    expect(presetForChoice('local')?.name).toBe('Ollama')
+  })
+
+  it('maps compare → null (routes to the template picker instead)', () => {
+    expect(presetForChoice('compare')).toBeNull()
+  })
+})
+
+describe('stepForChoice', () => {
+  it('jumps to the provider step when a preset is preselected', () => {
+    expect(stepForChoice('chat')).toBe('provider')
+    expect(stepForChoice('code')).toBe('provider')
+    expect(stepForChoice('local')).toBe('provider')
+  })
+
+  it('routes compare to the template picker', () => {
+    expect(stepForChoice('compare')).toBe('template')
+  })
+})
+
+describe('choiceOffersImport', () => {
+  it('offers the Claude Code / OpenCode import for chat and code', () => {
+    expect(choiceOffersImport('chat')).toBe(true)
+    expect(choiceOffersImport('code')).toBe(true)
+  })
+
+  it('does not offer import for compare or local', () => {
+    expect(choiceOffersImport('compare')).toBe(false)
+    expect(choiceOffersImport('local')).toBe(false)
+  })
+})
+
+describe('stepAfterImport', () => {
+  it('jumps to the permission step when at least one provider was created', () => {
+    expect(stepAfterImport(1)).toBe('permission')
+    expect(stepAfterImport(3)).toBe('permission')
+  })
+
+  it('falls back to the template picker when nothing was found', () => {
+    expect(stepAfterImport(0)).toBe('template')
   })
 })

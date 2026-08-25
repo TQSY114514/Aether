@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { PROVIDER_PRESETS } from './providerPresets'
-import { buildProviderPayload, isComplete, EMPTY_FORM, type Preset, type ProviderForm, type WizardStep } from './wizardLogic'
-import { ArrowRight, Check, Shield, X } from 'lucide-react'
+import { buildProviderPayload, isComplete, EMPTY_FORM, presetForChoice, stepAfterImport, type Choice, type Preset, type ProviderForm, type WizardStep } from './wizardLogic'
+import { ArrowRight, Check, Download, Shield, X } from 'lucide-react'
 
 const MODES = [
   { key: 'off', color: 'var(--text-muted)' },
@@ -13,14 +13,32 @@ const MODES = [
   { key: 'yolo', color: 'var(--error)' },
 ] as const
 
+// First-screen "how do you want to use Aether?" cards. Each routes to the
+// provider step with a preset preselected, or to the template picker.
+const CHOICES: { key: Choice }[] = [
+  { key: 'chat' },
+  { key: 'code' },
+  { key: 'compare' },
+  { key: 'local' },
+]
+
+interface ImportResult {
+  created: { providers: number; models: number }
+  skipped: string[]
+  errors: string[]
+}
+
 export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
   const addProvider = useStore((s) => s.addProvider)
   const addModel = useStore((s) => s.addModel)
+  const loadProviders = useStore((s) => s.loadProviders)
 
-  const [step, setStep] = useState<WizardStep>('template')
+  const [step, setStep] = useState<WizardStep>('choice')
   const [preset, setPreset] = useState<Preset | null>(null)
   const [form, setForm] = useState<ProviderForm>(EMPTY_FORM)
   const [busy, setBusy] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState('')
 
   const finish = async () => {
@@ -33,6 +51,33 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
     setForm({ name: p.name, api_url: p.api_url, api_key: '', api_format: p.api_format })
     setError('')
     setStep('provider')
+  }
+
+  // A first-screen choice either jumps to the provider step with a preset
+  // preselected, or to the template picker (Compare Models → Arena setup).
+  const handleChoice = (choice: Choice) => {
+    const p = presetForChoice(choice)
+    if (p) pickPreset(p)
+    else setStep('template')
+  }
+
+  // One-click import from Claude Code / OpenCode. Auto-discovers the standard
+  // config paths, creates providers/models via the new IPC, reloads the store
+  // (so the App mount gate sees providers), then jumps to the permission step.
+  const runImport = async () => {
+    if (importing) return
+    setImporting(true)
+    setError('')
+    try {
+      const res = await window.electronAPI.config.importExternal()
+      setImportResult(res)
+      await loadProviders()
+      if (stepAfterImport(res.created.providers) === 'permission') setStep('permission')
+    } catch {
+      setError(t('onboarding.import_error'))
+    } finally {
+      setImporting(false)
+    }
   }
 
   const saveProvider = async () => {
@@ -83,6 +128,39 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <X size={14} className="text-gray-400" />
           </button>
         </div>
+
+        {step === 'choice' && (
+          <div>
+            <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{t('onboarding.choice.title')}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {CHOICES.map((c) => (
+                <button key={c.key} onClick={() => handleChoice(c.key)}
+                  className="text-left px-3 py-3 rounded-lg border transition-colors hover:bg-[var(--bg-secondary)]"
+                  style={{ borderColor: 'var(--border)' }}>
+                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t(`onboarding.choice.${c.key}`)}</div>
+                  <div className="text-[11px] mt-1 leading-snug" style={{ color: 'var(--text-muted)' }}>{t(`onboarding.choice.${c.key}.desc`)}</div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+              <button onClick={runImport} disabled={importing}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-50"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                <Download size={12} />
+                {importing ? t('onboarding.importing') : t('onboarding.import')}
+              </button>
+              {importResult && importResult.created.providers === 0 && (
+                <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>{t('onboarding.import.none')}</p>
+              )}
+              {error && <p className="text-xs mt-2" style={{ color: 'var(--error)' }}>{error}</p>}
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button onClick={finish}
+                className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
+            </div>
+          </div>
+        )}
 
         {step === 'template' && (
           <div>
@@ -156,6 +234,11 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
               <Shield size={14} style={{ color: 'var(--accent)' }} />
               <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('onboarding.permission')}</span>
             </div>
+            {importResult && importResult.created.providers > 0 && (
+              <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
+                {t('onboarding.import.imported', String(importResult.created.providers), String(importResult.created.models))}
+              </p>
+            )}
             <div className="space-y-1.5">
               {MODES.map((m) => {
                 const isAsk = m.key === 'ask'

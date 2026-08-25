@@ -18,12 +18,15 @@ const ORIGIN_META: Record<string, { label: string; color: string }> = {
 }
 
 export default function MemoryPage() {
-  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string }[]>([])
+  const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string; workspace?: string | null }[]>([])
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState('fact')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  // Project Brain: 作用域过滤 —— all=全部 / global=非项目作用域记忆 /
+  // project=带 workspace 的项目记忆。客户端过滤(workspace 字段随行返回)。
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'global' | 'project'>('all')
   const [conflicts, setConflicts] = useState<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>([])
   const [showConflicts, setShowConflicts] = useState(false)
   const [resolving, setResolving] = useState<number | null>(null)

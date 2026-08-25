@@ -34,6 +34,7 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
   autoCommitOnTestPass: false,
   autoCommitAfterFileChange: true,
   agentWorkspace: "",
+  sessionBudgetUsd: 0,
   memories: [],
 
   loadMemories: async () => {
@@ -70,6 +71,7 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
       const modelRoutingPriority = ["quality", "speed", "cost"].includes(s.modelRoutingPriority as string) ? (s.modelRoutingPriority as "quality" | "speed" | "cost") : "quality"
       const modelAutoRoute = (s.modelAutoRoute ?? "0") === "1"
       const autoCommitOnTestPass = (s.autoCommitOnTestPass ?? "0") === "1"
+      const sessionBudgetUsd = parseFloat(s.session_budget_usd ?? "0") || 0
       let autoCommitAfterFileChange = true
       try { autoCommitAfterFileChange = (await window.electronAPI.git.getAutoCommit()).enabled } catch {} // eslint-disable-line no-empty
       await setLangAsync(lang)
@@ -78,7 +80,7 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
       applyLangDir(lang)
       let seenHints: string[] = []
       try { seenHints = JSON.parse(s.seen_hints || "[]") } catch (e) { log.warn("parse seen_hints failed:", e) }
-      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultThinkingEnabled, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, thinkingEnabled: defaultThinkingEnabled, seenHints, modelRoutingPriority, modelAutoRoute, autoCommitOnTestPass, autoCommitAfterFileChange })
+      set({ language: lang, theme, fallbackTimeout: timeout, fontScale, bubbleWidth, defaultEffort, defaultThinkingEnabled, defaultModelId, defaultPersonaId, maxTokens, temperature, topP, systemPrefix, autoTitle, titleLanguage, titleModelId, backgroundImage: null, backgroundOpacity: bgOpacity, backgroundBlur: bgBlur, effortLevel: defaultEffort, thinkingEnabled: defaultThinkingEnabled, seenHints, modelRoutingPriority, modelAutoRoute, autoCommitOnTestPass, autoCommitAfterFileChange, sessionBudgetUsd })
     } catch (e) { log.warn("loadSettings failed:", e) }
   },
 
@@ -175,5 +177,10 @@ export const createSettingsSlice: StateCreator<AppState, [], [], Partial<AppStat
   setAgentWorkspace: async (dir: string) => {
     try { await window.electronAPI.agent.setWorkspace({ dir }) } catch {}
     set({ agentWorkspace: dir })
+  },
+
+  setSessionBudgetUsd: async (v) => {
+    await window.electronAPI.settings.set("session_budget_usd", String(v))
+    set({ sessionBudgetUsd: v })
   },
 })

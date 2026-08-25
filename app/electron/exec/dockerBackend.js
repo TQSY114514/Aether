@@ -57,6 +57,24 @@ function runCli(args, timeoutMs = 15_000) {
   })
 }
 
+// Cached availability probe for other modules (e.g. backend resolution):
+// 'docker version --format {{.Server.Version}}'. A positive result is cached
+// for the process lifetime; a negative one is retried every TTL so plugging
+// Docker in later is picked up without a restart.
+let dockerAvailableCache = null // null = not probed yet, true / false after
+let lastProbeAt = 0
+const DOCKER_PROBE_RETRY_MS = 60_000
+
+async function isDockerAvailable() {
+  const now = Date.now()
+  if (dockerAvailableCache === true) return true
+  if (dockerAvailableCache === false && now - lastProbeAt < DOCKER_PROBE_RETRY_MS) return false
+  const probe = await runCli(['version', '--format', '{{.Server.Version}}'], 8_000)
+  dockerAvailableCache = probe.code === 0
+  lastProbeAt = now
+  return dockerAvailableCache
+}
+
 const dockerBackend = {
   id: 'docker',
   name: 'Docker Sandbox',
