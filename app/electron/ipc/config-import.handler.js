@@ -148,6 +148,10 @@ function parseClaudeSettings(content) {
 
 function readJsonFile(filePath) {
   try {
+    // All call sites below pass constant paths under os.homedir(); the guard
+    // exists purely defensively (scanner finding) — it rejects traversal
+    // segments without rejecting legitimate absolute paths.
+    if (String(filePath).split(/[\\/]+/).includes('..')) return { ok: false, reason: 'invalid path' }
     if (!fs.existsSync(filePath)) return { ok: false, reason: 'missing' }
     return { ok: true, content: fs.readFileSync(filePath, 'utf8') }
   } catch (e) {
