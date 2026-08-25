@@ -126,9 +126,13 @@ export default function MemoryPage() {
     } catch { toast('合并重复失败', { type: 'error' }) }
   }
 
+  // Project Brain: 先按作用域筛(all/global/project)，再套搜索关键词。
+  const scoped = scopeFilter === 'all' ? entries
+    : scopeFilter === 'global' ? entries.filter(e => !e.workspace)
+    : entries.filter(e => !!e.workspace)
   const filtered = searchQuery.trim()
-    ? entries.filter(e => e.content.toLowerCase().includes(searchQuery.toLowerCase()))
-    : entries
+    ? scoped.filter(e => e.content.toLowerCase().includes(searchQuery.toLowerCase()))
+    : scoped
 
   const counts = entries.reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc }, {} as Record<string, number>)
   const originCounts = entries.reduce((acc, e) => { const o = e.origin || 'user'; acc[o] = (acc[o] || 0) + 1; return acc }, {} as Record<string, number>)
@@ -226,6 +230,19 @@ export default function MemoryPage() {
           )}
         </div>
 
+        {/* Scope filter (Project Brain) */}
+        <div className="flex gap-1 mb-3" role="group" aria-label="记忆作用域">
+          {([['all', '全部'], ['global', '全局'], ['project', '项目']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setScopeFilter(v)}
+              className="px-2.5 py-1 text-[11px] rounded-lg border transition-colors active:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+              style={scopeFilter === v
+                ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)', color: '#fff' }
+                : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Search */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--content-bg)] border text-sm mb-4" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-gray-400 shrink-0" />
@@ -286,6 +303,12 @@ export default function MemoryPage() {
                       {(entry.origin === 'assistant' || entry.origin === 'external') && ORIGIN_META[entry.origin] && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: ORIGIN_META[entry.origin].color, color: '#fff' }}>
                           {ORIGIN_META[entry.origin].label}
+                        </span>
+                      )}
+                      {entry.workspace && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0" title={entry.workspace}
+                          style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+                          项目
                         </span>
                       )}
                       <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{entry.created_at?.slice(0, 16) || ''}</p>

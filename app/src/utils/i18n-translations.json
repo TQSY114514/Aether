@@ -608,7 +608,12 @@
       "settings.agent.capability_default": "默认",
       "capability.axis.filesystem": "文件系统",
       "capability.axis.shell": "Shell 命令",
-      "capability.axis.network": "网络访问"
+      "capability.axis.network": "网络访问",
+      "settings.advanced.budget": "会话预算上限（美元）",
+      "settings.advanced.budget_desc": "累计聊天成本达到该金额时每个会话提醒一次，0 为关闭。",
+      "usage.budget_warning": "预算提醒：本会话成本已达 {0} / 上限 {1}。",
+      "chat.draft_restored": "已恢复上次未发送的内容。",
+      "usage.cost_line": "本轮 {0} · 累计 {1}"
     }
   },
   {

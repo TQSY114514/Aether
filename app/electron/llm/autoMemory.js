@@ -57,8 +57,8 @@ let _memV = 0
 // _untrustedBlock 降权注入 —— 末尾、限量、<untrusted_memory> 包裹。
 // Project Brain: 可选第 3 参 workspace —— 来自 session.config JSON 的
 // `workspace` 字段(chat-send.handler.js: JSON.parse(session0.config)?.workspace；
-// 全局兜底 agent_workspace_root)。传入时项目块只取全局行(workspace IS NULL)
-// + 当前 workspace 行，当前 workspace 行优先；未传时回退旧行为(全量 project)。
+// 全局兜底 agent_workspace_root)。传入时所有注入池都从 getMemoriesScoped
+// 行集派生(全局 NULL 行 + 当前 workspace 行，后者优先)；未传时回退旧行为。
 function prefetch(db, userMessage, workspace) {
   const memories = _memCache && _memCache.v === _memV ? _memCache.data : (() => {
     let m
@@ -68,19 +68,24 @@ function prefetch(db, userMessage, workspace) {
   })()
   if (!memories || memories.length === 0) return ''
 
-  const trusted = memories.filter(m => m.origin !== 'external')
-  const external = memories.filter(m => m.origin === 'external')
+  // Project Brain: 传入 workspace 时，全部注入池(project/keyword/untrusted)
+  // 一律从 getMemoriesScoped(workspace) 的行集派生 —— 其他 workspace 的记忆
+  // 不得经 keyword 或 untrusted 块漏进上下文。作用域读取失败按 fail-closed
+  // 处理(空池)，宁可少注入也不跨工作区泄漏。
+  let pool = memories
+  if (workspace) {
+    try {
+      pool = db.getMemoriesScoped(workspace) || []
+    } catch { pool = [] }
+    if (pool.length === 0) return ''
+  }
+
+  const trusted = pool.filter(m => m.origin !== 'external')
+  const external = pool.filter(m => m.origin === 'external')
 
   let out = ''
-  // Project Brain: workspace 作用域的项目记忆。getMemoriesScoped 的 SQL 已按
-  // (workspace IS NULL OR workspace=?) 过滤并让当前 workspace 行优先，这里再
-  // 按 type='project' + 可信来源收窄 —— 其他 workspace 的项目记忆不注入。
-  let projectMem
-  if (workspace) {
-    try { projectMem = db.getMemoriesScoped(workspace).filter(m => m.type === 'project' && m.origin !== 'external') } catch { projectMem = [] }
-  } else {
-    projectMem = trusted.filter(m => m.type === 'project')
-  }
+  // 项目块：scoped 行集里再按 type='project' + 可信来源收窄。
+  const projectMem = trusted.filter(m => m.type === 'project')
   if (projectMem.length > 0) {
     const projLines = projectMem.slice(0, 5).map(m => {
       try { db.incrementMemoryAccess(m.id) } catch {}

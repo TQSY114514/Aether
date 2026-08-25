@@ -424,11 +424,12 @@ export default function SettingPage() {
                   <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{t('settings.advanced.budget')}</p>
                   <div className="flex items-center gap-2">
                     <input value={localBudget} onChange={(e) => setLocalBudget(e.target.value)}
-                      type="number" min="0" step="0.01"
-                      className="w-24 px-2 py-1 text-xs rounded-lg border outline-none bg-[var(--content-bg)] text-right"
+                      type="number" min="0" step="0.01" aria-label={t('settings.advanced.budget')}
+                      className="w-24 px-2 py-1 text-xs rounded-lg border bg-[var(--content-bg)] text-right focus:outline-none focus-visible:border-[var(--accent)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                       style={{ borderColor: 'var(--border)' }} />
                     <button onClick={handleSaveBudget}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-black text-white hover:opacity-80 transition-opacity">
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-black text-white hover:opacity-80 active:opacity-60 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+                      style={{ outlineColor: 'var(--accent)' }}>
                       {saved ? <Check size={12} /> : <Save size={12} />}
                       {saved ? t('settings.advanced.saved') : t('settings.advanced.save')}
                     </button>

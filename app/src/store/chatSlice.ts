@@ -248,7 +248,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     })
     ensureChunkListener()
     try {
-      await window.electronAPI.chat.send({
+      const result = await window.electronAPI.chat.send({
         sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
@@ -257,6 +257,10 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
       })
+      // Regenerated turns count toward cost too — same non-tool usage path.
+      if (result?.usage && result.messageId) {
+        get().recordReturnUsage(currentSessionId, result.messageId, result.usage)
+      }
     } catch (err) {
       set(clearStreaming(currentSessionId))
       log.error("regenerate error:", err)
@@ -307,7 +311,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }))
     ensureChunkListener()
     try {
-      await window.electronAPI.chat.send({
+      const result = await window.electronAPI.chat.send({
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
@@ -316,6 +320,10 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
       })
+      // Edited-and-rerun turns count toward cost too — same non-tool path.
+      if (result?.usage && result.messageId) {
+        get().recordReturnUsage(currentSessionId, result.messageId, result.usage)
+      }
     } catch (err) {
       set(clearStreaming(currentSessionId))
       log.error("editMessage error:", err)
