@@ -90,7 +90,9 @@ const dockerBackend = {
       return { ok: false, error: hint }
     }
 
-    const runArgs = ['run', '-d', '--rm', '--network', network]
+    // No --rm: a fast-exiting command must stay inspectable until the caller
+    // collects logs + the exit marker (dispose() removes the container).
+    const runArgs = ['run', '-d', '--network', network]
     for (const [k, v] of Object.entries(env)) {
       runArgs.push('-e', `${k}=${v}`)
     }
@@ -163,8 +165,9 @@ const dockerBackend = {
     const e = executions.get(execId)
     if (!e) return
     await dockerBackend.terminate(execId)
+    try { await runCli(['rm', '-f', e.containerId]) } catch { /* best effort */ }
     executions.delete(execId)
   },
 }
 
-module.exports = { dockerBackend }
+module.exports = { dockerBackend, isDockerAvailable }

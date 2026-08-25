@@ -72,7 +72,9 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
       const res = await window.electronAPI.config.importExternal()
       setImportResult(res)
       await loadProviders()
-      if (stepAfterImport(res.created.providers) === 'permission') setStep('permission')
+      // Always follow the route the import produced — zero providers falls
+      // through to the manual template/provider picker instead of sticking.
+      setStep(stepAfterImport(res.created.providers))
     } catch {
       setError(t('onboarding.import_error'))
     } finally {
@@ -135,8 +137,8 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <div className="grid grid-cols-2 gap-2">
               {CHOICES.map((c) => (
                 <button key={c.key} onClick={() => handleChoice(c.key)}
-                  className="text-left px-3 py-3 rounded-lg border transition-colors hover:bg-[var(--bg-secondary)]"
-                  style={{ borderColor: 'var(--border)' }}>
+                  className="text-left px-3 py-3 rounded-lg border transition-colors hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+                  style={{ borderColor: 'var(--border)', outlineColor: 'var(--accent)' }}>
                   <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t(`onboarding.choice.${c.key}`)}</div>
                   <div className="text-[11px] mt-1 leading-snug" style={{ color: 'var(--text-muted)' }}>{t(`onboarding.choice.${c.key}.desc`)}</div>
                 </button>
@@ -144,8 +146,8 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             </div>
             <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
               <button onClick={runImport} disabled={importing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-50"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-50 hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:focus-visible:outline-none"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', outlineColor: 'var(--accent)' }}>
                 <Download size={12} />
                 {importing ? t('onboarding.importing') : t('onboarding.import')}
               </button>

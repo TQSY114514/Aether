@@ -144,32 +144,39 @@ async function runInDocker(cmd, timeoutMs, db) {
   }
   if (!started.ok) return `[docker unavailable] ${started.error || 'docker execute failed'}`
 
-  const deadline = Date.now() + timeoutMs
-  let timedOut = false
-  let st = null
-  while (true) {
-    await new Promise((r) => setTimeout(r, 500))
-    st = await dockerBackend.status(started.execId).catch(() => null)
-    if (!st || (st.state !== 'running' && st.state !== 'paused')) break
-    if (Date.now() >= deadline) {
-      timedOut = true
-      try { await dockerBackend.terminate(started.execId) } catch { /* best effort */ }
+  // Containers run without --rm so a fast exit can't beat the first poll
+  // (logs + exit marker survive); dispose() below is the cleanup point on
+  // every path: result, timeout, or error return.
+  try {
+    const deadline = Date.now() + timeoutMs
+    let timedOut = false
+    let st = null
+    while (true) {
+      await new Promise((r) => setTimeout(r, 500))
       st = await dockerBackend.status(started.execId).catch(() => null)
-      break
+      if (!st || (st.state !== 'running' && st.state !== 'paused')) break
+      if (Date.now() >= deadline) {
+        timedOut = true
+        try { await dockerBackend.terminate(started.execId) } catch { /* best effort */ }
+        st = await dockerBackend.status(started.execId).catch(() => null)
+        break
+      }
     }
-  }
-  if (!st || !st.ok) return '[docker unavailable] command execution failed'
+    if (!st || !st.ok) return '[docker unavailable] command execution failed'
 
-  const raw = `${st.stdoutTail || ''}\n${st.stderrTail || ''}`
-  const idx = raw.lastIndexOf(DOCKER_EXIT_MARKER)
-  let exitCode = st.state === 'exited' ? 0 : undefined
-  let combined = raw
-  if (idx !== -1) {
-    const parsed = parseInt(raw.slice(idx + DOCKER_EXIT_MARKER.length).trim(), 10)
-    if (Number.isFinite(parsed)) exitCode = parsed
-    combined = raw.slice(0, idx)
+    const raw = `${st.stdoutTail || ''}\n${st.stderrTail || ''}`
+    const idx = raw.lastIndexOf(DOCKER_EXIT_MARKER)
+    let exitCode = st.state === 'exited' ? 0 : undefined
+    let combined = raw
+    if (idx !== -1) {
+      const parsed = parseInt(raw.slice(idx + DOCKER_EXIT_MARKER.length).trim(), 10)
+      if (Number.isFinite(parsed)) exitCode = parsed
+      combined = raw.slice(0, idx)
+    }
+    return formatShellResult(combined, '', exitCode ?? '', timedOut)
+  } finally {
+    try { await dockerBackend.dispose(started.execId) } catch { /* best effort */ }
   }
-  return formatShellResult(combined, '', exitCode ?? '', timedOut)
 }
 
 // ── Tool definitions ────────────────────────────────────────────────────
@@ -273,10 +280,15 @@ const TOOLS = [
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
+    // Explicit backend selection: ctx.executionBackend (future wiring) or the
+    // exec.backend setting — makes the resolver's configured branch reachable
+    // from this tool instead of dead code.
+    let configured = ctx?.executionBackend || ''
+    if (!configured && ctx?.db) { try { configured = String(ctx.db.getSetting('exec.backend') || '') } catch { /* fall through to mode-based resolution */ } }
     // Docker-as-safe-default (flag exec.docker.defaultForAuto, default off):
     // in auto/auto_confirm with the flag enabled and a reachable daemon the
     // command runs inside an ephemeral no-network container instead of the host shell.
-    return resolveBackendForMode(ctx?.agentMode, { db: ctx?.db }).then((backendId) => {
+    return resolveBackendForMode(ctx?.agentMode, { db: ctx?.db, configured }).then((backendId) => {
       if (backendId !== 'docker') {
         return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
           .then(({ stdout, stderr, exitCode, timedOut }) => formatShellResult(stdout, stderr, exitCode, timedOut))

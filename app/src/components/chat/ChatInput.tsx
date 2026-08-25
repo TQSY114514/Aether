@@ -593,7 +593,6 @@ export default function ChatInput() {
         )}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
         {isLooping && <AgentStatusBar sessionId={currentSessionId} />}
-        <BudgetWarningToast />
       </div>
     </div>
   )
@@ -665,29 +664,9 @@ function AgentModeSelector({ mode, onChange }: { mode: AgentMode; onChange: (v: 
   )
 }
 
-// Fires a one-time toast when a session's cumulative cost crosses the budget
-// cap. The crossing itself is detected in usageSlice (which also drops a status
-// line for AgentStatusBar); this component just surfaces the toast via useUI().
-// useUI().toast has no 'warning' type, so 'info' is used.
-const _budgetToastFired = new Set<number>()
-
-function BudgetWarningToast() {
-  const warned = useStore((s) => s.budgetWarnedSessions)
-  const usageBySession = useStore((s) => s.usageBySession)
-  const budget = useStore((s) => s.sessionBudgetUsd)
-  const { toast } = useUI()
-
-  useEffect(() => {
-    for (const sid of warned) {
-      if (_budgetToastFired.has(sid)) continue
-      _budgetToastFired.add(sid)
-      const u = usageBySession[sid]
-      toast(t('usage.budget_warning', `$${(u?.costUsd || 0).toFixed(3)}`, `$${budget}`), { type: 'info' })
-    }
-  }, [warned, usageBySession, budget, toast])
-
-  return null
-}
+// Budget-warning presentation is owned by usageSlice.recordUsage (status line
+// for AgentStatusBar + one 'warning' toast). The former <BudgetWarningToast />
+// component here double-fired the same notification and was removed.
 
 function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   const statusLines = useStore((s) => s.statusLinesByMessage)

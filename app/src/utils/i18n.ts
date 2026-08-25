@@ -694,7 +694,12 @@ const translations: Record<string, Record<string, string>> = {
     "onboarding.importing": "Importing…",
     "onboarding.import.none": "No providers found in Claude Code / OpenCode configs.",
     "onboarding.import.imported": "Imported {0} providers and {1} models.",
-    "onboarding.import_error": "Import failed. Check the config files and try again."
+    "onboarding.import_error": "Import failed. Check the config files and try again.",
+    "settings.advanced.budget": "Session budget cap (USD)",
+    "settings.advanced.budget_desc": "Warn once per session when cumulative chat cost reaches this amount. 0 disables the cap.",
+    "usage.budget_warning": "Budget: session cost has reached {0} of the {1} cap.",
+    "chat.draft_restored": "Draft restored.",
+    "usage.cost_line": "turn {0} · total {1}"
   },
   "en-upside": {
     "agent.ask": "suoᴉʇɔɐ ʎʞsᴉɹ ǝɹoɟǝq ɯɹᴉɟuoɔ — ʞsɐ",
@@ -1293,7 +1298,12 @@ const translations: Record<string, Record<string, string>> = {
     "onboarding.importing": "…ƃuᴉʇɹodɯᴉ",
     "onboarding.import.none": ".sƃᴉɟuoɔ ǝpoɔuǝdo / ǝpoɔ ǝpnɐlɔ uᴉ punoɟ sɹǝpᴉʌoɹd ou",
     "onboarding.import.imported": " pǝʇɹodɯᴉ{0} puɐ sɹǝpᴉʌoɹd {1}.slǝpoɯ ",
-    "onboarding.import_error": ".uᴉɐƃɐ ʎɹʇ puɐ sǝlᴉɟ ƃᴉɟuoɔ ǝɥʇ ʞɔǝɥɔ .pǝlᴉɐɟ ʇɹodɯᴉ"
+    "onboarding.import_error": ".uᴉɐƃɐ ʎɹʇ puɐ sǝlᴉɟ ƃᴉɟuoɔ ǝɥʇ ʞɔǝɥɔ .pǝlᴉɐɟ ʇɹodɯᴉ",
+    "settings.advanced.budget": ")psn( dɐɔ ʇǝƃpnq uoᴉssǝs",
+    "settings.advanced.budget_desc": ".dɐɔ ǝɥʇ sǝlqɐsᴉp 0 .ʇunoɯɐ sᴉɥʇ sǝɥɔɐǝɹ ʇsoɔ ʇɐɥɔ ǝʌᴉʇɐlnɯnɔ uǝɥʍ uoᴉssǝs ɹǝd ǝɔuo uɹɐʍ",
+    "usage.budget_warning": " pǝɥɔɐǝɹ sɐɥ ʇsoɔ uoᴉssǝs :ʇǝƃpnq{0} ǝɥʇ ɟo {1}.dɐɔ ",
+    "chat.draft_restored": ".pǝɹoʇsǝɹ ʇɟɐɹp",
+    "usage.cost_line": " uɹnʇ{0} lɐʇoʇ · {1}"
   },
   "zh-CN": {
     "agent.ask": "询问 — 危险操作前确认",
@@ -1902,7 +1912,12 @@ const translations: Record<string, Record<string, string>> = {
     "settings.agent.capability_default": "默认",
     "capability.axis.filesystem": "文件系统",
     "capability.axis.shell": "Shell 命令",
-    "capability.axis.network": "网络访问"
+    "capability.axis.network": "网络访问",
+    "settings.advanced.budget": "会话预算上限（美元）",
+    "settings.advanced.budget_desc": "累计聊天成本达到该金额时每个会话提醒一次，0 为关闭。",
+    "usage.budget_warning": "预算提醒：本会话成本已达 {0} / 上限 {1}。",
+    "chat.draft_restored": "已恢复上次未发送的内容。",
+    "usage.cost_line": "本轮 {0} · 累计 {1}"
   },
   "es": {
     "app.name": "Aether",

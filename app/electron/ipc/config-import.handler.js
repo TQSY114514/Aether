@@ -70,7 +70,10 @@ function parseOpenCodeConfig(content) {
   for (const [name, entry] of Object.entries(entries)) {
     if (!entry || typeof entry !== 'object') continue
     const api_format = mapNpmToFormat(entry.npm)
-    const base_url = (entry.baseURL || entry.baseUrl || '').trim() || defaultBaseUrl(api_format)
+    // baseURL may be any JSON value; only strings are trimmed, everything
+    // else falls through to the per-format default instead of throwing.
+    const rawUrl = entry.baseURL ?? entry.baseUrl
+    const base_url = (typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : defaultBaseUrl(api_format)
     const api_key = extractKey(entry)
     providers.push({ name, api_format, base_url, api_key })
     const modelEntries = (entry.models && typeof entry.models === 'object') ? entry.models : {}
