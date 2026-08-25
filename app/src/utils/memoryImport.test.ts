@@ -50,4 +50,27 @@ describe('parseMemoryImport', () => {
     const items = parseMemoryImport(JSON.stringify([{ content: 'a', junk: [1, 2], type: 'relation', other: null }]))
     expect(items).toEqual([{ content: 'a', type: 'relation' }])
   })
+
+  it('preserves a valid workspace so project memories keep their scope', () => {
+    const items = parseMemoryImport(JSON.stringify([
+      { content: 'arch note', type: 'project', workspace: 'D:/work/api-server' },
+    ]))
+    expect(items).toEqual([
+      { content: 'arch note', type: 'project', workspace: 'D:/work/api-server' },
+    ])
+  })
+
+  it('omits the workspace key for global memories instead of writing null', () => {
+    const items = parseMemoryImport(JSON.stringify([
+      { content: 'global note', type: 'fact', workspace: '' },
+      { content: 'also global', type: 'fact', workspace: 42 },
+      { content: 'no field', type: 'fact' },
+    ]))
+    expect(items).toEqual([
+      { content: 'global note', type: 'fact' },
+      { content: 'also global', type: 'fact' },
+      { content: 'no field', type: 'fact' },
+    ])
+    expect(Object.hasOwn(items[0], 'workspace')).toBe(false)
+  })
 })
