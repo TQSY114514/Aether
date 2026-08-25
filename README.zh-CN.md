@@ -185,6 +185,8 @@ node cli.js tui --smoke      # headless 状态机冒烟
 3. 点击 **Fetch models** 拉取可用模型列表。
 4. 回到聊天开始对话。
 
+> 从 Claude Code 或 OpenCode 迁移过来?首导向导可以直接导入既有提供商配置——见 [docs/migration-guide.md](./docs/migration-guide.md)。
+
 ### 启用 Ask 模式
 
 1. 打开 **设置 - Agent 与安全**。
@@ -270,7 +272,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 
 ### 隐私
 
-> **所有数据留在本地。** Aether 不收集、不上传任何关于你的信息。API 密钥、对话、人设都存储在本地 SQLite 数据库。唯一的出站网络请求只会发往你配置的 LLM 提供商。
+> **所有数据留在本地。** Aether 不收集、不上传任何关于你的信息。API 密钥、对话、人设都存储在本地 SQLite 数据库。唯一的出站网络请求只会发往你配置的 LLM 提供商。Agent 行为如何被约束:[docs/security-practices.md](./docs/security-practices.md)。
 
 ---
 
@@ -347,6 +349,8 @@ console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', 
 | **右键注册** | `app/resources/register-protocol.reg`(替换 `<AETHER_EXE>` 后管理员导入):`.cs/.js/.ts/.tsx/.md/.json` + 文件夹 → 右键"用 Aether 打开"。 |
 | **终端引导** | `app/resources/term/aether.ps1`(别名 + 启动 `aether tui`);`node app/cli.js --setup-term` 写入 Windows Terminal profile(深/浅两套配色)。 |
 | **沙箱强化** | Windows 路径防御:`\\?\` 长路径、UNC `\\server\share`、重解析点/junction 逃逸、`.lnk/.scr/.msi` 等危险扩展名。 |
+
+> 首次启动看到"Windows 已保护你的电脑"?那是 SmartScreen 对未签名二进制的正常反应——原因与一键放行方法见 [docs/smart-screen-faq.md](./docs/smart-screen-faq.md)。
 
 ---
 

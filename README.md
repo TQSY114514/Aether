@@ -189,6 +189,9 @@ node cli.js tui --smoke      # headless state-machine smoke
 3. Click **Fetch models** to pull the available model list.
 4. Go back to chat and start talking.
 
+> Coming from Claude Code or OpenCode? The first-run wizard can import your
+> existing provider config — see [docs/migration-guide.md](./docs/migration-guide.md).
+
 ### Enable Ask mode
 
 1. Open **Settings - Agent & Safety**.
@@ -274,7 +277,7 @@ node cli.js tui --smoke      # headless state-machine smoke
 
 ### Privacy
 
-> **All data stays local.** Aether collects nothing and uploads nothing about you. Your API keys, conversations, and personas live in a local SQLite database. The only outbound network requests go to the LLM providers you configure.
+> **All data stays local.** Aether collects nothing and uploads nothing about you. Your API keys, conversations, and personas live in a local SQLite database. The only outbound network requests go to the LLM providers you configure. How agent actions stay contained: [docs/security-practices.md](./docs/security-practices.md).
 
 ---
 
@@ -352,6 +355,8 @@ console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', 
 | **Context-menu registration** | `app/resources/register-protocol.reg` (replace `<AETHER_EXE>`, import as admin): `.cs/.js/.ts/.tsx/.md/.json` + folders → right-click "Open with Aether". |
 | **Terminal onboarding** | `app/resources/term/aether.ps1` (alias + launches `aether tui`); `node app/cli.js --setup-term` writes a Windows Terminal profile (dark/light palettes). |
 | **Sandbox hardening** | Windows path defenses: `\\?\` long paths, UNC `\\server\share`, reparse point/junction escapes, dangerous extensions (`.lnk/.scr/.msi`). |
+
+> Seeing "Windows protected your PC" on first launch? That is SmartScreen reacting to unsigned binaries — expected, explained, and one click to bypass: [docs/smart-screen-faq.md](./docs/smart-screen-faq.md).
 
 ---
 

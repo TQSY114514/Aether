@@ -111,6 +111,17 @@ export interface ArenaBenchmark {
   created_at: string
 }
 
+// Arena 2.0 leaderboard: real-traffic metrics per model (from usage_log).
+export interface ArenaModelMetrics {
+  model_id: number
+  model_name: string
+  provider_name: string
+  run_count: number
+  avg_latency_ms: number | null
+  total_cost_usd: number | null
+  success_rate: number | null
+}
+
 export interface RouteResult {
   model_id: number
   model_name: string
