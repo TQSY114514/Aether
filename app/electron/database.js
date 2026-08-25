@@ -817,9 +817,11 @@ function getMemoriesScoped(workspace) {
   if (!workspace) return getMemories()
   return db.prepare('SELECT * FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC').all(workspace)
 }
-function addMemory({ content, type }) {
+function addMemory({ content, type, source_session_id, workspace }) {
   // 手动添加与自动写入共用同一条去重入口（Hermes 式：重复在写入时拦截）。
-  return addMemoryWithProvenance(content, type, null, 'user')
+  // source_session_id / workspace 为可选透传：undo 重建与 JSON 导入需要把
+  // 原行的会话来源和工作区作用域带回来，否则项目记忆会静默降级为全局。
+  return addMemoryWithProvenance(content, type, source_session_id ?? null, 'user', null, workspace)
 }
 
 // 写入层查重：返回应 solidify 的已有行 id，无重复返回 null。

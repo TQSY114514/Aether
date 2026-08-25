@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { PROVIDER_PRESETS } from './providerPresets'
@@ -26,6 +26,25 @@ interface ImportResult {
   created: { providers: number; models: number }
   skipped: string[]
   errors: string[]
+}
+
+// Import diagnostics must survive step transitions: a zero-provider import
+// routes away from 'choice', so its "nothing found" hint (and any partial
+// error list) would otherwise never be seen.
+function importDiagnostics(result: ImportResult | null): ReactNode {
+  if (!result) return null
+  return (
+    <>
+      {result.created.providers === 0 && (
+        <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>{t('onboarding.import.none')}</p>
+      )}
+      {result.errors.length > 0 && (
+        <p className="text-[11px] mt-1" style={{ color: 'var(--error)' }}>
+          {result.errors.slice(0, 3).join('; ')}
+        </p>
+      )}
+    </>
+  )
 }
 
 export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
@@ -151,9 +170,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
                 <Download size={12} />
                 {importing ? t('onboarding.importing') : t('onboarding.import')}
               </button>
-              {importResult && importResult.created.providers === 0 && (
-                <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>{t('onboarding.import.none')}</p>
-              )}
+              {importDiagnostics(importResult)}
               {error && <p className="text-xs mt-2" style={{ color: 'var(--error)' }}>{error}</p>}
             </div>
             <div className="mt-5 flex justify-end">
@@ -191,6 +208,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
                 className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
             </div>
+            {importDiagnostics(importResult)}
           </div>
         )}
 
@@ -241,6 +259,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
                 {t('onboarding.import.imported', String(importResult.created.providers), String(importResult.created.models))}
               </p>
             )}
+            {importDiagnostics(importResult)}
             <div className="space-y-1.5">
               {MODES.map((m) => {
                 const isAsk = m.key === 'ask'

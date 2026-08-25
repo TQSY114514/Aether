@@ -25,18 +25,31 @@ export default function MemoryPage() {
   const [editContent, setEditContent] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   // Project Brain: 作用域过滤 —— all=全部 / global=非项目作用域记忆 /
-  // project=带 workspace 的项目记忆。客户端过滤(workspace 字段随行返回)。
+  // project=带 workspace 的项目记忆。列表已在服务端按当前 workspace 预限定
+  // （memory.list({workspace})），这里只做展示层二次过滤。
   const [scopeFilter, setScopeFilter] = useState<'all' | 'global' | 'project'>('all')
   const [conflicts, setConflicts] = useState<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>([])
   const [showConflicts, setShowConflicts] = useState(false)
   const [resolving, setResolving] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deleted, setDeleted] = useState<{ content: string; type: string; source_session_id: number | null } | null>(null)
+  const [deleted, setDeleted] = useState<{ content: string; type: string; source_session_id: number | null; workspace: string | null } | null>(null)
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { toast } = useUI()
 
+  // Active session's workspace (session.config `workspace`, falling back to
+  // the global agent_workspace_root). memory.list({workspace}) pre-scopes at
+  // the source so rows from *other* workspaces never reach this page —
+  // the all/global/project pills only shape what is already scoped.
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null)
+
   const loadEntries = async () => {
-    const memories = await window.electronAPI.memory.list()
+    let workspace: string | null = null
+    try {
+      const sessionId = useStore.getState().currentSessionId
+      if (sessionId) workspace = (await window.electronAPI.agent.getWorkspace(sessionId)) || null
+    } catch { /* no workspace context — fall back to global list */ }
+    setActiveWorkspace(workspace)
+    const memories = await window.electronAPI.memory.list(workspace ? { workspace } : undefined)
     setEntries(memories || [])
     const conf = await window.electronAPI.memory.conflicts()
     setConflicts(conf)
@@ -65,7 +78,9 @@ export default function MemoryPage() {
     const target = entries.find(e => e.id === id)
     await window.electronAPI.memory.delete(id)
     if (target) {
-      setDeleted({ content: target.content, type: target.type, source_session_id: target.source_session_id ?? null })
+      // Keep the workspace scope in the undo payload: recreating a project
+      // memory as global would silently change injection behavior.
+      setDeleted({ content: target.content, type: target.type, source_session_id: target.source_session_id ?? null, workspace: target.workspace ?? null })
       if (undoTimer.current) clearTimeout(undoTimer.current)
       undoTimer.current = setTimeout(() => setDeleted(null), 8000)
     }
@@ -79,6 +94,7 @@ export default function MemoryPage() {
         content: deleted.content,
         type: deleted.type,
         source_session_id: deleted.source_session_id ?? undefined,
+        workspace: deleted.workspace ?? undefined,
       })
       toast('已恢复删除的记忆')
     } catch { toast('恢复失败', { type: 'error' }) }
@@ -110,7 +126,7 @@ export default function MemoryPage() {
       try {
         const items = parseMemoryImport(await file.text())
         for (const item of items) {
-          await window.electronAPI.memory.create({ content: item.content, type: item.type })
+          await window.electronAPI.memory.create({ content: item.content, type: item.type, workspace: item.workspace ?? undefined })
         }
         loadEntries()
       } catch { toast('Invalid JSON file', { type: 'error' }) }
