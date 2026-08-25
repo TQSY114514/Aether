@@ -367,6 +367,7 @@ function initDatabase() {
     agent_checkpoint: getTableColumns('agent_checkpoint'),
     provider_credential: getTableColumns('provider_credential'),
     skill_patterns: getTableColumns('skill_patterns'),
+    memory: getTableColumns('memory'),
   }
   const addCol = (table, col, def) => {
     if (!cols[table].includes(col)) {
@@ -403,6 +404,12 @@ function initDatabase() {
   addCol('session', 'parent_session_id', 'INTEGER')
   addCol('session', 'status', "TEXT NOT NULL DEFAULT 'active'")
   addCol('provider_credential', 'disable_reason', 'TEXT')
+  // Project Brain: workspace 列 —— 项目级记忆(architecture/conventions/decisions)
+  // 的作用域。值来源：session.config JSON 字段 `workspace`
+  // (chat-send.handler.js: JSON.parse(session0.config)?.workspace)；全局兜底为
+  // settings 的 agent_workspace_root。NULL = 全局记忆(所有会话注入)；非 NULL =
+  // 仅注入到该 workspace 的会话。注入侧只对 type='project' 做作用域过滤。
+  addCol('memory', 'workspace', 'TEXT')
 
   // agent_task status CHECK 迁移：旧库 CHECK 只允许 5 态 (pending/running/
   // done/cancelled/error)，Phase 0 状态机扩为 7 态 (queued/plan/paused)。
@@ -800,6 +807,16 @@ function getMemories(limit) {
   const q = limit ? `LIMIT ${Math.max(1, Math.floor(limit))}` : ''
   return db.prepare(`SELECT * FROM memory ORDER BY created_at DESC ${q}`).all()
 }
+// Project Brain: workspace 作用域读取。workspace 来自 session.config JSON 的
+// `workspace` 字段(chat-send.handler.js: JSON.parse(session0.config)?.workspace；
+// 全局兜底 settings 的 agent_workspace_root)。返回全局行(workspace IS NULL)
+// + 当前 workspace 行，当前 workspace 行优先(ORDER BY (workspace IS NULL) ASC)，
+// 供 prefetch 的项目块与 memory:list 的 {workspace} 过滤使用。未传 workspace
+// 时回退全量 getMemories()(旧行为)。
+function getMemoriesScoped(workspace) {
+  if (!workspace) return getMemories()
+  return db.prepare('SELECT * FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC').all(workspace)
+}
 function addMemory({ content, type }) {
   // 手动添加与自动写入共用同一条去重入口（Hermes 式：重复在写入时拦截）。
   return addMemoryWithProvenance(content, type, null, 'user')
@@ -831,7 +848,7 @@ function findSolidifyTarget(content, type) {
   return null
 }
 
-function addMemoryWithProvenance(content, type, sourceSessionId, origin, relationMeta) {
+function addMemoryWithProvenance(content, type, sourceSessionId, origin, relationMeta, workspace) {
   const t = String(type || 'fact')
   const c = String(content || '').trim()
   if (!c) return { lastInsertRowid: null }
@@ -845,13 +862,14 @@ function addMemoryWithProvenance(content, type, sourceSessionId, origin, relatio
     return { lastInsertRowid: Number(dupId), duplicate: true }
   }
   // relation 条目带关系三元组字段；其余类型走通用插入。两条路径都写
-  // content_norm，保证启动合并和精确查重对全类型生效。
+  // content_norm，保证启动合并和精确查重对全类型生效。workspace 为可选
+  // 第 6 参：未传(undefined/null)时落 NULL = 全局记忆，旧行为不变。
   let info
   if (t === 'relation' && relationMeta) {
-    info = db.prepare('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, ?, ?, ?, 1.0, ?, ?)')
-      .run(c, t, relationMeta.entity1 || null, relationMeta.relation || null, relationMeta.entity2 || null, sourceSessionId, origin || 'user', memNormalize(c))
+    info = db.prepare('INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, confidence, origin, content_norm, workspace) VALUES (?, ?, ?, ?, ?, ?, 1.0, ?, ?, ?)')
+      .run(c, t, relationMeta.entity1 || null, relationMeta.relation || null, relationMeta.entity2 || null, sourceSessionId, origin || 'user', memNormalize(c), workspace || null)
   } else {
-    info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm) VALUES (?, ?, ?, 1.0, ?, ?)').run(c, t, sourceSessionId, origin || 'user', memNormalize(c))
+    info = db.prepare('INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm, workspace) VALUES (?, ?, ?, 1.0, ?, ?, ?)').run(c, t, sourceSessionId, origin || 'user', memNormalize(c), workspace || null)
   }
   try { db.prepare('INSERT INTO memories_fts (content, type, memory_id) VALUES (?, ?, ?)').run(c, t, Number(info.lastInsertRowid)) } catch {}
   return { lastInsertRowid: Number(info.lastInsertRowid), duplicate: false }
@@ -1255,7 +1273,7 @@ module.exports = {
 listArenaBenchmarks, saveArenaBenchmark, deleteArenaBenchmark, updateArenaBenchmarkResults,
 saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,
-  getMemories, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess, mergeDuplicateMemories,
+  getMemories, getMemoriesScoped, addMemory, addMemoryWithProvenance, addMemoriesBatch, updateMemory, deleteMemory, incrementMemoryAccess, mergeDuplicateMemories,
   getCompactionState, saveCompactionState, deleteCompactionState,
   getMemoryConflicts, resolveMemoryConflict,
   recordSkillResult, getSkillStats,

@@ -4,7 +4,7 @@ import type { AppState } from "./types"
 import { decodeDataUrlText } from "./types"
 import { t } from "@/utils/i18n"
 import log from "@/utils/logger"
-import { ensureChunkListener, ensureToolCallListener, ensureLoopStateListener, setStoppingSessionId } from "./listeners"
+import { ensureChunkListener, ensureToolCallListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
 
 const _injectedMsgIds = new Set<number>()
 const _undoStack: { sessionId: number; messages: Message[] }[] = []
@@ -131,6 +131,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     ensureChunkListener()
     ensureToolCallListener()
     ensureLoopStateListener()
+    ensureUsageListener()
+    get().resetTurnUsage(currentSessionId)
 
     try {
       const result = await window.electronAPI.chat.send({
@@ -147,6 +149,11 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         systemPrefix,
         })
       if (result?.modelSuggestion) set({ modelSuggestion: result.modelSuggestion })
+      // Non-tool turns report usage in the chat.send result; fold it into the
+      // same accumulator (tool turns arrive via chat:usage events instead).
+      if (result?.usage && result.messageId) {
+        get().recordReturnUsage(currentSessionId, result.messageId, result.usage)
+      }
     } catch (err) {
       log.error("[Aether] chat.send FAILED:", err)
       set(clearStreaming(currentSessionId))

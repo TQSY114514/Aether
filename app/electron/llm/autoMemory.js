@@ -55,7 +55,11 @@ let _memV = 0
 // 项目块置顶; 关键词记忆仍按需合并(_prefetchKeywords); 无关键词时仅注入项目块。
 // H5: origin='external' 的记忆不进入任何可信块(project/keyword), 改由
 // _untrustedBlock 降权注入 —— 末尾、限量、<untrusted_memory> 包裹。
-function prefetch(db, userMessage) {
+// Project Brain: 可选第 3 参 workspace —— 来自 session.config JSON 的
+// `workspace` 字段(chat-send.handler.js: JSON.parse(session0.config)?.workspace；
+// 全局兜底 agent_workspace_root)。传入时项目块只取全局行(workspace IS NULL)
+// + 当前 workspace 行，当前 workspace 行优先；未传时回退旧行为(全量 project)。
+function prefetch(db, userMessage, workspace) {
   const memories = _memCache && _memCache.v === _memV ? _memCache.data : (() => {
     let m
     try { m = db.getMemories(200) } catch { return [] }
@@ -68,7 +72,15 @@ function prefetch(db, userMessage) {
   const external = memories.filter(m => m.origin === 'external')
 
   let out = ''
-  const projectMem = trusted.filter(m => m.type === 'project')
+  // Project Brain: workspace 作用域的项目记忆。getMemoriesScoped 的 SQL 已按
+  // (workspace IS NULL OR workspace=?) 过滤并让当前 workspace 行优先，这里再
+  // 按 type='project' + 可信来源收窄 —— 其他 workspace 的项目记忆不注入。
+  let projectMem
+  if (workspace) {
+    try { projectMem = db.getMemoriesScoped(workspace).filter(m => m.type === 'project' && m.origin !== 'external') } catch { projectMem = [] }
+  } else {
+    projectMem = trusted.filter(m => m.type === 'project')
+  }
   if (projectMem.length > 0) {
     const projLines = projectMem.slice(0, 5).map(m => {
       try { db.incrementMemoryAccess(m.id) } catch {}
@@ -215,9 +227,9 @@ let _syncTimer = null
 let _syncPromise = null
 let _pendingSyncArgs = null // the most recent args; used when timer fires
 
-async function sync({ db, provider, model, userMessage, assistantReply, signal, sessionId }) {
+async function sync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace }) {
   // Always keep the latest args; the debounced call picks them up when it fires.
-  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal, sessionId }
+  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal, sessionId, workspace }
 
   if (_syncTimer) clearTimeout(_syncTimer)
   _syncTimer = setTimeout(() => {
@@ -250,7 +262,7 @@ function _usedExternalTools(db, sessionId) {
   } catch { return false }
 }
 
-async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId }) {
+async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace }) {
   try {
     // H5: 本轮消费过 external 工具结果 → 跳过本次入库，防止被污染的外部
     // 内容经提取持久化、再在后续会话中回注（跨会话持久注入）。
@@ -331,13 +343,13 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         // 去重。此前用裸 INSERT，content_norm 为 NULL —— 500 行 recent 窗口
         // 淘汰后启动合并救不了它，重复 relation 会无限累积。
         try {
-          db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 })
+          db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 }, workspace)
         } catch {}
       } else {
         // H5: origin 落库 —— 自动提取自会话的记忆标记为 'assistant'，
         // 与 user（手动创建）/ external（外部内容来源）/ review 区分。
         try {
-          const info = db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant')
+          const info = db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant', null, workspace)
           // 数据层写入层去重命中时（duplicate=true）已 solidify 既有行：
           // 不改写 origin（保住原始来源），也不标冲突（重新观察到同一事实
           // 不是冲突）。仅真正新插入的行才做 origin 落库与冲突连线。

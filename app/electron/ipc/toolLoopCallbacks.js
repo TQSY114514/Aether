@@ -59,9 +59,10 @@ function createAllowRulesStore() {
  * @param {string}       opts.source           'chat' | 'task'
  * @param {object}       opts.allowRules       createAllowRulesStore() instance
  * @param {boolean}      opts.thinkingSupported gates onThinkingStart/End
+ * @param {object}       [opts.model]          resolved model (for price columns)
  * @returns {object} callbacks bag — spread directly into runToolLoop options
  */
-function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller, source, allowRules, thinkingSupported }) {
+function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller, source, allowRules, thinkingSupported, model }) {
   // Wrap every outgoing send in try/catch so a dead renderer never throws.
   const safeSend = (c, p) => { try { send(c, p) } catch {} }
 
@@ -90,6 +91,21 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
 
   callbacks.onTodoUpdate = (todos) =>
     safeSend('chat:todo-update', { messageId: msgId, sessionId, todos })
+
+  // Live token/cost reporting: toolLoop calls onUsage({input, output}) after
+  // each model round with the loop-accumulated totals. Compute the USD cost
+  // from the resolved model's price columns (0 when unpriced) and emit a
+  // chat:usage event so the renderer can show per-turn + cumulative cost live.
+  callbacks.onUsage = (usage) => {
+    const inputTokens = Number(usage?.input) || 0
+    const outputTokens = Number(usage?.output) || 0
+    let costUsd = 0
+    try {
+      const { computeCost } = require('../utils/cost')
+      costUsd = computeCost(model, { prompt_tokens: inputTokens, completion_tokens: outputTokens })
+    } catch {}
+    safeSend('chat:usage', { sessionId, messageId: msgId, inputTokens, outputTokens, costUsd })
+  }
 
   // Stream tool output (run_command stdout, etc.) in real-time.
   callbacks.onStream = (chunk) => {
