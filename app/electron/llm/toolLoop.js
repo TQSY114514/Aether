@@ -207,6 +207,18 @@ class IterationBudget extends IterationBudgetBase {
   refund() { if (this._used > 0) { this._used-- } }
   get used() { return this._used }
   get remaining() { return Math.max(0, this.maxTotal - this._used) }
+  // 缩围重试（roadmap P0-1）：迭代维度一次性追加额度并解除基类闩锁。
+  // 只处理 iterations —— tokens/time/errors 属资源超限，延期不安全。
+  extendIterations(extra) {
+    const n = Math.max(0, Math.floor(Number(extra) || 0))
+    if (n <= 0) return false
+    this.maxTotal += n
+    if (this.maxIterations > 0) this.maxIterations += n
+    this._exhausted = false
+    this._exhaustedReason = null
+    this._warnings.iterations = false
+    return true
+  }
 }
 
 // Phase 4: Map agent mode strings to PermissionMode enum values.
@@ -266,12 +278,20 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // （getMergedTool 不拦截）, 路由只控制"出现在 payload 里"——失败 ≠ 任务失败。
   // plan 模式: 路由在只读过滤之后应用（toolsPayload 已按 mode 过滤）。
   let routedPayload = toolPayload
+  // 阶段感知路由状态（'agent.toolRouter.staged' 开启时每轮重估，只加不减）
+  const stageState = { enabled: false, seenCategories: [], allNames: [], safeNames: null, fullPayload: null }
   const convo0 = messages || []
   const userText = convo0
     .filter(m => m.role === 'user' && typeof m.content === 'string')
     .map(m => m.content)
     .join('\n')
   if (tools && toolPayload.length) {
+    // 阶段路由与基础路由相互独立: 无论基础路由开关如何, 先无条件填充全量
+    // 工具清单, 保证单独开启 'agent.toolRouter.staged' 时也能基于完整集合
+    // 做阶段重估（CodeRabbit #48 复审意见）。
+    stageState.allNames = toolPayload.map(p => p.function.name)
+    stageState.safeNames = new Set(stageState.allNames) // plan 已过滤
+    stageState.fullPayload = toolPayload
     try {
       const flag = db && typeof db.getSetting === 'function'
         ? db.getSetting('feature_flag.agent.toolRouter')
@@ -283,8 +303,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           const want = routeTools({
             mode: agentMode === 'plan' ? 'plan' : undefined,
             prompt: userText,
-            allToolNames: toolPayload.map(p => p.function.name),
-            safeNames: new Set(toolPayload.map(p => p.function.name)), // plan 已过滤
+            allToolNames: stageState.allNames,
+            safeNames: stageState.safeNames, // plan 已过滤
           })
           if (want.size > 0 && want.size < toolPayload.length) {
             routedPayload = toolPayload.filter(p => want.has(p.function.name))
@@ -292,6 +312,12 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           }
         }
       }
+      // 阶段路由开关独立于基础路由（默认关，保守上线）。
+      try {
+        if (tools && toolPayload.length && db) {
+          stageState.enabled = require('../featureFlags').isEnabled(db, 'agent.toolRouter.staged') === true
+        }
+      } catch {}
     } catch {}
   }
 
@@ -444,6 +470,32 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // the model gets a chance to fix errors without looping forever.
   let repairRounds = 0
 
+  // 自动缩围重试（'agent.shrinkRetry'，默认关）：任务中途撞上迭代预算或循环
+  // 守卫时不再直接终止——清空各循环检测状态、注入一条"缩小范围"指令，只求
+  // 一个能干净完成的最小增量，并追加少量轮数让收尾真正发生。单发闩锁：
+  // 整个运行至多触发一次，避免把死循环变成无限续命。
+  let shrinkUsed = false
+  let shrinkEnabled = false
+  try { shrinkEnabled = !!(db && require('../featureFlags').isEnabled(db, 'agent.shrinkRetry')) } catch {}
+  const SHRINK_EXTRA_ITERATIONS = 4
+  const tryShrinkRetry = (reasonText) => {
+    if (shrinkUsed || !shrinkEnabled) return false
+    // 外部预算可能是没有 extendIterations 的基类实例——先验证可扩展,
+    // 全部状态变更放在验证之后, 失败路径不留半套改动（CodeRabbit #48 R3）。
+    if (typeof budget.extendIterations !== 'function') return false
+    let extended = false
+    try { extended = budget.extendIterations(SHRINK_EXTRA_ITERATIONS) === true } catch { extended = false }
+    if (!extended) return false
+    shrinkUsed = true
+    lastSig = ''
+    sigRepeat = 0
+    try { semanticLoopDetector.reset() } catch {}
+    loopGuard.history.length = 0
+    convo.push({ role: 'system', content: '[scope reduction] You hit a limit mid-task. Do NOT try to finish everything. Pick the smallest useful increment you can complete cleanly with the remaining rounds, execute it, then clearly summarize: what is done, what remains.' })
+    try { onStatus?.({ kind: 'shrink_retry', text: `♻️ ${reasonText}——自动缩围：聚焦最小可完成增量，追加 ${SHRINK_EXTRA_ITERATIONS} 轮` }) } catch {}
+    return true
+  }
+
   // Evidence-based verification (Codex-inspired): uses test results and git diffs
   // as external evidence instead of LLM self-assessment alone.
   // Auto-commit is NO LONGER part of verification — it is decoupled and runs
@@ -526,10 +578,20 @@ Reply in this format:
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
-  while (budget.consume()) {
-    // Phase 4: Multi-dimensional budget check (iterations, tokens, time, errors).
+  while (true) {
+    // consume() 返回 false = 迭代预算在上一轮用尽。缩围重试在此与下方
+    // exhausted 检查两条出口都有机会续期（CodeRabbit #48 复审意见）;
+    // tryShrinkRetry 单发闩锁保证最多追加一次, 不会无限循环。
+    if (!budget.consume()) {
+      const _st0 = budget.exhausted()
+      if (!(_st0.exhausted && _st0.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) break
+    }
+    // 预算检查: 仅 iterations 耗尽且缩围可用时放行本轮——直接落到本轮 body,
+    // 不再 continue(那会先 consume 掉刚追加的额度, 实际只多跑 3 轮; 落地
+    // 才是承诺的 +4 执行轮, CodeRabbit #48 复审 R2)。其余维度或缩围不可用:
+    // 照旧上报并终止。
     const budgetStatus = budget.exhausted()
-    if (budgetStatus.exhausted) {
+    if (budgetStatus.exhausted && !(budgetStatus.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) {
       try { onStatus?.({ kind: 'budget_exhausted', text: `预算耗尽: ${budgetStatus.reason}` }) } catch {}
       break
     }
@@ -552,6 +614,41 @@ Reply in this format:
       try { onStatus?.({ text: '📥 已插入你的新消息', kind: 'injection' }) } catch {}
     }
     const opts = { ...options }
+    // 阶段感知路由（'agent.toolRouter.staged'）：每轮按最近 8 条审计记录重估
+    // 任务阶段（verify>build>deliver>explore），新阶段带来的工具类别只加不减，
+    // 重路由仍受 plan 只读过滤与 routeTools 兑底约束。
+    if (stageState.enabled && routedPayload.length && auditTrail.length) {
+      try {
+        const recentWindow = auditTrail.slice(-8)
+        const { routeTools: rt, inferStage: inferStageFn, _stageCategories: stageCats } = require('./toolRouter')
+        const stage = inferStageFn({
+          depth,
+          recentToolCalls: recentWindow.map(e => e.name),
+          recentErrorKinds: recentWindow.filter(e => e.error).map(e => e.failure_kind),
+        })
+        if (stage) {
+          let grew = false
+          for (const c of (stageCats[stage] || [])) {
+            if (!stageState.seenCategories.includes(c)) { stageState.seenCategories.push(c); grew = true }
+          }
+          if (grew) {
+            const want = rt({
+              mode: agentMode === 'plan' ? 'plan' : undefined,
+              prompt: userText,
+              allToolNames: stageState.allNames,
+              safeNames: stageState.safeNames,
+              extraCategories: stageState.seenCategories,
+            })
+            // want 涨满(覆盖全部工具)时也要重建 payload——否则基础路由先前
+            // 砍掉的类别永远回不来（CodeRabbit #48 复审 R2）。
+            if (want.size > 0) {
+              routedPayload = stageState.fullPayload.filter(p => want.has(p.function.name))
+              try { onStatus?.({ kind: 'tool_router', text: `阶段路由[${stage}]: 注入 ${routedPayload.length}/${stageState.allNames.length} 个工具` }) } catch {}
+            }
+          }
+        }
+      } catch {}
+    }
     // Tool Router: 用路由后的 payload（未路由时 routedPayload === toolPayload）
     if (routedPayload.length) { opts.tools = routedPayload; opts.tool_choice = 'auto' }
     if (planToolsPayload.length) { opts.tools = [...routedPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
@@ -607,9 +704,16 @@ Reply in this format:
       const roundSig = msg.tool_calls.map(tc => (tc.function||{}).name + ':' + (tc.function||{}).arguments).join('||')
       if (roundSig === lastSig) { sigRepeat++ } else { lastSig = roundSig; sigRepeat = 1 }
       if (sigRepeat >= LOOP_REPEAT_LIMIT) {
-        if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected', planId: plan?.id }) } catch {}
-        try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
-        return '（检测到工具调用循环，已停止）'
+        // 弹掉刚 push 的 assistant(tool_calls)：缩围后的下一轮请求若带着重复
+        // tool_calls 而无对应 tool 结果，部分 provider 会直接报错。pop 必须在
+        // tryShrinkRetry 之前——缩围注入的是 system 消息，不能被弹掉。
+        convo.pop()
+        if (!tryShrinkRetry('重复工具调用循环')) {
+          if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected', planId: plan?.id }) } catch {}
+          try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
+          return '（检测到工具调用循环，已停止）'
+        }
+        continue
       }
 
       // Semantic loop detection (OpenClaw-inspired): detects repeated reasoning patterns,
@@ -624,8 +728,12 @@ Reply in this format:
         } catch {}
       }
       if (semanticResult.action === 'break') {
-        if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'semantic_loop', planId: plan?.id }) } catch {}
-        return '（检测到语义循环，已停止）'
+        convo.pop()
+        if (!tryShrinkRetry('语义循环')) {
+          if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'semantic_loop', planId: plan?.id }) } catch {}
+          return '（检测到语义循环，已停止）'
+        }
+        continue
       }
 
       // Execute the round's tool calls. Dynamic concurrency: read-only tools
@@ -857,6 +965,7 @@ Reply in this format:
       // tools get higher parallelism.
       const maxConcurrent = getMaxConcurrent(msg.tool_calls)
       let allExecuted = []
+      let guardBlockFinal = false
       if (maxConcurrent === 1) {
         // Sequential execution — one tool at a time.
         for (const tc of msg.tool_calls) {
@@ -879,8 +988,10 @@ Reply in this format:
           try { onToolCall?.(entry) } catch {}
           // Event stream: tool end
           eventStream.toolEnd({ sessionId, name: entry.name, args: entry.args, result: entry.result, error: entry.error, latencyMs: entry.latencyMs, depth })
-          // Audit log: record each tool call.
-          if (onAudit && !isPlan) {
+          // Audit trail: 记录所有非 plan 工具调用——阶段感知路由从这条轨迹
+          // 推断阶段, 无外部审计者(onAudit 未接)时也不能饿死;
+          // onAudit 只负责外部持久化（CodeRabbit #48 复审意见）。
+          if (!isPlan) {
             auditTrail.push({ name: entry.name, args: entry.args, result: entry.result, error: entry.error, failure_kind: entry.failure_kind, recovery_hint: entry.recovery_hint, latencyMs: entry.latencyMs, depth })
           }
         }
@@ -921,18 +1032,9 @@ Reply in this format:
             loopGuard.record({ toolName: entry.name, argsHash: aHash, resultHash: rHash })
             const verdict = loopGuard.evaluate()
             if (verdict.action === 'block') {
-              // 与正常/预算退出同款收尾（eventStream.agentEnd + steering 复位
-              // + toolMetrics），否则 UI 停在 running 态、本次运行无指标。
-              eventStream.agentEnd({ sessionId, finalStatus: 'loop_detected_no_progress', totalIterations: budget.used })
-              steering.setRunning(sessionId, false)
-              try {
-                toolMetrics.updateRun(metricsRunId, {
-                  iterations: budget.used, durationMs: Date.now() - loopStart,
-                  inputTokens: budget.tokens || 0, errorKind: 'loop_detected_no_progress',
-                })
-              } catch {}
-              if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected_no_progress', planId: plan?.id }) } catch {}
-              return '（检测到工具调用无进展循环，已停止）'
+              // 只记下阻塞、让本轮剩余工具先执行完，循环结束后统一处理：
+              // 直接 return 会留下没有 tool 结果的悬空 tool_calls。
+              guardBlockFinal = true
             }
             if (verdict.action === 'warn' && loopWarnedKey !== aHash + ':' + rHash) {
               loopWarnedKey = aHash + ':' + rHash
@@ -943,6 +1045,24 @@ Reply in this format:
         }
         totalChars += rawContent.length
         convo.push({ role: 'tool', tool_call_id: tc.id, content: rawContent })
+      }
+
+      // loopGuard 阻塞的统一处理点（本轮工具已全部落账，convo 完整）：
+      // 先试缩围重试；不行才走与正常/预算退出同款的收尾再返回。
+      if (guardBlockFinal) {
+        if (!tryShrinkRetry('工具调用无进展循环')) {
+          eventStream.agentEnd({ sessionId, finalStatus: 'loop_detected_no_progress', totalIterations: budget.used })
+          steering.setRunning(sessionId, false)
+          try {
+            toolMetrics.updateRun(metricsRunId, {
+              iterations: budget.used, durationMs: Date.now() - loopStart,
+              inputTokens: budget.tokens || 0, errorKind: 'loop_detected_no_progress',
+            })
+          } catch {}
+          if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected_no_progress', planId: plan?.id }) } catch {}
+          return '（检测到工具调用无进展循环，已停止）'
+        }
+        continue
       }
 
       // Lint/test auto-repair (Task 2.3): if this round touched files, run the

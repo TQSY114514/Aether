@@ -62,6 +62,55 @@ const KNOWN_TOOLS = new Set([
   ...Object.values(CATEGORY_TOOLS).flat(),
 ])
 
+// ─── 阶段感知路由（roadmap P0-1 第二步）─────────────────────────────────────
+// 关键词路由只看用户消息，任务推进到新阶段（动手改代码 / 验证修复 / 收尾提交）
+// 时不会自动补齐该阶段需要的工具。这里基于循环内的客观信号推断阶段，向既有
+// 路由结果「只做加法」地追加类别 —— 绝不裁掉关键词路由已注入的工具。
+// feature flag 'agent.toolRouter.staged' 门控（默认关，保守上线）。
+
+// 写入信号：窗口内出现即视为进入 build 阶段。run_command 不算 —— 它既可能
+// 是构建也可能是跑测试，交给错误分类（test_failure）去判定 verify。
+const BUILD_SIGNAL_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch', 'delete_file'])
+
+// 交付信号：git 类工具被使用过。
+const GIT_SIGNAL_TOOLS = new Set([
+  'git_status', 'git_diff', 'git_log', 'git_commit', 'git_push', 'git_create_branch',
+])
+
+// 阶段 → 追加的类别。explore 不追加（CORE 已覆盖检索需求）。
+const STAGE_CATEGORIES = {
+  explore: [],
+  build: ['lsp'],            // 动手改代码：定义/引用/重命名辅助
+  verify: ['lsp', 'agent'],  // 验证修复：diagnostics + test_first/debug_loop/review_code
+  deliver: ['git'],          // 收尾：提交/分支/推送
+}
+
+/**
+ * 从循环内信号推断当前任务阶段。
+ * @param {object} [opts]
+ * @param {number} [opts.depth]          当前迭代深度（budget.used）
+ * @param {string[]} [opts.recentToolCalls] 最近若干轮执行过的工具名（含失败）
+ * @param {string[]} [opts.recentErrorKinds] 最近工具错误的 failure_kind 列表
+ * @returns {'explore'|'build'|'verify'|'deliver'|null}
+ *   null = 信号不足，调用方不应追加任何类别
+ *
+ * 优先级 verify > build > deliver > explore：
+ *   - 窗口内有 test_failure 错误或 lsp_diagnostics 调用 → verify（修到绿为止）
+ *   - 否则有写入类工具 → build
+ *   - 否则有 git 工具 → deliver
+ *   - 否则早期轮次 → explore；深度未知且无信号 → null（保守不追加）
+ */
+function inferStage({ depth, recentToolCalls, recentErrorKinds } = {}) {
+  const calls = Array.isArray(recentToolCalls) ? recentToolCalls : []
+  const errs = Array.isArray(recentErrorKinds) ? recentErrorKinds : []
+
+  if (errs.includes('test_failure') || calls.includes('lsp_diagnostics')) return 'verify'
+  if (calls.some(n => BUILD_SIGNAL_TOOLS.has(n))) return 'build'
+  if (calls.some(n => GIT_SIGNAL_TOOLS.has(n))) return 'deliver'
+  if (typeof depth === 'number' && depth > 0 && depth <= 2) return 'explore'
+  return null
+}
+
 /**
  * 路由: 给定 mode 与 prompt, 返回应注入的工具名集合。
  * @param {object} opts
@@ -70,9 +119,11 @@ const KNOWN_TOOLS = new Set([
  * @param {string[]} [opts.allToolNames] 全部可用工具名(含 MCP)
  * @param {Set<string>} [opts.safeNames] plan 模式下允许的只读工具名(必填 ——
  *   plan 模式缺失时拒绝路由返回空集, 绝不在只读边界未知时放行任何工具)
+ * @param {string[]} [opts.extraCategories] 额外注入的类别（阶段路由追加用,
+ *   与关键词命中的类别取并集; plan 模式同样受只读过滤）
  * @returns {Set<string>} 应注入的工具名
  */
-function routeTools({ mode, prompt, allToolNames, safeNames }) {
+function routeTools({ mode, prompt, allToolNames, safeNames, extraCategories }) {
   const names = allToolNames || []
   const want = new Set()
   const plan = mode === 'plan'
@@ -102,6 +153,15 @@ function routeTools({ mode, prompt, allToolNames, safeNames }) {
     }
   }
 
+  // 2.5 阶段追加类别（与关键词命中取并集; 同样受只读过滤）。未知类别忽略。
+  for (const category of Array.isArray(extraCategories) ? extraCategories : []) {
+    for (const t of CATEGORY_TOOLS[category] || []) {
+      if (!names.includes(t)) continue
+      if (plan && !safeNames.has(t)) continue
+      want.add(t)
+    }
+  }
+
   // 3. 保守兜底: 不在 KNOWN_TOOLS 里的工具恒注入（plan 模式仍受只读过滤,
   //    未知名单同样无法绕过 —— 见第 0 条守卫）。
   for (const n of names) {
@@ -120,4 +180,10 @@ function routerEnabled(flagEnabled) {
   return flagEnabled !== false
 }
 
-module.exports = { routeTools, routerEnabled, _categories: CATEGORY_TOOLS }
+module.exports = {
+  routeTools,
+  routerEnabled,
+  inferStage,
+  _categories: CATEGORY_TOOLS,
+  _stageCategories: STAGE_CATEGORIES,
+}
