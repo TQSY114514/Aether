@@ -126,7 +126,7 @@ export default function MemoryPage() {
       try {
         const items = parseMemoryImport(await file.text())
         for (const item of items) {
-          await window.electronAPI.memory.create({ content: item.content, type: item.type, workspace: item.workspace ?? undefined })
+          await window.electronAPI.memory.create({ content: item.content, type: item.type, workspace: item.workspace ?? null })
         }
         loadEntries()
       } catch { toast('Invalid JSON file', { type: 'error' }) }
