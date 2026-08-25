@@ -166,7 +166,10 @@ async function runInDocker(cmd, timeoutMs, db) {
 
     const raw = `${st.stdoutTail || ''}\n${st.stderrTail || ''}`
     const idx = raw.lastIndexOf(DOCKER_EXIT_MARKER)
-    let exitCode = st.state === 'exited' ? 0 : undefined
+    // Exit code priority: in-band marker (command ran to completion) →
+    // the container's real .State.ExitCode from docker inspect. Never default
+    // an exited container to 0 — a failed entrypoint or a kill must surface.
+    let exitCode = typeof st.exitCode === 'number' ? st.exitCode : undefined
     let combined = raw
     if (idx !== -1) {
       const parsed = parseInt(raw.slice(idx + DOCKER_EXIT_MARKER.length).trim(), 10)

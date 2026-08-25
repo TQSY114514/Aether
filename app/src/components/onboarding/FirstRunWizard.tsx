@@ -125,8 +125,8 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{t('onboarding.title')}</h2>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t('onboarding.subtitle')}</p>
           </div>
-          <button onClick={finish} aria-label={t('onboarding.skip')} title={t('onboarding.skip')}
-            className="p-1 rounded hover:bg-[var(--bg-secondary)] transition-colors">
+          <button onClick={finish} disabled={importing} aria-label={t('onboarding.skip')} title={t('onboarding.skip')}
+            className="p-1 rounded hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50">
             <X size={14} className="text-gray-400" />
           </button>
         </div>
@@ -136,8 +136,8 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
             <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{t('onboarding.choice.title')}</div>
             <div className="grid grid-cols-2 gap-2">
               {CHOICES.map((c) => (
-                <button key={c.key} onClick={() => handleChoice(c.key)}
-                  className="text-left px-3 py-3 rounded-lg border transition-colors hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+                <button key={c.key} onClick={() => handleChoice(c.key)} disabled={importing}
+                  className="text-left px-3 py-3 rounded-lg border transition-colors motion-reduce:transition-none hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ borderColor: 'var(--border)', outlineColor: 'var(--accent)' }}>
                   <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t(`onboarding.choice.${c.key}`)}</div>
                   <div className="text-[11px] mt-1 leading-snug" style={{ color: 'var(--text-muted)' }}>{t(`onboarding.choice.${c.key}.desc`)}</div>
@@ -157,8 +157,8 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
               {error && <p className="text-xs mt-2" style={{ color: 'var(--error)' }}>{error}</p>}
             </div>
             <div className="mt-5 flex justify-end">
-              <button onClick={finish}
-                className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+              <button onClick={finish} disabled={importing}
+                className="px-3 py-1.5 text-xs rounded-lg border transition-colors motion-reduce:transition-none disabled:opacity-50"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
             </div>
           </div>

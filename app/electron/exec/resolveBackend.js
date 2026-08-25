@@ -2,9 +2,12 @@
 // resolveBackend.js — pick an execution backend id for an agent mode.
 //
 // Safety-first defaults:
-//   - An explicit configured backend always wins (unknown ids fall back at the
-//     dispatch layer, never crash).
-//   - Yolo ALWAYS runs local: the user explicitly accepted raw-host risk.
+//   - Yolo ALWAYS runs local, even when a global exec.backend is configured:
+//     a hermetic no-network container would silently break its full-access
+//     contract (host network/filesystem). Configured backends apply to the
+//     other modes only.
+//   - An explicit configured backend wins for every non-yolo mode (unknown
+//     ids fall back at the dispatch layer, never crash).
 //   - Plan/Ask run local: they are per-command gated anyway.
 //   - Auto/Auto-confirm may use the Docker sandbox only when BOTH the
 //     conservative flag (exec.docker.defaultForAuto, default OFF) and a live
@@ -15,11 +18,14 @@
 const featureFlags = require('../featureFlags')
 
 async function resolveBackendForMode(agentMode, opts = {}) {
+  const mode = String(agentMode || '')
+  // Checked before `configured`: YOLO must stay on the host even if
+  // exec.backend is set to docker globally (CodeRabbit R2 finding).
+  if (mode === 'yolo') return 'local'
+
   const configured = typeof opts.configured === 'string' ? opts.configured.trim() : ''
   if (configured) return configured
 
-  const mode = String(agentMode || '')
-  if (mode === 'yolo') return 'local'
   if (mode !== 'auto' && mode !== 'auto_confirm') return 'local'
 
   let flagOn = false

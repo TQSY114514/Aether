@@ -30,9 +30,9 @@ function makeDb(flagValue) {
 }
 
 describe('resolveBackendForMode decision table', () => {
-  it('explicit configured backend always wins (even over yolo)', async () => {
+  it('yolo ignores a configured backend and stays local (full-access contract)', async () => {
     const id = await resolveBackendForMode('yolo', { configured: 'ssh', db: makeDb(true), dockerAvailable: false })
-    expect(id).toBe('ssh')
+    expect(id).toBe('local')
   })
 
   it('trims whitespace around the configured backend', async () => {
