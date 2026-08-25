@@ -191,8 +191,8 @@ interface Window {
       onEntry: (callback: (entry: { level: string; time: string; msg: string }) => void) => () => void
     }
     memory: {
-      list: () => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string }[]>
-      create: (data: { content: string; type?: string; source_session_id?: number | null }) => Promise<{ lastInsertRowid: number }>
+      list: (opts?: { workspace?: string }) => Promise<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string; workspace?: string | null }[]>
+      create: (data: { content: string; type?: string; source_session_id?: number | null; workspace?: string | null }) => Promise<{ lastInsertRowid: number }>
       update: (id: number, data: { content: string }) => Promise<void>
       delete: (id: number) => Promise<void>
       conflicts: () => Promise<{ memoryId: number; content: string; conflictingId: number; conflictingContent: string }[]>

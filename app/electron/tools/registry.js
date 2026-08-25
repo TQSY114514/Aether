@@ -123,6 +123,9 @@ function formatShellResult(stdout, stderr, exitCode, timedOut) {
 }
 
 const DOCKER_EXIT_MARKER = 'AETHER_EXIT_CODE:'
+// Sentinel for "our time budget ran out" — distinct from backend errors so
+// races between backend calls and the deadline resolve unambiguously.
+const DOCKER_DEADLINE_LOST = { __deadlineLost: true }
 
 // Run a command inside an ephemeral no-network container (docker backend).
 // Wraps the command so the container's real exit code survives `sh -lc`,
@@ -131,16 +134,30 @@ const DOCKER_EXIT_MARKER = 'AETHER_EXIT_CODE:'
 async function runInDocker(cmd, timeoutMs, db) {
   let image = 'node:22-alpine'
   try { image = String(db?.getSetting('exec.docker.image') || image) } catch { /* keep default image */ }
-  let started
-  try {
-    started = await dockerBackend.execute({
-      image,
-      command: 'sh',
-      args: ['-lc', `${cmd}\n__aether_rc=$?\necho ${DOCKER_EXIT_MARKER}$__aether_rc\nexit $__aether_rc`],
-      network: 'none',
-    })
-  } catch (e) {
-    return `[docker unavailable] ${e?.message || e}`
+  // One budget covers the WHOLE operation. Probe (~8s), `docker run` (~30s)
+  // and each inspect/logs poll (their own CLI timeouts) all burn wall-clock
+  // time, so the deadline must start BEFORE execute() and race every await —
+  // otherwise a 1s request could realistically take a minute.
+  const deadline = Date.now() + Math.max(timeoutMs, 1000)
+  const remaining = () => deadline - Date.now()
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+  const execPromise = dockerBackend.execute({
+    image,
+    command: 'sh',
+    args: ['-lc', `${cmd}\n__aether_rc=$?\necho ${DOCKER_EXIT_MARKER}$__aether_rc\nexit $__aether_rc`],
+    network: 'none',
+  }).catch((e) => ({ ok: false, error: e?.message || String(e) }))
+
+  let started = await Promise.race([
+    execPromise,
+    sleep(Math.max(remaining(), 1)).then(() => DOCKER_DEADLINE_LOST),
+  ])
+  if (started === DOCKER_DEADLINE_LOST) {
+    // execute() may still land later — reap its container in the background
+    // so nothing lingers past our budget.
+    void execPromise.then((s) => { if (s && s.ok) { try { dockerBackend.dispose(s.execId) } catch { /* best effort */ } } })
+    return formatShellResult('', '', '', true)
   }
   if (!started.ok) return `[docker unavailable] ${started.error || 'docker execute failed'}`
 
@@ -148,21 +165,29 @@ async function runInDocker(cmd, timeoutMs, db) {
   // (logs + exit marker survive); dispose() below is the cleanup point on
   // every path: result, timeout, or error return.
   try {
-    const deadline = Date.now() + timeoutMs
     let timedOut = false
     let st = null
     while (true) {
-      await new Promise((r) => setTimeout(r, 500))
-      st = await dockerBackend.status(started.execId).catch(() => null)
+      await sleep(Math.min(500, Math.max(remaining(), 1)))
+      if (remaining() <= 0) { timedOut = true; break }
+      const polled = await Promise.race([
+        dockerBackend.status(started.execId).catch(() => null),
+        sleep(remaining()).then(() => DOCKER_DEADLINE_LOST),
+      ])
+      if (polled === DOCKER_DEADLINE_LOST) { timedOut = true; break }
+      st = polled
       if (!st || (st.state !== 'running' && st.state !== 'paused')) break
-      if (Date.now() >= deadline) {
-        timedOut = true
-        try { await dockerBackend.terminate(started.execId) } catch { /* best effort */ }
-        st = await dockerBackend.status(started.execId).catch(() => null)
-        break
-      }
     }
-    if (!st || !st.ok) return '[docker unavailable] command execution failed'
+    if (timedOut) {
+      try { await dockerBackend.terminate(started.execId) } catch { /* best effort */ }
+      st = await Promise.race([
+        dockerBackend.status(started.execId).catch(() => null),
+        sleep(Math.max(remaining(), 1)).then(() => DOCKER_DEADLINE_LOST),
+      ]).then((v) => (v === DOCKER_DEADLINE_LOST ? null : v))
+    }
+    if (!st || !st.ok) {
+      return timedOut ? formatShellResult('', '', '', true) : '[docker unavailable] command execution failed'
+    }
 
     const raw = `${st.stdoutTail || ''}\n${st.stderrTail || ''}`
     const idx = raw.lastIndexOf(DOCKER_EXIT_MARKER)
