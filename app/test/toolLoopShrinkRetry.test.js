@@ -62,7 +62,7 @@ async function runLoop({ shrink, externalBudget }) {
     sessionId: 1,
     messageId: 1,
     db: makeDb({ shrink }),
-    externalBudget,
+    budget: externalBudget,
     onStatus: (s) => statuses.push(s),
     onToolCall: () => {},
     onPlanStep: () => {},
@@ -110,7 +110,7 @@ describe('shrink-retry extends an exhausted iteration budget exactly once', () =
       consume() { used += 1; return used <= 1 },
       exhausted() { return { exhausted: used >= 1, reason: used >= 1 ? 'iterations' : null } },
     }
-    const { statuses } = await runLoop({ shrink: true, budget: plainBase })
+    const { statuses } = await runLoop({ shrink: true, externalBudget: plainBase })
     // No crash, no half-applied retry state; a 1-shot external budget yields
     // zero executed rounds (top-of-pass exhaustion check stops it), and —
     // critically — NO shrink_retry event despite the flag being ON.
