@@ -4,9 +4,9 @@
 
 # Aether
 
-### 默认安全 · 多模型竞技场 · 本地优先
+### 本地优先 Agent 工作台 · 内置竞技场 · 默认安全
 
-一个拒绝「出其不意」的 AI 工作台——Agent 动手前先征得同意,多模型同台竞技横向对比。一切都在你的设备上。
+一个拒绝「出其不意」的 Agent 工作台——动手前先征得同意,竞技场告诉你哪个模型真正适合你的活,路由从你自己的投票里学习。一切都在你的设备上。
 
 **Electron + Node.js · React + TypeScript · MCP · Agent · Skills**
 
@@ -51,6 +51,12 @@
 **多模型竞技场。** 别再只信一个模型。一个提示同时发给多个模型、投票选出最佳、ELO 排名实时更新——为你自己的提示内置一个「同行评审」擂台。
 
 **本地优先。** 密钥、对话与记忆都存于本地 SQLite,除发往你所配置的提供商外,绝不离开你的电脑。无账号、无云同步、无遥测。你的数据最安全的地方,就是你的设备。
+
+**Aether 在哪一档——诚实版。** 依据公开资料对同类 Agent 自评(2026-08;是估计,不是跑分)。我们把不对称的形状原样画出来:强在「本地优先」相关轴——多模型/供应商、隐私、安全、桌面 UX;编程暂时不是第一梯队。这就是你选择 Aether 时接受的取舍。
+
+<p align="center"><img src="./assets/agent-radar-2026.svg" width="700" alt="Aether 自评雷达:对比 Claude Code / Codex / OpenCode / Cursor / Cline / OpenClaw / Gemini CLI / OpenHands" /></p>
+
+<sub>图表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——分数逐字内嵌其中,可用 <code>node app/scripts/gen-radar.cjs</code> 复现。</sub>
 
 > [!TIP]
 > **新用户请先装桌面版。** 桌面版开箱即用、稳定可靠。CLI / TUI / SDK 仍处于实验阶段 —— 接口可能变更,部分功能可能不完整。
