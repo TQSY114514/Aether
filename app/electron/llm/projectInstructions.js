@@ -19,7 +19,7 @@ const fs = require('fs')
 const path = require('path')
 const { getWorkspaceRoot } = require('../tools/sandbox')
 
-const INSTRUCTION_FILES = ['.aetherai.md', 'CLAUDE.md', 'AGENT.md', 'GEMINI.md']
+const INSTRUCTION_FILES = ['.aetherai.md', 'AETHER.md', 'AGENTS.md', 'CLAUDE.md', 'AGENT.md', 'GEMINI.md']
 const CACHE_TTL_MS = 30_000 // re-read from disk every 30s to pick up edits
 let _cached = null
 let _cacheTime = 0

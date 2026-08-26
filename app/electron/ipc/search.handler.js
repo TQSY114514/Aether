@@ -123,9 +123,8 @@ function registerSearchHandlers(ipcMain, db) {
 
   // Search files in the agent workspace by filename. Params: { query, root? }.
   ipcMain.handle('search:files', async (_e, { query, root } = {}) => {
-    if (!query || !query.trim()) return []
     try {
-      const rootDir = root || db.getSetting('agent_workspace_root') || ''
+      const rootDir = root || db.getSetting('agent_workspace_root') || require('../tools/sandbox').getWorkspaceRoot() || ''
       return (await db.searchFiles(query, rootDir)) || []
     } catch (e) {
       log.warn('search:files failed:', e.message || e)

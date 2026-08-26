@@ -59,9 +59,17 @@ function runCommand(command, args, opts = {}) {
       windowsHide = true,
     } = opts
 
+    const nonInteractiveEnv = {
+      CI: 'true',
+      DEBIAN_FRONTEND: 'noninteractive',
+      GIT_TERMINAL_PROMPT: '0',
+      npm_config_yes: 'true',
+      PIP_NO_INPUT: '1',
+    }
+
     const child = spawn(command, args, {
       cwd,
-      env: env ? { ...process.env, ...env } : undefined,
+      env: { ...process.env, ...nonInteractiveEnv, ...(env || {}) },
       shell,
       windowsHide,
       stdio: ['pipe', 'pipe', 'pipe'],

@@ -110,6 +110,7 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   Don't add JSON/JSONL sidecar stores for runtime state — graph memory belongs
   in the `kg_nodes`/`kg_edges` tables. (The old `memoryGraph.js` JSONL module
   was dead code and has been removed; do not revive that approach.)
+- **主动沉淀知识库 (Proactive Knowledge Base Logging)**: 每当完成重要特性开发、重大架构重构、关键 Bug 根治或提炼出核心教训时，**必须主动**沉淀到 `D:\.知识库`（包括 `03-开发日志/` 专项记录、`04-踩坑与经验/Aether踩坑与经验.md` 黄金教训追加、以及 `00-索引.md` 导航更新），遵循 Obsidian 双链提炼规范，无需用户反复提醒。
 - **UI must not look AI-generated**: every visual decision in `app/src` must be
   intentional per `docs/ui-design.md` — no indigo/violet/purple gradients, no
   `bg-clip-text` gradient headlines, no reflexive glassmorphism, no oversized

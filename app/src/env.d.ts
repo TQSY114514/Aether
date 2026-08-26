@@ -146,6 +146,7 @@ interface Window {
       onToolLoopStart: (callback: (payload: { sessionId: number }) => void) => () => void
       onToolLoopEnd: (callback: (payload: { sessionId: number }) => void) => () => void
       onUsage: (callback: (payload: { sessionId: number; messageId: number; inputTokens: number; outputTokens: number; costUsd: number }) => void) => () => void
+      compact: (sessionId: number) => Promise<{ ok: boolean; beforeCount?: number; afterCount?: number; beforeTokens?: number; afterTokens?: number; error?: string }>
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void

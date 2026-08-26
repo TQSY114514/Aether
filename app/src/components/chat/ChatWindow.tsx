@@ -10,6 +10,7 @@ import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-reac
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
+import ThinkingBlock from './ThinkingBlock'
 
 // Arena results display component with streaming-like animation
 function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, prompt }: {
@@ -140,38 +141,56 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
 
 // Lightweight streaming bubble: rendered inside the message flow, updated via
 // direct DOM writes to avoid re-rendering ChatWindow on every streaming token.
-// Styled as a proper assistant message bubble with AI avatar, border, and
-// auto-growing height. Uses rAF-throttled scrollIntoView with an isAtBottom
-// guard — skips scroll when the user has scrolled up to read history.
+// Also renders live thinking/reasoning blocks above the main content so the
+// user can watch the model reason in real time (before the main reply arrives).
 function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBottom: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
 
+  // Live thinking state: React state so ThinkingBlock re-renders on each new chunk.
+  const [thinkingText, setThinkingText] = useState('')
+  const [thinkingStreaming, setThinkingStreaming] = useState(false)
+
+  useEffect(() => {
+    setThinkingText('')
+    setThinkingStreaming(false)
+    lastLenRef.current = 0
+  }, [sessionId])
+
   useEffect(() => {
     const unsub = useStore.subscribe((s) => {
       const buf = s.streamingBySession[sessionId]
-      if (!buf || !ref.current) return
+      if (!buf) return
+
+      // -- Thinking block: read from thinkingBlocksByMessage keyed by messageId --
+      if (buf.messageId != null) {
+        const thinking = s.thinkingBlocksByMessage[buf.messageId]
+        if (thinking) {
+          setThinkingText(thinking)
+          // Thinking is active while main content has not yet started.
+          setThinkingStreaming(!buf.content)
+        }
+      }
+
+      // -- Main content: direct DOM write for O(1) per-token performance --
+      if (!ref.current) return
       const newLen = buf.content.length
       if (newLen === lastLenRef.current) return
       lastLenRef.current = newLen
-      // During streaming, render plain escaped text (not full markdown) for
-      // performance: re-parsing markdown + highlight.js on every token is O(n²)
-      // for long messages. The final rendered version is produced by
-      // MessageBubble via renderMarkdown when the stream completes.
+
       const escaped = buf.content
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/\n/g, '<br>')
       ref.current.innerHTML = escaped
-      // Auto-grow the bubble height based on content.
+
       if (bubbleRef.current) {
         bubbleRef.current.style.minHeight = ''
         bubbleRef.current.style.minHeight = bubbleRef.current.scrollHeight + 'px'
       }
-      // Auto-scroll only if user is at the bottom.
       if (isAtBottom) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = requestAnimationFrame(() => {
@@ -203,6 +222,9 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         </div>
         <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
           style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
+          {thinkingText && (
+            <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
+          )}
           <div ref={ref} className="mc" />
         </div>
       </div>
