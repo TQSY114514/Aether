@@ -141,16 +141,21 @@ export function ensureToolCallListener() {
   window.electronAPI.chat.onToolCall(({ messageId, sessionId, tool }) => {
     const entry = { name: tool.name, args: tool.args, result: tool.result, error: tool.error, failureKind: tool.failure_kind ?? null, recoveryHint: tool.recovery_hint ?? null, risk: tool.risk, latencyMs: tool.latencyMs ?? null, checkpointId: tool.checkpointId ?? null, diff: tool.diff ?? null, afterSnapshot: tool.after_snapshot ?? null, startedAt: tool.startedAt ?? null }
     getStore().setState((s) => {
-      const existing = s.toolCallsByMessage[messageId] || []
-      // If the last entry is still a "running" placeholder of the same name,
-      // replace it with the incoming entry (completion OR a newer status
-      // placeholder). This carries the placeholder->completion transition so a
-      // completed tool doesn't duplicate its started placeholder.
-      const last = existing[existing.length - 1]
-      if (existing.length > 0 && last.name === entry.name && last.result == null && last.error == null) {
-        return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing.slice(0, -1), entry] } }
+      const sid = sessionId || s.currentSessionId
+      const nextStreaming = { ...s.streamingBySession }
+      if (sid && !nextStreaming[sid]) {
+        nextStreaming[sid] = { content: "", messageId }
       }
-      return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: [...existing, entry] } }
+      const existing = s.toolCallsByMessage[messageId] || []
+      const last = existing[existing.length - 1]
+      let nextCalls = [...existing, entry]
+      if (existing.length > 0 && last.name === entry.name && last.result == null && last.error == null) {
+        nextCalls = [...existing.slice(0, -1), entry]
+      }
+      return {
+        streamingBySession: nextStreaming,
+        toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: nextCalls },
+      }
     })
   })
 }
@@ -173,15 +178,23 @@ export function ensurePlanStepListener() {
   window.electronAPI.chat.onPlanStep?.(({ messageId, sessionId, step }) => {
     if (!messageId) return
     getStore().setState((s) => {
+      const sid = sessionId || s.currentSessionId
+      const nextStreaming = { ...s.streamingBySession }
+      if (sid && !nextStreaming[sid]) {
+        nextStreaming[sid] = { content: "", messageId }
+      }
       const existing = s.planStepsByMessage[messageId] || []
       const idx = existing.findIndex(e => e.step === step.step && e.depth === step.depth)
       const entry = { step: step.step, depth: step.depth, assistantText: step.assistantText, kind: step.kind }
+      let nextSteps = [...existing, entry]
       if (idx >= 0) {
-        const next = [...existing]
-        next[idx] = entry
-        return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: next } }
+        nextSteps = [...existing]
+        nextSteps[idx] = entry
       }
-      return { planStepsByMessage: { ...s.planStepsByMessage, [messageId]: [...existing, entry] } }
+      return {
+        streamingBySession: nextStreaming,
+        planStepsByMessage: { ...s.planStepsByMessage, [messageId]: nextSteps },
+      }
     })
   })
 }
@@ -238,14 +251,22 @@ export function ensureTodoListener() {
 export function ensureThinkingListener() {
   if (_thinkingListenerInstalled) return
   _thinkingListenerInstalled = true
-  window.electronAPI.chat.onThinkingChunk?.(({ messageId, delta }) => {
+  window.electronAPI.chat.onThinkingChunk?.(({ messageId, sessionId, delta }) => {
     if (!messageId || !delta) return
-    getStore().setState((s) => ({
-      thinkingBlocksByMessage: {
-        ...s.thinkingBlocksByMessage,
-        [messageId]: (s.thinkingBlocksByMessage[messageId] || "") + delta,
-      },
-    }))
+    getStore().setState((s) => {
+      const sid = sessionId || s.currentSessionId
+      const nextStreaming = { ...s.streamingBySession }
+      if (sid && !nextStreaming[sid]) {
+        nextStreaming[sid] = { content: "", messageId }
+      }
+      return {
+        streamingBySession: nextStreaming,
+        thinkingBlocksByMessage: {
+          ...s.thinkingBlocksByMessage,
+          [messageId]: (s.thinkingBlocksByMessage[messageId] || "") + delta,
+        },
+      }
+    })
   })
 }
 

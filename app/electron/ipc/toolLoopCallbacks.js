@@ -68,12 +68,11 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
 
   const callbacks = {}
 
-  // Thinking start/end — only when the model supports extended thinking.
-  if (thinkingSupported) {
-    callbacks.onThinkingStart = () => safeSend('chat:thinking-start', { messageId: msgId, sessionId })
-    callbacks.onThinkingEnd   = () => safeSend('chat:thinking-end',   { messageId: msgId, sessionId })
-    callbacks.onThinkingDelta = (text) => safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text, done: false })
-  }
+  // Always hook up thinking start/end/delta for all models so any model with reasoning or <think> tags streams live
+  callbacks.onThinkingStart = () => safeSend('chat:thinking-start', { messageId: msgId, sessionId })
+  callbacks.onThinkingEnd   = () => safeSend('chat:thinking-end',   { messageId: msgId, sessionId })
+  callbacks.onThinkingDelta = (text) => safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text, done: false })
+  callbacks.onStreamDelta = (delta) => safeSend('chat:stream-chunk', { messageId: msgId, sessionId, delta, done: false })
 
   callbacks.onToolCall = (entry) =>
     safeSend('chat:tool-call', { messageId: msgId, sessionId, tool: entry })

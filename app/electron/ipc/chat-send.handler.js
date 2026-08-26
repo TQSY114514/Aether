@@ -566,27 +566,36 @@ ipcMain.handle('chat:complete', handleChatComplete)
       let fullContent = ''
       try {
         const wc = getWebContents()
-        const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test((m?.model_name || '').toLowerCase())
-        let lastThinkingLen = 0
-        const stream = streamChat({ provider: p, model: m, messages: compacted, signal: controller.signal, options: { ...mergedOpts, onThinkingDelta: thinkingSupported ? (text) => {
-          if (text.length > lastThinkingLen) {
-            const newLen = text.length - lastThinkingLen
-            wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text.slice(lastThinkingLen, text.length), done: false })
-            lastThinkingLen = text.length
-          }
-        } : undefined } })
+        let hasThinking = false
+        const stream = streamChat({
+          provider: p,
+          model: m,
+          messages: compacted,
+          signal: controller.signal,
+          options: {
+            ...mergedOpts,
+            onThinkingDelta: (delta) => {
+              if (delta) {
+                if (!hasThinking) {
+                  hasThinking = true
+                  try { wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) } catch {}
+                }
+                try { wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta, done: false }) } catch {}
+              }
+            },
+          },
+        })
         const streamStart = Date.now()
         for await (const delta of stream) {
           if (delta) {
             fullContent += delta
-            wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
+            try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
             // Signal thinking is complete as soon as main content tokens start flowing
-            if (lastThinkingLen > 0) {
-              wc?.send('chat:thinking-end', { messageId: msgId, sessionId })
-              lastThinkingLen = -1
+            if (hasThinking) {
+              try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
+              hasThinking = false
             }
           }
-
         }
         clearTimeout(timeout)
         abortControllers.delete(msgId)

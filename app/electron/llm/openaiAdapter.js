@@ -159,14 +159,12 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
       const { delta, reasoning, usage } = parseSSELine(line)
       if (usage) streamChat.usage = usage
       if (reasoning) {
-        _thinkingText += reasoning
-        try { onThinking?.(_thinkingText) } catch {}
+        try { onThinking?.(reasoning) } catch {}
       }
       if (delta) {
         const ext = thinkExtractor.process(delta)
         if (ext.reasoning) {
-          _thinkingText += ext.reasoning
-          try { onThinking?.(_thinkingText) } catch {}
+          try { onThinking?.(ext.reasoning) } catch {}
         }
         if (ext.content) { yield ext.content }
       }
@@ -177,22 +175,19 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     const { delta, reasoning, usage } = parseSSELine(buffer)
     if (usage) streamChat.usage = usage
     if (reasoning) {
-      _thinkingText += reasoning
-      try { onThinking?.(_thinkingText) } catch {}
+      try { onThinking?.(reasoning) } catch {}
     }
     if (delta) {
       const ext = thinkExtractor.process(delta)
       if (ext.reasoning) {
-        _thinkingText += ext.reasoning
-        try { onThinking?.(_thinkingText) } catch {}
+        try { onThinking?.(ext.reasoning) } catch {}
       }
       if (ext.content) { yield ext.content }
     }
   }
   const flushed = thinkExtractor.flush()
   if (flushed.reasoning) {
-    _thinkingText += flushed.reasoning
-    try { onThinking?.(_thinkingText) } catch {}
+    try { onThinking?.(flushed.reasoning) } catch {}
   }
   if (flushed.content) { yield flushed.content }
 }
@@ -209,9 +204,11 @@ function parseSSELine(line) {
     const delta = parsed.choices?.[0]?.delta || {}
     const reasoning = delta.reasoning_content || delta.reasoning || ''
     const content = delta.content || ''
+    const tool_calls = delta.tool_calls || undefined
     return {
       delta: content,
       reasoning: reasoning || undefined,
+      tool_calls,
       usage: parsed.usage ? normalizeUsage(parsed.usage) : null,
     }
   } catch {
@@ -243,10 +240,16 @@ async function completeChat({ provider, model, messages, signal, options = {} })
 // tool_calls AND log real server-reported token usage. `tool_calls`/`usage`
 // are undefined when the model didn't request any / the provider didn't report.
 async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
+  const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
+  const onStream = typeof options?.onStreamDelta === 'function' ? options.onStreamDelta : null
+  const thinkExtractor = new ThinkTagExtractor()
+
+  // Use streaming when callbacks are requested, but respect explicit options.stream
+  const useStream = options.stream !== false
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
-    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: false, ...options }),
+    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: useStream, ...options }),
     signal: withTimeout(signal),
   })
   if (!res.ok) {
@@ -255,16 +258,162 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     err.status = res.status
     throw err
   }
-  const data = await res.json()
-  const msg = data.choices?.[0]?.message || {}
-  let content = msg.content || ''
-  let reasoning = msg.reasoning_content || msg.reasoning || ''
-  if (!reasoning && content.includes('<think>')) {
-    const ext = extractThinkTags(content)
-    content = ext.content
-    reasoning = ext.reasoning
+
+  const contentType = (res.headers.get('content-type') || '').toLowerCase()
+  const isSSE = contentType.includes('text/event-stream')
+
+  // Fast path for non-SSE JSON responses (e.g. mock test servers or non-streaming endpoints)
+  if (!isSSE && !useStream) {
+    const data = await res.json()
+    const msg = data.choices?.[0]?.message || {}
+    let content = msg.content || ''
+    let reasoning = msg.reasoning_content || msg.reasoning || ''
+    if (!reasoning && content.includes('<think>')) {
+      const ext = extractThinkTags(content)
+      content = ext.content
+      reasoning = ext.reasoning
+    }
+    if (reasoning) { try { onThinking?.(reasoning) } catch {} }
+    if (content) { try { onStream?.(content) } catch {} }
+    return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning }
   }
-  return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullContent = ''
+  let fullReasoning = ''
+  let finalUsage = null
+  const toolCallsMap = {}
+  let isJsonDetected = false
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    // Check if the response is standard JSON rather than SSE
+    if (!isJsonDetected && buffer.trim().startsWith('{')) {
+      isJsonDetected = true
+    }
+
+    if (!isJsonDetected) {
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const { delta, reasoning, tool_calls, usage } = parseSSELine(line)
+        if (usage) finalUsage = usage
+        if (reasoning) {
+          fullReasoning += reasoning
+          try { onThinking?.(reasoning) } catch {}
+        }
+        if (delta) {
+          const ext = thinkExtractor.process(delta)
+          if (ext.reasoning) {
+            fullReasoning += ext.reasoning
+            try { onThinking?.(ext.reasoning) } catch {}
+          }
+          if (ext.content) {
+            fullContent += ext.content
+            try { onStream?.(ext.content) } catch {}
+          }
+        }
+        if (tool_calls && Array.isArray(tool_calls)) {
+          for (const tc of tool_calls) {
+            const idx = tc.index ?? 0
+            if (!toolCallsMap[idx]) {
+              toolCallsMap[idx] = {
+                id: tc.id || '',
+                type: tc.type || 'function',
+                function: {
+                  name: tc.function?.name || '',
+                  arguments: tc.function?.arguments || ''
+                }
+              }
+            } else {
+              if (tc.id) toolCallsMap[idx].id = tc.id
+              if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name
+              if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (isJsonDetected || (buffer.trim().startsWith('{') && !fullContent && Object.keys(toolCallsMap).length === 0)) {
+    try {
+      const data = JSON.parse(buffer.trim())
+      const msg = data.choices?.[0]?.message || {}
+      let content = msg.content || ''
+      let reasoning = msg.reasoning_content || msg.reasoning || ''
+      if (!reasoning && content.includes('<think>')) {
+        const ext = extractThinkTags(content)
+        content = ext.content
+        reasoning = ext.reasoning
+      }
+      if (reasoning) { try { onThinking?.(reasoning) } catch {} }
+      if (content) { try { onStream?.(content) } catch {} }
+      return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning }
+    } catch {}
+  }
+
+  if (buffer.startsWith('data: ')) {
+    const { delta, reasoning, tool_calls, usage } = parseSSELine(buffer)
+    if (usage) finalUsage = usage
+    if (reasoning) {
+      fullReasoning += reasoning
+      try { onThinking?.(reasoning) } catch {}
+    }
+    if (delta) {
+      const ext = thinkExtractor.process(delta)
+      if (ext.reasoning) {
+        fullReasoning += ext.reasoning
+        try { onThinking?.(ext.reasoning) } catch {}
+      }
+      if (ext.content) {
+        fullContent += ext.content
+        try { onStream?.(ext.content) } catch {}
+      }
+    }
+    if (tool_calls && Array.isArray(tool_calls)) {
+      for (const tc of tool_calls) {
+        const idx = tc.index ?? 0
+        if (!toolCallsMap[idx]) {
+          toolCallsMap[idx] = {
+            id: tc.id || '',
+            type: tc.type || 'function',
+            function: {
+              name: tc.function?.name || '',
+              arguments: tc.function?.arguments || ''
+            }
+          }
+        } else {
+          if (tc.id) toolCallsMap[idx].id = tc.id
+          if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name
+          if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments
+        }
+      }
+    }
+  }
+
+  const flushed = thinkExtractor.flush()
+  if (flushed.reasoning) {
+    fullReasoning += flushed.reasoning
+    try { onThinking?.(flushed.reasoning) } catch {}
+  }
+  if (flushed.content) {
+    fullContent += flushed.content
+    try { onStream?.(flushed.content) } catch {}
+  }
+
+  const toolCallsArray = Object.values(toolCallsMap)
+  return {
+    content: fullContent,
+    tool_calls: toolCallsArray.length > 0 ? toolCallsArray : undefined,
+    usage: finalUsage,
+    reasoning: fullReasoning
+  }
 }
 
 // normalizeUsage is imported from ../utils/llmShared

@@ -191,7 +191,7 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
             // Forward accumulated thinking so the renderer can display it live
             // (chat.handler slices by lastThinkingLen to emit only new text).
             if (typeof options?.onThinkingDelta === 'function') {
-              try { options.onThinkingDelta(_thinkingText) } catch {}
+              try { options.onThinkingDelta(d.thinking || '') } catch {}
             }
           } else if (d.type === 'text_delta') {
             // Only yield content strings so the plain-chat streaming path (which
