@@ -121,6 +121,11 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     try { return db.getModelScores() } catch (e) { log.warn('arena:scores error:', e); return [] }
   })
 
+  // Arena 2.0 leaderboard: real-traffic metrics per model (latency/cost/runs).
+  ipcMain.handle('arena:metrics', () => {
+    try { return db.getModelUsageMetrics() } catch (e) { log.warn('arena:metrics error:', e); return [] }
+  })
+
   // ── Arena 2.0: personal benchmark (review P0-3) ─────────────────────────
   // 用户自建任务集, 一键对选中模型重跑; 每任务每模型独立计分:
   //   - 结果非错误 → 记 1 胜(wins)

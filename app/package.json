@@ -78,6 +78,7 @@
     "typecheck": "tsc --noEmit",
     "smoke:boot": "node scripts/boot-smoke.js",
     "smoke:rpc": "node scripts/smoke-rpc.js",
+    "eval:coding": "node scripts/run-eval.cjs",
     "check:ipc": "node scripts/check-ipc.js",
     "build:icon": "node build-icons.js",
     "build:win": "vite build && electron-builder --win --x64",

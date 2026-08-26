@@ -65,12 +65,24 @@ function loadSkillsFromDir(dir) {
     for (const [k, v] of Object.entries(meta)) {
       if (!KNOWN_KEYS.has(k)) extra[k] = v
     }
+    // Structured capability declaration: `permissions: shell, network` in the
+    // frontmatter becomes an array on the skill object. Loading a skill is
+    // still safe (it is text); enforcement stays on the actual tools, which
+    // are permission-gated. The declaration lets use_skill annotate what the
+    // skill expects so the model and audit trail see the requested scope.
+    let permissions
+    if (extra.permissions !== undefined) {
+      permissions = String(extra.permissions)
+        .split(/[,;\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean)
+      delete extra.permissions
+    }
     found.push({
       name: meta.name,
       description: meta.description,
       filePath: skillPath,
       baseDir: path.join(dir, ent.name),
       body,
+      permissions: permissions && permissions.length > 0 ? permissions : undefined,
       metadata: Object.keys(extra).length > 0 ? extra : undefined,
     })
   }
