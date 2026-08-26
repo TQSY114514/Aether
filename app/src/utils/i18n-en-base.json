@@ -27,6 +27,7 @@
   "agent.permission.deny": "Deny",
   "agent.permission.desc": "Once allowed, the model will run this immediately. Deny if unsure. \"Allow & remember\" skips the prompt for similar actions this session.",
   "agent.permission.title": "Agent requests to run an action",
+  "agent.permission.axis_ask": "Capability policy: {0} access requires your approval",
   "agent.permission.what": "What",
   "agent.permission.impact": "Impact",
   "agent.permission.high_impact": "High impact",
