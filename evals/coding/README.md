@@ -18,6 +18,25 @@ node app/scripts/run-eval.cjs \
 Exit code 0 = every model passed every task. `results.json` carries per-task
 verdicts, durations, check output tails, and a per-model summary.
 
+## Router comparison (`router-compare.cjs`)
+
+Measures what staged tool routing (`agent.toolRouter.staged`) actually buys:
+the same suite runs twice per model — identical except for the flag, each
+mode in its own throwaway SQLite DB — and reports pass rate, token totals,
+wall time, and mid-loop stage re-injection counts side by side.
+
+```bash
+node evals/coding/router-compare.cjs \
+  --base-url https://api.example.com/v1 \
+  --model deepseek-chat \
+  --api-key sk-...        # or env AETHER_EVAL_API_KEY \
+  --out compare.json
+```
+
+Deltas can legitimately be zero on small tasks (routing only changes the
+tool payload once a build/verify/deliver stage is inferred); treat the
+harness as a measurement tool over your own larger suites, not a verdict.
+
 ## Task format (`suite.js`)
 
 See the top of [suite.js](./suite.js). Rules: solvable in one focused agent
