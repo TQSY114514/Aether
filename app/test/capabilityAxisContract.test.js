@@ -45,11 +45,18 @@ describe('capability axis settings-key contract (TQS-7)', () => {
     expect(loopMatch).toBeTruthy()
     const listedAxes = [...loopMatch[1].matchAll(/'([a-z_-]+)'/g)].map(m => m[1])
     expect(listedAxes.sort()).toEqual([...ENFORCED_AXES].sort())
-    // 断言范围限定在循环的可执行体（紧随循环头的源码窗口），
-    // 而不是整个文件——运行时读取表达式必须真实存在于体内。
-    const bodyStart = loopMatch.index + loopMatch[0].length
-    const bodyWindow = codeOnly.slice(bodyStart, bodyStart + 400)
-    expect(bodyWindow).toContain('db.getSetting(`capability.${axis}`)')
+    // 断言范围限定在循环的可执行体：括号配平解析出完整循环体
+    // （`${axis}` 的花括号成对出现，不影响深度计数），
+    // 读取表达式必须存在于体内——循环之后的代码不算数。
+    let i = loopMatch.index + loopMatch[0].length
+    let depth = 1
+    while (i < codeOnly.length && depth > 0) {
+      if (codeOnly[i] === '{') depth++
+      else if (codeOnly[i] === '}') depth--
+      i++
+    }
+    const loopBody = codeOnly.slice(loopMatch.index + loopMatch[0].length, i - 1)
+    expect(loopBody).toContain('db.getSetting(`capability.${axis}`)')
   })
 
   it('every tool known to TOOL_AXIS maps to an enforced axis', () => {
