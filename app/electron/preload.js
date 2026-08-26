@@ -117,6 +117,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     send: (params) => ipcRenderer.invoke('arena:send', params),
     vote: (data) => ipcRenderer.invoke('arena:vote', data),
     scores: () => ipcRenderer.invoke('arena:scores'),
+    metrics: () => ipcRenderer.invoke('arena:metrics'),
     stop: (sessionId) => ipcRenderer.invoke('arena:stop', sessionId),
     benchmarkList: () => ipcRenderer.invoke('arena:benchmark-list'),
     benchmarkSave: (data) => ipcRenderer.invoke('arena:benchmark-save', data),
