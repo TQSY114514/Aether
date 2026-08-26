@@ -22,7 +22,10 @@ You can:
   `Get-FileHash .\aetherai-setup-x.y.z.exe -Algorithm SHA256`
   then compare against the matching line in `SHA256SUMS.txt`.
 - Read the exact workflow that produced the release and inspect its run log.
-- Build identical installers yourself from source:
+- Verify the download before running it (see checksums below) — especially
+  before restoring a file your antivirus quarantined: compare SHA-256 first;
+  on mismatch, delete the file and re-download from the official release.
+- Build the installers yourself from source:
   `cd app && npm run build:win` (output in `app/dist-out/`).
 
 ## How do I run it anyway?
@@ -39,8 +42,8 @@ insists, building from source sidesteps the question entirely.
 
 | Artifact | Behavior |
 |---|---|
-| `*-setup-*.exe` (NSIS installer) | Installs normally; auto-update metadata (`latest.yml`) points here |
-| `*-portable.exe` | Single-file, no installation; keep wherever you like |
+| `aetherai-setup-x.y.z.exe` (NSIS installer) | Installs normally; auto-update metadata (`latest.yml`) points here |
+| `aetherai-x.y.z.exe` | Single-file portable, no installation; keep wherever you like |
 
 Both contain the same app. Pick the installer unless you specifically want a
 green (portable) copy.
