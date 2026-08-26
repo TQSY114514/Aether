@@ -4,7 +4,7 @@
 
 # Aether
 
-### Local-first Agent Workbench · built-in Arena · Safe by default
+## Local-first Agent Workbench · built-in Arena · Safe by default
 
 The agent workbench that refuses to surprise you — an agent that asks before it acts, an arena that shows which model actually fits *your* work, and routing that learns from your own votes. All on your device.
 
