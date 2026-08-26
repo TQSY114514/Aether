@@ -37,15 +37,19 @@ describe('capability axis settings-key contract (TQS-7)', () => {
   })
 
   it('toolLoop reads capability.* via db.getSetting inside its axis loop at runtime', () => {
-    // 从 for-of 语句提取轴清单（运行时代码，非注释）：
+    // 剥掉行注释，让"只在注释里出现"无法满足任何断言。
+    const codeOnly = toolLoopSrc.replace(/^\s*\/\/.*$/gm, '')
+    // 从 for-of 语句提取轴清单（运行时代码）：
     //   for (const axis of ['filesystem', 'shell', 'network']) {
-    const loopMatch = toolLoopSrc.match(/for\s*\(\s*const\s+axis\s+of\s+\[([^\]]*)\]\s*\)/)
+    const loopMatch = codeOnly.match(/for\s*\(\s*const\s+axis\s+of\s+\[([^\]]*)\]\s*\)\s*\{/)
     expect(loopMatch).toBeTruthy()
     const listedAxes = [...loopMatch[1].matchAll(/'([a-z_-]+)'/g)].map(m => m[1])
     expect(listedAxes.sort()).toEqual([...ENFORCED_AXES].sort())
-    // 运行时读取表达式必须真实存在（模板字面量逐字匹配，注释里的
-    // capability.filesystem 等写法不算数）
-    expect(toolLoopSrc).toContain('db.getSetting(`capability.${axis}`)')
+    // 断言范围限定在循环的可执行体（紧随循环头的源码窗口），
+    // 而不是整个文件——运行时读取表达式必须真实存在于体内。
+    const bodyStart = loopMatch.index + loopMatch[0].length
+    const bodyWindow = codeOnly.slice(bodyStart, bodyStart + 400)
+    expect(bodyWindow).toContain('db.getSetting(`capability.${axis}`)')
   })
 
   it('every tool known to TOOL_AXIS maps to an enforced axis', () => {
