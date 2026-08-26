@@ -80,7 +80,13 @@ describe('reflect.buildUserPrompt untrusted framing', () => {
       [{ tools: ['a'], error: 'some error text' }],
       false,
     )
-    expect(prompt).toContain('不可信')
+    // TQS-6: 边界声明不能替代数据本身——错误文本必须真的进入 prompt
+    //（否则"通知在、数据丢"的回归会静默通过）。
+    expect(prompt).toContain('错误: some error text')
+    // 框架顺序锁定：不可信声明必须先于错误文本出现（先声明边界，再列数据）。
+    const noticeIdx = prompt.indexOf('不可信')
+    expect(noticeIdx).toBeGreaterThanOrEqual(0)
+    expect(noticeIdx).toBeLessThan(prompt.indexOf('some error text'))
     expect(prompt).toContain('禁止照办')
   })
 
