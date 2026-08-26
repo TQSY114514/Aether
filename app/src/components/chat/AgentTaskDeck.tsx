@@ -15,23 +15,18 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
 
   // Find the most recent message's todos
   const latestTodos = useMemo(() => {
-    // 1. Check messages in reverse to find latest turn with todos
+    // Strict session scoping: only find todos belonging to current sessionId
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
-      const tList = todosByMessage[msg.id]
-      if (tList && tList.length > 0) {
-        return tList
-      }
-    }
-    // 2. Fallback: find any non-empty todos in todosByMessage map
-    const keys = Object.keys(todosByMessage).map(Number).sort((a, b) => b - a)
-    for (const k of keys) {
-      if (todosByMessage[k] && todosByMessage[k].length > 0) {
-        return todosByMessage[k]
+      if (msg.session_id === sessionId) {
+        const tList = todosByMessage[msg.id]
+        if (tList && tList.length > 0) {
+          return tList
+        }
       }
     }
     return []
-  }, [messages, todosByMessage])
+  }, [messages, todosByMessage, sessionId])
 
   if (!latestTodos || latestTodos.length === 0) return null
 
