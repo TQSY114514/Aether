@@ -354,3 +354,54 @@ describe('reducer 权限动作', () => {
     expect(s.toolCalls[0].rollbackResult).toEqual({ ok: true, via: 'snapshot' })
   })
 })
+
+// ── 并发批修复（PR #54 R1）：toolLoop 对读-only 批走 Promise.all，轴 ask 门让
+// 多个确认同时进入回调；单槽 resolveRef 曾被后到者覆盖、先到者等超时被拒。
+// 现改为 FIFO 队列：一次只展示一条，decidePermission 后自动弹出下一条。──
+describe('并发权限请求 FIFO 队列（PR #54 R1）', () => {
+  it('两个并发请求排队展示：先到者先答，答完自动弹下一条', async () => {
+    const h = makeHarness()
+    const p1 = h.handler({ name: 'web_search', args: { query: 'a' }, risk: 'safe', reason: 'capability policy: network axis requires approval' })
+    const p2 = h.handler({ name: 'web_fetch', args: { url: 'https://x' }, risk: 'safe', reason: 'capability policy: network axis requires approval' })
+    // 两个都只入队未落定
+    let s1 = false
+    p1.then(() => { s1 = true })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(s1).toBe(false)
+    // 先到者占据面板
+    expect(h.resolveRef.current).not.toBeNull()
+    expect(h.resolveRef.current.name).toBe('web_search')
+    const reqs = () => h.dispatched.filter((a) => a.type === 'PERMISSION_REQUEST')
+    expect(reqs().length).toBe(1)
+    // 决策第一条 → 自动弹出第二条
+    decidePermission({ decision: 'allow', allowRules: h.allowRules, sessionId: 'tui', resolveRef: h.resolveRef, dispatch: h.dispatched.push.bind(h.dispatched) })
+    expect(await p1).toBe(true)
+    expect(h.resolveRef.current.name).toBe('web_fetch')
+    expect(reqs().length).toBe(2)
+    expect(reqs()[1].payload.name).toBe('web_fetch')
+    // 决策第二条
+    decidePermission({ decision: 'deny', allowRules: h.allowRules, sessionId: 'tui', resolveRef: h.resolveRef, dispatch: h.dispatched.push.bind(h.dispatched) })
+    expect(await p2).toBe(false)
+    expect(h.resolveRef.current).toBeNull()
+  })
+
+  it('单个请求行为不变：立即展示（旧行为回归）', async () => {
+    const h = makeHarness()
+    const pending = h.handler({ name: 'write_file', args: { path: 'y.txt' } })
+    expect(h.resolveRef.current.name).toBe('write_file')
+    decidePermission({ decision: 'allow', allowRules: h.allowRules, sessionId: 'tui', resolveRef: h.resolveRef, dispatch: h.dispatched.push.bind(h.dispatched) })
+    expect(await pending).toBe(true)
+  })
+
+  it('队列等待期间 allowRules 命中的请求直接放行、不进队', async () => {
+    const h = makeHarness()
+    const blocked = h.handler({ name: 'write_file', args: { path: 'q.txt' } }) // 占住面板
+    // 预置会话 allow 规则 → 裸 handler 的 match 命中直接 true（App 包装层之外的兜底路径）
+    h.allowRules.add('tui', 'git_status', { path: 'r.txt' })
+    const bypass = h.handler({ name: 'git_status', args: { path: 'r.txt' } })
+    expect(await bypass).toBe(true)
+    expect(h.resolveRef.current.name).toBe('write_file') // 面板未被抢占
+    decidePermission({ decision: 'deny', allowRules: h.allowRules, sessionId: 'tui', resolveRef: h.resolveRef, dispatch: h.dispatched.push.bind(h.dispatched) })
+    expect(await blocked).toBe(false)
+  })
+})

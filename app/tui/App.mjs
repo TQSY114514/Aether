@@ -168,6 +168,7 @@ function PermissionPanel({ perm, permIdx }) {
     h(Text, { bold: true, color: C.warning }, `△ [权限请求] ${perm.name}`),
     h(PermissionDetail, { perm }),
     h(Text, { color: 'gray' }, `args: ${summarizeArgs(perm.args)} | risk: ${perm.risk}`),
+    perm.reason ? h(Text, { color: 'gray' }, `policy: ${perm.reason}`) : null,
     h(Box, { flexDirection: 'row', marginTop: 1 },
       options.map((opt, i) => h(Box, {
         key: opt,

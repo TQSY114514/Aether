@@ -831,19 +831,44 @@ Reply in this format:
             } catch {}
           }
 
+          // ── C0: capability 轴策略 ask 预检（P0-2 人话透传）────────────────
+          // 显式配置了 capability.<axis>='ask' 且本工具落在该轴上 → 即使非
+          // dangerous 也应走同一确认通道；原因串与 permissions.js 轴块保持
+          // 同源措辞，供 GUI 徽章 / TUI 行做 i18n 人话映射。
+          let axisAskReason = null
+          if (!entry.error && db && typeof db.getSetting === 'function') {
+            try {
+              const { decideAxisPolicy } = require('./capabilityPolicy')
+              const axes = {}
+              for (const axis of ['filesystem', 'shell', 'network']) {
+                const v = db.getSetting(`capability.${axis}`)
+                if (v === 'allow' || v === 'ask' || v === 'deny') axes[axis] = v
+              }
+              const ax = decideAxisPolicy(fn.name, axes)
+              if (ax.matched && ax.policy === 'ask') {
+                axisAskReason = `capability policy: ${ax.axis} axis requires approval`
+              }
+            } catch {}
+          }
+
           // ── C1: ask 模式 dangerous 工具的用户确认门（真正接线）───────────
           // requestPermissionWithTimeout: 回调抛错/超时均解析为 false ——
           // 默认拒绝, 无静默放行。复用 chat:permission-request IPC 链路
           // （toolLoopCallbacks.requestPermission, 内层 60s 超时）。
+          // 轴 ask（axisAskReason）同样进此通道：此前轴 ask 对非 dangerous
+          // 工具会在 authorizeWithContext 里静默拒绝（prompter=null）。
           let userDecision = null
-          if (!entry.error && tool.risk === 'dangerous' && effectiveMode === 'ask') {
+          if (!entry.error && ((tool.risk === 'dangerous' && effectiveMode === 'ask') || axisAskReason)) {
             if (typeof requestPermission !== 'function') {
               // 无确认通道（headless/后台恢复）→ 默认拒绝。
-              entry.error = `permission denied: dangerous tool '${fn.name}' requires user confirmation but no permission callback is available`
+              entry.error = axisAskReason
+                ? `permission denied: ${axisAskReason} and no permission callback is available`
+                : `permission denied: dangerous tool '${fn.name}' requires user confirmation but no permission callback is available`
               entry.failure_kind = 'permission_denied'
             } else {
               userDecision = await requestPermissionWithTimeout(requestPermission, {
                 name: fn.name, args, risk: tool.risk,
+                reason: axisAskReason || undefined,
               })
               // 信任分绑定用户决定（批准 +5 / 拒绝·超时 -10）, 而非"调用即加"。
               try {
