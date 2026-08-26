@@ -14,19 +14,17 @@ type ThinkingBlockProps = {
 // Shows a distinct slate-indigo container with brain icon, monospace font,
 // and clear visual boundary separating internal thoughts from conversational replies.
 export default function ThinkingBlock({ text, collapsed: initialCollapsed = true, streaming = false }: ThinkingBlockProps) {
-  const [open, setOpen] = useState(streaming ? true : !initialCollapsed)
+  const [open, setOpen] = useState(streaming || !initialCollapsed)
 
-  // Auto-expand when streaming starts, auto-collapse when it ends.
+  // Auto-expand during streaming, smoothly collapse after streaming ends
   useEffect(() => {
     if (streaming) {
       setOpen(true)
-    } else {
-      // Streaming just ended — collapse into compact mode so the main reply
-      // gets focus. A small delay makes the transition feel intentional.
-      const t = setTimeout(() => setOpen(false), 300)
+    } else if (initialCollapsed) {
+      const t = setTimeout(() => setOpen(false), 500)
       return () => clearTimeout(t)
     }
-  }, [streaming])
+  }, [streaming, initialCollapsed])
 
   if (!text || !text.trim()) return null
 

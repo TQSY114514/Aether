@@ -72,6 +72,7 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   callbacks.onThinkingStart = () => safeSend('chat:thinking-start', { messageId: msgId, sessionId })
   callbacks.onThinkingEnd   = () => safeSend('chat:thinking-end',   { messageId: msgId, sessionId })
   callbacks.onThinkingDelta = (text) => safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text, done: false })
+  callbacks.onStreamDelta = (delta) => safeSend('chat:stream-chunk', { messageId: msgId, sessionId, delta, done: false })
 
   callbacks.onToolCall = (entry) =>
     safeSend('chat:tool-call', { messageId: msgId, sessionId, tool: entry })

@@ -666,6 +666,9 @@ Reply in this format:
           onThinkingDelta: (delta) => {
             try { onThinkingDelta?.(delta) } catch {}
           },
+          onStreamDelta: (delta) => {
+            try { onStreamDelta?.(delta) } catch {}
+          },
         },
       })
       try { onThinkingEnd?.() } catch {}
