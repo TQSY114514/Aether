@@ -85,8 +85,14 @@ function makeDbAdapter(dbPath) {
 }
 
 function writeFixtures(dir, fixtures) {
+  const base = path.resolve(dir)
   for (const f of fixtures || []) {
-    const target = path.join(dir, f.path)
+    // Guard against suite-declared paths escaping the temp workspace (path traversal).
+    const target = path.resolve(base, f.path)
+    const relative = path.relative(base, target)
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error(`fixture path escapes workspace: ${f.path}`)
+    }
     fs.mkdirSync(path.dirname(target), { recursive: true })
     fs.writeFileSync(target, f.content, 'utf8')
   }
@@ -178,6 +184,7 @@ function aggregate(results) {
     if (r.ok) s.passed++
   }
   for (const s of Object.values(summary)) s.avgDurationMs = Math.round(s.totalDurationMs / Math.max(s.total, 1))
+  for (const s of Object.values(summary)) s.totalTokens = s.inputTokens + s.outputTokens
   return summary
 }
 
