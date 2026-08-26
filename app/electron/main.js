@@ -175,7 +175,10 @@ function createWindow() {
 
   let appIcon = undefined
   if (fs.existsSync(iconPath)) {
-    try { appIcon = nativeImage.createFromPath(iconPath) } catch {}
+    try {
+      const img = nativeImage.createFromPath(iconPath)
+      if (img && !img.isEmpty()) appIcon = img
+    } catch {}
   }
 
   mainWindow = new BrowserWindow({

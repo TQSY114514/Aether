@@ -1,3 +1,14 @@
+function ensureAllChatListeners() {
+  ensureChunkListener()
+  ensureToolCallListener()
+  ensurePlanStepListener()
+  ensureStatusListener()
+  ensureTodoListener()
+  ensureThinkingListener()
+  ensureLoopStateListener()
+  ensureUsageListener()
+}
+
 import type { StateCreator } from "zustand"
 import type { Message } from "@/types"
 import type { AppState } from "./types"
@@ -128,14 +139,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }))
     get().loadSessions()
 
-    ensureChunkListener()
-    ensureToolCallListener()
-    ensurePlanStepListener()
-    ensureStatusListener()
-    ensureTodoListener()
-    ensureThinkingListener()
-    ensureLoopStateListener()
-    ensureUsageListener()
+    ensureAllChatListeners()
     get().resetTurnUsage(currentSessionId)
 
     try {

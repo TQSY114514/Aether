@@ -61,7 +61,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
   if (!isLooping && !isStreaming) return null
 
   // Strict session scoping: only include messages in the active session
-  const sessionMsgIds = new Set(messages.map((m) => m.id))
+  const sessionMsgIds = useMemo(() => new Set(messages.filter((m) => !sessionId || m.session_id === sessionId).map((m) => m.id)), [messages, sessionId])
   const activeMessageId = sessionId ? streamingBySession[sessionId]?.messageId : null
 
   // 1. Check if there are structured Todos/Plan for this session (含已完成、进行中、将要执行的步骤)
