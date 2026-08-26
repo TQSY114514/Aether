@@ -84,18 +84,19 @@ export function toolToSnapshotPath(name, args) {
  * @param {{ current: {resolve: Function, name: string, args: object} | null }} opts.resolveRef
  * @param {Function} [opts.captureImpl]
  * @param {Function} [opts.pathImpl]
- * @returns {(perm: {name: string, args: object, risk?: string}) => Promise<boolean> & { takeSnapshot: (name: string) => object | null }}
+ * @param {{name: string, args: object, risk?: string, reason?: string}} perm
+ * @returns {(perm: {name: string, args: object, risk?: string, reason?: string}) => Promise<boolean> & { takeSnapshot: (name: string) => object | null }}
  */
 export function createTuiPermissionHandler({ dispatch, allowRules, sessionId = 'tui', resolveRef, captureImpl = captureFileSnapshot, pathImpl = toolToSnapshotPath }) {
   const snapshots = new Map() // toolName -> snapshot（TOOL_START 时消费）
-  const handler = async ({ name, args, risk }) => {
+  const handler = async ({ name, args, risk, reason }) => {
     if (allowRules.match(sessionId, name, args)) return true
     const filePath = pathImpl(name, args)
     const snapshot = filePath ? captureImpl(filePath) : null
     if (snapshot) snapshots.set(name, snapshot)
     return new Promise((resolve) => {
       resolveRef.current = { resolve, name, args }
-      dispatch({ type: 'PERMISSION_REQUEST', payload: { name, args, risk: risk || 'unknown', snapshot } })
+      dispatch({ type: 'PERMISSION_REQUEST', payload: { name, args, risk: risk || 'unknown', snapshot, reason: reason || undefined } })
     })
   }
   handler.takeSnapshot = (name) => {

@@ -63,6 +63,9 @@ export default function PermissionDialog() {
   const Icon = meta.icon
   const impact = (req as any).impact as { summary?: string; severity?: string; affectedFiles?: string[]; command?: string; riskTags?: string[]; rollback?: string; alternatives?: string } | undefined
   const severityColor = impact?.severity ? SEVERITY_COLORS[impact.severity] || 'var(--text-muted)' : 'var(--text-muted)'
+  // P0-2 人话透传：策略层原因（capability 轴 ask 等）
+  const reasonRaw = (req as any).reason as string | undefined
+  const axisMatch = reasonRaw ? reasonRaw.match(/^capability policy: (\w+) axis requires approval$/) : null
 
   const handleDeny = () => resolve(req.reqId, false, false)
   const handleAllowSession = () => resolve(req.reqId, true, 'session')
@@ -83,6 +86,14 @@ export default function PermissionDialog() {
             <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t(meta.labelKey)} · {t('tool.risk.high')}</p>
           </div>
         </div>
+
+        {/* Axis policy attribution — capability.<axis> = ask */}
+        {axisMatch && (
+          <div className="rounded-lg px-3 py-2 mb-3 text-[11px] font-medium"
+            style={{ backgroundColor: 'rgba(217,119,6,0.12)', border: '1px solid rgba(217,119,6,0.35)', color: '#d97706' }}>
+            {t('agent.permission.axis_ask').replace('{0}', t(`capability.axis.${axisMatch[1]}`))}
+          </div>
+        )}
 
         {/* Explanation card — what / impact / risk tags / affected files / command / rollback / alternatives */}
         <div className="rounded-lg border p-3 mb-3 space-y-2" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>

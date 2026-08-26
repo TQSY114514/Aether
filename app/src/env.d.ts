@@ -131,7 +131,7 @@ interface Window {
       onQuestion: (callback: (payload: { reqId: string; sessionId: number; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }) => void) => () => void
       onQuestionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyQuestion: (payload: { reqId: string; answers: { question: string; answer: string }[] }) => Promise<boolean>
-      onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous'; impact?: { summary?: string; severity?: string; affectedFiles?: string[]; command?: string; riskTags?: string[]; rollback?: string; alternatives?: string } | null }) => void) => () => void
+      onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous'; reason?: string; impact?: { summary?: string; severity?: string; affectedFiles?: string[]; command?: string; riskTags?: string[]; rollback?: string; alternatives?: string } | null }) => void) => () => void
       onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
       replyPermission: (payload: { reqId: string; allowed: boolean; remember?: boolean }) => Promise<boolean>
       onToolStream: (callback: (payload: { messageId: number; sessionId: number; text: string; done: boolean }) => void) => () => void

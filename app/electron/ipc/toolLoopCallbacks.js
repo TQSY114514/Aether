@@ -187,8 +187,9 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
 
   // requestPermission: check allow-rules first; otherwise prompt the user via
   // the permission dialog. 60s timeout. `source` field tells the renderer
-  // whether this is a 'chat' turn or a 'task' background run.
-  callbacks.requestPermission = ({ name, args, risk }) => {
+  // whether this is a 'chat' turn or a 'task' background run. `reason` (when
+  // present) carries the policy attribution, e.g. capability axis ask.
+  callbacks.requestPermission = ({ name, args, risk, reason }) => {
     if (allowRules.match(sessionId, name, args)) return Promise.resolve(true)
     let impactPreview = null
     try { impactPreview = require('../tools/toolImpact').toolImpact(name, args) } catch {}
@@ -218,7 +219,7 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       controller.signal.addEventListener('abort', onAbort)
       if (!safeWc) { finish(false); return }
       safeWc.on('chat:permission-reply', onReply)
-      safeSend('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk, impact: impactPreview, source })
+      safeSend('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk, impact: impactPreview, source, reason: reason || undefined })
     })
   }
 
