@@ -32,6 +32,7 @@ let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
 let _statusListenerInstalled = false
 let _habitSuggestionInstalled = false
+let _todoListenerInstalled = false
 let _thinkingListenerInstalled = false
 let _loopStateListenerInstalled = false
 let _planStepListenerInstalled = false
@@ -216,6 +217,22 @@ export function ensureHabitSuggestionListener() {
   })
 }
 
+
+// Todo update listener
+export function ensureTodoListener() {
+  if (_todoListenerInstalled) return
+  _todoListenerInstalled = true
+  window.electronAPI.chat.onTodoUpdate?.(({ messageId, sessionId, todos }) => {
+    if (!messageId || !todos) return
+    getStore().setState((s) => ({
+      todosByMessage: {
+        ...s.todosByMessage,
+        [messageId]: todos,
+      },
+    }))
+  })
+}
+
 // Thinking listener
 
 export function ensureThinkingListener() {
@@ -313,6 +330,7 @@ export function ensureAllListeners() {
   ensurePlanStepListener()
   ensureStatusListener()
   ensureHabitSuggestionListener()
+  ensureTodoListener()
   ensureThinkingListener()
   ensureLoopStateListener()
   ensureUsageListener()

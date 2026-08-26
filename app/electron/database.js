@@ -1204,15 +1204,16 @@ function searchMemories(rawQuery) {
   } catch { return [] }
 }
 async function searchFiles(query, rootDir, limit = 30) {
-  if (!rootDir || !query || !query.trim()) return []
+  const root = rootDir || require('./tools/sandbox').getWorkspaceRoot()
+  if (!root) return []
   try {
     const { scanWorkspace } = require('./context/fileScanner')
-    const files = await scanWorkspace(rootDir)
-    const q = query.trim().toLowerCase()
+    const files = await scanWorkspace(root)
+    const q = (query || '').trim().toLowerCase()
     const results = []
     for (const f of files) {
       if (results.length >= limit) break
-      if (f.relPath.toLowerCase().includes(q)) {
+      if (!q || f.relPath.toLowerCase().includes(q)) {
         results.push({ relPath: f.relPath, absPath: f.absPath, size: f.size, ext: f.ext, modified: f.modified })
       }
     }

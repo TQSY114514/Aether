@@ -112,6 +112,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onToolLoopStart: (cb) => subscribe('chat:tool-loop-start', cb),
     onToolLoopEnd: (cb) => subscribe('chat:tool-loop-end', cb),
     onUsage: (cb) => subscribe('chat:usage', cb),
+    compact: (sessionId) => ipcRenderer.invoke('chat:compact', sessionId),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
