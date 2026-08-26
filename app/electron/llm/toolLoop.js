@@ -695,7 +695,9 @@ Reply in this format:
     if (!msg) msg = { content: '', tool_calls: undefined }
     const hasToolCalls = !!(msg.tool_calls && msg.tool_calls.length)
     const kind = hasToolCalls ? 'act' : 'plan'
-    try { if (msg.content) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
+    // Only emit onPlanStep during intermediate tool calls — never emit the final conversational reply as a plan step
+    try { if (msg.content && hasToolCalls) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
+    if (msg.reasoning) { try { onThinkingDelta?.(msg.reasoning) } catch {} }
 
     if (msg.tool_calls && msg.tool_calls.length) {
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })

@@ -1,3 +1,75 @@
+// Stream/batch helper to separate <think>...</think> tags from model content
+class ThinkTagExtractor {
+  constructor() {
+    this.inThink = false
+    this.buf = ''
+  }
+  process(chunk) {
+    let content = ''
+    let reasoning = ''
+    this.buf += chunk
+    while (this.buf.length > 0) {
+      if (!this.inThink) {
+        const startIdx = this.buf.indexOf('<think>')
+        if (startIdx === -1) {
+          const m = this.buf.match(/<t?h?i?n?k?$/i)
+          if (m && m.index > 0) {
+            content += this.buf.slice(0, m.index)
+            this.buf = this.buf.slice(m.index)
+          } else if (!m) {
+            content += this.buf
+            this.buf = ''
+          }
+          break
+        } else {
+          content += this.buf.slice(0, startIdx)
+          this.buf = this.buf.slice(startIdx + 7)
+          this.inThink = true
+        }
+      } else {
+        const endIdx = this.buf.indexOf('</think>')
+        if (endIdx === -1) {
+          const m = this.buf.match(/<\/?t?h?i?n?k?>?$/i)
+          if (m && m.index > 0) {
+            reasoning += this.buf.slice(0, m.index)
+            this.buf = this.buf.slice(m.index)
+          } else if (!m) {
+            reasoning += this.buf
+            this.buf = ''
+          }
+          break
+        } else {
+          reasoning += this.buf.slice(0, endIdx)
+          this.buf = this.buf.slice(endIdx + 8)
+          this.inThink = false
+        }
+      }
+    }
+    return { content, reasoning }
+  }
+  flush() {
+    let content = ''
+    let reasoning = ''
+    if (this.buf.length > 0) {
+      if (this.inThink) reasoning = this.buf
+      else content = this.buf
+      this.buf = ''
+    }
+    return { content, reasoning }
+  }
+}
+
+function extractThinkTags(text) {
+  if (!text || typeof text !== 'string') return { content: '', reasoning: '' }
+  const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i)
+  if (thinkMatch) {
+    const reasoning = thinkMatch[1].trim()
+    const content = text.replace(/<think>[\s\S]*?<\/think>/i, '').trim()
+    return { content, reasoning }
+  }
+  return { content: text, reasoning: '' }
+}
+
 ﻿// ───────────────────────────────────────────────────────────────────────────
 // OpenAI-compatible adapter
 //
@@ -55,6 +127,7 @@ function normalizeMessages(messages) {
 // worked fine. Usage stats are collected on the non-streaming paths instead.
 async function* streamChat({ provider, model, messages, signal, options = {} }) {
   const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
+  const thinkExtractor = new ThinkTagExtractor()
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
@@ -85,10 +158,17 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
     for (const line of lines) {
       const { delta, reasoning, usage } = parseSSELine(line)
       if (usage) streamChat.usage = usage
-      if (delta) { yield delta }
       if (reasoning) {
         _thinkingText += reasoning
         try { onThinking?.(_thinkingText) } catch {}
+      }
+      if (delta) {
+        const ext = thinkExtractor.process(delta)
+        if (ext.reasoning) {
+          _thinkingText += ext.reasoning
+          try { onThinking?.(_thinkingText) } catch {}
+        }
+        if (ext.content) { yield ext.content }
       }
     }
   }
@@ -96,12 +176,25 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
   if (buffer.startsWith('data: ')) {
     const { delta, reasoning, usage } = parseSSELine(buffer)
     if (usage) streamChat.usage = usage
-    if (delta) { yield delta }
     if (reasoning) {
       _thinkingText += reasoning
       try { onThinking?.(_thinkingText) } catch {}
     }
+    if (delta) {
+      const ext = thinkExtractor.process(delta)
+      if (ext.reasoning) {
+        _thinkingText += ext.reasoning
+        try { onThinking?.(_thinkingText) } catch {}
+      }
+      if (ext.content) { yield ext.content }
+    }
   }
+  const flushed = thinkExtractor.flush()
+  if (flushed.reasoning) {
+    _thinkingText += flushed.reasoning
+    try { onThinking?.(_thinkingText) } catch {}
+  }
+  if (flushed.content) { yield flushed.content }
 }
 
 // Parse one SSE `data:` line into { delta, usage }. delta is the content
@@ -164,7 +257,14 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
   const data = await res.json()
   const msg = data.choices?.[0]?.message || {}
-  return { content: msg.content || '', tool_calls: msg.tool_calls, usage: data.usage, reasoning: msg.reasoning_content || msg.reasoning || '' }
+  let content = msg.content || ''
+  let reasoning = msg.reasoning_content || msg.reasoning || ''
+  if (!reasoning && content.includes('<think>')) {
+    const ext = extractThinkTags(content)
+    content = ext.content
+    reasoning = ext.reasoning
+  }
+  return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning }
 }
 
 // normalizeUsage is imported from ../utils/llmShared

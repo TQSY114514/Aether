@@ -516,8 +516,18 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           } catch {}
         }
-        wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId })
-        wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
+        // Chunked emit: stream final content in ~150-char pieces so the renderer
+        // shows a smooth progressive reveal instead of one bulk dump at the end.
+        if (finalContent && finalContent.length > 200) {
+          const CHUNK_SIZE = 150;
+          for (let _ci = 0; _ci < finalContent.length; _ci += CHUNK_SIZE) {
+            wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent.slice(_ci, _ci + CHUNK_SIZE), done: false, sessionId });
+            await new Promise(r => setTimeout(r, 8));
+          }
+        } else if (finalContent) {
+          wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId });
+        }
+        wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId });
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
@@ -570,12 +580,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
           if (delta) {
             fullContent += delta
             wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId })
+            // Signal thinking is complete as soon as main content tokens start flowing
+            if (lastThinkingLen > 0) {
+              wc?.send('chat:thinking-end', { messageId: msgId, sessionId })
+              lastThinkingLen = -1
+            }
           }
-          // Surface completed thinking block to the UI.
-          if (thinkingSupported && stream.thinkingBlocks && stream.thinkingBlocks.length > 0 && lastThinkingLen > 0 && stream.thinkingBlocks[0].text.length === lastThinkingLen) {
-            wc?.send('chat:thinking-end', { messageId: msgId, sessionId })
-            lastThinkingLen = -1 // don't re-send
-          }
+
         }
         clearTimeout(timeout)
         abortControllers.delete(msgId)
