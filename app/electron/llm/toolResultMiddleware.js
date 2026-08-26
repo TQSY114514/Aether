@@ -22,8 +22,40 @@ const MAX_TOOL_RESULT_CHARS = 16000 // cap a single tool result ~16k chars
 function truncateMiddleware(content) {
   if (typeof content !== 'string') content = String(content ?? '')
   if (content.length <= MAX_TOOL_RESULT_CHARS) return content
-  const head = content.slice(0, MAX_TOOL_RESULT_CHARS)
-  return head + `\n\n[… truncated ${content.length - MAX_TOOL_RESULT_CHARS} chars …]`
+
+  const HEAD_CHARS = 4000
+  const TAIL_CHARS = 6000
+  const head = content.slice(0, HEAD_CHARS)
+  const tail = content.slice(-TAIL_CHARS)
+  const middle = content.slice(HEAD_CHARS, content.length - TAIL_CHARS)
+
+  // Scan middle chunk for error / failure signals so critical stack traces are not lost
+  const errorLines = []
+  const lines = middle.split('\n')
+  const ERROR_RE = /(?:error|fail|exception|fatal|panic|cannot|syntaxerror|typeerror|uncaught|reject|warn)/i
+  let collectedChars = 0
+  const MAX_EXTRACTED_ERROR_CHARS = 3000
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (ERROR_RE.test(line)) {
+      const snippet = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 2)).join('\n')
+      if (collectedChars + snippet.length <= MAX_EXTRACTED_ERROR_CHARS) {
+        errorLines.push(snippet)
+        collectedChars += snippet.length
+        i += 1
+      }
+    }
+    if (collectedChars >= MAX_EXTRACTED_ERROR_CHARS) break
+  }
+
+  const omittedChars = content.length - (head.length + tail.length + collectedChars)
+  let middleSummary = `\n\n[… truncated ${omittedChars > 0 ? omittedChars : 0} chars from middle …]\n`
+  if (errorLines.length > 0) {
+    middleSummary += `[Extracted key error lines from middle]:\n${errorLines.join('\n---\n')}\n[… continuing to output tail …]\n\n`
+  }
+
+  return head + middleSummary + tail
 }
 
 // Redact things that look like secrets before the model ever sees them. Catches

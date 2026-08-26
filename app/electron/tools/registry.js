@@ -17,7 +17,7 @@ function guardWorkspaceRead(target, ctx, label) {
   const p = String(target || ''); if (!p) return
   if (ctx?.agentMode !== 'ask') return
   if (isInsideWorkspace(p, ctx?.sessionId)) return
-  throw new Error(`读取被拒绝：${label} ${p} 位于工作区之外（当前为 ask 模式）。如确需读取该路径，请改用 ask_user 工具向用户说明并请求批准`)
+  throw new Error(`璇诲彇琚嫆缁濓細${label} ${p} 浣嶄簬宸ヤ綔鍖轰箣澶栵紙褰撳墠涓?ask 妯″紡锛夈€傚纭渶璇诲彇璇ヨ矾寰勶紝璇锋敼鐢?ask_user 宸ュ叿鍚戠敤鎴疯鏄庡苟璇锋眰鎵瑰噯`)
 }
 
 function lspFullEnabled(ctx) {
@@ -64,7 +64,7 @@ function formatRipgrepLines(output, cwd) {
   return hits.join('\n') || '(no matches)'
 }
 
-// ── DDG snippet extraction ──────────────────────────────────────────────
+// 鈹€鈹€ DDG snippet extraction 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 function extractDdgSnippets(html, q) {
   const snippets = []; const re = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g; let m
   while ((m = re.exec(html)) && snippets.length < 5) { const t = m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); if (t) snippets.push(`- ${t}`) }
@@ -72,7 +72,7 @@ function extractDdgSnippets(html, q) {
   return snippets.join('\n')
 }
 
-// ── Unified diff parser ─────────────────────────────────────────────────
+// 鈹€鈹€ Unified diff parser 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 function parseUnifiedDiff(text) {
   const lines = text.split('\n'); const hunks = []; let current = null; let i = 0
   while (i < lines.length) {
@@ -111,7 +111,7 @@ function applyHunks(fileLines, hunks) {
   return { content: result.join('\n'), applied, conflicts }
 }
 
-// ── Shell result formatting + optional Docker sandbox for run_command ───
+// 鈹€鈹€ Shell result formatting + optional Docker sandbox for run_command 鈹€鈹€鈹€
 
 function formatShellResult(stdout, stderr, exitCode, timedOut) {
   const out = stdout?.trim() || ''; const err = stderr?.trim() || ''; const parts = []
@@ -123,7 +123,7 @@ function formatShellResult(stdout, stderr, exitCode, timedOut) {
 }
 
 const DOCKER_EXIT_MARKER = 'AETHER_EXIT_CODE:'
-// Sentinel for "our time budget ran out" — distinct from backend errors so
+// Sentinel for "our time budget ran out" 鈥?distinct from backend errors so
 // races between backend calls and the deadline resolve unambiguously.
 const DOCKER_DEADLINE_LOST = { __deadlineLost: true }
 
@@ -136,7 +136,7 @@ async function runInDocker(cmd, timeoutMs, db) {
   try { image = String(db?.getSetting('exec.docker.image') || image) } catch { /* keep default image */ }
   // One budget covers the WHOLE operation. Probe (~8s), `docker run` (~30s)
   // and each inspect/logs poll (their own CLI timeouts) all burn wall-clock
-  // time, so the deadline must start BEFORE execute() and race every await —
+  // time, so the deadline must start BEFORE execute() and race every await 鈥?
   // otherwise a 1s request could realistically take a minute.
   const deadline = Date.now() + Math.max(timeoutMs, 1000)
   const remaining = () => deadline - Date.now()
@@ -154,7 +154,7 @@ async function runInDocker(cmd, timeoutMs, db) {
     sleep(Math.max(remaining(), 1)).then(() => DOCKER_DEADLINE_LOST),
   ])
   if (started === DOCKER_DEADLINE_LOST) {
-    // execute() may still land later — reap its container in the background
+    // execute() may still land later 鈥?reap its container in the background
     // so nothing lingers past our budget.
     void execPromise.then((s) => { if (s && s.ok) { try { dockerBackend.dispose(s.execId) } catch { /* best effort */ } } })
     return formatShellResult('', '', '', true)
@@ -191,9 +191,9 @@ async function runInDocker(cmd, timeoutMs, db) {
 
     const raw = `${st.stdoutTail || ''}\n${st.stderrTail || ''}`
     const idx = raw.lastIndexOf(DOCKER_EXIT_MARKER)
-    // Exit code priority: in-band marker (command ran to completion) →
+    // Exit code priority: in-band marker (command ran to completion) 鈫?
     // the container's real .State.ExitCode from docker inspect. Never default
-    // an exited container to 0 — a failed entrypoint or a kill must surface.
+    // an exited container to 0 鈥?a failed entrypoint or a kill must surface.
     let exitCode = typeof st.exitCode === 'number' ? st.exitCode : undefined
     let combined = raw
     if (idx !== -1) {
@@ -207,9 +207,9 @@ async function runInDocker(cmd, timeoutMs, db) {
   }
 }
 
-// ── Tool definitions ────────────────────────────────────────────────────
+// 鈹€鈹€ Tool definitions 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 const TOOLS = [
-  // ── Read tools ──────────────────────────────────────────────────────────
+  // 鈹€鈹€ Read tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'read_file', description: 'Read file content (up to 64KB).', risk: 'safe', parameters: { type: 'object', properties: { path: { type: 'string' }, offset: { type: 'number' }, limit: { type: 'number' } }, required: ['path'] }, run: (args, ctx) => {
     const p = String(args.path || ''); if (!p) throw new Error('path is required'); guardWorkspaceRead(p, ctx, 'path')
     const buf = fs.readFileSync(p); let text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
@@ -257,7 +257,7 @@ const TOOLS = [
     if (mode === 'impact') {
       const g = await pi.indexWorkspace(root); const r = a.analyzeImpact(g, String(args.query || ''))
       if (!r.total) return `no files reference "${args.query}"`
-      return [`Impact: "${args.query}"`, `Direct: ${r.direct.length}`, ...r.direct.map(f => `  → ${f}`), `Transitive: ${r.transitive.length}`, ...r.transitive.map(f => `  → ${f}`), `Total: ${r.total}`].join('\n')
+      return [`Impact: "${args.query}"`, `Direct: ${r.direct.length}`, ...r.direct.map(f => `  鈫?${f}`), `Transitive: ${r.transitive.length}`, ...r.transitive.map(f => `  鈫?${f}`), `Total: ${r.total}`].join('\n')
     }
     if (mode === 'relevance') {
       const g = await pi.indexWorkspace(root); const topN = Number(args.maxFiles) || 20
@@ -268,7 +268,7 @@ const TOOLS = [
     const an = a.analyzeCodebase(null, root, { maxFiles: 3000 }); if (!an) return 'analysis failed'
     const L = [`Codebase: ${path.basename(root)}`, `Frameworks: ${an.frameworks.map(f => `${f.framework} (${Math.round(f.confidence * 100)}%)`).join(', ') || 'none'}`, `Files: ${an.fileCount} | Graph: ${an.graphNodes} nodes, ${an.graphEdges} edges`, '']
     if (an.entryPoints.length) { L.push(`Entry points:`, ...an.entryPoints.slice(0, 10).map(e => `  [${e.type}] ${e.file}`)); L.push('') }
-    if (an.apiRoutes.length) { L.push(`API routes:`, ...an.apiRoutes.slice(0, 15).map(r => `  ${r.path} → ${r.file}`)); L.push('') }
+    if (an.apiRoutes.length) { L.push(`API routes:`, ...an.apiRoutes.slice(0, 15).map(r => `  ${r.path} 鈫?${r.file}`)); L.push('') }
     if (an.configs.length) L.push(`Configs: ${an.configs.map(c => c.type).join(', ')}`)
     return L.join('\n')
   }},
@@ -279,7 +279,7 @@ const TOOLS = [
     return Object.entries(files).map(([t, f]) => `## ${f.fileName} (${t})\n\n${f.content}`).join('\n\n---\n\n')
   }},
 
-  // ── Write tools ────────────────────────────────────────────────────────
+  // 鈹€鈹€ Write tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'write_file', description: 'Write text to a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const c = String(args.content ?? ''); if (!p) throw new Error('path is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
@@ -303,13 +303,13 @@ const TOOLS = [
     await fs.promises.writeFile(p, r.content, 'utf-8'); return `patched ${p} (${r.applied} hunks)`
   }},
 
-  // ── Execution tools ─────────────────────────────────────────────────────
+  // 鈹€鈹€ Execution tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: (args, ctx) => {
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
     // Explicit backend selection: ctx.executionBackend (future wiring) or the
-    // exec.backend setting — makes the resolver's configured branch reachable
+    // exec.backend setting 鈥?makes the resolver's configured branch reachable
     // from this tool instead of dead code.
     let configured = ctx?.executionBackend || ''
     if (!configured && ctx?.db) { try { configured = String(ctx.db.getSetting('exec.backend') || '') } catch { /* fall through to mode-based resolution */ } }
@@ -325,7 +325,7 @@ const TOOLS = [
     })
   }},
 
-  // ── Agent tools ─────────────────────────────────────────────────────────
+  // 鈹€鈹€ Agent tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'delegate_task', description: 'Delegate parallel sub-tasks to sub-agents.', risk: 'dangerous', parameters: { type: 'object', properties: { tasks: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 } }, required: ['tasks'] }, run: async (args, ctx) => {
     const tasks = Array.isArray(args.tasks) ? args.tasks.filter(Boolean) : []
     if (!tasks.length) throw new Error('tasks must be non-empty')
@@ -365,7 +365,7 @@ const TOOLS = [
     const ftr = (Array.isArray(args.files) ? args.files : []).slice(0, 5).map(f => { try { return { path: f, content: fs.readFileSync(f, 'utf-8') } } catch { return null } }).filter(Boolean)
     return (await reviewFiles({ provider: ctx.provider, model: ctx.model, files: ftr, signal: ctx.signal })).summary
   }},
-  { name: 'run_arena', description: 'Multi-agent arena: plan → cross-review → judge → execute. Modes: plan_only, full.', risk: 'dangerous', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['plan_only', 'full'] }, request: { type: 'string' }, roles: { type: 'array', items: { type: 'string' } } }, required: ['request'] }, run: async (args, ctx) => {
+  { name: 'run_arena', description: 'Multi-agent arena: plan 鈫?cross-review 鈫?judge 鈫?execute. Modes: plan_only, full.', risk: 'dangerous', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['plan_only', 'full'] }, request: { type: 'string' }, roles: { type: 'array', items: { type: 'string' } } }, required: ['request'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
     const ar = require('../llm/agentArena'); const mode = String(args.mode || 'plan_only'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
@@ -376,7 +376,7 @@ const TOOLS = [
     } catch (e) { return `error: ${e?.message}` }
   }},
 
-  // ── Memory tools ────────────────────────────────────────────────────────
+  // 鈹€鈹€ Memory tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'memory_save', description: 'Save a structured memory entry (entity/fact/context/relation). DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { content: { type: 'string' }, type: { type: 'string', enum: ['entity', 'fact', 'context', 'relation'] } }, required: ['content', 'type'] }, run: async (args, ctx) => {
     if (!ctx?.db) return 'no db'
     const c = String(args.content || '').trim(); const t = String(args.type || 'fact')
@@ -388,7 +388,7 @@ const TOOLS = [
     } catch (e) { return `error: ${e.message}` }
   }},
 
-  // ── Web tools ───────────────────────────────────────────────────────────
+  // 鈹€鈹€ Web tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'web_search', description: 'Search the web (DDG).', risk: 'safe', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, run: async (args, ctx) => {
     const q = String(args.query || ''); if (!q) throw new Error('query required')
     const ctrl = new AbortController(); const timeout = setTimeout(() => ctrl.abort(), 15000)
@@ -400,22 +400,39 @@ const TOOLS = [
       if (!res.ok) return `[failed: HTTP ${res.status}]`; const html = await res.text(); return `<!-- EXTERNAL_WEB_SEARCH -->\n${extractDdgSnippets(html, q)}`
     } catch (e) { return `[error: ${e.message}]` } finally { clearTimeout(timeout) }
   }},
-  { name: 'web_fetch', description: 'Fetch URL content (up to 16KB).', risk: 'safe', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }, run: async (args, ctx) => {
+  { name: 'web_fetch', description: 'Fetch URL content (up to 16KB). Supports GitHub API with token auth.', risk: 'safe', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }, run: async (args, ctx) => {
     const url = String(args.url || ''); if (!url) throw new Error('url required')
     if (ctx?.db) { try { const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy'); if (policyActive(ctx.db)) { const a2 = checkUrlPolicy(ctx.db, url); if (!a2.ok) return `[blocked]` } } catch { return `[blocked: network policy check failed]` } }
     const ssrf = checkSSRF(url); if (!ssrf.ok) return `[blocked]`
     let parsed; try { parsed = new URL(url) } catch { return '[invalid]' }
     try { await checkSSRFHostname(parsed.hostname) } catch (e) { return `[blocked: ${e.message}]` }
+    // Build request headers — inject GitHub auth automatically for api.github.com.
+    const reqHeaders = { 'User-Agent': 'Aether/1.0' }
+    const isGitHubApi = parsed.hostname === 'api.github.com' || parsed.hostname === 'github.com'
+    if (isGitHubApi && ctx?.db) {
+      const ghToken = (() => { try { return ctx.db.getSetting('github_token') || '' } catch { return '' } })()
+      if (ghToken) {
+        reqHeaders['Authorization'] = `Bearer ${ghToken}`
+        reqHeaders['X-GitHub-Api-Version'] = '2022-11-28'
+        reqHeaders['Accept'] = 'application/vnd.github+json'
+      } else {
+        return '[auth required] GitHub token not configured. Go to Settings → GitHub Token and enter a Personal Access Token (PAT) with appropriate scopes.'
+      }
+    }
     const ctrl = new AbortController(); const timeout = setTimeout(() => ctrl.abort(), 20000)
     try {
-      const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Aether/0.1' }, redirect: 'error' })
-      if (!res.ok) return `[failed: HTTP ${res.status}]`; const raw = await res.text()
-      const text = (res.headers.get('content-type') || '').includes('html') ? raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
+      const res = await fetch(url, { signal: ctrl.signal, headers: reqHeaders, redirect: 'follow' })
+      if (res.status === 401 || res.status === 403) return `[auth failed: HTTP ${res.status}] GitHub token may be expired or lack required scopes.`
+      if (res.status === 404) return `[not found: HTTP 404] Resource does not exist or is private.`
+      if (!res.ok) return `[failed: HTTP ${res.status}]`
+      const raw = await res.text()
+      const ct = res.headers.get('content-type') || ''
+      const text = ct.includes('html') ? raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw
       return `<!-- EXTERNAL_WEB_FETCH -->\n${text.slice(0, 16384)}${text.length > 16384 ? '\n[truncated]' : ''}`
     } catch (e) { return `[error: ${e.message}]` } finally { clearTimeout(timeout) }
   }},
 
-  // ── Platform tools ──────────────────────────────────────────────────────
+  // 鈹€鈹€ Platform tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'use_skill', description: 'Load a skill by name.', risk: 'safe', parameters: { type: 'object', properties: { skill_name: { type: 'string' } }, required: ['skill_name'] }, run: (args) => {
     const name = String(args.skill_name || ''); if (!name) throw new Error('skill_name required')
     const skillsMod = require('../llm/skills')
@@ -438,16 +455,16 @@ const TOOLS = [
     } catch (e) { return `error: ${e.message}` }
   }},
 
-  // ── Debug tools ─────────────────────────────────────────────────────────
-  { name: 'debug_loop', description: 'Run test → analyze → fix loop until tests pass or max cycles.', risk: 'dangerous', parameters: { type: 'object', properties: { maxCycles: { type: 'number' } } }, run: async (args, ctx) => {
+  // 鈹€鈹€ Debug tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  { name: 'debug_loop', description: 'Run test 鈫?analyze 鈫?fix loop until tests pass or max cycles.', risk: 'dangerous', parameters: { type: 'object', properties: { maxCycles: { type: 'number' } } }, run: async (args, ctx) => {
     const da = require('./debugAgent'); const maxC = Math.min(Number(args.maxCycles) || 5, 10)
     const r = await da.runDebugLoop({ provider: ctx.provider, model: ctx.model, signal: ctx.signal, sessionId: ctx.sessionId })
-    if (r.success) return `✅ ${r.summary} (${r.cycles} cycles)`
-    const lines = [r.analysis ? r.analysis.description : `❌ Failed (${r.cycles}/${maxC})`]; return lines.join('\n')
+    if (r.success) return `鉁?${r.summary} (${r.cycles} cycles)`
+    const lines = [r.analysis ? r.analysis.description : `鉂?Failed (${r.cycles}/${maxC})`]; return lines.join('\n')
   }},
 ]
 
-// ── LSP tools (feature-flagged) ──────────────────────────────────────────
+// 鈹€鈹€ LSP tools (feature-flagged) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 function makeLspTool(name, desc, fn) {
   return { name, description: desc, risk: 'safe', parameters: { type: 'object', properties: { position: { type: 'object' } } }, run: async (args, ctx) => {
     if (!lspFullEnabled(ctx)) return 'LSP disabled'
@@ -464,20 +481,59 @@ TOOLS.push({ name: 'lsp_rename', description: 'Rename symbol via LSP. DANGEROUS.
 }})
 
 // ── GitHub tools ─────────────────────────────────────────────────────────
+// GitHub tools use the gh CLI when available, and fall back to the GitHub
+// REST API when gh is not authenticated. Requires either:
+//   (a) gh auth login has been run in the current repo, OR
+//   (b) a GitHub Token saved in Settings -> General -> GitHub Token.
+// Without either, tools return a clear, actionable error message.
+function _ghToken(db) {
+  try { return (db && db.getSetting('github_token')) || '' } catch { return '' }
+}
+function _ghHeaders(db) {
+  const token = _ghToken(db)
+  if (!token) return null
+  return { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Aether/1.0' }
+}
+async function _ghApiFetch(apiPath, method, body, db) {
+  const headers = _ghHeaders(db)
+  if (!headers) return { ok: false, error: 'No GitHub token configured. Run: gh auth login  OR go to Settings and set a GitHub Token.' }
+  const opts = { method: method || 'GET', headers }
+  if (body) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json' }
+  try {
+    const res = await fetch('https://api.github.com' + apiPath, opts)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: 'HTTP ' + res.status + ': ' + (data.message || JSON.stringify(data).slice(0, 200)) }
+    return { ok: true, data }
+  } catch (e) { return { ok: false, error: e.message } }
+}
 TOOLS.push(
-  { name: 'github_issue_create', description: 'Create a GitHub issue. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] }, run: async (args) => {
-    const t = String(args.title || ''); if (!t) throw new Error('title required')
-    const r = await runCommand('gh', ['issue', 'create', '--title', t, ...(args.body ? ['--body', String(args.body)] : [])], { timeout: 30000, maxBuffer: 16 * 1024 })
-    if (r.exitCode !== 0) throw new Error(r.stderr || 'failed'); return (r.stdout || 'Issue created').trim()
+  { name: 'github_issue_create', description: 'Create a GitHub issue. Requires gh auth login OR GitHub Token in Settings. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, repo: { type: 'string', description: 'owner/repo (e.g. octocat/Hello-World). Required for API fallback when gh CLI is not authenticated.' } }, required: ['title'] }, run: async (args, ctx) => {
+    const title = String(args.title || ''); if (!title) throw new Error('title required')
+    const r = await runCommand('gh', ['issue', 'create', '--title', title, ...(args.body ? ['--body', String(args.body)] : [])], { timeout: 30000, maxBuffer: 16 * 1024 })
+    if (r.exitCode === 0) return (r.stdout || 'Issue created').trim()
+    if (!args.repo) return '[gh CLI error] ' + (r.stderr || 'failed') + ". Tip: run 'gh auth login' or specify the repo param and set a GitHub Token in Settings."
+    const result = await _ghApiFetch('/repos/' + args.repo + '/issues', 'POST', { title, body: args.body || '' }, ctx && ctx.db)
+    if (!result.ok) return '[API error] ' + result.error
+    return 'Issue created: ' + result.data.html_url
   }},
-  { name: 'github_issue_list', description: 'List GitHub issues. Read-only.', risk: 'safe', parameters: { type: 'object', properties: { state: { type: 'string', enum: ['open', 'closed', 'all'] }, limit: { type: 'number' } } }, run: async (args) => {
+  { name: 'github_issue_list', description: 'List GitHub issues. Requires gh auth login OR GitHub Token + repo param. Read-only.', risk: 'safe', parameters: { type: 'object', properties: { state: { type: 'string', enum: ['open', 'closed', 'all'] }, limit: { type: 'number' }, repo: { type: 'string', description: 'owner/repo — required for API fallback.' } } }, run: async (args, ctx) => {
     const r = await runCommand('gh', ['issue', 'list', '--state', String(args.state || 'open'), '--limit', String(args.limit || 30)], { timeout: 30000, maxBuffer: 32 * 1024 })
-    if (r.exitCode !== 0) throw new Error(r.stderr || 'failed'); return r.stdout || '(none)'
+    if (r.exitCode === 0) return r.stdout || '(none)'
+    if (!args.repo) return '[gh CLI error] ' + (r.stderr || 'failed') + ". Tip: run 'gh auth login' or specify the repo param and set a GitHub Token in Settings."
+    const state = args.state || 'open'
+    const result = await _ghApiFetch('/repos/' + args.repo + '/issues?state=' + state + '&per_page=' + (args.limit || 30), 'GET', null, ctx && ctx.db)
+    if (!result.ok) return '[API error] ' + result.error
+    if (!Array.isArray(result.data) || result.data.length === 0) return '(none)'
+    return result.data.map(function(i) { return '#' + i.number + ' [' + i.state + '] ' + i.title + ' — ' + i.html_url }).join('\n')
   }},
-  { name: 'github_pr_create', description: 'Create a GitHub PR. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, base: { type: 'string' } }, required: ['title'] }, run: async (args, ctx) => {
-    const t = String(args.title || ''); if (!t) throw new Error('title required')
-    const r = await runCommand('gh', ['pr', 'create', '--title', t, '--base', String(args.base || 'master'), ...(args.body ? ['--body', String(args.body)] : [])], { timeout: 30000, maxBuffer: 16 * 1024 })
-    if (r.exitCode !== 0) throw new Error(r.stderr || 'failed'); return (r.stdout || 'PR created').trim()
+  { name: 'github_pr_create', description: 'Create a GitHub PR. Requires gh auth login OR GitHub Token + repo+head params. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, base: { type: 'string' }, head: { type: 'string', description: 'Head branch name — required for API fallback.' }, repo: { type: 'string', description: 'owner/repo — required for API fallback.' } }, required: ['title'] }, run: async (args, ctx) => {
+    const title = String(args.title || ''); if (!title) throw new Error('title required')
+    const r = await runCommand('gh', ['pr', 'create', '--title', title, '--base', String(args.base || 'main'), ...(args.body ? ['--body', String(args.body)] : [])], { timeout: 30000, maxBuffer: 16 * 1024 })
+    if (r.exitCode === 0) return (r.stdout || 'PR created').trim()
+    if (!args.repo || !args.head) return '[gh CLI error] ' + (r.stderr || 'failed') + ". Tip: run 'gh auth login' or specify repo+head params and set a GitHub Token in Settings."
+    const result = await _ghApiFetch('/repos/' + args.repo + '/pulls', 'POST', { title, body: args.body || '', head: args.head, base: args.base || 'main' }, ctx && ctx.db)
+    if (!result.ok) return '[API error] ' + result.error
+    return 'PR created: ' + result.data.html_url
   }}
 )
 
@@ -486,3 +542,4 @@ function getTool(name) { return TOOLS.find(t => t.name === name) }
 function toolsPayload() { return TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) }
 
 module.exports = { TOOLS, getTool, toolsPayload, parseUnifiedDiff, applyHunks }
+

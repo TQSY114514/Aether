@@ -233,6 +233,58 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     }
   })
 
+  // ─── Context Compaction IPC ─────────────────────────────────────────────
+  ipcMain.handle('chat:compact', async (_e, sessionId) => {
+    if (!sessionId) return { ok: false, error: 'sessionId required' }
+    try {
+      const session = db.getSession(sessionId)
+      if (!session) return { ok: false, error: 'session not found' }
+      const messages = db.getMessages(sessionId)
+      if (!messages || messages.length <= 2) return { ok: false, error: '对话过短，无需压缩' }
+
+      const modelId = session.model_id
+      const model = modelId ? db.getModel(modelId) : (db.getDefaultModel?.() || { model_name: 'default' })
+      const provider = model?.provider_id ? db.getProvider(model.provider_id) : null
+      const { maybeCompact, estimateMessagesTokens } = require('../llm/compaction')
+
+      const apiMsgs = messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }))
+
+      const beforeTokens = estimateMessagesTokens(apiMsgs)
+      const beforeCount = apiMsgs.length
+      const budget = (model?.context_window && Number(model.context_window) > 0)
+        ? Number(model.context_window)
+        : 32000
+
+      const compacted = await maybeCompact({
+        provider,
+        model,
+        messages: apiMsgs,
+        budget,
+        sessionId,
+        force: true,
+      })
+
+      if (!compacted || compacted.length >= beforeCount) {
+        return { ok: false, error: '当前历史已足够紧凑，无法进一步压缩' }
+      }
+
+      const afterTokens = estimateMessagesTokens(compacted)
+      return {
+        ok: true,
+        beforeCount,
+        afterCount: compacted.length,
+        beforeTokens,
+        afterTokens,
+      }
+    } catch (e) {
+      log.warn('chat:compact failed:', e.message || e)
+      return { ok: false, error: e.message || String(e) }
+    }
+  })
+
   // Surface the chat-send handler exports (e.g. handleChatComplete for the
   // local gateway) so main.js can register them as proxy channels.
   return chatSendState

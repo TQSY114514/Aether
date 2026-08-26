@@ -5,6 +5,8 @@ import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw } from 'lucide-react'
 import AgentStatusBar from './AgentStatusBar'
+import AgentActionHUD from './AgentActionHUD'
+import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
@@ -34,7 +36,21 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
   { id: 'code', name: '生成代码', description: '根据需求生成实现代码', prompt: '请生成实现以上需求的代码。' },
   { id: 'clear', name: '清空对话', description: '清空当前对话历史', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
   { id: 'regenerate', name: '重新生成', description: '撤销最后一条回复并重新生成', action: () => { useStore.getState().regenerate() } },
-  { id: 'compact', name: '压缩上下文', description: '智能压缩对话历史节省 token', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
+  { id: 'compact', name: '压缩上下文', description: '智能压缩对话历史节省 token', action: async () => {
+    const sid = useStore.getState().currentSessionId
+    if (!sid) return
+    try {
+      const res = await window.electronAPI.chat.compact(sid)
+      if (res.ok) {
+        window.alert(`✅ 已成功压缩上下文！\n消息数：${res.beforeCount} → ${res.afterCount}\n估算 Token：${res.beforeTokens} → ${res.afterTokens}`)
+        useStore.getState().loadMessages(sid)
+      } else {
+        window.alert(`提示：${res.error || '无需压缩'}`)
+      }
+    } catch (e: any) {
+      window.alert(`压缩失败：${e.message || e}`)
+    }
+  } },
   { id: 'undo', name: '撤销提交', description: '按最近一次检查点恢复文件并生成撤销提交', action: async () => {
     try {
       const cwd = await window.electronAPI.agent.getWorkspace()
@@ -517,6 +533,8 @@ export default function ChatInput() {
             ))}
           </div>
         )}
+        <AgentTaskDeck sessionId={currentSessionId} />
+        <AgentActionHUD sessionId={currentSessionId} />
         <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
