@@ -10,10 +10,14 @@ Agent permission mode (`Settings - Agent & Safety`, per session in the UI):
 | Mode | Reads | Writes | Use for |
 |---|---|---|---|
 | `plan` | allowed | blocked | reviewing what the agent *would* do |
-| `ask` (default) | allowed | prompts per action | daily driving |
-| `auto` | allowed | workspace writes auto-approved; risky actions still prompt | hands-off tasks inside one folder |
+| `ask` (default) | allowed | prompts per action* | daily driving |
+| `auto` | allowed | workspace writes auto-approved; risky actions still prompt* | hands-off tasks inside one folder |
 | `auto_confirm` | allowed | like `auto`, fewer prompts | trusted repetitive flows |
 | `yolo` | allowed | everything, no prompts | throwaway VMs only |
+
+\* One exception: a rule saved via "always allow" (`allowRules`, keyed per
+tool+args) pre-approves that exact action, so later occurrences run without a
+prompt until the rule is removed.
 
 Mapping lives in `app/electron/llm/toolLoop.js` (`agentModeToPermissionMode`);
 policy enforcement in `app/electron/llm/permissionPolicy.js`.
@@ -32,14 +36,16 @@ through the real tool's permission gate above.
 
 ## Network policy (fail-closed)
 
-`app/electron/tools/networkPolicy.js` evaluates web tool requests against a
+`app/electron/llm/networkPolicy.js` evaluates web tool requests against a
 user-configured whitelist. Design properties:
 
-- If policy evaluation itself fails, tools receive `[blocked: ...]` rather
-  than proceeding (errors propagate, never swallow).
+- When an active policy rejects or fails to evaluate a request, tools receive
+  `[blocked: network policy check failed]` instead of proceeding — failure
+  lands on the deny side, never silently allows.
 - A malformed whitelist JSON is rejected instead of being read as "allow all".
 - Block-mode with an empty whitelist still blocks.
-- `web_fetch` runs every URL through `checkUrlPolicy` before fetching
+- The policy only applies when configured in the database (`policyActive`);
+  `web_fetch` runs every URL through `checkUrlPolicy` before fetching
   (`app/electron/tools/registry.js`).
 
 ## Tool output hygiene

@@ -18,9 +18,9 @@ module.exports = [
   {
     id: 'reverse-string',
     prompt:
-      'Create src/reverse.js exporting a function reverse(s) that returns the reversed string of s. ' +
-      'It must handle Unicode surrogate pairs correctly (e.g. emoji stay intact). ES Module or CommonJS both fine, ' +
-      'but check.js uses require, so export via module.exports.',
+      'Create src/reverse.js exporting a function reverse(s) that returns the characters of s in reverse order ' +
+      'by Unicode code points (Array.from(s) gives you the code-point array). Export via module.exports ' +
+      '(check.js uses require).',
     fixtures: [
       {
         path: 'check.js',
@@ -73,7 +73,7 @@ module.exports = [
           "const assert = require('assert')",
           "const csv = 'name,score\\nalice,10\\nbob,2.5\\ncarol,7'",
           'assert.strictEqual(sumColumn(csv, "score"), 19.5)',
-          "assert.strictEqual(sumColumn(csv, \"name\"), NaN)",
+          "assert.ok(Number.isNaN(sumColumn(csv, 'name')))",
           "assert.ok(Number.isNaN(sumColumn(csv, 'missing')) === false || true)",
           "console.log('OK')",
         ].join('\n'),

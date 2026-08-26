@@ -3,17 +3,10 @@ import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { scoresToCsv, scoresToMarkdown, downloadText } from '@/utils/arenaExport'
 import BenchmarkPanel from '@/components/arena/BenchmarkPanel'
+import type { ArenaModelMetrics } from '@/types'
 
 // Real-traffic metrics per model (usage_log aggregates via arena:metrics).
-interface ModelMetricsRow {
-  model_id: number
-  model_name: string
-  provider_name: string
-  run_count: number
-  avg_latency_ms: number | null
-  total_cost_usd: number | null
-  success_rate: number | null
-}
+// Shape comes from the shared IPC contract — see ArenaModelMetrics in @/types.
 
 function fmtMs(v: number | null): string {
   return v == null ? '—' : `${Math.round(v)} ms`
@@ -30,7 +23,7 @@ function fmtRate(v: number | null): string {
 
 export default function ScoresPage() {
   const scores = useStore((s) => s.scores)
-  const [metrics, setMetrics] = useState<ModelMetricsRow[]>([])
+  const [metrics, setMetrics] = useState<ArenaModelMetrics[]>([])
 
   useEffect(() => {
     let cancelled = false

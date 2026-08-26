@@ -28,7 +28,10 @@ Everything is under `%APPDATA%/aetherai/`:
 | `aetherai.db` (+ `-wal`/`-shm`) | providers, models, sessions, messages, memory, personas, settings |
 | `background.img` | custom background image |
 
-No cloud copy exists. Back up by closing Aether and copying this folder.
+No cloud copy exists. Back up by closing **all** Aether clients (desktop app
+*and* any `aether tui` / CLI session — they share the same database and WAL
+files; copying while one runs can produce an incomplete backup), then copying
+this folder.
 
 Note: the terminal TUI keeps its own lightweight key store at
 `~/.config/aether/auth.json` (`/apikey` command) — separate from the desktop

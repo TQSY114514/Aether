@@ -185,7 +185,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 3. 点击 **Fetch models** 拉取可用模型列表。
 4. 回到聊天开始对话。
 
-> 从 Claude Code 或 OpenCode 迁移过来?首导向导可以直接导入既有提供商配置——见 [docs/migration-guide.md](./docs/migration-guide.md)。
+> 从 Claude Code 或 OpenCode 迁移过来？首次运行向导可以直接导入既有提供商配置——见 [docs/migration-guide.md](./docs/migration-guide.md)。
 
 ### 启用 Ask 模式
 
@@ -350,7 +350,7 @@ console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', 
 | **终端引导** | `app/resources/term/aether.ps1`(别名 + 启动 `aether tui`);`node app/cli.js --setup-term` 写入 Windows Terminal profile(深/浅两套配色)。 |
 | **沙箱强化** | Windows 路径防御:`\\?\` 长路径、UNC `\\server\share`、重解析点/junction 逃逸、`.lnk/.scr/.msi` 等危险扩展名。 |
 
-> 首次启动看到"Windows 已保护你的电脑"?那是 SmartScreen 对未签名二进制的正常反应——原因与一键放行方法见 [docs/smart-screen-faq.md](./docs/smart-screen-faq.md)。
+> 首次启动看到“Windows 已保护你的电脑”？那是 SmartScreen 对未签名二进制的正常反应——原因与一键放行方法见 [docs/smart-screen-faq.md](./docs/smart-screen-faq.md)。
 
 ---
 

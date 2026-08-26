@@ -29,7 +29,9 @@ directory containing only the fixtures.
 
 ## Notes
 
-- The agent runs in `yolo` mode **inside a throwaway temp dir** only; nothing
-  outside it is touched. See docs/security-practices.md for how permissions
-  normally gate these tools in interactive use.
+- The agent runs in `yolo` mode **inside a throwaway temp dir**; task fixtures
+  and checks stay in that dir, but yolo is unrestricted by design — the model
+  could write outside it. Run evals only on machines where you would also run
+  yolo interactively (see docs/security-practices.md for how permissions gate
+  these tools normally).
 - Costs are real API calls: 5 tasks × N models × ~10 tool iterations each.
