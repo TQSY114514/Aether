@@ -49,6 +49,8 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
   const turnUsage = useStore((s) => (sessionId ? s.turnUsageBySession[sessionId] : null))
 
   const [isExpanded, setIsExpanded] = useState(false)
+  const messages = useStore((s) => s.messages)
+  const sessionMsgIds = useMemo(() => new Set(messages.map((m) => m.id)), [messages])
 
   const isLooping = sessionId ? loopingSessions.has(sessionId) : false
   const isStreaming = sessionId ? !!streamingBySession[sessionId] : false
@@ -69,16 +71,19 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
     return ''
   }, [activeMessageId, thinkingBlocksByMessage])
 
-  // Collect all tool calls in chronological order
+  // Collect all tool calls scoped to the active session in chronological order
   const allToolCalls = useMemo(() => {
     const list: any[] = []
-    for (const [, calls] of Object.entries(toolCallsByMessage)) {
-      if (Array.isArray(calls)) {
-        list.push(...calls)
+    for (const [msgIdStr, calls] of Object.entries(toolCallsByMessage)) {
+      const mid = Number(msgIdStr)
+      if (!sessionId || sessionMsgIds.has(mid) || (activeMessageId && mid === activeMessageId)) {
+        if (Array.isArray(calls)) {
+          list.push(...calls)
+        }
       }
     }
     return list
-  }, [toolCallsByMessage])
+  }, [toolCallsByMessage, sessionMsgIds, activeMessageId, sessionId])
 
   const latestTool = useMemo(() => {
     if (allToolCalls.length === 0) return null
@@ -190,6 +195,14 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
                 {activeThinkingText.slice(-60).replace(/\n/g, ' ')}
               </span>
               <span className="animate-pulse opacity-70">▋</span>
+            </div>
+          ) : latestTool?.error ? (
+            <div className="flex items-center gap-1.5 truncate text-[11px]" style={{ color: 'var(--error, #ef4444)' }}>
+              <AlertTriangle size={12} className="text-red-400 shrink-0" />
+              <span className="font-mono">{latestTool.name}</span>
+              <span className="truncate max-w-[180px] text-[10px] opacity-75">
+                (执行失败)
+              </span>
             </div>
           ) : latestTool ? (
             <div className="flex items-center gap-1.5 truncate text-[11px]" style={{ color: 'var(--text-secondary)' }}>
@@ -337,7 +350,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
           </div>
 
           <div className="text-[10px] text-[var(--text-muted)] opacity-60 flex items-center justify-between pt-1 border-t border-[var(--border)]">
-            <span>💡 提示：Agent 运行中可直接在下方输入框打字进行实时干预</span>
+            <span className="flex items-center gap-1.5"><Wand2 size={11} className="text-[var(--accent)]" /><span>提示：Agent 运行中可直接在下方输入框打字进行实时干预</span></span>
             <span>ESC / 点击收起</span>
           </div>
         </div>
