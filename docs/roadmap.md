@@ -14,6 +14,22 @@
   （Claude Code / OpenCode / Codex 是"选一个强 Agent"，Aether 的机会是多模型 + 评估 + 自动路由）
 - ⚠️ README 不要继续写成"功能超市"：首页第一屏直接回答"为什么要下载"，用一个真实工作流证明。
 
+### 三方战略输入定案（2026-08-26，GPT 调研 × OpenClaw × Hermes）
+
+- **品类名收敛（采纳 OpenClaw）**：对外统一 **Local-first Agent Workbench (with built-in Arena)** —— 不再用 Multi-Agent 当品类词（最弱关联格），也不再用 Multi-model 充作品类；Arena 是差异点，不是品类。已落 README 双语第一屏与 GitHub About/topics。
+- **护城河叙事（GPT）**：Arena → Model Intelligence → Router，一句话讲清「竞技场产生数据 → 数据变建议 → 建议驱动路由」的闭环。
+- **诚实雷达（Hermes）**：自评 CSV 逐字内嵌 `app/scripts/gen-radar.cjs`，生成 `assets/agent-radar-2026.svg` 入 README 双语。禁顶格美化——编程轴对同类最佳 -2.3 的差距如实画出，不对称形状即定位证据。（此前 PNG 曾把 7.5 画成 ~9.5，已废弃。）
+- **GPT P0 四项对账现状**：
+
+| 输入项 | 现状核对（2026-08-26） | 处置 |
+|--------|------------------------|------|
+| AETHER.md | 项目记忆已有雏形（#50 workspace 作用域 + 注入带为什么） | 归入 P1 #5 Project Intelligence 收口：仓库根约定文件（AETHER.md/AGENTS.md）自动发现并注入 |
+| Agent Run Timeline | GUI 无运行时间线视图；auditTrail/agentEvents 数据源已有 | 新增 P1 条目：会话运行时间线（工具序列/审批/预算可视化） |
+| Diff Review | 写入显 diff 已有（权限门 + diff 呈现） | 增强：任务级改动集一次审（整任务 diff review 流），挂 P1 |
+| Runtime 稳定 | #43/#44/#48/#50 已落地 loopGuard / 缩围重试 / 阶段路由 / Docker 全程预算化 | 持续项，不再单列 |
+
+- **增长钩子（OpenClaw）**：Arena 结果分享卡片评估通过——工作量小到中（前端卡片渲染 + 导出 SVG/PNG），并入下方 P0 #3 Arena 2.0 排期，不单开项目。
+
 ## P0 — 现在最该做
 
 ### 1. Agent 可靠性（两份评审一致的首选）
@@ -41,6 +57,7 @@
 - 升级：用户可建**个人 benchmark**（自己的任务集），模型更新后一键重跑 →
   **"你的工作负载的模型排行榜"**（准确率 / 延迟 / 成本 / 工具成功率）
 - 增强细节：同模型多温度 / 多 system prompt 对比、匿名投票后揭示、导出对比报告
+- 分享卡片（增长钩子）：Arena 对比结果一键导出分享图（ELO 对比 + 意图标签 + 二维码/链接），见上「三方战略输入定案」
 - 这是 OpenCode / Claude Code 都没有的差异化，直接支撑"Aether 替你决定"定位
 
 ## P1 — 下一阶段
