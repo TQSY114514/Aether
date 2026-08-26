@@ -150,7 +150,9 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const ref = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
+  const thinkingRafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
+  const activeMidRef = useRef<number | null>(null)
 
   // Live streaming states: React state so blocks re-render on each new chunk/step.
   const [thinkingText, setThinkingText] = useState('')
@@ -160,7 +162,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const [todos, setTodos] = useState<any[]>([])
   const [statusLines, setStatusLines] = useState<string[]>([])
 
-  useEffect(() => {
+  const resetLocalState = useCallback(() => {
     setThinkingText('')
     setThinkingStreaming(false)
     setToolCalls([])
@@ -168,7 +170,13 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     setTodos([])
     setStatusLines([])
     lastLenRef.current = 0
-  }, [sessionId])
+    if (ref.current) ref.current.innerHTML = ''
+  }, [])
+
+  useEffect(() => {
+    resetLocalState()
+    activeMidRef.current = null
+  }, [sessionId, resetLocalState])
 
   useEffect(() => {
     const unsub = useStore.subscribe((s) => {
@@ -176,25 +184,34 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       if (!buf) return
 
       const mid = buf.messageId
+      if (mid != null && activeMidRef.current !== null && activeMidRef.current !== mid) {
+        resetLocalState()
+      }
       if (mid != null) {
-        // Thinking stream
+        activeMidRef.current = mid
+
+        // Thinking stream with RAF throttling to prevent UI thrashing
         const thinking = s.thinkingBlocksByMessage[mid]
         if (thinking !== undefined) {
-          setThinkingText(thinking)
-          setThinkingStreaming(!buf.content)
+          cancelAnimationFrame(thinkingRafRef.current)
+          thinkingRafRef.current = requestAnimationFrame(() => {
+            thinkingRafRef.current = 0
+            setThinkingText(thinking)
+            setThinkingStreaming(!buf.content)
+          })
         }
         // Tool calls in progress or completed
-        const tc = s.toolCallsByMessage[mid]
-        if (tc) setToolCalls(tc)
+        const tc = s.toolCallsByMessage[mid] || []
+        setToolCalls(tc)
         // Plan steps
-        const ps = s.planStepsByMessage[mid]
-        if (ps) setPlanSteps(ps)
+        const ps = s.planStepsByMessage[mid] || []
+        setPlanSteps(ps)
         // Todos
-        const td = s.todosByMessage[mid]
-        if (td) setTodos(td)
+        const td = s.todosByMessage[mid] || []
+        setTodos(td)
         // Status lines
-        const sl = s.statusLinesByMessage[mid]
-        if (sl) setStatusLines(sl)
+        const sl = s.statusLinesByMessage[mid] || []
+        setStatusLines(sl)
       }
 
       // -- Main content: direct DOM write for O(1) per-token performance --
@@ -225,8 +242,9 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     return () => {
       unsub()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current)
     }
-  }, [sessionId, isAtBottom])
+  }, [sessionId, isAtBottom, resetLocalState])
 
   const hasTask = todos && todos.length > 0
 

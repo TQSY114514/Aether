@@ -654,6 +654,7 @@ Reply in this format:
     if (planToolsPayload.length) { opts.tools = [...routedPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
 
     let msg
+    let hasStreamedThinking = false
     try {
       try { onThinkingStart?.() } catch {}
       msg = await completeChatMessage({
@@ -664,6 +665,7 @@ Reply in this format:
         options: {
           ...opts,
           onThinkingDelta: (delta) => {
+            if (delta) hasStreamedThinking = true
             try { onThinkingDelta?.(delta) } catch {}
           },
           onStreamDelta: (delta) => {
@@ -708,7 +710,10 @@ Reply in this format:
     const kind = hasToolCalls ? 'act' : 'plan'
     // Only emit onPlanStep during intermediate tool calls — never emit the final conversational reply as a plan step
     try { if (msg.content && hasToolCalls) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
-    if (msg.reasoning) { try { onThinkingDelta?.(msg.reasoning) } catch {} }
+    // Only emit accumulated msg.reasoning as fallback when no streaming deltas were received
+    if (msg.reasoning && !hasStreamedThinking) {
+      try { onThinkingDelta?.(msg.reasoning) } catch {}
+    }
 
     if (msg.tool_calls && msg.tool_calls.length) {
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
