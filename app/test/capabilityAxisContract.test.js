@@ -36,10 +36,16 @@ describe('capability axis settings-key contract (TQS-7)', () => {
     expect(keys.sort()).toEqual(ENFORCED_AXES.map(a => `capability.${a}`).sort())
   })
 
-  it('toolLoop reads the same capability.* keys per enforced axis', () => {
-    for (const axis of ENFORCED_AXES) {
-      expect(toolLoopSrc).toContain(`capability.${axis}`)
-    }
+  it('toolLoop reads capability.* via db.getSetting inside its axis loop at runtime', () => {
+    // 从 for-of 语句提取轴清单（运行时代码，非注释）：
+    //   for (const axis of ['filesystem', 'shell', 'network']) {
+    const loopMatch = toolLoopSrc.match(/for\s*\(\s*const\s+axis\s+of\s+\[([^\]]*)\]\s*\)/)
+    expect(loopMatch).toBeTruthy()
+    const listedAxes = [...loopMatch[1].matchAll(/'([a-z_-]+)'/g)].map(m => m[1])
+    expect(listedAxes.sort()).toEqual([...ENFORCED_AXES].sort())
+    // 运行时读取表达式必须真实存在（模板字面量逐字匹配，注释里的
+    // capability.filesystem 等写法不算数）
+    expect(toolLoopSrc).toContain('db.getSetting(`capability.${axis}`)')
   })
 
   it('every tool known to TOOL_AXIS maps to an enforced axis', () => {
