@@ -33,6 +33,8 @@ let _pendingDeltas: Record<number, string> = {}
 let _statusListenerInstalled = false
 let _habitSuggestionInstalled = false
 let _todoListenerInstalled = false
+let _planSnapshotListenerInstalled = false
+let _subagentListenerInstalled = false
 let _thinkingListenerInstalled = false
 let _loopStateListenerInstalled = false
 let _planStepListenerInstalled = false
@@ -246,6 +248,65 @@ export function ensureTodoListener() {
   })
 }
 
+// Plan snapshot listener (hierarchical planner)
+export function ensurePlanSnapshotListener() {
+  if (_planSnapshotListenerInstalled) return
+  _planSnapshotListenerInstalled = true
+  window.electronAPI.chat.onPlanSnapshot?.(({ messageId, sessionId, plan }) => {
+    if (!messageId || !plan) return
+    const mappedTodos = (plan.tasks || []).map((t: any) => ({
+      content: t.description,
+      status: (t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending') as 'pending' | 'in_progress' | 'completed',
+      activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
+    }))
+    getStore().setState((s) => ({
+      planSnapshotsByMessage: {
+        ...s.planSnapshotsByMessage,
+        [messageId]: plan,
+      },
+      todosByMessage: {
+        ...s.todosByMessage,
+        [messageId]: mappedTodos,
+      },
+    }))
+  })
+}
+
+// Subagent event listener (delegate_task / parallel subagents)
+export function ensureSubagentListener() {
+  if (_subagentListenerInstalled) return
+  _subagentListenerInstalled = true
+  window.electronAPI.chat.onSubagentEvent?.(({ messageId, sessionId, event }) => {
+    if (!messageId || !event) return
+    getStore().setState((s) => {
+      const existing = s.subagentsByMessage[messageId] || []
+      const idx = existing.findIndex((sa) => sa.id === event.id)
+      const entry = {
+        id: event.id,
+        name: `子代理 ${event.index + 1}`,
+        task: event.task,
+        status: event.status,
+        latencyMs: event.latencyMs,
+        startedAt: event.startedAt,
+        output: event.output,
+        error: event.error,
+      }
+      let nextList = [...existing]
+      if (idx >= 0) {
+        nextList[idx] = { ...nextList[idx], ...entry }
+      } else {
+        nextList.push(entry)
+      }
+      return {
+        subagentsByMessage: {
+          ...s.subagentsByMessage,
+          [messageId]: nextList,
+        },
+      }
+    })
+  })
+}
+
 // Thinking listener
 
 export function ensureThinkingListener() {
@@ -349,9 +410,11 @@ export function ensureAllListeners() {
   ensureChunkListener()
   ensureToolCallListener()
   ensurePlanStepListener()
+  ensurePlanSnapshotListener()
   ensureStatusListener()
   ensureHabitSuggestionListener()
   ensureTodoListener()
+  ensureSubagentListener()
   ensureThinkingListener()
   ensureLoopStateListener()
   ensureUsageListener()

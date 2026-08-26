@@ -516,18 +516,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           } catch {}
         }
-        // Chunked emit: stream final content in ~150-char pieces so the renderer
-        // shows a smooth progressive reveal instead of one bulk dump at the end.
-        if (finalContent && finalContent.length > 200) {
-          const CHUNK_SIZE = 150;
-          for (let _ci = 0; _ci < finalContent.length; _ci += CHUNK_SIZE) {
-            wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent.slice(_ci, _ci + CHUNK_SIZE), done: false, sessionId });
-            await new Promise(r => setTimeout(r, 8));
-          }
-        } else if (finalContent) {
-          wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId });
-        }
-        wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId });
+        // End of tool loop streaming: all live deltas were already forwarded via onStreamDelta.
+        // Send the terminal done event to close the streaming buffer in the renderer.
+        wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}

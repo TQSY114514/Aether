@@ -264,7 +264,12 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
+// NOTE: onStreamDelta carries live assistant TEXT deltas from every loop round
+// (commentary rounds included). It must stay in this signature — before it was
+// added the forwarder at the completeChatMessage call site referenced an
+// undeclared identifier, every delta threw a swallowed ReferenceError and the
+// renderer saw nothing until the post-loop replay (the "one bulk dump" bug).
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
   toolCache.clear()
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
@@ -565,6 +570,11 @@ Reply in this format:
         // Inject plan into system context
         const planBlock = planning.planSystemBlock(plan)
         convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
+        // Full plan snapshot for the renderer's sticky deck (steps + statuses).
+        try {
+          onPlanSnapshot?.(plan)
+          onTodoUpdate?.(plan.tasks.map(t => ({ content: t.description, status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending' })))
+        } catch {}
         onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)`, kind: 'plan' })
       }
     } catch (e) {
@@ -574,7 +584,9 @@ Reply in this format:
   }
 
   // Build tool context with sessionId for sandbox checks.
-  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, db }
+  // onSubagentEvent flows through toolCtx so delegate_task (registry) can push
+  // live per-subagent progress up to the renderer's deck.
+  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, db }
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
@@ -764,6 +776,10 @@ Reply in this format:
         if (fn.name === 'plan_progress' && planningMode) {
           const handled = planning.handlePlanProgress(plan, args)
           if (handled) {
+            try {
+              onPlanSnapshot?.(plan)
+              onTodoUpdate?.(plan.tasks.map(t => ({ content: t.description, status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending' })))
+            } catch {}
             return { tc, isPlan: true, entry: { name: fn.name, args, result: `progress recorded for task ${args.task_id}`, error: null, risk: null, latencyMs: null }, planStep: `📊 [${args.task_id}] ${(args.result || '').slice(0, 60)}` }
           }
         }

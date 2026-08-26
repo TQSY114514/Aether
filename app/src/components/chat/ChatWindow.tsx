@@ -265,26 +265,11 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         </div>
         <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
           style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
-          {hasTask && (
-            <TaskCard todos={todos} planSteps={planSteps} statusLines={statusLines} />
-          )}
-          {!hasTask && statusLines && statusLines.length > 0 && (
-            <div className="mb-2 space-y-0.5">
-              {statusLines.map((line, i) => (
-                <div key={i} className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
-                  <span>{line}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {!hasTask && planSteps && planSteps.length > 0 && (
-            <AgentPlanTrace steps={planSteps} />
-          )}
           {thinkingText && (
             <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
           )}
           {toolCalls && toolCalls.length > 0 && (
-            <div className="mb-2">
+            <div className="mb-2 space-y-1">
               {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
             </div>
           )}

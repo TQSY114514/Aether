@@ -2,8 +2,10 @@ function ensureAllChatListeners() {
   ensureChunkListener()
   ensureToolCallListener()
   ensurePlanStepListener()
+  ensurePlanSnapshotListener()
   ensureStatusListener()
   ensureTodoListener()
+  ensureSubagentListener()
   ensureThinkingListener()
   ensureLoopStateListener()
   ensureUsageListener()
@@ -15,7 +17,7 @@ import type { AppState } from "./types"
 import { decodeDataUrlText } from "./types"
 import { t } from "@/utils/i18n"
 import log from "@/utils/logger"
-import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensureStatusListener, ensureTodoListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
+import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensurePlanSnapshotListener, ensureStatusListener, ensureTodoListener, ensureSubagentListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
 
 const _injectedMsgIds = new Set<number>()
 const _undoStack: { sessionId: number; messages: Message[] }[] = []
@@ -34,6 +36,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   toolCallsByMessage: {},
   planStepsByMessage: {},
   todosByMessage: {},
+  planSnapshotsByMessage: {},
+  subagentsByMessage: {},
   thinkingBlocksByMessage: {},
   statusLinesByMessage: {},
   contextBudgetText: null,

@@ -91,6 +91,12 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   callbacks.onTodoUpdate = (todos) =>
     safeSend('chat:todo-update', { messageId: msgId, sessionId, todos })
 
+  callbacks.onPlanSnapshot = (plan) =>
+    safeSend('chat:plan-snapshot', { messageId: msgId, sessionId, plan })
+
+  callbacks.onSubagentEvent = (event) =>
+    safeSend('chat:subagent-event', { messageId: msgId, sessionId, event })
+
   // Live token/cost reporting: toolLoop calls onUsage({input, output}) after
   // each model round with the loop-accumulated totals. Compute the USD cost
   // from the resolved model's price columns (0 when unpriced) and emit a

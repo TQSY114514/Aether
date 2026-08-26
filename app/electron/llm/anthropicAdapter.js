@@ -1,4 +1,4 @@
-﻿// ───────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
 // Anthropic Messages API adapter.
 //
 // For providers that speak the native Claude protocol: POST /messages with
@@ -255,7 +255,10 @@ function parseSSELine(line) {
       return { type: 'content_block_stop', index: idx }
     }
     if (parsed.type === 'message_start') {
-      return { type: 'message_start', usage: parsed.usage }
+      return { type: 'message_start', usage: parsed.message?.usage || parsed.usage }
+    }
+    if (parsed.type === 'message_delta') {
+      return { type: 'message_delta', usage: parsed.usage }
     }
   } catch {}
   return null
@@ -290,18 +293,29 @@ async function completeChat({ provider, model, messages, signal, options = {} })
   return ''
 }
 
-// Non-streaming returning { content, tool_calls, usage }.
+// Streaming-backed completion returning { content, tool_calls, usage, reasoning }
+// while streaming deltas in real time via options.onThinkingDelta and options.onStreamDelta.
 async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
+  const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
+  const onStream = typeof options?.onStreamDelta === 'function' ? options.onStreamDelta : null
   const { system, messages: aMsgs } = toAnthropicMessages(messages)
+  const useStream = options.stream !== false
   const body = {
     model: model.model_name,
     messages: aMsgs,
     max_tokens: options.max_tokens || 4096,
+    stream: useStream,
   }
   if (system) body.system = system
   applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
+  if (options.reasoning_effort) {
+    const budgets = { low: 1280, medium: 4096, high: 16000 }
+    const b = budgets[options.reasoning_effort]
+    if (b) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
+  }
+
   const res = await fetch(`${baseUrl(provider)}/messages`, {
     method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal: withTimeout(signal),
   })
@@ -311,14 +325,91 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     err.status = res.status
     throw err
   }
-  const data = await res.json()
-  const { text, tool_calls } = parseToolUses(data.content)
-  const usage = data.usage ? _nu(data.usage) : null
-  const reasoning = (data.content || [])
-    .filter(b => b.type === 'thinking' && b.thinking)
-    .map(b => b.thinking)
-    .join('')
-  return { content: text, tool_calls, usage, reasoning }
+
+  if (!useStream) {
+    const data = await res.json()
+    const { text, tool_calls } = parseToolUses(data.content)
+    const usage = data.usage ? _nu(data.usage) : null
+    const reasoning = (data.content || [])
+      .filter(b => b.type === 'thinking' && b.thinking)
+      .map(b => b.thinking)
+      .join('')
+    if (reasoning) { try { onThinking?.(reasoning) } catch {} }
+    if (text) { try { onStream?.(text) } catch {} }
+    return { content: text, tool_calls, usage, reasoning }
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullContent = ''
+  let fullReasoning = ''
+  let initialUsage = null
+  let deltaUsage = null
+  const _toolBlocks = new Map()
+  const toolCalls = []
+  let _thinkingIndex = -1
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      const evt = parseSSELine(line)
+      if (!evt) continue
+      if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
+      if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
+      if (evt.type === 'content_block_start') {
+        const block = evt.block || {}
+        if (block.type === 'thinking') _thinkingIndex = evt.index
+        else if (block.type === 'tool_use') {
+          _toolBlocks.set(evt.index, { id: block.id, name: block.name, inputJson: '' })
+        }
+        continue
+      }
+      if (evt.type === 'content_block_delta') {
+        const d = evt.delta || {}
+        if (d.type === 'thinking_delta') {
+          fullReasoning += d.thinking || ''
+          try { onThinking?.(d.thinking || '') } catch {}
+        } else if (d.type === 'text_delta') {
+          fullContent += d.text || ''
+          try { onStream?.(d.text || '') } catch {}
+        } else if (d.type === 'input_json_delta') {
+          const tb = _toolBlocks.get(evt.index)
+          if (tb) tb.inputJson += d.partial_json || ''
+        }
+        continue
+      }
+      if (evt.type === 'content_block_stop') {
+        if (evt.index === _thinkingIndex) { _thinkingIndex = -1; continue }
+        const tb = _toolBlocks.get(evt.index)
+        if (tb) {
+          _toolBlocks.delete(evt.index)
+          let input = {}
+          try { input = tb.inputJson ? JSON.parse(tb.inputJson) : {} } catch {}
+          toolCalls.push({ id: tb.id, type: 'function', function: { name: tb.name, arguments: JSON.stringify(input) } })
+        }
+        continue
+      }
+    }
+  }
+
+  const rawUsage = (initialUsage || deltaUsage) ? {
+    input_tokens: (initialUsage?.input_tokens || 0),
+    output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
+    cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
+    cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
+  } : null
+
+  return {
+    content: fullContent,
+    tool_calls: toolCalls.length ? toolCalls : undefined,
+    usage: rawUsage ? _nu(rawUsage) : null,
+    reasoning: fullReasoning,
+  }
 }
 
 async function listModels() { return [] }

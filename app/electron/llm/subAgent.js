@@ -157,13 +157,25 @@ async function runParallel(tasks, shared) {
   if (!shared.db) throw new Error('runParallel: db is required')
   if (!Array.isArray(tasks) || tasks.length === 0) return []
 
-  const runners = tasks.map((task) => {
+  const runners = tasks.map((task, i) => {
     return (async () => {
+      const startTime = Date.now()
+      const subagentId = `sa_${Date.now()}_${i + 1}`
+      try {
+        shared.onSubagentEvent?.({
+          type: 'start',
+          id: subagentId,
+          index: i,
+          task: String(task).slice(0, 80),
+          status: 'running',
+          startedAt: startTime,
+        })
+      } catch {}
       const iterations = 0
       try {
         const result = await runSubagent({
           db: shared.db,
-          parentSessionId: null,
+          parentSessionId: shared.parentSessionId || null,
           provider: shared.provider,
           model: shared.model,
           prompt: task,
@@ -172,9 +184,34 @@ async function runParallel(tasks, shared) {
           callbacks: shared.callbacks || {},
           config: shared.subagentConfig || {},
         })
-        return { success: true, output: result.content, iterations, childSessionId: result.childSessionId }
+        const latencyMs = Date.now() - startTime
+        try {
+          shared.onSubagentEvent?.({
+            type: 'done',
+            id: subagentId,
+            index: i,
+            task: String(task).slice(0, 80),
+            status: 'done',
+            latencyMs,
+            output: result.content,
+            childSessionId: result.childSessionId,
+          })
+        } catch {}
+        return { success: true, output: result.content, iterations, childSessionId: result.childSessionId, latencyMs }
       } catch (e) {
-        return { success: false, error: e.message || 'unknown', iterations }
+        const latencyMs = Date.now() - startTime
+        try {
+          shared.onSubagentEvent?.({
+            type: 'error',
+            id: subagentId,
+            index: i,
+            task: String(task).slice(0, 80),
+            status: 'error',
+            latencyMs,
+            error: e.message || 'unknown',
+          })
+        } catch {}
+        return { success: false, error: e.message || 'unknown', iterations, latencyMs }
       }
     })()
   })
