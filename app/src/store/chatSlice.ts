@@ -4,7 +4,7 @@ import type { AppState } from "./types"
 import { decodeDataUrlText } from "./types"
 import { t } from "@/utils/i18n"
 import log from "@/utils/logger"
-import { ensureChunkListener, ensureToolCallListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
+import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensureStatusListener, ensureTodoListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
 
 const _injectedMsgIds = new Set<number>()
 const _undoStack: { sessionId: number; messages: Message[] }[] = []
@@ -130,6 +130,10 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
 
     ensureChunkListener()
     ensureToolCallListener()
+    ensurePlanStepListener()
+    ensureStatusListener()
+    ensureTodoListener()
+    ensureThinkingListener()
     ensureLoopStateListener()
     ensureUsageListener()
     get().resetTurnUsage(currentSessionId)

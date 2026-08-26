@@ -656,11 +656,19 @@ Reply in this format:
     let msg
     try {
       try { onThinkingStart?.() } catch {}
-      msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
+      msg = await completeChatMessage({
+        provider,
+        model,
+        messages: convo,
+        signal,
+        options: {
+          ...opts,
+          onThinkingDelta: (delta) => {
+            try { onThinkingDelta?.(delta) } catch {}
+          },
+        },
+      })
       try { onThinkingEnd?.() } catch {}
-      if (msg && msg.reasoning) {
-        try { onThinkingDelta?.(msg.reasoning) } catch {}
-      }
       // 实时 token 用量: 累计每次请求 usage 并上报(onUsage → TUI 状态栏显示)
       if (msg && msg.usage) {
         usageAccum.input += Number(msg.usage.prompt_tokens || msg.usage.input_tokens || 0)
