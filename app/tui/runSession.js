@@ -81,21 +81,34 @@ export function toolToSnapshotPath(name, args) {
  * @param {(action: object) => void} opts.dispatch
  * @param {ReturnType<import('./allowRules.js').createAllowRulesStore>} opts.allowRules
  * @param {string} [opts.sessionId]
- * @param {{ current: {resolve: Function, name: string, args: object} | null }} opts.resolveRef
+ * @param {{ current: {resolve: Function, name: string, args: object} | null, pump?: Function }} opts.resolveRef
  * @param {Function} [opts.captureImpl]
  * @param {Function} [opts.pathImpl]
- * @returns {(perm: {name: string, args: object, risk?: string}) => Promise<boolean> & { takeSnapshot: (name: string) => object | null }}
+ * @param {{name: string, args: object, risk?: string, reason?: string}} perm
+ * @returns {(perm: {name: string, args: object, risk?: string, reason?: string}) => Promise<boolean> & { takeSnapshot: (name: string) => object | null }}
  */
 export function createTuiPermissionHandler({ dispatch, allowRules, sessionId = 'tui', resolveRef, captureImpl = captureFileSnapshot, pathImpl = toolToSnapshotPath }) {
   const snapshots = new Map() // toolName -> snapshot（TOOL_START 时消费）
-  const handler = async ({ name, args, risk }) => {
+  // 并发批修复（PR #54 R1）：toolLoop 对读-only 批走 Promise.all（getMaxConcurrent>1），
+  // 轴 ask 门（C0）让多个只读工具同时进入本回调。单槽 resolveRef 会被后到者覆盖，
+  // 先到者只能等超时被拒 —— 改为 FIFO 队列，一次只展示一条；decidePermission
+  // 消费当前请求后经 resolveRef.pump() 弹出下一条。
+  const queue = []
+  const pump = () => {
+    if (resolveRef.current || queue.length === 0) return
+    const next = queue.shift()
+    resolveRef.current = { resolve: next.resolve, name: next.name, args: next.args }
+    dispatch({ type: 'PERMISSION_REQUEST', payload: { name: next.name, args: next.args, risk: next.risk || 'unknown', snapshot: next.snapshot, reason: next.reason || undefined } })
+  }
+  resolveRef.pump = pump
+  const handler = async ({ name, args, risk, reason }) => {
     if (allowRules.match(sessionId, name, args)) return true
     const filePath = pathImpl(name, args)
     const snapshot = filePath ? captureImpl(filePath) : null
     if (snapshot) snapshots.set(name, snapshot)
     return new Promise((resolve) => {
-      resolveRef.current = { resolve, name, args }
-      dispatch({ type: 'PERMISSION_REQUEST', payload: { name, args, risk: risk || 'unknown', snapshot } })
+      queue.push({ resolve, name, args, risk, reason, snapshot })
+      pump()
     })
   }
   handler.takeSnapshot = (name) => {
@@ -113,7 +126,7 @@ export function createTuiPermissionHandler({ dispatch, allowRules, sessionId = '
  * @param {boolean} [opts.remember]   'a' 键 → 记入会话 allowRules
  * @param {ReturnType<import('./allowRules.js').createAllowRulesStore>} opts.allowRules
  * @param {string} [opts.sessionId]
- * @param {{ current: {resolve: Function, name: string, args: object} | null }} opts.resolveRef
+ * @param {{ current: {resolve: Function, name: string, args: object} | null, pump?: Function }} opts.resolveRef
  * @param {(action: object) => void} opts.dispatch
  */
 export function decidePermission({ decision, remember = false, allowRules, sessionId = 'tui', resolveRef, dispatch }) {
@@ -128,6 +141,8 @@ export function decidePermission({ decision, remember = false, allowRules, sessi
     resolve(false)
   }
   dispatch({ type: 'PERMISSION_DECIDE' })
+  // 并发批修复（PR #54 R1）：当前请求已消费，弹出队列中的下一个待确认。
+  if (typeof resolveRef.pump === 'function') resolveRef.pump()
 }
 
 /**
