@@ -169,12 +169,24 @@ function isInternalNavUrl(url) {
 }
 
 function createWindow() {
+  const icoPath = path.join(__dirname, '..', 'resources', 'icon.ico')
+  const pngPath = path.join(__dirname, '..', 'resources', 'icon.png')
+  const iconPath = (process.platform === 'win32' && fs.existsSync(icoPath)) ? icoPath : pngPath
+
+  let appIcon = undefined
+  if (fs.existsSync(iconPath)) {
+    try {
+      const img = nativeImage.createFromPath(iconPath)
+      if (img && !img.isEmpty()) appIcon = img
+    } catch {}
+  }
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    icon: path.join(__dirname, '..', 'resources', 'icon.png'),
+    icon: appIcon || iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -185,6 +197,10 @@ function createWindow() {
     backgroundColor: '#FFFFFF',
     show: false,  // hide until page is ready — no blank flash on startup
   })
+
+  if (appIcon && process.platform === 'win32') {
+    try { mainWindow.setIcon(appIcon) } catch {}
+  }
 
   // M4 (2026-08 audit): the renderer never opens child windows and never
   // navigates off-app. window.open and target=_blank are denied outright;

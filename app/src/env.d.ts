@@ -149,7 +149,7 @@ interface Window {
       compact: (sessionId: number) => Promise<{ ok: boolean; beforeCount?: number; afterCount?: number; beforeTokens?: number; afterTokens?: number; error?: string }>
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
-      onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean }) => void) => () => void
+      onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean; sessionId?: number }) => void) => () => void
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>

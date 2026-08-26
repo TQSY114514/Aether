@@ -654,13 +654,26 @@ Reply in this format:
     if (planToolsPayload.length) { opts.tools = [...routedPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
 
     let msg
+    let hasStreamedThinking = false
     try {
       try { onThinkingStart?.() } catch {}
-      msg = await completeChatMessage({ provider, model, messages: convo, signal, options: opts })
+      msg = await completeChatMessage({
+        provider,
+        model,
+        messages: convo,
+        signal,
+        options: {
+          ...opts,
+          onThinkingDelta: (delta) => {
+            if (delta) hasStreamedThinking = true
+            try { onThinkingDelta?.(delta) } catch {}
+          },
+          onStreamDelta: (delta) => {
+            try { onStreamDelta?.(delta) } catch {}
+          },
+        },
+      })
       try { onThinkingEnd?.() } catch {}
-      if (msg && msg.reasoning) {
-        try { onThinkingDelta?.(msg.reasoning) } catch {}
-      }
       // 实时 token 用量: 累计每次请求 usage 并上报(onUsage → TUI 状态栏显示)
       if (msg && msg.usage) {
         usageAccum.input += Number(msg.usage.prompt_tokens || msg.usage.input_tokens || 0)
@@ -697,7 +710,10 @@ Reply in this format:
     const kind = hasToolCalls ? 'act' : 'plan'
     // Only emit onPlanStep during intermediate tool calls — never emit the final conversational reply as a plan step
     try { if (msg.content && hasToolCalls) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
-    if (msg.reasoning) { try { onThinkingDelta?.(msg.reasoning) } catch {} }
+    // Only emit accumulated msg.reasoning as fallback when no streaming deltas were received
+    if (msg.reasoning && !hasStreamedThinking) {
+      try { onThinkingDelta?.(msg.reasoning) } catch {}
+    }
 
     if (msg.tool_calls && msg.tool_calls.length) {
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })

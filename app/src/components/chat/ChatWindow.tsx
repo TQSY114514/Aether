@@ -11,6 +11,9 @@ import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
 import ThinkingBlock from './ThinkingBlock'
+import ToolCallBlock from './ToolCallBlock'
+import TaskCard from './TaskCard'
+import AgentPlanTrace from './AgentPlanTrace'
 
 // Arena results display component with streaming-like animation
 function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, prompt }: {
@@ -147,31 +150,68 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const ref = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
+  const thinkingRafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
+  const activeMidRef = useRef<number | null>(null)
 
-  // Live thinking state: React state so ThinkingBlock re-renders on each new chunk.
+  // Live streaming states: React state so blocks re-render on each new chunk/step.
   const [thinkingText, setThinkingText] = useState('')
   const [thinkingStreaming, setThinkingStreaming] = useState(false)
+  const [toolCalls, setToolCalls] = useState<any[]>([])
+  const [planSteps, setPlanSteps] = useState<any[]>([])
+  const [todos, setTodos] = useState<any[]>([])
+  const [statusLines, setStatusLines] = useState<string[]>([])
 
-  useEffect(() => {
+  const resetLocalState = useCallback(() => {
     setThinkingText('')
     setThinkingStreaming(false)
+    setToolCalls([])
+    setPlanSteps([])
+    setTodos([])
+    setStatusLines([])
     lastLenRef.current = 0
-  }, [sessionId])
+    if (ref.current) ref.current.innerHTML = ''
+  }, [])
+
+  useEffect(() => {
+    resetLocalState()
+    activeMidRef.current = null
+  }, [sessionId, resetLocalState])
 
   useEffect(() => {
     const unsub = useStore.subscribe((s) => {
       const buf = s.streamingBySession[sessionId]
       if (!buf) return
 
-      // -- Thinking block: read from thinkingBlocksByMessage keyed by messageId --
-      if (buf.messageId != null) {
-        const thinking = s.thinkingBlocksByMessage[buf.messageId]
-        if (thinking) {
-          setThinkingText(thinking)
-          // Thinking is active while main content has not yet started.
-          setThinkingStreaming(!buf.content)
+      const mid = buf.messageId
+      if (mid != null && activeMidRef.current !== null && activeMidRef.current !== mid) {
+        resetLocalState()
+      }
+      if (mid != null) {
+        activeMidRef.current = mid
+
+        // Thinking stream with RAF throttling to prevent UI thrashing
+        const thinking = s.thinkingBlocksByMessage[mid]
+        if (thinking !== undefined) {
+          cancelAnimationFrame(thinkingRafRef.current)
+          thinkingRafRef.current = requestAnimationFrame(() => {
+            thinkingRafRef.current = 0
+            setThinkingText(thinking)
+            setThinkingStreaming(!buf.content)
+          })
         }
+        // Tool calls in progress or completed
+        const tc = s.toolCallsByMessage[mid] || []
+        setToolCalls(tc)
+        // Plan steps
+        const ps = s.planStepsByMessage[mid] || []
+        setPlanSteps(ps)
+        // Todos
+        const td = s.todosByMessage[mid] || []
+        setTodos(td)
+        // Status lines
+        const sl = s.statusLinesByMessage[mid] || []
+        setStatusLines(sl)
       }
 
       // -- Main content: direct DOM write for O(1) per-token performance --
@@ -202,8 +242,11 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     return () => {
       unsub()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current)
     }
-  }, [sessionId, isAtBottom])
+  }, [sessionId, isAtBottom, resetLocalState])
+
+  const hasTask = todos && todos.length > 0
 
   return (
     <div id={`msg-streaming-${sessionId}`} className="flex justify-start message-enter">
@@ -222,8 +265,28 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         </div>
         <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
           style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
+          {hasTask && (
+            <TaskCard todos={todos} planSteps={planSteps} statusLines={statusLines} />
+          )}
+          {!hasTask && statusLines && statusLines.length > 0 && (
+            <div className="mb-2 space-y-0.5">
+              {statusLines.map((line, i) => (
+                <div key={i} className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {!hasTask && planSteps && planSteps.length > 0 && (
+            <AgentPlanTrace steps={planSteps} />
+          )}
           {thinkingText && (
             <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
+          )}
+          {toolCalls && toolCalls.length > 0 && (
+            <div className="mb-2">
+              {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
+            </div>
           )}
           <div ref={ref} className="mc" />
         </div>
