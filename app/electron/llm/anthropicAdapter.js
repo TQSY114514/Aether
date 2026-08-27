@@ -118,6 +118,20 @@ function mapToolChoice(choice) {
   return { type: 'auto' }
 }
 
+// Build the thinking configuration for Anthropic requests based on model capabilities.
+// Claude 3.x: legacy { type: 'enabled', budget_tokens: N } with budget < max_tokens.
+// Claude 4.x+: adaptive thinking — no budget_tokens, just { type: 'adaptive' }.
+function buildThinkingConfig(modelName, reasoningEffort, maxTokens) {
+  const budgets = { low: 1280, medium: 4096, high: 16000 }
+  const b = budgets[reasoningEffort]
+  if (!b) return null
+  const isClaude4Plus = /claude-[4-9]/.test(modelName)
+  if (isClaude4Plus) return { type: 'adaptive' }
+  // Claude 3.x: budget must be strictly less than max_tokens.
+  if (b < maxTokens) return { type: 'enabled', budget_tokens: b }
+  return null
+}
+
 // Parse a tool_use block from an Anthropic content_block event stream into the
 // OpenAI tool_calls shape (so the tool loop in toolLoop.js works unchanged).
 function parseToolUses(content) {
@@ -162,12 +176,10 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
     const tc = mapToolChoice(options.tool_choice)
     if (tc) body.tool_choice = tc
   }
-  // Claude thinking: relay reasoning_effort → thinking.budget_tokens.
+  // Claude thinking: relay reasoning_effort → thinking configuration.
   if (options.reasoning_effort) {
-    const budgets = { low: 1280, medium: 4096, high: 16000 }
-    const b = budgets[options.reasoning_effort]
-    const maxTok = body.max_tokens || 4096
-    if (b && b < maxTok) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
+    const thinkingCfg = buildThinkingConfig(model.model_name, options.reasoning_effort, body.max_tokens || 4096)
+    if (thinkingCfg) { body.thinking = thinkingCfg; body.temperature = 1 }
   }
 
   const gen = (async function* () {
@@ -372,10 +384,8 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     if (tc) body.tool_choice = tc
   }
   if (options.reasoning_effort) {
-    const budgets = { low: 1280, medium: 4096, high: 16000 }
-    const b = budgets[options.reasoning_effort]
-    const maxTok = body.max_tokens || 4096
-    if (b && b < maxTok) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
+    const thinkingCfg = buildThinkingConfig(model.model_name, options.reasoning_effort, body.max_tokens || 4096)
+    if (thinkingCfg) { body.thinking = thinkingCfg; body.temperature = 1 }
   }
 
   const res = await fetch(`${baseUrl(provider)}/messages`, {
