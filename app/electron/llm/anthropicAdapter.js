@@ -96,6 +96,28 @@ function normalizeContent(content) {
   return ''
 }
 
+// Map OpenAI-style tools to Anthropic tool format.
+// OpenAI: { type: 'function', function: { name, description, parameters } }
+// Anthropic: { name, description, input_schema }
+function mapToolsToAnthropic(tools) {
+  if (!Array.isArray(tools) || !tools.length) return undefined
+  return tools
+    .filter(t => t?.type === 'function' && t.function)
+    .map(t => ({
+      name: t.function.name,
+      description: t.function.description || '',
+      input_schema: t.function.parameters || { type: 'object', properties: {} },
+    }))
+}
+
+// Map OpenAI-style tool_choice to Anthropic format.
+function mapToolChoice(choice) {
+  if (!choice) return undefined
+  if (choice === 'auto' || choice === 'none') return { type: choice }
+  if (typeof choice === 'object' && choice.type) return choice
+  return { type: 'auto' }
+}
+
 // Parse a tool_use block from an Anthropic content_block event stream into the
 // OpenAI tool_calls shape (so the tool loop in toolLoop.js works unchanged).
 function parseToolUses(content) {
@@ -133,11 +155,19 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
   applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
+  // Forward tool definitions to Anthropic request.
+  const anthropicTools = mapToolsToAnthropic(options.tools)
+  if (anthropicTools) {
+    body.tools = anthropicTools
+    const tc = mapToolChoice(options.tool_choice)
+    if (tc) body.tool_choice = tc
+  }
   // Claude thinking: relay reasoning_effort → thinking.budget_tokens.
   if (options.reasoning_effort) {
     const budgets = { low: 1280, medium: 4096, high: 16000 }
     const b = budgets[options.reasoning_effort]
-    if (b) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
+    const maxTok = body.max_tokens || 4096
+    if (b && b < maxTok) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
   }
 
   const gen = (async function* () {
@@ -334,10 +364,18 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
+  // Forward tool definitions to Anthropic request.
+  const anthropicTools = mapToolsToAnthropic(options.tools)
+  if (anthropicTools) {
+    body.tools = anthropicTools
+    const tc = mapToolChoice(options.tool_choice)
+    if (tc) body.tool_choice = tc
+  }
   if (options.reasoning_effort) {
     const budgets = { low: 1280, medium: 4096, high: 16000 }
     const b = budgets[options.reasoning_effort]
-    if (b) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
+    const maxTok = body.max_tokens || 4096
+    if (b && b < maxTok) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
   }
 
   const res = await fetch(`${baseUrl(provider)}/messages`, {
