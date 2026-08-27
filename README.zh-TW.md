@@ -113,7 +113,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` 與 `aetherai` 指向同一個套件。`npm install -g aetherai@0.7.1` 可鎖定到與桌面版相同的版本。
+`aether` 與 `aetherai` 指向同一個套件。`npm install -g aetherai@0.8.0` 可鎖定到與桌面版相同的版本。
 
 > **與 GUI 共享資料** — 兩個產品共用同一 SQLite 資料庫(`%APPDATA%/aetherai/aetherai.db`)。桌面端開啟的會話可在 TUI 續接,反之亦然。
 

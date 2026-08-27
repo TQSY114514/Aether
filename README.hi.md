@@ -115,7 +115,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` और `aetherai` एक ही पैकेज पर रिज़ॉल्व होते हैं। डेस्कटॉप रिलीज़ से मेल खाने के लिए `npm install -g aetherai@0.7.1` से वर्ज़न पिन करें।
+`aether` और `aetherai` एक ही पैकेज पर रिज़ॉल्व होते हैं। डेस्कटॉप रिलीज़ से मेल खाने के लिए `npm install -g aetherai@0.8.0` से वर्ज़न पिन करें।
 
 > **GUI के साथ डेटा साझाकरण** — दोनों उत्पाद एक ही SQLite डेटाबेस (`%APPDATA%/aetherai/aetherai.db`) का उपयोग करते हैं। डेस्कटॉप ऐप में शुरू किया गया सत्र TUI में जारी रखा जा सकता है, और इसका उल्टा भी।
 

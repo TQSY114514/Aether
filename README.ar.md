@@ -115,7 +115,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` و `aetherai` يحلّان إلى نفس الحزمة. ثبّت إصدارًا محدّدًا بـ `npm install -g aetherai@0.7.1` لمطابقة إصدار سطح المكتب.
+`aether` و `aetherai` يحلّان إلى نفس الحزمة. ثبّت إصدارًا محدّدًا بـ `npm install -g aetherai@0.8.0` لمطابقة إصدار سطح المكتب.
 
 > **مشاركة البيانات مع الواجهة الرسومية** — المنتجان يستخدمان نفس قاعدة بيانات SQLite (`%APPDATA%/aetherai/aetherai.db`). الجلسة التي بدأت في تطبيق سطح المكتب يمكن استئنافها في الـ TUI، والعكس صحيح.
 
