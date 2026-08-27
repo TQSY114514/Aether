@@ -58,11 +58,10 @@ function createAllowRulesStore() {
  * @param {AbortController} opts.controller
  * @param {string}       opts.source           'chat' | 'task'
  * @param {object}       opts.allowRules       createAllowRulesStore() instance
- * @param {boolean}      opts.thinkingSupported gates onThinkingStart/End
  * @param {object}       [opts.model]          resolved model (for price columns)
  * @returns {object} callbacks bag — spread directly into runToolLoop options
  */
-function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller, source, allowRules, thinkingSupported, model }) {
+function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller, source, allowRules, model }) {
   // Wrap every outgoing send in try/catch so a dead renderer never throws.
   const safeSend = (c, p) => { try { send(c, p) } catch {} }
 

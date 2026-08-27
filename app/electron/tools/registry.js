@@ -340,7 +340,7 @@ const TOOLS = [
   }},
   { name: 'run_agent', description: 'Spawn a specialized sub-agent (explore/build/review/research/debug).', risk: 'dangerous', parameters: { type: 'object', properties: { role: { type: 'string', enum: ['explore', 'build', 'review', 'research', 'debug'] }, task: { type: 'string' }, maxIterations: { type: 'number' } }, required: ['role', 'task'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
-    const roles = require('../llm/agentRoles'); const SA = require('./subAgent')
+    const roles = require('../llm/agentRoles'); const SA = require('../llm/subAgent')
     if (!roles.getRole(args.role)) return `unknown role: ${args.role}`
     const td = String(args.task || '').trim(); if (!td) return 'task is required'
     const mp = roles.buildRolePrompt(args.role, td); if (!mp) return 'prompt build failed'

@@ -262,6 +262,15 @@ OUTPUT FORMAT:
 For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along. When an execution plan is shown, call plan_progress with the task id and a brief result as you finish each step.
 Parallelism: you may call multiple INDEPENDENT tools in one round (they run concurrently). For larger independent sub-tasks (e.g. researching 3 unrelated files), call delegate_task with an array of task descriptions — sub-agents run them in parallel and return combined results.`
 
+function planToTodos(plan) {
+  if (!plan || !Array.isArray(plan.tasks)) return []
+  return plan.tasks.map(t => ({
+    content: t.description,
+    status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending',
+    activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
+  }))
+}
+
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
 // NOTE: onStreamDelta carries live assistant TEXT deltas from every loop round
@@ -573,7 +582,7 @@ Reply in this format:
         // Full plan snapshot for the renderer's sticky deck (steps + statuses).
         try {
           onPlanSnapshot?.(plan)
-          onTodoUpdate?.(plan.tasks.map(t => ({ content: t.description, status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending' })))
+          onTodoUpdate?.(planToTodos(plan))
         } catch {}
         onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)`, kind: 'plan' })
       }
@@ -778,7 +787,7 @@ Reply in this format:
           if (handled) {
             try {
               onPlanSnapshot?.(plan)
-              onTodoUpdate?.(plan.tasks.map(t => ({ content: t.description, status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending' })))
+              onTodoUpdate?.(planToTodos(plan))
             } catch {}
             return { tc, isPlan: true, entry: { name: fn.name, args, result: `progress recorded for task ${args.task_id}`, error: null, risk: null, latencyMs: null }, planStep: `📊 [${args.task_id}] ${(args.result || '').slice(0, 60)}` }
           }
@@ -1301,6 +1310,7 @@ function requestPermissionWithTimeout(requestPermission, payload, timeoutMs = PE
 
 module.exports = {
   runToolLoop,
+  planToTodos,
   IterationBudget,
   isComplexRequest: planning.isComplexRequest,
   generatePlan: planning.generatePlan,

@@ -237,7 +237,7 @@ export function ensureHabitSuggestionListener() {
 export function ensureTodoListener() {
   if (_todoListenerInstalled) return
   _todoListenerInstalled = true
-  window.electronAPI.chat.onTodoUpdate?.(({ messageId, sessionId, todos }) => {
+  window.electronAPI.chat.onTodoUpdate?.(({ messageId, todos }) => {
     if (!messageId || !todos) return
     getStore().setState((s) => ({
       todosByMessage: {
@@ -252,21 +252,12 @@ export function ensureTodoListener() {
 export function ensurePlanSnapshotListener() {
   if (_planSnapshotListenerInstalled) return
   _planSnapshotListenerInstalled = true
-  window.electronAPI.chat.onPlanSnapshot?.(({ messageId, sessionId, plan }) => {
+  window.electronAPI.chat.onPlanSnapshot?.(({ messageId, plan }) => {
     if (!messageId || !plan) return
-    const mappedTodos = (plan.tasks || []).map((t: any) => ({
-      content: t.description,
-      status: (t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending') as 'pending' | 'in_progress' | 'completed',
-      activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
-    }))
     getStore().setState((s) => ({
       planSnapshotsByMessage: {
         ...s.planSnapshotsByMessage,
         [messageId]: plan,
-      },
-      todosByMessage: {
-        ...s.todosByMessage,
-        [messageId]: mappedTodos,
       },
     }))
   })

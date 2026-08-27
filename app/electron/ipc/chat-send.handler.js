@@ -399,12 +399,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
       activeToolLoops.add(sessionId)
       try { wc?.send('chat:tool-loop-start', { sessionId }) } catch {}
       let finalContent = ''
+      let streamedContent = ''
       try {
-        const modelName = (model?.model_name || '').toLowerCase()
-        const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test(modelName)
         // Build shared callback bag (onToolCall, onAskUser, requestPermission, etc.)
         // using the extracted factory. Feature B's injection options stay inline below.
-        const cb = buildToolLoopCallbacks({
+        const baseCb = buildToolLoopCallbacks({
           db,
           send: (c, p) => wc?.send(c, p),
           getWc: () => (wc && !wc.isDestroyed() ? wc : null),
@@ -413,9 +412,15 @@ ipcMain.handle('chat:complete', handleChatComplete)
           controller,
           source: 'chat',
           allowRules: allowRulesStore,
-          thinkingSupported,
           model,
         })
+        const cb = {
+          ...baseCb,
+          onStreamDelta: (delta) => {
+            if (delta) streamedContent += delta
+            baseCb.onStreamDelta?.(delta)
+          },
+        }
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
         const runSingleLoop = () => runToolLoop({
@@ -473,10 +478,15 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
             const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: cb })
-            finalContent = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
-          } catch { finalContent = await runWithOverflowHeal() }
+            const returned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
+            finalContent = streamedContent || returned || ''
+          } catch {
+            const returned = await runWithOverflowHeal()
+            finalContent = streamedContent || returned || ''
+          }
         } else {
-          finalContent = await runWithOverflowHeal()
+          const returned = await runWithOverflowHeal()
+          finalContent = streamedContent || returned || ''
         }
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
@@ -558,6 +568,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       try {
         const wc = getWebContents()
         let hasThinking = false
+        let thinkingEnded = false
         const stream = streamChat({
           provider: p,
           model: m,
@@ -580,13 +591,17 @@ ipcMain.handle('chat:complete', handleChatComplete)
         for await (const delta of stream) {
           if (delta) {
             fullContent += delta
-            try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
             // Signal thinking is complete as soon as main content tokens start flowing
-            if (hasThinking) {
+            if (hasThinking && !thinkingEnded) {
+              thinkingEnded = true
               try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
-              hasThinking = false
             }
+            try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
           }
+        }
+        if (hasThinking && !thinkingEnded) {
+          thinkingEnded = true
+          try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
         }
         clearTimeout(timeout)
         abortControllers.delete(msgId)

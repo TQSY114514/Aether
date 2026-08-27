@@ -237,6 +237,29 @@ async function completeChat({ provider, model, messages, signal, options = {} })
 
 // Non-streaming completion returning the full assistant message object
 // ({ content, tool_calls, usage }) so callers (the tool loop) can inspect
+function mergeToolCallDeltas(toolCallsMap, toolCalls) {
+  if (!Array.isArray(toolCalls)) return
+  for (const tc of toolCalls) {
+    const idx = tc.index ?? 0
+    if (!toolCallsMap[idx]) {
+      toolCallsMap[idx] = {
+        id: tc.id || '',
+        type: tc.type || 'function',
+        function: {
+          name: tc.function?.name || '',
+          arguments: tc.function?.arguments || ''
+        }
+      }
+    } else {
+      if (tc.id) toolCallsMap[idx].id = tc.id
+      if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name
+      if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments
+    }
+  }
+}
+
+// Non-streaming completion returning the full assistant message object
+// ({ content, tool_calls, usage }) so callers (the tool loop) can inspect
 // tool_calls AND log real server-reported token usage. `tool_calls`/`usage`
 // are undefined when the model didn't request any / the provider didn't report.
 async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
@@ -246,10 +269,11 @@ async function completeChatMessage({ provider, model, messages, signal, options 
 
   // Use streaming when callbacks are requested, but respect explicit options.stream
   const useStream = options.stream !== false
+  const { onThinkingDelta: _otd, onStreamDelta: _osd, ...restOpts } = options
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
-    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: useStream, ...options }),
+    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: useStream, ...restOpts }),
     signal: withTimeout(signal),
   })
   if (!res.ok) {
@@ -318,24 +342,8 @@ async function completeChatMessage({ provider, model, messages, signal, options 
             try { onStream?.(ext.content) } catch {}
           }
         }
-        if (tool_calls && Array.isArray(tool_calls)) {
-          for (const tc of tool_calls) {
-            const idx = tc.index ?? 0
-            if (!toolCallsMap[idx]) {
-              toolCallsMap[idx] = {
-                id: tc.id || '',
-                type: tc.type || 'function',
-                function: {
-                  name: tc.function?.name || '',
-                  arguments: tc.function?.arguments || ''
-                }
-              }
-            } else {
-              if (tc.id) toolCallsMap[idx].id = tc.id
-              if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name
-              if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments
-            }
-          }
+        if (tool_calls) {
+          mergeToolCallDeltas(toolCallsMap, tool_calls)
         }
       }
     }
@@ -376,24 +384,8 @@ async function completeChatMessage({ provider, model, messages, signal, options 
         try { onStream?.(ext.content) } catch {}
       }
     }
-    if (tool_calls && Array.isArray(tool_calls)) {
-      for (const tc of tool_calls) {
-        const idx = tc.index ?? 0
-        if (!toolCallsMap[idx]) {
-          toolCallsMap[idx] = {
-            id: tc.id || '',
-            type: tc.type || 'function',
-            function: {
-              name: tc.function?.name || '',
-              arguments: tc.function?.arguments || ''
-            }
-          }
-        } else {
-          if (tc.id) toolCallsMap[idx].id = tc.id
-          if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name
-          if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments
-        }
-      }
+    if (tool_calls) {
+      mergeToolCallDeltas(toolCallsMap, tool_calls)
     }
   }
 

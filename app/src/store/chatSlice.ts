@@ -250,15 +250,19 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         const { [regeneratedMsgId]: ___, ...restTB } = s.todosByMessage
         const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
         const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
+        const { [regeneratedMsgId]: ______, ...restSNAP } = s.planSnapshotsByMessage
+        const { [regeneratedMsgId]: _______, ...restSA } = s.subagentsByMessage
         next.toolCallsByMessage = restTC
         next.planStepsByMessage = restPS
         next.todosByMessage = restTB
         next.thinkingBlocksByMessage = restTIB
         next.statusLinesByMessage = restSIB
+        next.planSnapshotsByMessage = restSNAP
+        next.subagentsByMessage = restSA
       }
       return next
     })
-    ensureChunkListener()
+    ensureAllChatListeners()
     try {
       const result = await window.electronAPI.chat.send({
         sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
@@ -321,7 +325,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       messages: truncated,
       streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: "", messageId: null } },
     }))
-    ensureChunkListener()
+    ensureAllChatListeners()
     try {
       const result = await window.electronAPI.chat.send({
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,

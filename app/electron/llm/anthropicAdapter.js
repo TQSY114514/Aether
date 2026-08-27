@@ -326,7 +326,10 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     throw err
   }
 
-  if (!useStream) {
+  const contentType = (res.headers.get('content-type') || '').toLowerCase()
+  const isSSE = contentType.includes('text/event-stream')
+
+  if (!useStream || !isSSE) {
     const data = await res.json()
     const { text, tool_calls } = parseToolUses(data.content)
     const usage = data.usage ? _nu(data.usage) : null

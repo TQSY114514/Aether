@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import {
-  Zap,
   Cpu,
   AlertTriangle,
   Loader2,
@@ -20,8 +19,8 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
   const streamingBySession = useStore((s) => s.streamingBySession)
   const toolCallsByMessage = useStore((s) => s.toolCallsByMessage)
   const todosByMessage = useStore((s) => s.todosByMessage)
+  const planSnapshotsByMessage = useStore((s) => s.planSnapshotsByMessage)
   const subagentsByMessage = useStore((s) => s.subagentsByMessage)
-  const statusLinesByMessage = useStore((s) => s.statusLinesByMessage)
   const messages = useStore((s) => s.messages)
   const turnUsage = useStore((s) => (sessionId ? s.turnUsageBySession[sessionId] : null))
 
@@ -29,26 +28,41 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
 
   const isLooping = sessionId ? loopingSessions.has(sessionId) : false
   const isStreaming = sessionId ? !!streamingBySession[sessionId] : false
-  if (!isLooping && !isStreaming) return null
 
   // Strict session scoping: only include messages in the active session
   const sessionMsgIds = useMemo(() => new Set(messages.filter((m) => !sessionId || m.session_id === sessionId).map((m) => m.id)), [messages, sessionId])
   const activeMessageId = sessionId ? streamingBySession[sessionId]?.messageId : null
 
-  // 1. Check if there are structured Todos/Plan for this session
+  // 1. Check if there are structured Todos/Plan for this session (from todosByMessage or planSnapshotsByMessage)
   const latestTodos = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
       if (msg.session_id === sessionId) {
         const tList = todosByMessage[msg.id]
         if (tList && tList.length > 0) return tList
+        const snap = planSnapshotsByMessage[msg.id]
+        if (snap && Array.isArray(snap.tasks) && snap.tasks.length > 0) {
+          return snap.tasks.map((t) => ({
+            content: t.description,
+            status: (t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending') as 'pending' | 'in_progress' | 'completed',
+            activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
+          }))
+        }
       }
     }
-    if (activeMessageId && todosByMessage[activeMessageId]) {
-      return todosByMessage[activeMessageId]
+    if (activeMessageId) {
+      if (todosByMessage[activeMessageId]?.length) return todosByMessage[activeMessageId]
+      const snap = planSnapshotsByMessage[activeMessageId]
+      if (snap && Array.isArray(snap.tasks) && snap.tasks.length > 0) {
+        return snap.tasks.map((t) => ({
+          content: t.description,
+          status: (t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending') as 'pending' | 'in_progress' | 'completed',
+          activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
+        }))
+      }
     }
     return []
-  }, [messages, todosByMessage, sessionId, activeMessageId])
+  }, [messages, todosByMessage, planSnapshotsByMessage, sessionId, activeMessageId])
 
   // 2. Collect parallel subagents from subagentsByMessage, status lines, and tool calls
   const subagents = useMemo(() => {
@@ -81,7 +95,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
             if (/subagent|runSubagent|delegate/i.test(c.name)) {
               const isRunning = c.result == null && c.error == null
               const name = (c.args as any)?.role ? `子代理 [${(c.args as any).role}]` : `子代理 (${c.name})`
-              if (!list.some(sa => sa.name === name)) {
+              if (!list.some((sa) => sa.name === name)) {
                 list.push({
                   name,
                   status: isRunning ? 'running' : c.error ? 'error' : 'done',
@@ -133,6 +147,9 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
   const activeTool = toolSteps.find((s) => s.status === 'running') || (toolSteps.length > 0 ? toolSteps[toolSteps.length - 1] : null)
   const isToolRunning = activeTool?.status === 'running'
 
+  // Early return placed after all hooks
+  if (!isLooping && !isStreaming) return null
+
   return (
     <div
       className="mb-2 rounded-xl border shadow-sm transition-all duration-200"
@@ -147,7 +164,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
     >
       {/* ── 1. Top HUD Capsule (Always Visible while running) ── */}
       <div
-        className="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-[var(--hover-bg)] transition-colors rounded-xl"
+        className="flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-[var(--hover-bg)] transition-colors rounded-xl cursor-pointer"
         onClick={() => setIsExpanded((prev) => !prev)}
       >
         {/* Left: Status Pill + Active Action / Plan */}
@@ -168,13 +185,13 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
             }}
           >
             {isToolRunning ? (
-              <Loader2 size={12} className="animate-spin shrink-0" />
+              <Loader2 size={12} className="motion-safe:animate-spin shrink-0" />
             ) : hasSubagents ? (
-              <Bot size={12} className="animate-pulse shrink-0" />
+              <Bot size={12} className="motion-safe:animate-pulse shrink-0" />
             ) : hasPlan ? (
-              <Layers size={12} className="animate-pulse shrink-0" />
+              <Layers size={12} className="motion-safe:animate-pulse shrink-0" />
             ) : (
-              <Cpu size={12} className="animate-pulse shrink-0" />
+              <Cpu size={12} className="motion-safe:animate-pulse shrink-0" />
             )}
             <span>
               {hasPlan
@@ -192,7 +209,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
           {/* Current Live Detail */}
           {hasPlan && planActive ? (
             <div className="flex items-center gap-1.5 truncate text-[11px]" style={{ color: 'var(--text-primary)' }}>
-              <Loader2 size={11} className="animate-spin text-amber-400 shrink-0" />
+              <Loader2 size={11} className="motion-safe:animate-spin text-amber-400 shrink-0" />
               <span className="font-semibold">{planActive.activeForm || planActive.content}</span>
             </div>
           ) : activeTool && isToolRunning ? (
@@ -220,7 +237,12 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
           {/* Expand/Collapse Drawer Button */}
           <button
             type="button"
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer"
+            aria-expanded={isExpanded}
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsExpanded((prev) => !prev)
+            }}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-[var(--accent)] outline-none"
             style={{ color: 'var(--accent)' }}
           >
             <span>{isExpanded ? t('common.collapse', '收起') : t('agent.action.all_steps', '展开全部')}</span>
@@ -232,7 +254,6 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
       {/* ── 2. Expandable Plan & Subagent Matrix Drawer ── */}
       {isExpanded && (
         <div className="border-t border-[var(--border)] px-3 py-2.5 space-y-3 text-xs">
-          
           {/* Section A: Multi-Subagents Parallel Matrix (if any) */}
           {hasSubagents && (
             <div className="space-y-1.5">
@@ -253,7 +274,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
                     }`}
                   >
                     {sa.status === 'running' ? (
-                      <Loader2 size={12} className="text-cyan-400 animate-spin shrink-0" />
+                      <Loader2 size={12} className="text-cyan-400 motion-safe:animate-spin shrink-0" />
                     ) : sa.status === 'error' ? (
                       <AlertTriangle size={12} className="text-red-400 shrink-0" />
                     ) : (
@@ -303,7 +324,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
                         {isDone ? (
                           <CheckCircle2 size={13} className="text-emerald-400" />
                         ) : isRunning ? (
-                          <Loader2 size={13} className="text-amber-400 animate-spin" />
+                          <Loader2 size={13} className="text-amber-400 motion-safe:animate-spin" />
                         ) : (
                           <Circle size={13} className="text-gray-400 opacity-40" />
                         )}
@@ -320,11 +341,11 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
                               isDone
                                 ? 'text-emerald-400 bg-emerald-500/10'
                                 : isRunning
-                                ? 'text-amber-400 bg-amber-500/10 animate-pulse'
+                                ? 'text-amber-400 bg-amber-500/10 motion-safe:animate-pulse'
                                 : 'text-gray-400 bg-gray-500/10'
                             }`}
                           >
-                            {isDone ? '✓ 已完成' : isRunning ? '⟳ 进行中' : '○ 将要执行'}
+                            {isDone ? '已完成' : isRunning ? '进行中' : '待执行'}
                           </span>
                         </div>
                       </div>

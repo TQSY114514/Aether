@@ -160,7 +160,8 @@ async function runParallel(tasks, shared) {
   const runners = tasks.map((task, i) => {
     return (async () => {
       const startTime = Date.now()
-      const subagentId = `sa_${Date.now()}_${i + 1}`
+      const rand = Math.random().toString(36).slice(2, 8)
+      const subagentId = `sa_${startTime}_${rand}_${i + 1}`
       try {
         shared.onSubagentEvent?.({
           type: 'start',
