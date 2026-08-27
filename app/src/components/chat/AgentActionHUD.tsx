@@ -227,7 +227,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
               e.stopPropagation()
               setIsExpanded((prev) => !prev)
             }}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer focus-visible:ring-1 focus-visible:ring-[var(--accent)] outline-none"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer hover:opacity-90 active:bg-[var(--hover-bg)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-1 focus-visible:ring-[var(--accent)] outline-none"
             style={{ color: 'var(--accent)' }}
           >
             <span>{isExpanded ? t('common.collapse', '收起') : t('agent.action.all_steps', '展开全部')}</span>

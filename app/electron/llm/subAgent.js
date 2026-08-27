@@ -97,6 +97,8 @@ async function runSubagent({
 
   let finalContent = ''
   let wasTimeout = false
+  let hasError = false
+  let errorMessage = ''
   try {
     finalContent = await runToolLoop({
       provider,
@@ -118,8 +120,10 @@ async function runSubagent({
       wasTimeout = true
       finalContent = `[Sub-agent timed out after ${cfg.timeoutMs / 1000}s — partial result]`
     } else {
-      log.warn('Subagent execution failed:', e?.message)
-      finalContent = `Sub-agent encountered an error: ${e?.message || 'unknown'}`
+      hasError = true
+      errorMessage = e?.message || 'unknown'
+      log.warn('Subagent execution failed:', errorMessage)
+      finalContent = `Sub-agent encountered an error: ${errorMessage}`
     }
   } finally {
     clearTimeout(timeout)
@@ -130,12 +134,12 @@ async function runSubagent({
     db.addMessage({ session_id: childSessionId, role: 'assistant', content: finalContent })
     db.updateSession(childSessionId, {
       title: `subagent: ${String(prompt).slice(0, 60)}`,
-      status: wasTimeout ? 'timeout' : 'completed',
+      status: wasTimeout ? 'timeout' : hasError ? 'failed' : 'completed',
     })
   } catch {}
 
   // Cleanup policy
-  if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && finalContent && !finalContent.startsWith('['))) {
+  if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && !hasError && finalContent && !finalContent.startsWith('['))) {
     try { db.deleteSession(childSessionId) } catch {}
   }
 
@@ -148,6 +152,8 @@ async function runSubagent({
     content: finalContent || '(sub-agent returned no content)',
     childSessionId,
     wasTimeout,
+    hasError,
+    error: errorMessage || (wasTimeout ? 'Timed out' : null),
   }
 }
 
@@ -186,7 +192,8 @@ async function runParallel(tasks, shared) {
           config: shared.subagentConfig || {},
         })
         const latencyMs = Date.now() - startTime
-        if (result?.wasTimeout) {
+        if (result?.wasTimeout || result?.hasError) {
+          const errText = result?.error || (result?.wasTimeout ? 'Timed out' : 'Sub-agent error')
           try {
             shared.onSubagentEvent?.({
               type: 'error',
@@ -195,10 +202,10 @@ async function runParallel(tasks, shared) {
               task: String(task).slice(0, 80),
               status: 'error',
               latencyMs,
-              error: 'Timed out',
+              error: errText,
             })
           } catch {}
-          return { success: false, error: 'Timed out', iterations, childSessionId: result.childSessionId, latencyMs }
+          return { success: false, error: errText, iterations, childSessionId: result.childSessionId, latencyMs }
         }
         try {
           shared.onSubagentEvent?.({

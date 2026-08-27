@@ -1184,7 +1184,29 @@ Reply in this format:
         const summary = planning.planSummary(plan)
         convo.push({ role: 'system', content: summary })
         try {
-          const finalMsg = await completeChatMessage({ provider, model, messages: convo, signal, options: { max_tokens: 2048, ...options } })
+          let hasStreamedPlanThinking = false
+          try { onThinkingStart?.() } catch {}
+          const finalMsg = await completeChatMessage({
+            provider,
+            model,
+            messages: convo,
+            signal,
+            options: {
+              max_tokens: 2048,
+              ...options,
+              onThinkingDelta: (delta) => {
+                if (delta) hasStreamedPlanThinking = true
+                try { onThinkingDelta?.(delta) } catch {}
+              },
+              onStreamDelta: (delta) => {
+                try { onStreamDelta?.(delta) } catch {}
+              },
+            },
+          })
+          if (finalMsg?.reasoning && !hasStreamedPlanThinking) {
+            try { onThinkingDelta?.(finalMsg.reasoning) } catch {}
+          }
+          try { onThinkingEnd?.() } catch {}
           if (finalMsg?.content) return finalMsg.content
         } catch {}
         return summary

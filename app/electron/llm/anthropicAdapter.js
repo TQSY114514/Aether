@@ -163,6 +163,8 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
     // Per-block accumulator keyed by content_block index. A tool_use block's
     // name + id arrive at content_block_start, its input arrives as fragments
     // via input_json_delta, and it is only complete at content_block_stop.
+    let initialUsage = null
+    let deltaUsage = null
     const _toolBlocks = new Map() // index -> { id, name, inputJson }
     while (true) {
       const { done, value } = await reader.read()
@@ -182,6 +184,8 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
           else if (errObj.type === 'authentication_error') err.status = 401
           throw err
         }
+        if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
+        if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
         // content_block_start → begin accumulating a block.
         if (evt.type === 'content_block_start') {
           const block = evt.block || {}
@@ -230,12 +234,20 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
         // message_start / other events — no content to yield.
       }
     }
+    const rawUsage = (initialUsage || deltaUsage) ? {
+      input_tokens: (initialUsage?.input_tokens || 0),
+      output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
+      cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
+      cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
+    } : null
+    gen.usage = rawUsage ? _nu(rawUsage) : null
   })()
 
   // Attach accumulated state to the generator instance so consumers reading
-  // `stream.thinkingBlocks` / `stream.toolCalls` can see them after the loop.
+  // `stream.thinkingBlocks` / `stream.toolCalls` / `stream.usage` can see them after the loop.
   gen.thinkingBlocks = null
   gen.toolCalls = null
+  gen.usage = null
   return gen
 }
 
