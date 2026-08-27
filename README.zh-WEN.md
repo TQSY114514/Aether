@@ -113,7 +113,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` 與 `aetherai` 本同一套件。欲與桌面版同其版次，以 `npm install -g aetherai@0.7.1` 鎖定之。
+`aether` 與 `aetherai` 本同一套件。欲與桌面版同其版次，以 `npm install -g aetherai@0.8.0` 鎖定之。
 
 > **與圖形界面共用數據** —— 兩個產品共用同一 SQLite 庫（`%APPDATA%/aetherai/aetherai.db`）。桌面所啟之會話，可於 TUI 續之，反之亦然。
 

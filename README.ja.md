@@ -115,7 +115,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` と `aetherai` は同じパッケージを指します。`npm install -g aetherai@0.7.1` でバージョンを固定すると、デスクトップのリリースと一致させられます。
+`aether` と `aetherai` は同じパッケージを指します。`npm install -g aetherai@0.8.0` でバージョンを固定すると、デスクトップのリリースと一致させられます。
 
 > **GUI とのデータ共有** — 両製品は同じ SQLite データベース（`%APPDATA%/aetherai/aetherai.db`）を使用します。デスクトップアプリで開始したセッションは TUI で再開でき、その逆も可能です。
 

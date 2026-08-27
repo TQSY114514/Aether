@@ -115,7 +115,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` und `aetherai` zeigen auf dasselbe Paket. Pinnen Sie eine Version mit `npm install -g aetherai@0.7.1`, um sie an ein Desktop-Release anzugleichen.
+`aether` und `aetherai` zeigen auf dasselbe Paket. Pinnen Sie eine Version mit `npm install -g aetherai@0.8.0`, um sie an ein Desktop-Release anzugleichen.
 
 > **Daten mit der GUI teilen** — beide Produkte verwenden dieselbe SQLite-Datenbank (`%APPDATA%/aetherai/aetherai.db`). Eine in der Desktop-App begonnene Sitzung lässt sich in der TUI fortsetzen und umgekehrt.
 

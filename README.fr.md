@@ -115,7 +115,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` et `aetherai` pointent vers le même paquet. Épinglez une version avec `npm install -g aetherai@0.7.1` pour faire correspondre une release du bureau.
+`aether` et `aetherai` pointent vers le même paquet. Épinglez une version avec `npm install -g aetherai@0.8.0` pour faire correspondre une release du bureau.
 
 > **Partage des données avec la GUI** — les deux produits utilisent la même base de données SQLite (`%APPDATA%/aetherai/aetherai.db`). Une session commencée dans l'application de bureau peut être reprise dans le TUI et inversement.
 

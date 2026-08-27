@@ -104,7 +104,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether`와 `aetherai`는 동일한 패키지를 가리킵니다. `npm install -g aetherai@0.7.1`로 버전을 고정하면 데스크톱 릴리스와 일치시킬 수 있습니다.
+`aether`와 `aetherai`는 동일한 패키지를 가리킵니다. `npm install -g aetherai@0.8.0`로 버전을 고정하면 데스크톱 릴리스와 일치시킬 수 있습니다.
 
 > **GUI와 데이터 공유** — 두 제품은 동일한 SQLite 데이터베이스(`%APPDATA%/aetherai/aetherai.db`)를 사용합니다. 데스크톱 앱에서 시작한 세션은 TUI에서 이어서 사용할 수 있고, 그 반대도 가능합니다.
 

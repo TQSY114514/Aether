@@ -17,7 +17,7 @@
 
 # ─── 本文件是模板, 实际 manifest 需按 wingetcreate 输出替换 ───
 PackageIdentifier: Aether.Aether
-PackageVersion: 0.7.0
+PackageVersion: 0.8.0
 PackageLocale: en-US
 Publisher: TQSY114514
 PackageName: Aether
@@ -26,7 +26,7 @@ ShortDescription: Local-first multi-model AI workbench - chat with any model, ru
 InstallerType: exe
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/TQSY114514/Aether/releases/download/v0.7.0/aetherai-setup-0.7.0.exe
+    InstallerUrl: https://github.com/TQSY114514/Aether/releases/download/v0.8.0/aetherai-setup-0.8.0.exe
     InstallerSha256: REPLACE_WITH_REAL_SHA256
     InstallerSwitches:
       Silent: /S

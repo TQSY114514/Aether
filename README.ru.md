@@ -113,7 +113,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` и `aetherai` указывают на один и тот же пакет. Закрепите версию командой `npm install -g aetherai@0.7.1`, чтобы она совпадала с десктоп-релизом.
+`aether` и `aetherai` указывают на один и тот же пакет. Закрепите версию командой `npm install -g aetherai@0.8.0`, чтобы она совпадала с десктоп-релизом.
 
 > **Общие данные с GUI** — оба продукта используют одну и ту же базу данных SQLite (`%APPDATA%/aetherai/aetherai.db`). Сессию, начатую в десктоп-приложении, можно продолжить в TUI — и наоборот.
 

@@ -2,6 +2,22 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.8.0] - 2026-08-27
+
+### Added
+
+- **True Character-by-Character Streaming & Thought Process (真·逐字流式打字机与深度思考).** End-to-end character streaming across chat UI and reasoning blocks. Thought processes stream live with foldable collapsible cards, ensuring immediate, low-latency visual feedback for reasoning-heavy models (e.g. DeepSeek-R1, Claude 3.7 Sonnet Thinking, OpenAI o-series).
+- **Bubble Tool Cards & Docked Task Deck (气泡内工具卡片归位与输入框吸顶 HUD).** Tool execution cards are now embedded directly within their contextual message bubbles rather than displaced, and the active task dashboard / HUD docks cleanly above the input box for effortless monitoring of ongoing multi-step plans.
+- **Parallel Sub-Agent Matrix & Task Execution (多子代理并行矩阵).** Multi-agent execution matrix with live concurrent state reporting, allowing complex sub-tasks to run in parallel with clear progress indicators and aggregated summaries.
+- **Staged Tool Routing & Shrink-Retry Recovery (分阶段工具路由与自动恢复).** Enhanced tool routing dynamically manages token budgets; when context constraints are encountered, intelligent shrink-retry recovers without failing the task.
+- **Project-Scoped Memory & Docker Safe Defaults (项目作用域记忆与安全沙箱).** Structured memory can now be isolated per workspace/project, and containerized tool execution defaults to non-root safe isolation.
+- **Capability Axis Ask Reasons & Arena Metrics Board.** Enhanced permission prompt clarity with granular capability-axis reasons for every gated operation, plus public benchmark and Arena model score tracking.
+
+### Fixed
+
+- **Windows Taskbar & System Tray Logo.** Resolved icon rendering glitches in the Windows taskbar and system tray across high-DPI displays.
+- **Strict IPC Contract & Memory Dedup.** Hardened IPC channel integrity between main/preload/renderer and eliminated potential duplicate memory edge insertions.
+
 ## [0.7.4] - 2026-08-18
 
 ### Added

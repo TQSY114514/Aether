@@ -143,7 +143,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` and `aetherai` resolve to the same package. Pin a version with `npm install -g aetherai@0.7.1` to match a desktop release.
+`aether` and `aetherai` resolve to the same package. Pin a version with `npm install -g aetherai@0.8.0` to match a desktop release.
 
 > **Sharing data with the GUI** — both products use the same SQLite database (`%APPDATA%/aetherai/aetherai.db`). A session started in the desktop app can be resumed in the TUI and vice versa.
 
