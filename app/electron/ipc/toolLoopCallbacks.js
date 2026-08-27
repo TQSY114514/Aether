@@ -58,11 +58,10 @@ function createAllowRulesStore() {
  * @param {AbortController} opts.controller
  * @param {string}       opts.source           'chat' | 'task'
  * @param {object}       opts.allowRules       createAllowRulesStore() instance
- * @param {boolean}      opts.thinkingSupported gates onThinkingStart/End
  * @param {object}       [opts.model]          resolved model (for price columns)
  * @returns {object} callbacks bag — spread directly into runToolLoop options
  */
-function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller, source, allowRules, thinkingSupported, model }) {
+function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller, source, allowRules, model }) {
   // Wrap every outgoing send in try/catch so a dead renderer never throws.
   const safeSend = (c, p) => { try { send(c, p) } catch {} }
 
@@ -90,6 +89,12 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
 
   callbacks.onTodoUpdate = (todos) =>
     safeSend('chat:todo-update', { messageId: msgId, sessionId, todos })
+
+  callbacks.onPlanSnapshot = (plan) =>
+    safeSend('chat:plan-snapshot', { messageId: msgId, sessionId, plan })
+
+  callbacks.onSubagentEvent = (event) =>
+    safeSend('chat:subagent-event', { messageId: msgId, sessionId, event })
 
   // Live token/cost reporting: toolLoop calls onUsage({input, output}) after
   // each model round with the loop-accumulated totals. Compute the USD cost

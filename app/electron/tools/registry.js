@@ -325,17 +325,22 @@ const TOOLS = [
     })
   }},
 
-  // 鈹€鈹€ Agent tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── Agent tools ─────────────────────────────────────────────────────────────
+  { name: 'todo_write', description: 'Create or update the structured execution checklist. Use this for multi-step tasks so progress is tracked live.', risk: 'safe', parameters: { type: 'object', properties: { todos: { type: 'array', items: { type: 'object', properties: { content: { type: 'string', description: 'Step description' }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] }, activeForm: { type: 'string', description: 'Action phrasing when in progress' } }, required: ['content', 'status'] } } }, required: ['todos'] }, run: async (args, ctx) => {
+    const todos = Array.isArray(args.todos) ? args.todos : []
+    try { ctx?.onTodoUpdate?.(todos) } catch {}
+    return `Updated ${todos.length} todo item(s).`
+  }},
   { name: 'delegate_task', description: 'Delegate parallel sub-tasks to sub-agents.', risk: 'dangerous', parameters: { type: 'object', properties: { tasks: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 } }, required: ['tasks'] }, run: async (args, ctx) => {
     const tasks = Array.isArray(args.tasks) ? args.tasks.filter(Boolean) : []
     if (!tasks.length) throw new Error('tasks must be non-empty')
-    const SA = require('./subAgent'); const shared = { db: ctx.db, provider: ctx.provider, model: ctx.model, signal: ctx.signal, options: ctx.options || {}, agentMode: 'auto' }
+    const SA = require('../llm/subAgent'); const shared = { db: ctx.db, provider: ctx.provider, model: ctx.model, signal: ctx.signal, options: ctx.options || {}, agentMode: 'auto', parentSessionId: ctx.sessionId, onSubagentEvent: ctx.onSubagentEvent }
     const results = await SA.runParallel(tasks, shared)
     return results.map((r, i) => `### Task ${i + 1}: ${tasks[i].slice(0, 80)}\n${r.success ? r.output : `(failed: ${r.error})`}`).join('\n\n')
   }},
   { name: 'run_agent', description: 'Spawn a specialized sub-agent (explore/build/review/research/debug).', risk: 'dangerous', parameters: { type: 'object', properties: { role: { type: 'string', enum: ['explore', 'build', 'review', 'research', 'debug'] }, task: { type: 'string' }, maxIterations: { type: 'number' } }, required: ['role', 'task'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
-    const roles = require('../llm/agentRoles'); const SA = require('./subAgent')
+    const roles = require('../llm/agentRoles'); const SA = require('../llm/subAgent')
     if (!roles.getRole(args.role)) return `unknown role: ${args.role}`
     const td = String(args.task || '').trim(); if (!td) return 'task is required'
     const mp = roles.buildRolePrompt(args.role, td); if (!mp) return 'prompt build failed'

@@ -142,6 +142,8 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
   )
 }
 
+const EMPTY_ARRAY: any[] = []
+
 // Lightweight streaming bubble: rendered inside the message flow, updated via
 // direct DOM writes to avoid re-rendering ChatWindow on every streaming token.
 // Also renders live thinking/reasoning blocks above the main content so the
@@ -157,18 +159,12 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   // Live streaming states: React state so blocks re-render on each new chunk/step.
   const [thinkingText, setThinkingText] = useState('')
   const [thinkingStreaming, setThinkingStreaming] = useState(false)
-  const [toolCalls, setToolCalls] = useState<any[]>([])
-  const [planSteps, setPlanSteps] = useState<any[]>([])
-  const [todos, setTodos] = useState<any[]>([])
-  const [statusLines, setStatusLines] = useState<string[]>([])
+  const [toolCalls, setToolCalls] = useState<any[]>(EMPTY_ARRAY)
 
   const resetLocalState = useCallback(() => {
     setThinkingText('')
     setThinkingStreaming(false)
-    setToolCalls([])
-    setPlanSteps([])
-    setTodos([])
-    setStatusLines([])
+    setToolCalls(EMPTY_ARRAY)
     lastLenRef.current = 0
     if (ref.current) ref.current.innerHTML = ''
   }, [])
@@ -201,17 +197,8 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
           })
         }
         // Tool calls in progress or completed
-        const tc = s.toolCallsByMessage[mid] || []
+        const tc = s.toolCallsByMessage[mid] || EMPTY_ARRAY
         setToolCalls(tc)
-        // Plan steps
-        const ps = s.planStepsByMessage[mid] || []
-        setPlanSteps(ps)
-        // Todos
-        const td = s.todosByMessage[mid] || []
-        setTodos(td)
-        // Status lines
-        const sl = s.statusLinesByMessage[mid] || []
-        setStatusLines(sl)
       }
 
       // -- Main content: direct DOM write for O(1) per-token performance --
@@ -246,8 +233,6 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
     }
   }, [sessionId, isAtBottom, resetLocalState])
 
-  const hasTask = todos && todos.length > 0
-
   return (
     <div id={`msg-streaming-${sessionId}`} className="flex justify-start message-enter">
       <div className="w-full" style={{ maxWidth: '85%' }}>
@@ -265,26 +250,11 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         </div>
         <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
           style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
-          {hasTask && (
-            <TaskCard todos={todos} planSteps={planSteps} statusLines={statusLines} />
-          )}
-          {!hasTask && statusLines && statusLines.length > 0 && (
-            <div className="mb-2 space-y-0.5">
-              {statusLines.map((line, i) => (
-                <div key={i} className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
-                  <span>{line}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {!hasTask && planSteps && planSteps.length > 0 && (
-            <AgentPlanTrace steps={planSteps} />
-          )}
           {thinkingText && (
             <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
           )}
           {toolCalls && toolCalls.length > 0 && (
-            <div className="mb-2">
+            <div className="mb-2 space-y-1">
               {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
             </div>
           )}

@@ -1,4 +1,4 @@
-﻿// ───────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
 // Anthropic Messages API adapter.
 //
 // For providers that speak the native Claude protocol: POST /messages with
@@ -96,6 +96,55 @@ function normalizeContent(content) {
   return ''
 }
 
+// Map OpenAI-style tools to Anthropic tool format.
+// OpenAI: { type: 'function', function: { name, description, parameters } }
+// Anthropic: { name, description, input_schema }
+function mapToolsToAnthropic(tools) {
+  if (!Array.isArray(tools) || !tools.length) return undefined
+  return tools
+    .filter(t => t?.type === 'function' && t.function)
+    .map(t => ({
+      name: t.function.name,
+      description: t.function.description || '',
+      input_schema: t.function.parameters || { type: 'object', properties: {} },
+    }))
+}
+
+// Map OpenAI-style tool_choice to Anthropic format.
+// OpenAI: 'required' | 'auto' | 'none' | { type: 'function', function: { name } }
+// Anthropic: { type: 'any' } | { type: 'auto' } | { type: 'none' } | { type: 'tool', name }
+function mapToolChoice(choice) {
+  if (!choice) return undefined
+  if (choice === 'required') return { type: 'any' }
+  if (choice === 'auto' || choice === 'none') return { type: choice }
+  if (typeof choice === 'object') {
+    // OpenAI object form → { type: 'tool', name }.
+    if (choice.type === 'function' && choice.function?.name) {
+      return { type: 'tool', name: choice.function.name }
+    }
+    // Already-valid Anthropic choice (e.g. { type: 'tool', name } / { type: 'any' }).
+    if (choice.type) return choice
+  }
+  return { type: 'auto' }
+}
+
+// Build the thinking configuration for Anthropic requests based on model capabilities.
+// Claude 3.x: legacy { type: 'enabled', budget_tokens: N } with budget < max_tokens.
+// Claude 4.x+: adaptive thinking — no budget_tokens, just { type: 'adaptive' }.
+function buildThinkingConfig(modelName, reasoningEffort, maxTokens) {
+  const budgets = { low: 1280, medium: 4096, high: 16000 }
+  const b = budgets[reasoningEffort]
+  if (!b) return null
+  // Claude 4+ appears either as `claude-4…` or (canonical) as
+  // `claude-<family>-<gen>-…` like `claude-sonnet-4-20250514`. Match the family
+  // segment before the generation number so every Claude 4 variant is detected.
+  const isClaude4Plus = /claude-(?:[4-9]|(?:sonnet|opus|haiku)-[4-9])/.test(modelName)
+  if (isClaude4Plus) return { type: 'adaptive' }
+  // Claude 3.x: budget must be strictly less than max_tokens.
+  if (b < maxTokens) return { type: 'enabled', budget_tokens: b }
+  return null
+}
+
 // Parse a tool_use block from an Anthropic content_block event stream into the
 // OpenAI tool_calls shape (so the tool loop in toolLoop.js works unchanged).
 function parseToolUses(content) {
@@ -133,11 +182,17 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
   applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
-  // Claude thinking: relay reasoning_effort → thinking.budget_tokens.
+  // Forward tool definitions to Anthropic request.
+  const anthropicTools = mapToolsToAnthropic(options.tools)
+  if (anthropicTools) {
+    body.tools = anthropicTools
+    const tc = mapToolChoice(options.tool_choice)
+    if (tc) body.tool_choice = tc
+  }
+  // Claude thinking: relay reasoning_effort → thinking configuration.
   if (options.reasoning_effort) {
-    const budgets = { low: 1280, medium: 4096, high: 16000 }
-    const b = budgets[options.reasoning_effort]
-    if (b) { body.thinking = { type: 'enabled', budget_tokens: b }; body.temperature = 1 }
+    const thinkingCfg = buildThinkingConfig(model.model_name, options.reasoning_effort, body.max_tokens || 4096)
+    if (thinkingCfg) { body.thinking = thinkingCfg; body.temperature = 1 }
   }
 
   const gen = (async function* () {
@@ -163,6 +218,8 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
     // Per-block accumulator keyed by content_block index. A tool_use block's
     // name + id arrive at content_block_start, its input arrives as fragments
     // via input_json_delta, and it is only complete at content_block_stop.
+    let initialUsage = null
+    let deltaUsage = null
     const _toolBlocks = new Map() // index -> { id, name, inputJson }
     while (true) {
       const { done, value } = await reader.read()
@@ -173,6 +230,17 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
       for (const line of lines) {
         const evt = parseSSELine(line)
         if (!evt) continue
+        if (evt.type === 'error') {
+          const errObj = evt.error || {}
+          const err = new Error(errObj.message || 'Anthropic API streaming error')
+          if (errObj.type) err.type = errObj.type
+          if (errObj.type === 'rate_limit_error') err.status = 429
+          else if (errObj.type === 'overloaded_error') err.status = 529
+          else if (errObj.type === 'authentication_error') err.status = 401
+          throw err
+        }
+        if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
+        if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
         // content_block_start → begin accumulating a block.
         if (evt.type === 'content_block_start') {
           const block = evt.block || {}
@@ -221,12 +289,20 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
         // message_start / other events — no content to yield.
       }
     }
+    const rawUsage = (initialUsage || deltaUsage) ? {
+      input_tokens: (initialUsage?.input_tokens || 0),
+      output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
+      cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
+      cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
+    } : null
+    gen.usage = rawUsage ? _nu(rawUsage) : null
   })()
 
   // Attach accumulated state to the generator instance so consumers reading
-  // `stream.thinkingBlocks` / `stream.toolCalls` can see them after the loop.
+  // `stream.thinkingBlocks` / `stream.toolCalls` / `stream.usage` can see them after the loop.
   gen.thinkingBlocks = null
   gen.toolCalls = null
+  gen.usage = null
   return gen
 }
 
@@ -255,7 +331,13 @@ function parseSSELine(line) {
       return { type: 'content_block_stop', index: idx }
     }
     if (parsed.type === 'message_start') {
-      return { type: 'message_start', usage: parsed.usage }
+      return { type: 'message_start', usage: parsed.message?.usage || parsed.usage }
+    }
+    if (parsed.type === 'message_delta') {
+      return { type: 'message_delta', usage: parsed.usage }
+    }
+    if (parsed.type === 'error') {
+      return { type: 'error', error: parsed.error || {} }
     }
   } catch {}
   return null
@@ -290,18 +372,35 @@ async function completeChat({ provider, model, messages, signal, options = {} })
   return ''
 }
 
-// Non-streaming returning { content, tool_calls, usage }.
+// Streaming-backed completion returning { content, tool_calls, usage, reasoning }
+// while streaming deltas in real time via options.onThinkingDelta and options.onStreamDelta.
 async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
+  const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
+  const onStream = typeof options?.onStreamDelta === 'function' ? options.onStreamDelta : null
   const { system, messages: aMsgs } = toAnthropicMessages(messages)
+  const useStream = options.stream !== false
   const body = {
     model: model.model_name,
     messages: aMsgs,
     max_tokens: options.max_tokens || 4096,
+    stream: useStream,
   }
   if (system) body.system = system
   applyAnthropicCache(body)
   if (options.temperature != null) body.temperature = options.temperature
   if (options.top_p != null) body.top_p = options.top_p
+  // Forward tool definitions to Anthropic request.
+  const anthropicTools = mapToolsToAnthropic(options.tools)
+  if (anthropicTools) {
+    body.tools = anthropicTools
+    const tc = mapToolChoice(options.tool_choice)
+    if (tc) body.tool_choice = tc
+  }
+  if (options.reasoning_effort) {
+    const thinkingCfg = buildThinkingConfig(model.model_name, options.reasoning_effort, body.max_tokens || 4096)
+    if (thinkingCfg) { body.thinking = thinkingCfg; body.temperature = 1 }
+  }
+
   const res = await fetch(`${baseUrl(provider)}/messages`, {
     method: 'POST', headers: headers(provider), body: JSON.stringify(body), signal: withTimeout(signal),
   })
@@ -311,14 +410,106 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     err.status = res.status
     throw err
   }
-  const data = await res.json()
-  const { text, tool_calls } = parseToolUses(data.content)
-  const usage = data.usage ? _nu(data.usage) : null
-  const reasoning = (data.content || [])
-    .filter(b => b.type === 'thinking' && b.thinking)
-    .map(b => b.thinking)
-    .join('')
-  return { content: text, tool_calls, usage, reasoning }
+
+  const contentType = (res.headers.get('content-type') || '').toLowerCase()
+  const isSSE = contentType.includes('text/event-stream')
+
+  if (!useStream || !isSSE) {
+    const data = await res.json()
+    // Handle both array and object content formats for compatibility
+    const content = Array.isArray(data.content) ? data.content : 
+                    (data.content && typeof data.content === 'object' ? [data.content] : [])
+    const { text, tool_calls } = parseToolUses(content)
+    const usage = data.usage ? _nu(data.usage) : null
+    const reasoning = content
+      .filter(b => b.type === 'thinking' && b.thinking)
+      .map(b => b.thinking)
+      .join('')
+    if (reasoning) { try { onThinking?.(reasoning) } catch {} }
+    if (text) { try { onStream?.(text) } catch {} }
+    return { content: text, tool_calls, usage, reasoning }
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullContent = ''
+  let fullReasoning = ''
+  let initialUsage = null
+  let deltaUsage = null
+  const _toolBlocks = new Map()
+  const toolCalls = []
+  let _thinkingIndex = -1
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      const evt = parseSSELine(line)
+      if (!evt) continue
+      if (evt.type === 'error') {
+        const errObj = evt.error || {}
+        const err = new Error(errObj.message || 'Anthropic API streaming error')
+        if (errObj.type) err.type = errObj.type
+        if (errObj.type === 'rate_limit_error') err.status = 429
+        else if (errObj.type === 'overloaded_error') err.status = 529
+        else if (errObj.type === 'authentication_error') err.status = 401
+        throw err
+      }
+      if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
+      if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
+      if (evt.type === 'content_block_start') {
+        const block = evt.block || {}
+        if (block.type === 'thinking') _thinkingIndex = evt.index
+        else if (block.type === 'tool_use') {
+          _toolBlocks.set(evt.index, { id: block.id, name: block.name, inputJson: '' })
+        }
+        continue
+      }
+      if (evt.type === 'content_block_delta') {
+        const d = evt.delta || {}
+        if (d.type === 'thinking_delta') {
+          fullReasoning += d.thinking || ''
+          try { onThinking?.(d.thinking || '') } catch {}
+        } else if (d.type === 'text_delta') {
+          fullContent += d.text || ''
+          try { onStream?.(d.text || '') } catch {}
+        } else if (d.type === 'input_json_delta') {
+          const tb = _toolBlocks.get(evt.index)
+          if (tb) tb.inputJson += d.partial_json || ''
+        }
+        continue
+      }
+      if (evt.type === 'content_block_stop') {
+        if (evt.index === _thinkingIndex) { _thinkingIndex = -1; continue }
+        const tb = _toolBlocks.get(evt.index)
+        if (tb) {
+          _toolBlocks.delete(evt.index)
+          let input = {}
+          try { input = tb.inputJson ? JSON.parse(tb.inputJson) : {} } catch {}
+          toolCalls.push({ id: tb.id, type: 'function', function: { name: tb.name, arguments: JSON.stringify(input) } })
+        }
+        continue
+      }
+    }
+  }
+
+  const rawUsage = (initialUsage || deltaUsage) ? {
+    input_tokens: (initialUsage?.input_tokens || 0),
+    output_tokens: (deltaUsage?.output_tokens || initialUsage?.output_tokens || 0),
+    cache_read_input_tokens: initialUsage?.cache_read_input_tokens || 0,
+    cache_creation_input_tokens: initialUsage?.cache_creation_input_tokens || 0,
+  } : null
+
+  return {
+    content: fullContent,
+    tool_calls: toolCalls.length ? toolCalls : undefined,
+    usage: rawUsage ? _nu(rawUsage) : null,
+    reasoning: fullReasoning,
+  }
 }
 
 async function listModels() { return [] }

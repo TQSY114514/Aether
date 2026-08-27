@@ -208,6 +208,10 @@ export interface AppState {
   planStepsByMessage: Record<number, { step: number; depth: number; assistantText: string; kind?: 'plan' | 'act' | 'observe' }[]>
   // Per-message agent todo checklist (updated via the todo_write tool).
   todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
+  // Per-message plan snapshot (from hierarchical planner).
+  planSnapshotsByMessage: Record<number, { id: string; description: string; tasks: { id: string; description: string; status: string; result?: string | null }[] }>
+  // Per-message subagents parallel state (from delegate_task).
+  subagentsByMessage: Record<number, { id: string; name: string; task: string; status: 'running' | 'done' | 'error'; latencyMs?: number; startedAt?: number; output?: string; error?: string }[]>
   // Per-message thinking/reasoning blocks from extended-thinking models (Claude
   // extended thinking, OpenAI o-series reasoning_content). Accumulated as
   // deltas arrive during streaming; cleared when the stream ends.

@@ -144,29 +144,11 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
           ? { background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }
           : isError ? undefined
           : { backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}>
-          {/* Task card — top of the bubble so multi-step progress reads first.
-              It absorbs the todo checklist + status lines, so those only render
-              standalone below when there's no active task list. */}
-          {!isUser && hasTask && (
-            <TaskCard todos={todos} planSteps={planSteps} statusLines={statusLines} />
-          )}
-          {!isUser && !hasTask && statusLines && statusLines.length > 0 && (
-            <div className="mb-2 space-y-0.5">
-              {statusLines.map((line, i) => (
-                <div key={i} className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
-                  <span>{line}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {!isUser && planSteps && planSteps.length > 0 && (
-            <AgentPlanTrace steps={planSteps} />
-          )}
           {!isUser && thinkingBlocks && (
             <ThinkingBlock text={thinkingBlocks} />
           )}
           {!isUser && toolCalls && toolCalls.length > 0 && (
-            <div className="mb-2">
+            <div className="mb-2 space-y-1">
               {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
             </div>
           )}

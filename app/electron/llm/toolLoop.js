@@ -262,9 +262,23 @@ OUTPUT FORMAT:
 For multi-step tasks (3+ steps), call todo_write first to lay out the checklist, and update it (mark in_progress→completed) as you progress so the user can follow along. When an execution plan is shown, call plan_progress with the task id and a brief result as you finish each step.
 Parallelism: you may call multiple INDEPENDENT tools in one round (they run concurrently). For larger independent sub-tasks (e.g. researching 3 unrelated files), call delegate_task with an array of task descriptions — sub-agents run them in parallel and return combined results.`
 
+function planToTodos(plan) {
+  if (!plan || !Array.isArray(plan.tasks)) return []
+  return plan.tasks.map(t => ({
+    content: t.description,
+    status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending',
+    activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
+  }))
+}
+
 // Main entry: run a tool-calling loop with optional planning support.
 // Returns the final assistant text.
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onStatus, onTodoUpdate, onAskUser, onStream, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
+// NOTE: onStreamDelta carries live assistant TEXT deltas from every loop round
+// (commentary rounds included). It must stay in this signature — before it was
+// added the forwarder at the completeChatMessage call site referenced an
+// undeclared identifier, every delta threw a swallowed ReferenceError and the
+// renderer saw nothing until the post-loop replay (the "one bulk dump" bug).
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
   toolCache.clear()
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
@@ -565,6 +579,11 @@ Reply in this format:
         // Inject plan into system context
         const planBlock = planning.planSystemBlock(plan)
         convo.unshift({ role: 'system', content: `\n\n${planBlock}` })
+        // Full plan snapshot for the renderer's sticky deck (steps + statuses).
+        try {
+          onPlanSnapshot?.(plan)
+          onTodoUpdate?.(planToTodos(plan))
+        } catch {}
         onPlanStep?.({ step: 0, depth: 0, remaining: budget.remaining, assistantText: `📋 Plan: ${plan.description} (${plan.tasks.length} tasks)`, kind: 'plan' })
       }
     } catch (e) {
@@ -574,7 +593,13 @@ Reply in this format:
   }
 
   // Build tool context with sessionId for sandbox checks.
-  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, db }
+  // onSubagentEvent flows through toolCtx so delegate_task / run_agent (registry) can push
+  // live per-subagent progress up to the renderer's deck.
+  const callbacks = {
+    onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
+    onPlanStep, onPlanSnapshot, onStatus, onThinkingStart, onThinkingEnd, onThinkingDelta, onToolCall,
+  }
+  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
@@ -673,6 +698,11 @@ Reply in this format:
           },
         },
       })
+      // Only emit accumulated msg.reasoning as fallback when no streaming deltas were received
+      // Must be emitted BEFORE onThinkingEnd so the renderer ordering is preserved
+      if (msg?.reasoning && !hasStreamedThinking) {
+        try { onThinkingDelta?.(msg.reasoning) } catch {}
+      }
       try { onThinkingEnd?.() } catch {}
       // 实时 token 用量: 累计每次请求 usage 并上报(onUsage → TUI 状态栏显示)
       if (msg && msg.usage) {
@@ -710,10 +740,6 @@ Reply in this format:
     const kind = hasToolCalls ? 'act' : 'plan'
     // Only emit onPlanStep during intermediate tool calls — never emit the final conversational reply as a plan step
     try { if (msg.content && hasToolCalls) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
-    // Only emit accumulated msg.reasoning as fallback when no streaming deltas were received
-    if (msg.reasoning && !hasStreamedThinking) {
-      try { onThinkingDelta?.(msg.reasoning) } catch {}
-    }
 
     if (msg.tool_calls && msg.tool_calls.length) {
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
@@ -764,6 +790,10 @@ Reply in this format:
         if (fn.name === 'plan_progress' && planningMode) {
           const handled = planning.handlePlanProgress(plan, args)
           if (handled) {
+            try {
+              onPlanSnapshot?.(plan)
+              onTodoUpdate?.(planToTodos(plan))
+            } catch {}
             return { tc, isPlan: true, entry: { name: fn.name, args, result: `progress recorded for task ${args.task_id}`, error: null, risk: null, latencyMs: null }, planStep: `📊 [${args.task_id}] ${(args.result || '').slice(0, 60)}` }
           }
         }
@@ -1154,7 +1184,29 @@ Reply in this format:
         const summary = planning.planSummary(plan)
         convo.push({ role: 'system', content: summary })
         try {
-          const finalMsg = await completeChatMessage({ provider, model, messages: convo, signal, options: { max_tokens: 2048, ...options } })
+          let hasStreamedPlanThinking = false
+          try { onThinkingStart?.() } catch {}
+          const finalMsg = await completeChatMessage({
+            provider,
+            model,
+            messages: convo,
+            signal,
+            options: {
+              max_tokens: 2048,
+              ...options,
+              onThinkingDelta: (delta) => {
+                if (delta) hasStreamedPlanThinking = true
+                try { onThinkingDelta?.(delta) } catch {}
+              },
+              onStreamDelta: (delta) => {
+                try { onStreamDelta?.(delta) } catch {}
+              },
+            },
+          })
+          if (finalMsg?.reasoning && !hasStreamedPlanThinking) {
+            try { onThinkingDelta?.(finalMsg.reasoning) } catch {}
+          }
+          try { onThinkingEnd?.() } catch {}
           if (finalMsg?.content) return finalMsg.content
         } catch {}
         return summary
@@ -1285,6 +1337,7 @@ function requestPermissionWithTimeout(requestPermission, payload, timeoutMs = PE
 
 module.exports = {
   runToolLoop,
+  planToTodos,
   IterationBudget,
   isComplexRequest: planning.isComplexRequest,
   generatePlan: planning.generatePlan,

@@ -2,8 +2,10 @@ function ensureAllChatListeners() {
   ensureChunkListener()
   ensureToolCallListener()
   ensurePlanStepListener()
+  ensurePlanSnapshotListener()
   ensureStatusListener()
   ensureTodoListener()
+  ensureSubagentListener()
   ensureThinkingListener()
   ensureLoopStateListener()
   ensureUsageListener()
@@ -15,7 +17,7 @@ import type { AppState } from "./types"
 import { decodeDataUrlText } from "./types"
 import { t } from "@/utils/i18n"
 import log from "@/utils/logger"
-import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensureStatusListener, ensureTodoListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
+import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensurePlanSnapshotListener, ensureStatusListener, ensureTodoListener, ensureSubagentListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
 
 const _injectedMsgIds = new Set<number>()
 const _undoStack: { sessionId: number; messages: Message[] }[] = []
@@ -34,6 +36,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   toolCallsByMessage: {},
   planStepsByMessage: {},
   todosByMessage: {},
+  planSnapshotsByMessage: {},
+  subagentsByMessage: {},
   thinkingBlocksByMessage: {},
   statusLinesByMessage: {},
   contextBudgetText: null,
@@ -246,15 +250,19 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         const { [regeneratedMsgId]: ___, ...restTB } = s.todosByMessage
         const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
         const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
+        const { [regeneratedMsgId]: ______, ...restSNAP } = s.planSnapshotsByMessage
+        const { [regeneratedMsgId]: _______, ...restSA } = s.subagentsByMessage
         next.toolCallsByMessage = restTC
         next.planStepsByMessage = restPS
         next.todosByMessage = restTB
         next.thinkingBlocksByMessage = restTIB
         next.statusLinesByMessage = restSIB
+        next.planSnapshotsByMessage = restSNAP
+        next.subagentsByMessage = restSA
       }
       return next
     })
-    ensureChunkListener()
+    ensureAllChatListeners()
     try {
       const result = await window.electronAPI.chat.send({
         sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
@@ -317,7 +325,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       messages: truncated,
       streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: "", messageId: null } },
     }))
-    ensureChunkListener()
+    ensureAllChatListeners()
     try {
       const result = await window.electronAPI.chat.send({
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
