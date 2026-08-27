@@ -163,11 +163,16 @@ async function runParallel(tasks, shared) {
   if (!shared.db) throw new Error('runParallel: db is required')
   if (!Array.isArray(tasks) || tasks.length === 0) return []
 
+  // Atomic counter for globally unique subagent IDs across concurrent calls
+  let _subagentCounter = 0
   const runners = tasks.map((task, i) => {
     return (async () => {
       const startTime = Date.now()
-      const rand = Math.random().toString(36).slice(2, 8)
-      const subagentId = `sa_${startTime}_${rand}_${i + 1}`
+      // Use crypto.randomUUID() for guaranteed uniqueness in concurrent scenarios
+      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? crypto.randomUUID().slice(0, 8) 
+        : `${Date.now()}-${++_subagentCounter}-${Math.random().toString(36).slice(2, 8)}`
+      const subagentId = `sa_${startTime}_${uniqueId}_${i + 1}`
       try {
         shared.onSubagentEvent?.({
           type: 'start',

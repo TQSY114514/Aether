@@ -355,9 +355,12 @@ async function completeChatMessage({ provider, model, messages, signal, options 
 
   if (!useStream || !isSSE) {
     const data = await res.json()
-    const { text, tool_calls } = parseToolUses(data.content)
+    // Handle both array and object content formats for compatibility
+    const content = Array.isArray(data.content) ? data.content : 
+                    (data.content && typeof data.content === 'object' ? [data.content] : [])
+    const { text, tool_calls } = parseToolUses(content)
     const usage = data.usage ? _nu(data.usage) : null
-    const reasoning = (data.content || [])
+    const reasoning = content
       .filter(b => b.type === 'thinking' && b.thinking)
       .map(b => b.thinking)
       .join('')

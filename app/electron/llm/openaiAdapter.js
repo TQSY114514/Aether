@@ -269,7 +269,15 @@ async function completeChatMessage({ provider, model, messages, signal, options 
 
   // Use streaming when callbacks are requested, but respect explicit options.stream
   const useStream = options.stream !== false
-  const { onThinkingDelta: _otd, onStreamDelta: _osd, ...restOpts } = options
+  // Strip ALL callback functions from the request body to avoid sending
+  // non-serializable or unexpected fields to the API.
+  const {
+    onThinkingDelta: _otd, onStreamDelta: _osd, onToolCall: _otc, onPlanStep: _ops,
+    onPlanSnapshot: _opsn, onStatus: _os, onTodoUpdate: _otu, onAskUser: _oau,
+    onStream: _ostr, onSubagentEvent: _ose, onThinkingStart: _ots, onThinkingEnd: _ote,
+    onUsage: _ou, onBudgetUpdate: _obu, onAudit: _oa, onVerification: _ov,
+    ...restOpts
+  } = options
   const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
     method: 'POST',
     headers: headers(provider),
