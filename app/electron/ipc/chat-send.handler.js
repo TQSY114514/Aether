@@ -538,7 +538,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
         // Preserve accumulated content on abort (tool-loop path)
-        db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted', error_message: errMsg })
+        const preserved = streamedContent || finalContent || ''
+        db.updateMessage(msgId, { content: preserved, status: 'aborted', error_message: errMsg })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         return { messageId: msgId, modelSuggestion }
       } finally {

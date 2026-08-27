@@ -186,6 +186,20 @@ async function runParallel(tasks, shared) {
           config: shared.subagentConfig || {},
         })
         const latencyMs = Date.now() - startTime
+        if (result?.wasTimeout) {
+          try {
+            shared.onSubagentEvent?.({
+              type: 'error',
+              id: subagentId,
+              index: i,
+              task: String(task).slice(0, 80),
+              status: 'error',
+              latencyMs,
+              error: 'Timed out',
+            })
+          } catch {}
+          return { success: false, error: 'Timed out', iterations, childSessionId: result.childSessionId, latencyMs }
+        }
         try {
           shared.onSubagentEvent?.({
             type: 'done',

@@ -33,36 +33,21 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
   const sessionMsgIds = useMemo(() => new Set(messages.filter((m) => !sessionId || m.session_id === sessionId).map((m) => m.id)), [messages, sessionId])
   const activeMessageId = sessionId ? streamingBySession[sessionId]?.messageId : null
 
-  // 1. Check if there are structured Todos/Plan for this session (from todosByMessage or planSnapshotsByMessage)
+  // 1. Check if there are structured Todos/Plan for this active turn (from todosByMessage or planSnapshotsByMessage)
   const latestTodos = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]
-      if (msg.session_id === sessionId) {
-        const tList = todosByMessage[msg.id]
-        if (tList && tList.length > 0) return tList
-        const snap = planSnapshotsByMessage[msg.id]
-        if (snap && Array.isArray(snap.tasks) && snap.tasks.length > 0) {
-          return snap.tasks.map((t) => ({
-            content: t.description,
-            status: (t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending') as 'pending' | 'in_progress' | 'completed',
-            activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
-          }))
-        }
-      }
-    }
-    if (activeMessageId) {
-      if (todosByMessage[activeMessageId]?.length) return todosByMessage[activeMessageId]
-      const snap = planSnapshotsByMessage[activeMessageId]
-      if (snap && Array.isArray(snap.tasks) && snap.tasks.length > 0) {
-        return snap.tasks.map((t) => ({
-          content: t.description,
-          status: (t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending') as 'pending' | 'in_progress' | 'completed',
-          activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
-        }))
-      }
+    if (!activeMessageId) return []
+    const tList = todosByMessage[activeMessageId]
+    if (tList && tList.length > 0) return tList
+    const snap = planSnapshotsByMessage[activeMessageId]
+    if (snap && Array.isArray(snap.tasks) && snap.tasks.length > 0) {
+      return snap.tasks.map((t) => ({
+        content: t.description,
+        status: (t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending') as 'pending' | 'in_progress' | 'completed',
+        activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
+      }))
     }
     return []
-  }, [messages, todosByMessage, planSnapshotsByMessage, sessionId, activeMessageId])
+  }, [todosByMessage, planSnapshotsByMessage, activeMessageId])
 
   // 2. Collect parallel subagents from subagentsByMessage, status lines, and tool calls
   const subagents = useMemo(() => {

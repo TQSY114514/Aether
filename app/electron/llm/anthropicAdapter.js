@@ -173,6 +173,15 @@ function streamChat({ provider, model, messages, signal, options = {} }) {
       for (const line of lines) {
         const evt = parseSSELine(line)
         if (!evt) continue
+        if (evt.type === 'error') {
+          const errObj = evt.error || {}
+          const err = new Error(errObj.message || 'Anthropic API streaming error')
+          if (errObj.type) err.type = errObj.type
+          if (errObj.type === 'rate_limit_error') err.status = 429
+          else if (errObj.type === 'overloaded_error') err.status = 529
+          else if (errObj.type === 'authentication_error') err.status = 401
+          throw err
+        }
         // content_block_start → begin accumulating a block.
         if (evt.type === 'content_block_start') {
           const block = evt.block || {}
@@ -259,6 +268,9 @@ function parseSSELine(line) {
     }
     if (parsed.type === 'message_delta') {
       return { type: 'message_delta', usage: parsed.usage }
+    }
+    if (parsed.type === 'error') {
+      return { type: 'error', error: parsed.error || {} }
     }
   } catch {}
   return null
@@ -362,6 +374,15 @@ async function completeChatMessage({ provider, model, messages, signal, options 
     for (const line of lines) {
       const evt = parseSSELine(line)
       if (!evt) continue
+      if (evt.type === 'error') {
+        const errObj = evt.error || {}
+        const err = new Error(errObj.message || 'Anthropic API streaming error')
+        if (errObj.type) err.type = errObj.type
+        if (errObj.type === 'rate_limit_error') err.status = 429
+        else if (errObj.type === 'overloaded_error') err.status = 529
+        else if (errObj.type === 'authentication_error') err.status = 401
+        throw err
+      }
       if (evt.type === 'message_start' && evt.usage) initialUsage = evt.usage
       if (evt.type === 'message_delta' && evt.usage) deltaUsage = evt.usage
       if (evt.type === 'content_block_start') {

@@ -593,9 +593,13 @@ Reply in this format:
   }
 
   // Build tool context with sessionId for sandbox checks.
-  // onSubagentEvent flows through toolCtx so delegate_task (registry) can push
+  // onSubagentEvent flows through toolCtx so delegate_task / run_agent (registry) can push
   // live per-subagent progress up to the renderer's deck.
-  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, db }
+  const callbacks = {
+    onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
+    onPlanStep, onPlanSnapshot, onStatus, onThinkingStart, onThinkingEnd, onThinkingDelta, onToolCall,
+  }
+  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
@@ -694,6 +698,11 @@ Reply in this format:
           },
         },
       })
+      // Only emit accumulated msg.reasoning as fallback when no streaming deltas were received
+      // Must be emitted BEFORE onThinkingEnd so the renderer ordering is preserved
+      if (msg?.reasoning && !hasStreamedThinking) {
+        try { onThinkingDelta?.(msg.reasoning) } catch {}
+      }
       try { onThinkingEnd?.() } catch {}
       // 实时 token 用量: 累计每次请求 usage 并上报(onUsage → TUI 状态栏显示)
       if (msg && msg.usage) {
@@ -731,10 +740,6 @@ Reply in this format:
     const kind = hasToolCalls ? 'act' : 'plan'
     // Only emit onPlanStep during intermediate tool calls — never emit the final conversational reply as a plan step
     try { if (msg.content && hasToolCalls) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
-    // Only emit accumulated msg.reasoning as fallback when no streaming deltas were received
-    if (msg.reasoning && !hasStreamedThinking) {
-      try { onThinkingDelta?.(msg.reasoning) } catch {}
-    }
 
     if (msg.tool_calls && msg.tool_calls.length) {
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
