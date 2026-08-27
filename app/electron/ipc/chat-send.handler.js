@@ -399,12 +399,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
       activeToolLoops.add(sessionId)
       try { wc?.send('chat:tool-loop-start', { sessionId }) } catch {}
       let finalContent = ''
+      let streamedContent = ''
       try {
-        const modelName = (model?.model_name || '').toLowerCase()
-        const thinkingSupported = /^(o[134]|gpt-5|claude|deepseek.*r|qwq)/.test(modelName)
         // Build shared callback bag (onToolCall, onAskUser, requestPermission, etc.)
         // using the extracted factory. Feature B's injection options stay inline below.
-        const cb = buildToolLoopCallbacks({
+        const baseCb = buildToolLoopCallbacks({
           db,
           send: (c, p) => wc?.send(c, p),
           getWc: () => (wc && !wc.isDestroyed() ? wc : null),
@@ -413,9 +412,15 @@ ipcMain.handle('chat:complete', handleChatComplete)
           controller,
           source: 'chat',
           allowRules: allowRulesStore,
-          thinkingSupported,
           model,
         })
+        const cb = {
+          ...baseCb,
+          onStreamDelta: (delta) => {
+            if (delta) streamedContent += delta
+            baseCb.onStreamDelta?.(delta)
+          },
+        }
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
         const runSingleLoop = () => runToolLoop({
@@ -473,10 +478,15 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
             const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: cb })
-            finalContent = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
-          } catch { finalContent = await runWithOverflowHeal() }
+            const returned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
+            finalContent = streamedContent || returned || ''
+          } catch {
+            const returned = await runWithOverflowHeal()
+            finalContent = streamedContent || returned || ''
+          }
         } else {
-          finalContent = await runWithOverflowHeal()
+          const returned = await runWithOverflowHeal()
+          finalContent = streamedContent || returned || ''
         }
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
@@ -516,18 +526,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           } catch {}
         }
-        // Chunked emit: stream final content in ~150-char pieces so the renderer
-        // shows a smooth progressive reveal instead of one bulk dump at the end.
-        if (finalContent && finalContent.length > 200) {
-          const CHUNK_SIZE = 150;
-          for (let _ci = 0; _ci < finalContent.length; _ci += CHUNK_SIZE) {
-            wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent.slice(_ci, _ci + CHUNK_SIZE), done: false, sessionId });
-            await new Promise(r => setTimeout(r, 8));
-          }
-        } else if (finalContent) {
-          wc?.send('chat:stream-chunk', { messageId: msgId, delta: finalContent, done: false, sessionId });
-        }
-        wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId });
+        // End of tool loop streaming: all live deltas were already forwarded via onStreamDelta.
+        // Send the terminal done event to close the streaming buffer in the renderer.
+        wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
@@ -537,7 +538,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
         // Preserve accumulated content on abort (tool-loop path)
-        db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted', error_message: errMsg })
+        const preserved = streamedContent || finalContent || ''
+        db.updateMessage(msgId, { content: preserved, status: 'aborted', error_message: errMsg })
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         return { messageId: msgId, modelSuggestion }
       } finally {
@@ -567,6 +569,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       try {
         const wc = getWebContents()
         let hasThinking = false
+        let thinkingEnded = false
         const stream = streamChat({
           provider: p,
           model: m,
@@ -589,13 +592,17 @@ ipcMain.handle('chat:complete', handleChatComplete)
         for await (const delta of stream) {
           if (delta) {
             fullContent += delta
-            try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
             // Signal thinking is complete as soon as main content tokens start flowing
-            if (hasThinking) {
+            if (hasThinking && !thinkingEnded) {
+              thinkingEnded = true
               try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
-              hasThinking = false
             }
+            try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
           }
+        }
+        if (hasThinking && !thinkingEnded) {
+          thinkingEnded = true
+          try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
         }
         clearTimeout(timeout)
         abortControllers.delete(msgId)

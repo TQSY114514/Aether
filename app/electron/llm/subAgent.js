@@ -97,6 +97,8 @@ async function runSubagent({
 
   let finalContent = ''
   let wasTimeout = false
+  let hasError = false
+  let errorMessage = ''
   try {
     finalContent = await runToolLoop({
       provider,
@@ -118,8 +120,10 @@ async function runSubagent({
       wasTimeout = true
       finalContent = `[Sub-agent timed out after ${cfg.timeoutMs / 1000}s — partial result]`
     } else {
-      log.warn('Subagent execution failed:', e?.message)
-      finalContent = `Sub-agent encountered an error: ${e?.message || 'unknown'}`
+      hasError = true
+      errorMessage = e?.message || 'unknown'
+      log.warn('Subagent execution failed:', errorMessage)
+      finalContent = `Sub-agent encountered an error: ${errorMessage}`
     }
   } finally {
     clearTimeout(timeout)
@@ -130,12 +134,12 @@ async function runSubagent({
     db.addMessage({ session_id: childSessionId, role: 'assistant', content: finalContent })
     db.updateSession(childSessionId, {
       title: `subagent: ${String(prompt).slice(0, 60)}`,
-      status: wasTimeout ? 'timeout' : 'completed',
+      status: wasTimeout ? 'timeout' : hasError ? 'failed' : 'completed',
     })
   } catch {}
 
   // Cleanup policy
-  if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && finalContent && !finalContent.startsWith('['))) {
+  if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && !hasError && finalContent && !finalContent.startsWith('['))) {
     try { db.deleteSession(childSessionId) } catch {}
   }
 
@@ -148,6 +152,8 @@ async function runSubagent({
     content: finalContent || '(sub-agent returned no content)',
     childSessionId,
     wasTimeout,
+    hasError,
+    error: errorMessage || (wasTimeout ? 'Timed out' : null),
   }
 }
 
@@ -157,13 +163,31 @@ async function runParallel(tasks, shared) {
   if (!shared.db) throw new Error('runParallel: db is required')
   if (!Array.isArray(tasks) || tasks.length === 0) return []
 
-  const runners = tasks.map((task) => {
+  // Atomic counter for globally unique subagent IDs across concurrent calls
+  let _subagentCounter = 0
+  const runners = tasks.map((task, i) => {
     return (async () => {
+      const startTime = Date.now()
+      // Use crypto.randomUUID() for guaranteed uniqueness in concurrent scenarios
+      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? crypto.randomUUID().slice(0, 8) 
+        : `${Date.now()}-${++_subagentCounter}-${Math.random().toString(36).slice(2, 8)}`
+      const subagentId = `sa_${startTime}_${uniqueId}_${i + 1}`
+      try {
+        shared.onSubagentEvent?.({
+          type: 'start',
+          id: subagentId,
+          index: i,
+          task: String(task).slice(0, 80),
+          status: 'running',
+          startedAt: startTime,
+        })
+      } catch {}
       const iterations = 0
       try {
         const result = await runSubagent({
           db: shared.db,
-          parentSessionId: null,
+          parentSessionId: shared.parentSessionId || null,
           provider: shared.provider,
           model: shared.model,
           prompt: task,
@@ -172,9 +196,49 @@ async function runParallel(tasks, shared) {
           callbacks: shared.callbacks || {},
           config: shared.subagentConfig || {},
         })
-        return { success: true, output: result.content, iterations, childSessionId: result.childSessionId }
+        const latencyMs = Date.now() - startTime
+        if (result?.wasTimeout || result?.hasError) {
+          const errText = result?.error || (result?.wasTimeout ? 'Timed out' : 'Sub-agent error')
+          try {
+            shared.onSubagentEvent?.({
+              type: 'error',
+              id: subagentId,
+              index: i,
+              task: String(task).slice(0, 80),
+              status: 'error',
+              latencyMs,
+              error: errText,
+            })
+          } catch {}
+          return { success: false, error: errText, iterations, childSessionId: result.childSessionId, latencyMs }
+        }
+        try {
+          shared.onSubagentEvent?.({
+            type: 'done',
+            id: subagentId,
+            index: i,
+            task: String(task).slice(0, 80),
+            status: 'done',
+            latencyMs,
+            output: result.content,
+            childSessionId: result.childSessionId,
+          })
+        } catch {}
+        return { success: true, output: result.content, iterations, childSessionId: result.childSessionId, latencyMs }
       } catch (e) {
-        return { success: false, error: e.message || 'unknown', iterations }
+        const latencyMs = Date.now() - startTime
+        try {
+          shared.onSubagentEvent?.({
+            type: 'error',
+            id: subagentId,
+            index: i,
+            task: String(task).slice(0, 80),
+            status: 'error',
+            latencyMs,
+            error: e.message || 'unknown',
+          })
+        } catch {}
+        return { success: false, error: e.message || 'unknown', iterations, latencyMs }
       }
     })()
   })

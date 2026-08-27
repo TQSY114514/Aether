@@ -4,9 +4,7 @@ import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw } from 'lucide-react'
-import AgentStatusBar from './AgentStatusBar'
 import AgentActionHUD from './AgentActionHUD'
-import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
@@ -533,7 +531,6 @@ export default function ChatInput() {
             ))}
           </div>
         )}
-        <AgentTaskDeck sessionId={currentSessionId} />
         <AgentActionHUD sessionId={currentSessionId} />
         <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
@@ -610,7 +607,6 @@ export default function ChatInput() {
           </div>
         )}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
-        {isLooping && <AgentStatusBar sessionId={currentSessionId} />}
       </div>
     </div>
   )
