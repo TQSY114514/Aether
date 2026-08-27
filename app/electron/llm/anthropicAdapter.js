@@ -111,10 +111,20 @@ function mapToolsToAnthropic(tools) {
 }
 
 // Map OpenAI-style tool_choice to Anthropic format.
+// OpenAI: 'required' | 'auto' | 'none' | { type: 'function', function: { name } }
+// Anthropic: { type: 'any' } | { type: 'auto' } | { type: 'none' } | { type: 'tool', name }
 function mapToolChoice(choice) {
   if (!choice) return undefined
+  if (choice === 'required') return { type: 'any' }
   if (choice === 'auto' || choice === 'none') return { type: choice }
-  if (typeof choice === 'object' && choice.type) return choice
+  if (typeof choice === 'object') {
+    // OpenAI object form → { type: 'tool', name }.
+    if (choice.type === 'function' && choice.function?.name) {
+      return { type: 'tool', name: choice.function.name }
+    }
+    // Already-valid Anthropic choice (e.g. { type: 'tool', name } / { type: 'any' }).
+    if (choice.type) return choice
+  }
   return { type: 'auto' }
 }
 
@@ -125,7 +135,10 @@ function buildThinkingConfig(modelName, reasoningEffort, maxTokens) {
   const budgets = { low: 1280, medium: 4096, high: 16000 }
   const b = budgets[reasoningEffort]
   if (!b) return null
-  const isClaude4Plus = /claude-[4-9]/.test(modelName)
+  // Claude 4+ appears either as `claude-4…` or (canonical) as
+  // `claude-<family>-<gen>-…` like `claude-sonnet-4-20250514`. Match the family
+  // segment before the generation number so every Claude 4 variant is detected.
+  const isClaude4Plus = /claude-(?:[4-9]|(?:sonnet|opus|haiku)-[4-9])/.test(modelName)
   if (isClaude4Plus) return { type: 'adaptive' }
   // Claude 3.x: budget must be strictly less than max_tokens.
   if (b < maxTokens) return { type: 'enabled', budget_tokens: b }
