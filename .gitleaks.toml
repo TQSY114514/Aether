@@ -1,0 +1,17 @@
+[extend]
+# Extend default gitleaks config
+
+[allowlist]
+description = "Ignore mock keys in test files and documentation"
+paths = [
+  '''app/test/''',
+  '''app/test/.*''',
+  '''\.github/.*''',
+  '''docs/.*''',
+  '''CHANGELOG\.md''',
+  '''AGENTS\.md'''
+]
+regexes = [
+  '''sk-ant-api03-[a-z0-9]+''',
+  '''sk-[a-zA-Z0-9]{20,}T3BlbkFJ'''
+]

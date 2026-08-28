@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
   pull_request:
-    branches: [master]
+    branches: [master, main]
 
 permissions:
   contents: read
@@ -13,14 +13,26 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - name: Secret Scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           # Node 22+：vitest 4.1.10 的 forks pool 在 Node 20 上 worker 异常退出
           #（实测 7 个 fork 崩溃、61/68 文件）；Node 22/24 全绿。同时与
           # app/tui 的 Ink v5 运行时要求（Node ≥ 22）一致。
           node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies (app)
         run: cd app && npm ci --ignore-scripts
@@ -44,6 +56,9 @@ jobs:
 
       - name: Build renderer
         run: cd app && npx vite build
+
+      - name: Verify npm package files (dry-run)
+        run: cd app && npm pack --dry-run
 
       - name: E2E launch smoke test
         # A real check, but kept non-blocking so a flaky environment (native
