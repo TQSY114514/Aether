@@ -67,7 +67,10 @@ opencode.jsonc.bak*
 
 # ── Dev-only reference material & fix scripts (not part of the app) ──
 references/
-scripts/
+scripts/*
+!scripts/ci/
+scripts/ci/*
+!scripts/ci/classify_changes.mjs
 fix_test.js
 .omo/
 .trae/
