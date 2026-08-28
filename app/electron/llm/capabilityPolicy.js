@@ -24,13 +24,15 @@ const TOOL_AXIS = {
   read_file: AXES.FILESYSTEM, list_dir: AXES.FILESYSTEM, glob_find: AXES.FILESYSTEM,
   grep_search: AXES.FILESYSTEM, write_file: AXES.FILESYSTEM, edit_file: AXES.FILESYSTEM,
   apply_patch: AXES.FILESYSTEM, get_project_context: AXES.FILESYSTEM,
+  codebase_graph: AXES.FILESYSTEM, workspace_files: AXES.FILESYSTEM,
   lsp_definition: AXES.FILESYSTEM, lsp_references: AXES.FILESYSTEM,
   lsp_diagnostics: AXES.FILESYSTEM, lsp_code_actions: AXES.FILESYSTEM,
   lsp_rename: AXES.FILESYSTEM, find_symbol: AXES.FILESYSTEM,
   // shell: 命令执行
   run_command: AXES.SHELL, debug_loop: AXES.SHELL, test_first: AXES.SHELL,
+  run_long_task: AXES.SHELL,
   // network: 网络访问
-  web_search: AXES.NETWORK, web_fetch: AXES.NETWORK,
+  web_search: AXES.NETWORK, web_fetch: AXES.NETWORK, gateway: AXES.NETWORK,
   github_pr_create: AXES.NETWORK, github_pr_list: AXES.NETWORK, github_pr_merge: AXES.NETWORK,
   github_pr_review: AXES.NETWORK, github_issue_create: AXES.NETWORK, github_issue_list: AXES.NETWORK,
   github_release_create: AXES.NETWORK, github_actions_status: AXES.NETWORK,
@@ -40,7 +42,9 @@ const TOOL_AXIS = {
   // agent meta: 工具自身（ask_user/todo/use_skill/memory/delegate）→ filesystem 兜底宽松
   use_skill: AXES.FILESYSTEM, ask_user: AXES.FILESYSTEM, todo_write: AXES.FILESYSTEM,
   memory_save: AXES.FILESYSTEM, memory_list: AXES.FILESYSTEM, memory_search: AXES.FILESYSTEM,
-  delegate_task: AXES.FILESYSTEM, task: AXES.FILESYSTEM, review_code: AXES.FILESYSTEM,
+  delegate_task: AXES.FILESYSTEM, run_agent: AXES.FILESYSTEM,
+  run_workflow: AXES.FILESYSTEM, run_arena: AXES.FILESYSTEM,
+  task: AXES.FILESYSTEM, review_code: AXES.FILESYSTEM,
 }
 
 /** 工具 → 轴 */

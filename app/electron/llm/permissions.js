@@ -292,22 +292,25 @@ class PermissionPolicy {
       return PermissionOutcome.deny(overrideReason || `tool '${toolName}' denied by hook`)
     }
 
-    // P0: session-scoped always-allow —— 用户本会话内显式批准过。排在全部
-    // 确定性拒绝（deniedTools / denyRules / hook Deny）之后：永不覆盖任何
-    // 拒绝通道，但压过 ask 规则、能力轴询问与模式升档确认（这正是它的
-    // 存在意义——"本会话内不再问"）。
-    // 唯一例外：capability axis 的 deny 是确定性拒绝，必须先探测——否则
-    // sessionApproved 在此早退会越过轴策略（CWE-863）。deny 轴命中时本块
-    // 直接放行失败；ask 轴的绕行在下方 axis 块内单独处理。
-    let _axisDenies = false
+    // Capability deny is an absolute runtime ceiling: a hook Allow or a
+    // previously approved session rule must not revive a disabled capability.
+    // Keep the resolved axis decision for the ask/allow handling below.
+    let axisPolicy = null
     try {
       if (this.axisPolicies) {
         const { decideAxisPolicy } = require('./capabilityPolicy')
-        const ax = decideAxisPolicy(toolName, this.axisPolicies)
-        _axisDenies = !!(ax.matched && ax.policy === 'deny')
+        axisPolicy = decideAxisPolicy(toolName, this.axisPolicies)
       }
     } catch {}
-    if (!_axisDenies && _findMatchingRule(this.sessionApproved, toolName, input)) {
+    if (axisPolicy?.matched && axisPolicy.policy === 'deny') {
+      return PermissionOutcome.deny(`capability policy: ${axisPolicy.axis} axis denies ${toolName}`)
+    }
+
+    // P0: session-scoped always-allow —— 用户本会话内显式批准过。排在全部
+    // 确定性拒绝（deniedTools / denyRules / hook Deny）之后：永不覆盖任何
+    // 拒绝通道，但压过 ask 规则、能力轴询问与模式升档确认（这正是它的
+    // 存在意义——"本会话内不再问"）。capability deny 已在上方绝对拦截。
+    if (_findMatchingRule(this.sessionApproved, toolName, input)) {
       return PermissionOutcome.allowVia('session_approved')
     }
 
@@ -320,6 +323,9 @@ class PermissionPolicy {
       if (askRule) {
         const reason = `tool '${toolName}' requires approval due to ask rule`
         return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
+      }
+      if (axisPolicy?.matched && axisPolicy.policy === 'ask') {
+        return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${axisPolicy.axis} axis requires approval`, prompter, this)
       }
       if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {
         return PermissionOutcome.allow()
@@ -336,22 +342,12 @@ class PermissionPolicy {
     // 规则引擎未命中时, 按轴级策略决策: filesystem/shell/network 三轴各
     // allow|ask|deny, 作为显式政策覆盖 —— deny 轴压过 Allow 模式,
     // allow 轴放行 ReadOnly 模式; 未注入/未知工具轴 → 回落既有 5 档判断。
-    if (this.axisPolicies) {
-      try {
-        const { decideAxisPolicy } = require('./capabilityPolicy')
-        const ax = decideAxisPolicy(toolName, this.axisPolicies)
-        if (ax.matched) {
-          if (ax.policy === 'allow') return PermissionOutcome.allow()
-          if (ax.policy === 'deny') return PermissionOutcome.deny(`capability policy: ${ax.axis} axis denies ${toolName}`)
-          if (ax.policy === 'ask') {
-            // 会话批准可代替轴询问（deny 已在 :343 拦下，永不越过）。
-            if (_findMatchingRule(this.sessionApproved, toolName, input)) {
-              return PermissionOutcome.allowVia('session_approved')
-            }
-            return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${ax.axis} axis requires approval`, prompter, this)
-          }
-        }
-      } catch {}
+    if (axisPolicy?.matched) {
+      if (axisPolicy.policy === 'allow') return PermissionOutcome.allow()
+      if (axisPolicy.policy === 'ask') {
+        // 会话批准已在上方处理，可代替轴询问。
+        return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${axisPolicy.axis} axis requires approval`, prompter, this)
+      }
     }
 
     if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {

@@ -4,8 +4,8 @@
 // enforcement chain is cross-file:
 //
 //   SecurityPage.tsx  writes  settings key `capability.<axis>`
-//        → toolLoop.js     reads  `capability.${axis}` each agent run
-//                              (llm/toolLoop.js, capability-axis block)
+//        → toolLoop.js     reads  `capability.${axis}` before each dispatch
+//                              and refreshes the live PermissionPolicy
 //        → permissions.js  axis policy: deny rejects / ask prompts / allow passes
 //
 // None of that is visible from any single file, so this test locks the
@@ -24,6 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // capabilityPolicy.js is a pure module (no electron) — safe to import directly.
 const { AXES, TOOL_AXIS } = require('../electron/llm/capabilityPolicy.js')
+const { TOOLS } = require('../electron/tools/registry.js')
 
 const ENFORCED_AXES = Object.values(AXES).filter(a => a !== AXES.UNKNOWN)
 
@@ -36,7 +37,7 @@ describe('capability axis settings-key contract (TQS-7)', () => {
     expect(keys.sort()).toEqual(ENFORCED_AXES.map(a => `capability.${a}`).sort())
   })
 
-  it('toolLoop reads capability.* via db.getSetting inside its axis loop at runtime', () => {
+  it('toolLoop refreshes PermissionPolicy from capability.* before dispatch', () => {
     // 剥掉行注释，让"只在注释里出现"无法满足任何断言。
     const codeOnly = toolLoopSrc.replace(/^\s*\/\/.*$/gm, '')
     // 从 for-of 语句提取轴清单（运行时代码）：
@@ -57,11 +58,21 @@ describe('capability axis settings-key contract (TQS-7)', () => {
     }
     const loopBody = codeOnly.slice(loopMatch.index + loopMatch[0].length, i - 1)
     expect(loopBody).toContain('db.getSetting(`capability.${axis}`)')
+    const dispatchRefresh = codeOnly.match(
+      /let axisAskReason = null[\s\S]*?permissionPolicy\.withAxisPolicies\(axes\)[\s\S]*?decideAxisPolicy\(fn\.name, axes\)/
+    )
+    expect(dispatchRefresh).toBeTruthy()
   })
 
   it('every tool known to TOOL_AXIS maps to an enforced axis', () => {
     for (const axis of Object.values(TOOL_AXIS)) {
       expect(ENFORCED_AXES).toContain(axis)
+    }
+  })
+
+  it('every built-in tool dispatch has a capability axis', () => {
+    for (const tool of TOOLS) {
+      expect(TOOL_AXIS[tool.name], tool.name).toBeTruthy()
     }
   })
 })
