@@ -1,0 +1,46 @@
+name: Dependency Vulnerability Scan (OSV)
+
+# hermes-agent 同款：google/osv-scanner 免费扫描 lockfile，
+# 结果上传 SARIF（GitHub Security 标签可看），漏洞命中即失败。
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'app/package-lock.json'
+      - 'app/tui/package-lock.json'
+      - 'app/package.json'
+      - 'app/tui/package.json'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'app/package-lock.json'
+      - 'app/tui/package-lock.json'
+      - 'app/package.json'
+      - 'app/tui/package.json'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  osv-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run OSV Scanner
+        uses: google/osv-scanner-action@v1
+        with:
+          scan-args: |-
+            --format=sarif
+            --output=osv-results.sarif
+            --fail-on-vuln=high
+            app/package-lock.json
+            app/tui/package-lock.json
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: google/osv-scanner-action/upload-sarif@v1
+        with:
+          sarif_file: osv-results.sarif

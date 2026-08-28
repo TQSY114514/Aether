@@ -1,0 +1,28 @@
+name: Stale
+
+# 仓库卫生：90 天无活动的 issue / PR 标记 stale，再 30 天无动作关闭。
+on:
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark & close stale items
+        uses: actions/stale@v9
+        with:
+          days-before-issue-stale: 90
+          days-before-issue-close: 30
+          days-before-pr-stale: 90
+          days-before-pr-close: 30
+          stale-issue-message: '此 issue 已 90 天无活动，标记为 stale。30 天后将自动关闭；如需继续推进请回复。'
+          stale-pr-message: '此 PR 已 90 天无活动，标记为 stale。30 天后将自动关闭；如需继续推进请回复。'
+          close-issue-message: '因长期无活动自动关闭。可随时重新打开。'
+          close-pr-message: '因长期无活动自动关闭。可随时重新打开。'
+          exempt-issue-labels: 'pinned,security,bug,enhancement'
+          exempt-pr-labels: 'pinned,security,dependencies'

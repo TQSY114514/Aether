@@ -8,10 +8,22 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
-  build:
-    runs-on: windows-latest
+  # ────────────────────────── 分类器 ──────────────────────────
+  # 按改动路径决定哪些 lane 需要跑（hermes-agent 式 detect-changes）：
+  #   PR = 增量触发（只跑受影响 lane）；push 到主干 = fail-open 全跑。
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.classify.outputs.core }}
+      renderer: ${{ steps.classify.outputs.renderer }}
+      tui: ${{ steps.classify.outputs.tui }}
+      tests: ${{ steps.classify.outputs.tests }}
+      deps: ${{ steps.classify.outputs.deps }}
+      docs: ${{ steps.classify.outputs.docs }}
+      ci: ${{ steps.classify.outputs.ci }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,6 +35,24 @@ jobs:
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Classify changed lanes
+        id: classify
+        run: node scripts/ci/classify_changes.mjs
+
+  # ────────────────────── 类型 + IPC 契约 ──────────────────────
+  typecheck-ipc:
+    needs: detect
+    if: >-
+      needs.detect.outputs.core == 'true' ||
+      needs.detect.outputs.renderer == 'true' ||
+      needs.detect.outputs.tui == 'true' ||
+      needs.detect.outputs.deps == 'true' ||
+      needs.detect.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -38,7 +68,7 @@ jobs:
         run: cd app && npm ci --ignore-scripts
 
       - name: Install dependencies (app/tui)
-        # app/tui 有独立局部 package.json(Ink v5, todo 1)——必须一起装,
+        # app/tui 有独立局部 package.json(Ink v5)——必须一起装,
         # 否则 test/tui/toolCards.test.js 等导入 ink 的测试找不到模块。
         run: cd app/tui && npm ci --ignore-scripts
 
@@ -48,17 +78,99 @@ jobs:
       - name: TypeScript check
         run: cd app && npx tsc --noEmit
 
+  # ────────────────────────── 单元 / 集成测试 ──────────────────────────
+  tests:
+    needs: detect
+    if: >-
+      needs.detect.outputs.tests == 'true' ||
+      needs.detect.outputs.core == 'true' ||
+      needs.detect.outputs.renderer == 'true' ||
+      needs.detect.outputs.tui == 'true' ||
+      needs.detect.outputs.deps == 'true' ||
+      needs.detect.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies (app)
+        run: cd app && npm ci --ignore-scripts
+
+      - name: Install dependencies (app/tui)
+        run: cd app/tui && npm ci --ignore-scripts
+
       - name: Run tests
-        # 2 核 runner 上 68 个测试文件并行 fork 会饿死 worker：同步测试被拖过
-        # vitest 默认 5s 超时误杀（backgroundReview/knowledgeGraph 等纯内存测试
-        # 曾"卡 5.3s/5.8s"失败）。文件串行 + 30s 超时彻底消除饿死/worker 崩溃。
+        # 2 核 runner 上并行 fork 会饿死 worker：同步测试被拖过 vitest 默认
+        # 5s 超时误杀（backgroundReview/knowledgeGraph 等纯内存测试曾卡
+        # 5.3s/5.8s 失败）。文件串行 + 30s 超时彻底消除饿死/worker 崩溃。
         run: cd app && npx vitest run --fileParallelism=false --testTimeout=30000
+
+  # ────────────────────────── 构建 + 打包 ──────────────────────────
+  build:
+    needs: detect
+    if: >-
+      needs.detect.outputs.core == 'true' ||
+      needs.detect.outputs.renderer == 'true' ||
+      needs.detect.outputs.tui == 'true' ||
+      needs.detect.outputs.deps == 'true' ||
+      needs.detect.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies (app)
+        run: cd app && npm ci --ignore-scripts
+
+      - name: Install dependencies (app/tui)
+        run: cd app/tui && npm ci --ignore-scripts
 
       - name: Build renderer
         run: cd app && npx vite build
 
       - name: Verify npm package files (dry-run)
         run: cd app && npm pack --dry-run
+
+  # ────────────────────────── E2E 启动冒烟（Windows） ──────────────────────────
+  smoke:
+    needs: detect
+    if: >-
+      needs.detect.outputs.core == 'true' ||
+      needs.detect.outputs.renderer == 'true' ||
+      needs.detect.outputs.tui == 'true' ||
+      needs.detect.outputs.deps == 'true' ||
+      needs.detect.outputs.ci == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies (app)
+        run: cd app && npm ci --ignore-scripts
+
+      - name: Install dependencies (app/tui)
+        run: cd app/tui && npm ci --ignore-scripts
 
       - name: E2E launch smoke test
         # A real check, but kept non-blocking so a flaky environment (native
@@ -73,3 +185,70 @@ jobs:
             node node_modules/electron/install.js
           }
           npm run test:e2e
+
+  # ────────────────────────── 汇总 gate ──────────────────────────
+  # 分支保护只需认这一个检查：success/skipped 都算过，仅 failure 失败。
+  all-checks-pass:
+    needs: [typecheck-ipc, tests, build, smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all lanes passed
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          node -e "
+            const n = JSON.parse(process.env.NEEDS_JSON);
+            const failed = Object.entries(n)
+              .filter(([, v]) => v.result === 'failure')
+              .map(([k]) => k);
+            if (failed.length > 0) {
+              console.error('Failed lanes: ' + failed.join(', '));
+              process.exit(1);
+            }
+            const skipped = Object.entries(n)
+              .filter(([, v]) => v.result === 'skipped')
+              .map(([k]) => k);
+            console.log('All lanes passed' + (skipped.length ? ' (skipped: ' + skipped.join(', ') + ')' : ''));
+          "
+
+      - name: Post / update PR check summary
+        # PR 上自动聚合本站所为一次评论（ultimately 兑现 pr-review-config 的
+        # “审查总结”承诺，但报告的是真实检查结果）。
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const headSha = context.payload.pull_request.head.sha;
+            const { data: checks } = await github.rest.checks.listForRef({
+              owner, repo, ref: headSha, per_page: 100,
+            });
+            const rows = checks.check_runs.map((c) =>
+              `| ${c.name} | ${c.status} | ${c.conclusion || '—'} |`
+            ).join('\n');
+            const body = [
+              '## 🤖 Aether CI 检查汇总',
+              '',
+              '> 由 all-checks-pass 自动更新，每次 PR 变更时刷新。',
+              '',
+              '| 检查 | 状态 | 结论 |',
+              '| --- | --- | --- |',
+              rows,
+              '',
+              `[查看全部 Checks](${context.payload.pull_request.html_url}/checks)`,
+            ].join('\n');
+            const marker = 'Aether CI 检查汇总';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: context.issue.number, per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: context.issue.number, body,
+              });
+            }

@@ -1,0 +1,41 @@
+name: Supply Chain Audit
+
+# npm audit 对 lockfile 的已知漏洞审计（registry 数据）。
+# 依赖或锁文件变更时才触发；high 以上漏洞使检查失败。
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'app/package-lock.json'
+      - 'app/tui/package-lock.json'
+      - 'app/package.json'
+      - 'app/tui/package.json'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'app/package-lock.json'
+      - 'app/tui/package-lock.json'
+      - 'app/package.json'
+      - 'app/tui/package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [app, app/tui]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Audit (${{ matrix.dir }})
+        working-directory: ${{ matrix.dir }}
+        run: npm audit --audit-level=high

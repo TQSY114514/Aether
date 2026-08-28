@@ -1,0 +1,18 @@
+name: Labeler
+
+# 按改动路径给 PR 自动打标签（与 CI lane 分类规则保持一致）。
+on:
+  - pull_request_target
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply path labels
+        uses: actions/labeler@v5
+        with:
+          sync-labels: true

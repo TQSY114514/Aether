@@ -1,0 +1,31 @@
+# 路径 → PR 标签映射（与 scripts/ci/classify_changes.mjs 的 lane 规则对齐）
+
+core:
+  - app/electron/**/*
+  - app/scripts/**/*
+
+renderer:
+  - app/src/**/*
+
+tui:
+  - app/tui/**/*
+
+tests:
+  - app/test/**/*
+  - evals/**/*
+  - app/**/*.test.*
+  - app/**/*.spec.*
+
+dependencies:
+  - app/package.json
+  - app/package-lock.json
+  - app/tui/package.json
+  - app/tui/package-lock.json
+
+docs:
+  - docs/**/*
+  - '**/*.md'
+
+ci:
+  - .github/**/*
+  - scripts/**/*
