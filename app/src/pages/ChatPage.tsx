@@ -97,19 +97,19 @@ export default function ChatPage() {
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
+        <div className="min-h-12 py-1.5 border-b flex flex-wrap items-center justify-between px-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {chatMode === 'arena' ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <select value={localArenaIds[0] ?? ''} onChange={(e) => {
                   const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
                   syncLocalArena(ids)
                 }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
-                  <option value="">Model 1</option>
+                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
+                  <option value="">{t('chat.arena.model1')}</option>
                   {allArenaModels.map(m => (
                     <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                   ))}
@@ -118,8 +118,8 @@ export default function ChatPage() {
                   const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
                   syncLocalArena(ids)
                 }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
-                  <option value="">Model 2</option>
+                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
+                  <option value="">{t('chat.arena.model2')}</option>
                   {allArenaModels.map(m => (
                     <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                   ))}
@@ -169,16 +169,16 @@ export default function ChatPage() {
             </Tooltip>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Arena model selectors — shown when in arena mode */}
           {chatMode === 'arena' ? (
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <select value={localArenaIds[0] ?? ''} onChange={(e) => {
                 const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
                 syncLocalArena(ids)
               }}
-                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
-                  <option value="">Model 1</option>
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
+                  <option value="">{t('chat.arena.model1')}</option>
                   {allArenaModels.map(m => (
                     <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                   ))}
@@ -187,8 +187,8 @@ export default function ChatPage() {
                   const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
                   syncLocalArena(ids)
                 }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
-                <option value="">Model 2</option>
+                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
+                <option value="">{t('chat.arena.model2')}</option>
                 {allArenaModels.map(m => (
                   <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                 ))}
@@ -198,22 +198,22 @@ export default function ChatPage() {
                 const v = e.target.value
                 setArenaTemperatures(v ? v.split(',').map(Number) : null)
               }}
-                title="同模型多温度对比"
-                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
-                <option value="">单次</option>
-                <option value="0.2,0.8">温度 0.2/0.8</option>
-                <option value="0.2,0.5,0.8">温度 0.2/0.5/0.8</option>
+                title={t('chat.arena.temp_title')}
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[140px]" style={{ borderColor: 'var(--border)' }}>
+                <option value="">{t('chat.arena.single')}</option>
+                <option value="0.2,0.8">{t('chat.arena.temp_pair')}</option>
+                <option value="0.2,0.5,0.8">{t('chat.arena.temp_triple')}</option>
               </select>
             </div>
           ) : null}
           <Tooltip text={t('tooltip.mode_switch')}>
-          <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center border rounded-lg overflow-hidden text-xs shrink-0" style={{ borderColor: 'var(--border)' }}>
             <button onClick={() => setChatMode('normal')}
-              className={`px-2.5 py-1.5 transition-colors ${chatMode === 'normal' ? 'bg-black text-white' : ''}`}
+              className={`px-2.5 py-1.5 transition-colors ${chatMode === 'normal' ? 'bg-[var(--accent)] text-white' : ''}`}
               style={chatMode !== 'normal' ? { color: 'var(--text-secondary)' } : {}}>{t('chat.mode.normal')}</button>
             <Tooltip text={t('tooltip.arena_mode')}>
               <button onClick={() => setChatMode('arena')}
-                className={`px-2.5 py-1.5 transition-colors ${chatMode === 'arena' ? 'bg-black text-white' : ''}`}
+                className={`px-2.5 py-1.5 transition-colors ${chatMode === 'arena' ? 'bg-[var(--accent)] text-white' : ''}`}
                 style={chatMode !== 'arena' ? { color: 'var(--text-secondary)' } : {}}>
                 <FlaskConical size={12} className="inline mr-0.5" />{t('chat.mode.arena')}</button>
             </Tooltip>
@@ -223,7 +223,7 @@ export default function ChatPage() {
             <select value={currentPersonaId ?? ''} onChange={(e) => {
               const v = e.target.value ? Number(e.target.value) : null
               if (currentSessionId) saveSessionConfig(currentSessionId, { personaId: v })
-            }} className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
+            }} className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-[var(--content-bg)] shrink-0 max-w-[180px]" style={{ borderColor: 'var(--border)' }}>
               <option value="">{t('chat.no_persona')}</option>
               {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
