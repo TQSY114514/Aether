@@ -3,8 +3,9 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, ListChecks } from 'lucide-react'
 import AgentActionHUD from './AgentActionHUD'
+import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
@@ -278,23 +279,25 @@ export default function ChatInput() {
     }
   }, [])
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (overrides?: { agentMode?: AgentMode }) => {
     const content = input.trim()
     if (!content && pending.length === 0 && snippets.length === 0) return
-    if (isArenaRunning) {
-      if (content) { enqueueMessage(content); setInput('') }
-      return
-    }
-    if (isStreaming) {
-      const looping = useStore.getState().loopingSessions.has(currentSessionId ?? -1)
-      if (looping && content) {
-        useStore.getState().injectMessage(content)
-        setInput('')
-      } else if (content) {
-        enqueueMessage(content)
-        setInput('')
+    if (!overrides || overrides.agentMode !== 'plan') {
+      if (isArenaRunning) {
+        if (content) { enqueueMessage(content); setInput('') }
+        return
       }
-      return
+      if (isStreaming) {
+        const looping = useStore.getState().loopingSessions.has(currentSessionId ?? -1)
+        if (looping && content) {
+          useStore.getState().injectMessage(content)
+          setInput('')
+        } else if (content) {
+          enqueueMessage(content)
+          setInput('')
+        }
+        return
+      }
     }
     setInput('')
     try { localStorage.removeItem(`draft:${currentSessionId ?? 'new'}`) } catch {}
@@ -314,7 +317,7 @@ export default function ChatInput() {
     if (chatMode === 'arena') {
       runArena(finalContent)
     } else if (sessionId) {
-      sendMessage(finalContent, atts.length > 0 ? atts : undefined)
+      sendMessage(finalContent, atts.length > 0 ? atts : undefined, overrides && overrides.agentMode ? { agentMode: overrides.agentMode as AgentMode } : undefined)
     }
   }
 
@@ -531,6 +534,7 @@ export default function ChatInput() {
             ))}
           </div>
         )}
+        <AgentTaskDeck sessionId={currentSessionId} />
         <AgentActionHUD sessionId={currentSessionId} />
         <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
@@ -566,10 +570,17 @@ export default function ChatInput() {
               <Square size={14} />
             </button>
           ) : (
-            <button onClick={handleSubmit} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
-              <Send size={14} />
-            </button>
+            <>
+              <button onClick={() => handleSubmit()} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
+                className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
+                <Send size={14} />
+              </button>
+              <button onClick={() => handleSubmit({ agentMode: 'plan' })} disabled={!input.trim() && pending.length === 0 && snippets.length === 0}
+                className={cn('shrink-0 p-2.5 rounded-xl border transition-colors hover:opacity-90', 'disabled:opacity-30')}
+                style={{ borderColor: '#3b82f680', color: '#3b82f6' }} title={t('chat.plan_first', '先规划：只读任务拆解，不改文件')} aria-label={t('chat.plan_first', '先规划')}>
+                <ListChecks size={14} />
+              </button>
+            </>
           )}
         </div>
 
@@ -650,16 +661,13 @@ function AgentModeSelector({ mode, onChange }: { mode: AgentMode; onChange: (v: 
   // Subscribe to language so t() re-evaluates when the user switches language.
   const language = useStore((s) => s.language)
   const AGENT_MODES: { value: AgentMode; label: string; color: string; tooltip: string }[] = useMemo(() => [
-    { value: 'off', label: t('agent.mode.off'), color: 'var(--text-muted)', tooltip: t('agent.mode.off.desc') },
-    { value: 'plan', label: t('agent.mode.plan'), color: '#3b82f6', tooltip: t('agent.mode.plan.desc') },
     { value: 'ask', label: t('agent.mode.ask'), color: 'var(--accent)', tooltip: t('agent.mode.ask.desc') },
-    { value: 'auto_confirm', label: t('agent.mode.auto_confirm'), color: '#f59e0b', tooltip: t('agent.mode.auto_confirm.desc') },
     { value: 'auto', label: t('agent.mode.auto'), color: '#f97316', tooltip: t('agent.mode.auto.desc') },
     { value: 'yolo', label: t('agent.mode.yolo'), color: 'var(--error)', tooltip: t('agent.mode.yolo.desc') },
     { value: 'custom', label: t('agent.mode.custom', 'Custom'), color: '#8b5cf6', tooltip: t('agent.mode.custom.desc', 'Custom policy: configure per-tool permissions in settings') },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [language, t])
-  const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[2]
+  const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[0]
   return (
     <div className="flex items-center gap-0.5">
       <Shield size={13} className="text-gray-400 shrink-0" />

@@ -11,7 +11,6 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
   const [expanded, setExpanded] = useState(false)
   const todosByMessage = useStore((s) => s.todosByMessage)
   const messages = useStore((s) => s.messages)
-  const isStreaming = sessionId ? !!useStore.getState().streamingBySession[sessionId] : false
 
   // Find the most recent message's todos
   const latestTodos = useMemo(() => {

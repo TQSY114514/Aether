@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Circle,
   Wand2,
   Bot,
   Layers,
@@ -22,7 +21,6 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
   const planSnapshotsByMessage = useStore((s) => s.planSnapshotsByMessage)
   const subagentsByMessage = useStore((s) => s.subagentsByMessage)
   const messages = useStore((s) => s.messages)
-  const turnUsage = useStore((s) => (sessionId ? s.turnUsageBySession[sessionId] : null))
 
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -208,17 +206,8 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
           )}
         </div>
 
-        {/* Right: Tokens & Expand Toggle */}
+        {/* Right: Expand Toggle */}
         <div className="flex items-center gap-2 shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          {turnUsage && (turnUsage.inputTokens > 0 || turnUsage.outputTokens > 0) && (
-            <span
-              className="tabular-nums font-mono px-1.5 py-0.5 rounded text-[10px] border hidden sm:inline"
-              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
-            >
-              {Math.round((turnUsage.inputTokens + turnUsage.outputTokens) / 100) / 10}k tokens
-            </span>
-          )}
-
           {/* Expand/Collapse Drawer Button */}
           <button
             type="button"
@@ -275,73 +264,6 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Section B: High-Level Execution Plan Checklist */}
-          {hasPlan ? (
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-medium text-[var(--text-muted)] flex items-center justify-between pb-0.5">
-                <span className="flex items-center gap-1.5">
-                  <Layers size={11} className="text-[var(--accent)]" />
-                  <span>任务执行计划 (已完成 {planCompleted} / 共 {planTotal} 步 · {planPct}%)</span>
-                </span>
-                <span className="opacity-60 text-[9px]">支持滚轮滑动</span>
-              </div>
-
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 font-mono">
-                {latestTodos.map((todo, idx) => {
-                  const isDone = todo.status === 'completed'
-                  const isRunning = todo.status === 'in_progress'
-
-                  return (
-                    <div
-                      key={(todo as any).id || idx}
-                      className={`flex items-start gap-2 p-1.5 rounded-lg text-[11px] transition-colors ${
-                        isRunning
-                          ? 'bg-[var(--accent)]/10 border border-[var(--accent)]/30 text-[var(--text-primary)] font-medium'
-                          : isDone
-                          ? 'bg-[var(--content-bg)] text-[var(--text-secondary)] opacity-75'
-                          : 'bg-[var(--bg-secondary)] border border-dashed border-[var(--border)] text-[var(--text-muted)]'
-                      }`}
-                    >
-                      <div className="mt-0.5 shrink-0">
-                        {isDone ? (
-                          <CheckCircle2 size={13} className="text-emerald-400" />
-                        ) : isRunning ? (
-                          <Loader2 size={13} className="text-amber-400 motion-safe:animate-spin" />
-                        ) : (
-                          <Circle size={13} className="text-gray-400 opacity-40" />
-                        )}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold shrink-0">{idx + 1}.</span>
-                          <span className={`truncate flex-1 ${isDone ? 'line-through opacity-70' : ''}`}>
-                            {todo.content}
-                          </span>
-                          <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${
-                              isDone
-                                ? 'text-emerald-400 bg-emerald-500/10'
-                                : isRunning
-                                ? 'text-amber-400 bg-amber-500/10 motion-safe:animate-pulse'
-                                : 'text-gray-400 bg-gray-500/10'
-                            }`}
-                          >
-                            {isDone ? '已完成' : isRunning ? '进行中' : '待执行'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="py-2 text-center text-[11px] text-[var(--text-muted)]">
-              暂无结构化任务计划，工具执行卡片直接在上方对话气泡中实时呈现
             </div>
           )}
 

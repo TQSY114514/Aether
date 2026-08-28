@@ -71,11 +71,10 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     })
     // Agent modes
     const modes: [string, string, typeof Brain][] = [
-      ['off', t('agent.mode.off'), Brain],
-      ['plan', t('agent.mode.plan'), Shield],
       ['ask', t('agent.mode.ask'), Shield],
       ['auto', t('agent.mode.auto'), Zap],
       ['yolo', t('agent.mode.yolo'), Zap],
+      ['custom', t('agent.mode.custom', 'Custom'), Brain],
     ]
     modes.forEach(([mode, label, icon]) => {
       cmds.push({ id: `mode-${mode}`, label: `${t('cmd.set_mode')} ${label}`, group: t('cmd.group.agent'), icon, run: () => { setAgentMode(mode as any); onClose() } })
