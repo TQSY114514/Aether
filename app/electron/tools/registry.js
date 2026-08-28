@@ -349,11 +349,11 @@ const TOOLS = [
       return o.content || '(no content)'
     } catch (e) { return `agent error: ${e?.message}` }
   }},
-  { name: 'run_workflow', description: 'Execute a typed multi-step workflow (feature/bugfix/refactor/explore).', risk: 'dangerous', parameters: { type: 'object', properties: { template: { type: 'string', enum: ['feature', 'bugfix', 'refactor', 'explore'] }, request: { type: 'string' } }, required: ['template', 'request'] }, run: async (args, ctx) => {
+  { name: 'run_workflow', description: 'Execute a typed multi-step workflow (feature/bugfix/refactor/explore). Optional: maxSubagentCalls budget, stepModels role→model mapping, checkpointKey for resume.', risk: 'dangerous', parameters: { type: 'object', properties: { template: { type: 'string', enum: ['feature', 'bugfix', 'refactor', 'explore'] }, request: { type: 'string' }, maxSubagentCalls: { type: 'number', minimum: 1 }, stepModels: { type: 'object' }, checkpointKey: { type: 'string' } }, required: ['template', 'request'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
     const wf = require('../llm/workflow'); const tn = String(args.template || 'feature'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
-      const r = await wf.runWorkflow({ db: ctx.db, provider: ctx.provider, model: ctx.model, templateName: tn, userRequest: req, signal: ctx.signal })
+      const r = await wf.runWorkflow({ db: ctx.db, provider: ctx.provider, model: ctx.model, templateName: tn, userRequest: req, signal: ctx.signal, maxSubagentCalls: args.maxSubagentCalls != null ? Number(args.maxSubagentCalls) : null, stepModels: args.stepModels || null, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
       if (!r.ok) return `failed: ${r.error}`; return r.summary || '(done)'
     } catch (e) { return `error: ${e?.message}` }
   }},
@@ -370,11 +370,11 @@ const TOOLS = [
     const ftr = (Array.isArray(args.files) ? args.files : []).slice(0, 5).map(f => { try { return { path: f, content: fs.readFileSync(f, 'utf-8') } } catch { return null } }).filter(Boolean)
     return (await reviewFiles({ provider: ctx.provider, model: ctx.model, files: ftr, signal: ctx.signal })).summary
   }},
-  { name: 'run_arena', description: 'Multi-agent arena: plan 鈫?cross-review 鈫?judge 鈫?execute. Modes: plan_only, full.', risk: 'dangerous', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['plan_only', 'full'] }, request: { type: 'string' }, roles: { type: 'array', items: { type: 'string' } } }, required: ['request'] }, run: async (args, ctx) => {
+  { name: 'run_arena', description: 'Multi-agent arena: plan 鈫?cross-review 鈫?judge 鈫?execute. Modes: plan_only, full. Optional: maxRounds>1 enables Evaluator-Optimizer refine loop with judgeThreshold; roles can be [{role, model}] for role-model mapping; executeModel overrides executor model; supervise=true lets an LLM supervisor pick roles dynamically; checkpointKey persists phase state for resume.', risk: 'dangerous', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['plan_only', 'full'] }, request: { type: 'string' }, roles: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { role: { type: 'string' }, model: { type: 'object' } } }] } }, maxRounds: { type: 'number', minimum: 1 }, judgeThreshold: { type: 'number', minimum: 0 }, maxSubagentCalls: { type: 'number', minimum: 1 }, executeModel: { type: 'object' }, supervise: { type: 'boolean' }, checkpointKey: { type: 'string' } }, required: ['request'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
     const ar = require('../llm/agentArena'); const mode = String(args.mode || 'plan_only'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
-      const r = await ar.runArena({ db: ctx.db, provider: ctx.provider, model: ctx.model, userRequest: req, signal: ctx.signal, mode, roles: Array.isArray(args.roles) && args.roles.length ? args.roles : ['explore', 'build', 'review'] })
+      const r = await ar.runArena({ db: ctx.db, provider: ctx.provider, model: ctx.model, userRequest: req, signal: ctx.signal, mode, roles: Array.isArray(args.roles) && args.roles.length ? args.roles : ['explore', 'build', 'review'], maxRounds: Number(args.maxRounds) || 1, judgeThreshold: Number(args.judgeThreshold) || 0, maxSubagentCalls: Number(args.maxSubagentCalls) || 20, executeModel: args.executeModel || null, supervise: args.supervise === true, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
       if (!r.ok) return `failed: ${r.error}`
       if (mode === 'plan_only') return (r.plans || []).map(p => `[${p.role}] ${(p.plan || '').slice(0, 300)}...`).join('\n')
       return [`Best: ${r.bestPlan.role} (${r.bestPlan.score})`, r.execution?.success ? r.execution.output : `exec failed: ${r.execution?.error}`].join('\n')
