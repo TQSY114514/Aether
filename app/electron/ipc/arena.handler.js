@@ -1,5 +1,6 @@
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
 const { computeCost } = require('../utils/cost')
+const { shouldWriteQuickTitle, quickTitleOf } = require('./chat-send.handler')
 const log = require('../logger')
 const abortControllers = new Map()
 
@@ -26,6 +27,20 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
 
     // Persist the user's arena prompt as a message so it survives a reload
     db.addMessage({ session_id: sessionId, role: 'user', content })
+
+    // Auto-title: an arena round is a real conversation too. When the session is
+    // still placeholder-titled and this is its first message, fall back to the
+    // same quick title the chat path uses (chat-send.handler), so arena sessions
+    // don't sit at "新会话" forever. AI-summary upgrade happens on the chat side
+    // if the user continues the conversation there.
+    try {
+      const s0 = db.getSession(sessionId)
+      const autoTitleOn = (db.getSetting('autoTitle') ?? '1') === '1'
+      if (s0 && shouldWriteQuickTitle({ autoTitleOn, sessionTitle: s0.title, msgsLen: db.getMessages(sessionId).length })) {
+        const quick = quickTitleOf(content)
+        if (quick) db.renameSession(sessionId, quick)
+      }
+    } catch (e) { log.warn('arena quick title failed:', e.message) }
 
     // Run all model×temperature variants CONCURRENTLY (Promise.all) so a slow
     // model doesn't block the others — each gets its own 60s timeout + abort.

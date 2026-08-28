@@ -127,7 +127,9 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
                   { model_id: r.model_id, model_name: r.model_name },
                   results.filter(x => x.model_id !== r.model_id).map(x => ({ model_id: x.model_id, model_name: x.model_name }))
                 )}
-                  className="text-xs px-3 py-1 rounded-lg border bg-[var(--content-bg)] hover:bg-amber-50 hover:border-amber-300 transition-colors" style={{ borderColor: 'var(--border)' }}>
+                  disabled={!done}
+                  title={done ? t('chat.arena.vote') : t('chat.arena.wait_all')}
+                  className="text-xs px-3 py-1 rounded-lg border bg-[var(--content-bg)] hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--content-bg)] disabled:hover:border-[var(--border)]" style={{ borderColor: 'var(--border)' }}>
                   ⭐ {t('chat.arena.vote')}
                 </button>
               </div>
