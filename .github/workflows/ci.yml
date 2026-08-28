@@ -88,7 +88,9 @@ jobs:
       needs.detect.outputs.tui == 'true' ||
       needs.detect.outputs.deps == 'true' ||
       needs.detect.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    # Windows-only tests (sandbox-win / UNC / \\?\ prefix path checks) require
+    # Windows path semantics — must run on windows-latest, not ubuntu.
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
