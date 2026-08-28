@@ -48,7 +48,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   loopingSessions: new Set<number>(),
   thinkingEnabled: true,
   effortLevel: 'medium',
-  agentMode: 'off',
+  agentMode: 'auto',
   modelSuggestion: null as ModelSuggestion | null,
   messageSearchQuery: "",
 
@@ -85,8 +85,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
   },
 
-  sendMessage: async (content, attachments) => {
+  sendMessage: async (content, attachments, overrides?: { agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom' }) => {
     const { currentSessionId, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
+    const effMode = overrides?.agentMode ?? agentMode
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
     let modelId = cfg?.modelId
     if (!modelId) {
@@ -154,8 +155,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         mode: chatMode,
         personaId: cfg?.personaId ?? null,
         attachments: imageAttachments,
-        useTools: agentMode !== "off",
-        agentMode: agentMode === "off" ? "ask" : agentMode,
+        useTools: effMode !== "off",
+        agentMode: effMode === "off" ? "ask" : effMode,
         effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
@@ -181,7 +182,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     setStoppingSessionId(sid0)
     try {
       if (sid0) await window.electronAPI.chat.stop(sid0)
-      await window.electronAPI.arena.stop(sid0 || undefined).catch(() => {})
+      // Stop ONLY the current session's arena run. Passing undefined would hit the
+      // main-process "abort all" branch and kill every concurrent arena session.
+      if (sid0) await window.electronAPI.arena.stop(sid0).catch(() => {})
 
       const current = get().currentSessionId
       if (!current) return
