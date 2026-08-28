@@ -119,22 +119,93 @@ ${context || '(no previous context — this is the first step)'}`
   }
 }
 
+// ── Checkpoint persistence (best-effort, like compactionStore) ───────────
+// Key format: `run_workflow:checkpoint:<key>`. Survives app restarts via the
+// settings table; degrades silently to a per-process Map when db is absent.
+
+const _ckMem = new Map()
+
+function _ckDb(db) {
+  return db && typeof db.getSetting === 'function' ? db : null
+}
+
+function loadWorkflowCheckpoint(db, key) {
+  if (!key) return null
+  const memKey = `run_workflow:checkpoint:${key}`
+  if (_ckMem.has(memKey)) return _ckMem.get(memKey)
+  const sdb = _ckDb(db)
+  if (!sdb) return null
+  try {
+    const row = sdb.getSetting(memKey)
+    if (!row) return null
+    const ck = JSON.parse(row)
+    _ckMem.set(memKey, ck)
+    return ck
+  } catch { return null }
+}
+
+function saveWorkflowCheckpoint(db, key, data) {
+  if (!key) return
+  const memKey = `run_workflow:checkpoint:${key}`
+  _ckMem.set(memKey, data)
+  const sdb = _ckDb(db)
+  if (!sdb) return
+  try { sdb.setSetting(memKey, JSON.stringify(data)) } catch { /* best-effort */ }
+}
+
 // ── Run a full workflow ──────────────────────────────────────────────────
 
-async function runWorkflow({ db, provider, model, templateName, userRequest, signal, onStepComplete }) {
+async function runWorkflow({
+  db, provider, model, templateName, userRequest, signal, onStepComplete,
+  maxSubagentCalls = null,   // hard budget on spawned sub-agents; null = unlimited (legacy)
+  stepModels = null,         // role→model or step-index→model override: { explore: m1 } | [m1, m2]
+  checkpointKey = null,      // resume/save checkpoint under this key
+}) {
   const template = getTemplate(templateName)
   if (!template) return { ok: false, error: `unknown template: ${templateName}. Valid: ${TEMPLATE_NAMES.join(', ')}` }
 
+  // Resolve model per step: explicit entry wins, else role map, else main model.
+  const stepModelFor = (i, role) => {
+    if (Array.isArray(stepModels)) return stepModels[i] || model
+    if (stepModels && typeof stepModels === 'object' && stepModels[role]) return stepModels[role]
+    return model
+  }
+
   const trace = []
   let context = ''
+  let calls = 0
+  let startIndex = 0
 
-  for (let i = 0; i < template.steps.length; i++) {
+  // Resume: replay completed steps from checkpoint into trace/context instead of re-running.
+  const done = loadWorkflowCheckpoint(db, checkpointKey)
+  if (done && Array.isArray(done.trace)) {
+    startIndex = Math.min(done.completedSteps || 0, template.steps.length)
+    // A failed step's entry can linger at the end of a checkpoint trace — only
+    // replay the steps that actually completed.
+    done.trace.slice(0, startIndex).forEach(t => trace.push(t))
+    context = done.context || ''
+    if (startIndex > template.steps.length) startIndex = template.steps.length
+  }
+
+  for (let i = startIndex; i < template.steps.length; i++) {
     const step = template.steps[i]
+
+    if (maxSubagentCalls != null && calls >= maxSubagentCalls) {
+      return {
+        ok: false,
+        error: `sub-agent budget exhausted after ${calls} calls (max ${maxSubagentCalls}) before step ${i + 1} (${step.type})`,
+        trace,
+        completedSteps: i,
+        budgetExhausted: true,
+      }
+    }
+
     const stepResult = await runWorkflowStep({
-      db, provider, model,
+      db, provider, model: stepModelFor(i, step.role),
       step, stepIndex: i,
       context, signal, userRequest,
     })
+    calls++
 
     trace.push({ step: i, type: step.type, role: step.role, ...stepResult })
 
@@ -143,16 +214,22 @@ async function runWorkflow({ db, provider, model, templateName, userRequest, sig
     }
 
     if (!stepResult.success) {
+      // Persist progress so a retry can skip the steps that already succeeded.
+      saveWorkflowCheckpoint(db, checkpointKey, { completedSteps: i, trace, context })
       return {
         ok: false,
         error: `Step ${i + 1} (${step.type}) failed: ${stepResult.error}`,
         trace,
         completedSteps: i,
+        checkpoint: checkpointKey || null,
       }
     }
 
     // Feed this step's output into the next step's context
     context = `(Output from step ${i + 1} - ${step.type}): ${stepResult.output || '(no output)'}`
+
+    // Save checkpoint after each successful step — a crash mid-workflow can resume from here.
+    saveWorkflowCheckpoint(db, checkpointKey, { completedSteps: i + 1, trace, context })
   }
 
   // Build summary from all step outputs
@@ -160,7 +237,9 @@ async function runWorkflow({ db, provider, model, templateName, userRequest, sig
     const step = template.steps[i]
     return `## Step ${i + 1}: ${step.type} (${step.role})\n${t.output || '(no output)'}`  }).join('\n\n')
 
-  return { ok: true, trace, summary, template: templateName }
+  saveWorkflowCheckpoint(db, checkpointKey, { completedSteps: template.steps.length, trace, context, done: true })
+
+  return { ok: true, trace, summary, template: templateName, checkpoint: checkpointKey || null }
 }
 
 module.exports = {
@@ -170,4 +249,6 @@ module.exports = {
   listTemplates,
   runWorkflow,
   runWorkflowStep,
+  loadWorkflowCheckpoint,
+  saveWorkflowCheckpoint,
 }

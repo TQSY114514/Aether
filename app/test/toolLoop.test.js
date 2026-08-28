@@ -6,7 +6,7 @@
 // toolLoop.js requires electron transitively (via ../tools/sandbox and
 // ../logger), so we mock the 'electron' module before importing it.
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import Module from 'module'
 
 // ─── Mock electron before importing toolLoop ─────────────────────────────────
@@ -164,5 +164,72 @@ describe('LoopGuard wiring', () => {
     expect(typeof toolLoop.LoopGuard).toBe('function')
     expect(typeof toolLoop.SemanticLoopDetector).toBe('function')
     expect(typeof toolLoop.classifyToolError).toBe('function')
+  })
+})
+
+// ─── accountToolLoopUsage (/tokens usage accounting) ────────────────────────
+// Agent-loop LLM calls (arena/workflow/sub-agent/agent-mode chat) must land in
+// usage_log with source='agent' so the TokenPage shows orchestration cost —
+// previously only chat streaming ('chat') and arena:send ('arena') were logged.
+describe('accountToolLoopUsage', () => {
+  const provider = { provider_id: 'p1', provider_name: 'P1' }
+  const model = { model_name: 'gpt-test', input_price_per_1k: 0.01, output_price_per_1k: 0.03 }
+
+  it('writes a usage_log row with source=agent and computed cost', () => {
+    const db = { logUsage: vi.fn() }
+    toolLoop.accountToolLoopUsage({
+      db, sessionId: 'sess-1', provider, model,
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, prompt_tokens_details: { cached_tokens: 30 } },
+      latencyMs: 1234,
+    })
+    expect(db.logUsage).toHaveBeenCalledTimes(1)
+    const row = db.logUsage.mock.calls[0][0]
+    expect(row.source).toBe('agent')
+    expect(row.session_id).toBe('sess-1')
+    expect(row.provider_id).toBe('p1')
+    expect(row.provider_name).toBe('P1')
+    expect(row.model_name).toBe('gpt-test')
+    expect(row.prompt_tokens).toBe(100)
+    expect(row.completion_tokens).toBe(50)
+    expect(row.total_tokens).toBe(150)
+    expect(row.cache_read_tokens).toBe(30)
+    expect(row.latency_ms).toBe(1234)
+    expect(row.status).toBe(200)
+    // 70 billable input tokens × $0.01/1k + 50 × $0.03/1k = $0.0022
+    expect(row.cost).toBeCloseTo(0.0022, 6)
+  })
+
+  it('falls back to provider.id / model.name when *_id / *_name are absent', () => {
+    const db = { logUsage: vi.fn() }
+    toolLoop.accountToolLoopUsage({
+      db, sessionId: null,
+      provider: { id: 'p9', name: 'P9' },
+      model: { name: 'mini', input_price_per_1k: 1, output_price_per_1k: 1 },
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    })
+    const row = db.logUsage.mock.calls[0][0]
+    expect(row.provider_id).toBe('p9')
+    expect(row.provider_name).toBe('P9')
+    expect(row.model_name).toBe('mini')
+  })
+
+  it('no-ops without usage and never throws on db.logUsage failure', () => {
+    const db = { logUsage: vi.fn(() => { throw new Error('boom') }) }
+    expect(() => toolLoop.accountToolLoopUsage({ db, provider, model, usage: null })).not.toThrow()
+    expect(db.logUsage).not.toHaveBeenCalled()
+    const dbOk = { logUsage: vi.fn(() => { throw new Error('boom') }) }
+    expect(() => toolLoop.accountToolLoopUsage({ db: dbOk, provider, model, usage: { prompt_tokens: 1 } })).not.toThrow()
+  })
+
+  it('ignores Anthropic-style usage fields too (normalizeUsage handles both)', () => {
+    const db = { logUsage: vi.fn() }
+    toolLoop.accountToolLoopUsage({
+      db, sessionId: 'sess-2', provider, model,
+      usage: { input_tokens: 200, output_tokens: 40, cache_read_input_tokens: 100 },
+    })
+    const row = db.logUsage.mock.calls[0][0]
+    expect(row.prompt_tokens).toBe(200)
+    expect(row.completion_tokens).toBe(40)
+    expect(row.cache_read_tokens).toBe(100)
   })
 })

@@ -57,6 +57,7 @@ async function generatePlan(provider, model, userMessage, signal, options = {}) 
     return {
       id: 'plan_' + Date.now(),
       description: String(parsed.description || '').slice(0, 80),
+      usage: result && result.usage,
       tasks: parsed.tasks.map((t, i) => ({
         id: String(t.id || `t${i + 1}`),
         description: String(t.description || '').trim(),

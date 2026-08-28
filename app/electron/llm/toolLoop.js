@@ -14,7 +14,8 @@
 // multi-dimensional IterationBudget (iterations, tokens, time, errors).
 // ───────────────────────────────────────────────────────────────────────────
 
-const { completeChatMessage } = require('./providerAdapter')
+const { completeChatMessage, normalizeUsage } = require('./providerAdapter')
+const { computeCost } = require('../utils/cost')
 const { safeParseToolCallArgs, validateToolArgs } = require('./toolArgs')
 const { applyMiddleware, enrichWithSummary } = require('./toolResultMiddleware')
 const { LoopGuard } = require('./loopGuard') // P0: sliding-window no-progress detector
@@ -269,6 +270,38 @@ function planToTodos(plan) {
     status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending',
     activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,
   }))
+}
+
+// ─── Usage accounting (TokenPage /tokens) ─────────────────────────────────
+// Every LLM call inside the tool loop (agent-mode chat, sub-agents, arena
+// orchestration, background tasks) writes a row to usage_log with source='agent'.
+// chat streaming writes source='chat' in chat-send.handler — the two paths are
+// mutually exclusive, so no double counting. Mirrors Aider /tokens / omp-stats.
+function accountToolLoopUsage({ db, sessionId, provider, model, usage, latencyMs, status = 200 }) {
+  try {
+    if (!db || !usage) return
+    const u = normalizeUsage(usage)
+    if (!u) return
+    const cost = typeof computeCost === 'function' ? computeCost(model, u) : 0
+    db.logUsage({
+      session_id: sessionId || null,
+      provider_id: (provider && (provider.provider_id || provider.id)) || (model && model.provider_id) || null,
+      provider_name: (provider && (provider.provider_name || provider.name)) || (model && model.provider_name) || null,
+      model_name: (model && model.model_name) || (model && model.name) || null,
+      prompt_tokens: u.prompt_tokens || 0,
+      completion_tokens: u.completion_tokens || 0,
+      total_tokens: u.total_tokens || 0,
+      cache_read_tokens: u.cache_read_tokens || 0,
+      cache_creation_tokens: u.cache_creation_tokens || 0,
+      cost,
+      latency_ms: latencyMs || null,
+      status,
+      source: 'agent',
+    })
+  } catch (e) {
+    // Accounting is best-effort — never break the agent loop for a stats write.
+    try { log.warn('accountToolLoopUsage failed:', e && e.message) } catch {}
+  }
 }
 
 // Main entry: run a tool-calling loop with optional planning support.
@@ -546,6 +579,7 @@ Reply in this format:
         signal,
         options: { max_tokens: 512, ...options },
       })
+      accountToolLoopUsage({ db, sessionId, provider, model, usage: result && result.usage, status: 200 })
       const text = result?.content || null
 
       return text
@@ -559,6 +593,7 @@ Reply in this format:
   if (lastUserMsg && planning.isComplexRequest(lastUserMsg.content, messages.length)) {
     try {
       plan = await planning.generatePlan(provider, model, lastUserMsg.content, signal, options)
+      accountToolLoopUsage({ db, sessionId, provider, model, usage: plan && plan.usage, status: 200 })
       if (plan && plan.tasks.length > 1) {
         planningMode = true
         planToolsPayload = planning.planToolsPayload()
@@ -695,6 +730,10 @@ Reply in this format:
         usageAccum.input += Number(msg.usage.prompt_tokens || msg.usage.input_tokens || 0)
         usageAccum.output += Number(msg.usage.completion_tokens || msg.usage.output_tokens || 0)
         try { onUsage?.({ ...usageAccum }) } catch {}
+      }
+      // 用量统计 (/tokens): 每次主循环 LLM 调用计入 usage_log, TokenPage 可见。
+      if (msg && msg.usage) {
+        accountToolLoopUsage({ db, sessionId, provider, model, usage: msg.usage, latencyMs: Date.now() - loopStart })
       }
     } catch (e) {
       try { onThinkingEnd?.() } catch {}
@@ -1197,6 +1236,7 @@ Reply in this format:
             try { onThinkingDelta?.(finalMsg.reasoning) } catch {}
           }
           try { onThinkingEnd?.() } catch {}
+          accountToolLoopUsage({ db, sessionId, provider, model, usage: finalMsg && finalMsg.usage, status: 200 })
           if (finalMsg?.content) return finalMsg.content
         } catch {}
         return summary
@@ -1267,6 +1307,7 @@ Reply in this format:
     // cannot be answered with yet another tool call (CodeRabbit follow-up).
     const { tools: _graceTools, tool_choice: _graceToolChoice, ...graceOptions } = options
     const g = await completeChatMessage({ provider, model, messages: graceConvo, signal, options: graceOptions })
+    accountToolLoopUsage({ db, sessionId, provider, model, usage: g && g.usage, status: 200 })
     if (g && g.content && String(g.content).trim()) {
       graceNote = `\n\n---\n📋 收尾总结：\n${String(g.content).trim()}`
     }
@@ -1328,6 +1369,7 @@ function requestPermissionWithTimeout(requestPermission, payload, timeoutMs = PE
 module.exports = {
   runToolLoop,
   planToTodos,
+  accountToolLoopUsage,
   IterationBudget,
   isComplexRequest: planning.isComplexRequest,
   generatePlan: planning.generatePlan,
