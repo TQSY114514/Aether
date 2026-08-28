@@ -388,20 +388,6 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     } catch {}
   }
 
-  // Capability axis policies（评审 P0-2）: 从 settings 读取持久化配置
-  //   capability.filesystem / capability.shell / capability.network
-  //   = 'allow' | 'ask' | 'deny'（缺省不设置 → 轴策略不生效, 纯 5 档行为）。
-  try {
-    if (db && typeof db.getSetting === 'function') {
-      const axes = {}
-      for (const axis of ['filesystem', 'shell', 'network']) {
-        const v = db.getSetting(`capability.${axis}`)
-        if (v === 'allow' || v === 'ask' || v === 'deny') axes[axis] = v
-      }
-      if (Object.keys(axes).length) permissionPolicy.withAxisPolicies(axes)
-    }
-  } catch {}
-
   let totalChars = 0
   let lastSig = ''
   let sigRepeat = 0
@@ -879,10 +865,10 @@ Reply in this format:
             } catch {}
           }
 
-          // ── C0: capability 轴策略 ask 预检（P0-2 人话透传）────────────────
-          // 显式配置了 capability.<axis>='ask' 且本工具落在该轴上 → 即使非
-          // dangerous 也应走同一确认通道；原因串与 permissions.js 轴块保持
-          // 同源措辞，供 GUI 徽章 / TUI 行做 i18n 人话映射。
+          // ── C0: capability 轴策略运行时强制执行（P0-2）──────────────────
+          // 每次 dispatch 都从 settings 重读并刷新完整策略，使安全页在当前
+          // main process 中写入的 deny/ask/allow 立即生效。ask 还需预先进入
+          // GUI/TUI 确认通道；deny/allow 由下方 PermissionPolicy 终审。
           let axisAskReason = null
           if (!entry.error && db && typeof db.getSetting === 'function') {
             try {
@@ -892,11 +878,15 @@ Reply in this format:
                 const v = db.getSetting(`capability.${axis}`)
                 if (v === 'allow' || v === 'ask' || v === 'deny') axes[axis] = v
               }
+              permissionPolicy.withAxisPolicies(axes)
               const ax = decideAxisPolicy(fn.name, axes)
               if (ax.matched && ax.policy === 'ask') {
                 axisAskReason = `capability policy: ${ax.axis} axis requires approval`
               }
-            } catch {}
+            } catch (e) {
+              entry.error = `capability policy error: ${e.message}`
+              entry.failure_kind = 'permission_denied'
+            }
           }
 
           // ── C1: ask 模式 dangerous 工具的用户确认门（真正接线）───────────

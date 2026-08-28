@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from 'vitest'
 import { axisFor, decideAxisPolicy, normalizeAxisPolicies, AXES, POLICY, TOOL_AXIS } from '../electron/llm/capabilityPolicy'
-import { PermissionPolicy, PermissionMode, PermissionOutcome, PermissionPromptDecision } from '../electron/llm/permissions'
+import { PermissionPolicy, PermissionMode, PermissionOutcome, PermissionOverride, PermissionPromptDecision } from '../electron/llm/permissions'
 
 describe('axisFor (tool → axis mapping)', () => {
   it('maps representative tools to the three axes', () => {
@@ -72,6 +72,17 @@ describe('PermissionPolicy + axis policies integration', () => {
     expect(out.reason).toContain('capability policy')
   })
 
+  it('deny axis cannot be bypassed by a hook allow override', () => {
+    const p = new PermissionPolicy(PermissionMode.Allow)
+      .withAxisPolicies({ shell: 'deny' })
+    const out = p.authorizeWithContext(
+      'run_command',
+      '{"command":"npm test"}',
+      { permissionOverride: PermissionOverride.Allow },
+    )
+    expect(out.allowed).toBe(false)
+  })
+
   it('allow axis permits even in a stricter mode', () => {
     const p = new PermissionPolicy(PermissionMode.ReadOnly)
       .withAxisPolicies({ filesystem: 'allow' })
@@ -83,10 +94,35 @@ describe('PermissionPolicy + axis policies integration', () => {
   it('ask axis routes to the prompter', () => {
     const p = new PermissionPolicy(PermissionMode.WorkspaceWrite)
       .withAxisPolicies({ network: 'ask' })
-    const prompter = { decide: () => PermissionPromptDecision.Allow }
+    let request = null
+    const prompter = { decide: (r) => { request = r; return PermissionPromptDecision.Allow } }
     expect(p.authorize('web_fetch', '{"url":"http://x"}', prompter).allowed).toBe(true)
+    expect(request.tool_name).toBe('web_fetch')
+    expect(request.reason).toContain('network axis requires approval')
     const denyPrompter = { decide: () => PermissionPromptDecision.Deny }
     expect(p.authorize('web_fetch', '{"url":"http://x"}', denyPrompter).allowed).toBe(false)
+  })
+
+  it('ask axis still prompts when a hook requests allow', () => {
+    const p = new PermissionPolicy(PermissionMode.Allow)
+      .withAxisPolicies({ network: 'ask' })
+    let requests = 0
+    const prompter = { decide: () => { requests++; return PermissionPromptDecision.Deny } }
+    const out = p.authorizeWithContext(
+      'web_fetch',
+      '{"url":"http://x"}',
+      { permissionOverride: PermissionOverride.Allow },
+      prompter,
+    )
+    expect(requests).toBe(1)
+    expect(out.allowed).toBe(false)
+  })
+
+  it('allow axis retains higher-priority deny safeguards', () => {
+    const p = new PermissionPolicy(PermissionMode.Allow)
+      .withPermissionRules({ allow: [], ask: [], deny: ['write_file(*)'], denied_tools: [] })
+      .withAxisPolicies({ filesystem: 'allow' })
+    expect(p.authorize('write_file', '{"path":"x"}').allowed).toBe(false)
   })
 
   it('no axis policies configured → 5-tier behavior unchanged', () => {
