@@ -141,7 +141,9 @@ export default function ChatPage() {
             </Tooltip>
           </div>
         </div>
-        <div className="flex-1">
+        {/* 空态容器:flex 让 EmptyState 的 flex-1 生效并在内部居中;
+            min-h-0 + overflow-hidden 防止内容超高时撑出滚动条(改为裁剪) */}
+        <div className="flex-1 min-h-0 flex overflow-hidden">
           <EmptyState />
         </div>
         <ChatInput />

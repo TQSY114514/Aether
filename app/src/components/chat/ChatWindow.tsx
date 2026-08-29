@@ -6,7 +6,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
-import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, Activity } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
@@ -441,11 +441,34 @@ export default function ChatWindow() {
   // is live (only fires after the 200ms debounce).
   useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
 
+  // Token & activity stats for the current session (/tokens HUD)
+  const sessionStats = useMemo(() => {
+    let totalTokens = 0
+    let totalLatency = 0
+    let modelSet = new Set<string>()
+    for (const m of messages) {
+      if (m.token_count) totalTokens += m.token_count
+      if (m.latency_ms) totalLatency += m.latency_ms
+      if (m.model_used) modelSet.add(m.model_used)
+    }
+    return {
+      tokens: totalTokens,
+      messagesCount: messages.length,
+      latency: totalLatency,
+      models: Array.from(modelSet),
+    }
+  }, [messages])
+
+  // Empty chat: render EmptyState centered inside a non-scrolling flex box.
+  // When there ARE messages the same container is overflow-y-auto (虚拟列表滚动);
+  // keeping the empty state inside that scroller is what let it scroll before.
+  const isEmptyChat = messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0
+
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ position: "relative" }}>
-      {/* Search bar */}
-      <div className="px-4 py-1.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
+      {/* Search & Token HUD bar */}
+      <div className="px-4 py-1.5 shrink-0 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
           <input value={searchQuery} onChange={handleSearchChange}
             placeholder={t('chat.search_placeholder')} autoComplete="off"
@@ -469,6 +492,18 @@ export default function ChatWindow() {
             </>
           )}
         </div>
+        {sessionStats.messagesCount > 0 && (
+          <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-mono border"
+            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            title={`当前会话累计：${sessionStats.tokens.toLocaleString()} Tokens · ${sessionStats.messagesCount} 条消息`}>
+            <Activity size={11} className="text-[var(--accent)]" />
+            <span className="tabular-nums font-medium">
+              {sessionStats.tokens > 1000 ? `${(sessionStats.tokens / 1000).toFixed(1)}k` : sessionStats.tokens} tok
+            </span>
+            <span className="opacity-40">|</span>
+            <span className="tabular-nums">{sessionStats.messagesCount} msgs</span>
+          </div>
+        )}
       </div>
 
       {/* Streaming status bar */}
@@ -481,9 +516,9 @@ export default function ChatWindow() {
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className="scroll-bounce flex-1 overflow-y-auto px-4 py-6">
+      <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'flex-1 flex items-center justify-center overflow-hidden px-4 py-6' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6'}>
         <div className="max-w-3xl mx-auto chat-gap">
-          {messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0 && (
+          {isEmptyChat && (
             <EmptyState />
           )}
 
