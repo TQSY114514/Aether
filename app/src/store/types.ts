@@ -277,6 +277,7 @@ export interface AppState {
   setLooping: (sessionId: number, looping: boolean) => void
   injectMessage: (content: string) => void
   isInjectedMsg: (id: number) => boolean
+  undoLastAction: () => Promise<{ ok: boolean; message?: string; undoneCommit?: string | null; error?: string }>
   // Feature A: background tasks. In-memory mirror of the main-process
   // TaskManager (which is itself not persisted — see the plan's 明确不做 #2),
   // hydrated by TaskPanel via `task.list()` on mount.

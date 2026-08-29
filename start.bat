@@ -46,6 +46,17 @@ if %ERRORLEVEL% neq 0 (
   pause & exit /b 1
 )
 
+:: Ensure Windows icons and AppUserModelID shortcut exist
+if not exist "resources\icon.ico" (
+    echo [2.5] Generating icons and shortcuts...
+    call node build-icons.js
+)
+
 echo.
 echo   Starting Aether...
 call npx electron .
+if %ERRORLEVEL% neq 0 (
+  echo.
+  echo [!] Aether exited with code %ERRORLEVEL%
+  pause
+)

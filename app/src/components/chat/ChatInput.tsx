@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, ListChecks } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, Zap } from 'lucide-react'
 import AgentActionHUD from './AgentActionHUD'
 import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
@@ -50,17 +50,11 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
       window.alert(`压缩失败：${e.message || e}`)
     }
   } },
-  { id: 'undo', name: '撤销提交', description: '按最近一次检查点恢复文件并生成撤销提交', action: async () => {
+  { id: 'undo', name: '撤销修改', description: '按最近一次检查点恢复文件并生成撤销提交', action: async () => {
     try {
-      const cwd = await window.electronAPI.agent.getWorkspace()
-      if (!cwd) { window.alert('未配置工作区，无法撤销提交'); return }
-      const confirmed = window.confirm('将按最近一次检查点（checkpoint）快照恢复被修改的文件，并生成一条撤销提交（不做 git reset --hard，不丢弃其他未提交修改）。若本仓库没有检查点记录则拒绝执行。确定继续吗？')
-      if (!confirmed) return
-      const res = await window.electronAPI.git.undo(cwd)
-      if (res.success) {
-        window.alert(`✅ 已按检查点恢复并生成撤销提交：${res.undoneCommit || '未知'}`)
-      } else {
-        window.alert(`❌ 撤销失败：${res.error || res.message || '未知错误'}`)
+      const res = await useStore.getState().undoLastAction()
+      if (!res.ok) {
+        window.alert(`❌ 撤销失败：${res.error || '未知错误'}`)
       }
     } catch { window.alert('❌ 撤销失败') }
   } },
@@ -282,18 +276,23 @@ export default function ChatInput() {
   const handleSubmit = async (overrides?: { agentMode?: AgentMode }) => {
     const content = input.trim()
     if (!content && pending.length === 0 && snippets.length === 0) return
+
+    // Intercept /undo slash command directly
+    if (content === '/undo' || content.startsWith('/undo ')) {
+      setInput('')
+      try { localStorage.removeItem(`draft:${currentSessionId ?? 'new'}`) } catch {}
+      await useStore.getState().undoLastAction()
+      return
+    }
+
     if (!overrides || overrides.agentMode !== 'plan') {
       if (isArenaRunning) {
         if (content) { enqueueMessage(content); setInput('') }
         return
       }
       if (isStreaming) {
-        const looping = useStore.getState().loopingSessions.has(currentSessionId ?? -1)
-        if (looping && content) {
+        if (content) {
           useStore.getState().injectMessage(content)
-          setInput('')
-        } else if (content) {
-          enqueueMessage(content)
           setInput('')
         }
         return
@@ -562,25 +561,23 @@ export default function ChatInput() {
             <Paperclip size={16} className="text-gray-400" />
           </button>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)} onKeyDown={handleKeyDown} onPaste={handlePaste}
-            placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
+            placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isStreaming ? '⚡ 输入中途纠偏指令 (Steer) / 按回车插话...' : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
-            disabled={isArenaRunning || (isStreaming && !isLooping)} />
-          {isArenaRunning || isStreaming ? (
+            disabled={isArenaRunning} />
+          {isArenaRunning || (isStreaming && !input.trim()) ? (
             <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
               <Square size={14} />
             </button>
+          ) : isStreaming && input.trim() ? (
+            <button onClick={() => handleSubmit()}
+              className="shrink-0 p-2.5 rounded-xl bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-sm animate-pulse" title="⚡ 插入纠偏 (Steer)" aria-label="插入纠偏">
+              <Zap size={14} />
+            </button>
           ) : (
-            <>
-              <button onClick={() => handleSubmit()} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-                className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
-                <Send size={14} />
-              </button>
-              <button onClick={() => handleSubmit({ agentMode: 'plan' })} disabled={!input.trim() && pending.length === 0 && snippets.length === 0}
-                className={cn('shrink-0 p-2.5 rounded-xl border transition-colors hover:opacity-90', 'disabled:opacity-30')}
-                style={{ borderColor: '#3b82f680', color: '#3b82f6' }} title={t('chat.plan_first', '先规划：只读任务拆解，不改文件')} aria-label={t('chat.plan_first', '先规划')}>
-                <ListChecks size={14} />
-              </button>
-            </>
+            <button onClick={() => handleSubmit()} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
+              className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
+              <Send size={14} />
+            </button>
           )}
         </div>
 

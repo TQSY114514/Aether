@@ -408,6 +408,39 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
 
   isInjectedMsg: (id) => _injectedMsgIds.has(id),
 
+  undoLastAction: async () => {
+    const { currentSessionId } = get()
+    try {
+      const cwd = await window.electronAPI.agent.getWorkspace()
+      if (!cwd) return { ok: false, error: '未配置工作区' }
+      const res = await window.electronAPI.git.undo(cwd)
+      if (res.success) {
+        if (currentSessionId) {
+          const undoMsg: Message = {
+            id: Date.now(),
+            session_id: currentSessionId,
+            role: "assistant",
+            content: `⏪ **已成功撤销上一次 Agent 修改**\n\n- **还原状态**：${res.message || '文件已按检查点快照恢复'}\n${res.undoneCommit ? `- **撤销提交**：\`${res.undoneCommit}\`` : ''}`,
+            model_used: "system",
+            provider_used: null,
+            token_count: null,
+            latency_ms: null,
+            status: "success",
+            error_message: null,
+            created_at: new Date().toISOString(),
+            attachment: null,
+          }
+          set((s) => ({ messages: [...s.messages, undoMsg] }))
+        }
+        return { ok: true, message: res.message, undoneCommit: res.undoneCommit }
+      } else {
+        return { ok: false, error: res.error || res.message }
+      }
+    } catch (e: any) {
+      return { ok: false, error: e?.message || String(e) }
+    }
+  },
+
   resolvePermission: (reqId, allowed, remember: boolean | 'session' | 'remember' = false) => {
     // P0: 'session'（本会话内总是允许）与 'remember' 都进主进程的会话级
     // allow-rules 库（该库本就随会话消亡）；此前 'session' 被吞成 false，

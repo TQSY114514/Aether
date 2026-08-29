@@ -5,6 +5,16 @@ const fs = require('fs')
 const db = require('./database')
 const log = require('./logger')
 
+// ── App Identity & Storage Path ──────────────────────────────────────────
+// Hard rule (AGENTS.md): All user DB, sessions, keys live in %APPDATA%/aetherai/.
+app.name = 'aetherai'
+if (typeof app.setPath === 'function' && typeof app.getPath === 'function') {
+  try { app.setPath('userData', path.join(app.getPath('appData'), 'aetherai')) } catch {}
+}
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.aetherai.app')
+}
+
 // ── GPU acceleration flags ────────────────────────────────────────────────
 // Enable GPU rasterization and bypass the hardware acceleration blocklist
 // for smoother rendering on machines with older/additional GPUs.
@@ -169,24 +179,24 @@ function isInternalNavUrl(url) {
 }
 
 function createWindow() {
-  const icoPath = path.join(__dirname, '..', 'resources', 'icon.ico')
-  const pngPath = path.join(__dirname, '..', 'resources', 'icon.png')
+  // Packaged: resources are copied next to app.asar under
+  // {resourcesPath}/resources via extraResources; in dev they live at
+  // {appRoot}/resources. Inside asar, __dirname stays virtual so `..` can
+  // NOT escape the archive — always resolve real paths from
+  // process.resourcesPath / app root.
+  const resBase = (app.isPackaged && process.resourcesPath)
+    ? path.join(process.resourcesPath, 'resources')
+    : path.join(__dirname, '..', 'resources')
+  const icoPath = path.join(resBase, 'icon.ico')
+  const pngPath = path.join(resBase, 'icon.png')
   const iconPath = (process.platform === 'win32' && fs.existsSync(icoPath)) ? icoPath : pngPath
-
-  let appIcon = undefined
-  if (fs.existsSync(iconPath)) {
-    try {
-      const img = nativeImage.createFromPath(iconPath)
-      if (img && !img.isEmpty()) appIcon = img
-    } catch {}
-  }
 
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    icon: appIcon || iconPath,
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -198,8 +208,15 @@ function createWindow() {
     show: false,  // hide until page is ready — no blank flash on startup
   })
 
-  if (appIcon && process.platform === 'win32') {
-    try { mainWindow.setIcon(appIcon) } catch {}
+  if (fs.existsSync(iconPath)) {
+    try {
+      const img = nativeImage.createFromPath(iconPath)
+      if (img && !img.isEmpty()) {
+        mainWindow.setIcon(img)
+      } else if (process.platform === 'win32') {
+        mainWindow.setIcon(iconPath)
+      }
+    } catch {}
   }
 
   // M4 (2026-08 audit): the renderer never opens child windows and never
@@ -265,7 +282,10 @@ function setupGlobalShortcut() {
 function createTray() {
   if (tray) return
   try {
-    const iconPath = path.join(__dirname, '..', 'resources', 'icon.png')
+    const resBase = (app.isPackaged && process.resourcesPath)
+      ? path.join(process.resourcesPath, 'resources')
+      : path.join(__dirname, '..', 'resources')
+    const iconPath = path.join(resBase, 'icon.png')
     let trayImg = null
     if (fs.existsSync(iconPath)) {
       try { trayImg = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 }) } catch {}
@@ -411,14 +431,6 @@ function setupIpcHandlers() {
   if (chatState && chatState.handleChatComplete) {
     localGateway.registerHandler('chat:complete', chatState.handleChatComplete)
   }
-}
-
-// ── Windows AppUserModelID ────────────────────────────────────────────────
-// Without this, the taskbar/notification grouping falls back to electron.exe's
-// default icon (dev mode shows the Electron logo instead of Aether's icon).
-// Must be set before any window is created; matches electron-builder appId.
-if (process.platform === 'win32') {
-  app.setAppUserModelId('com.aetherai.app')
 }
 
 app.whenReady().then(async () => {

@@ -61,7 +61,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
   const showEffort = thinkingEnabled
 
   return (
-    <div className="flex-1 flex items-center justify-center px-6 py-12">
+    <div className="flex-1 flex items-center justify-center px-6 py-6">
       <div className="w-full max-w-xl text-center">
         {/* Hero icon with pulse animation */}
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 relative animate-pulse-glow"

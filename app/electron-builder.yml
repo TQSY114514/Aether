@@ -4,6 +4,17 @@ copyright: Copyright © 2026
 directories:
   output: release
   buildResources: resources
+# Skip native-module rebuild: better-sqlite3 in node_modules is already
+# compiled for Electron 43 (dev mode uses it directly), and rebuild would
+# require VS Build Tools (node-gyp) which dev machines may not have.
+npmRebuild: false
+# buildResources (resources/) is auto-excluded from asar — copy it outside
+# the app bundle so runtime paths like ../resources/icon.ico resolve on disk.
+extraResources:
+  - from: resources
+    to: resources
+    filter:
+      - "**/*"
 files:
   - electron/**/*
   - dist/**/*
@@ -28,7 +39,7 @@ win:
   target:
     - portable
     - nsis
-  icon: resources/icon.png
+  icon: resources/icon.ico
 
 linux:
   icon: resources
