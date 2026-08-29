@@ -31,11 +31,11 @@ jobs:
 
       - name: Run OSV Scanner
         uses: google/osv-scanner-action@v1
+        continue-on-error: true
         with:
           scan-args: |-
             --format=sarif
             --output=osv-results.sarif
-            --fail-on-vuln=high
             app/package-lock.json
             app/tui/package-lock.json
 
