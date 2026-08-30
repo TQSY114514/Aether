@@ -338,9 +338,16 @@ function initDatabase() {
   // 首次启动即清零，无需再手动点"记忆去重"。个人应用规模的全表 GROUP BY
   // 开销可忽略；函数声明在模块内提升，运行期调用安全。
   try { mergeDuplicateMemories() } catch {}
-  // H5 记忆来源标注：user/assistant/external/review — autoMemory 写此列，
-  // 注入时 external 来源以 untrusted 包裹降权。
   try { db.exec("ALTER TABLE memory ADD COLUMN origin TEXT DEFAULT 'user'") } catch {}
+
+  // P0-4: Task / Checklist Runtime - persistent session plans
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS session_plan (
+      session_id INTEGER PRIMARY KEY,
+      plan_json TEXT NOT NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`)
+  } catch {}
 
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges("from")') } catch {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_kg_edges_to ON kg_edges("to")') } catch {}
@@ -646,6 +653,19 @@ function getAllSettings() {
   const result = {}
   rows.forEach(r => result[r.key] = r.value)
   return result
+}
+function resetSettings() {
+  db.prepare('DELETE FROM settings').run()
+}
+function importSettings(settingsObj) {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM settings').run()
+    const stmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+    for (const [k, v] of Object.entries(settingsObj)) {
+      stmt.run(k, v)
+    }
+  })
+  tx()
 }
 
 // ===== Agent Task CRUD (persistent background tasks) =====
@@ -1240,6 +1260,19 @@ function deleteRepoIndexCache(workspace) {
   try { db.prepare('DELETE FROM repo_index_cache WHERE workspace=?').run(workspace) } catch {}
 }
 
+// ===== Session Plan (Task / Checklist Runtime) =====
+function getSessionPlan(sessionId) {
+  const row = db.prepare('SELECT plan_json FROM session_plan WHERE session_id = ?').get(sessionId)
+  if (!row) return null
+  try { return JSON.parse(row.plan_json) } catch { return null }
+}
+function saveSessionPlan(sessionId, planObj) {
+  db.prepare('INSERT INTO session_plan (session_id, plan_json, updated_at) VALUES (?, ?, datetime("now")) ON CONFLICT(session_id) DO UPDATE SET plan_json = excluded.plan_json, updated_at = excluded.updated_at').run(sessionId, JSON.stringify(planObj))
+}
+function clearSessionPlan(sessionId) {
+  db.prepare('DELETE FROM session_plan WHERE session_id = ?').run(sessionId)
+}
+
 // ===== Skill Lifecycle =====
 function getSkillUsage() { try { return db.prepare('SELECT * FROM skill_usage ORDER BY use_count DESC').all() } catch { return [] } }
 function updateSkillState(name, state) {
@@ -1294,9 +1327,10 @@ module.exports = {
   getPersonas, getPersona, addPersona, updatePersona, deletePersona,
   getSessions, getSession, createSession, pruneEmptySessions, renameSession, pinSession, deleteSession, touchSession, updateSession,
   getMessages, addMessage, updateMessage,
-  getSetting, setSetting, getAllSettings,
+  getSetting, setSetting, getAllSettings, resetSettings, importSettings,
   getScheduledTasks, addScheduledTask, getScheduledTask, deleteScheduledTask, markScheduledTaskRun,
   createAgentTask, getAgentTask, updateAgentTask, listAgentTasks,
+  getSessionPlan, saveSessionPlan, clearSessionPlan,
   getModelScores, getModelUsageMetrics, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute,
 listArenaBenchmarks, saveArenaBenchmark, deleteArenaBenchmark, updateArenaBenchmarkResults,
 saveDatabase, flushDatabase,
@@ -1321,8 +1355,9 @@ saveDatabase, flushDatabase,
   addCredential: function(pid, key, label) { return require('./llm/credentialPool').addCredential(pid, key, label) },
   removeCredential: function(cid) { return require('./llm/credentialPool').removeCredential(cid) },
   prepare: (...args) => db ? db.prepare(...args) : null,
-  run: (...args) => { if (db) db.prepare(args[0]).run(...args.slice(1)) },
+  run: (...args) => { if (db) return db.prepare(args[0]).run(...args.slice(1)) },
   exec: (...args) => db ? db.exec(...args) : [],
+  transaction: (fn) => db ? db.transaction(fn) : null,
   allRows: (sql, params = []) => { if (!db) return []; return db.prepare(sql).all(...params) },
   encryptKey, decryptKey, isPlaintextKey, migrateLegacyPlaintextKeys,
 }

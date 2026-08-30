@@ -98,8 +98,9 @@ const { registerTaskHandlers } = require('./ipc/task.handler')
 const { registerCronHandlers } = require('./ipc/cron.handler')
 const { registerFlagsHandlers } = require('./ipc/flags.handler')
 const { registerLearningHandlers } = require('./ipc/learning.handler')
+const { registerMarketHandlers } = require('./ipc/market.handler')
 const { initScheduler } = require('./cron/scheduler')
-const { runEvolutionCycle } = require('./evolution/gep')
+
 const mcpManager = require('./mcp/manager')
 const { setWorkspaceRoot } = require('./tools/sandbox')
 const localGateway = require('./llm/localGateway')
@@ -347,6 +348,7 @@ function setupIpcHandlers() {
   registerCronHandlers(ipcMain, db)
   registerFlagsHandlers(ipcMain, db)
   registerLearningHandlers(ipcMain, db)
+  registerMarketHandlers(ipcMain, db, mcpManager)
 
   // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──
   try {
@@ -373,7 +375,7 @@ function setupIpcHandlers() {
           if (parsed && Array.isArray(parsed.toolCalls)) trail = parsed.toolCalls
         } catch {}
       }
-      const result = runEvolutionCycle(db, trail, strategy || 'balanced')
+      const result = require('./evolution/gep').runEvolutionCycle(db, trail, strategy || 'balanced')
       // Manual cycles also feed forward: store the generated guidance as the
       // global fallback so subsequent agent turns inject it (session-scoped
       // guidance would be preferred when the manual run targets a session).

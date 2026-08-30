@@ -10,6 +10,10 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:create', (_e, data) => db.createSession(data))
   ipcMain.handle('session:rename', (_e, id, title) => db.renameSession(id, title))
   ipcMain.handle('session:pin', (_e, id, pinned) => db.pinSession(id, pinned))
+  ipcMain.handle('session:fork', (_e, { sessionId, title }) => {
+    const row = db.createSession({ title: title || 'fork', parentSessionId: sessionId })
+    return { id: row.lastInsertRowid || row.id }
+  })
   ipcMain.handle('session:delete', (_e, id) => {
     try { db.deleteSession(id) } catch (e) { log.warn('session:delete db error:', e) }
     try { clearAllowRules(id) } catch {}

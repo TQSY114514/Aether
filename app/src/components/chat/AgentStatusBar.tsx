@@ -61,11 +61,13 @@ export default function AgentStatusBar({ sessionId }: { sessionId: number | null
     }
 
     if (lastTool) status = 'tool_running'
+    const turnUsage = useStore.getState().turnUsageBySession[sessionId]
+    const tokensUsed = turnUsage ? (turnUsage.inputTokens + turnUsage.outputTokens) : 0
 
     setRuntime({
       iteration: totalCalls,
       maxIterations: 0, // unknown from renderer side
-      tokensUsed: 0,
+      tokensUsed,
       currentTool: lastTool,
       status,
       budgetNote,
@@ -100,6 +102,11 @@ export default function AgentStatusBar({ sessionId }: { sessionId: number | null
         {currentTool && (
           <span className="truncate max-w-[120px]" style={{ color: 'var(--text-muted)' }}>
             · {currentTool}
+          </span>
+        )}
+        {runtime.tokensUsed > 0 && (
+          <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
+            · {runtime.tokensUsed} tokens
           </span>
         )}
         {budgetNote && (

@@ -95,6 +95,11 @@ export const createUsageSlice: StateCreator<AppState, [], [], Partial<AppState>>
         }
         // Store-level toast (supports 'warning'; useUI().toast does not).
         get().triggerToast(line, 'warning')
+        
+        // ROADMAP P2 #6: 达到预算上限停止 Agent
+        if (typeof get().stopGeneration === 'function') {
+          get().stopGeneration().catch(() => {})
+        }
       }
     }
   },

@@ -34,24 +34,117 @@ function adapterFor(provider) {
   return DISPATCH[provider.api_format] || DISPATCH.openai
 }
 
-// Stream a chat completion. Yields content deltas (strings) as they arrive.
-// The caller is responsible for AbortController lifecycle; pass its signal.
-async function* streamChat({ provider, model, messages, signal, options = {} }) {
-  yield* (adapterFor(provider).streamChatWithRetry || adapterFor(provider).streamChat)({ provider, model, messages, signal, options })
+const featureFlags = require('../featureFlags')
+
+function getAlternateProviders(db, modelName) {
+  if (!db) return []
+  try {
+    return db.prepare(`
+      SELECT p.*, m.id as model_id 
+      FROM provider p 
+      JOIN model m ON p.id = m.provider_id 
+      WHERE m.model_name = ? AND p.enabled = 1
+    `).all(modelName)
+  } catch (e) {
+    return []
+  }
 }
 
-// Non-streaming completion. Returns the full content string.
-async function completeChat({ provider, model, messages, signal, options = {} }) {
-  return adapterFor(provider).completeChatWithRetry
-    ? adapterFor(provider).completeChatWithRetry({ provider, model, messages, signal, options })
-    : adapterFor(provider).completeChat({ provider, model, messages, signal, options })
+const smartPoolCursors = new Map()
+
+async function executeWithResilience(methodName, { provider, model, messages, signal, options = {} }) {
+  const db = options.db
+  let targetProvider = provider
+  let targetModel = model
+  let triedProviders = new Set([provider.id])
+
+  if (db && featureFlags.isEnabled(db, 'llm.smartPool')) {
+    const alternates = getAlternateProviders(db, model.model_name)
+    if (alternates.length > 0) {
+      let cursor = smartPoolCursors.get(model.model_name) || 0
+      targetProvider = alternates[cursor % alternates.length]
+      targetModel = { ...model, id: targetProvider.model_id, provider_id: targetProvider.id }
+      smartPoolCursors.set(model.model_name, cursor + 1)
+      triedProviders.clear()
+      triedProviders.add(targetProvider.id)
+    }
+  }
+
+  const run = async (p, m) => {
+    const adapter = adapterFor(p)
+    const fn = adapter[`${methodName}WithRetry`] || adapter[methodName]
+    return fn({ provider: p, model: m, messages, signal, options })
+  }
+
+  try {
+    if (methodName === 'streamChat') {
+      return await wrapStreamFallback(run, targetProvider, targetModel, messages, signal, options, triedProviders)
+    } else {
+      return await run(targetProvider, targetModel)
+    }
+  } catch (err) {
+    if (db && featureFlags.isEnabled(db, 'llm.autoFallback')) {
+      const status = err.status || err.statusCode
+      if (status === 429 || status >= 500) {
+        const alternates = getAlternateProviders(db, model.model_name).filter(p => !triedProviders.has(p.id))
+        if (alternates.length > 0) {
+          const fallbackProvider = alternates[0]
+          const fallbackModel = { ...model, id: fallbackProvider.model_id, provider_id: fallbackProvider.id }
+          return await run(fallbackProvider, fallbackModel)
+        }
+      }
+    }
+    throw err
+  }
 }
 
-// Non-streaming completion returning the full assistant message object.
-async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
-  return adapterFor(provider).completeChatMessageWithRetry
-    ? adapterFor(provider).completeChatMessageWithRetry({ provider, model, messages, signal, options })
-    : adapterFor(provider).completeChatMessage({ provider, model, messages, signal, options })
+async function* wrapStreamFallback(run, p, m, messages, signal, options, triedProviders) {
+  const db = options.db
+  let iterator
+  try {
+    const iter = await run(p, m)
+    // Support both async generator and normal generator
+    iterator = iter[Symbol.asyncIterator] ? iter[Symbol.asyncIterator]() : iter[Symbol.iterator]()
+    const first = await iterator.next()
+    if (first.done) return
+    yield first.value
+  } catch (err) {
+    if (db && featureFlags.isEnabled(db, 'llm.autoFallback')) {
+      const status = err.status || err.statusCode
+      if (status === 429 || status >= 500) {
+        const alternates = getAlternateProviders(db, m.model_name).filter(alt => !triedProviders.has(alt.id))
+        if (alternates.length > 0) {
+          const fallbackProvider = alternates[0]
+          const fallbackModel = { ...m, id: fallbackProvider.model_id, provider_id: fallbackProvider.id }
+          const fallbackIter = await run(fallbackProvider, fallbackModel)
+          yield* fallbackIter
+          return
+        }
+      }
+    }
+    throw err
+  }
+  
+  if (iterator) {
+    while (true) {
+      const next = await iterator.next()
+      if (next.done) break
+      yield next.value
+    }
+  }
+}
+
+async function* streamChat(args) {
+  const iter = await executeWithResilience('streamChat', args)
+  yield* iter
+}
+
+async function completeChat(args) {
+  return executeWithResilience('completeChat', args)
+}
+
+async function completeChatMessage(args) {
+  return executeWithResilience('completeChatMessage', args)
 }
 
 async function listModels({ provider, signal }) {

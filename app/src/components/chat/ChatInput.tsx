@@ -277,12 +277,47 @@ export default function ChatInput() {
     const content = input.trim()
     if (!content && pending.length === 0 && snippets.length === 0) return
 
-    // Intercept /undo slash command directly
-    if (content === '/undo' || content.startsWith('/undo ')) {
-      setInput('')
-      try { localStorage.removeItem(`draft:${currentSessionId ?? 'new'}`) } catch {}
-      await useStore.getState().undoLastAction()
-      return
+    // Intercept slash commands for TUI/GUI shortcut alignment
+    if (content.startsWith('/')) {
+      const parts = content.split(/\s+/)
+      const cmd = parts[0]
+      const arg = parts.slice(1).join(' ').trim()
+      
+      if (cmd === '/undo') {
+        setInput('')
+        try { localStorage.removeItem(`draft:${currentSessionId ?? 'new'}`) } catch {}
+        await useStore.getState().undoLastAction()
+        return
+      }
+      if (cmd === '/clear') {
+        setInput('')
+        if (currentSessionId) window.electronAPI.chat.clear(currentSessionId)
+        return
+      }
+      if (cmd === '/mode' && arg) {
+        if (['ask', 'auto', 'yolo', 'custom'].includes(arg)) {
+          setAgentMode(arg as AgentMode)
+          setInput('')
+          return
+        }
+      }
+      if (cmd === '/effort' && arg) {
+        if (['low', 'medium', 'high'].includes(arg)) {
+          setThinkingEnabled(true)
+          setEffortLevel(arg as any)
+          setInput('')
+          return
+        }
+      }
+      if (cmd === '/model' && arg) {
+        const lowerArg = arg.toLowerCase()
+        const match = allModels.find(m => m.model_name.toLowerCase().includes(lowerArg) || m.display_name?.toLowerCase().includes(lowerArg))
+        if (match && currentSessionId) {
+          saveSessionConfig(currentSessionId, { providerId: match.provider_id, modelId: match.id })
+          setInput('')
+          return
+        }
+      }
     }
 
     if (!overrides || overrides.agentMode !== 'plan') {

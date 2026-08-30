@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createAndSelect: (opts) => ipcRenderer.invoke('session:create-and-select', opts),
     rename: (id, title) => ipcRenderer.invoke('session:rename', id, title),
     pin: (id, pinned) => ipcRenderer.invoke('session:pin', id, pinned),
+    fork: (params) => ipcRenderer.invoke('session:fork', params),
     delete: (id) => ipcRenderer.invoke('session:delete', id),
     touch: (id) => ipcRenderer.invoke('session:touch', id),
     getConfig: (id) => ipcRenderer.invoke('session:get-config', id),
@@ -146,6 +147,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     get: (key) => ipcRenderer.invoke('settings:get', key),
     set: (key, value) => ipcRenderer.invoke('settings:set', key, value),
     getAll: () => ipcRenderer.invoke('settings:getAll'),
+    reset: () => ipcRenderer.invoke('settings:reset'),
+    import: (data) => ipcRenderer.invoke('settings:import', data),
     onChanged: (cb) => subscribe('settings:changed', cb),
   },
   flags: {

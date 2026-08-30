@@ -70,6 +70,31 @@ function buildSessionContext({ db, sessionId, personaId, userMessage } = {}) {
     } catch { /* 记忆表缺失/查询失败 → 跳过 */ }
   }
 
+  // 3) Context Engine 核心扩充 (AGENTS.md)
+  try {
+    const fs = require('fs')
+    const path = require('path')
+    let getWorkspaceRoot
+    try {
+      getWorkspaceRoot = require('../tools/sandbox').getWorkspaceRoot
+    } catch {
+      // 兼容 TUI 等沙箱外环境
+    }
+    
+    if (getWorkspaceRoot) {
+      const root = getWorkspaceRoot(sessionId)
+      if (root) {
+        const agentsMdPath = path.join(root, 'AGENTS.md')
+        if (fs.existsSync(agentsMdPath)) {
+          const agentsMd = fs.readFileSync(agentsMdPath, 'utf8')
+          if (agentsMd && agentsMd.trim()) {
+            prefix.push({ role: 'system', content: `[Workspace Context: AGENTS.md]\n${agentsMd.slice(0, 8000)}` })
+          }
+        }
+      }
+    }
+  } catch { /* 容错：防止因文件读取失败导致会话崩溃 */ }
+
   return { prefix, memoryCount }
 }
 

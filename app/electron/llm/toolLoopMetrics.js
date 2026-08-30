@@ -35,14 +35,26 @@ function updateRun(id, { iterations, inputTokens, outputTokens, durationMs, erro
   } catch {}
 }
 
+let toolQueue = []; let flushTimer = null;
+function flushTools() {
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  if (toolQueue.length === 0) return;
+  const batch = toolQueue; toolQueue = [];
+  try {
+    const tx = db().transaction((batch) => {
+      const stmt = db().prepare('INSERT INTO tool_call_sample (run_id, tool_name, duration_ms, success) VALUES (?, ?, ?, ?)');
+      for (const b of batch) stmt.run(...b);
+    });
+    if (tx) tx(batch);
+    else for (const b of batch) db().run('INSERT INTO tool_call_sample (run_id, tool_name, duration_ms, success) VALUES (?, ?, ?, ?)', ...b);
+  } catch {}
+}
+
 // Record a single tool invocation belonging to a run. Returns void.
 function recordTool({ runId = null, toolName = '', ms = 0, success = true } = {}) {
-  try {
-    db().run(
-      'INSERT INTO tool_call_sample (run_id, tool_name, duration_ms, success) VALUES (?, ?, ?, ?)',
-      runId, toolName, ms, success ? 1 : 0
-    )
-  } catch {}
+  toolQueue.push([runId, toolName, ms, success ? 1 : 0]);
+  if (toolQueue.length >= 50) flushTools();
+  else if (!flushTimer) flushTimer = setTimeout(flushTools, 2000);
 }
 
 // Recent runs with per-run aggregates, newest first. Used by the UI.

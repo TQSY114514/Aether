@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X } from 'lucide-react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { t } from '@/utils/i18n'
 import { parseMemoryImport } from '@/utils/memoryImport'
 
@@ -153,8 +154,18 @@ export default function MemoryPage() {
   const counts = entries.reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc }, {} as Record<string, number>)
   const originCounts = entries.reduce((acc, e) => { const o = e.origin || 'user'; acc[o] = (acc[o] || 0) + 1; return acc }, {} as Record<string, number>)
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 100,
+    overscan: 10,
+    getItemKey: (index) => filtered[index].id,
+  })
+
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
       {loading ? (
         <div className="p-8 text-center" style={{ color: 'var(--text-secondary)' }}>Loading...</div>
       ) : (
@@ -290,7 +301,7 @@ export default function MemoryPage() {
         </div>
 
         {/* Memory list */}
-        <div className="space-y-2">
+        <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
           {filtered.length === 0 && (
             <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>
               {searchQuery ? '没有匹配的记忆' : '还没有记忆，添加一条试试'}

@@ -90,8 +90,61 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
           </div>
         )}
 
-        {/* Example prompt grid with hover animations */}
-        {!noSession && (
+        {noSession ? (
+          <>
+            {/* Onboarding Choices Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-6 text-left">
+              <button onClick={() => startWith('我想随意聊聊')}
+                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `0ms` }}>
+                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">💬</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>General Chat</div>
+                  <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Ask questions, brainstorm, or write text</div>
+                </div>
+              </button>
+              
+              <button onClick={() => startWith('帮我写一段代码')}
+                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `50ms` }}>
+                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">💻</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>Code & Agent</div>
+                  <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Generate code, fix bugs, or run commands</div>
+                </div>
+              </button>
+
+              <button onClick={() => { useStore.getState().setChatMode('arena'); createSession(); }}
+                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `100ms` }}>
+                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">⚔️</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>Compare Models</div>
+                  <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Run Arena mode to benchmark side-by-side</div>
+                </div>
+              </button>
+
+              <button onClick={() => startWith('我想要连接本地模型（Ollama/LM Studio），请告诉我怎么设置')}
+                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `150ms` }}>
+                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">🔒</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>Use Local Model</div>
+                  <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Keep data offline with Ollama or LM Studio</div>
+                </div>
+              </button>
+            </div>
+
+            {/* Import Configuration */}
+            <div className="flex justify-center mb-8">
+              <button onClick={() => { alert('Importing config from Claude Code / OpenCode will be supported in the next release.'); }}
+                className="text-[11px] px-3 py-1.5 rounded-full border transition-colors hover:bg-[var(--bg-tertiary)]"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                ↓ 导入 Claude Code / OpenCode 历史与配置
+              </button>
+            </div>
+          </>
+        ) : (
           <div className="grid grid-cols-2 gap-3 mb-8 text-left">
             {examples.map((ex, i) => (
               <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}

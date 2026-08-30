@@ -15,6 +15,23 @@ let db = null
 
 function setDb(d) { db = d }
 
+let auditQueue = []; let auditTimer = null;
+function flushAudit() {
+  if (auditTimer) { clearTimeout(auditTimer); auditTimer = null; }
+  if (auditQueue.length === 0 || !db) return;
+  const batch = auditQueue; auditQueue = [];
+  try {
+    const tx = db.transaction((batch) => {
+      const stmt = db.prepare('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)');
+      for (const b of batch) stmt.run(...b);
+    });
+    if (tx) tx(batch);
+    else for (const b of batch) db.run('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)', ...b);
+  } catch (e) {
+    log.warn('audit log flush failed:', e && e.message)
+  }
+}
+
 function record({ sessionId, turnId, toolCalls = [], planId = null, planStatus = null, totalIterations = 0, finalStatus = 'success' }) {
   if (!db) return
   try {
@@ -22,8 +39,9 @@ function record({ sessionId, turnId, toolCalls = [], planId = null, planStatus =
       toolCalls: toolCalls.map(tc => ({ name: tc.name, args: tc.args, result: tc.result?.slice(0, 500), error: tc.error, latencyMs: tc.latencyMs })),
       planId, planStatus, totalIterations, finalStatus,
     })
-    db.run(`INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)`,
-      [sessionId, turnId, payload])
+    auditQueue.push([sessionId, turnId, payload]);
+    if (auditQueue.length >= 10) flushAudit();
+    else if (!auditTimer) auditTimer = setTimeout(flushAudit, 2000);
   } catch (e) {
     log.warn('audit log failed:', e && e.message)
   }

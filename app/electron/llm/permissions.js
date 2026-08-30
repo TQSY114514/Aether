@@ -37,6 +37,7 @@ const PermissionOverride = Object.freeze({
   Allow: 'allow',
   Deny:  'deny',
   Ask:   'ask',
+  AlwaysAsk: 'always_ask',
 })
 
 // ── PermissionRequest ─────────────────────────────────────────────────────
@@ -292,29 +293,26 @@ class PermissionPolicy {
       return PermissionOutcome.deny(overrideReason || `tool '${toolName}' denied by hook`)
     }
 
-    // Capability deny is an absolute runtime ceiling: a hook Allow or a
-    // previously approved session rule must not revive a disabled capability.
-    // Keep the resolved axis decision for the ask/allow handling below.
+    // Capability deny is an absolute runtime ceiling.
     let axisPolicy = null
     try {
-      if (this.axisPolicies) {
-        const { decideAxisPolicy } = require('./capabilityPolicy')
-        axisPolicy = decideAxisPolicy(toolName, this.axisPolicies)
-      }
+      const { decideAxisPolicy } = require('./capabilityPolicy')
+      axisPolicy = decideAxisPolicy(toolName, input, this.axisPolicies || {})
     } catch {}
+    
     if (axisPolicy?.matched && axisPolicy.policy === 'deny') {
       return PermissionOutcome.deny(`capability policy: ${axisPolicy.axis} axis denies ${toolName}`)
     }
 
-    // P0: session-scoped always-allow —— 用户本会话内显式批准过。排在全部
-    // 确定性拒绝（deniedTools / denyRules / hook Deny）之后：永不覆盖任何
-    // 拒绝通道，但压过 ask 规则、能力轴询问与模式升档确认（这正是它的
-    // 存在意义——"本会话内不再问"）。capability deny 已在上方绝对拦截。
-    if (_findMatchingRule(this.sessionApproved, toolName, input)) {
+    // Always Ask overrides session approved
+    const isAlwaysAsk = (override === PermissionOverride.AlwaysAsk) || (axisPolicy?.matched && axisPolicy.policy === 'always_ask')
+
+    // P0: session-scoped always-allow
+    if (!isAlwaysAsk && _findMatchingRule(this.sessionApproved, toolName, input)) {
       return PermissionOutcome.allowVia('session_approved')
     }
 
-    if (override === PermissionOverride.Ask) {
+    if (override === PermissionOverride.Ask || override === PermissionOverride.AlwaysAsk) {
       const reason = overrideReason || `tool '${toolName}' requires approval due to hook guidance`
       return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
     }
@@ -324,7 +322,7 @@ class PermissionPolicy {
         const reason = `tool '${toolName}' requires approval due to ask rule`
         return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
       }
-      if (axisPolicy?.matched && axisPolicy.policy === 'ask') {
+      if (axisPolicy?.matched && (axisPolicy.policy === 'ask' || axisPolicy.policy === 'always_ask')) {
         return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${axisPolicy.axis} axis requires approval`, prompter, this)
       }
       if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {
@@ -339,13 +337,9 @@ class PermissionPolicy {
     }
 
     // ── Capability axis policy（外部评审 P0-2）───────────────────────────
-    // 规则引擎未命中时, 按轴级策略决策: filesystem/shell/network 三轴各
-    // allow|ask|deny, 作为显式政策覆盖 —— deny 轴压过 Allow 模式,
-    // allow 轴放行 ReadOnly 模式; 未注入/未知工具轴 → 回落既有 5 档判断。
     if (axisPolicy?.matched) {
       if (axisPolicy.policy === 'allow') return PermissionOutcome.allow()
-      if (axisPolicy.policy === 'ask') {
-        // 会话批准已在上方处理，可代替轴询问。
+      if (axisPolicy.policy === 'ask' || axisPolicy.policy === 'always_ask') {
         return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${axisPolicy.axis} axis requires approval`, prompter, this)
       }
     }
