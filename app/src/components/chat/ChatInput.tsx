@@ -291,7 +291,11 @@ export default function ChatInput() {
       }
       if (cmd === '/clear') {
         setInput('')
-        if (currentSessionId) window.electronAPI.chat.clear(currentSessionId)
+        if (currentSessionId) {
+          window.electronAPI.message.deleteAfter(currentSessionId, 0).then(() => {
+            useStore.getState().loadMessages(currentSessionId)
+          }).catch(() => {})
+        }
         return
       }
       if (cmd === '/mode' && arg) {
