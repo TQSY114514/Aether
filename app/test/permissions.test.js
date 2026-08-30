@@ -79,7 +79,7 @@ describe('PermissionPolicy authorization matrix (C1 fix)', () => {
   const { ReadOnly, WorkspaceWrite, DangerFullAccess, Prompt, Allow } = permissions.PermissionMode
   const prompterAllow = { decide: () => permissions.PermissionPromptDecision.Allow }
   const prompterDeny = { decide: () => permissions.PermissionPromptDecision.Deny }
-  const dangerousInput = JSON.stringify({ command: 'rm -rf /tmp/x' })
+  const dangerousInput = JSON.stringify({ command: 'echo hello' })
   const safeInput = JSON.stringify({ path: 'C:/tmp/a.txt' })
 
   function policy(mode) {
@@ -136,6 +136,14 @@ describe('PermissionPolicy authorization matrix (C1 fix)', () => {
       .withToolRequirement('run_command', DangerFullAccess)
       .withPermissionRules({ allow: ['run_command'] })
     expect(p.authorize('run_command', dangerousInput).allowed).toBe(true)
+  })
+
+  it('AlwaysAsk overrides Allow mode for highly destructive commands', () => {
+    const p = policy(Allow)
+    const highlyDangerous = JSON.stringify({ command: 'rm -rf /' })
+    // No prompter -> deny
+    expect(p.authorize('run_command', highlyDangerous).allowed).toBe(false)
+    expect(p.authorize('run_command', highlyDangerous, prompterAllow).allowed).toBe(true)
   })
 
   it('unregistered tools default to DangerFullAccess requirement (conservative)', () => {
@@ -501,7 +509,7 @@ describe('approveAlways / sessionApproved', () => {
   it('capability axis deny beats session-approved rules', () => {
     const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
     policy.approveAlways('run_command(npm test)')
-    policy.withAxisPolicies({ execute: 'deny' })
+    policy.withAxisPolicies({ shell: 'deny' })
     const r = policy.authorize('run_command', JSON.stringify({ command: 'npm test' }), null)
     expect(r.allowed).toBe(false)
   })
@@ -512,7 +520,7 @@ describe('approveAlways / sessionApproved', () => {
     const input = JSON.stringify({ command: 'npm test' })
     policy.withToolRequirement('run_command', PermissionMode.DangerFullAccess);
     // 必须真的声明轴策略——否则走的是 askRule/模式询问路径而非轴 ask 绕行分支（CodeRabbit r3）。
-    policy.withAxisPolicies({ execute: 'ask' });
+    policy.withAxisPolicies({ shell: 'ask' });
     policy.authorize('run_command', input, p) // 第一次：轴 ask → 询问并 AllowAlways
     expect(p.asks).toBe(1)
     const r2 = policy.authorize('run_command', input, p) // 第二次：会话批准代替轴询问
