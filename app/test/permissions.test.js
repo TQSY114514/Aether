@@ -70,7 +70,7 @@ describe('PermissionMode enum', () => {
   })
 
   it('PermissionOverride exposes allow/deny/ask', () => {
-    expect(permissions.PermissionOverride).toEqual({ Allow: 'allow', Deny: 'deny', Ask: 'ask' })
+    expect(permissions.PermissionOverride).toEqual({ Allow: 'allow', Deny: 'deny', Ask: 'ask', AlwaysAsk: 'always_ask' })
   })
 })
 
@@ -501,7 +501,7 @@ describe('approveAlways / sessionApproved', () => {
   it('capability axis deny beats session-approved rules', () => {
     const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
     policy.approveAlways('run_command(npm test)')
-    policy.withAxisPolicies({ shell: 'deny' })
+    policy.withAxisPolicies({ execute: 'deny' })
     const r = policy.authorize('run_command', JSON.stringify({ command: 'npm test' }), null)
     expect(r.allowed).toBe(false)
   })
@@ -512,7 +512,7 @@ describe('approveAlways / sessionApproved', () => {
     const input = JSON.stringify({ command: 'npm test' })
     policy.withToolRequirement('run_command', PermissionMode.DangerFullAccess);
     // 必须真的声明轴策略——否则走的是 askRule/模式询问路径而非轴 ask 绕行分支（CodeRabbit r3）。
-    policy.withAxisPolicies({ shell: 'ask' });
+    policy.withAxisPolicies({ execute: 'ask' });
     policy.authorize('run_command', input, p) // 第一次：轴 ask → 询问并 AllowAlways
     expect(p.asks).toBe(1)
     const r2 = policy.authorize('run_command', input, p) // 第二次：会话批准代替轴询问
