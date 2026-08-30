@@ -10,12 +10,12 @@ import { PermissionPolicy, PermissionMode, PermissionOutcome, PermissionOverride
 
 describe('axisFor (tool → axis mapping)', () => {
   it('maps representative tools to the three axes', () => {
-    expect(axisFor('read_file')).toBe(AXES.READ)
-    expect(axisFor('write_file')).toBe(AXES.WRITE)
-    expect(axisFor('run_command')).toBe(AXES.EXECUTE)
+    expect(axisFor('read_file')).toBe(AXES.FILESYSTEM)
+    expect(axisFor('write_file')).toBe(AXES.FILESYSTEM)
+    expect(axisFor('run_command')).toBe(AXES.SHELL)
     expect(axisFor('web_fetch')).toBe(AXES.NETWORK)
-    expect(axisFor('github_pr_create')).toBe(AXES.EXTERNAL)
-    expect(axisFor('git_commit')).toBe(AXES.GIT)
+    expect(axisFor('github_pr_create')).toBe(AXES.NETWORK)
+    expect(axisFor('git_commit')).toBe(AXES.FILESYSTEM)
   })
 
   it('covers every registry tool (no accidental UNKNOWN for built-ins)', () => {
@@ -32,11 +32,11 @@ describe('axisFor (tool → axis mapping)', () => {
 })
 
 describe('decideAxisPolicy', () => {
-  const policies = { read: 'allow', execute: 'deny', network: 'ask' }
+  const policies = { filesystem: 'allow', shell: 'deny', network: 'ask' }
 
   it('returns the policy for a mapped axis', () => {
-    expect(decideAxisPolicy('read_file', '{}', policies)).toEqual({ axis: AXES.READ, policy: 'allow', matched: true })
-    expect(decideAxisPolicy('run_command', '{}', policies)).toEqual({ axis: AXES.EXECUTE, policy: 'deny', matched: true })
+    expect(decideAxisPolicy('read_file', '{}', policies)).toEqual({ axis: AXES.FILESYSTEM, policy: 'allow', matched: true })
+    expect(decideAxisPolicy('run_command', '{}', policies)).toEqual({ axis: AXES.SHELL, policy: 'deny', matched: true })
     expect(decideAxisPolicy('web_fetch', '{}', policies)).toEqual({ axis: AXES.NETWORK, policy: 'ask', matched: true })
   })
 
@@ -49,8 +49,8 @@ describe('decideAxisPolicy', () => {
 
 describe('normalizeAxisPolicies', () => {
   it('keeps only valid three-state values on real axes', () => {
-    const out = normalizeAxisPolicies({ read: 'allow', execute: 'deny', network: 'ask', unknown: 'deny', bogus: 'maybe' })
-    expect(out).toEqual({ read: 'allow', execute: 'deny', network: 'ask' })
+    const out = normalizeAxisPolicies({ filesystem: 'allow', shell: 'deny', network: 'ask', unknown: 'deny', bogus: 'maybe' })
+    expect(out).toEqual({ filesystem: 'allow', shell: 'deny', network: 'ask' })
   })
 
   it('returns empty object for empty input', () => {
