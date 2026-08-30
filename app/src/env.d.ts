@@ -108,6 +108,7 @@ interface Window {
       createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null }) => Promise<{ session: Session & { id: number }; config: { providerId: number | null; modelId: number | null; personaId: number | null }; messages: Message[] }>
       rename: (id: number, title: string) => Promise<void>
       pin: (id: number, pinned: number) => Promise<void>
+      fork: (params: { sessionId: number; title?: string }) => Promise<{ id: number }>
       delete: (id: number) => Promise<void>
       touch: (id: number) => Promise<void>
       getConfig: (id: number) => Promise<{ providerId: number | null; modelId: number | null; personaId: number | null } | null>
@@ -183,7 +184,9 @@ interface Window {
       get: (key: string) => Promise<string | null>
       set: (key: string, value: string) => Promise<void>
       getAll: () => Promise<Record<string, string>>
-      onChanged: (callback: (key: string, value: string) => void) => () => void
+      reset: () => Promise<{ success: boolean }>
+      import: (data: Record<string, string>) => Promise<{ success: boolean }>
+      onChanged: (callback: (key: string | null, value: string | null) => void) => () => void
     }
     flags: {
       list: () => Promise<{ key: string; default: boolean; value: string | null; enabled: boolean; category: string; description: string }[]>

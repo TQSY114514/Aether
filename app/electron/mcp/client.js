@@ -143,11 +143,22 @@ class McpClient extends EventEmitter {
       parameters: t.inputSchema || { type: 'object', properties: {} },
       run: async (args) => {
         const result = await this.request('tools/call', { name: t.name, arguments: args })
-        // MCP returns { content: [{ type: 'text', text }] } — flatten to text.
         if (result && Array.isArray(result.content)) {
+          const hasImage = result.content.some(c => c.type === 'image' || c.type === 'image_url')
+          if (hasImage) {
+            // Multimodal result: return an array of OpenAI-compatible content parts
+            return result.content.map(c => {
+              if (c.type === 'image' && c.data && c.mimeType) {
+                return { type: 'image_url', image_url: { url: `data:${c.mimeType};base64,${c.data}` } }
+              }
+              if (c.type === 'image_url') return c
+              return { type: 'text', text: c.text || '' }
+            })
+          }
+          // Text-only: flatten to string
           return result.content.map(c => c.text || '').join('\n')
         }
-        return JSON.stringify(result ?? '')
+        return typeof result === 'string' ? result : JSON.stringify(result ?? '')
       },
     }
   }

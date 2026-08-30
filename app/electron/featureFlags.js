@@ -52,6 +52,12 @@ const FLAG_DEFS = [
   // Phase 4 — self-evolving memory
   { key: 'memory.experienceReplay', default: false, category: 'learning', description: 'Trajectory experience replay into the loop' },
   { key: 'skills.selfEvolution', default: false, category: 'learning',    description: 'Agent-created skill drafts (skill evolution)' },
+  // Phase 5 — LLM routing & resilience
+  { key: 'llm.autoFallback',     default: false, category: 'agent',       description: 'Enable transparent provider fallback on 429/5xx errors' },
+  { key: 'llm.smartPool',        default: false, category: 'agent',       description: 'Enable load balancing across multiple free-tier providers' },
+  { key: 'llm.tokenCompression', default: false, category: 'agent',       description: 'Enable aggressive whitespace and structure compression for tool outputs' },
+  { key: 'gateway.enabled',      default: true,  category: 'ecosystem',   description: 'Explicit toggle for the local OpenAI-compatible server' },
+  { key: 'agent.a2aProtocol',    default: false, category: 'ecosystem',   description: 'Enable Agent-to-Agent standard message framing over RPC/Gateway' },
   // Phase 6 — ecosystem
   { key: 'plugin.sdk',           default: false, category: 'ecosystem',   description: 'Third-party plugin SDK (registerTool/Skill/Agent/Provider)' },
   // Phase 6 — UX / onboarding

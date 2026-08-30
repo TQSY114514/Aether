@@ -135,12 +135,59 @@ function externalSourceTagMiddleware(content, ctx) {
   return content
 }
 
+const featureFlags = require('../featureFlags')
+
+function compressionMiddleware(content, ctx) {
+  if (typeof content !== 'string') content = String(content ?? '')
+  const db = ctx && ctx.db
+  if (db && !featureFlags.isEnabled(db, 'llm.tokenCompression')) {
+    return content
+  }
+  
+  let compressed = content
+  const trimmed = compressed.trim()
+  
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const obj = JSON.parse(trimmed)
+      if (Array.isArray(obj) && obj.length > 50) {
+        const structural = obj.map(item => {
+          if (typeof item === 'object' && item !== null) {
+            const small = {}
+            for (const [k, v] of Object.entries(item)) {
+              if (typeof v === 'string' && v.length > 100) small[k] = v.slice(0, 50) + '...[trunc]'
+              else small[k] = v
+            }
+            return small
+          }
+          return item
+        })
+        return JSON.stringify(structural)
+      } else {
+        return JSON.stringify(obj)
+      }
+    } catch {}
+  }
+  
+  // Condense contiguous whitespace
+  compressed = compressed.replace(/[ \t]{2,}/g, ' ')
+  compressed = compressed.replace(/\n{3,}/g, '\n\n')
+  return compressed
+}
+
 // Ordered chain. Order matters: redact first (so truncated tails don't hide a
 // secret split across the cut), then tag external-by-source content, then
-// sanitize external content, then truncate.
-const CHAIN = [redactMiddleware, externalSourceTagMiddleware, externalInjectionMiddleware, truncateMiddleware]
+// sanitize external content, compress, then truncate.
+const CHAIN = [redactMiddleware, externalSourceTagMiddleware, externalInjectionMiddleware, compressionMiddleware, truncateMiddleware]
 
 function applyMiddleware(content, ctx) {
+  // Pass multimodal (image) content arrays through unmodified.
+  // Converting them to strings breaks the structure expected by the API adapter.
+  if (Array.isArray(content)) {
+    const isMultimodal = content.some(c => c && typeof c === 'object' && (c.type === 'image_url' || c.type === 'image'))
+    if (isMultimodal) return content
+  }
+
   let out = content
   for (const mw of CHAIN) {
     try { out = mw(out, ctx) } catch { /* skip a failing middleware */ }

@@ -114,6 +114,13 @@ function start(db, port = DEFAULT_PORT) {
   _token = null
 
   _server = http.createServer((req, res) => {
+    const featureFlags = require('../featureFlags')
+    if (!featureFlags.isEnabled(_db, 'gateway.enabled')) {
+      res.writeHead(503, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Local gateway is disabled by feature flag' }))
+      return
+    }
+
     // M5: cross-origin browser requests are rejected outright (403) — only
     // loopback pages and non-browser clients (no Origin) may proceed.
     if (!_originAllowed(req)) {

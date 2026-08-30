@@ -22,14 +22,12 @@ const { PermissionMode, PermissionPolicy } = require('./permissions')
 // Map our 3-value policy to PermissionMode requirement.
 // Tools in this category require the given mode to function.
 const CATEGORY_MODE_MAP = {
-  filesystem: PermissionMode.WorkspaceWrite,   // read/write files
-  write: PermissionMode.WorkspaceWrite,          // write/edit/patch
-  shell: PermissionMode.DangerFullAccess,        // run commands
-  network: PermissionMode.WorkspaceWrite,        // web search/fetch
-  agent: PermissionMode.DangerFullAccess,        // delegate/task
-  lsp: PermissionMode.WorkspaceWrite,            // LSP operations
-  review: PermissionMode.ReadOnly,               // code review (safe)
-  ask: PermissionMode.ReadOnly,                  // ask user (safe)
+  read: PermissionMode.ReadOnly,
+  write: PermissionMode.WorkspaceWrite,
+  execute: PermissionMode.DangerFullAccess,
+  network: PermissionMode.WorkspaceWrite,
+  git: PermissionMode.WorkspaceWrite,
+  external: PermissionMode.DangerFullAccess,
 }
 
 // Map 3-value policy → axis policy value

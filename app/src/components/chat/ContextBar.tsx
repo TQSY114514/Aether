@@ -55,31 +55,73 @@ export default function ContextBar() {
 
   return (
     <div className="border-b border-[var(--border)] bg-[var(--bg-secondary)]/50">
-      {/* Main bar — click to expand/collapse breakdown */}
-      <button onClick={() => setExpanded(e => !e)}
-        className="flex items-center gap-3 px-4 py-1.5 w-full text-left cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors">
-        <div className="flex-1 flex rounded-full overflow-hidden h-1.5 gap-0.5 bg-[var(--border)] max-w-[200px]">
-          {compact.map(s => (
-            <div key={s.role} title={`${s.role}: ${formatTokens(s.tokens)} (${s.count} msgs)`}
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${(s.tokens / used) * 100}%`, backgroundColor: ROLE_COLORS[s.role] || 'var(--text-muted)', minWidth: s.tokens > 0 ? 3 : 0 }} />
-          ))}
+      {/* Main bar */}
+      <div className="flex items-center gap-3 px-4 py-1.5 w-full text-left hover:bg-[var(--bg-secondary)] transition-colors">
+        <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => setExpanded(e => !e)}>
+          <div className="flex-1 flex rounded-full overflow-hidden h-1.5 gap-0.5 bg-[var(--border)] max-w-[200px]">
+            {compact.map(s => (
+              <div key={s.role} title={`${s.role}: ${formatTokens(s.tokens)} (${s.count} msgs)`}
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${(s.tokens / used) * 100}%`, backgroundColor: ROLE_COLORS[s.role] || 'var(--text-muted)', minWidth: s.tokens > 0 ? 3 : 0 }} />
+            ))}
+          </div>
+          <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap tabular-nums">
+            {formatTokens(used)} / {formatTokens(contextWindow)} ({pct}%)
+          </span>
+          {remaining < contextWindow * 0.3 && remaining > 0 && (
+            <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+              {formatTokens(remaining)} left
+            </span>
+          )}
+          {contextBudgetText && (
+            <span className="text-[11px] whitespace-nowrap" style={{ color: pct > 90 ? 'var(--error)' : pct > 70 ? 'var(--warning)' : 'var(--text-muted)' }}>
+              {contextBudgetText}
+            </span>
+          )}
+          <span className="text-[var(--text-muted)]">{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
         </div>
-        <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap tabular-nums">
-          {formatTokens(used)} / {formatTokens(contextWindow)} ({pct}%)
-        </span>
-        {remaining < contextWindow * 0.3 && remaining > 0 && (
-          <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
-            {formatTokens(remaining)} left
-          </span>
-        )}
-        {contextBudgetText && (
-          <span className="text-[11px] whitespace-nowrap" style={{ color: pct > 90 ? 'var(--error)' : pct > 70 ? 'var(--warning)' : 'var(--text-muted)' }}>
-            {contextBudgetText}
-          </span>
-        )}
-        <span className="text-[var(--text-muted)]">{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
-      </button>
+        
+        {/* Compact button */}
+        <button
+          onClick={async (e) => {
+            e.stopPropagation()
+            if (!currentSessionId) return
+            try {
+              const res = await window.electronAPI.chat.compact(currentSessionId)
+              if (res.ok) {
+                console.log(`Compacted from ${res.beforeCount} to ${res.afterCount} messages.`)
+              } else {
+                console.error('Compact failed or unnecessary:', res.error)
+              }
+            } catch (err) {
+              console.error('Compact error:', err)
+            }
+          }}
+          title="Compact session context"
+          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+        >
+          Compact
+        </button>
+        
+        {/* Fork button */}
+        <button
+          onClick={async (e) => {
+            e.stopPropagation()
+            if (!currentSessionId) return
+            try {
+              const res = await window.electronAPI.session.fork({ sessionId: currentSessionId })
+              useStore.getState().loadSessions()
+              useStore.getState().selectSession(res.id)
+            } catch (err) {
+              console.error('Fork failed:', err)
+            }
+          }}
+          title="Fork session from current state"
+          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+        >
+          Fork
+        </button>
+      </div>
 
       {/* Expandable breakdown */}
       {expanded && (

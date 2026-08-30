@@ -7,22 +7,20 @@
 //                        (Task 4.3: daily code review, dependency check, backup)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const scheduler = require('../cron/scheduler')
-
 function registerCronHandlers(ipcMain, db) {
   // ── Built-in tasks ──
   ipcMain.handle('cron:list', () => {
-    return scheduler.listTasks()
+    return require('../cron/scheduler').listTasks()
   })
 
   ipcMain.handle('cron:run-now', (_e, name) => {
-    return scheduler.runNow(name)
+    return require('../cron/scheduler').runNow(name)
   })
 
   // ── User-configurable scheduled tasks ──
   ipcMain.handle('cron:tasks:list', () => {
     const tasks = db.getScheduledTasks()
-    const running = new Map(scheduler.listUserTasks().map(t => [Number(t.id), t.running]))
+    const running = new Map(require('../cron/scheduler').listUserTasks().map(t => [Number(t.id), t.running]))
     return tasks.map(t => ({ ...t, running: !!running.get(Number(t.id)) }))
   })
 
@@ -31,14 +29,14 @@ function registerCronHandlers(ipcMain, db) {
     if (!name || !type || !intervalMs || intervalMs < 60000) {
       return { ok: false, error: 'name, type and intervalMs (>= 60000ms) are required' }
     }
-    if (!scheduler.USER_TASK_TYPES[type]) {
+    if (!require('../cron/scheduler').USER_TASK_TYPES[type]) {
       return { ok: false, error: `unknown task type: ${type}` }
     }
     const info = db.addScheduledTask({ name, type, interval_ms: intervalMs, enabled, config })
     const id = info.lastInsertRowid
     if (enabled) {
       const task = db.getScheduledTask(id)
-      scheduler.registerUserTask(task)
+      require('../cron/scheduler').registerUserTask(task)
     }
     return { ok: true, id }
   })
@@ -46,7 +44,7 @@ function registerCronHandlers(ipcMain, db) {
   ipcMain.handle('cron:tasks:remove', (_e, id) => {
     const task = db.getScheduledTask(id)
     if (!task) return { ok: false, error: 'task not found' }
-    scheduler.removeUserTask(id)
+    require('../cron/scheduler').removeUserTask(id)
     db.deleteScheduledTask(id)
     return { ok: true }
   })
@@ -55,8 +53,8 @@ function registerCronHandlers(ipcMain, db) {
     const task = db.getScheduledTask(id)
     if (!task) return { ok: false, error: 'task not found' }
     // Ensure it's registered so the manual trigger works even if disabled.
-    if (!task.enabled) scheduler.registerUserTask(task)
-    const started = scheduler.runUserTaskNow(id)
+    if (!task.enabled) require('../cron/scheduler').registerUserTask(task)
+    const started = require('../cron/scheduler').runUserTaskNow(id)
     return { ok: started }
   })
 }

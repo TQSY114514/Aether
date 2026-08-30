@@ -262,7 +262,7 @@ function mergeToolCallDeltas(toolCallsMap, toolCalls) {
 // ({ content, tool_calls, usage }) so callers (the tool loop) can inspect
 // tool_calls AND log real server-reported token usage. `tool_calls`/`usage`
 // are undefined when the model didn't request any / the provider didn't report.
-async function completeChatMessage({ provider, model, messages, signal, options = {} }) {
+async function _completeChatMessage({ provider, model, messages, signal, options = {} }) {
   const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
   const onStream = typeof options?.onStreamDelta === 'function' ? options.onStreamDelta : null
   const thinkExtractor = new ThinkTagExtractor()
@@ -489,6 +489,8 @@ async function completeChatMessageWithRetry({ provider, model, messages, signal,
   )
 }
 
+async function streamChatMessage(args) { return apiLimit.run(() => _streamChatMessage(args)) }
+async function completeChatMessage(args) { return apiLimit.run(() => _completeChatMessage(args)) }
 module.exports = {
   streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage,
   normalizeMessages, parseSSELine,

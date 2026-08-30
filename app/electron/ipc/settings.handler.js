@@ -22,6 +22,20 @@ function registerSettingsHandlers(ipcMain, db) {
     }
     return all
   })
+  ipcMain.handle('settings:reset', () => {
+    db.resetSettings()
+    ipcMain.emit('settings:changed', null, null)
+    return { success: true }
+  })
+  ipcMain.handle('settings:import', (_e, settingsObj) => {
+    if (typeof settingsObj !== 'object') return { success: false }
+    for (const k of Object.keys(settingsObj)) {
+      if (isSensitiveSettingKey(k)) delete settingsObj[k]
+    }
+    db.importSettings(settingsObj)
+    ipcMain.emit('settings:changed', null, null)
+    return { success: true }
+  })
 }
 
 module.exports = { registerSettingsHandlers }

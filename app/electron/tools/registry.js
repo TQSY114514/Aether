@@ -539,6 +539,46 @@ TOOLS.push(
     const result = await _ghApiFetch('/repos/' + args.repo + '/pulls', 'POST', { title, body: args.body || '', head: args.head, base: args.base || 'main' }, ctx && ctx.db)
     if (!result.ok) return '[API error] ' + result.error
     return 'PR created: ' + result.data.html_url
+  }},
+  { name: 'sandbox_init', description: 'Create a Shadow Workspace (Sandbox) in .aether/shadow/ for safe experimentation. Mirrors the current project into the shadow directory, skipping node_modules, .git, and .aether. Returns the absolute path of the new shadow workspace. Read-only tool.', risk: 'safe', parameters: { type: 'object', properties: { excludes: { type: 'array', items: { type: 'string' }, description: 'Additional directory names to exclude from the sandbox (e.g., dist, build)' } } }, run: async (args, ctx) => {
+    const cwd = ctx.cwd
+    if (!cwd) throw new Error('No cwd provided')
+    const shadowDir = path.join(cwd, '.aether', 'shadow')
+    if (!fs.existsSync(path.dirname(shadowDir))) fs.mkdirSync(path.dirname(shadowDir), { recursive: true })
+    
+    const extraExcludes = Array.isArray(args.excludes) ? args.excludes : []
+    const cmdArgs = [cwd, shadowDir, '/MIR', '/XD', 'node_modules', '.git', '.aether', ...extraExcludes, '/MT:8']
+    const r = await runCommand('robocopy', cmdArgs, { timeout: 60000 })
+    if (r.exitCode >= 8) {
+      throw new Error(`Failed to initialize sandbox (code ${r.exitCode}): ${r.stderr || r.stdout}`)
+    }
+    return `Sandbox initialized at: ${shadowDir}\nYou can now safely run commands and edit files inside this directory.`
+  }},
+  { name: 'sandbox_apply', description: 'Apply changes from the Shadow Workspace (.aether/shadow/) back to the main workspace. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { excludes: { type: 'array', items: { type: 'string' }, description: 'Additional directory names to exclude from syncing (must match what was passed to init)' } } }, run: async (args, ctx) => {
+    const cwd = ctx.cwd
+    if (!cwd) throw new Error('No cwd provided')
+    const shadowDir = path.join(cwd, '.aether', 'shadow')
+    if (!fs.existsSync(shadowDir)) throw new Error('Shadow workspace not found at ' + shadowDir)
+    
+    const extraExcludes = Array.isArray(args.excludes) ? args.excludes : []
+    const cmdArgs = [shadowDir, cwd, '/MIR', '/XD', 'node_modules', '.git', '.aether', ...extraExcludes, '/MT:8']
+    const r = await runCommand('robocopy', cmdArgs, { timeout: 60000 })
+    if (r.exitCode >= 8) {
+      throw new Error(`Failed to apply sandbox (code ${r.exitCode}): ${r.stderr || r.stdout}`)
+    }
+    return `Sandbox changes successfully applied to ${cwd}`
+  }},
+  { name: 'generate_repo_map', description: 'Generates a condensed structural map of the repository (Repo Map) to help understand the project topology and key function/class signatures. Best used before planning large changes.', risk: 'safe', parameters: { type: 'object', properties: {} }, run: async (args, ctx) => {
+    const cwd = ctx.cwd
+    if (!cwd) throw new Error('No cwd provided')
+    try {
+      const { buildRepoMap } = require('../llm/repoMap')
+      const lines = buildRepoMap(cwd)
+      if (!lines || lines.length === 0) return 'Repo map is empty or failed to generate.'
+      return `Repo Map (${lines.length} lines):\n\n` + lines.join('\n')
+    } catch (e) {
+      return `Error generating repo map: ${e.message}`
+    }
   }}
 )
 

@@ -11,6 +11,7 @@ import CustomPolicySettings from '@/components/settings/CustomPolicySettings'
 import SystemSettings from '@/components/settings/SystemSettings'
 import SkillsSettings from '@/components/settings/SkillsSettings'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
+import FeatureFlagsSettings from '@/components/settings/FeatureFlagsSettings'
 import TokenPage from '@/pages/TokenPage'
 import EvolutionPage from '@/pages/EvolutionPage'
 import LearningGraphPage from '@/pages/LearningGraphPage'
@@ -445,6 +446,9 @@ export default function SettingPage() {
 
           {/* Agent workspace + safety */}
           <AgentSettings />
+
+          {/* Feature Flags */}
+          <FeatureFlagsSettings />
 
           {/* Windows system integration: auto-launch + notifications */}
           <SystemSettings />

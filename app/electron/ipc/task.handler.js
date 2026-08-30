@@ -13,16 +13,7 @@
 //   task:error    →  { taskId, error }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const {
-  startTask,
-  cancelTask,
-  pauseTask,
-  resumeTask,
-  listTasks,
-  getTask,
-  initBackgroundTasks,
-  restorePendingTasks,
-} = require('../llm/backgroundTasks')
+
 
 const { TASK_PROGRESS_TYPES } = require('../llm/eventTypes')
 
@@ -34,6 +25,7 @@ function stripRecord(record) {
 }
 
 function registerTaskHandlers(ipcMain, db, getWebContents) {
+  const { startTask, cancelTask, pauseTask, resumeTask, listTasks, getTask, initBackgroundTasks, restorePendingTasks } = require('../llm/backgroundTasks');
   // Wire getWebContents into the TaskManager so dialog events (permission,
   // question) can reach the renderer even from detached task sessions.
   initBackgroundTasks({ getWebContents, db })

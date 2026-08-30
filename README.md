@@ -39,6 +39,17 @@ One real loop instead of a feature list — pick a model with evidence, hand ove
 > edges. Bug reports are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and
 > [SECURITY.md](./SECURITY.md).
 
+## 🗺️ Roadmap & Current Focus
+
+Aether's current focus is **Stability over New Features**. We are actively paying down technical debt, optimizing performance, and refining the local agent experience. 
+
+- **Recent Updates:** Virtual scrolling for large memories, lazy-loaded components for fast startup, budget caps and cost visibility.
+- **Up Next:** 
+  - Improving tool reliability with robust error summaries (no naked stderr).
+  - Centralizing IPC contracts and type safety across the stack.
+  - Better TUI/GUI synchronization for power users.
+  - See `docs/roadmap.md` for the complete backlog.
+
 > [!CAUTION]
 > **Windows SmartScreen warning is expected.** Aether is built by a student
 > developer without a commercial code-signing certificate, so Windows 11 /

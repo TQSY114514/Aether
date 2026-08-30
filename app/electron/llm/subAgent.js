@@ -15,7 +15,8 @@ const { completeChatMessage } = require('./providerAdapter')
 const { runToolLoop } = require('./toolLoop')
 const { buildReasoningParams } = require('./reasoning')
 const log = require('../logger')
-const { IterationBudget } = require('./toolLoop')
+const { IterationBudget } = require('./toolLoop');
+const { subagentLimit } = require('./concurrency');
 
 const SUBAGENT_SYSTEM_PROMPT = `You are a sub-agent spawned by the parent agent to handle a delegated task.
 You have your own isolated context — previous conversation history is not available.
@@ -36,7 +37,7 @@ const DEFAULT_SUBAGENT_CONFIG = {
 
 // ─── Run a single sub-agent ──────────────────────────────────────────────
 
-async function runSubagent({
+async function _runSubagent({
   db,
   parentSessionId,
   provider,
@@ -246,4 +247,5 @@ async function runParallel(tasks, shared) {
   return Promise.all(runners)
 }
 
+async function runSubagent(args) { return subagentLimit.run(() => _runSubagent(args)) }
 module.exports = { runSubagent, runParallel, SUBAGENT_SYSTEM_PROMPT, DEFAULT_SUBAGENT_CONFIG }

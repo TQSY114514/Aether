@@ -1,57 +1,19 @@
-# Migration Guide
+# 从 Claude Code / Cursor 迁移到 Aether 指南
 
-Bringing providers, data, and habits over from other tools — and keeping your
-data safe across upgrades and machines.
+如果你是从 Claude Code 或 Cursor 迁移到 Aether 的开发者，以下内容将帮助你快速适应 Aether 的 Agent 模式。
 
-## Import providers from Claude Code / OpenCode
+## 1. 定位差异
+- **Cursor** 是一个全功能的 IDE，Agent 深度绑定在编辑器侧边栏。
+- **Aether** 是一个 **Agent Workbench (工作台)**，专注于多模型、复杂任务链以及本地终端的集成，你可以用 Aether 管理 Agent 工作流，同时在 VS Code 等熟悉的 IDE 中写代码。
 
-The first-run wizard offers **Import existing configuration** (also reachable
-from the wizard's first choice screen). It reads:
+## 2. 交互模式
+- Aether 提供 GUI 与 TUI（终端用户界面）两套完整的 UI。
+- 你可以直接在当前工程下运行 `aether tui` 以 CLI 的方式进行交互。
 
-- Claude Code: `~/.claude.json` and/or `~/.claude/settings.json`
-- OpenCode: `~/.config/opencode/opencode.json` (+ `auth.json` for API keys)
+## 3. 工具生态
+- Aether 支持 MCP (Model Context Protocol) 协议，你可以复用现有的 MCP 服务器。
+- 所有工具默认受安全网控制，相比一键修改，Aether 更强调**安全与可见性**。
 
-Import results report what was created, skipped (already present, matched by
-provider name), and any parse errors. API formats are normalized to Aether's
-three supported values (`openai` / `anthropic` / `responses`); unknown formats
-fall back to `openai`.
-
-Prefer doing it manually? `Models → Add provider` (name / API URL / key),
-then **Fetch models**. That is the entire setup.
-
-## Where your data lives
-
-Everything is under `%APPDATA%/aetherai/`:
-
-| File | Contents |
-|---|---|
-| `aetherai.db` (+ `-wal`/`-shm`) | providers, models, sessions, messages, memory, personas, settings |
-| `background.img` | custom background image |
-
-No cloud copy exists. Back up by closing **all** Aether clients (desktop app
-*and* any `aether tui` / CLI session — they share the same database and WAL
-files; copying while one runs can produce an incomplete backup), then copying
-this folder.
-
-Note: the terminal TUI keeps its own lightweight key store at
-`~/.config/aether/auth.json` (`/apikey` command) — separate from the desktop
-database by design.
-
-## Upgrading Aether
-
-Schema migrations run automatically on first launch of a new version (the
-`addCol` migration block in `app/electron/database.js` adds missing columns to
-existing tables). No manual export/import is needed between releases.
-
-## Moving to another machine (or Windows user)
-
-1. Close Aether on the old machine.
-2. Copy `%APPDATA%/aetherai/` to the same location on the new machine.
-3. Re-enter your API keys once: they were encrypted with Windows DPAPI bound
-   to the old user profile, so `safeStorage` cannot decrypt them elsewhere.
-   Providers/models/sessions/history carry over untouched.
-
-## Leaving Aether
-
-Delete `%APPDATA%/aetherai/` and (if you used the TUI) `~/.config/aether/`.
-That removes everything, including the database.
+## 4. 成本与隐私
+- Aether 完全**本地优先 (Local-First)**。
+- Token 成本通过 SQLite 直接本地核算，无中间商差价。
