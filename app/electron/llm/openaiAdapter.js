@@ -1,3 +1,5 @@
+const { apiLimit } = require('./concurrency')
+
 // Stream/batch helper to separate <think>...</think> tags from model content
 class ThinkTagExtractor {
   constructor() {
