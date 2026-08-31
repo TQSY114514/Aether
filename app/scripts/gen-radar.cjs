@@ -28,7 +28,7 @@ const AXES = [
 ];
 
 const SCORES = {
-  'Aether':      [7.5, 8.0, 9.5, 8.5, 8.0, 9.0, 9.5, 9.0],
+  'Aether':      [8.5, 9.0, 9.8, 9.5, 8.5, 9.9, 9.5, 9.5],
   'Claude Code': [9.8, 6.5, 7.0, 9.8, 9.5, 9.0, 7.5, 8.0],
   'Codex':       [9.7, 8.0, 8.0, 9.5, 9.5, 9.8, 7.0, 9.0],
   'OpenCode':    [9.2, 6.5, 9.7, 9.0, 8.5, 8.5, 9.0, 8.3],
@@ -121,8 +121,8 @@ selfScores.forEach((v, i) => {
 });
 
 // Footnote
-parts.push(`<text x="40" y="${H - 40}" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="11.5" fill="#8b949e">自评估计，非跑分——基于公开资料与日常使用印象（2026-08，Aether v0.7.x）。形状即定位：强在「本地优先」相关轴，编程暂未进第一梯队。</text>`);
-parts.push(`<text x="40" y="${H - 20}" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10.5" fill="#484f58">Self-scored estimates, not benchmarks (public info, 2026-08). The asymmetric shape is the point.</text>`);
+parts.push(`<text x="40" y="${H - 40}" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="11.5" fill="#8b949e">自评估计，非跑分——基于公开资料与日常使用印象（2026-08，Aether v0.8.0+ 验收阶段）。形状即定位：强在「本地优先」与「安全」轴，编程能力稳步逼近第一梯队。</text>`);
+parts.push(`<text x="40" y="${H - 20}" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10.5" fill="#484f58">Self-scored estimates, not benchmarks (public info, 2026-08, v0.8.0+). The asymmetric shape is the point.</text>`);
 
 parts.push('</svg>');
 
