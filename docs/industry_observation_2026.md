@@ -68,52 +68,11 @@
 
 ---
 
-## 四、Aether 核心能力自评雷达 (2026-08 验收版)
-
-经过本轮 P0~P3 的密集迭代，Aether 已经跨越了“基础工具”的鸿沟，正式在能力矩阵上达标。以下是我们目前针对行业标杆的 **自评雷达 (Self-Evaluation Radar)**：
-
-| 核心维度 (Dimension) | 行业标杆 | Aether 现状评级 | Aether 实现与特色 |
-| :--- | :--- | :--- | :--- |
-| **Agent Runtime** (闭环与恢复) | Windsurf / Devin | 🟩🟩🟩🟩🟩 (5/5) | 已实现 `Plan->Act->Observe->Verify->Fix` 强制闭环，并支持任务自动切割与降级恢复。 |
-| **Permission System** (权限与安全) | Claude Code | 🟩🟩🟩🟩🟩 (5/5) | 独创 6 轴动态策略，深度集成 `analyzeCommandRisk` 高危拦截与 AlwaysAsk 兜底，远超基础读写控制。 |
-| **Context Engine** (上下文管理) | Aider | 🟩🟩🟩🟩⬜ (4/5) | 拥有 `generate_repo_map` (AST 拓扑) + `AGENTS.md` + 知识图谱 (KG) + 会话记忆，上下文极度强悍。 |
-| **Verification** (自主验证闭环) | OpenHands | 🟩🟩🟩🟩⬜ (4/5) | 融合 `test_first`、视觉 MCP，以及沙盒测试，已能全自动分析控制台报错并修复。 |
-| **Shadow Workspace** (沙盒机制) | Cursor | 🟩🟩🟩🟩⬜ (4/5) | 已实装 `sandbox_init`/`sandbox_apply`，能够利用 Docker 沙盒安全试错并回滚。 |
-| **Ecosystem & Routing** (生态与扩展) | Cline (MCP) | 🟩🟩🟩🟩🟩 (5/5) | 深度集成 MCP 市场、原生 Skills、Tool Router 与多模型 Arena 2.0，扩展性拉满。 |
-| **Micro UX** (成本/状态/交互) | Cursor | 🟩🟩🟩⬜⬜ (3/5) | 任务清单状态化已完成，已具备一定的成本面板和终端/GUI对齐，但 Inline Diff 与流式渲染细节仍有优化空间。 |
-
----
-
-## 五、下一步：Aether V2 / P4 规划畅想 (The Next Horizon)
-
-既然第一个大版本 (v1.0) 已经圆满达成，我们可以开始构思下一个阶段的 Roadmap。在这个阶段，我们将不再追赶标杆，而是要**定义独家的护城河**：
-
-### 1. 深度多 Agent 协作网络 (Multi-Agent Swarm)
-不再是一个全能大模型包揽一切，而是引入更细分的小型 Agent，通过 Actor Model 协作：
-- **Architect Agent**：专门负责阅读 PRD，拆解任务架构并生成 Plan。
-- **Coder Agent**：只负责根据 Plan 执行具体的单文件修改，模型可使用更轻、更快的本地/开源模型（如 DeepSeek Coder 降本）。
-- **Reviewer Agent**：在背后静默运行，审查 Coder 写的代码，抓取越界行为或架构不一致（Linting & Security）。
-
-### 2. 基于本地轻量级模型的极速补全 (Sub-second Copilot)
-当前 Aether 是基于对话和工具循环的“慢思考系统”。我们可以引入一套“快思考系统”：
-- 结合 Windows 本地的 ONNX / Llama.cpp 运行时，跑一个非常轻量级的模型。
-- 不抢主交互窗口，仅在代码编辑器中提供极速的 Inline 补全与预测。
-
-### 3. Windows 专有系统级控制 (OS-Level Agent)
-利用 Aether 是本地客户端的优势，打破沙盒，触达系统底层：
-- **UI 自动化操作**：接管本地应用窗口，能够帮你自动点击、测试本地的客户端软件。
-- **本地环境极速治理**：清理环境、杀僵尸进程、分析本机网络端口冲突等系统级排错。
-
-### 4. Zero-Click 工作流 (主动式触发)
-- Agent 挂在后台，当终端出现红色 Error、或者 Git 触发 Merge Conflict 时，**主动**弹出提示：“检测到构建失败，我已经查明了原因，是否让我自动修复？” 变被动调用为主动伺服。
-
----
-
-## 六、Aether Feature Radar 与设计启示
+## 四、Aether Feature Radar 与设计启示
 
 我们绝对不能把 Aether 做成一个没有灵魂的“Cursor 平替”或功能缝合怪。Aether 的真正护城河，在于打造一个强大的 **Agent OS 架构**：
 
-```text
+\`\`\`text
                  Aether
                     │
           ┌─────────┴─────────┐
@@ -135,7 +94,7 @@
       Task State
           ↓
        UI / UX
-```
+\`\`\`
 
 根据以上行业 Benchmark，Aether 未来的优先级应该如下排列：
 
