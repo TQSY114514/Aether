@@ -2,6 +2,20 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.8.1] - 2026-09-04
+
+### Fixed
+
+- **Main Process Startup Crash Fix & Native Glob Migration (主进程启动崩溃根治与原生 Glob 迁移).** Replaced external `glob` dependency with Node.js built-in `fs.promises.glob` (Node >= 22 native support). Eliminates the missing module startup crash in packaged distributions and resolves callback-vs-promise asynchronous incompatibility (`m.slice is not a function`).
+- **Production Dependency Verification Gate (生产依赖构建门禁).** Added `scripts/check-deps.js` into the build pipeline to statically audit all `electron/` requires, ensuring all main-process runtime dependencies are strictly declared in `package.json` `dependencies`.
+- **Supply Chain Security & Dependabot Remediation (依赖安全加固).** Resolved all high/medium Dependabot advisories by updating overrides (`fast-uri` to 3.1.7, `browserslist` to 4.28.9, `@xmldom/xmldom` to 0.8.15). Fixed OSV scanner action to official `v2.5.1` with standard SARIF upload.
+
+### Added
+
+- **Agent Mode Convergence & Unified HUD (Agent 模式收敛与统一任务看板).** Simplified runtime agent modes (ask/plan/auto/yolo), resolved HUD overlapping, and refined docked task dashboard.
+- **Mid-Task Steering & Semantic Undo (任务中途干预纠偏与语义级撤销).** Interactive mid-task steering controls and `/undo` execution rollback.
+- **Roadmap P2 & P3 Capabilities (P2/P3 路线图能力落地).** TUI/GUI alignment, Shadow Workspace isolation, Repo Map code indexing, and token usage ledger visualizations on TokenPage.
+
 ## [0.8.0] - 2026-08-27
 
 ### Added
