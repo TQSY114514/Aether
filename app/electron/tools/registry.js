@@ -3,7 +3,6 @@ const fs = require('fs')
 const path = require('path')
 const { spawn, spawnSync } = require('child_process')
 const { runCommand, runCommandSync } = require('./exec')
-const { glob } = require('glob')
 const { checkWritePath, checkCommand, isInsideWorkspace } = require('./sandbox')
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
 const { checkSSRF, checkSSRFHostname } = require('./ssrf')
@@ -12,6 +11,42 @@ const { dockerBackend } = require('../exec/dockerBackend')
 
 const MAX_READ_BYTES = 64 * 1024
 const MAX_GREP_BYTES = 32 * 1024
+
+// Native glob helper using Node.js built-in fs.promises.glob (Node >= 22).
+// Avoids external npm 'glob' dependency missing from production asar packages.
+async function globFiles(pattern, options = {}) {
+  const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd()
+  const nodir = options.nodir !== false
+  const absolute = options.absolute !== false
+  const results = []
+
+  if (fs.promises && typeof fs.promises.glob === 'function') {
+    try {
+      for await (const entry of fs.promises.glob(pattern || '**/*', { cwd, withFileTypes: true })) {
+        if (nodir && !entry.isFile()) continue
+        const fullPath = path.join(entry.parentPath || entry.path || cwd, entry.name)
+        results.push(absolute ? fullPath : path.relative(cwd, fullPath))
+      }
+      return results
+    } catch {}
+  }
+
+  function walk(dir) {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true })
+      for (const ent of entries) {
+        const full = path.join(dir, ent.name)
+        if (ent.isDirectory()) {
+          walk(full)
+        } else if (ent.isFile() || !nodir) {
+          results.push(absolute ? full : path.relative(cwd, full))
+        }
+      }
+    } catch {}
+  }
+  walk(cwd)
+  return results
+}
 
 function guardWorkspaceRead(target, ctx, label) {
   const p = String(target || ''); if (!p) return
@@ -224,7 +259,7 @@ const TOOLS = [
   { name: 'glob_find', description: 'Find files by glob (up to 100).', risk: 'safe', parameters: { type: 'object', properties: { pattern: { type: 'string' }, cwd: { type: 'string' } }, required: ['pattern', 'cwd'] }, run: async (args, ctx) => {
     const pattern = String(args.pattern || ''); const cwd = String(args.cwd || '')
     if (!pattern) throw new Error('pattern is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
-    const m = await glob(pattern, { cwd: cwd || undefined, absolute: true, nodir: true })
+    const m = await globFiles(pattern, { cwd: cwd || undefined, absolute: true, nodir: true })
     return m.slice(0, 100).join('\n') || '(no matches)'
   }},
   { name: 'grep_search', description: 'Search file contents by regex (up to 50 hits).', risk: 'safe', parameters: { type: 'object', properties: { pattern: { type: 'string' }, cwd: { type: 'string' }, glob: { type: 'string' } }, required: ['pattern', 'cwd'] }, run: async (args, ctx) => {
@@ -232,7 +267,7 @@ const TOOLS = [
     if (!pattern) throw new Error('pattern is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
     let re; try { re = new RegExp(pattern) } catch (e) { return `invalid regex: ${e.message}` }
     if (rgAvailable()) { const o = await grepWithRipgrep({ cwd, glob: args.glob, pattern }); if (o !== null) return formatRipgrepLines(o, cwd) }
-    const files = await glob(args.glob || '**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
+    const files = await globFiles(args.glob || '**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
     const hits = []; outer: for (const f of files.slice(0, 2000)) {
       try { const text = fs.readFileSync(f, 'utf-8'); const lines = text.split('\n')
         for (let i = 0; i < lines.length; i++) { if (re.test(lines[i])) { hits.push(`${path.relative(cwd || path.dirname(f), f)}:${i + 1}: ${lines[i].trim().slice(0, 200)}`); if (hits.length >= 200) break outer } }
@@ -244,7 +279,7 @@ const TOOLS = [
     if (!name) throw new Error('name is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
     if (lspFullEnabled(ctx)) { try { const lsp = require('../context/lspClient'); const r = await lsp.findSymbol(name, cwd); if (r && r.length) return JSON.stringify(r) } catch {} }
     const re = new RegExp(`\\b${name.replace(/[.*+?^${}()[\\]\\]/g, '\\$&')}\\b`)
-    const files = await glob('**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
+    const files = await globFiles('**/*', { cwd: cwd || undefined, absolute: true, nodir: true })
     const hits = []; outer: for (const f of files.slice(0, 2000)) {
       try { const text = fs.readFileSync(f, 'utf-8'); const lines = text.split('\n')
         for (let i = 0; i < lines.length; i++) { if (re.test(lines[i])) { hits.push(`${path.relative(cwd || path.dirname(f), f)}:${i + 1}: ${lines[i].trim().slice(0, 200)}`); if (hits.length >= 50) break outer } }
