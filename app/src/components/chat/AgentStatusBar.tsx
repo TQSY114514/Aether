@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
-import { Cpu, Zap, AlertTriangle, Loader2 } from 'lucide-react'
+import { Cpu, Zap, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react'
 
 type AgentRuntime = {
   iteration: number
@@ -25,8 +25,21 @@ export default function AgentStatusBar({ sessionId }: { sessionId: number | null
   const toolCallsByMessage = useStore((s) => s.toolCallsByMessage)
   const statusLinesByMessage = useStore((s) => s.statusLinesByMessage)
   const loopingSessions = useStore((s) => s.loopingSessions)
+  const providers = useStore((s) => s.providers)
 
   const isLooping = sessionId ? loopingSessions.has(sessionId) : false
+
+  const outboundHosts = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of providers) {
+      if (!p.enabled) continue
+      try {
+        const u = new URL(p.api_url)
+        if (u.hostname) set.add(u.hostname)
+      } catch {}
+    }
+    return Array.from(set)
+  }, [providers])
 
   useEffect(() => {
     if (!sessionId || !isLooping) {
@@ -110,10 +123,23 @@ export default function AgentStatusBar({ sessionId }: { sessionId: number | null
           </span>
         )}
         {budgetNote && (
-          <span className="ml-auto truncate max-w-[40%]" style={{ color: accent }}>
+          <span className="truncate max-w-[30%]" style={{ color: accent }}>
             {budgetNote}
           </span>
         )}
+        {/* Outbound Privacy Ledger (P1-11) */}
+        <div
+          className="ml-auto flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0"
+          style={{
+            borderColor: 'rgba(34,197,94,0.3)',
+            backgroundColor: 'rgba(34,197,94,0.08)',
+            color: 'var(--success)',
+          }}
+          title={`🔒 0-Telemetry / 零遥测保护\n出站端点白名单：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有对话与长期记忆仅保存在本地 SQLite。`}
+        >
+          <ShieldCheck size={10} className="shrink-0" />
+          <span className="font-mono font-medium">0-Telemetry</span>
+        </div>
       </div>
     </div>
   )

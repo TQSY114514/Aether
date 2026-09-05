@@ -117,8 +117,53 @@ export default function PermissionDialog() {
           </div>
         )}
 
-        {/* Explanation card — what / impact / risk tags / affected files / command / rollback / alternatives */}
-        <div className="rounded-lg border p-3 mb-3 space-y-2" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        {/* Receipt-style Explanation Card */}
+        <div className="rounded-xl border p-3.5 mb-3 space-y-2.5" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+          {/* Receipt Grid: Action Verb & Target */}
+          <div className="grid grid-cols-2 gap-2 pb-2 border-b text-[11px]" style={{ borderColor: 'var(--border)' }}>
+            <div>
+              <span className="text-[10px] font-medium block" style={{ color: 'var(--text-muted)' }}>
+                {t('agent.permission.receipt_action', '操作动词')}
+              </span>
+              <span className="font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {req.name.toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-medium block" style={{ color: 'var(--text-muted)' }}>
+                {t('agent.permission.receipt_target', '精确作用目标')}
+              </span>
+              <span className="font-mono truncate block" style={{ color: 'var(--text-secondary)' }} title={impact?.affectedFiles?.join(', ') || impact?.command || ''}>
+                {impact?.affectedFiles && impact.affectedFiles.length > 0
+                  ? impact.affectedFiles.filter(Boolean).join(', ')
+                  : impact?.command
+                  ? impact.command.slice(0, 35) + (impact.command.length > 35 ? '...' : '')
+                  : (req.args as any)?.path || summarizeArgs(req.name, req.args).split('\n')[0]}
+              </span>
+            </div>
+          </div>
+
+          {/* Receipt Grid: Security & Rollback Status */}
+          <div className="grid grid-cols-2 gap-2 pb-2 border-b text-[11px]" style={{ borderColor: 'var(--border)' }}>
+            <div>
+              <span className="text-[10px] font-medium block" style={{ color: 'var(--text-muted)' }}>
+                {t('agent.permission.receipt_security', '安全上下文')}
+              </span>
+              <span className={`inline-flex items-center gap-1 font-medium ${isTainted ? 'text-red-500' : 'text-emerald-600'}`}>
+                {isTainted ? '⚠️ 受污染 (Tainted)' : '✓ 洁净执行上下文'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-medium block" style={{ color: 'var(--text-muted)' }}>
+                {t('agent.permission.receipt_rollback', '回滚方案')}
+              </span>
+              <span className="inline-flex items-center gap-1 font-mono text-[10px]" style={{ color: 'var(--text-secondary)' }}>
+                <RotateCcw size={10} className="shrink-0" />
+                {impact?.rollback || '支持快照撤销 (Timeline Rollback)'}
+              </span>
+            </div>
+          </div>
+
           {/* What */}
           {impact?.summary && (
             <div>
@@ -159,13 +204,6 @@ export default function PermissionDialog() {
             <div>
               <span className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>{t('agent.permission.command')}:</span>
               <pre className="text-[10px] font-mono mt-0.5 px-2 py-1 rounded break-all" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>{impact.command}</pre>
-            </div>
-          )}
-          {/* Rollback info */}
-          {impact?.rollback && (
-            <div className="flex items-start gap-1.5">
-              <RotateCcw size={10} className="mt-0.5 shrink-0" style={{ color: 'var(--text-muted)' }} />
-              <span className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>{impact.rollback}</span>
             </div>
           )}
           {/* Alternatives */}

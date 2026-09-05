@@ -165,6 +165,7 @@ interface Window {
       benchmarkDelete: (id: number) => Promise<{ ok: boolean; error?: string }>
       benchmarkRun: (data: { id: number; modelIds: number[] }) => Promise<{ lastRun: string; models: Record<number, { model_name: string; provider_name: string }>; results: Record<number, { wins: number; runs: number; total_ms: number; total_cost: number }>; error?: string }>
       benchmarkStop: (id: number) => Promise<void>
+      autoRoute: (params?: { prompt?: string; intent?: string }) => Promise<{ intent: string; model_id: number; model_name: string; provider_id: number; provider_name: string; route_reason: string } | null>
       onModelDone: (callback: (payload: { sessionId: number; result: ArenaResult }) => void) => () => void
     }
     mcp: {

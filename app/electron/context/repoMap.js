@@ -154,6 +154,7 @@ async function generateRepoMap(rootDir, options = {}) {
     rootDir,
     tree,
     files: Array.from(extractionByAbs.values()),
+    gitChanged: git ? Array.from(git.changed) : [],
     stats: { totalFiles: files.length, indexedFiles: extractionByAbs.size },
     generatedAt: Date.now(),
   }
@@ -166,11 +167,30 @@ async function generateRepoMap(rootDir, options = {}) {
 }
 
 /**
+ * Score a file node for prioritization when budget clamping.
+ */
+function scoreFileNode(node, gitChangedSet) {
+  let score = 1
+  const rel = toPosix(node.relPath || node.name)
+  const base = path.basename(rel).toLowerCase()
+  if (gitChangedSet && gitChangedSet.has(rel)) score += 100
+  if (/^(package\.json|index\.[jt]sx?|main\.[jt]sx?|app\.[jt]sx?|readme\.md|tsconfig\.json|vite\.config\.[jt]s|cargo\.toml|go\.mod|pyproject\.toml)$/i.test(base)) {
+    score += 50
+  }
+  if (node.exports && node.exports.length) score += 20
+  if (node.symbols && node.symbols.length) score += 10
+  return score
+}
+
+/**
  * Render the repo map as a compact system-prompt block.
+ * Clamps output under maxLines (~1.8k tokens) and prioritizes git-modified files,
+ * entry points, and exported symbols.
  * @param {object} map - generateRepoMap() output.
+ * @param {number} [maxLines=160] - Maximum lines budget for repo map.
  * @returns {string}
  */
-function buildRepoMapText(map) {
+function buildRepoMapText(map, maxLines = 160) {
   if (!map || !map.tree) return ''
   const lines = []
   lines.push(`# Repo Map (${map.stats.totalFiles} files, ${map.stats.indexedFiles} indexed)`)
@@ -178,19 +198,63 @@ function buildRepoMapText(map) {
   lines.push('Project structure and top-level symbols (functions/classes/exports):')
   lines.push('')
 
+  // Collect all file nodes
+  const allFileNodes = []
+  const collectFiles = (node) => {
+    if (node.type === 'file') allFileNodes.push(node)
+    else if (node.children) node.children.forEach(collectFiles)
+  }
+  collectFiles(map.tree)
+
+  const gitChangedSet = new Set(map.gitChanged || [])
+  const needsPruning = allFileNodes.length > maxLines
+
+  let allowedFilePaths = null
+  let allowedDirPaths = null
+  let omittedCount = 0
+
+  if (needsPruning) {
+    const targetFileCount = Math.max(20, maxLines - 20)
+    const scored = allFileNodes.map(node => ({
+      node,
+      score: scoreFileNode(node, gitChangedSet)
+    }))
+    scored.sort((a, b) => b.score - a.score)
+    const selected = scored.slice(0, targetFileCount).map(s => s.node)
+    omittedCount = allFileNodes.length - selected.length
+
+    allowedFilePaths = new Set(selected.map(n => n.path))
+    allowedDirPaths = new Set()
+    for (const f of selected) {
+      let cur = path.dirname(f.path)
+      while (cur && cur !== path.dirname(map.rootDir)) {
+        allowedDirPaths.add(cur)
+        const parent = path.dirname(cur)
+        if (parent === cur) break
+        cur = parent
+      }
+    }
+  }
+
   const walk = (node, depth) => {
     const indent = '  '.repeat(depth)
     if (node.type === 'dir') {
+      if (allowedDirPaths && !allowedDirPaths.has(node.path)) return
       lines.push(`${indent}${node.name}/`)
       for (const child of node.children) walk(child, depth + 1)
       return
     }
+    if (allowedFilePaths && !allowedFilePaths.has(node.path)) return
     const extra = []
     if (node.symbols && node.symbols.length) extra.push(`defs: ${node.symbols.join(', ')}`)
     if (node.exports && node.exports.length) extra.push(`exports: ${node.exports.join(', ')}`)
     lines.push(`${indent}${node.name}${extra.length ? `  [${extra.join('; ')}]` : ''}`)
   }
   walk(map.tree, 0)
+
+  if (omittedCount > 0) {
+    lines.push(`  ... (+${omittedCount} more files omitted to fit token budget)`)
+  }
 
   lines.push('```')
   return lines.join('\n')
