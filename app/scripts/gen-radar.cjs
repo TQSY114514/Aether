@@ -8,15 +8,12 @@
  *   - assets/agent-radar-2026.<lang>.svg for 14 supported locales:
  *     zh-CN, en, zh-TW, zh-WEN, ja, ko, de, fr, es, pt, ru, uk, ar, hi
  *
- * Principle (external review & positioning): draw exactly what the data says —
- * no top-scale beautification. The asymmetric shape IS the positioning statement:
- * strongest where local-first matters (multi-provider / privacy / 3-tier safety /
- * dual-mode UX), honestly acknowledging the gap with top-of-class coding agents.
- *
- * Benchmark includes 16 representative agent tools across 3 categories:
- *   - Terminal Coding Agents: Claude Code, Codex, OpenCode, Aider, Gemini CLI, Kimi CLI
- *   - IDE & Desktop Agents: Cursor, Windsurf, Trae, Cline, GitHub Copilot
- *   - Autonomous Platforms: OpenHands, Devin, OpenClaw, DeepSeek Harness, Hermes
+ * Layout:
+ *   - 1000x760 canvas with ample margins
+ *   - Top-right 4-row structured legend card (eliminates horizontal collisions)
+ *   - Balanced 8-axis spokes (CX=500, CY=360, R=195)
+ *   - Bottom matrix box at y=626 with 2 clean rows (avoids collision with 6 o'clock axis)
+ *   - Auto-wrapping footnote
  *
  * Usage:
  *   node app/scripts/gen-radar.cjs               (generates all languages)
@@ -61,7 +58,7 @@ const PEERS = Object.keys(SCORES).filter((k) => k !== SELF);
 // ─── i18n Localization Dictionary ───────────────────────────────────────────
 const I18N = {
   'zh-CN': {
-    title: 'Aether · Agent Workbench 诚实自评雷达',
+    title: 'Aether · Agent 诚实自评雷达',
     titleTag: '(2026-09 最新评估)',
     subtitle: '全面对比 16 款主流 Agent 工具 · 8 大核心维度能力画像',
     legendAether: 'Aether 自评 (v0.8.1+)',
@@ -87,7 +84,7 @@ const I18N = {
     footnote: '客观自评 · 形状即定位：Aether 强在「本地隐私」、「三层沙箱安全」与「多模型自由切换」；在单一极端编程任务上坦然落后于 Claude Code/Cursor，绝不顶格美化。',
   },
   'en': {
-    title: 'Aether · Agent Workbench Honest Self-Assessment Radar',
+    title: 'Aether · Agent Honest Self-Assessment Radar',
     titleTag: '(2026-09 Latest Assessment)',
     subtitle: 'Comprehensive Benchmark vs 16 Leading Agent Tools · 8 Core Dimensions',
     legendAether: 'Aether (v0.8.1+)',
@@ -113,7 +110,7 @@ const I18N = {
     footnote: 'Honest Self-Assessment · Shape as Positioning: Aether excels in local privacy, 3-tier sandbox safety, and multi-provider agility; raw coding trails Claude Code/Cursor without artificial inflating.',
   },
   'zh-TW': {
-    title: 'Aether · Agent Workbench 誠實自評雷達',
+    title: 'Aether · Agent 誠實自評雷達',
     titleTag: '(2026-09 最新評估)',
     subtitle: '全面對比 16 款主流 Agent 工具 · 8 大核心維度能力畫像',
     legendAether: 'Aether 自評 (v0.8.1+)',
@@ -165,7 +162,7 @@ const I18N = {
     footnote: '直筆省度 · 形神歸位：Aether 雄於「本地隱默」、「三重營壘安全」及「萬流並蓄」；純藝運算則坦承弗及 Claude Code 與 Cursor，絕不矯飾虛榮。',
   },
   'ja': {
-    title: 'Aether · Agent Workbench 正直な自己評価レーダー',
+    title: 'Aether · Agent 正直な自己評価レーダー',
     titleTag: '(2026-09 最新評価)',
     subtitle: '主要エージェント16種との徹底比較 · 8大コア能力プロファイル',
     legendAether: 'Aether 自己評価 (v0.8.1+)',
@@ -191,7 +188,7 @@ const I18N = {
     footnote: '客観的自己評価 · 形状こそが位置づけ: Aetherは「ローカル・プライバシー」「3層サンドボックス」「複数モデル切替」でリード。過度な美化を排し、単一コーディングでのClaude Code/Cursorとの差を率直に提示。',
   },
   'ko': {
-    title: 'Aether · Agent Workbench 솔직한 자체 평가 레이더',
+    title: 'Aether · Agent 솔직한 자체 평가 레이더',
     titleTag: '(2026-09 최신 평가)',
     subtitle: '16개 주요 에이전트 도구 비교 · 8대 핵심 역량 프로파일',
     legendAether: 'Aether 자체 평가 (v0.8.1+)',
@@ -217,7 +214,7 @@ const I18N = {
     footnote: '솔직한 자체 평가 · 형태가 곧 포지셔닝: Aether는 로컬 프라이버시, 3단계 샌드박스, 다중 모델 전환에서 우수하며, 순수 코딩에서의 Claude Code/Cursor 대비 격차를 과장 없이 솔직하게 인정합니다.',
   },
   'de': {
-    title: 'Aether · Agent Workbench Ehrliches Selbsteinschätzungs-Radar',
+    title: 'Aether · Agent Ehrliches Selbsteinschätzungs-Radar',
     titleTag: '(2026-09 Bewertung)',
     subtitle: 'Benchmark gegen 16 führende Agenten · 8 Kernkompetenzen',
     legendAether: 'Aether (v0.8.1+)',
@@ -243,7 +240,7 @@ const I18N = {
     footnote: 'Ehrliche Selbsteinschätzung · Form als Positionierung: Aether glänzt bei lokaler Privatsphäre, 3-stufiger Sandbox und Modellauswahl; räumt Rückstand beim reinen Coding gegenüber Claude Code/Cursor offen ein.',
   },
   'fr': {
-    title: 'Aether · Agent Workbench Radar d\'auto-évaluation honnête',
+    title: 'Aether · Radar d\'auto-évaluation honnête',
     titleTag: '(2026-09 Évaluation)',
     subtitle: 'Comparatif avec 16 agents de pointe · 8 dimensions clés',
     legendAether: 'Aether (v0.8.1+)',
@@ -269,7 +266,7 @@ const I18N = {
     footnote: 'Auto-évaluation honnête · La forme reflète le positionnement : Aether excelle en confidentialité locale, bac à sable à 3 niveaux et multi-fournisseurs ; reconnaît sans fard l\'écart de code brut face à Claude Code/Cursor.',
   },
   'es': {
-    title: 'Aether · Agent Workbench Radar de autoevaluación honesto',
+    title: 'Aether · Radar de autoevaluación honesto',
     titleTag: '(2026-09 Evaluación)',
     subtitle: 'Comparativa con 16 herramientas de agentes líderes · 8 dimensiones clave',
     legendAether: 'Aether (v0.8.1+)',
@@ -295,7 +292,7 @@ const I18N = {
     footnote: 'Autoevaluación honesta · La forma como posicionamiento: Aether destaca en privacidad local, sandbox de 3 niveles y multiflexibilidad; asume sin maquillaje la brecha en código frente a Claude Code/Cursor.',
   },
   'pt': {
-    title: 'Aether · Agent Workbench Radar de Autoavaliação Honesta',
+    title: 'Aether · Radar de Autoavaliação Honesta',
     titleTag: '(2026-09 Avaliação)',
     subtitle: 'Comparação com 16 ferramentas de agentes líderes · 8 dimensões centrais',
     legendAether: 'Aether (v0.8.1+)',
@@ -321,7 +318,7 @@ const I18N = {
     footnote: 'Autoavaliação honesta · A forma é o posicionamento: Aether lidera em privacidade local, sandbox de 3 níveis e multiprovedores; reconhece sem rodeios a distância em código bruto frente ao Claude Code/Cursor.',
   },
   'ru': {
-    title: 'Aether · Agent Workbench Честный радар самооценки',
+    title: 'Aether · Честный радар самооценки',
     titleTag: '(2026-09 Оценка)',
     subtitle: 'Сравнение с 16 ведущими агентами · 8 ключевых измерений',
     legendAether: 'Aether (v0.8.1+)',
@@ -347,7 +344,7 @@ const I18N = {
     footnote: 'Честная самооценка · Форма как позиционирование: Aether лидирует в локальной приватности, 3-уровневой песочнице и мультипровайдерах; открыто признает отставание в чистом кодинге от Claude Code/Cursor.',
   },
   'uk': {
-    title: 'Aether · Agent Workbench Чесний радар самооцінки',
+    title: 'Aether · Чесний радар самооцінки',
     titleTag: '(2026-09 Оцінка)',
     subtitle: 'Порівняння з 16 провідними агентами · 8 ключових вимірів',
     legendAether: 'Aether (v0.8.1+)',
@@ -373,7 +370,7 @@ const I18N = {
     footnote: 'Чесна самооцінка · Форма як позиціонування: Aether веде в локальній приватності, 3-рівневій пісочниці та мультипровайдерах; відверто визнає відставання в чистому коді від Claude Code/Cursor.',
   },
   'ar': {
-    title: 'Aether · Agent Workbench رادار التقييم الذاتي الصادق',
+    title: 'Aether · رادار التقييم الذاتي الصادق',
     titleTag: '(2026-09 التقييم الأحدث)',
     subtitle: 'مقارنة شاملة مع 16 وكيلاً رائداً · رسم بياني لـ 8 أبعاد جوهرية',
     legendAether: 'Aether (v0.8.1+)',
@@ -399,7 +396,7 @@ const I18N = {
     footnote: 'تقييم ذاتي صادق · الشكل يحدد الهوية: يتفوق Aether في الخصوصية المحلية والأمان ثلاثي المستويات ومرونة النماذج؛ ويعترف بفارق البرمجة الصرفة مقارنة بـ Claude Code/Cursor دون تزييف.',
   },
   'hi': {
-    title: 'Aether · Agent Workbench ईमानदार आत्म-मूल्यांकन रडार',
+    title: 'Aether · ईमानदार आत्म-मूल्यांकन रडार',
     titleTag: '(2026-09 नवीनतम मूल्यांकन)',
     subtitle: '16 प्रमुख एजेंट उपकरणों की तुलना · 8 मुख्य आयामों की क्षमता प्रोफ़ाइल',
     legendAether: 'Aether (v0.8.1+)',
@@ -426,12 +423,12 @@ const I18N = {
   },
 };
 
-// ─── Geometry ───────────────────────────────────────────────────────────────
-const W = 960;
-const H = 740;
-const CX = 480;
-const CY = 376;
-const R = 210; // radius for score 10
+// ─── Geometry (Upgraded to 1000x760 with generous breathing room) ────────────
+const W = 1000;
+const H = 760;
+const CX = 500;
+const CY = 358;
+const R = 195; // radius for score 10
 
 const N = 8; // 8 axes
 const angleAt = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / N; // 12 o'clock start, clockwise
@@ -459,27 +456,30 @@ function renderRadarSvg(lang = 'zh-CN') {
   parts.push(`<rect x="0" y="0" width="${W}" height="${H}" rx="16" fill="#0d1117"/>`);
   parts.push(`<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="15.5" fill="none" stroke="#21262d"/>`);
 
-  // Header
-  parts.push(`<text x="40" y="46" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="20" font-weight="700" fill="#e6edf3">${esc(dict.title)} <tspan fill="#8b949e" font-weight="400" font-size="14">${esc(dict.titleTag)}</tspan></text>`);
-  parts.push(`<text x="40" y="70" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">${esc(dict.subtitle)}</text>`);
+  // Header (Left aligned, max width 620px to avoid legend collision)
+  parts.push(`<text x="40" y="44" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="19" font-weight="700" fill="#e6edf3">${esc(dict.title)} <tspan fill="#8b949e" font-weight="400" font-size="13.5">${esc(dict.titleTag)}</tspan></text>`);
+  parts.push(`<text x="40" y="68" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">${esc(dict.subtitle)}</text>`);
 
-  // Legend (top-right)
-  const LX = W - 325;
-  parts.push(`<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11.5">`);
-  // Aether
-  parts.push(`<rect x="${LX}" y="32" width="12" height="12" rx="2" fill="#6366f1" fill-opacity="0.36" stroke="#818cf8" stroke-width="1.8"/>`);
-  parts.push(`<text x="${LX + 18}" y="42" fill="#e0e7ff" font-weight="600">${esc(dict.legendAether)}</text>`);
+  // Legend Card (Top-right, framed in a clean card to eliminate horizontal collisions)
+  const LX = W - 280; // 720
+  const LY = 18;
+  parts.push(`<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11">`);
+  parts.push(`<rect x="${LX}" y="${LY}" width="240" height="74" rx="6" fill="#161b22" stroke="#21262d"/>`);
 
-  // Peer-best envelope
-  parts.push(`<line x1="${LX}" y1="58" x2="${LX + 12}" y2="58" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>`);
-  parts.push(`<text x="${LX + 18}" y="62" fill="#8b949e">${esc(dict.legendPeerBest)}</text>`);
+  // Row 1: Aether
+  parts.push(`<rect x="${LX + 12}" y="${LY + 10}" width="10" height="10" rx="2" fill="#6366f1" fill-opacity="0.36" stroke="#818cf8" stroke-width="1.8"/>`);
+  parts.push(`<text x="${LX + 28}" y="${LY + 19}" fill="#e0e7ff" font-weight="600">${esc(dict.legendAether)}</text>`);
 
-  // Benchmarks (Claude Code & Cursor)
-  parts.push(`<line x1="${LX}" y1="78" x2="${LX + 12}" y2="78" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.8"/>`);
-  parts.push(`<text x="${LX + 18}" y="82" fill="#7dd3fc">${esc(dict.legendClaude)}</text>`);
+  // Row 2: Peer-best envelope
+  parts.push(`<line x1="${LX + 12}" y1="${LY + 32}" x2="${LX + 22}" y2="${LY + 32}" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>`);
+  parts.push(`<text x="${LX + 28}" y="${LY + 35}" fill="#8b949e">${esc(dict.legendPeerBest)}</text>`);
 
-  parts.push(`<line x1="${LX + 158}" y1="78" x2="${LX + 170}" y2="78" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.8"/>`);
-  parts.push(`<text x="${LX + 176}" y="82" fill="#fcd34d">${esc(dict.legendCursor)}</text>`);
+  // Row 3: Claude Code & Cursor (two compact columns inside row 3)
+  parts.push(`<line x1="${LX + 12}" y1="${LY + 52}" x2="${LX + 22}" y2="${LY + 52}" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.8"/>`);
+  parts.push(`<text x="${LX + 28}" y="${LY + 55}" fill="#7dd3fc">${esc(dict.legendClaude)}</text>`);
+
+  parts.push(`<line x1="${LX + 12}" y1="${LY + 67}" x2="${LX + 22}" y2="${LY + 67}" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.8"/>`);
+  parts.push(`<text x="${LX + 28}" y="${LY + 70}" fill="#fcd34d">${esc(dict.legendCursor)}</text>`);
   parts.push(`</g>`);
 
   // Grid rings (scores 2, 4, 6, 8, 10) + spoke lines
@@ -513,37 +513,63 @@ function renderRadarSvg(lang = 'zh-CN') {
   });
 
   // Axis labels (localized primary + secondary subtitle + score badges)
+  // Distance adjusted per direction to avoid edge collisions
   dict.axes.forEach((ax, i) => {
-    const lx = CX + (R + 32) * Math.cos(angleAt(i));
-    const ly = CY + (R + 32) * Math.sin(angleAt(i));
-    const cos = Math.cos(angleAt(i));
+    const a = angleAt(i);
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+
+    // Dynamic label offset distance
+    const dist = i === 0 ? R + 26 : i === 4 ? R + 26 : R + 24;
+    const lx = CX + dist * cos;
+    const ly = CY + dist * sin;
+
     let anchor = 'middle';
     if (cos > 0.25) anchor = 'start';
     else if (cos < -0.25) anchor = 'end';
-    const dy = Math.sin(angleAt(i)) < -0.7 ? -8 : Math.sin(angleAt(i)) > 0.7 ? 14 : 2;
+
+    // Vertical shift based on hemisphere
+    const dy = sin < -0.7 ? -8 : sin > 0.7 ? 12 : 2;
     const selfScore = selfScores[i];
     const delta = (selfScore - peerBest[i]).toFixed(1);
     const isTop = delta >= 0;
 
-    parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">${esc(ax.primary)} <tspan fill="${isTop ? '#4ade80' : '#a5b4fc'}" font-size="12" font-weight="700">${selfScore.toFixed(1)}</tspan><tspan fill="${isTop ? '#4ade80' : '#8b949e'}" font-size="10.5"> (${isTop ? dict.leadBadge : delta})</tspan></text>`);
-    parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + dy + 15).toFixed(1)}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">${esc(ax.secondary)} · ${dict.peakLabel} ${peerBest[i].toFixed(1)}</text>`);
+    parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">${esc(ax.primary)} <tspan fill="${isTop ? '#4ade80' : '#a5b4fc'}" font-size="11.5" font-weight="700">${selfScore.toFixed(1)}</tspan><tspan fill="${isTop ? '#4ade80' : '#8b949e'}" font-size="10"> (${isTop ? dict.leadBadge : delta})</tspan></text>`);
+    parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + dy + 14).toFixed(1)}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">${esc(ax.secondary)} · ${dict.peakLabel} ${peerBest[i].toFixed(1)}</text>`);
   });
 
-  // Competitor Matrix Category Summary (bottom box)
+  // Competitor Matrix Category Summary (bottom box, 2 clean rows)
   const BX = 40;
-  const BY = H - 98;
+  const BY = 636;
   parts.push(`<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11">`);
-  parts.push(`<rect x="${BX}" y="${BY}" width="${W - 80}" height="54" rx="8" fill="#161b22" stroke="#21262d"/>`);
+  parts.push(`<rect x="${BX}" y="${BY}" width="${W - 80}" height="62" rx="8" fill="#161b22" stroke="#21262d"/>`);
   parts.push(`<text x="${BX + 14}" y="${BY + 18}" fill="#8b949e" font-weight="600">${esc(dict.matrixLabel)}</text>`);
-  parts.push(`<text x="${BX + 14}" y="${BY + 38}" fill="#c9d1d9">
+  parts.push(`<text x="${BX + 14}" y="${BY + 36}" fill="#c9d1d9">
   <tspan fill="#7dd3fc" font-weight="600">${esc(dict.catTerminal)}</tspan>: Claude Code · Codex · OpenCode · Aider · Gemini CLI · Kimi CLI  ｜  
-  <tspan fill="#fcd34d" font-weight="600">${esc(dict.catIde)}</tspan>: Cursor · Windsurf · Trae · Cline · Copilot  ｜  
-  <tspan fill="#c084fc" font-weight="600">${esc(dict.catAuto)}</tspan>: OpenHands · Devin · OpenClaw · DSH · Hermes
+  <tspan fill="#fcd34d" font-weight="600">${esc(dict.catIde)}</tspan>: Cursor · Windsurf · Trae · Cline · Copilot
+</text>`);
+  parts.push(`<text x="${BX + 14}" y="${BY + 52}" fill="#c9d1d9">
+  <tspan fill="#c084fc" font-weight="600">${esc(dict.catAuto)}</tspan>: OpenHands · Devin · OpenClaw · DeepSeek Harness · Hermes Agent
 </text>`);
   parts.push(`</g>`);
 
-  // Footnote
-  parts.push(`<text x="40" y="${H - 24}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10" fill="#6e7681">${esc(dict.footnote)}</text>`);
+  // Footnote (Supports multi-line wrap if text exceeds 110 chars)
+  const footnote = dict.footnote;
+  if (footnote.length > 115) {
+    // Split near middle punctuation or space
+    let splitIdx = footnote.lastIndexOf('；', 110);
+    if (splitIdx === -1) splitIdx = footnote.lastIndexOf('; ', 110);
+    if (splitIdx === -1) splitIdx = footnote.lastIndexOf('. ', 110);
+    if (splitIdx === -1) splitIdx = footnote.lastIndexOf(' ', 100);
+    if (splitIdx === -1) splitIdx = 95;
+
+    const line1 = footnote.slice(0, splitIdx + 1).trim();
+    const line2 = footnote.slice(splitIdx + 1).trim();
+    parts.push(`<text x="40" y="718" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10" fill="#6e7681">${esc(line1)}</text>`);
+    parts.push(`<text x="40" y="733" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10" fill="#6e7681">${esc(line2)}</text>`);
+  } else {
+    parts.push(`<text x="40" y="726" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10" fill="#6e7681">${esc(footnote)}</text>`);
+  }
 
   parts.push('</svg>');
   return parts.join('\n');
