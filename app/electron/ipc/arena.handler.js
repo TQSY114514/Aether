@@ -141,6 +141,18 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     try { return db.getModelUsageMetrics() } catch (e) { log.warn('arena:metrics error:', e); return [] }
   })
 
+  // Arena-driven dynamic workload auto-routing (review P0-4)
+  ipcMain.handle('arena:auto-route', (_e, { prompt, intent } = {}) => {
+    try {
+      const targetIntent = intent || (prompt ? db.classifyIntent(prompt) : 'general')
+      const route = db.autoRoute(targetIntent)
+      return route || null
+    } catch (e) {
+      log.warn('arena:auto-route error:', e)
+      return null
+    }
+  })
+
   // ── Arena 2.0: personal benchmark (review P0-3) ─────────────────────────
   // 用户自建任务集, 一键对选中模型重跑; 每任务每模型独立计分:
   //   - 结果非错误 → 记 1 胜(wins)

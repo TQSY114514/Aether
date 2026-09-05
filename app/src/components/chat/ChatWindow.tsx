@@ -6,7 +6,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
-import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, Activity, History } from 'lucide-react'
+import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, Activity, History, ShieldAlert } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
@@ -366,6 +366,14 @@ export default function ChatWindow() {
     return t('status.thinking')
   }, [currentSessionId, toolCallsByMessage])
 
+  // Session taint state (QVD-2026-57410 / untrusted external input defense)
+  const isSessionTainted = useMemo(() => {
+    if (!currentSessionId) return false
+    return Object.values(toolCallsByMessage).some((calls) =>
+      calls.some((tc) => (tc as any).isTainted === true)
+    )
+  }, [currentSessionId, toolCallsByMessage])
+
   // Reload messages when window regains focus (fix: text disappearing on alt-tab).
   // Skipped while a stream is active for this session — reloading mid-stream
   // would discard the in-progress assistant bubble.
@@ -518,6 +526,31 @@ export default function ChatWindow() {
           </button>
         )}
       </div>
+
+      {/* Session Taint Banner (QVD-2026-57410 Defense) */}
+      {isSessionTainted && (
+        <div
+          className="px-4 py-2 shrink-0 border-b flex items-center justify-between text-xs animate-blur-fade"
+          style={{
+            backgroundColor: 'rgba(239,68,68,0.06)',
+            borderColor: 'rgba(239,68,68,0.25)',
+            color: 'var(--error)',
+          }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldAlert size={14} className="shrink-0 text-red-500" />
+            <span className="font-semibold truncate">
+              {t('agent.session.taint_banner_title')}
+            </span>
+            <span className="hidden sm:inline opacity-80 text-[11px]">
+              · {t('agent.session.taint_banner_desc')}
+            </span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded border border-red-200 bg-white/60 dark:bg-black/30 font-mono shrink-0">
+            QVD-2026-57410 Guarded
+          </span>
+        </div>
+      )}
 
       {/* Streaming status bar */}
       {(currentSessionId && streamingBySession[currentSessionId]) && streamingStatus && (

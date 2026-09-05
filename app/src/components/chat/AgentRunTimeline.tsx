@@ -15,8 +15,10 @@ import {
   FileEdit,
   Wrench,
   Search,
+  RotateCcw,
 } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import { useStore } from '@/store'
 
 interface AuditLogEntry {
   id: number
@@ -67,8 +69,29 @@ export default function AgentRunTimeline({
 }) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [loading, setLoading] = useState(false)
+  const [rollingBack, setRollingBack] = useState(false)
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({})
   const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({})
+
+  const handleRollback = async () => {
+    if (!window.confirm(t('agent.timeline.rollback_confirm', '确定要撤销 Agent 上一次对工作区进行的修改吗？'))) {
+      return
+    }
+    setRollingBack(true)
+    try {
+      const res = await useStore.getState().undoLastAction()
+      if (res.ok) {
+        useStore.getState().triggerToast(res.message || t('agent.timeline.rollback_success', '工作区变更已成功撤销'), 'success')
+        fetchLogs()
+      } else {
+        useStore.getState().triggerToast(res.error || '回滚失败', 'error')
+      }
+    } catch (e: any) {
+      useStore.getState().triggerToast(e?.message || '回滚发生异常', 'error')
+    } finally {
+      setRollingBack(false)
+    }
+  }
 
   const fetchLogs = useCallback(async () => {
     if (!sessionId) return
@@ -143,6 +166,16 @@ export default function AgentRunTimeline({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleRollback}
+              disabled={rollingBack || loading}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium hover:bg-[var(--bg-primary)] transition-colors cursor-pointer"
+              style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
+              title={t('agent.timeline.rollback', '撤销上次修改')}
+            >
+              <RotateCcw size={12} className={rollingBack ? 'animate-spin' : ''} />
+              <span>{t('agent.timeline.rollback', '撤销上次变更')}</span>
+            </button>
             <button
               onClick={fetchLogs}
               disabled={loading}

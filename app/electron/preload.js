@@ -129,6 +129,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     benchmarkDelete: (id) => ipcRenderer.invoke('arena:benchmark-delete', id),
     benchmarkRun: (data) => ipcRenderer.invoke('arena:benchmark-run', data),
     benchmarkStop: (id) => ipcRenderer.invoke('arena:benchmark-stop', id),
+    autoRoute: (params) => ipcRenderer.invoke('arena:auto-route', params),
     onModelDone: (cb) => subscribe('arena:model-done', cb),
   },
   mcp: {

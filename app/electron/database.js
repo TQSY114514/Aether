@@ -837,13 +837,37 @@ function classifyIntent(text) {
   return 'general'
 }
 function autoRoute(intent) {
-  const scores = db.prepare(`SELECT ms.score, ms.model_id, m.model_name, m.provider_id, p.api_url, p.api_key, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id = m.id JOIN provider p ON m.provider_id = p.id WHERE ms.intent=? AND p.enabled=1 ORDER BY ms.score DESC LIMIT 1`).all(intent)
+  const targetIntent = intent || 'general'
+  const scores = db.prepare(`SELECT ms.score, ms.model_id, m.model_name, m.provider_id, p.name as provider_name FROM model_score ms JOIN model m ON ms.model_id = m.id JOIN provider p ON m.provider_id = p.id WHERE ms.intent=? AND p.enabled=1 ORDER BY ms.score DESC LIMIT 1`).all(targetIntent)
   if (scores.length > 0) {
     const best = scores[0]
-    return { model_id: best.model_id, model_name: best.model_name, provider_id: best.provider_id, api_url: best.api_url, api_key: decryptKey(best.api_key), route_reason: `ELO ${best.score.toFixed(0)}` }
+    return {
+      intent: targetIntent,
+      model_id: Number(best.model_id),
+      model_name: best.model_name,
+      provider_id: Number(best.provider_id),
+      provider_name: best.provider_name,
+      route_reason: `ELO ${best.score.toFixed(0)} (${targetIntent})`
+    }
   }
-  const m2 = db.prepare('SELECT m.id, m.model_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id=p.id WHERE m.is_primary=1 AND p.enabled=1 LIMIT 1').get()
-  if (m2) return { model_id: Number(m2.id), model_name: m2.model_name, api_url: m2.api_url, api_key: decryptKey(m2.api_key), route_reason: 'Primary model' }
+  const m2 = db.prepare('SELECT m.id, m.model_name, m.provider_id, p.name as provider_name FROM model m JOIN provider p ON m.provider_id=p.id WHERE m.is_primary=1 AND p.enabled=1 LIMIT 1').get()
+  if (m2) return {
+    intent: targetIntent,
+    model_id: Number(m2.id),
+    model_name: m2.model_name,
+    provider_id: Number(m2.provider_id),
+    provider_name: m2.provider_name,
+    route_reason: 'Primary model'
+  }
+  const m3 = db.prepare('SELECT m.id, m.model_name, m.provider_id, p.name as provider_name FROM model m JOIN provider p ON m.provider_id=p.id WHERE p.enabled=1 ORDER BY m.id ASC LIMIT 1').get()
+  if (m3) return {
+    intent: targetIntent,
+    model_id: Number(m3.id),
+    model_name: m3.model_name,
+    provider_id: Number(m3.provider_id),
+    provider_name: m3.provider_name,
+    route_reason: 'Default fallback'
+  }
   return null
 }
 

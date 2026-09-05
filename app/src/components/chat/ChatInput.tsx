@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, Zap } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, Zap, Sparkles, ShieldCheck, ShieldAlert } from 'lucide-react'
 import AgentActionHUD from './AgentActionHUD'
 import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
@@ -23,6 +23,9 @@ function classifyFile(file: File): 'text' | 'image' {
   if (TEXT_EXTS.has(ext)) return 'text'
   return 'text'
 }
+
+// Sensitive credential/secret file regex (P1-11 Credential Guard)
+const SENSITIVE_FILE_PATTERN = /(\.env(\..+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.pkcs12|credentials\.json|service-account.*\.json)$/i
 
 // Default commands — used when no custom CMD.md files are discovered.
 // Commands with `action` execute directly (no prompt insertion).
@@ -140,6 +143,19 @@ export default function ChatInput() {
     for (const sc of scores) { map[sc.model_id] = Math.round(sc.score) }
     return map
   }, [scores])
+
+  // Outbound hosts for 0-telemetry verification ledger (P1-11)
+  const outboundHosts = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of providers) {
+      if (!p.enabled) continue
+      try {
+        const u = new URL(p.api_url)
+        if (u.hostname) set.add(u.hostname)
+      } catch {}
+    }
+    return Array.from(set)
+  }, [providers])
 
   // Per-session streaming check — NOT a global flag, so one session's stream
   // never blocks another session's input. Arena is also per-session: runArena
@@ -547,6 +563,22 @@ export default function ChatInput() {
             ))}
           </div>
         )}
+        {/* Sensitive Credential File Guard (P1-11) */}
+        {pending.some(a => SENSITIVE_FILE_PATTERN.test(a.name)) && (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-2 rounded-lg border text-xs animate-blur-fade"
+            style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.35)', color: 'var(--error)' }}>
+            <ShieldAlert size={14} className="shrink-0 text-red-500" />
+            <span className="flex-1 font-medium text-[11px]">
+              {t('chat.sensitive_file_warning', '检测到包含私密密钥或配置的文件 (.env / .pem / 密钥)。发送前请确认内容不含明文生产凭据！')}
+            </span>
+            <button
+              onClick={() => setPending(prev => prev.filter(a => !SENSITIVE_FILE_PATTERN.test(a.name)))}
+              className="text-[10px] px-2 py-0.5 rounded border border-red-300 hover:bg-red-100 dark:hover:bg-red-950 transition-colors font-medium shrink-0"
+            >
+              一键移除敏感文件
+            </button>
+          </div>
+        )}
         {pending.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {pending.map((a, i) => (
@@ -637,6 +669,7 @@ export default function ChatInput() {
               activeModelId={activeModelId}
               modelSuggestion={modelSuggestion}
               scoreByModel={scoreByModel}
+              currentPrompt={input}
               onSelect={(mid, pid) => {
                 if (currentSessionId) {
                   saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
@@ -650,7 +683,20 @@ export default function ChatInput() {
                 {t('chat.tokens_estimate', String(totalInputTokens))}
               </span>
             )}
-            <span className="text-[10px] text-[var(--text-muted)] ml-auto shrink-0">{t('empty.hint.slash')}</span>
+            {/* Outbound Privacy Ledger Pill (P1-11) */}
+            <div
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0 ml-auto"
+              style={{
+                borderColor: 'rgba(34,197,94,0.3)',
+                backgroundColor: 'rgba(34,197,94,0.06)',
+                color: 'var(--success)',
+              }}
+              title={`🔒 0-Telemetry / 零遥测保护\n已配置出站端点：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有数据与历史对话仅保存在本地 SQLite。`}
+            >
+              <ShieldCheck size={11} className="shrink-0" />
+              <span className="font-mono font-medium">0-Telemetry</span>
+            </div>
+            <span className="text-[10px] text-[var(--text-muted)] shrink-0">{t('empty.hint.slash')}</span>
           </div>
         )}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
@@ -825,18 +871,36 @@ function formatSuggestionReason(modelSuggestion: ModelSuggestion | null): string
   return lines.join('\n')
 }
 
-function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion, scoreByModel }: {
+function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion, scoreByModel, currentPrompt }: {
   providers: { id: number; name: string }[]
   allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]
   activeModelId: number | null
   onSelect: (modelId: number, providerId: number) => void
   modelSuggestion: ModelSuggestion | null
   scoreByModel: Record<number, number>
+  currentPrompt?: string
 }) {
   const groups = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
     return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null
   }).filter(Boolean) as { providerId: number; providerName: string; models: typeof allModels }[], [providers, allModels])
+
+  const handleAutoRoute = async () => {
+    try {
+      const route = await window.electronAPI.arena.autoRoute({ prompt: currentPrompt })
+      if (route && route.model_id) {
+        onSelect(route.model_id, route.provider_id)
+        useStore.getState().triggerToast(
+          t('chat.model_routed').replace('{0}', route.model_name).replace('{1}', route.route_reason),
+          'success'
+        )
+      } else {
+        useStore.getState().triggerToast(t('model.suggest.no_match'), 'info')
+      }
+    } catch {
+      useStore.getState().triggerToast('自动路由失败', 'warning')
+    }
+  }
 
   if (groups.length === 0) return null
 
@@ -870,7 +934,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
         {!isAutoSuggested && suggestedModel && (
           <button
             onClick={() => onSelect(suggestedModel.id, suggestedModel.provider_id)}
-            className="absolute -right-1.5 -top-1.5 w-4 h-4 rounded-full flex items-center justify-center hover:scale-110 transition-transform z-10"
+            className="absolute -right-1.5 -top-1.5 w-4 h-4 rounded-full flex items-center justify-center hover:scale-110 transition-transform z-10 cursor-pointer"
             style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
             title={reasonTitle} aria-label={reasonTitle}>
             <Wand2 size={9} />
@@ -884,6 +948,16 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
           </span>
         )}
       </div>
+
+      <button
+        onClick={handleAutoRoute}
+        className="p-1 px-1.5 rounded-lg border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer"
+        style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+        title={t('chat.model_auto_route_desc')}
+      >
+        <Sparkles size={11} className="text-amber-500 shrink-0" />
+        <span className="hidden sm:inline font-medium">{t('chat.model_auto_route')}</span>
+      </button>
     </div>
   )
 }
