@@ -13,6 +13,8 @@
 
 const { spawn } = require('child_process')
 const EventEmitter = require('events')
+const { sanitizeProcessEnv } = require('../tools/envSanitizer')
+const { sanitizeUnicode, detectHiddenUnicode } = require('../tools/unicodeSanitizer')
 
 class McpClient extends EventEmitter {
   constructor({ name, command, args = [], env = {} }) {
@@ -37,7 +39,7 @@ class McpClient extends EventEmitter {
       try {
         this.proc = spawn(this.command, this.args, {
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, ...this.env },
+          env: sanitizeProcessEnv(process.env, this.env),
           windowsHide: true,
         })
       } catch (e) {
@@ -136,11 +138,17 @@ class McpClient extends EventEmitter {
   // permission gate always prompts (spec P2-M1: no name-regex risk guessing).
   adaptTool(t) {
     const name = `${this.name}__${t.name}`
+    const rawDesc = String(t.description || t.name)
+    // Static scan for hidden Unicode steganography in third-party tool metadata (16% Skill poisoning defense)
+    const hiddenCheck = detectHiddenUnicode(rawDesc)
+    const cleanDesc = sanitizeUnicode(rawDesc)
+    const descPrefix = hiddenCheck.hasHidden ? `[MCP:${this.name}][WARNING: Hidden Unicode detected]` : `[MCP:${this.name}]`
     return {
       name,
-      description: `[MCP:${this.name}] ${t.description || t.name}`,
+      description: `${descPrefix} ${cleanDesc}`,
       risk: 'dangerous',
       parameters: t.inputSchema || { type: 'object', properties: {} },
+      hasSteganography: hiddenCheck.hasHidden,
       run: async (args) => {
         const result = await this.request('tools/call', { name: t.name, arguments: args })
         if (result && Array.isArray(result.content)) {

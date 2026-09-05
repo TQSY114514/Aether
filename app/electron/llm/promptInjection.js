@@ -66,10 +66,15 @@ const INJECTION_PATTERNS = [
   { label: 'zh-reveal-prompt', re: /(?:显示|输出|打印|泄露|透露|告诉我)(?:你|您)(?:的)?(?:系统提示词?|初始指令|预设指令|提示词|系统指令)/g },
 ]
 
+const { sanitizeUnicode } = require('../tools/unicodeSanitizer')
+
 // Strip the known instruction patterns out of a string. Returns the cleaned text.
 function stripInjectionPatterns(content) {
   if (typeof content !== 'string') return String(content ?? '')
-  let out = content
+  // Anti-steganography / homoglyph defense: normalize Unicode (NFKC), strip
+  // invisible / zero-width characters (U+200B, U+FEFF, etc.), and canonicalize
+  // punctuation homoglyphs so disguised injection patterns match cleanly.
+  let out = sanitizeUnicode(content)
   for (const { re } of INJECTION_PATTERNS) {
     out = out.replace(re, ' ')
   }
