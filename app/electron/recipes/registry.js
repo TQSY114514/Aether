@@ -104,8 +104,26 @@ function listCustomRecipes(workspaceRoot) {
         const full = path.join(customDir, file)
         const raw = fs.readFileSync(full, 'utf8')
         const parsed = JSON.parse(raw)
-        if (parsed && parsed.id && parsed.title && parsed.prompt) {
-          res.push({ ...parsed, custom: true, filePath: full })
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          typeof parsed.id === 'string' && parsed.id.trim() &&
+          typeof parsed.title === 'string' && parsed.title.trim() &&
+          typeof parsed.prompt === 'string' && parsed.prompt.trim()
+        ) {
+          // Security: custom workspace recipes must never auto-escalate to 'yolo'.
+          const mode = ['auto', 'ask', 'plan'].includes(parsed.suggestedMode) ? parsed.suggestedMode : 'ask'
+          res.push({
+            id: parsed.id.trim(),
+            category: typeof parsed.category === 'string' ? parsed.category.trim() : 'custom',
+            title: parsed.title.trim(),
+            description: typeof parsed.description === 'string' ? parsed.description.trim() : '',
+            prompt: parsed.prompt.trim(),
+            suggestedMode: mode,
+            permissions: Array.isArray(parsed.permissions) ? parsed.permissions.map(String) : [],
+            custom: true,
+            filePath: full,
+          })
         }
       } catch {}
     }

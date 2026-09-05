@@ -569,6 +569,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         if (sw && sw.ok) {
           shadowWorktree = sw
           setWorkspaceRootForSession(sessionId, sw.dir)
+          try { require('../tools/sandbox').setShadowOrigin(sessionId, origRoot) } catch {}
           try { onStatus?.({ kind: 'shadow_workspace', text: `🛡️ 进入影子工作区隔离沙盒 (${sw.branch})` }) } catch {}
         }
       }
@@ -970,7 +971,7 @@ Reply in this format:
         if (!entry.error) {
           try {
             const { isToolAllowed } = require('../config/projectConfig')
-            const ws = getWorkspaceRoot(sessionId)
+            const ws = origRoot || getWorkspaceRoot(sessionId)
             const allowedCheck = isToolAllowed(fn.name, ws)
             if (!allowedCheck.allowed) {
               entry.error = allowedCheck.reason || `tool ${fn.name} is blocked by project config`
@@ -1540,11 +1541,12 @@ Reply ONLY with JSON:
   } finally {
     if (shadowWorktree && origRoot) {
       try {
-        setWorkspaceRootForSession(sessionId, null)
+        setWorkspaceRootForSession(sessionId, origRoot)
+        try { require('../tools/sandbox').setShadowOrigin(sessionId, null) } catch {}
         const worktreeMgr = require('../worktreeManager')
         if (shadowSuccess) {
           const st = worktreeMgr.shadowWorkspaceStatus({ root: origRoot, sessionId })
-          if (st && st.dirty) {
+          if (st && (st.hasChanges || st.dirty || (st.ahead && st.ahead > 0))) {
             const applied = worktreeMgr.applyShadowWorkspace({ root: origRoot, sessionId, message: `aether: auto mode changes (${sessionId})` })
             if (applied && applied.ok) {
               try { onStatus?.({ kind: 'shadow_workspace', text: '✓ 影子工作区测试通过，变更已合并至当前工作区' }) } catch {}

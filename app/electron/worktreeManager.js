@@ -214,17 +214,45 @@ function worktreeDiffStats(root, taskId) {
 
 // ─── Shadow Workspace (P0-02 / Cursor & OpenHands isolation) ───────────────
 
+const crypto = require('crypto')
+
+function safeSessionHash(sessionId) {
+  const str = String(sessionId || 'default')
+  const clean = str.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32)
+  const hash = crypto.createHash('sha256').update(str).digest('hex').slice(0, 8)
+  return `${clean}-${hash}`
+}
+
+function shadowMetaPath(root, safeId) {
+  return path.join(root, '.aether', 'worktrees', `.shadow-meta-${safeId}.json`)
+}
+
 function shadowDirFor(root, sessionId) {
-  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
+  const safeId = safeSessionHash(sessionId)
   return path.join(root, '.aether', 'worktrees', `shadow-${safeId}`)
 }
 
 function createShadowWorkspace({ root, sessionId }) {
   const repo = assertRepo(root)
   if (!repo.ok) return repo
+  const safeId = safeSessionHash(sessionId)
   const dir = shadowDirFor(root, sessionId)
-  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
   const branch = `aether-shadow-${safeId}`
+
+  // Query and persist target branch at creation time to detect drift upon merge
+  const curBranchRes = git(root, ['rev-parse', '--abbrev-ref', 'HEAD'])
+  const rootBranch = curBranchRes.ok ? curBranchRes.stdout.trim() : null
+  const metaFile = shadowMetaPath(root, safeId)
+  try {
+    fs.mkdirSync(path.dirname(metaFile), { recursive: true })
+    fs.writeFileSync(metaFile, JSON.stringify({
+      sessionId,
+      safeId,
+      rootBranch,
+      branch,
+      createdAt: new Date().toISOString(),
+    }, null, 2), 'utf8')
+  } catch {}
 
   const existing = git(root, ['worktree', 'list', '--porcelain'])
   if (existing.ok && filenameMatches(existing.stdout, dir)) {
@@ -253,9 +281,30 @@ function commitShadowWorkspace({ root, sessionId, message = 'aether: shadow work
 function applyShadowWorkspace({ root, sessionId, message = 'aether: apply shadow workspace changes' } = {}) {
   const repo = assertRepo(root)
   if (!repo.ok) return repo
-  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
+  const safeId = safeSessionHash(sessionId)
   const dir = shadowDirFor(root, sessionId)
   const branch = `aether-shadow-${safeId}`
+
+  // Target branch drift validation
+  const metaFile = shadowMetaPath(root, safeId)
+  let meta = null
+  try {
+    if (fs.existsSync(metaFile)) {
+      meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    }
+  } catch {}
+
+  if (meta && meta.rootBranch && meta.rootBranch !== 'HEAD') {
+    const curBranchRes = git(root, ['rev-parse', '--abbrev-ref', 'HEAD'])
+    const currentBranch = curBranchRes.ok ? curBranchRes.stdout.trim() : null
+    if (currentBranch && currentBranch !== meta.rootBranch) {
+      return {
+        ok: false,
+        error: `cannot apply shadow workspace: active branch changed from '${meta.rootBranch}' to '${currentBranch}'`,
+        targetBranchDrift: true,
+      }
+    }
+  }
 
   const committed = commitShadowWorkspace({ root, sessionId, message })
   if (!committed.ok) return committed
@@ -275,8 +324,12 @@ function applyShadowWorkspace({ root, sessionId, message = 'aether: apply shadow
 }
 
 function removeShadowWorkspace({ root, sessionId, pruneBranch = true } = {}) {
-  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
+  const safeId = safeSessionHash(sessionId)
   const dir = shadowDirFor(root, sessionId)
+  const metaFile = shadowMetaPath(root, safeId)
+  try {
+    if (fs.existsSync(metaFile)) fs.unlinkSync(metaFile)
+  } catch {}
   const r = git(root, ['worktree', 'remove', '--force', dir])
   if (pruneBranch) git(root, ['branch', '-D', `aether-shadow-${safeId}`])
   git(root, ['worktree', 'prune'])
@@ -284,6 +337,7 @@ function removeShadowWorkspace({ root, sessionId, pruneBranch = true } = {}) {
 }
 
 function shadowWorkspaceStatus({ root, sessionId }) {
+  const safeId = safeSessionHash(sessionId)
   const dir = shadowDirFor(root, sessionId)
   const porcelain = git(root, ['worktree', 'list', '--porcelain'])
   if (!porcelain.ok) return null
@@ -294,11 +348,19 @@ function shadowWorkspaceStatus({ root, sessionId }) {
     if (!sameDir(wtPath, dir)) continue
     const branchLine = lines.find(l => l.startsWith('branch '))
     const branch = branchLine ? branchLine.slice('branch refs/heads/'.length) : null
-    const info = { dir: wtPath, branch, exists: true }
+    const info = { dir: wtPath, branch, exists: true, dirty: false, changedFiles: 0, ahead: 0, hasChanges: false }
     if (branch) {
       const st = git(wtPath, ['status', '--porcelain'])
       info.dirty = st.ok && st.stdout.length > 0
       info.changedFiles = st.ok ? st.stdout.split('\n').filter(Boolean).length : 0
+
+      const metaFile = shadowMetaPath(root, safeId)
+      let meta = null
+      try { if (fs.existsSync(metaFile)) meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')) } catch {}
+      const compareRef = (meta && meta.rootBranch && meta.rootBranch !== 'HEAD') ? meta.rootBranch : 'HEAD'
+      const rev = git(wtPath, ['rev-list', '--count', `${compareRef}..HEAD`])
+      info.ahead = rev.ok ? (parseInt(rev.stdout, 10) || 0) : 0
+      info.hasChanges = info.dirty || info.ahead > 0
     }
     return info
   }
@@ -320,4 +382,5 @@ module.exports = {
   applyShadowWorkspace,
   removeShadowWorkspace,
   shadowWorkspaceStatus,
+  safeSessionHash,
 }

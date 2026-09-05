@@ -269,7 +269,7 @@ function main() {
         return 1
       }
       argv.splice(0, 3, r.prompt)
-      if (r.suggestedMode && !argv.includes('--mode')) {
+      if (r.suggestedMode && !argv.some(arg => arg === '--mode' || arg.startsWith('--mode='))) {
         argv.push('--mode', r.suggestedMode)
       }
     }

@@ -144,4 +144,31 @@ describe('Config-as-Code .aether/config.json (P1-10)', () => {
     const check2 = checkWritePath(path.join(tmpDir, 'normal.txt'))
     expect(check2.ok).toBe(true)
   })
+
+  it('rejects path traversal and absolute external files in getProjectRules', () => {
+    const aetherDir = path.join(tmpDir, '.aether')
+    fs.mkdirSync(aetherDir, { recursive: true })
+
+    // Create an external file outside workspace
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aether-outside-'))
+    const secretFile = path.join(outsideDir, 'secret.md')
+    fs.writeFileSync(secretFile, 'SUPER_SECRET_EXTERNAL_CONTENT', 'utf8')
+
+    try {
+      const configData = {
+        rules: [
+          '../../secret.md',
+          secretFile,
+        ],
+      }
+      fs.writeFileSync(path.join(aetherDir, 'config.json'), JSON.stringify(configData), 'utf8')
+      invalidateProjectConfigCache(tmpDir)
+
+      const rules = getProjectRules(tmpDir)
+      // Must NOT read the external file contents; remains string literal or rejected
+      expect(rules).not.toContain('SUPER_SECRET_EXTERNAL_CONTENT')
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true })
+    }
+  })
 })

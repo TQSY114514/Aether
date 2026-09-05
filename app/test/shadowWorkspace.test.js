@@ -43,7 +43,7 @@ describe('P0-02 影子工作区隔离机制 (Cursor / OpenHands 战术)', async 
   it('createShadowWorkspace: 为会话创建独立的影子分支与 worktree', () => {
     const res = worktreeMgr.createShadowWorkspace({ root: testRepoRoot, sessionId: 'session-alpha-123' })
     expect(res.ok).toBe(true)
-    expect(res.branch).toBe('aether-shadow-session-alpha-123')
+    expect(res.branch).toMatch(/^aether-shadow-session-alpha-123-[a-f0-9]{8}$/)
     expect(existsSync(res.dir)).toBe(true)
 
     // 幂等重用
@@ -52,7 +52,7 @@ describe('P0-02 影子工作区隔离机制 (Cursor / OpenHands 战术)', async 
     expect(res2.reused).toBe(true)
   })
 
-  it('shadowWorkspaceStatus: 检测影子内部未提交变更', () => {
+  it('shadowWorkspaceStatus: 检测影子内部未提交变更与提交状态', () => {
     const dir = worktreeMgr.shadowDirFor(testRepoRoot, 'session-alpha-123')
     // 在影子工作区写入新文件
     writeFileSync(join(dir, 'shadow-file.txt'), 'created inside shadow workspace\n', 'utf8')
@@ -63,6 +63,7 @@ describe('P0-02 影子工作区隔离机制 (Cursor / OpenHands 战术)', async 
     const status = worktreeMgr.shadowWorkspaceStatus({ root: testRepoRoot, sessionId: 'session-alpha-123' })
     expect(status).not.toBeNull()
     expect(status.dirty).toBe(true)
+    expect(status.hasChanges).toBe(true)
     expect(status.changedFiles).toBeGreaterThanOrEqual(1)
   })
 
@@ -103,5 +104,33 @@ describe('P0-02 影子工作区隔离机制 (Cursor / OpenHands 战术)', async 
     // 主工作区绝不残留
     expect(existsSync(join(testRepoRoot, 'toxic-change.txt'))).toBe(false)
     expect(existsSync(dir)).toBe(false)
+  })
+
+  it('抗碰撞性: 特殊字符 sessionId 生成独立影子分支与路径', () => {
+    const resA = worktreeMgr.createShadowWorkspace({ root: testRepoRoot, sessionId: 'user/session?1' })
+    const resB = worktreeMgr.createShadowWorkspace({ root: testRepoRoot, sessionId: 'user?session/1' })
+    expect(resA.ok).toBe(true)
+    expect(resB.ok).toBe(true)
+    expect(resA.branch).not.toBe(resB.branch)
+    expect(resA.dir).not.toBe(resB.dir)
+    worktreeMgr.removeShadowWorkspace({ root: testRepoRoot, sessionId: 'user/session?1', pruneBranch: true })
+    worktreeMgr.removeShadowWorkspace({ root: testRepoRoot, sessionId: 'user?session/1', pruneBranch: true })
+  })
+
+  it('目标分支漂移保护: 主仓库切换分支后阻止合流并报错', () => {
+    const res = worktreeMgr.createShadowWorkspace({ root: testRepoRoot, sessionId: 'session-drift-789' })
+    expect(res.ok).toBe(true)
+    writeFileSync(join(res.dir, 'drift-change.txt'), 'drift\n', 'utf8')
+
+    // 主仓库创建并切换到新分支
+    execSync('git checkout -b another-branch', { cwd: testRepoRoot, stdio: 'pipe' })
+
+    const applyRes = worktreeMgr.applyShadowWorkspace({ root: testRepoRoot, sessionId: 'session-drift-789' })
+    expect(applyRes.ok).toBe(false)
+    expect(applyRes.targetBranchDrift).toBe(true)
+
+    // 切回原分支并清理
+    execSync('git checkout -', { cwd: testRepoRoot, stdio: 'pipe' })
+    worktreeMgr.removeShadowWorkspace({ root: testRepoRoot, sessionId: 'session-drift-789', pruneBranch: true })
   })
 })
