@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="740" viewBox="0 0 960 740" role="img" aria-label="Aether · Agent Workbench Honest Self-Assessment Radar">
+<rect x="0" y="0" width="960" height="740" rx="16" fill="#0d1117"/>
+<rect x="0.5" y="0.5" width="959" height="739" rx="15.5" fill="none" stroke="#21262d"/>
+<text x="40" y="46" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="20" font-weight="700" fill="#e6edf3">Aether · Agent Workbench Honest Self-Assessment Radar <tspan fill="#8b949e" font-weight="400" font-size="14">(2026-09 Latest Assessment)</tspan></text>
+<text x="40" y="70" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">Comprehensive Benchmark vs 16 Leading Agent Tools · 8 Core Dimensions</text>
+<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11.5">
+<rect x="635" y="32" width="12" height="12" rx="2" fill="#6366f1" fill-opacity="0.36" stroke="#818cf8" stroke-width="1.8"/>
+<text x="653" y="42" fill="#e0e7ff" font-weight="600">Aether (v0.8.1+)</text>
+<line x1="635" y1="58" x2="647" y2="58" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="653" y="62" fill="#8b949e">Peer-Best Envelope (16 Peers Peak)</text>
+<line x1="635" y1="78" x2="647" y2="78" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.8"/>
+<text x="653" y="82" fill="#7dd3fc">Claude Code (Terminal Benchmark)</text>
+<line x1="793" y1="78" x2="805" y2="78" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.8"/>
+<text x="811" y="82" fill="#fcd34d">Cursor (IDE Benchmark)</text>
+</g>
+<polygon points="480.0,334.0 509.7,346.3 522.0,376.0 509.7,405.7 480.0,418.0 450.3,405.7 438.0,376.0 450.3,346.3" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,292.0 539.4,316.6 564.0,376.0 539.4,435.4 480.0,460.0 420.6,435.4 396.0,376.0 420.6,316.6" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,250.0 569.1,286.9 606.0,376.0 569.1,465.1 480.0,502.0 390.9,465.1 354.0,376.0 390.9,286.9" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,208.0 598.8,257.2 648.0,376.0 598.8,494.8 480.0,544.0 361.2,494.8 312.0,376.0 361.2,257.2" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,166.0 628.5,227.5 690.0,376.0 628.5,524.5 480.0,586.0 331.5,524.5 270.0,376.0 331.5,227.5" fill="none" stroke="#30363d" stroke-width="1.2"/>
+<line x1="480" y1="376" x2="480.0" y2="166.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="628.5" y2="227.5" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="690.0" y2="376.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="628.5" y2="524.5" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="480.0" y2="586.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="331.5" y2="524.5" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="270.0" y2="376.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="331.5" y2="227.5" stroke="#21262d" stroke-width="1"/>
+<text x="486" y="331" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">2</text>
+<text x="486" y="289" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">4</text>
+<text x="486" y="247" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">6</text>
+<text x="486" y="205" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">8</text>
+<text x="486" y="163" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">10</text>
+<polygon points="480.0,170.2 625.5,230.5 683.7,376.0 625.5,521.5 480.0,575.5 334.5,521.5 291.0,376.0 334.5,230.5" fill="none" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4"/>
+<polygon points="480.0,170.2 576.5,279.5 627.0,376.0 625.5,521.5 480.0,575.5 346.4,509.6 322.5,376.0 361.2,257.2" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
+<polygon points="480.0,172.3 591.4,264.6 627.0,376.0 606.2,502.2 480.0,554.5 361.2,494.8 343.5,376.0 334.5,230.5" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
+<polygon points="480.0,191.2 616.6,239.4 687.9,376.0 622.6,518.6 480.0,565.0 331.5,524.5 274.2,376.0 336.0,232.0" fill="#6366f1" fill-opacity="0.32" stroke="#818cf8" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="480.0" cy="191.2" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="616.6" cy="239.4" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="687.9" cy="376.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="622.6" cy="518.6" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="480.0" cy="565.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="331.5" cy="524.5" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="274.2" cy="376.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="336.0" cy="232.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<text x="480.0" y="126.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">Coding Agent <tspan fill="#a5b4fc" font-size="12" font-weight="700">8.8</tspan><tspan fill="#8b949e" font-size="10.5"> (-1.0)</tspan></text>
+<text x="480.0" y="141.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Specialized Task · Peak 9.8</text>
+<text x="651.1" y="196.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">General Tasks <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.2</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.6)</tspan></text>
+<text x="651.1" y="211.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Autonomous Scope · Peak 9.8</text>
+<text x="722.0" y="378.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">Multi-Provider <tspan fill="#4ade80" font-size="12" font-weight="700">9.9</tspan><tspan fill="#4ade80" font-size="10.5"> (★Lead)</tspan></text>
+<text x="722.0" y="393.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Zero-Lockin BYOK · Peak 9.7</text>
+<text x="651.1" y="561.1" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">Extensibility <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.6</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.2)</tspan></text>
+<text x="651.1" y="576.1" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">MCP &amp; Skills · Peak 9.8</text>
+<text x="480.0" y="632.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">Multi-Agent <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.0</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.5)</tspan></text>
+<text x="480.0" y="647.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Sub-Agent Routing · Peak 9.5</text>
+<text x="308.9" y="561.1" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">3-Tier Safety <tspan fill="#4ade80" font-size="12" font-weight="700">10.0</tspan><tspan fill="#4ade80" font-size="10.5"> (★Lead)</tspan></text>
+<text x="308.9" y="576.1" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Diff &amp; Taint Sandbox · Peak 9.8</text>
+<text x="238.0" y="378.0" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">Local &amp; Privacy <tspan fill="#4ade80" font-size="12" font-weight="700">9.8</tspan><tspan fill="#4ade80" font-size="10.5"> (★Lead)</tspan></text>
+<text x="238.0" y="393.0" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">SQLite &amp; Zero-Telemetry · Peak 9.0</text>
+<text x="308.9" y="196.9" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">Desktop &amp; TUI Dual UX <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.7</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.1)</tspan></text>
+<text x="308.9" y="211.9" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">GUI &amp; Terminal Sync · Peak 9.8</text>
+<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11">
+<rect x="40" y="642" width="880" height="54" rx="8" fill="#161b22" stroke="#21262d"/>
+<text x="54" y="660" fill="#8b949e" font-weight="600">Peer Benchmark Matrix (16 Tools):</text>
+<text x="54" y="680" fill="#c9d1d9">
+  <tspan fill="#7dd3fc" font-weight="600">Terminal</tspan>: Claude Code · Codex · OpenCode · Aider · Gemini CLI · Kimi CLI  ｜  
+  <tspan fill="#fcd34d" font-weight="600">IDE/Desktop</tspan>: Cursor · Windsurf · Trae · Cline · Copilot  ｜  
+  <tspan fill="#c084fc" font-weight="600">Autonomous</tspan>: OpenHands · Devin · OpenClaw · DSH · Hermes
+</text>
+</g>
+<text x="40" y="716" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10" fill="#6e7681">Honest Self-Assessment · Shape as Positioning: Aether excels in local privacy, 3-tier sandbox safety, and multi-provider agility; raw coding trails Claude Code/Cursor without artificial inflating.</text>
+</svg>

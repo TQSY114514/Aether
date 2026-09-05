@@ -63,7 +63,7 @@ Aether 采用**双轮驱动架构**发布，提供完全平等的双形态体验
 
 **Aether 在哪一档——诚实版。** 依据公开资料对 16 款主流终端 / IDE / 平台 Agent 工具进行系统自评（2026-09 最新评估；是估计，不是跑分）。我们把不对称的形状原样画出来：强在「本地优先」、「三层沙箱安全」与「多模型自由切换」等轴；单模型极致编程能力坦然与第一梯队存在客观差距。这就是你选择 Aether 时接受的真实取舍。完整竞品深度对比详见 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
 
-<p align="center"><img src="./assets/agent-radar-2026.svg" width="760" alt="Aether 诚实自评雷达: 对比 16 款主流终端 / IDE / 平台 Agent 工具 (Claude Code / Codex / Cursor / Windsurf / Trae / Devin / OpenHands / DSH 等)" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.zh-CN.svg" width="760" alt="Aether 诚实自评雷达: 对比 16 款主流终端 / IDE / 平台 Agent 工具 (Claude Code / Codex / Cursor / Windsurf / Trae / Devin / OpenHands / DSH 等)" /></p>
 
 <sub>图表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——16 款工具评分逐字内嵌其中，可用 <code>node app/scripts/gen-radar.cjs</code> 本地复现。</sub>
 
