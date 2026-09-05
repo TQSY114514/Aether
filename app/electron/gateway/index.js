@@ -41,10 +41,22 @@ class Channel {
 
 // ── Webhook Channel (HTTP-based, for testing / custom integrations) ───────
 
+const crypto = require('crypto')
+
+function safeTimingEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
+  const bufA = Buffer.from(a, 'utf8')
+  const bufB = Buffer.from(b, 'utf8')
+  if (bufA.length !== bufB.length) return false
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
 class WebhookChannel extends Channel {
   constructor(config, gateway) {
     super(config, gateway)
     this.port = config.port || 3080
+    // QVD-2026-57410 defense: bind to loopback (127.0.0.1) by default to prevent 0.0.0.0 exposure
+    this.host = config.host || '127.0.0.1'
     this.secret = config.secret || ''
     this.server = null
   }
@@ -58,24 +70,24 @@ class WebhookChannel extends Channel {
         req.on('end', () => {
           try {
             const data = JSON.parse(body)
-            if (this.secret && data.secret !== this.secret) {
-              res.writeHead(401); res.end('Unauthorized'); return
+            if (this.secret && !safeTimingEqual(String(data.secret || ''), String(this.secret))) {
+              res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Unauthorized' })); return
             }
             const msg = this.normalizeMessage(data)
             this.gateway.handleMessage(this, msg)
-            res.writeHead(200); res.end('OK')
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'ok' }))
           } catch (e) {
-            res.writeHead(400); res.end('Bad Request')
+            res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Bad Request' }))
           }
         })
       } else if (req.method === 'GET' && req.url === '/health') {
-        res.writeHead(200); res.end(JSON.stringify({ status: 'ok', channel: 'webhook' }))
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'ok', channel: 'webhook' }))
       } else {
-        res.writeHead(404); res.end('Not Found')
+        res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not Found' }))
       }
     })
     return new Promise((resolve, reject) => {
-      this.server.listen(this.port, err => {
+      this.server.listen(this.port, this.host, err => {
         if (err) reject(err)
         else { this.status = 'connected'; resolve() }
       })
