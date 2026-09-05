@@ -33,7 +33,16 @@
 
 **4 · 你说了算才提交。** Agent 只在你批准的范围内使用 git 工具(`git_status`、`git_diff`、`git_commit`)——没有明确要求就不会推送。
 
-> 桌面端开始的会话,终端里接着用:`aether tui --session <id>` —— 同一会话库,同一份记忆。
+---
+
+## 两个产品形态，一个统一大脑
+
+Aether 采用**双轮驱动架构**发布，提供完全平等的双形态体验，底层 100% 共享相同的 Agent 运行时、SQLite 记忆与三层安全沙箱：
+
+- 🖥️ **Aether 桌面版（GUI）** — 基于 Electron + React。拥有直观的图文富文本流、多窗口拖拽、可视化模型竞技场与直观的配置中心。**推荐绝大多数日常开发、偏好可视化操作与新用户首选。**（从 [GitHub Releases](#下载-桌面版) 下载，开箱即用）
+- ⌨️ **Aether 终端版（CLI / TUI / SDK）** — 基于 Node.js 22+ 与 Ink v5。全键盘沉浸式交互、毫秒级轻量启动、行级 Diff 审批，原生支持 SSH 远程开发与无头 CI/CD 流水线。**推荐重度终端极客与全键盘流开发者。**（`npm i -g aetherai`，详见[下载 CLI](#下载-cli--tui--sdk)）
+
+> 💡 **无缝协同**：二者共享 `agentCore`、内置工具集、SQLite 记忆、多模型路由、MCP 服务器与同一会话存储。你在桌面版开启的会话，随时可在终端用 `aether tui --session <id>` 续接，反之亦然。
 
 ---
 
@@ -57,22 +66,6 @@
 <p align="center"><img src="./assets/agent-radar-2026.svg" width="760" alt="Aether 诚实自评雷达: 对比 16 款主流终端 / IDE / 平台 Agent 工具 (Claude Code / Codex / Cursor / Windsurf / Trae / Devin / OpenHands / DSH 等)" /></p>
 
 <sub>图表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——16 款工具评分逐字内嵌其中，可用 <code>node app/scripts/gen-radar.cjs</code> 本地复现。</sub>
-
-> [!TIP]
-> **新用户请先装桌面版。** 桌面版开箱即用、稳定可靠。CLI / TUI / SDK 仍处于实验阶段 —— 接口可能变更,部分功能可能不完整。
-
----
-
-## 两个产品,一个仓库
-
-Aether 以两个独立产物的形式发布,二者共享同一 Agent 运行时:
-
-- **Aether 桌面版** — Electron + React 图形界面。从 [GitHub Releases](#下载-桌面版) 下载,开箱即用。
-- **Aether CLI / TUI / SDK** — 无头 Agent、Ink v5 终端 UI、Electron-free SDK。`npm install -g aetherai`(详见[下载 CLI](#下载-cli--tui--sdk))。CLI 命令为 `aether`。
-
-> **Aether 最初只有桌面端**，CLI / TUI 是后来补上的，目前仍在完善中。如果你只是想用一个**稳定可用的 AI 工作台**，请先装 **Aether 桌面版**。CLI / TUI / SDK 仍处于**实验性质**：接口与行为可能变化，部分功能可能不完整或不可靠。
-
-二者共享 `agentCore`、42 个工具、SQLite 记忆、多模型路由、MCP 服务器与同一会话存储。桌面端开启的会话可在终端用 `aether tui --session <id>` 续接,反之亦然。
 
 ---
 
