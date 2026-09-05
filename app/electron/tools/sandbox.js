@@ -144,6 +144,16 @@ function checkWritePath(target, sessionId) {
   if (isSensitivePath(r.resolved || r.abs)) {
     return { ok: false, reason: '敏感路径禁止写入：.aetherai/hooks、.aetherai/skills、.claude、.git、.ssh（防持久化 RCE）', abs: r.abs }
   }
+  // P1-10: 仓库级配置忽略路径检查 (.aether/config.json 中的 ignorePatterns)
+  const ws = getWorkspaceRoot(sessionId)
+  if (ws) {
+    try {
+      const { isPathIgnored } = require('../config/projectConfig')
+      if (isPathIgnored(r.resolved || r.abs, ws)) {
+        return { ok: false, reason: '路径匹配项目配置 (.aether/config.json) 中的 ignorePatterns', abs: r.abs }
+      }
+    } catch {}
+  }
   // todo 19：危险扩展名块（.lnk/.url/.scr/... 点击即执行）
   if (hasDangerousExtension(target)) {
     return { ok: false, reason: 'dangerous file extension blocked', abs: r.abs }
@@ -407,4 +417,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, clearSessionWorkspaces, isInsideWorkspace, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, clearSessionWorkspaces, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

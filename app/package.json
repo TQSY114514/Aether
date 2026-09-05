@@ -86,6 +86,7 @@
     "build:ci": "vite build && electron-builder --win --x64 --publish always",
     "start": "electron .",
     "test": "vitest run --fileParallelism=false --testTimeout=30000",
+    "test:security": "vitest run test/securityRegression.test.js",
     "test:watch": "vitest",
     "test:e2e": "node e2e/launch.test.js",
     "prepublishOnly": "node -e \"if (!process.env.CI) { console.error('publishing from local is blocked; use npm run publish:npm in CI (see .github/workflows/npm-publish.yml)'); process.exit(1) }\" && npm run smoke:boot && npm run smoke:rpc && npm test",

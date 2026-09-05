@@ -72,6 +72,32 @@ interface ModelSuggestion {
   confidence: number
 }
 
+interface Recipe {
+  id: string
+  category: string
+  title: string
+  description: string
+  prompt: string
+  suggestedMode?: 'ask' | 'auto' | 'plan'
+  permissions?: string[]
+  icon?: string
+  custom?: boolean
+  filePath?: string
+}
+
+interface ProjectConfig {
+  defaultModel: string | null
+  mode: 'ask' | 'auto' | 'plan' | null
+  shadowWorkspace: boolean | null
+  tools: {
+    deny: string[]
+    allow: string[]
+  }
+  ignorePatterns: string[]
+  rules: string[]
+  customConfigPath: string | null
+}
+
 interface Window {
   electronAPI: {
     provider: {
@@ -165,6 +191,7 @@ interface Window {
       benchmarkDelete: (id: number) => Promise<{ ok: boolean; error?: string }>
       benchmarkRun: (data: { id: number; modelIds: number[] }) => Promise<{ lastRun: string; models: Record<number, { model_name: string; provider_name: string }>; results: Record<number, { wins: number; runs: number; total_ms: number; total_cost: number }>; error?: string }>
       benchmarkStop: (id: number) => Promise<void>
+      benchmarkTemplates: () => Promise<{ id: string; name: string; description: string; tasks: any[] }[]>
       autoRoute: (params?: { prompt?: string; intent?: string }) => Promise<{ intent: string; model_id: number; model_name: string; provider_id: number; provider_name: string; route_reason: string } | null>
       onModelDone: (callback: (payload: { sessionId: number; result: ArenaResult }) => void) => () => void
     }
@@ -243,6 +270,7 @@ interface Window {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
       import: (bundle: any) => Promise<{ success: boolean; created?: { providers: number; models: number; personas: number }; skipped?: { providers: number; models: number; personas: number }; error?: string }>
       importExternal: () => Promise<{ created: { providers: number; models: number }; skipped: string[]; errors: string[] }>
+      getProject: (workspaceRoot?: string) => Promise<ProjectConfig>
     }
     protocol: {
       // aetherai:// 协议事件(todo 17): open(workspace 路径) / tui / new / chat
@@ -278,6 +306,10 @@ interface Window {
       updateState: (name: string, state: string) => Promise<{ ok: boolean }>
       pin: (name: string, pinned: boolean) => Promise<{ ok: boolean }>
       importDir: () => Promise<{ ok: boolean; count?: number; error?: string }>
+    }
+    recipe: {
+      list: (workspaceRoot?: string) => Promise<Recipe[]>
+      get: (id: string, workspaceRoot?: string) => Promise<Recipe | null>
     }
     search: {
       messages: (query: string, sessionId?: number) => Promise<{ id: number; session_id: number; role: string; content: string; model_used: string | null; created_at: string; session_title?: string; terms?: string[] }[]>
