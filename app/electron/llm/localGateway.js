@@ -16,8 +16,16 @@ const TOKEN_HEADER = 'X-Aether-Token'
 // M5 (2026-08 audit): browsers may only call the gateway from loopback pages;
 // missing Origin = non-browser client (curl / scripts / SDK) → allowed.
 const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+// QVD-2026-57410 defense: DNS rebinding prevention via strict Host header validation.
+const LOCAL_HOST_RE = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 // M5: request body cap — stop buffering and drop the connection past this.
 const MAX_BODY_BYTES = 16 * 1024 * 1024
+
+function _hostAllowed(req) {
+  const host = req.headers.host
+  if (!host || typeof host !== 'string') return false
+  return LOCAL_HOST_RE.test(host.trim())
+}
 
 let _server = null
 let _token = null
@@ -118,6 +126,13 @@ function start(db, port = DEFAULT_PORT) {
     if (!featureFlags.isEnabled(_db, 'gateway.enabled')) {
       res.writeHead(503, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'Local gateway is disabled by feature flag' }))
+      return
+    }
+
+    // QVD-2026-57410 defense: DNS rebinding prevention via strict Host header validation.
+    if (!_hostAllowed(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Host header not allowed (DNS rebinding protection)' }))
       return
     }
 
@@ -260,4 +275,18 @@ function getOrCreateToken(db) {
 
 function getPort() { return _server?.address()?.port || DEFAULT_PORT }
 
-module.exports = { start, stop, isRunning, getToken, getOrCreateToken, getPort, registerHandler, unregisterHandler, DEFAULT_PORT }
+module.exports = {
+  start,
+  stop,
+  isRunning,
+  getToken,
+  getOrCreateToken,
+  getPort,
+  registerHandler,
+  unregisterHandler,
+  DEFAULT_PORT,
+  _hostAllowed,
+  _originAllowed,
+  LOCAL_HOST_RE,
+  LOCAL_ORIGIN_RE,
+}

@@ -27,9 +27,10 @@ const checkpointMgr = require('./checkpointManager')
 const { generateDiff, generateAfterSnapshot } = require('../tools/toolImpact')
 const { buildProjectContextMessage, invalidateCache } = require('./projectInstructions')
 const { buildRepoMapMessage } = require('../context/repoMap')
-const { getWorkspaceRoot } = require('../tools/sandbox')
+const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox')
 const modelRouter = require('./modelRouter')
 const path = require('path')
+const log = require('../logger')
 
 // Phase 4: Permission model and multi-dimensional iteration budget.
 const permissions = require('./permissions')
@@ -484,6 +485,20 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, projectCtx)
   }
 
+  // P1-10: 注入仓库级配置规则 (.aether/config.json / .aether.json)
+  try {
+    const { getProjectRules } = require('../config/projectConfig')
+    const ws = getWorkspaceRoot(sessionId)
+    const rules = getProjectRules(ws)
+    if (rules && rules.length > 0) {
+      const sysIdx = convo.findIndex(m => m.role === 'system')
+      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, {
+        role: 'system',
+        content: `## Project Configuration Rules (.aether/config.json)\n\n${rules.join('\n\n')}`,
+      })
+    }
+  } catch {}
+
   // Inject the repo map (project structure + top-level symbols) so the agent
   // has a project-level understanding of the codebase from the first turn.
   // Generated on first use and cached; incremental updates re-parse only
@@ -531,6 +546,36 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       }
     }
   } catch {}
+
+  // ── Shadow Workspace (Cursor & OpenHands isolation, P0-02) ───────────────
+  let shadowWorktree = null
+  let origRoot = null
+  let shadowSuccess = false
+  const shadowEnabled = (agentMode === 'auto') && (() => {
+    try {
+      if (db && require('../featureFlags').isEnabled(db, 'agent.shadowWorkspace') === true) return true
+      const pc = require('../config/projectConfig').loadProjectConfig(getWorkspaceRoot(sessionId))
+      if (pc && pc.shadowWorkspace === true) return true
+      return false
+    } catch { return false }
+  })()
+
+  if (shadowEnabled && sessionId) {
+    try {
+      origRoot = getWorkspaceRoot(sessionId)
+      const worktreeMgr = require('../worktreeManager')
+      if (worktreeMgr.assertRepo(origRoot).ok) {
+        const sw = worktreeMgr.createShadowWorkspace({ root: origRoot, sessionId })
+        if (sw && sw.ok) {
+          shadowWorktree = sw
+          setWorkspaceRootForSession(sessionId, sw.dir)
+          try { onStatus?.({ kind: 'shadow_workspace', text: `🛡️ 进入影子工作区隔离沙盒 (${sw.branch})` }) } catch {}
+        }
+      }
+    } catch (e) {
+      try { log.warn('Shadow workspace init error:', e?.message) } catch {}
+    }
+  }
 
   let plan = null
   let planningMode = false
@@ -638,6 +683,7 @@ Reply in this format:
     }
   }
 
+  try {
   // Planning gate: if the request is complex enough, generate a plan first.
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
   
@@ -920,6 +966,19 @@ Reply in this format:
           }
         }
 
+        // P1-10: 仓库级配置工具门禁 (.aether/config.json)
+        if (!entry.error) {
+          try {
+            const { isToolAllowed } = require('../config/projectConfig')
+            const ws = getWorkspaceRoot(sessionId)
+            const allowedCheck = isToolAllowed(fn.name, ws)
+            if (!allowedCheck.allowed) {
+              entry.error = allowedCheck.reason || `tool ${fn.name} is blocked by project config`
+              entry.failure_kind = 'permission_denied'
+            }
+          } catch {}
+        }
+
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
           entry.failure_kind = 'model_invalid_args'
@@ -1007,15 +1066,63 @@ Reply in this format:
             }
           }
 
-          // ── C1: ask 模式 dangerous 工具的用户确认门（真正接线）───────────
-          // requestPermissionWithTimeout: 回调抛错/超时均解析为 false ——
-          // 默认拒绝, 无静默放行。复用 chat:permission-request IPC 链路
-          // （toolLoopCallbacks.requestPermission, 内层 60s 超时）。
-          // 轴 ask（axisAskReason）同样进此通道：此前轴 ask 对非 dangerous
-          // 工具会在 authorizeWithContext 里静默拒绝（prompter=null）。
+          // ── P0-MM: 第二名复核 (Runner-Up Dual-Model Review) ──────────────
+          // 在 auto 模式下，若开启 'agent.runnerUpReview' 且工具属于 dangerous 级别
+          // （如修改代码行数超过 20 行或 shell 命令），调用 Arena 排位第二的模型交叉审查。
+          let runnerUpObjection = null
+          if (!entry.error && effectiveMode === 'auto' && tool.risk === 'dangerous' && db) {
+            try {
+              const ff = require('../featureFlags')
+              if (ff.isEnabled(db, 'agent.runnerUpReview')) {
+                const diffObj = generateDiff(fn.name, args)
+                const diffText = diffObj?.diff || ''
+                const lineCount = diffText ? diffText.split('\n').length : 0
+                if (lineCount > 20 || fn.name === 'run_command') {
+                  const intent = db.classifyIntent ? db.classifyIntent(userText) : 'coding'
+                  const currentModelId = model?.id || model?.model_id
+                  const runnerUp = db.getRunnerUpModel(intent, currentModelId)
+                  if (runnerUp && runnerUp.provider_id) {
+                    const ruProvider = db.getProviderDecrypted(runnerUp.provider_id)
+                    if (ruProvider) {
+                      try { onStatus?.({ kind: 'runner_up_review', text: `⚖️ 第二名复核 (${runnerUp.model_name}): 正在审查 ${fn.name} 变更...` }) } catch {}
+                      const reviewPrompt = `You are a strict code review and safety auditor.
+Review the following tool call for severe bugs, security vulnerabilities, syntax errors, or destructive data loss.
+Tool: ${fn.name}
+Arguments / Diff:
+${diffText.slice(0, 3000) || JSON.stringify(args).slice(0, 1000)}
+
+Reply ONLY with JSON:
+{"approved": boolean, "issue": "brief explanation if not approved, or empty string if approved"}`
+                      const reviewRes = await completeChatMessage({
+                        provider: ruProvider,
+                        model: { model_name: runnerUp.model_name, id: runnerUp.model_id },
+                        messages: [{ role: 'user', content: reviewPrompt }],
+                        signal,
+                        options: { temperature: 0.1, max_tokens: 256 },
+                      })
+                      const cleaned = (reviewRes?.content || '').replace(/```json|```/g, '').trim()
+                      try {
+                        const parsed = JSON.parse(cleaned)
+                        if (parsed && parsed.approved === false && parsed.issue) {
+                          runnerUpObjection = `第二名模型 (${runnerUp.model_name}) 提出异议: ${parsed.issue}`
+                          try { onStatus?.({ kind: 'warn', text: `⚠️ ${runnerUpObjection}` }) } catch {}
+                        }
+                      } catch {}
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              try { log.warn('Runner-up review error:', e?.message) } catch {}
+            }
+          }
+
           let userDecision = null
           let preDiff = null
-          const shouldPromptForPermission = (tool.risk === 'dangerous' && (effectiveMode === 'ask' || isTainted)) || axisAskReason
+          const shouldPromptForPermission = (tool.risk === 'dangerous' && (effectiveMode === 'ask' || isTainted)) || axisAskReason || runnerUpObjection
+          if (runnerUpObjection && !axisAskReason) {
+            axisAskReason = runnerUpObjection
+          }
           if (!entry.error && shouldPromptForPermission) {
             if (typeof requestPermission !== 'function') {
               // 无确认通道（headless/后台恢复）→ 默认拒绝。
@@ -1344,9 +1451,13 @@ Reply in this format:
           try { onThinkingEnd?.() } catch {}
           accountToolLoopUsage({ db, sessionId, provider, model, usage: finalMsg && finalMsg.usage, status: 200 })
           if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
-          if (finalMsg?.content) return finalMsg.content
+          if (finalMsg?.content) {
+            shadowSuccess = true
+            return finalMsg.content
+          }
         } catch {}
         if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
+        shadowSuccess = true
         return summary
       }
       continue
@@ -1370,6 +1481,7 @@ Reply in this format:
     }
     // 推理模型可能全部输出为思考过程(reasoning)而无正文 —— 给出可见说明而非空回复
     if (!msg.content && msg.reasoning) {
+      shadowSuccess = true
       return `[模型仅生成了思考过程, 未输出正文回复。可尝试换非推理模型(如 /model 选择), 或重试。]`
     }
     // Experience replay: 成功完成且动了工具 → 把本次轨迹(signature+工具序列)入池,
@@ -1383,6 +1495,7 @@ Reply in this format:
     // Always return the model's actual content — never return verification text
     // as the reply. Verification is fire-and-forget: it runs in the background
     // and its results are logged, not surfaced to the user as the answer.
+    shadowSuccess = finalStatus === 'success'
     return msg.content || ''
   }
   eventStream.agentEnd({ sessionId, finalStatus: 'budget_exhausted', totalIterations: budget.used })
@@ -1424,6 +1537,34 @@ Reply in this format:
     }
   } catch {}
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${graceNote}${planNote}`
+  } finally {
+    if (shadowWorktree && origRoot) {
+      try {
+        setWorkspaceRootForSession(sessionId, null)
+        const worktreeMgr = require('../worktreeManager')
+        if (shadowSuccess) {
+          const st = worktreeMgr.shadowWorkspaceStatus({ root: origRoot, sessionId })
+          if (st && st.dirty) {
+            const applied = worktreeMgr.applyShadowWorkspace({ root: origRoot, sessionId, message: `aether: auto mode changes (${sessionId})` })
+            if (applied && applied.ok) {
+              try { onStatus?.({ kind: 'shadow_workspace', text: '✓ 影子工作区测试通过，变更已合并至当前工作区' }) } catch {}
+            } else {
+              try { onStatus?.({ kind: 'warn', text: `⚠️ 影子工作区合并失败: ${applied?.error || '冲突'}` }) } catch {}
+            }
+          } else {
+            worktreeMgr.removeShadowWorkspace({ root: origRoot, sessionId, pruneBranch: true })
+          }
+        } else {
+          worktreeMgr.removeShadowWorkspace({ root: origRoot, sessionId, pruneBranch: true })
+          try { onStatus?.({ kind: 'shadow_workspace', text: '✕ 任务未完成或失败，影子工作区已自动回滚销毁' }) } catch {}
+        }
+      } catch (e) {
+        try { log.warn('Shadow workspace cleanup error:', e?.message) } catch {}
+      } finally {
+        shadowWorktree = null
+      }
+    }
+  }
 }
 
 // Execute a tool with timeout, retry on transient errors (Claude Code-style
