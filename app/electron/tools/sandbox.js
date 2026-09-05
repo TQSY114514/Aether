@@ -9,9 +9,30 @@ const app = (electron && typeof electron === 'object' && electron.app) ? electro
 let _workspaceRoot = null
 let _sessionWorkspaces = new Map()
 
-function setWorkspaceRoot(p) { _workspaceRoot = p ? path.resolve(p) : null }
+function isDangerousRoot(p) {
+  if (!p) return false
+  const norm = path.resolve(p).toLowerCase()
+  if (/^[a-z]:\\?$/i.test(norm) || norm === '/' || norm === '\\') return true
+  const winDir = (process.env.WINDIR || 'C:\\Windows').toLowerCase()
+  const progFiles = (process.env.ProgramFiles || 'C:\\Program Files').toLowerCase()
+  if (norm === winDir || norm.startsWith(winDir + path.sep)) return true
+  if (norm === progFiles || norm.startsWith(progFiles + path.sep)) return true
+  return false
+}
+
+function setWorkspaceRoot(p) {
+  if (p && isDangerousRoot(p)) {
+    throw new Error(`Forbidden workspace root: ${p} is a system-critical directory`)
+  }
+  _workspaceRoot = p ? path.resolve(p) : null
+}
 function setWorkspaceRootForSession(sessionId, p) {
-  if (p && String(p).trim()) { _sessionWorkspaces.set(sessionId, path.resolve(p)) }
+  if (p && String(p).trim()) {
+    if (isDangerousRoot(p)) {
+      throw new Error(`Forbidden workspace root: ${p} is a system-critical directory`)
+    }
+    _sessionWorkspaces.set(sessionId, path.resolve(p))
+  }
   else { _sessionWorkspaces.delete(sessionId) }
 }
 function clearSessionWorkspaces() { _sessionWorkspaces.clear() }
@@ -95,6 +116,10 @@ function isReparsePoint(p) {
 // 非 yolo 语境下被调用。
 const SENSITIVE_DIR_SEGMENTS = new Set(['.git', '.ssh', '.claude'])
 const SENSITIVE_DIR_PAIRS = { '.aetherai': new Set(['hooks', 'skills']) }
+const SENSITIVE_FILE_NAMES = new Set([
+  '.npmrc', '.gitconfig', '.bashrc', '.bash_profile', '.zshrc', '.profile',
+  'authorized_keys', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa',
+])
 
 function isSensitivePath(p) {
   const segs = String(p || '').replace(/\\/g, '/').toLowerCase().split('/')
@@ -104,6 +129,9 @@ function isSensitivePath(p) {
   for (let i = 0; i < segs.length - 1; i++) {
     const next = SENSITIVE_DIR_PAIRS[segs[i]]
     if (next && next.has(segs[i + 1])) return true
+  }
+  if (segs.length > 0 && SENSITIVE_FILE_NAMES.has(segs[segs.length - 1])) {
+    return true
   }
   return false
 }

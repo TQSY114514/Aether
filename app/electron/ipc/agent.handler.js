@@ -101,6 +101,16 @@ function registerAgentHandlers(ipcMain, db) {
     db.deleteCheckpoints(sessionId)
     return { ok: true }
   })
+
+  // ─── Agent Execution Audit / Trajectory IPC ─────────────────────────────
+  ipcMain.handle('agent:audit:list', (_e, { sessionId, limit = 50 } = {}) => {
+    try {
+      if (!sessionId) return []
+      return db.getAuditLog(sessionId, limit)
+    } catch {
+      return []
+    }
+  })
 }
 
 module.exports = { registerAgentHandlers }

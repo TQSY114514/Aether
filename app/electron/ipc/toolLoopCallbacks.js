@@ -193,10 +193,15 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   // the permission dialog. 60s timeout. `source` field tells the renderer
   // whether this is a 'chat' turn or a 'task' background run. `reason` (when
   // present) carries the policy attribution, e.g. capability axis ask.
-  callbacks.requestPermission = ({ name, args, risk, reason }) => {
-    if (allowRules.match(sessionId, name, args)) return Promise.resolve(true)
+  callbacks.requestPermission = ({ name, args, risk, reason, diff, isTainted, taintReason }) => {
+    // If not tainted, check allow-rules. If tainted by external untrusted input, require explicit confirmation!
+    if (!isTainted && allowRules.match(sessionId, name, args)) return Promise.resolve(true)
     let impactPreview = null
     try { impactPreview = require('../tools/toolImpact').toolImpact(name, args) } catch {}
+    let diffPreview = diff || null
+    if (!diffPreview && ['write_file', 'edit_file', 'apply_patch'].includes(name)) {
+      try { diffPreview = require('../tools/toolImpact').generateDiff(name, args)?.diff } catch {}
+    }
     return new Promise((resolve) => {
       const reqId = `${msgId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
       const safeWc = getWc ? getWc() : null
@@ -211,7 +216,7 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       }
       const onReply = (_e, r) => {
         if (!r || r.reqId !== reqId) return
-        if (r.allowed && r.remember) allowRules.add(sessionId, name, args)
+        if (r.allowed && r.remember && !isTainted) allowRules.add(sessionId, name, args)
         finish(!!r.allowed)
       }
       const onAbort   = () => finish(false)
@@ -223,7 +228,15 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       controller.signal.addEventListener('abort', onAbort)
       if (!safeWc) { finish(false); return }
       safeWc.on('chat:permission-reply', onReply)
-      safeSend('chat:permission-request', { reqId, messageId: msgId, sessionId, name, args, risk, impact: impactPreview, source, reason: reason || undefined })
+      safeSend('chat:permission-request', {
+        reqId, messageId: msgId, sessionId, name, args, risk,
+        impact: impactPreview,
+        diff: diffPreview,
+        isTainted: !!isTainted,
+        taintReason: taintReason || undefined,
+        source,
+        reason: reason || undefined,
+      })
     })
   }
 

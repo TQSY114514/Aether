@@ -6,7 +6,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
-import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, Activity } from 'lucide-react'
+import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, Activity, History } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
@@ -14,6 +14,7 @@ import ThinkingBlock from './ThinkingBlock'
 import ToolCallBlock from './ToolCallBlock'
 import TaskCard from './TaskCard'
 import AgentPlanTrace from './AgentPlanTrace'
+import AgentRunTimeline from './AgentRunTimeline'
 
 // Arena results display component with streaming-like animation
 function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, prompt }: {
@@ -428,6 +429,7 @@ export default function ChatWindow() {
     return messages.filter(m => m.content.toLowerCase().includes(q)).map(m => m.id)
   }, [messages, debouncedQuery])
   const [matchIdx, setMatchIdx] = useState(0)
+  const [showTimeline, setShowTimeline] = useState(false)
   const matchCount = matchIds.length
   // Clamp the active index when the match set shrinks (query changed).
   useEffect(() => { if (matchIdx > matchCount - 1) setMatchIdx(Math.max(0, matchCount - 1)) }, [matchCount, matchIdx])
@@ -503,6 +505,17 @@ export default function ChatWindow() {
             <span className="opacity-40">|</span>
             <span className="tabular-nums">{sessionStats.messagesCount} msgs</span>
           </div>
+        )}
+        {currentSessionId && (
+          <button
+            onClick={() => setShowTimeline(true)}
+            className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            title={t('agent.timeline.view_toggle')}
+          >
+            <History size={12} style={{ color: 'var(--accent)' }} />
+            <span>{t('agent.timeline.view_toggle')}</span>
+          </button>
         )}
       </div>
 
@@ -612,6 +625,14 @@ export default function ChatWindow() {
       </div>
 
       <MessageNav messages={messages} activeId={activeMsgId} scrollTo={scrollToMsg} scrollRef={scrollRef} />
+
+      {currentSessionId && (
+        <AgentRunTimeline
+          sessionId={currentSessionId}
+          isOpen={showTimeline}
+          onClose={() => setShowTimeline(false)}
+        />
+      )}
     </div>
   )
 }

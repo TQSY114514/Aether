@@ -169,9 +169,25 @@ function generateDiff(name, args) {
     const filePath = String(args?.path || '')
     const content = String(args?.content ?? '')
     if (!filePath || !content) return null
-    const lines = content.split('\n')
-    const body = lines.map(l => '+' + l).join('\n')
-    return { diff: truncate(body, MAX_DIFF_CHARS), oldPath: '/dev/null', newPath: filePath }
+    let oldLines = []
+    let exists = false
+    try {
+      if (require('fs').existsSync(filePath)) {
+        const existing = readFileSync(filePath, 'utf-8')
+        oldLines = existing.split('\n')
+        exists = true
+      }
+    } catch {}
+    if (exists) {
+      const newLines = content.split('\n')
+      const body = buildUnifiedDiff(oldLines, newLines)
+      const diff = '--- ' + filePath + '\n+++ ' + filePath + '\n' + body
+      return { diff: truncate(diff, MAX_DIFF_CHARS), oldPath: filePath, newPath: filePath }
+    } else {
+      const lines = content.split('\n')
+      const body = lines.map(l => '+' + l).join('\n')
+      return { diff: truncate(body, MAX_DIFF_CHARS), oldPath: '/dev/null', newPath: filePath }
+    }
   }
   if (name === 'edit_file') {
     const filePath = String(args?.path || '')
@@ -183,6 +199,12 @@ function generateDiff(name, args) {
     const body = buildUnifiedDiff(oldLines, newLines)
     const diff = '--- ' + filePath + '\n+++ ' + filePath + '\n' + body
     return { diff: truncate(diff, MAX_DIFF_CHARS), oldPath: filePath, newPath: filePath }
+  }
+  if (name === 'apply_patch') {
+    const filePath = String(args?.path || '')
+    const patch = String(args?.patch ?? '')
+    if (!filePath || !patch) return null
+    return { diff: truncate(patch, MAX_DIFF_CHARS), oldPath: filePath, newPath: filePath }
   }
   return null
 }

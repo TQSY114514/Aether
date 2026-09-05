@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:get', id),
     deleteCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:delete', id),
     cleanupCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:cleanup', sessionId),
+    getAuditLog: (sessionId, limit) => ipcRenderer.invoke('agent:audit:list', { sessionId, limit }),
   },
   git: {
     undo: (cwd) => ipcRenderer.invoke('git:undo', cwd),

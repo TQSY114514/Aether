@@ -18,6 +18,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const { spawn } = require('child_process')
+const { sanitizeProcessEnv } = require('./envSanitizer')
 
 // Windows 进程树终止（对标 Codex 沙箱的 Job Object 隔离）:
 // child.kill() 只杀主进程, cmd.exe /c 派生的孙进程会变孤儿继续跑。
@@ -69,7 +70,7 @@ function runCommand(command, args, opts = {}) {
 
     const child = spawn(command, args, {
       cwd,
-      env: { ...process.env, ...nonInteractiveEnv, ...(env || {}) },
+      env: sanitizeProcessEnv(process.env, { ...nonInteractiveEnv, ...(env || {}) }),
       shell,
       windowsHide,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -129,7 +130,7 @@ function runCommandSync(command, args, opts = {}) {
   const { spawnSync } = require('child_process')
   const child = spawnSync(command, args, {
     cwd,
-    env: env ? { ...process.env, ...env } : undefined,
+    env: sanitizeProcessEnv(process.env, env || {}),
     shell,
     windowsHide,
     stdio: ['pipe', 'pipe', 'pipe'],
