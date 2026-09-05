@@ -1,8 +1,102 @@
+const path = require('path')
+const { spawn } = require('child_process')
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
 const { computeCost } = require('../utils/cost')
 const { shouldWriteQuickTitle, quickTitleOf } = require('./chat-send.handler')
 const log = require('../logger')
 const abortControllers = new Map()
+
+function sanitizeVerifyCommand(cmd) {
+  if (typeof cmd !== 'string') return null
+  const trimmed = cmd.trim()
+  if (!trimmed || trimmed.includes('\0') || trimmed.length > 1000) return null
+  return trimmed
+}
+
+function resolveTaskCwd(taskCwd, fallbackRoot) {
+  const base = path.resolve(fallbackRoot || process.cwd())
+  if (!taskCwd || typeof taskCwd !== 'string') return base
+  const resolved = path.resolve(base, taskCwd)
+  const rel = path.relative(base, resolved)
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return base
+  }
+  return resolved
+}
+
+function killProcessTree(child) {
+  if (!child || !child.pid) return
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    } catch {}
+  } else {
+    try { child.kill('SIGTERM') } catch {}
+    try { child.kill('SIGKILL') } catch {}
+  }
+}
+
+function runVerifyCommand(verifyCommand, taskCwd, signal, expectedExitCode = 0) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve(false)
+    let child
+    try {
+      child = spawn(verifyCommand, {
+        cwd: taskCwd,
+        shell: true,
+        windowsHide: true,
+        stdio: 'ignore',
+      })
+    } catch (e) {
+      return resolve(false)
+    }
+
+    let finished = false
+    let timer = null
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onAbort)
+    }
+
+    const onAbort = () => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        killProcessTree(child)
+        resolve(false)
+      }
+    }
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true })
+    }
+
+    timer = setTimeout(() => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        killProcessTree(child)
+        resolve(false)
+      }
+    }, 30000)
+
+    child.on('error', () => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        resolve(false)
+      }
+    })
+
+    child.on('close', (code) => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        resolve(code === expectedExitCode)
+      }
+    })
+  })
+}
 
 function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, personaId, temperatures }) => {
@@ -163,7 +257,30 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   })
 
   ipcMain.handle('arena:benchmark-save', (_e, { id = null, name, tasks, modelIds }) => {
-    try { return db.saveArenaBenchmark({ id, name: String(name || 'benchmark').slice(0, 60), tasks, modelIds }) } catch (e) { return { error: e.message } }
+    try {
+      if (!Array.isArray(tasks)) return { error: 'tasks must be an array' }
+      const fallbackRoot = require('../tools/sandbox').getWorkspaceRoot() || process.cwd()
+      const cleanTasks = tasks.map(t => {
+        if (typeof t === 'string') return t.trim()
+        if (typeof t === 'object' && t !== null) {
+          const prompt = String(t.prompt || '').trim()
+          const verifyCommand = sanitizeVerifyCommand(t.verifyCommand)
+          const cwd = t.cwd ? resolveTaskCwd(t.cwd, fallbackRoot) : null
+          const expectedExitCode = typeof t.expectedExitCode === 'number' ? t.expectedExitCode : 0
+          return { prompt, verifyCommand, cwd, expectedExitCode }
+        }
+        return String(t || '').trim()
+      }).filter(t => (typeof t === 'string' ? t.length > 0 : t.prompt.length > 0))
+
+      return db.saveArenaBenchmark({
+        id,
+        name: String(name || 'benchmark').slice(0, 60),
+        tasks: cleanTasks,
+        modelIds: Array.isArray(modelIds) ? modelIds : [],
+      })
+    } catch (e) {
+      return { error: e.message }
+    }
   })
 
   ipcMain.handle('arena:benchmark-delete', (_e, id) => {
@@ -184,11 +301,13 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     abortControllers.set(`bench:${id}`, controller)
 
     try {
+      const fallbackRoot = require('../tools/sandbox').getWorkspaceRoot() || process.cwd()
       for (const task of bench.tasks) {
         const isObj = typeof task === 'object' && task !== null
         const content = isObj ? String(task.prompt || '').trim() : String(task || '').trim()
-        const verifyCommand = isObj && task.verifyCommand ? String(task.verifyCommand).trim() : null
-        const taskCwd = isObj && task.cwd ? String(task.cwd) : (require('../tools/sandbox').getWorkspaceRoot() || process.cwd())
+        const verifyCommand = isObj ? sanitizeVerifyCommand(task.verifyCommand) : null
+        const taskCwd = isObj && task.cwd ? resolveTaskCwd(task.cwd, fallbackRoot) : fallbackRoot
+        const expectedExitCode = isObj && typeof task.expectedExitCode === 'number' ? task.expectedExitCode : 0
         if (!content) continue
         // 并行跑该任务下所有模型(复用 arena 并发语义), 等待全部完成
         const round = await Promise.all(selected.map(async (m) => {
@@ -207,21 +326,17 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
             const u = normalizeUsage(usage)
             const cost = u ? computeCost(m, u) : 0
             let ok = !!answer && !String(answer).startsWith('[Error')
+            let verified = false
 
             // P1-09 SWE-bench: 真实测试命令校验 (Pass/Fail)
             if (ok && verifyCommand) {
-              try {
-                const { execSync } = require('child_process')
-                execSync(verifyCommand, { cwd: taskCwd, timeout: 30000, stdio: 'pipe', windowsHide: true })
-                ok = true
-              } catch (verifyErr) {
-                ok = false
-              }
+              verified = true
+              ok = await runVerifyCommand(verifyCommand, taskCwd, controller.signal, expectedExitCode)
             }
 
-            return { modelId: m.id, ok, latency: Date.now() - start, cost, verified: !!verifyCommand }
+            return { modelId: m.id, ok, latency: Date.now() - start, cost, verified }
           } catch (err) {
-            return { modelId: m.id, ok: false, latency: Date.now() - start, cost: 0, verified: !!verifyCommand }
+            return { modelId: m.id, ok: false, latency: Date.now() - start, cost: 0, verified: false }
           } finally {
             clearTimeout(timeout)
             controller.signal.removeEventListener('abort', onOuterAbort)

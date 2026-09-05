@@ -79,7 +79,7 @@ export default function ChatInput() {
       const baseCmds = (cmds && cmds.length > 0) ? cmds : DEFAULT_COMMANDS.filter(c => !c.action)
       const recipeCmds: SlashCommand[] = (recipes || []).map((r: any) => ({
         id: `recipe:${r.id}`,
-        name: `🍳 ${r.title}`,
+        name: `[配方] ${r.title}`,
         description: r.description,
         prompt: r.prompt,
       }))

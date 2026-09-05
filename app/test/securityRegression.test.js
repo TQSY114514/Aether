@@ -11,25 +11,34 @@
 //   7. [MCP & External Sanitization] 外部/MCP 工具输出中敏感凭证脱敏与 Prompt 注入剥离
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, vi, afterAll } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-// Electron stub
 import Module from 'module'
+
+// Hoist Electron mock for Vitest test collection and execution
+vi.mock('electron', () => ({
+  app: {
+    getPath: () => join(tmpdir(), 'aether-security-test-userdata'),
+  },
+  ipcMain: {
+    listeners: () => [],
+    handle: () => {},
+    on: () => {},
+  },
+}))
+
 const origLoad = Module._load
-beforeAll(() => {
-  Module._load = function (request, ...args) {
-    if (request === 'electron') {
-      return {
-        app: { getPath: () => join(tmpdir(), 'aether-security-test-userdata') },
-        ipcMain: { listeners: () => [] },
-      }
+Module._load = function (request, ...args) {
+  if (request === 'electron') {
+    return {
+      app: { getPath: () => join(tmpdir(), 'aether-security-test-userdata') },
+      ipcMain: { listeners: () => [], handle: () => {}, on: () => {} },
     }
-    return origLoad.apply(this, [request, ...args])
   }
-})
+  return origLoad.apply(this, [request, ...args])
+}
 
 afterAll(() => {
   Module._load = origLoad
@@ -137,6 +146,9 @@ describe('P0-06 外部 RCE 与真实攻击回归套件', () => {
       '.ssh/authorized_keys',
       '.aetherai/hooks/on_commit.js',
       '.aetherai/skills/malicious/SKILL.md',
+      '.aether/config.json',
+      '.aether.json',
+      'opencode.json',
       '.claude/settings.json',
       '.npmrc',
       '.gitconfig',

@@ -142,14 +142,28 @@ function getProjectRules(workspaceRoot) {
   if (!cfg.rules || cfg.rules.length === 0) return []
 
   const resolved = []
+  const base = path.resolve(workspaceRoot)
+  let realBase = base
+  try { realBase = fs.realpathSync(base) } catch {}
+
   for (const r of cfg.rules) {
-    if (r.endsWith('.md') || r.endsWith('.txt')) {
-      const full = path.resolve(workspaceRoot, r)
+    if (typeof r === 'string' && (r.endsWith('.md') || r.endsWith('.txt'))) {
+      const full = path.resolve(base, r)
+      const rel = path.relative(base, full)
+      // Reject paths that traverse outside workspaceRoot or are on different drives
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        resolved.push(r)
+        continue
+      }
       try {
         if (fs.existsSync(full)) {
-          const content = fs.readFileSync(full, 'utf8')
-          if (content.trim()) resolved.push(content.trim())
-          continue
+          const real = fs.realpathSync(full)
+          const realRel = path.relative(realBase, real)
+          if (!realRel.startsWith('..') && !path.isAbsolute(realRel)) {
+            const content = fs.readFileSync(real, 'utf8')
+            if (content.trim()) resolved.push(content.trim())
+            continue
+          }
         }
       } catch {}
     }
