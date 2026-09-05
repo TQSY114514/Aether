@@ -1,56 +1,72 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="688" viewBox="0 0 900 688" role="img" aria-label="Aether honest self-assessment radar vs peer agents">
-<rect x="0" y="0" width="900" height="688" rx="16" fill="#0d1117"/>
-<rect x="0.5" y="0.5" width="899" height="687" rx="15.5" fill="none" stroke="#21262d"/>
-<text x="40" y="52" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="21" font-weight="700" fill="#e6edf3">Aether · Agent Workbench 自评雷达 <tspan fill="#8b949e" font-weight="400" font-size="15">Honest self-radar</tspan></text>
-<text x="40" y="78" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8b949e">vs Claude Code / Codex / OpenCode / Cursor / Cline / OpenClaw / Gemini CLI / OpenHands</text>
-<g font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12">
-<rect x="608" y="40" width="14" height="14" fill="#6366f1" fill-opacity="0.32" stroke="#818cf8" stroke-width="1.5"/><text x="628" y="51" fill="#c9d1d9">Aether 自评</text>
-<line x1="608" y1="70" x2="622" y2="70" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4"/><text x="628" y="74" fill="#8b949e">同类最佳（对照）</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="740" viewBox="0 0 960 740" role="img" aria-label="Aether honest self-assessment radar vs 16 peer agents">
+<rect x="0" y="0" width="960" height="740" rx="16" fill="#0d1117"/>
+<rect x="0.5" y="0.5" width="959" height="739" rx="15.5" fill="none" stroke="#21262d"/>
+<text x="40" y="46" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="20" font-weight="700" fill="#e6edf3">Aether · Agent Workbench 诚实自评雷达 <tspan fill="#8b949e" font-weight="400" font-size="14">(2026-09 最新评估)</tspan></text>
+<text x="40" y="70" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" fill="#8b949e">全面对比 16 款主流 Agent 工具 · 8 大核心维度能力画像</text>
+<g font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11.5">
+<rect x="640" y="32" width="12" height="12" rx="2" fill="#6366f1" fill-opacity="0.36" stroke="#818cf8" stroke-width="1.8"/>
+<text x="658" y="42" fill="#e0e7ff" font-weight="600">Aether 自评 (v0.8.1+)</text>
+<line x1="640" y1="58" x2="652" y2="58" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="658" y="62" fill="#8b949e">同类最佳包络 (16 款竞品峰值)</text>
+<line x1="640" y1="78" x2="652" y2="78" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.8"/>
+<text x="658" y="82" fill="#7dd3fc">Claude Code (终端标杆)</text>
+<line x1="795" y1="78" x2="807" y2="78" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.8"/>
+<text x="813" y="82" fill="#fcd34d">Cursor (IDE 标杆)</text>
 </g>
-<polygon points="450.0,315.0 479.0,327.0 491.0,356.0 479.0,385.0 450.0,397.0 421.0,385.0 409.0,356.0 421.0,327.0" fill="none" stroke="#21262d" stroke-width="1"/>
-<polygon points="450.0,274.0 508.0,298.0 532.0,356.0 508.0,414.0 450.0,438.0 392.0,414.0 368.0,356.0 392.0,298.0" fill="none" stroke="#21262d" stroke-width="1"/>
-<polygon points="450.0,233.0 537.0,269.0 573.0,356.0 537.0,443.0 450.0,479.0 363.0,443.0 327.0,356.0 363.0,269.0" fill="none" stroke="#21262d" stroke-width="1"/>
-<polygon points="450.0,192.0 566.0,240.0 614.0,356.0 566.0,472.0 450.0,520.0 334.0,472.0 286.0,356.0 334.0,240.0" fill="none" stroke="#21262d" stroke-width="1"/>
-<polygon points="450.0,151.0 595.0,211.0 655.0,356.0 595.0,501.0 450.0,561.0 305.0,501.0 245.0,356.0 305.0,211.0" fill="none" stroke="#30363d" stroke-width="1.2"/>
-<line x1="450" y1="356" x2="450.0" y2="151.0" stroke="#21262d" stroke-width="1"/>
-<line x1="450" y1="356" x2="595.0" y2="211.0" stroke="#21262d" stroke-width="1"/>
-<line x1="450" y1="356" x2="655.0" y2="356.0" stroke="#21262d" stroke-width="1"/>
-<line x1="450" y1="356" x2="595.0" y2="501.0" stroke="#21262d" stroke-width="1"/>
-<line x1="450" y1="356" x2="450.0" y2="561.0" stroke="#21262d" stroke-width="1"/>
-<line x1="450" y1="356" x2="305.0" y2="501.0" stroke="#21262d" stroke-width="1"/>
-<line x1="450" y1="356" x2="245.0" y2="356.0" stroke="#21262d" stroke-width="1"/>
-<line x1="450" y1="356" x2="305.0" y2="211.0" stroke="#21262d" stroke-width="1"/>
-<text x="456" y="312" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#484f58">2</text>
-<text x="456" y="271" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#484f58">4</text>
-<text x="456" y="230" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#484f58">6</text>
-<text x="456" y="189" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#484f58">8</text>
-<text x="456" y="148" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#484f58">10</text>
-<text x="450.0" y="115.0" text-anchor="middle" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">编程 Agent <tspan fill="#8b949e" font-size="11">8.5</tspan></text>
-<text x="450.0" y="130.0" text-anchor="middle" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Coding</text>
-<text x="616.2" y="183.8" text-anchor="start" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">通用任务 <tspan fill="#8b949e" font-size="11">9.0</tspan></text>
-<text x="616.2" y="198.8" text-anchor="start" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">General</text>
-<text x="685.0" y="358.0" text-anchor="start" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">多模型/供应商 <tspan fill="#3fb950" font-size="11">9.8</tspan></text>
-<text x="685.0" y="373.0" text-anchor="start" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Multi-provider</text>
-<text x="616.2" y="534.2" text-anchor="start" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">扩展生态 <tspan fill="#8b949e" font-size="11">9.5</tspan></text>
-<text x="616.2" y="549.2" text-anchor="start" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Ecosystem</text>
-<text x="450.0" y="603.0" text-anchor="middle" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">多 Agent 编排 <tspan fill="#8b949e" font-size="11">8.5</tspan></text>
-<text x="450.0" y="618.0" text-anchor="middle" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Multi-agent</text>
-<text x="283.8" y="534.2" text-anchor="end" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">安全/权限 <tspan fill="#3fb950" font-size="11">9.9</tspan></text>
-<text x="283.8" y="549.2" text-anchor="end" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Safety</text>
-<text x="215.0" y="358.0" text-anchor="end" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">本地/隐私 <tspan fill="#3fb950" font-size="11">9.5</tspan></text>
-<text x="215.0" y="373.0" text-anchor="end" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Local &amp; private</text>
-<text x="283.8" y="183.8" text-anchor="end" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#c9d1d9">桌面/终端 UX <tspan fill="#8b949e" font-size="11">9.5</tspan></text>
-<text x="283.8" y="198.8" text-anchor="end" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Desktop &amp; TUI UX</text>
-<polygon points="450.0,155.1 592.1,213.9 648.9,356.0 592.1,498.1 450.0,550.8 307.9,498.1 265.5,356.0 307.9,213.9" fill="none" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4"/>
-<polygon points="450.0,181.8 580.5,225.5 650.9,356.0 587.7,493.7 450.0,530.3 306.5,499.5 255.3,356.0 312.3,218.3" fill="#6366f1" fill-opacity="0.30" stroke="#818cf8" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="450.0" cy="181.8" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<circle cx="580.5" cy="225.5" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<circle cx="650.9" cy="356.0" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<circle cx="587.7" cy="493.7" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<circle cx="450.0" cy="530.3" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<circle cx="306.5" cy="499.5" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<circle cx="255.3" cy="356.0" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<circle cx="312.3" cy="218.3" r="3.2" fill="#a5b4fc" stroke="#0d1117" stroke-width="1"/>
-<text x="40" y="648" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="11.5" fill="#8b949e">自评估计，非跑分——基于公开资料与日常使用印象（2026-08，Aether v0.8.0+ 验收阶段）。形状即定位：强在「本地优先」与「安全」轴，编程能力稳步逼近第一梯队。</text>
-<text x="40" y="668" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10.5" fill="#484f58">Self-scored estimates, not benchmarks (public info, 2026-08, v0.8.0+). The asymmetric shape is the point.</text>
+<polygon points="480.0,334.0 509.7,346.3 522.0,376.0 509.7,405.7 480.0,418.0 450.3,405.7 438.0,376.0 450.3,346.3" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,292.0 539.4,316.6 564.0,376.0 539.4,435.4 480.0,460.0 420.6,435.4 396.0,376.0 420.6,316.6" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,250.0 569.1,286.9 606.0,376.0 569.1,465.1 480.0,502.0 390.9,465.1 354.0,376.0 390.9,286.9" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,208.0 598.8,257.2 648.0,376.0 598.8,494.8 480.0,544.0 361.2,494.8 312.0,376.0 361.2,257.2" fill="none" stroke="#1f242c" stroke-width="0.8"/>
+<polygon points="480.0,166.0 628.5,227.5 690.0,376.0 628.5,524.5 480.0,586.0 331.5,524.5 270.0,376.0 331.5,227.5" fill="none" stroke="#30363d" stroke-width="1.2"/>
+<line x1="480" y1="376" x2="480.0" y2="166.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="628.5" y2="227.5" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="690.0" y2="376.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="628.5" y2="524.5" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="480.0" y2="586.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="331.5" y2="524.5" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="270.0" y2="376.0" stroke="#21262d" stroke-width="1"/>
+<line x1="480" y1="376" x2="331.5" y2="227.5" stroke="#21262d" stroke-width="1"/>
+<text x="486" y="331" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">2</text>
+<text x="486" y="289" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">4</text>
+<text x="486" y="247" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">6</text>
+<text x="486" y="205" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">8</text>
+<text x="486" y="163" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="9" fill="#484f58">10</text>
+<polygon points="480.0,170.2 625.5,230.5 683.7,376.0 625.5,521.5 480.0,575.5 334.5,521.5 291.0,376.0 334.5,230.5" fill="none" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4"/>
+<polygon points="480.0,170.2 576.5,279.5 627.0,376.0 625.5,521.5 480.0,575.5 346.4,509.6 322.5,376.0 361.2,257.2" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
+<polygon points="480.0,172.3 591.4,264.6 627.0,376.0 606.2,502.2 480.0,554.5 361.2,494.8 343.5,376.0 334.5,230.5" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
+<polygon points="480.0,191.2 616.6,239.4 687.9,376.0 622.6,518.6 480.0,565.0 331.5,524.5 274.2,376.0 336.0,232.0" fill="#6366f1" fill-opacity="0.32" stroke="#818cf8" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="480.0" cy="191.2" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="616.6" cy="239.4" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="687.9" cy="376.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="622.6" cy="518.6" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="480.0" cy="565.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="331.5" cy="524.5" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="274.2" cy="376.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="336.0" cy="232.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<text x="480.0" y="126.0" text-anchor="middle" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">编程 Agent <tspan fill="#a5b4fc" font-size="12" font-weight="700">8.8</tspan><tspan fill="#8b949e" font-size="10.5"> (-1.0)</tspan></text>
+<text x="480.0" y="141.0" text-anchor="middle" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Coding · Peak 9.8</text>
+<text x="651.1" y="196.9" text-anchor="start" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">通用任务 <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.2</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.6)</tspan></text>
+<text x="651.1" y="211.9" text-anchor="start" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">General · Peak 9.8</text>
+<text x="722.0" y="378.0" text-anchor="start" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">多模型/供应商 <tspan fill="#4ade80" font-size="12" font-weight="700">9.9</tspan><tspan fill="#4ade80" font-size="10.5"> (★领先)</tspan></text>
+<text x="722.0" y="393.0" text-anchor="start" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Multi-provider · Peak 9.7</text>
+<text x="651.1" y="561.1" text-anchor="start" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">扩展生态 <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.6</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.2)</tspan></text>
+<text x="651.1" y="576.1" text-anchor="start" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Ecosystem · Peak 9.8</text>
+<text x="480.0" y="632.0" text-anchor="middle" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">多 Agent 编排 <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.0</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.5)</tspan></text>
+<text x="480.0" y="647.0" text-anchor="middle" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Multi-agent · Peak 9.5</text>
+<text x="308.9" y="561.1" text-anchor="end" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">安全/权限 <tspan fill="#4ade80" font-size="12" font-weight="700">10.0</tspan><tspan fill="#4ade80" font-size="10.5"> (★领先)</tspan></text>
+<text x="308.9" y="576.1" text-anchor="end" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Safety · Peak 9.8</text>
+<text x="238.0" y="378.0" text-anchor="end" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">本地/隐私 <tspan fill="#4ade80" font-size="12" font-weight="700">9.8</tspan><tspan fill="#4ade80" font-size="10.5"> (★领先)</tspan></text>
+<text x="238.0" y="393.0" text-anchor="end" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Local &amp; private · Peak 9.0</text>
+<text x="308.9" y="196.9" text-anchor="end" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="13" font-weight="600" fill="#e6edf3">桌面/终端双形态 <tspan fill="#a5b4fc" font-size="12" font-weight="700">9.7</tspan><tspan fill="#8b949e" font-size="10.5"> (-0.1)</tspan></text>
+<text x="308.9" y="211.9" text-anchor="end" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="10" fill="#6e7681">Desktop &amp; TUI UX · Peak 9.8</text>
+<g font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="11">
+<rect x="40" y="642" width="880" height="54" rx="8" fill="#161b22" stroke="#21262d"/>
+<text x="54" y="660" fill="#8b949e" font-weight="600">对比竞品矩阵（16款）：</text>
+<text x="54" y="680" fill="#c9d1d9">
+  <tspan fill="#7dd3fc" font-weight="600">终端类</tspan>: Claude Code · Codex · OpenCode · Aider · Gemini CLI · Kimi CLI  ｜  
+  <tspan fill="#fcd34d" font-weight="600">IDE/桌面</tspan>: Cursor · Windsurf · Trae · Cline · Copilot  ｜  
+  <tspan fill="#c084fc" font-weight="600">自主平台</tspan>: OpenHands · Devin · OpenClaw · DSH · Hermes
+</text>
+</g>
+<text x="40" y="716" font-family="-apple-system,Segoe UI,'Microsoft YaHei',sans-serif" font-size="10.5" fill="#6e7681">客观自评 · 形状即定位：Aether 强在「本地隐私」、「三层沙箱安全」与「多模型自由切换」；在单一极端编程任务上坦然落后于 Claude Code/Cursor，绝不顶格美化。</text>
 </svg>
