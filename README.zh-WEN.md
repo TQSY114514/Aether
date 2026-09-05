@@ -38,16 +38,22 @@
 
 ---
 
-## 一庫二品
+## 雙輪並曜，一體同樞
 
-Aether 之發佈，兩個產品並出，二者同享一 Agent 運行時：
+Aether 發佈以雙形態並行，兩者氣脈同流，無有上下。深潛之下，共享 Agent 靈核、SQLite 萬維之庫與三重金城禦侮沙箱：
 
-- **Aether 桌面版** —— Electron + React 圖形界面。自 [GitHub Releases](#下載-桌面版) 下載，開箱即用。
-- **Aether CLI / TUI / SDK** —— 無頭 Agent、Ink v5 終端界面、Electron-free SDK。以 `npm install -g aetherai` 裝之（[安裝之法](#下載-cli--tui--sdk)）。CLI 命令曰 `aether`。
+- 🖥️ **Aether 桌面版（GUI）** —— Electron + React 圖形之坊。文字燦然，移錄隨意，兼備擂臺選粹與圖畫機杼。**尋常修撰、好目治圖象及新入門者，宜首選之。**（自 [GitHub Releases](#下載-桌面版) 下載，即開即行）
+- ⌨️ **Aether 終端版（CLI / TUI / SDK）** —— 基於 Node.js 22+ 與 Ink v5 終端界面。運指如飛，啟閉如電，改書審錄絲髮分明，遠涉 SSH 與百役自動無往不入。**深研終端、獨好鍵盤策算者宜選之。**（以 `npm i -g aetherai` 裝之，詳見[安裝之法](#下載-cli--tui--sdk)）
 
-> **Aether 之初，唯桌面端耳。** CLI 與 TUI 乃後加之，猶未完善。若但求一可用之 AI 工作台，請先裝 **Aether 桌面版**。CLI / TUI / SDK 尚處**實驗性質**：接口與行止可能變動，部分功能或不完整、不可靠。
+> 💡 **神交無間**：二者同稟 `agentCore` 靈核、四十二樞機之器、SQLite 記憶、多模型通途與同一會話庫。案席圖景所啟之問，隨時可於端几以 `aether tui --session <id>` 續詠，反之亦同。
 
-二者共享 `agentCore`、四十二工具、SQLite 記憶、多模型路由、MCP 伺服器，會話之庫亦同。圖形界面所啟之會話，可於 TUI 以 `aether tui --session <id>` 續之，反之亦然。
+---
+
+**Aether 居於何處 —— 誠直之衡。** 稽考公天下諸書，衡較十六方名家樞機（2026-09 最新驗度；乃平心權量，非誇飾之競分）。吾輩存真去偽，直書其貌：「玄圃內隱」、「金城禦侮」與「萬宗並納」拔萃當世；而獨門純藝之算，坦承有遜於 Claude Code 與 Cursor 之輩，不作矯飾。詳考載於 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
+
+<p align="center"><img src="./assets/agent-radar-2026.zh-WEN.svg" width="760" alt="Aether 躬自審度星網: 衡較十六方名家樞機" /></p>
+
+<sub>圖出於 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> —— 十六家算度俱納於中，可以 <code>node app/scripts/gen-radar.cjs</code> 驗知。</sub>
 
 ---
 

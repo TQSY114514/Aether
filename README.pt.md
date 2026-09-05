@@ -40,16 +40,22 @@ Converse com qualquer modelo, execute um agente de codificação seguro e compar
 
 ---
 
-## Dois produtos, um repositório
+## Duas formas de produto, um núcleo unificado
 
-O Aether é distribuído como dois artefatos independentes que compartilham o mesmo runtime de agente:
+O Aether adota uma **arquitetura de motor duplo**, oferecendo duas interfaces de primeira linha equivalentes que compartilham o mesmo runtime de agente, armazenamento SQLite e sandbox de segurança de 3 níveis:
 
-- **Aether Desktop** — a GUI Electron + React. Baixe no [GitHub Releases](#download--desktop). Funciona pronto para uso.
-- **Aether CLI / TUI / SDK** — agente headless, interface de terminal Ink v5 e SDK sem Electron. Instale com `npm install -g aetherai` ([instalação →](#download--cli--tui--sdk)). O binário do CLI é `aether`.
+- 🖥️ **Aether Desktop (GUI)** — Interface gráfica Electron + React com tipografia refinada, arrastar e soltar, arena de modelos visual e centro de configurações intuitivo. **Recomendado para a maioria dos fluxos diários e novos usuários.** (Baixe no [GitHub Releases](#download--desktop), pronto para uso)
+- ⌨️ **Aether Terminal (CLI / TUI / SDK)** — UI de terminal Ink v5 leve com inicialização instantânea, operação 100% por teclado, aprovação de diffs linha a linha e suporte nativo a SSH e pipelines CI/CD. **Feito para desenvolvedores focados em terminal e automação.** (`npm i -g aetherai`, [instalação →](#download--cli--tui--sdk))
 
-> **O Aether começou como um aplicativo desktop.** A CLI e a TUI foram adicionadas depois e ainda estão se atualizando. Se você quer apenas uma estação de trabalho de IA funcional, comece pelo **Aether Desktop**. A camada CLI/TUI/SDK é experimental: APIs e comportamento podem mudar, e alguns recursos podem estar incompletos ou pouco confiáveis.
+> 💡 **Continuidade fluida**: Ambos compartilham o `agentCore`, 42 ferramentas, memória SQLite, roteamento multi-modelo, servidores MCP e o mesmo armazenamento de sessões. Um chat iniciado na GUI pode ser retomado no TUI com `aether tui --session <id>` e vice-versa.
 
-Ambos compartilham o `agentCore`, 42 ferramentas, memória SQLite, roteamento multi-modelo, servidores MCP e o mesmo armazenamento de sessões. Um chat iniciado na GUI pode ser retomado no TUI com `aether tui --session <id>` e vice-versa.
+---
+
+**Onde o Aether se posiciona — com total honestidade.** Autoavaliação frente a 16 ferramentas de agentes líderes (terminal, IDE e plataformas autônomas) com base em dados públicos (avaliação de 2026-09; estimativas, não benchmarks). Apresentamos a forma assimétrica sem filtros: liderança em privacidade local, segurança em 3 níveis e flexibilidade multi-modelo; reconhecemos com franqueza a distância em código bruto frente ao Claude Code e Cursor. Para uma análise aprofundada, veja [docs/competitive-analysis.md](docs/competitive-analysis.md).
+
+<p align="center"><img src="./assets/agent-radar-2026.pt.svg" width="760" alt="Radar de Autoavaliação Honesta do Aether vs 16 pares" /></p>
+
+<sub>Gráfico gerado por <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — pontuações incorporadas literalmente; reproduzível via <code>node app/scripts/gen-radar.cjs</code>.</sub>
 
 ---
 

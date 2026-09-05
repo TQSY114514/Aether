@@ -38,16 +38,22 @@
 
 ---
 
-## 兩個產品,一個儲存庫
+## 兩個產品形態，一個統一核心
 
-Aether 以兩個獨立產品的形式發布,二者共享同一 Agent 執行時:
+Aether 採用**雙輪驅動架構**發布，提供完全平等的雙形態體驗，底層 100% 共享相同的 Agent 執行時、SQLite 記憶與三層安全沙箱：
 
-- **Aether 桌面版** — Electron + React 圖形介面。從 [GitHub Releases](#下載-桌面版) 下載,開箱即用。
-- **Aether CLI / TUI / SDK** — 無頭 Agent、Ink v5 終端 UI、Electron-free SDK。`npm install -g aetherai`(詳見[下載 CLI](#下載-cli--tui--sdk))。CLI 命令為 `aether`。
+- 🖥️ **Aether 桌面版（GUI）** — 基於 Electron + React。擁有直觀的圖文富文字流、多視窗拖曳、視覺化模型競技場與直觀的設定中心。**推薦絕大多數日常開發、偏好視覺化操作與新使用者首選。**（從 [GitHub Releases](#下載-桌面版) 下載，開箱即用）
+- ⌨️ **Aether 終端版（CLI / TUI / SDK）** — 基於 Node.js 22+ 與 Ink v5。全鍵盤沉浸式互動、毫秒級輕量啟動、行級 Diff 審批，原生支援 SSH 遠端開發與無頭 CI/CD 流水線。**推薦重度終端極客與全鍵盤流開發者。**（`npm i -g aetherai`，詳見[下載 CLI](#下載-cli--tui--sdk)）
 
-> **Aether 最初只有桌面端**，CLI / TUI 是後來補上的，目前仍在完善中。如果你只是想用一個**穩定可用的 AI 工作台**，請先裝 **Aether 桌面版**。CLI / TUI / SDK 仍處於**實驗性質**：接口與行為可能變化，部分功能可能不完整或不可靠。
+> 💡 **無縫協同**：二者共享 `agentCore`、42 個工具、SQLite 記憶、多模型路由、MCP 伺服器與同一會話儲存。你在桌面版開啟的會話，隨時可在終端用 `aether tui --session <id>` 續接，反之亦然。
 
-二者共享 `agentCore`、42 個工具、SQLite 記憶、多模型路由、MCP 伺服器與同一會話儲存。桌面端開啟的會話可在終端用 `aether tui --session <id>` 續接,反之亦然。
+---
+
+**Aether 在哪一檔——誠實版。** 依據公開資料對 16 款主流終端 / IDE / 平台 Agent 工具進行系統自評（2026-09 最新評估；是估計，不是跑分）。我們把不對稱的形狀原樣畫出來：強在「本地隱私」、「三層沙箱安全」與「多模型自由切換」等軸；單模型極致編程能力坦然與第一梯隊存在客觀差距。這就是你選擇 Aether 時接受的真實取捨。完整競品深度對比詳見 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
+
+<p align="center"><img src="./assets/agent-radar-2026.zh-TW.svg" width="760" alt="Aether 誠實自評雷達: 對比 16 款主流終端 / IDE / 平台 Agent 工具" /></p>
+
+<sub>圖表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——16 款工具評分逐字內嵌其中，可用 <code>node app/scripts/gen-radar.cjs</code> 本地復現。</sub>
 
 ---
 

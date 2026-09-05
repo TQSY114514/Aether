@@ -40,6 +40,25 @@
 
 ---
 
+## 두 가지 제품 형태, 하나의 통합 코어
+
+Aether는 **듀얼 엔진 아키텍처**로 제공되며, 완전히 동등한 최고 수준의 경험을 제공합니다. 내부적으로 100% 동일한 에이전트 런타임, SQLite 메모리 및 3단계 보안 샌드박스를 공유합니다:
+
+- 🖥️ **Aether 데스크톱(GUI)** — Electron + React 기반 그래픽 UI. 풍부한 텍스트, 멀티 창 드래그 앤 드롭, 시각적 모델 아레나 및 직관적인 설정을 제공합니다. **대부분의 일상적인 개발 작업과 시각적 조작을 선호하는 사용자에게 추천합니다.**([GitHub Releases](#다운로드-데스크톱)에서 다운로드)
+- ⌨️ **Aether 터미널(CLI / TUI / SDK)** — Node.js 22+ 및 Ink v5 기반 인터랙티브 터미널 및 SDK. 초고속 실행, 풀 키보드 조작, 줄 번호 diff 승인, SSH 원격 개발 및 CI/CD 자동화를 기본 지원합니다. **터미널 중심의 파워 유저에게 추천합니다.**(`npm i -g aetherai`, [설정 안내](#다운로드-cli--tui--sdk))
+
+> 💡 **원활한 연속성**: 둘 다 `agentCore`, 내장 도구, SQLite 메모리, 멀티 모델 라우팅, MCP 서버 및 동일한 세션 저장소를 공유합니다. 데스크톱에서 시작한 대화는 터미널에서 `aether tui --session <id>`로 즉시 이어갈 수 있습니다.
+
+---
+
+**Aether의 현재 위치 — 솔직한 자체 평가.** 공개 정보를 기반으로 16개 주요 터미널/IDE/플랫폼 에이전트 도구와 자체 평가를 진행했습니다(2026-09 최신 평가; 벤치마크가 아닌 추정치). 비대칭적 형상을 솔직하게 공개합니다: 로컬 프라이버시, 3단계 샌드박스 보안, 다중 모델 전환에서 우수하며, 순수 코딩에서의 Claude Code/Cursor 대비 격차를 숨김없이 인정합니다. 자세한 비교는 [docs/competitive-analysis.md](docs/competitive-analysis.md)를 참조하세요.
+
+<p align="center"><img src="./assets/agent-radar-2026.ko.svg" width="760" alt="Aether 솔직한 자체 평가 레이더: 16개 주요 에이전트 도구 비교" /></p>
+
+<sub>차트는 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a>로 생성되었으며 <code>node app/scripts/gen-radar.cjs</code>로 재현할 수 있습니다.</sub>
+
+---
+
 ## Aether의 차별점
 
 Aether는 일반적으로 여러 도구에 분산되어 있는 기능들을 하나의 로컬 데스크톱 앱에 결합합니다:
