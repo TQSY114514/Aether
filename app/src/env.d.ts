@@ -256,6 +256,7 @@ interface Window {
       getCheckpoint: (id: number) => Promise<{ id: number; sessionId: number; turnId: number; stepIndex: number; messages: unknown[]; toolTrace: unknown[]; meta: Record<string, unknown>; createdAt: string } | null>
       deleteCheckpoint: (id: number) => Promise<{ ok: boolean }>
       cleanupCheckpoints: (sessionId: number) => Promise<{ ok: boolean }>
+      getAuditLog: (sessionId: number, limit?: number) => Promise<{ id: number; session_id: number; turn_id: number; payload: any; created_at: string }[]>
     }
     git: {
       undo: (cwd?: string) => Promise<{ success: boolean; message?: string; undoneCommit?: string | null; error?: string }>

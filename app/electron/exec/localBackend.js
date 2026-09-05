@@ -15,6 +15,7 @@
 
 const { spawn } = require('child_process')
 const os = require('os')
+const { sanitizeProcessEnv } = require('../tools/envSanitizer')
 
 const MAX_TAIL = 64 * 1024      // bytes kept per stream (stdout/stderr)
 const DEFAULT_TIMEOUT = 60_000  // ms; 0 = no timeout
@@ -54,7 +55,7 @@ const localBackend = {
     try {
       child = spawn(command, args, {
         cwd: cwd || process.cwd(),
-        env: { ...process.env, ...(env || {}) },
+        env: sanitizeProcessEnv(process.env, env),
         windowsHide: true,
       })
     } catch (err) {

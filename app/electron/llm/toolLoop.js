@@ -538,6 +538,10 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Collect all tool calls for the audit log.
   const auditTrail = []
 
+  // Untrusted external content taint tracking (QVD-2026-57410 / DeepSeek Harness defense):
+  let isTainted = false
+  const taintSources = []
+
   // Collect evidence for evidence-based verification (Codex-inspired).
   const verificationEvidence = []
 
@@ -1010,7 +1014,9 @@ Reply in this format:
           // 轴 ask（axisAskReason）同样进此通道：此前轴 ask 对非 dangerous
           // 工具会在 authorizeWithContext 里静默拒绝（prompter=null）。
           let userDecision = null
-          if (!entry.error && ((tool.risk === 'dangerous' && effectiveMode === 'ask') || axisAskReason)) {
+          let preDiff = null
+          const shouldPromptForPermission = (tool.risk === 'dangerous' && (effectiveMode === 'ask' || isTainted)) || axisAskReason
+          if (!entry.error && shouldPromptForPermission) {
             if (typeof requestPermission !== 'function') {
               // 无确认通道（headless/后台恢复）→ 默认拒绝。
               entry.error = axisAskReason
@@ -1018,9 +1024,16 @@ Reply in this format:
                 : `permission denied: dangerous tool '${fn.name}' requires user confirmation but no permission callback is available`
               entry.failure_kind = 'permission_denied'
             } else {
+              try {
+                const { generateDiff } = require('../tools/toolImpact')
+                preDiff = generateDiff(fn.name, args)
+              } catch {}
               userDecision = await requestPermissionWithTimeout(requestPermission, {
                 name: fn.name, args, risk: tool.risk,
-                reason: axisAskReason || undefined,
+                reason: axisAskReason || (isTainted ? 'untrusted_input_taint' : undefined),
+                diff: preDiff?.diff,
+                isTainted,
+                taintReason: isTainted && taintSources.length > 0 ? taintSources[taintSources.length - 1] : undefined,
               })
               // 信任分绑定用户决定（批准 +5 / 拒绝·超时 -10）, 而非"调用即加"。
               try {
@@ -1115,6 +1128,12 @@ Reply in this format:
               if (autoCommit) {
                 try { maybeAutoCommitAfterTool({ toolName: fn.name, args, sessionId, db, onStatus }) } catch {}
               }
+              // Untrusted external content taint tracking:
+              if (['web_search', 'web_fetch', 'read_url_content', 'fetch_web_page'].includes(fn.name)) {
+                isTainted = true
+                const target = (args && (args.url || args.query || args.path)) || fn.name
+                taintSources.push(`${fn.name}: ${String(target).slice(0, 80)}`)
+              }
             }
           }
         }
@@ -1170,7 +1189,18 @@ Reply in this format:
           // 推断阶段, 无外部审计者(onAudit 未接)时也不能饿死;
           // onAudit 只负责外部持久化（CodeRabbit #48 复审意见）。
           if (!isPlan) {
-            auditTrail.push({ name: entry.name, args: entry.args, result: entry.result, error: entry.error, failure_kind: entry.failure_kind, recovery_hint: entry.recovery_hint, latencyMs: entry.latencyMs, depth })
+            auditTrail.push({
+              name: entry.name,
+              args: entry.args,
+              result: entry.result,
+              error: entry.error,
+              failure_kind: entry.failure_kind,
+              recovery_hint: entry.recovery_hint,
+              latencyMs: entry.latencyMs,
+              depth,
+              diff: entry.diff || null,
+              isTainted: !!isTainted,
+            })
           }
         }
         let rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')

@@ -67,6 +67,9 @@ export default function PermissionDialog() {
   const reasonRaw = (req as any).reason as string | undefined
   const axisMatch = reasonRaw ? reasonRaw.match(/^capability policy: (\w+) axis requires approval$/) : null
 
+  const isTainted = (req as any).isTainted === true
+  const taintReason = (req as any).taintReason as string | undefined
+
   const handleDeny = () => resolve(req.reqId, false, false)
   const handleAllowSession = () => resolve(req.reqId, true, 'session')
   const handleAllowRemember = () => resolve(req.reqId, true, 'remember')
@@ -75,10 +78,10 @@ export default function PermissionDialog() {
   return (
     <div className="fixed inset-0 z-[101] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 animate-blur-fade" onClick={() => resolve(req.reqId, false)} />
-      <div className="relative w-full max-w-md rounded-2xl border shadow-xl p-5 animate-blur-fade"
-        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
+      <div className="relative w-full max-w-lg rounded-2xl border shadow-xl p-5 animate-blur-fade"
+        style={{ backgroundColor: 'var(--bg-primary)', borderColor: isTainted ? 'var(--error)' : 'var(--border)' }}>
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(220,38,38,0.1)' }}>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: isTainted ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.1)' }}>
             <Icon size={16} style={{ color: 'var(--error)' }} />
           </div>
           <div>
@@ -86,6 +89,25 @@ export default function PermissionDialog() {
             <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{t(meta.labelKey)} · {t('tool.risk.high')}</p>
           </div>
         </div>
+
+        {/* Taint Alert: Untrusted External Input (QVD-2026-57410 defense) */}
+        {isTainted && (
+          <div className="rounded-lg p-3 mb-3 text-xs border"
+            style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.4)', color: 'var(--error)' }}>
+            <div className="flex items-center gap-1.5 font-semibold mb-1">
+              <ShieldAlert size={14} className="shrink-0" />
+              <span>{t('agent.permission.taint_warning_title')}</span>
+            </div>
+            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              {t('agent.permission.taint_warning_desc')}
+            </p>
+            {taintReason && (
+              <div className="mt-1 text-[10px] font-mono opacity-85 truncate" style={{ color: 'var(--text-muted)' }}>
+                {taintReason}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Axis policy attribution — capability.<axis> = ask */}
         {axisMatch && (
@@ -158,37 +180,46 @@ export default function PermissionDialog() {
         <pre className="text-xs font-mono whitespace-pre-wrap break-all rounded-lg p-2.5 mb-3 max-h-24 overflow-y-auto"
           style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{summarizeArgs(req.name, req.args)}</pre>
 
-        {/* Diff preview for file-touching tools (Claude Code / Cline pattern) */}
+        {/* Unified Diff preview for file-touching tools */}
         {['write_file', 'edit_file', 'apply_patch'].includes(req.name) && (() => {
+          const rawDiff = (req as any).diff as string | undefined
           const args = req.args as Record<string, string> | undefined
-          if (!args) return null
-          const oldLines = req.name === 'write_file' ? [] : (args.old_string || '').split('\n')
-          const newLines = req.name === 'apply_patch'
-            ? (args.patch || '').split('\n').filter(l => l.startsWith('+') || l.startsWith(' ') || l.startsWith('-')).map(l => l.slice(1))
-            : (args.content || args.new_string || '').split('\n')
-          const total = oldLines.length + newLines.length
-          if (total === 0) return null
-          const maxShow = 60
-          const showOld = oldLines.slice(0, maxShow)
-          const showNew = newLines.slice(0, maxShow)
+          let diffLines: string[] = []
+          if (rawDiff) {
+            diffLines = rawDiff.split('\n')
+          } else if (args) {
+            if (req.name === 'apply_patch') {
+              diffLines = (args.patch || '').split('\n')
+            } else if (req.name === 'edit_file') {
+              const oldLines = (args.old_string || '').split('\n').map(l => '-' + l)
+              const newLines = (args.new_string || '').split('\n').map(l => '+' + l)
+              diffLines = [...oldLines, ...newLines]
+            } else if (req.name === 'write_file') {
+              diffLines = (args.content || '').split('\n').map(l => '+' + l)
+            }
+          }
+          if (!diffLines || diffLines.length === 0) return null
+          const maxShow = 80
+          const displayLines = diffLines.slice(0, maxShow)
           return (
-            <div className="rounded-lg border mb-3 overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+            <div className="rounded-lg border mb-3 overflow-hidden text-left" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-medium" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-                <FileDiff size={11} /> Diff Preview {total > maxShow ? `(showing ${maxShow} of ${total} lines)` : `(${total} lines)`}
+                <FileDiff size={12} /> {t('agent.permission.diff_preview')} {diffLines.length > maxShow ? `(${maxShow}/${diffLines.length} lines)` : `(${diffLines.length} lines)`}
               </div>
-              <div className="flex text-[11px] font-mono">
-                {showOld.map((line, i) => (
-                  <div key={`old-${i}`} className="flex w-full" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span className="shrink-0 px-2 text-right select-none" style={{ color: 'var(--error)', backgroundColor: 'rgba(239,68,68,0.06)', width: '2.5rem' }}>{i + 1}</span>
-                    <span className="px-2 truncate" style={{ color: 'var(--text-secondary)' }}>-{line}</span>
-                  </div>
-                ))}
-                {showNew.map((line, i) => (
-                  <div key={`new-${i}`} className="flex w-full" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span className="shrink-0 px-2 text-right select-none" style={{ color: 'var(--success)', backgroundColor: 'rgba(34,197,94,0.06)', width: '2.5rem' }}>{i + 1}</span>
-                    <span className="px-2 truncate" style={{ color: 'var(--text-secondary)' }}>+{line}</span>
-                  </div>
-                ))}
+              <div className="text-[11px] font-mono max-h-52 overflow-y-auto divide-y divide-[var(--border)]">
+                {displayLines.map((line, i) => {
+                  const isAdd = line.startsWith('+') && !line.startsWith('+++')
+                  const isDel = line.startsWith('-') && !line.startsWith('---')
+                  const isHdr = line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')
+                  const bg = isAdd ? 'rgba(34,197,94,0.08)' : isDel ? 'rgba(239,68,68,0.08)' : isHdr ? 'rgba(59,130,246,0.08)' : 'transparent'
+                  const color = isAdd ? 'var(--success)' : isDel ? 'var(--error)' : isHdr ? 'var(--accent)' : 'var(--text-secondary)'
+                  return (
+                    <div key={i} className="flex px-2 py-0.5" style={{ backgroundColor: bg }}>
+                      <span className="shrink-0 w-8 select-none text-[10px] text-right pr-2 opacity-50" style={{ color: 'var(--text-muted)' }}>{i + 1}</span>
+                      <span className="whitespace-pre-wrap break-all" style={{ color }}>{line}</span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )
