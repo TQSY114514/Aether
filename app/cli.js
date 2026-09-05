@@ -35,6 +35,8 @@ const HELP = `Aether headless agent
 
 Usage:
   aether <prompt> [options]      Single-shot prompt (positional or -p).
+  aether recipe list             List available recipes (official + project).
+  aether recipe run <id>         Run a curated recipe (e.g. fix-failing-tests).
   aether tui [--smoke]           Interactive terminal UI.
   aether completion <shell>      Print a shell completion script (bash|zsh|powershell).
   aether --mode json "prompt"    NDJSON event stream (like --json-lines).
@@ -78,6 +80,7 @@ Options:
   --persona <id>          Load a saved persona (system prompt + memory prefix).
   --list-models           List available models and exit.
   --list-providers        List configured providers and exit.
+  --list-recipes          List available recipes and exit.
   --db <path>             Path to aetherai.db (default: userData/aetherai.db).
   --term-settings <path>  Override the Windows Terminal settings path for --setup-term.
   --version               Print the version (aether <semver>) and exit.
@@ -127,7 +130,7 @@ function parseArgs(argv) {
       }
       const key = arg.slice(2)
       // Flags that take no value.
-      if (['json', 'json-lines', 'list-models', 'list-providers', 'task', 'stdin', 'setup-term', 'memory-trace', 'skills', 'version', 'resume'].includes(key)) { opts[key] = true; continue }
+      if (['json', 'json-lines', 'list-models', 'list-providers', 'list-recipes', 'task', 'stdin', 'setup-term', 'memory-trace', 'skills', 'version', 'resume'].includes(key)) { opts[key] = true; continue }
       // --fork takes an OPTIONAL value: `--fork <id>` treats <id> as the source
       // session directly; bare `--fork` takes its source from --session/--resume.
       // Only a pure integer is consumed as a value (session ids are INTEGER PKs),
@@ -239,10 +242,58 @@ function main() {
     console.log(r.script)
     return 0
   }
+
+  // P1-07 / P1-08: aether recipe list / aether recipe run <id>
+  if (argv[0] === 'recipe') {
+    const recipesModule = require('./electron/recipes/registry')
+    const sub = argv[1] || 'list'
+    if (sub === 'list') {
+      const list = recipesModule.listRecipes(process.cwd())
+      console.log(`\nAether Recipes (${list.length} available):\n`)
+      for (const r of list) {
+        const tag = r.custom ? '[custom]' : '[official]'
+        console.log(`  ${r.id.padEnd(28)} ${tag.padEnd(10)} ${r.title}`)
+      }
+      console.log(`\nRun a recipe: aether recipe run <id>\n`)
+      return 0
+    }
+    if (sub === 'run') {
+      const id = argv[2]
+      if (!id) {
+        console.error('error: recipe id required. e.g. `aether recipe run fix-failing-tests`')
+        return 1
+      }
+      const r = recipesModule.getRecipe(id, process.cwd())
+      if (!r) {
+        console.error(`error: recipe "${id}" not found. Run \`aether recipe list\` to see available recipes.`)
+        return 1
+      }
+      argv.splice(0, 3, r.prompt)
+      if (r.suggestedMode && !argv.includes('--mode')) {
+        argv.push('--mode', r.suggestedMode)
+      }
+    }
+  }
+
   const opts = parseArgs(argv)
 
   // W5-t27：--version → aether <semver>，早于 --help。
   if (opts.version) { console.log('aether ' + require('./package.json').version); return 0 }
+
+  if (opts['list-recipes']) {
+    const list = require('./electron/recipes/registry').listRecipes(process.cwd())
+    if (opts.json) {
+      console.log(JSON.stringify(list, null, 2))
+    } else {
+      console.log(`\nAether Recipes (${list.length} available):\n`)
+      for (const r of list) {
+        const tag = r.custom ? '[custom]' : '[official]'
+        console.log(`  ${r.id.padEnd(28)} ${tag.padEnd(10)} ${r.title}`)
+      }
+      console.log(`\nRun: aether recipe run <id>\n`)
+    }
+    return 0
+  }
 
   if (opts.help) { console.log(HELP); return 0 }
 

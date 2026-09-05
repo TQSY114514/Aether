@@ -70,20 +70,28 @@ export default function ChatInput() {
   const [refCursor, setRefCursor] = useState(0)
   useEffect(() => {
     let cancelled = false
-    window.electronAPI.commands?.list?.().then((cmds: SlashCommand[]) => {
+    Promise.all([
+      window.electronAPI.commands?.list?.().catch(() => []),
+      window.electronAPI.recipe?.list?.().catch(() => []),
+    ]).then(([cmds, recipes]: [any, any]) => {
       if (cancelled) return
-      if (cmds && cmds.length > 0) {
-        // Merge: keep the built-in action commands (clear/regenerate/compact/undo)
-        // that are only defined as DEFAULT_COMMANDS, alongside the CMD.md commands
-        // discovered via IPC. Without this, action-only commands would be dropped
-        // as soon as any CMD.md file exists.
-        const actionCmds = DEFAULT_COMMANDS.filter(c => c.action)
-        const merged = [...actionCmds, ...cmds.filter(c => !actionCmds.some(a => a.id === c.id))]
-        setSlashCommands(merged)
-      } else {
-        setSlashCommands(DEFAULT_COMMANDS)
-      }
-    }).catch(() => {})
+      const actionCmds = DEFAULT_COMMANDS.filter(c => c.action)
+      const baseCmds = (cmds && cmds.length > 0) ? cmds : DEFAULT_COMMANDS.filter(c => !c.action)
+      const recipeCmds: SlashCommand[] = (recipes || []).map((r: any) => ({
+        id: `recipe:${r.id}`,
+        name: `🍳 ${r.title}`,
+        description: r.description,
+        prompt: r.prompt,
+      }))
+      const merged = [
+        ...actionCmds,
+        ...baseCmds.filter((c: any) => !actionCmds.some(a => a.id === c.id)),
+        ...recipeCmds,
+      ]
+      setSlashCommands(merged)
+    }).catch(() => {
+      setSlashCommands(DEFAULT_COMMANDS)
+    })
     return () => { cancelled = true }
   }, [])
   // Load arena scores on mount so model selector shows ratings.

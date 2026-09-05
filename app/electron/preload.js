@@ -129,6 +129,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     benchmarkDelete: (id) => ipcRenderer.invoke('arena:benchmark-delete', id),
     benchmarkRun: (data) => ipcRenderer.invoke('arena:benchmark-run', data),
     benchmarkStop: (id) => ipcRenderer.invoke('arena:benchmark-stop', id),
+    benchmarkTemplates: () => ipcRenderer.invoke('arena:benchmark-templates'),
     autoRoute: (params) => ipcRenderer.invoke('arena:auto-route', params),
     onModelDone: (cb) => subscribe('arena:model-done', cb),
   },
@@ -197,6 +198,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
     import: (bundle) => ipcRenderer.invoke('config:import', bundle),
     importExternal: () => ipcRenderer.invoke('config:import-external'),
+    getProject: (workspaceRoot) => ipcRenderer.invoke('config:getProject', workspaceRoot),
   },
   protocol: {
     onOpen: (cb) => subscribe('protocol:open', cb),
@@ -215,6 +217,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateState: (name, state) => ipcRenderer.invoke('skills:updateState', name, state),
     pin: (name, pinned) => ipcRenderer.invoke('skills:pin', name, pinned),
     importDir: () => ipcRenderer.invoke('skills:importDir'),
+  },
+  recipe: {
+    list: (workspaceRoot) => ipcRenderer.invoke('recipe:list', workspaceRoot),
+    get: (id, workspaceRoot) => ipcRenderer.invoke('recipe:get', id, workspaceRoot),
   },
   search: {
     messages: (query, sessionId) => ipcRenderer.invoke('search:messages', { query, sessionId }),

@@ -212,6 +212,99 @@ function worktreeDiffStats(root, taskId) {
   return r.ok ? { stats: r.stdout.split('\n').filter(Boolean) } : { stats: [] }
 }
 
+// ─── Shadow Workspace (P0-02 / Cursor & OpenHands isolation) ───────────────
+
+function shadowDirFor(root, sessionId) {
+  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
+  return path.join(root, '.aether', 'worktrees', `shadow-${safeId}`)
+}
+
+function createShadowWorkspace({ root, sessionId }) {
+  const repo = assertRepo(root)
+  if (!repo.ok) return repo
+  const dir = shadowDirFor(root, sessionId)
+  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
+  const branch = `aether-shadow-${safeId}`
+
+  const existing = git(root, ['worktree', 'list', '--porcelain'])
+  if (existing.ok && filenameMatches(existing.stdout, dir)) {
+    return { ok: true, dir, branch, reused: true }
+  }
+
+  const r = git(root, ['worktree', 'add', '-B', branch, dir])
+  if (!r.ok) {
+    if (fs.existsSync(dir)) return { ok: true, dir, branch, reused: true }
+    return { ok: false, error: `shadow worktree create failed: ${r.stderr || 'unknown git error'}` }
+  }
+  return { ok: true, dir, branch }
+}
+
+function commitShadowWorkspace({ root, sessionId, message = 'aether: shadow workspace changes' } = {}) {
+  const dir = shadowDirFor(root, sessionId)
+  const st = git(dir, ['status', '--porcelain'])
+  if (!st.ok || !st.stdout) return { ok: true, committed: false, sha: null }
+  git(dir, ['add', '-A'])
+  const c = git(dir, ['commit', '-q', '-m', message])
+  if (!c.ok) return { ok: false, error: `shadow commit failed: ${c.stderr}` }
+  const sha = git(dir, ['rev-parse', 'HEAD'])
+  return { ok: true, committed: true, sha: sha.stdout || null }
+}
+
+function applyShadowWorkspace({ root, sessionId, message = 'aether: apply shadow workspace changes' } = {}) {
+  const repo = assertRepo(root)
+  if (!repo.ok) return repo
+  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
+  const dir = shadowDirFor(root, sessionId)
+  const branch = `aether-shadow-${safeId}`
+
+  const committed = commitShadowWorkspace({ root, sessionId, message })
+  if (!committed.ok) return committed
+
+  const m = git(root, ['merge', '--no-edit', branch])
+  if (m.ok) {
+    removeShadowWorkspace({ root, sessionId, pruneBranch: true })
+    return { ok: true, message: 'applied' }
+  }
+
+  const conflictText = `${m.stdout}\n${m.stderr}`
+  const conflicts = (conflictText.match(/CONFLICT[^\n]*?:\s*(?:Merge conflict in\s+)?([^\n]+)/g) || [])
+    .map(l => l.replace(/^CONFLICT[^\n]*?:\s*(?:Merge conflict in\s+)?/, '').trim())
+    .filter(Boolean)
+  git(root, ['merge', '--abort'])
+  return { ok: false, conflicts, error: m.stderr || `merge shadow branch ${branch} failed` }
+}
+
+function removeShadowWorkspace({ root, sessionId, pruneBranch = true } = {}) {
+  const safeId = String(sessionId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_')
+  const dir = shadowDirFor(root, sessionId)
+  const r = git(root, ['worktree', 'remove', '--force', dir])
+  if (pruneBranch) git(root, ['branch', '-D', `aether-shadow-${safeId}`])
+  git(root, ['worktree', 'prune'])
+  return { ok: true }
+}
+
+function shadowWorkspaceStatus({ root, sessionId }) {
+  const dir = shadowDirFor(root, sessionId)
+  const porcelain = git(root, ['worktree', 'list', '--porcelain'])
+  if (!porcelain.ok) return null
+  const blocks = porcelain.stdout.replace(/\r/g, '').split('\n\n').filter(Boolean)
+  for (const block of blocks) {
+    const lines = block.split('\n')
+    const wtPath = (lines.find(l => l.startsWith('worktree ')) || '').slice('worktree '.length).trim()
+    if (!sameDir(wtPath, dir)) continue
+    const branchLine = lines.find(l => l.startsWith('branch '))
+    const branch = branchLine ? branchLine.slice('branch refs/heads/'.length) : null
+    const info = { dir: wtPath, branch, exists: true }
+    if (branch) {
+      const st = git(wtPath, ['status', '--porcelain'])
+      info.dirty = st.ok && st.stdout.length > 0
+      info.changedFiles = st.ok ? st.stdout.split('\n').filter(Boolean).length : 0
+    }
+    return info
+  }
+  return null
+}
+
 module.exports = {
   assertRepo,
   worktreeDirFor,
@@ -221,4 +314,10 @@ module.exports = {
   mergeWorktree,
   removeWorktree,
   worktreeDiffStats,
+  shadowDirFor,
+  createShadowWorkspace,
+  commitShadowWorkspace,
+  applyShadowWorkspace,
+  removeShadowWorkspace,
+  shadowWorkspaceStatus,
 }

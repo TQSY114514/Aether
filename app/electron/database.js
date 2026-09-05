@@ -871,6 +871,58 @@ function autoRoute(intent) {
   return null
 }
 
+function getRunnerUpModel(intent, excludeModelId) {
+  const targetIntent = intent || 'general'
+  const excludeSql = excludeModelId ? 'AND ms.model_id != ?' : ''
+  const params = excludeModelId ? [targetIntent, excludeModelId] : [targetIntent]
+  const scores = db.prepare(`
+    SELECT ms.score, ms.model_id, m.model_name, m.provider_id, p.name as provider_name
+    FROM model_score ms
+    JOIN model m ON ms.model_id = m.id
+    JOIN provider p ON m.provider_id = p.id
+    WHERE ms.intent = ? AND p.enabled = 1 ${excludeSql}
+    ORDER BY ms.score DESC
+    LIMIT 1
+  `).all(...params)
+
+  if (scores.length > 0) {
+    const runnerUp = scores[0]
+    return {
+      intent: targetIntent,
+      model_id: Number(runnerUp.model_id),
+      model_name: runnerUp.model_name,
+      provider_id: Number(runnerUp.provider_id),
+      provider_name: runnerUp.provider_name,
+      score: runnerUp.score,
+      route_reason: `Runner-up ELO ${runnerUp.score.toFixed(0)} (${targetIntent})`
+    }
+  }
+
+  const fallbackSql = excludeModelId ? 'AND m.id != ?' : ''
+  const fbParams = excludeModelId ? [excludeModelId] : []
+  const m = db.prepare(`
+    SELECT m.id as model_id, m.model_name, m.provider_id, p.name as provider_name
+    FROM model m
+    JOIN provider p ON m.provider_id = p.id
+    WHERE p.enabled = 1 ${fallbackSql}
+    ORDER BY m.is_primary DESC, m.id ASC
+    LIMIT 1
+  `).get(...fbParams)
+
+  if (m) {
+    return {
+      intent: targetIntent,
+      model_id: Number(m.model_id),
+      model_name: m.model_name,
+      provider_id: Number(m.provider_id),
+      provider_name: m.provider_name,
+      score: 1000,
+      route_reason: 'Secondary fallback'
+    }
+  }
+  return null
+}
+
 // ===== Memory CRUD =====
 function getMemories(limit) {
   const q = limit ? `LIMIT ${Math.max(1, Math.floor(limit))}` : ''
@@ -1355,7 +1407,7 @@ module.exports = {
   getScheduledTasks, addScheduledTask, getScheduledTask, deleteScheduledTask, markScheduledTaskRun,
   createAgentTask, getAgentTask, updateAgentTask, listAgentTasks,
   getSessionPlan, saveSessionPlan, clearSessionPlan,
-  getModelScores, getModelUsageMetrics, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute,
+  getModelScores, getModelUsageMetrics, getModelLatency, initModelScores, updateElo, recordArenaVote, classifyIntent, autoRoute, getRunnerUpModel,
 listArenaBenchmarks, saveArenaBenchmark, deleteArenaBenchmark, updateArenaBenchmarkResults,
 saveDatabase, flushDatabase,
   getPrimaryModel, getSessionConfig, setSessionConfig,

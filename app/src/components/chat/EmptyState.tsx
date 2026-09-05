@@ -160,6 +160,26 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
           </div>
         )}
 
+        {/* Quick recipe shortcuts (P1-07 Curated Recipes) */}
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
+          <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>配方直达:</span>
+          {[
+            { label: '修测试', prompt: '请执行项目测试命令（如 npm test / pytest），定位所有失败或异常的用例。阅读相关代码与堆栈信息，做出最小化修复，并重新运行测试直到全部通过。最后总结修复原因。' },
+            { label: '写提交', prompt: '请运行 git diff 检查当前所有未暂存和暂存的代码变更。分析改动的核心意图、影响范围，按照 Conventional Commits 规范生成清晰规范的提交信息。' },
+            { label: '审 PR', prompt: '请检查当前分支与基准分支之间的差异文件列表与 diff。逐一审查架构坏味道、内存泄漏、安全注入风险与编码规范，输出详细评审报告。' },
+            { label: '安全排查', prompt: '全面扫描代码库：检查是否存在硬编码的 API Key、私钥文件、未做边界检查的路径操作。输出详细的安全评估报告并给出加固建议。' },
+          ].map((item) => (
+            <button
+              key={item.label}
+              onClick={() => startWith(item.prompt)}
+              className="px-2.5 py-1 text-xs rounded-lg border transition-all duration-150 hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', color: 'var(--text-secondary)' }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         {/* Quick actions / keyboard hints */}
         <div className="flex items-center justify-center gap-3 text-[11px]" style={{ color: 'var(--text-muted)' }}>
           <span className="flex items-center gap-1"><Keyboard size={12} /> {t('empty.hint.new')}</span>

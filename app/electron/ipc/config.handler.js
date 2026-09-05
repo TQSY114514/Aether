@@ -242,6 +242,25 @@ function registerConfigHandlers(ipcMain, db) {
       return { success: false, error: String(e.message || e) }
     }
   })
+
+  // P1-10: 获取仓库级配置 (.aether/config.json / .aether.json / opencode.json)
+  ipcMain.handle('config:getProject', (_e, workspaceRoot) => {
+    try {
+      const { loadProjectConfig } = require('../config/projectConfig')
+      const { getWorkspaceRoot } = require('../tools/sandbox')
+      return loadProjectConfig(workspaceRoot || getWorkspaceRoot())
+    } catch {
+      return {
+        defaultModel: null,
+        mode: null,
+        shadowWorkspace: null,
+        tools: { deny: [], allow: [] },
+        ignorePatterns: [],
+        rules: [],
+        customConfigPath: null,
+      }
+    }
+  })
 }
 
 module.exports = { registerConfigHandlers }

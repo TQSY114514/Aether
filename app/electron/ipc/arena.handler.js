@@ -185,7 +185,10 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
 
     try {
       for (const task of bench.tasks) {
-        const content = String(task || '').trim()
+        const isObj = typeof task === 'object' && task !== null
+        const content = isObj ? String(task.prompt || '').trim() : String(task || '').trim()
+        const verifyCommand = isObj && task.verifyCommand ? String(task.verifyCommand).trim() : null
+        const taskCwd = isObj && task.cwd ? String(task.cwd) : (require('../tools/sandbox').getWorkspaceRoot() || process.cwd())
         if (!content) continue
         // 并行跑该任务下所有模型(复用 arena 并发语义), 等待全部完成
         const round = await Promise.all(selected.map(async (m) => {
@@ -203,9 +206,22 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
             })
             const u = normalizeUsage(usage)
             const cost = u ? computeCost(m, u) : 0
-            return { modelId: m.id, ok: !!answer && !String(answer).startsWith('[Error'), latency: Date.now() - start, cost }
+            let ok = !!answer && !String(answer).startsWith('[Error')
+
+            // P1-09 SWE-bench: 真实测试命令校验 (Pass/Fail)
+            if (ok && verifyCommand) {
+              try {
+                const { execSync } = require('child_process')
+                execSync(verifyCommand, { cwd: taskCwd, timeout: 30000, stdio: 'pipe', windowsHide: true })
+                ok = true
+              } catch (verifyErr) {
+                ok = false
+              }
+            }
+
+            return { modelId: m.id, ok, latency: Date.now() - start, cost, verified: !!verifyCommand }
           } catch (err) {
-            return { modelId: m.id, ok: false, latency: Date.now() - start, cost: 0 }
+            return { modelId: m.id, ok: false, latency: Date.now() - start, cost: 0, verified: !!verifyCommand }
           } finally {
             clearTimeout(timeout)
             controller.signal.removeEventListener('abort', onOuterAbort)
@@ -218,6 +234,10 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
           acc.total_ms += r.latency
           acc.total_cost += r.cost
           if (r.ok) acc.wins += 1
+          if (r.verified) {
+            acc.verified_runs = (acc.verified_runs || 0) + 1
+            if (r.ok) acc.verified_passes = (acc.verified_passes || 0) + 1
+          }
         }
       }
     } finally {
@@ -238,6 +258,44 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   ipcMain.handle('arena:benchmark-stop', (_e, id) => {
     const c = abortControllers.get(`bench:${id}`)
     if (c) { c.abort(); abortControllers.delete(`bench:${id}`) }
+  })
+
+  // P1-09: SWE-bench 官方与个人基准模板预设
+  ipcMain.handle('arena:benchmark-templates', () => {
+    return [
+      {
+        id: 'swe-bench-core',
+        name: 'SWE-bench 本地核心代码基准 (SWE-bench Local)',
+        description: '真实代码修复与测试驱动评估，自动执行测试命令校验 Pass/Fail 率',
+        tasks: [
+          {
+            name: '修测试与功能验证',
+            prompt: '请分析当前项目中的单元测试，定位并修复问题',
+            verifyCommand: 'npx vitest run test/recipes.test.js',
+          },
+          {
+            name: '安全回归防线',
+            prompt: '检查项目安全边界防范与路径规范',
+            verifyCommand: 'npx vitest run test/securityRegression.test.js',
+          },
+          {
+            name: '项目配置解析',
+            prompt: '验证项目级配置文件解析正确性',
+            verifyCommand: 'npx vitest run test/projectConfig.test.js',
+          },
+        ],
+      },
+      {
+        id: 'coding-general',
+        name: '通用编程与算法问答 (Coding Q&A)',
+        description: '基础代码生成、算法解释与结构化输出基准',
+        tasks: [
+          '用 TypeScript 实现一个支持 TTL 和 LRU 淘汰策略的高性能内存缓存类',
+          '分析并解释快速排序与三向切分快速排序在大规模重复元素下的复杂度差异',
+          '编写一段防范 SQL 注入与路径穿越的代码示例并给出审计要点',
+        ],
+      },
+    ]
   })
 }
 
