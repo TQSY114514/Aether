@@ -2,6 +2,29 @@
 
 All notable changes to AetherAI are documented here.
 
+## [0.8.2] - 2026-09-05
+
+### Added
+
+- **3-Tier Defense Sandbox & Execution Security (三层纵深防御沙箱与执行安全).**
+  - Implemented 3-tier defense architecture for tool execution (Tier 1: Read-only observation & inspection, Tier 2: Pre-execution Unified Diff preview with explicit user approval for filesystem mutations, Tier 3: Isolated environment boundary for system-level executions).
+  - Dynamic Taint Tracking (`isTainted`): External network content / untrusted inputs (web search, URLs) are dynamically marked with taint status to prevent indirect prompt injection.
+  - Unified Diff Previews in Permission Dialog: Granular, line-by-line diff previews for file write, edit, and patch actions directly inside the authorization modal before confirmation.
+  - Agent Run Timeline Drawer (`AgentRunTimeline`): Full auditability and post-execution visual inspection of tool parameters, unified diffs, taint markers, and execution timing persisted in SQLite `agent_execution_log`.
+- **CJK-Safe Unicode Sanitization & Process Hardening (CJK 友好的 Unicode 隐写防御与边界加固).**
+  - Defended against `unicode_hidden` injection attacks (zero-width spaces, BiDi override controls, modifier homoglyphs) while strictly preserving CJK fullwidth punctuation (`，`、`。`、`“”`).
+  - Hardened external MCP stdio processes with `sanitizeProcessEnv` to prevent leakage of host API keys and tokens.
+  - Webhook & local gateway socket isolation: Enforced loopback binding (`127.0.0.1`) and timing-safe token validation (`crypto.timingSafeEqual`).
+- **2026-09 Honest Self-Assessment Radar & 14-Language Anti-Collision Layout (2026-09 诚实自评雷达与多语言防重叠工业级排版).**
+  - Comprehensive peer benchmark expanded to 16 leading agent tools across Terminal, IDE/Desktop, and Autonomous platforms.
+  - Upgraded SVG layout from 960x740 to 1000x760 with dedicated vertical legend card, 31px safety margins, structured 2-row category matrix, and adaptive text wrapping, completely eliminating text overlap across all 14 supported languages.
+- **Narrative & Dual-Mode Positioning Enhancement (双形态架构定位跃升).**
+  - Replaced legacy experimental warnings with clear "Two Form Factors, One Brain" architecture narrative (GUI Desktop + CLI/TUI/SDK sharing one SQLite brain and 3-tier sandbox).
+
+### Fixed
+
+- **CI/CD Workflow Compatibility (CI/CD 流水线加固).** Installed official OSV-Scanner binary with standard SARIF upload and updated GitHub Actions labeler to v5 syntax.
+
 ## [0.8.1] - 2026-09-04
 
 ### Fixed
