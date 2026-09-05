@@ -29,15 +29,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install OSV-Scanner
+        run: |
+          curl -fsSL https://github.com/google/osv-scanner/releases/download/v2.5.1/osv-scanner_linux_amd64 -o /tmp/osv-scanner
+          chmod +x /tmp/osv-scanner
+          sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
+
       - name: Run OSV Scanner
-        uses: google/osv-scanner-action@v2.5.1
-        continue-on-error: true
-        with:
-          scan-args: |-
-            --format=sarif
-            --output=osv-results.sarif
-            app/package-lock.json
-            app/tui/package-lock.json
+        run: |
+          osv-scanner \
+            --format=sarif \
+            --output=osv-results.sarif \
+            --lockfile=app/package-lock.json \
+            --lockfile=app/tui/package-lock.json || true
 
       - name: Upload SARIF to GitHub Security
         if: always()

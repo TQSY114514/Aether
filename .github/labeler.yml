@@ -1,31 +1,45 @@
 # 路径 → PR 标签映射（与 scripts/ci/classify_changes.mjs 的 lane 规则对齐）
 
 core:
-  - app/electron/**/*
-  - app/scripts/**/*
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/electron/**/*'
+          - 'app/scripts/**/*'
 
 renderer:
-  - app/src/**/*
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/src/**/*'
 
 tui:
-  - app/tui/**/*
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/tui/**/*'
 
 tests:
-  - app/test/**/*
-  - evals/**/*
-  - app/**/*.test.*
-  - app/**/*.spec.*
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/test/**/*'
+          - 'evals/**/*'
+          - 'app/**/*.test.*'
+          - 'app/**/*.spec.*'
 
 dependencies:
-  - app/package.json
-  - app/package-lock.json
-  - app/tui/package.json
-  - app/tui/package-lock.json
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/package.json'
+          - 'app/package-lock.json'
+          - 'app/tui/package.json'
+          - 'app/tui/package-lock.json'
 
 docs:
-  - docs/**/*
-  - '**/*.md'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**/*'
+          - '**/*.md'
 
 ci:
-  - .github/**/*
-  - scripts/**/*
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**/*'
+          - 'scripts/**/*'
