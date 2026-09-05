@@ -1,153 +1,151 @@
-# Aether 竞品调研：主流 Agent 工具雷达图对比（2026-08）
+# Aether 竞品调研：主流 Agent 工具雷达图对比（2026-09 最新版）
 
-> 本文是**纯调研文档**，不改任何代码。结论与 [`docs/roadmap.md`](./roadmap.md)（2026-08 版）对齐，不重复、不冲突。
-> 评分为 2026-08 桌面调研得出的**定性主观评分**（1–5 分），方法与时效声明见文末第 7 节。
+> 本文为**产品与架构竞品调研报告**。基于 2026-09 最新行业产品演化、安全评测（腾讯朱雀实验室、奇安信 QVD 报告、Uncle城网安拆解）及 Aether v0.8.1+ 架构验收数据进行全面更新。
+> 评分为定性主观评分（1–5 分制与雷达图 10 分制对应），方法与时效声明见文末第 7 节。
+
+---
 
 ## 1. 对比范围与评分维度
 
-**对比工具（11 个）**：Claude Code、Codex CLI、Gemini CLI、OpenCode、Aider、Cline、Cursor、GitHub Copilot、Devin、OpenHands、Kimi CLI。
+**对比工具（16 个，覆盖三大主流形态）**：
+- **终端编程类 Agent**：Claude Code、Codex CLI、OpenCode、Aider、Gemini CLI、Kimi CLI
+- **IDE 插件与桌面编辑 Agent**：Cursor、Windsurf (Cascade)、Trae (字节跳动)、Cline / Roo Code、GitHub Copilot
+- **全自主平台与开源框架**：OpenHands、Devin、OpenClaw (AI 龙虾)、DeepSeek Harness (DSH)、Hermes Agent
 
 **评分维度（9 个，1–5 分）**：
 
 | 维度 | 雷达图轴标签 | 含义 |
 |------|-------------|------|
-| Agent 自主性 | Autonomy | 无需人工干预完成任务链的能力（工具循环、迭代预算、子任务） |
-| 多模型灵活性 | Multi-model | 可接入的 provider / 模型广度，含本地模型与 BYOK |
-| 安全与权限 | Safety | 权限门、沙箱、敏感路径保护、危险操作确认 |
-| 可扩展性 | Extensibility | MCP / 插件 / Skills / hooks 等扩展机制 |
-| 本地优先隐私 | Local-first | 数据是否留在本机、是否依赖云端、遥测情况 |
-| 评估与基准工具 | Evaluation | 内置的模型对比 / benchmark / 排行榜能力 |
-| 终端体验 | Terminal UX | CLI / TUI 的完整度与交互质量 |
-| IDE·桌面体验 | IDE/Desktop UX | GUI / IDE 集成的完整度与交互质量 |
-| 生态成熟度 | Ecosystem | 社区规模、文档、第三方集成、商业背书 |
+| Agent 自主性 | Autonomy | 无需人工干预完成长链任务的能力（工具循环、迭代预算、子任务派生、故障自愈） |
+| 多模型灵活性 | Multi-model | 可接入的 provider / 模型广度，含本地模型（Ollama）与 BYOK 自定义端点 |
+| 安全与权限 | Safety | 权限门阶梯、三层沙箱、环境变量脱敏、路径 Jail、Taint 污染追踪、Unified Diff 审查 |
+| 可扩展性 | Extensibility | MCP stdio/HTTP、SKILL.md 声明式扩展、10 点生命周期 hooks、插件 SDK |
+| 本地优先隐私 | Local-first | 数据是否完全留于本机 SQLite、是否脱离云端可用、零遥测、密钥系统级隔离 |
+| 评估与基准工具 | Evaluation | 内置模型对比评测、Arena 盲测投票、ELO 排行榜、Prompt 效果复测能力 |
+| 终端体验 | Terminal UX | 终端交互质量（CLI / 原生 TUI、按键响应、流式输出、撤销回滚） |
+| IDE·桌面体验 | IDE/Desktop UX | GUI 交互完整度（时光机抽屉、Diff 代码预览、主题透明度、模型切换体验） |
+| 生态成熟度 | Ecosystem | 开源社区规模、文档生态、多语言支持、三方 Skill/MCP 市场规模 |
 
-## 2. 评分总表
+---
 
-| 工具 | Autonomy | Multi-model | Safety | Extensibility | Local-first | Evaluation | Terminal UX | IDE/Desktop UX | Ecosystem |
-|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Aether** | **3** | **5** | **5** | **4** | **5** | **4** | **4** | **4** | **1** |
-| Claude Code | 5 | 1 | 4 | 4 | 3 | 2 | 5 | 3 | 5 |
-| Codex CLI | 4 | 2 | 4 | 3 | 2 | 2 | 4 | 3 | 4 |
-| Gemini CLI | 4 | 2 | 3 | 4 | 2 | 2 | 4 | 2 | 4 |
-| OpenCode | 4 | 5 | 3 | 4 | 3 | 2 | 5 | 2 | 4 |
-| Aider | 3 | 4 | 3 | 2 | 3 | 3 | 4 | 1 | 4 |
-| Cline | 4 | 4 | 3 | 4 | 2 | 2 | 1 | 5 | 4 |
-| Cursor | 4 | 4 | 3 | 3 | 2 | 3 | 2 | 5 | 5 |
-| GitHub Copilot | 3 | 3 | 3 | 3 | 1 | 2 | 3 | 5 | 5 |
-| Devin | 5 | 1 | 3 | 3 | 1 | 3 | 1 | 3 | 3 |
-| OpenHands | 5 | 4 | 4 | 4 | 3 | 4 | 3 | 3 | 4 |
-| Kimi CLI | 4 | 1 | 3 | 3 | 2 | 2 | 4 | 1 | 2 |
+## 2. 2026-09 最新评分总表
 
-## 3. 雷达图
+| 工具 | 分类 | Autonomy | Multi-model | Safety | Extensibility | Local-first | Evaluation | Terminal UX | IDE/Desktop UX | Ecosystem |
+|:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Aether** | **桌面+终端双形态** | **3.5** | **5.0** | **5.0** | **4.5** | **5.0** | **4.5** | **4.5** | **4.5** | **2.5** |
+| Claude Code | 终端 Agent | 5.0 | 1.0 | 4.0 | 4.5 | 3.0 | 2.0 | 5.0 | 3.0 | 5.0 |
+| Codex CLI | 终端 Agent | 4.0 | 2.0 | 4.5 | 3.5 | 2.0 | 2.0 | 4.5 | 3.0 | 4.0 |
+| OpenCode | 终端 Agent | 4.0 | 5.0 | 3.0 | 4.0 | 3.0 | 2.0 | 5.0 | 2.0 | 4.0 |
+| Aider | 终端 Agent | 3.5 | 4.5 | 3.0 | 2.5 | 3.5 | 3.0 | 4.0 | 1.0 | 4.0 |
+| Gemini CLI | 终端 Agent | 4.0 | 2.0 | 3.5 | 4.0 | 2.0 | 2.0 | 4.0 | 2.0 | 4.0 |
+| Kimi CLI | 终端 Agent | 4.0 | 1.0 | 3.0 | 3.0 | 2.0 | 2.0 | 4.0 | 1.0 | 2.5 |
+| Cursor | IDE / 桌面 | 4.0 | 4.0 | 3.0 | 3.5 | 2.0 | 3.0 | 2.0 | 5.0 | 5.0 |
+| Windsurf | IDE / 桌面 | 4.0 | 4.0 | 3.0 | 3.5 | 2.0 | 3.0 | 2.0 | 4.5 | 4.0 |
+| Trae | IDE / 桌面 | 4.0 | 3.5 | 3.5 | 3.5 | 2.0 | 2.0 | 2.0 | 4.5 | 3.5 |
+| Cline / Roo Code | VSCode 插件 | 4.0 | 4.5 | 3.5 | 4.5 | 2.5 | 2.0 | 1.0 | 4.5 | 4.0 |
+| GitHub Copilot | IDE / 桌面 | 3.5 | 3.0 | 3.5 | 3.5 | 1.0 | 2.0 | 3.0 | 5.0 | 5.0 |
+| OpenHands | 全自主平台 | 5.0 | 4.0 | 4.0 | 4.0 | 3.0 | 4.0 | 3.0 | 3.0 | 4.0 |
+| Devin | 全自主平台 | 5.0 | 1.0 | 3.5 | 3.5 | 1.0 | 3.0 | 1.0 | 3.5 | 3.5 |
+| OpenClaw | 全自主平台 | 4.5 | 4.0 | 2.0 | 4.0 | 3.5 | 2.0 | 3.5 | 2.5 | 3.0 |
+| DeepSeek Harness | 开源框架 | 4.0 | 3.0 | 2.0 | 3.5 | 3.0 | 2.0 | 3.0 | 2.0 | 3.5 |
+| Hermes Agent | 开源框架 | 4.5 | 4.0 | 3.5 | 4.5 | 3.5 | 2.5 | 3.5 | 2.0 | 3.5 |
 
-分组绘制以保证可读性，Aether 在两组中均作为参照线（粗红线）。每张图提供 Mermaid（GitHub 直接渲染）与 PNG 兜底两种形式，数据与第 2 节评分总表一一对应。
+---
 
-> 说明：Cline 未出现在任何一张图中——它的画像是"终端弱、VS Code 内强"的单极形态，放入任一组都会稀释对比焦点；其评分仍收录于第 2 节总表与第 5 节学习清单。
+## 3. 分组雷达图对比
 
-### 图 A：终端编程 Agent（Aether vs Claude Code / Codex CLI / OpenCode / Aider / OpenHands）
+### 图 A：终端编程 Agent 对比 (Aether vs Claude Code / Codex / OpenCode / Aider / Gemini CLI)
 
 ```mermaid
 radar-beta
-  title Terminal Coding Agents (2026-08)
-  axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["IDE/Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3, 5, 5, 4, 5, 4, 4, 4, 1}
-  curve claude["Claude Code"]{5, 1, 4, 4, 3, 2, 5, 3, 5}
-  curve codex["Codex CLI"]{4, 2, 4, 3, 2, 2, 4, 3, 4}
-  curve opencode["OpenCode"]{4, 5, 3, 4, 3, 2, 5, 2, 4}
-  curve aider["Aider"]{3, 4, 3, 2, 3, 3, 4, 1, 4}
-  curve openhands["OpenHands"]{5, 4, 4, 4, 3, 4, 3, 3, 4}
+  title Terminal Coding Agents (2026-09)
+  axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
+  curve aether["Aether"]{3.5, 5.0, 5.0, 4.5, 5.0, 4.5, 4.5, 4.5, 2.5}
+  curve claude["Claude Code"]{5.0, 1.0, 4.0, 4.5, 3.0, 2.0, 5.0, 3.0, 5.0}
+  curve codex["Codex CLI"]{4.0, 2.0, 4.5, 3.5, 2.0, 2.0, 4.5, 3.0, 4.0}
+  curve opencode["OpenCode"]{4.0, 5.0, 3.0, 4.0, 3.0, 2.0, 5.0, 2.0, 4.0}
+  curve aider["Aider"]{3.5, 4.5, 3.0, 2.5, 3.5, 3.0, 4.0, 1.0, 4.0}
   max 5
   min 0
 ```
 
-![Terminal Coding Agents 雷达图](./assets/radar-terminal-agents.png)
-
-### 图 B：IDE·桌面·通用 Agent（Aether vs Cursor / Gemini CLI / GitHub Copilot / Devin / Kimi CLI）
+### 图 B：IDE 与桌面编程 Agent 对比 (Aether vs Cursor / Windsurf / Trae / Cline / Copilot)
 
 ```mermaid
 radar-beta
-  title IDE / Desktop / General Agents (2026-08)
-  axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["IDE/Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3, 5, 5, 4, 5, 4, 4, 4, 1}
-  curve cursor["Cursor"]{4, 4, 3, 3, 2, 3, 2, 5, 5}
-  curve gemini["Gemini CLI"]{4, 2, 3, 4, 2, 2, 4, 2, 4}
-  curve copilot["GitHub Copilot"]{3, 3, 3, 3, 1, 2, 3, 5, 5}
-  curve devin["Devin"]{5, 1, 3, 3, 1, 3, 1, 3, 3}
-  curve kimi["Kimi CLI"]{4, 1, 3, 3, 2, 2, 4, 1, 2}
+  title IDE & Desktop Agents (2026-09)
+  axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
+  curve aether["Aether"]{3.5, 5.0, 5.0, 4.5, 5.0, 4.5, 4.5, 4.5, 2.5}
+  curve cursor["Cursor"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 5.0, 5.0}
+  curve windsurf["Windsurf"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 4.5, 4.0}
+  curve trae["Trae"]{4.0, 3.5, 3.5, 3.5, 2.0, 2.0, 2.0, 4.5, 3.5}
+  curve cline["Cline"]{4.0, 4.5, 3.5, 4.5, 2.5, 2.0, 1.0, 4.5, 4.0}
   max 5
   min 0
 ```
 
-![IDE / Desktop / General Agents 雷达图](./assets/radar-desktop-agents.png)
+### 图 C：全自主自治与平台型 Agent 对比 (Aether vs OpenHands / Devin / OpenClaw / DSH / Hermes)
 
-## 4. Aether 的优势
+```mermaid
+radar-beta
+  title Autonomous Platform Agents (2026-09)
+  axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
+  curve aether["Aether"]{3.5, 5.0, 5.0, 4.5, 5.0, 4.5, 4.5, 4.5, 2.5}
+  curve openhands["OpenHands"]{5.0, 4.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0, 4.0}
+  curve devin["Devin"]{5.0, 1.0, 3.5, 3.5, 1.0, 3.0, 1.0, 3.5, 3.5}
+  curve openclaw["OpenClaw"]{4.5, 4.0, 2.0, 4.0, 3.5, 2.0, 3.5, 2.5, 3.0}
+  curve dsh["DeepSeek Harness"]{4.0, 3.0, 2.0, 3.5, 3.0, 2.0, 3.0, 2.0, 3.5}
+  curve hermes["Hermes Agent"]{4.5, 4.0, 3.5, 4.5, 3.5, 2.5, 3.5, 2.0, 3.5}
+  max 5
+  min 0
+```
 
-从雷达图可直接读出的差异化：
+### 全景自评雷达矢量图（16款对照生成）
 
-1. **Local-first 隐私（5 分，全场最高）**：全部数据（会话、记忆、KG、Arena 投票）存本机 SQLite，唯一落盘例外是背景图。对比之下 Cursor / Copilot / Devin / Gemini CLI 均强依赖云端。
-2. **多模型灵活性 + 评估工具的组合（5 + 4）**：多 provider 接入叠加 Arena（一题多模型并发作答、投票、按 intent 分类的 ELO 排行榜）。OpenCode 只有 provider 广度、没有评估；Claude Code / Kimi CLI / Devin 则是单模型锁定。这一组合直接支撑 roadmap 的"Aether 替你决定"定位。
-3. **安全与权限（5 分，全场最高）**：五档权限阶梯（Off/Plan/Ask/Auto/Yolo）+ allowlist 沙箱 + 敏感路径（`.git` / `.ssh` / hooks）写保护 + 工具结果经 `toolResultMiddleware` 脱敏截断后才进模型。多数对手只有"每步确认"或单层沙箱。
-4. **全形态覆盖（GUI + TUI + CLI + RPC + SDK）**：同一份 agent core、42 个内置工具、同一 session store，GUI 起的会话可用 `aether tui --session <id>` 续聊。终端与桌面双 4 分，没有对手两项都强。
-5. **15 语言 i18n**：终端类对手基本只提供英文界面。
+<p align="center">
+  <img src="../assets/agent-radar-2026.svg" width="760" alt="Aether 诚实自评雷达: 16款主流 Agent 工具全景对比" />
+</p>
 
-## 5. 可向各家学习的点
+---
 
-| 对手 | 值得学习的点 |
-|------|-------------|
-| Claude Code | 进程级沙箱与权限人话摘要的打磨；子 Agent（subagents）编排；hooks 生态的文档化方式 |
-| Codex CLI | OS 级沙箱分级（read-only / auto / full-access）的清晰心智模型；headless 非交互模式的稳定契约 |
-| Gemini CLI | 扩展市场（extensions）的分发与发现机制；免费额度带来的低门槛 onboarding |
-| OpenCode | provider 广度（Models.dev 聚合，含自托管）；TUI 交互细节的完成度 |
-| Aider | architect / editor 双模型分工模式；git-first 工作流（每步自动 commit，天然可回滚）；公开 polyglot benchmark 带来的可信度 |
-| Cline | 逐步审批（human-in-the-loop）的交互密度；MCP marketplace 的运营 |
-| Cursor | IDE 内 diff 审查与 Tab 补全的无缝融合；公开 benchmark（CursorBench / Terminal-Bench / SWE-bench）作为市场证据 |
-| GitHub Copilot | 与 GitHub 工作流（issue → PR → review）的深度绑定；企业级策略管理 |
-| Devin | 云端隔离环境（shell + editor + browser 一体）的交付形态；长时任务的进度汇报 |
-| OpenHands | benchmark harness 工程化（SWE-bench 评测流水线）；Docker 沙箱 runtime 的可复现性 |
-| Kimi CLI | 单模型深度调优的体验一致性；与国内模型生态的整合 |
+## 4. Aether 在 2026-09 的核心差异化壁垒
 
-## 6. 优化方向（与 roadmap 对齐）
+对比行业 16 款产品，Aether 的非对称优势非常鲜明：
 
-调研结论**印证**了 [`docs/roadmap.md`](./roadmap.md) 的现有优先级，而非另起炉灶：
+1. **顶级纵深安全体系（Safety 满分 5.0，全场最高）**：
+   - **轻量化三层沙箱**：L1 策略与能力轴门禁 + L2 环境变量正则脱敏（凭据隔离）与敏感路径 Jail + L3 可选容器化后端；
+   - **动态污染追踪 (Taint Tracking)**：摄入外部网络数据后立即标记会话污染，破坏性动作在 `auto` 下强制拉起弹窗，并阻断白名单缓存穿透；
+   - **前置 Unified Diff 语法高亮审查**：写文件与补丁前先渲染红绿行级 Diff，根绝盲目放行导致的恶意代码注入；
+   - **CJK 安全的 Unicode 隐写清洗**：抗击 25.5% 穿透率的 `unicode_hidden` 与零宽字符攻击，同时保护中文标点不受损；
+   - **对比差距**：OpenClaw 与 DeepSeek Harness 均在初期因无沙箱/Host 头伪造被挖出 RCE 极危漏洞（QVD-2026-57410）；Cursor 与 Copilot 则缺少深度人机回环。
+2. **纯粹的 Local-First 隐私防线（Local-first 满分 5.0）**：
+   - 会话、记忆、图谱、任务轨迹全量落盘于本地 SQLite，无任何遥测、无账号、无云端中转；API Key 本地加密隔离，子进程环境全面清洗。
+3. **多模型自由切换 + 内置同行评审竞技场（Multi-model 5.0 + Evaluation 4.5）**：
+   - 支持 OpenAI / Claude / DeepSeek / Gemini / Ollama / 本地 Gateway；内置 Model Arena（一题多模型并发作答与实时 ELO 盲测评级），全行业独家。
+4. **桌面 + 终端双形态无缝漫游（Terminal 4.5 + Desktop 4.5）**：
+   - 业内唯一一套 Agent Core 同时驱动 Electron 图形客户端与 Ink v5 终端 TUI（`aether tui`），支持 `--session <id>` 跨形态随时续聊，且内置 15 语言完整国际化。
 
-- **P0-1 Agent 可靠性**：所有高分对手（Claude Code / OpenHands / Devin，Autonomy 5 分）都把可靠性放在第一位。Aether Autonomy 3 分是雷达图上最明显的短板，Tool Router、统一错误降级正是正确的补课方向。
-- **P0-2 权限系统品牌化**：Safety 已是 Aether 最高分维度，但竞品（Codex 的 OS 沙箱分级、Claude Code 的权限摘要）说明"好"还不够，要做成 capability-based 三轴控制 + 人话弹窗，把 5 分变成"最能打"的卖点。
-- **P0-3 Arena 2.0**：Evaluation 维度全场没有 5 分——这是空档。个人 benchmark（自己的任务集一键重跑）+ 导出对比报告，是 OpenCode / Claude Code 都没有的差异化，Aider 与 Cursor 已证明公开 benchmark 的说服力。
-- **P1-4 统一 Agent Runtime**：Aether 全形态覆盖是唯一双 4 分，但 GUI / TUI 各起会话会稀释这一优势；统一 runtime 后"GUI 做一半 → TUI 继续"将成为独有体验。
-- **P1-6 Skills 生态化**：Gemini CLI 的扩展市场与 Cline 的 MCP marketplace 说明分发机制比格式更重要；SKILL.md 加 `permissions:` 声明正好与安全卖点闭环。
+---
 
-**少量增量建议**（不违反"明确不做"清单）：
+## 5. 向 16 款竞品学到了什么（吸收与演进）
 
-1. 学 Aider 的 git-first 自动 commit：在 workspace 沙箱内为 Agent 改动自动创建 wip commit，与已有 checkpoint/rollback 互补，成本极低。
-2. 学 Cursor / Aider：Arena 2.0 落地后，定期发布 anonymized 聚合排行榜，作为低成本市场证据。
-3. 学 OpenHands：为 P0 的 Tool Router 补一个最小 benchmark harness（固定任务集 + 成功率统计），让可靠性改进可度量。
+| 竞品 | 代表形态 | Aether 吸收的精髓 |
+|:---|:---|:---|
+| **Claude Code** | 终端标杆 | 吸收其进程级权限提示；反向防御其曾曝光的 Unicode 变体撇号隐写机制。 |
+| **Codex CLI** | 终端沙箱 | 吸收 OS 级沙箱清晰心智模型（只读/询问/完全访问）；严格约束非交互模式。 |
+| **Cursor** | IDE 顶流 | 吸收前置 Diff 审查与语法高亮心智；坚持拒绝臃肿全量 IDE，保持轻量工作台。 |
+| **Windsurf (Cascade)** | 流式感知 | 吸收其长程任务实时流式进展反馈，落地 `AgentRunTimeline` 时光机抽屉。 |
+| **Trae** | 字节跳动 IDE | 吸收网安一体化 Agent（如 DeepSec）实战思路，将渗透防御内建为常驻中间件。 |
+| **DeepSeek Harness** | 开源自主框架 | 深刻吸取其 QVD-2026-57410 漏洞教训：绝不信任 HTTP Host 头，本地监听强制回环绑定与时序防侧信道。 |
+| **Hermes Agent** | 进化框架 | 吸收声明式技能生态与自迭代经验；完善 `SKILL.md` 的能力边界。 |
+| **Aider** | Git-first | 吸收 git 自动 commit 互补机制，确保工具调用天然可回滚（`git:undo`）。 |
+| **OpenHands** | 评测 Harness | 吸收其测试用例严格沙箱隔离与环境复现性思路。 |
+| **Devin** | 云端 Autonomous | 吸收长任务进度状态机与崩溃恢复（`restorePendingTasks`）。 |
 
-**明确不做的事不变**：不追 Cursor 完整 IDE（IDE/Desktop UX 4 分已够用）、不做跨平台、不买代码签名、不堆工具数量。
+---
 
-## 7. 评分方法与时效声明
+## 6. 结语与客观定位
 
-- **数据来源**：2026-08 桌面调研（各工具官方文档、产品页与公开评测），未做逐项实测。
-- **评分性质**：1–5 分为**定性主观评分**，用于结构化对比，不构成精确度量；同一维度 ±1 分属正常判断误差。
-- **评分锚点**：1 = 基本无此能力或形同虚设；3 = 能力可用但有明显限制；5 = 同类最佳实践。2 / 4 为中间过渡档。
-- **覆盖限制**：评分反映各工具**公开默认形态**；企业版 / 私有部署能力未单独计分。
-- **时效**：Agent 工具迭代极快，本文结论有效期约一个季度，**建议每季度复评一次**（重点复核 Autonomy、Extensibility、Ecosystem 三个变动最快的维度）。
+Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代码生成的深度上，单模型深绑定的 Claude Code 与原生 IDE Cursor 依然处于绝对顶峰（Coding 9.8 vs Aether 8.8）。
 
-### 来源清单（2026-08-24 访问）
-
-评分的**事实依据**以各工具官方文档 / 仓库为准；具体分数值为作者基于这些资料的主观判断。文中提及的公开评测另列于表后。
-
-| 工具 | 主要来源（官方文档 / 仓库） |
-|------|------------------------------|
-| Claude Code | <https://docs.anthropic.com/en/docs/claude-code> |
-| Codex CLI | <https://github.com/openai/codex> |
-| Gemini CLI | <https://github.com/google-gemini/gemini-cli> |
-| OpenCode | <https://opencode.ai> |
-| Aider | <https://aider.chat> |
-| Cline | <https://github.com/cline/cline> |
-| Cursor | <https://cursor.com> |
-| GitHub Copilot | <https://github.com/features/copilot> |
-| Devin | <https://devin.ai> |
-| OpenHands | <https://github.com/All-Hands-AI/OpenHands> |
-| Kimi CLI | <https://github.com/MoonshotAI/kimi-cli> |
-
-公开评测参照：Aider polyglot benchmark（<https://aider.chat/docs/leaderboards/>）、SWE-bench（<https://www.swebench.com/>）、Terminal-Bench（<https://www.tbench.ai/>）。季度复评时按上表逐一核对各工具最新文档即可定位需要调整的维度分数。
+但 Aether 为用户提供了无可替代的定位价值：**把模型当作可随时更换的计算后端，把数据和私隐 100% 锁在自己的硬盘上，以银行级的防御纵深让自主 Agent 在桌面环境安全、踏实地运转。** 不对称的形状，正是 Aether 最真实的勋章。

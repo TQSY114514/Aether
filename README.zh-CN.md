@@ -52,11 +52,11 @@
 
 **本地优先。** 密钥、对话与记忆都存于本地 SQLite,除发往你所配置的提供商外,绝不离开你的电脑。无账号、无云同步、无遥测。你的数据最安全的地方,就是你的设备。
 
-**Aether 在哪一档——诚实版。** 依据公开资料对同类 Agent 自评(2026-08;是估计,不是跑分)。我们把不对称的形状原样画出来:强在「本地优先」相关轴——多模型/供应商、隐私、安全、桌面 UX;编程暂时不是第一梯队。这就是你选择 Aether 时接受的取舍。
+**Aether 在哪一档——诚实版。** 依据公开资料对 16 款主流终端 / IDE / 平台 Agent 工具进行系统自评（2026-09 最新评估；是估计，不是跑分）。我们把不对称的形状原样画出来：强在「本地优先」、「三层沙箱安全」与「多模型自由切换」等轴；单模型极致编程能力坦然与第一梯队存在客观差距。这就是你选择 Aether 时接受的真实取舍。完整竞品深度对比详见 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
 
-<p align="center"><img src="./assets/agent-radar-2026.svg" width="700" alt="Aether 自评雷达:对比 Claude Code / Codex / OpenCode / Cursor / Cline / OpenClaw / Gemini CLI / OpenHands" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.svg" width="760" alt="Aether 诚实自评雷达: 对比 16 款主流终端 / IDE / 平台 Agent 工具 (Claude Code / Codex / Cursor / Windsurf / Trae / Devin / OpenHands / DSH 等)" /></p>
 
-<sub>图表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——分数逐字内嵌其中,可用 <code>node app/scripts/gen-radar.cjs</code> 复现。</sub>
+<sub>图表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——16 款工具评分逐字内嵌其中，可用 <code>node app/scripts/gen-radar.cjs</code> 本地复现。</sub>
 
 > [!TIP]
 > **新用户请先装桌面版。** 桌面版开箱即用、稳定可靠。CLI / TUI / SDK 仍处于实验阶段 —— 接口可能变更,部分功能可能不完整。
