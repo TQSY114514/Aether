@@ -1,0 +1,55 @@
+# CodeRabbit 閰嶇疆 鈥?Aether
+# 鐩爣锛氬皬鏀瑰姩鑷姩閫氳繃 + 鑱氱劍楂樹环鍊煎鏌?+ 鍑忓皯鍣煶
+# 鏇村瀛楁鍙傝€? https://docs.coderabbit.ai/reference/configuration
+
+language: "zh-CN"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "master"
+      - "main"
+
+  # 灏忔敼鍔ㄨ嚜鍔ㄩ€氳繃锛堝彧鏈夋敼鍔ㄦ枃浠跺皯銆佷笖涓嶅惈鏍稿績浠ｇ爜鎵嶈嚜鍔?approve锛?  auto_approve:
+    scope: "small"
+    ignore_files:
+      - "**/CHANGELOG.md"
+      - "**/README*.md"
+      - "**/docs/**"
+      - "**/*.lock"
+      - "**/package-lock.json"
+      - "**/pnpm-lock.yaml"
+      - "**/yarn.lock"
+
+  # 鍙鏍稿績鐩綍锛岄檷浣庝緷璧栨洿鏂?鏂囨。绫诲櫔闊?  ignore_files:
+    - "**/CHANGELOG.md"
+    - "**/README*.md"
+    - "**/docs/**"
+    - "**/*.lock"
+    - "**/package-lock.json"
+    - "**/pnpm-lock.yaml"
+    - "**/yarn.lock"
+    - "**/evals/**"
+
+  # 瀵逛緷璧栨洿鏂?PR 涓嶆繁搴﹀锛圖ependabot 鑷姩 merge 鐨勶級
+  path_instructions:
+    - path: "app/electron/**"
+      instructions: |
+        Electron 涓昏繘绋嬶紝蹇呴』 CommonJS锛坮equire/module.exports锛夛紝绂?ES import銆?        淇濇寔 IPC 涓夋枃浠跺绾︼紙ipc/*.handler.js + preload.js + src/env.d.ts锛夊悓姝ャ€?        database 鐢?better-sqlite3 WAL锛屽弬鏁板寲鏌ヨ prepare().get/all/run銆?    - path: "app/src/**"
+      instructions: |
+        React 18 + TS + Zustand + Tailwind銆傞伒寰?docs/ui-design.md锛?        绂佺敤绱?闈涙笎鍙樿儗鏅€乥g-clip-text 娓愬彉鏍囬銆乪moji 鍥炬爣锛堢敤 Lucide锛夈€?    - path: "app/tui/**"
+      instructions: |
+        React + Ink v5 缁堢鐣岄潰锛屼弗鏍肩姝?Electron 渚濊禆銆?
+chat:
+  auto_reply: true
+  auto_respond_out_of_thread: false
+  auto_tag: false
