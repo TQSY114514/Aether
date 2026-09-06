@@ -48,6 +48,11 @@ function clearRuntimeData(db) {
   }
 }
 
+/**
+ * Register configuration import, export, and project-config query IPC handlers.
+ * @param {import('electron').IpcMain} ipcMain
+ * @param {object} db - Database layer
+ */
 function registerConfigHandlers(ipcMain, db) {
   // Export the full configuration + runtime data as a JSON-serializable bundle.
   // H2: includeSecrets defaults to FALSE — a bundle must not leak keys unless

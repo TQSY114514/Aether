@@ -91,6 +91,12 @@ const OFFICIAL_RECIPES = [
   },
 ]
 
+/**
+ * List custom recipes defined in the workspace's `.aether/recipes/*.json` directory.
+ * Enforces schema validation and disallows mode escalation to 'yolo'.
+ * @param {string} workspaceRoot - Absolute workspace root
+ * @returns {Array<object>} Array of parsed custom recipe objects
+ */
 function listCustomRecipes(workspaceRoot) {
   if (!workspaceRoot || typeof workspaceRoot !== 'string') return []
   const customDir = path.join(workspaceRoot, '.aether', 'recipes')
@@ -131,6 +137,11 @@ function listCustomRecipes(workspaceRoot) {
   return res
 }
 
+/**
+ * List all available recipes, merging official recipes with any workspace overrides/extensions.
+ * @param {string} [workspaceRoot] - Optional workspace root to search for custom recipes
+ * @returns {Array<object>} Merged list of official and custom recipes
+ */
 function listRecipes(workspaceRoot) {
   const custom = listCustomRecipes(workspaceRoot)
   const customMap = new Map(custom.map(r => [r.id, r]))
@@ -143,6 +154,12 @@ function listRecipes(workspaceRoot) {
   return merged
 }
 
+/**
+ * Look up a specific recipe by ID across official and workspace custom recipes.
+ * @param {string} id - Recipe ID
+ * @param {string} [workspaceRoot] - Optional workspace root
+ * @returns {object|null} Matching recipe or null
+ */
 function getRecipe(id, workspaceRoot) {
   if (!id) return null
   const all = listRecipes(workspaceRoot)

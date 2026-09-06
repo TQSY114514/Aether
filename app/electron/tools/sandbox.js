@@ -36,6 +36,12 @@ function setWorkspaceRootForSession(sessionId, p) {
   }
   else { _sessionWorkspaces.delete(sessionId) }
 }
+/**
+ * Record the original workspace root for a session when using a shadow workspace.
+ * Allows policy and ignore checks to evaluate against the actual project root.
+ * @param {string|number} sessionId
+ * @param {string|null} origRoot
+ */
 function setShadowOrigin(sessionId, origRoot) {
   if (origRoot && String(origRoot).trim()) {
     _sessionShadowOrigins.set(sessionId, path.resolve(origRoot))
@@ -53,6 +59,11 @@ function getWorkspaceRoot(sessionId) {
   return _workspaceRoot || defaultWorkspace()
 }
 
+/**
+ * Get the original workspace root for a session (returns origRoot if in shadow mode, else getWorkspaceRoot).
+ * @param {string|number} [sessionId]
+ * @returns {string}
+ */
 function getOriginalWorkspaceRoot(sessionId) {
   if (sessionId && _sessionShadowOrigins.has(sessionId)) return _sessionShadowOrigins.get(sessionId)
   return getWorkspaceRoot(sessionId)

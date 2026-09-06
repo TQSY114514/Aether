@@ -216,6 +216,11 @@ function worktreeDiffStats(root, taskId) {
 
 const crypto = require('crypto')
 
+/**
+ * Derive a deterministic, collision-resistant identifier for a session.
+ * @param {string|number} sessionId
+ * @returns {string} Safe hashed identifier
+ */
 function safeSessionHash(sessionId) {
   const str = String(sessionId || 'default')
   const clean = str.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32)
@@ -223,15 +228,33 @@ function safeSessionHash(sessionId) {
   return `${clean}-${hash}`
 }
 
+/**
+ * Return metadata filepath for a shadow workspace.
+ * @param {string} root - Workspace root
+ * @param {string} safeId - Hashed session identifier
+ * @returns {string}
+ */
 function shadowMetaPath(root, safeId) {
   return path.join(root, '.aether', 'worktrees', `.shadow-meta-${safeId}.json`)
 }
 
+/**
+ * Return directory path for a session's shadow worktree.
+ * @param {string} root - Workspace root
+ * @param {string|number} sessionId
+ * @returns {string}
+ */
 function shadowDirFor(root, sessionId) {
   const safeId = safeSessionHash(sessionId)
   return path.join(root, '.aether', 'worktrees', `shadow-${safeId}`)
 }
 
+/**
+ * Create or reuse an isolated git shadow worktree for an agent session.
+ * Records target root branch metadata to prevent merge drift.
+ * @param {{ root: string, sessionId: string|number }} param0
+ * @returns {{ ok: boolean, dir?: string, branch?: string, error?: string, reused?: boolean }}
+ */
 function createShadowWorkspace({ root, sessionId }) {
   const repo = assertRepo(root)
   if (!repo.ok) return repo
@@ -267,6 +290,11 @@ function createShadowWorkspace({ root, sessionId }) {
   return { ok: true, dir, branch }
 }
 
+/**
+ * Commit any uncommitted changes inside the shadow workspace worktree.
+ * @param {{ root: string, sessionId: string|number, message?: string }} [param0]
+ * @returns {{ ok: boolean, committed: boolean, sha: string|null, error?: string }}
+ */
 function commitShadowWorkspace({ root, sessionId, message = 'aether: shadow workspace changes' } = {}) {
   const dir = shadowDirFor(root, sessionId)
   const st = git(dir, ['status', '--porcelain'])
@@ -278,6 +306,12 @@ function commitShadowWorkspace({ root, sessionId, message = 'aether: shadow work
   return { ok: true, committed: true, sha: sha.stdout || null }
 }
 
+/**
+ * Merge shadow workspace branch back into the main repository branch.
+ * Rejects merge if the target branch has drifted since shadow workspace creation.
+ * @param {{ root: string, sessionId: string|number, message?: string }} [param0]
+ * @returns {{ ok: boolean, message?: string, conflicts?: string[], error?: string, targetBranchDrift?: boolean }}
+ */
 function applyShadowWorkspace({ root, sessionId, message = 'aether: apply shadow workspace changes' } = {}) {
   const repo = assertRepo(root)
   if (!repo.ok) return repo
@@ -323,6 +357,11 @@ function applyShadowWorkspace({ root, sessionId, message = 'aether: apply shadow
   return { ok: false, conflicts, error: m.stderr || `merge shadow branch ${branch} failed` }
 }
 
+/**
+ * Remove shadow worktree directory, branch, and metadata.
+ * @param {{ root: string, sessionId: string|number, pruneBranch?: boolean }} [param0]
+ * @returns {{ ok: boolean }}
+ */
 function removeShadowWorkspace({ root, sessionId, pruneBranch = true } = {}) {
   const safeId = safeSessionHash(sessionId)
   const dir = shadowDirFor(root, sessionId)
@@ -336,6 +375,11 @@ function removeShadowWorkspace({ root, sessionId, pruneBranch = true } = {}) {
   return { ok: true }
 }
 
+/**
+ * Inspect status of a session's shadow workspace (exists, dirty, ahead commits, changed files).
+ * @param {{ root: string, sessionId: string|number }} param0
+ * @returns {{ dir: string, branch: string|null, exists: boolean, dirty: boolean, changedFiles: number, ahead: number, hasChanges: boolean }|null}
+ */
 function shadowWorkspaceStatus({ root, sessionId }) {
   const safeId = safeSessionHash(sessionId)
   const dir = shadowDirFor(root, sessionId)

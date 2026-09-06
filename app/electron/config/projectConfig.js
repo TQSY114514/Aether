@@ -23,6 +23,10 @@ const CONFIG_CANDIDATES = [
 const CACHE_TTL_MS = 10_000
 const cache = new Map() // workspaceRoot -> { config, timestamp }
 
+/**
+ * Invalidate cached project configuration for a workspace root or all workspaces.
+ * @param {string} [workspaceRoot] - Optional workspace root to invalidate
+ */
 function invalidateProjectConfigCache(workspaceRoot) {
   if (workspaceRoot) {
     cache.delete(workspaceRoot)
@@ -31,6 +35,11 @@ function invalidateProjectConfigCache(workspaceRoot) {
   }
 }
 
+/**
+ * Normalize raw project configuration into a typed, validated structure.
+ * @param {object} [raw={}] - Raw configuration object
+ * @returns {object} Normalized configuration object
+ */
 function normalizeConfig(raw = {}) {
   const tools = raw.tools || {}
   return {
@@ -47,6 +56,12 @@ function normalizeConfig(raw = {}) {
   }
 }
 
+/**
+ * Load project configuration for the given workspace root with caching.
+ * Searches candidate locations: .aether/config.json, .aether.json, opencode.json.
+ * @param {string} workspaceRoot - Absolute workspace root path
+ * @returns {object} Loaded and normalized project config
+ */
 function loadProjectConfig(workspaceRoot) {
   if (!workspaceRoot || typeof workspaceRoot !== 'string') {
     return normalizeConfig()
@@ -81,6 +96,12 @@ function loadProjectConfig(workspaceRoot) {
   return empty
 }
 
+/**
+ * Check if a tool is permitted by the project policy (deny/allow lists).
+ * @param {string} toolName - Name of the tool to evaluate
+ * @param {string} workspaceRoot - Workspace root path
+ * @returns {{ allowed: boolean, reason?: string }} Permission evaluation result
+ */
 function isToolAllowed(toolName, workspaceRoot) {
   if (!toolName) return { allowed: true }
   const cfg = loadProjectConfig(workspaceRoot)
@@ -104,6 +125,12 @@ function isToolAllowed(toolName, workspaceRoot) {
   return { allowed: true }
 }
 
+/**
+ * Simple glob pattern matcher (* and ** support).
+ * @param {string} pattern - Glob pattern
+ * @param {string} str - String to test
+ * @returns {boolean} True if matching
+ */
 function simpleGlobMatch(pattern, str) {
   if (pattern === str) return true
   // Convert basic glob (*, **) to RegExp
@@ -115,6 +142,12 @@ function simpleGlobMatch(pattern, str) {
   return re.test(str)
 }
 
+/**
+ * Determine if a target file or path is ignored by project ignore patterns.
+ * @param {string} targetPath - Path to evaluate
+ * @param {string} workspaceRoot - Workspace root
+ * @returns {boolean} True if path matches ignore patterns
+ */
 function isPathIgnored(targetPath, workspaceRoot) {
   if (!targetPath || !workspaceRoot) return false
   const cfg = loadProjectConfig(workspaceRoot)
@@ -136,6 +169,12 @@ function isPathIgnored(targetPath, workspaceRoot) {
   return false
 }
 
+/**
+ * Resolve project-level prompt rules (inline text or loaded from markdown files).
+ * Safely prevents directory traversal outside workspaceRoot.
+ * @param {string} workspaceRoot - Workspace root path
+ * @returns {string[]} Resolved prompt rule strings
+ */
 function getProjectRules(workspaceRoot) {
   if (!workspaceRoot) return []
   const cfg = loadProjectConfig(workspaceRoot)

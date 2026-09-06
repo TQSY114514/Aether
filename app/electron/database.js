@@ -871,6 +871,13 @@ function autoRoute(intent) {
   return null
 }
 
+/**
+ * Select the runner-up model based on ELO scores for an intent, excluding the primary/current model.
+ * Falls back to primary/available model when no scores are recorded.
+ * @param {string} intent - Detected workload intent (e.g. 'coding', 'general')
+ * @param {number|null} [excludeModelId] - Model ID to exclude from consideration
+ * @returns {object|null} Runner-up model selection info or null if unavailable
+ */
 function getRunnerUpModel(intent, excludeModelId) {
   const targetIntent = intent || 'general'
   const excludeSql = excludeModelId ? 'AND ms.model_id != ?' : ''
