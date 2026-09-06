@@ -438,7 +438,13 @@ const pt = (i, v) => {
   return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
 };
 const poly = (vals) => vals.map((v, i) => pt(i, v).map((n) => n.toFixed(1)).join(',')).join(' ');
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc = (s) =>
+  String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 const peerBest = Array.from({ length: N }, (_, i) => Math.max(...PEERS.map((p) => SCORES[p][i])));
 const selfScores = SCORES[SELF];

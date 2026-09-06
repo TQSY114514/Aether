@@ -48,6 +48,11 @@ function clearRuntimeData(db) {
   }
 }
 
+/**
+ * Register configuration import, export, and project-config query IPC handlers.
+ * @param {import('electron').IpcMain} ipcMain
+ * @param {object} db - Database layer
+ */
 function registerConfigHandlers(ipcMain, db) {
   // Export the full configuration + runtime data as a JSON-serializable bundle.
   // H2: includeSecrets defaults to FALSE — a bundle must not leak keys unless
@@ -240,6 +245,25 @@ function registerConfigHandlers(ipcMain, db) {
       return { success: true, created, skipped }
     } catch (e) {
       return { success: false, error: String(e.message || e) }
+    }
+  })
+
+  // P1-10: 获取仓库级配置 (.aether/config.json / .aether.json / opencode.json)
+  ipcMain.handle('config:getProject', (_e, workspaceRoot) => {
+    try {
+      const { loadProjectConfig } = require('../config/projectConfig')
+      const { getWorkspaceRoot } = require('../tools/sandbox')
+      return loadProjectConfig(workspaceRoot || getWorkspaceRoot())
+    } catch {
+      return {
+        defaultModel: null,
+        mode: null,
+        shadowWorkspace: null,
+        tools: { deny: [], allow: [] },
+        ignorePatterns: [],
+        rules: [],
+        customConfigPath: null,
+      }
     }
   })
 }

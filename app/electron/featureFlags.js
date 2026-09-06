@@ -38,6 +38,8 @@ const FLAG_DEFS = [
   { key: 'exec.docker.defaultForAuto', default: false, category: 'exec',   description: 'Auto mode prefers the Docker sandbox for shell commands when Docker is available (falls back to local)' },
   { key: 'scheduler.queue',      default: false, category: 'exec',        description: 'Task queue with priority / retry / resume' },
   { key: 'agent.worktreeIsolation', default: false, category: 'agent',    description: 'Per-agent git worktree isolation' },
+  { key: 'agent.shadowWorkspace',   default: false, category: 'agent',    description: 'Auto mode shadow workspace: execute changes in isolated worktree and verify before applying' },
+  { key: 'agent.runnerUpReview',    default: false, category: 'agent',    description: 'Runner-up dual-model review: 2nd-ranked ELO model cross-checks destructive diffs before auto-apply' },
   // Phase 2 — background code intelligence
   { key: 'agent.backgroundReview', default: false, category: 'agent',     description: 'Background code review after file-touching tools' },
   // Phase 2 — agent quality (external review P0-1)
