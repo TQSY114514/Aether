@@ -8,6 +8,7 @@ const app = (electron && typeof electron === 'object' && electron.app) ? electro
 
 let _workspaceRoot = null
 let _sessionWorkspaces = new Map()
+let _sessionShadowOrigins = new Map()
 
 function isDangerousRoot(p) {
   if (!p) return false
@@ -35,11 +36,37 @@ function setWorkspaceRootForSession(sessionId, p) {
   }
   else { _sessionWorkspaces.delete(sessionId) }
 }
-function clearSessionWorkspaces() { _sessionWorkspaces.clear() }
+/**
+ * Record the original workspace root for a session when using a shadow workspace.
+ * Allows policy and ignore checks to evaluate against the actual project root.
+ * @param {string|number} sessionId
+ * @param {string|null} origRoot
+ */
+function setShadowOrigin(sessionId, origRoot) {
+  if (origRoot && String(origRoot).trim()) {
+    _sessionShadowOrigins.set(sessionId, path.resolve(origRoot))
+  } else {
+    _sessionShadowOrigins.delete(sessionId)
+  }
+}
+function clearSessionWorkspaces() {
+  _sessionWorkspaces.clear()
+  _sessionShadowOrigins.clear()
+}
 
 function getWorkspaceRoot(sessionId) {
   if (sessionId && _sessionWorkspaces.has(sessionId)) return _sessionWorkspaces.get(sessionId)
   return _workspaceRoot || defaultWorkspace()
+}
+
+/**
+ * Get the original workspace root for a session (returns origRoot if in shadow mode, else getWorkspaceRoot).
+ * @param {string|number} [sessionId]
+ * @returns {string}
+ */
+function getOriginalWorkspaceRoot(sessionId) {
+  if (sessionId && _sessionShadowOrigins.has(sessionId)) return _sessionShadowOrigins.get(sessionId)
+  return getWorkspaceRoot(sessionId)
 }
 
 function defaultWorkspace() {
@@ -115,10 +142,14 @@ function isReparsePoint(p) {
 // （registry 各工具 `ctx?.agentMode !== 'yolo'` 的门）保证，本函数只在
 // 非 yolo 语境下被调用。
 const SENSITIVE_DIR_SEGMENTS = new Set(['.git', '.ssh', '.claude'])
-const SENSITIVE_DIR_PAIRS = { '.aetherai': new Set(['hooks', 'skills']) }
+const SENSITIVE_DIR_PAIRS = {
+  '.aetherai': new Set(['hooks', 'skills']),
+  '.aether': new Set(['config.json', 'config.jsonc']),
+}
 const SENSITIVE_FILE_NAMES = new Set([
   '.npmrc', '.gitconfig', '.bashrc', '.bash_profile', '.zshrc', '.profile',
   'authorized_keys', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa',
+  'opencode.json', '.aether.json',
 ])
 
 function isSensitivePath(p) {
@@ -139,10 +170,26 @@ function isSensitivePath(p) {
 function checkWritePath(target, sessionId) {
   const r = resolveInside(target, { mustExist: false }, sessionId)
   if (r.ok !== true) return { ok: false, reason: r.reason || 'path outside workspace', abs: r.abs }
-  // P0-C4：敏感路径（hooks/skills/.git/.ssh/.claude）默认拒绝，防写入
+  // P0-C4：敏感路径（hooks/skills/.git/.ssh/.claude/.aether/config.json）默认拒绝，防写入
   // post-commit 钩子 /authorized_keys 之类的持久化 RCE 载体。
   if (isSensitivePath(r.resolved || r.abs)) {
-    return { ok: false, reason: '敏感路径禁止写入：.aetherai/hooks、.aetherai/skills、.claude、.git、.ssh（防持久化 RCE）', abs: r.abs }
+    return { ok: false, reason: '敏感路径禁止写入：.aetherai/hooks、.aetherai/skills、.claude、.git、.ssh、.aether/config.json（防持久化 RCE）', abs: r.abs }
+  }
+  // P1-10: 仓库级配置忽略路径检查 (.aether/config.json 中的 ignorePatterns)
+  const origWs = getOriginalWorkspaceRoot(sessionId)
+  if (origWs) {
+    try {
+      const { isPathIgnored } = require('../config/projectConfig')
+      const curWs = getWorkspaceRoot(sessionId)
+      let checkTarget = r.resolved || r.abs
+      if (curWs && origWs !== curWs && checkTarget.startsWith(curWs)) {
+        const relInShadow = path.relative(curWs, checkTarget)
+        checkTarget = path.join(origWs, relInShadow)
+      }
+      if (isPathIgnored(checkTarget, origWs)) {
+        return { ok: false, reason: '路径匹配项目配置 (.aether/config.json) 中的 ignorePatterns', abs: r.abs }
+      }
+    } catch {}
   }
   // todo 19：危险扩展名块（.lnk/.url/.scr/... 点击即执行）
   if (hasDangerousExtension(target)) {
@@ -407,4 +454,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, clearSessionWorkspaces, isInsideWorkspace, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

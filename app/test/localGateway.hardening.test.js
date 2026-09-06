@@ -204,6 +204,49 @@ describe('M5 CORS 收紧', () => {
   })
 })
 
+describe('QVD-2026-57410 DNS 重绑定与 Host 头校验', () => {
+  it('Host: localhost:PORT → 放行', async () => {
+    const r = await request({
+      method: 'GET', path: '/health',
+      headers: { 'x-aether-token': TOKEN, host: `localhost:${port}` },
+    })
+    expect(r.status).toBe(200)
+  })
+
+  it('Host: 127.0.0.1:PORT → 放行', async () => {
+    const r = await request({
+      method: 'GET', path: '/health',
+      headers: { 'x-aether-token': TOKEN, host: `127.0.0.1:${port}` },
+    })
+    expect(r.status).toBe(200)
+  })
+
+  it('Host: [::1]:PORT → 放行', async () => {
+    const r = await request({
+      method: 'GET', path: '/health',
+      headers: { 'x-aether-token': TOKEN, host: `[::1]:${port}` },
+    })
+    expect(r.status).toBe(200)
+  })
+
+  it('Host: evil.com (DNS 重绑定攻击) → 403 阻断', async () => {
+    const r = await request({
+      method: 'GET', path: '/health',
+      headers: { 'x-aether-token': TOKEN, host: `evil.com:${port}` },
+    })
+    expect(r.status).toBe(403)
+    expect(r.body).toContain('DNS rebinding')
+  })
+
+  it('Host: localhost.evil.com → 403 阻断', async () => {
+    const r = await request({
+      method: 'GET', path: '/health',
+      headers: { 'x-aether-token': TOKEN, host: `localhost.evil.com:${port}` },
+    })
+    expect(r.status).toBe(403)
+  })
+})
+
 describe('M5 body 16MB 上限', () => {
   it('小 body POST 正常走代理路径（未超限不误伤）', async () => {
     const r = await request(

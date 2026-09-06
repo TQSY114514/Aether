@@ -1,9 +1,135 @@
+const path = require('path')
+const { spawn } = require('child_process')
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
 const { computeCost } = require('../utils/cost')
 const { shouldWriteQuickTitle, quickTitleOf } = require('./chat-send.handler')
 const log = require('../logger')
 const abortControllers = new Map()
 
+/**
+ * Sanitize and validate verifyCommand string for benchmark tasks.
+ * Rejects non-strings, strings containing null bytes, and excessively long inputs.
+ * @param {any} cmd - Candidate command string
+ * @returns {string|null} Validated command or null
+ */
+function sanitizeVerifyCommand(cmd) {
+  if (typeof cmd !== 'string') return null
+  const trimmed = cmd.trim()
+  if (!trimmed || trimmed.includes('\0') || trimmed.length > 1000) return null
+  return trimmed
+}
+
+/**
+ * Constrain task cwd within the fallback workspace sandbox root.
+ * Prevents directory traversal attacks via relative paths like `../../`.
+ * @param {string|null|undefined} taskCwd - Candidate cwd
+ * @param {string} fallbackRoot - Workspace sandbox root
+ * @returns {string} Safe absolute cwd
+ */
+function resolveTaskCwd(taskCwd, fallbackRoot) {
+  const base = path.resolve(fallbackRoot || process.cwd())
+  if (!taskCwd || typeof taskCwd !== 'string') return base
+  const resolved = path.resolve(base, taskCwd)
+  const rel = path.relative(base, resolved)
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return base
+  }
+  return resolved
+}
+
+/**
+ * Terminate a spawned child process and its entire process tree cleanly.
+ * Uses taskkill /T /F on Windows and SIGTERM/SIGKILL on POSIX platforms.
+ * @param {import('child_process').ChildProcess} child
+ */
+function killProcessTree(child) {
+  if (!child || !child.pid) return
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    } catch {}
+  } else {
+    try { child.kill('SIGTERM') } catch {}
+    try { child.kill('SIGKILL') } catch {}
+  }
+}
+
+/**
+ * Asynchronously execute a benchmark verification command with timeout and abort support.
+ * @param {string} verifyCommand - Shell command to execute
+ * @param {string} taskCwd - Working directory constrained within workspace
+ * @param {AbortSignal} [signal] - Optional abort signal
+ * @param {number} [expectedExitCode=0] - Expected process exit code
+ * @returns {Promise<boolean>} True if command exited with expectedExitCode
+ */
+function runVerifyCommand(verifyCommand, taskCwd, signal, expectedExitCode = 0) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve(false)
+    let child
+    try {
+      child = spawn(verifyCommand, {
+        cwd: taskCwd,
+        shell: true,
+        windowsHide: true,
+        stdio: 'ignore',
+      })
+    } catch (e) {
+      return resolve(false)
+    }
+
+    let finished = false
+    let timer = null
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onAbort)
+    }
+
+    const onAbort = () => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        killProcessTree(child)
+        resolve(false)
+      }
+    }
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true })
+    }
+
+    timer = setTimeout(() => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        killProcessTree(child)
+        resolve(false)
+      }
+    }, 30000)
+
+    child.on('error', () => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        resolve(false)
+      }
+    })
+
+    child.on('close', (code) => {
+      if (!finished) {
+        finished = true
+        cleanup()
+        resolve(code === expectedExitCode)
+      }
+    })
+  })
+}
+
+/**
+ * Register all Arena IPC handlers (arena:send, arena:stop, arena:vote, arena:benchmark-*).
+ * @param {import('electron').IpcMain} ipcMain
+ * @param {object} db - Database access layer
+ * @param {() => import('electron').WebContents|null} [getWebContents]
+ */
 function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, personaId, temperatures }) => {
     const allModels = db.getAllModels()
@@ -163,7 +289,30 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   })
 
   ipcMain.handle('arena:benchmark-save', (_e, { id = null, name, tasks, modelIds }) => {
-    try { return db.saveArenaBenchmark({ id, name: String(name || 'benchmark').slice(0, 60), tasks, modelIds }) } catch (e) { return { error: e.message } }
+    try {
+      if (!Array.isArray(tasks)) return { error: 'tasks must be an array' }
+      const fallbackRoot = require('../tools/sandbox').getWorkspaceRoot() || process.cwd()
+      const cleanTasks = tasks.map(t => {
+        if (typeof t === 'string') return t.trim()
+        if (typeof t === 'object' && t !== null) {
+          const prompt = String(t.prompt || '').trim()
+          const verifyCommand = sanitizeVerifyCommand(t.verifyCommand)
+          const cwd = t.cwd ? resolveTaskCwd(t.cwd, fallbackRoot) : null
+          const expectedExitCode = typeof t.expectedExitCode === 'number' ? t.expectedExitCode : 0
+          return { prompt, verifyCommand, cwd, expectedExitCode }
+        }
+        return String(t || '').trim()
+      }).filter(t => (typeof t === 'string' ? t.length > 0 : t.prompt.length > 0))
+
+      return db.saveArenaBenchmark({
+        id,
+        name: String(name || 'benchmark').slice(0, 60),
+        tasks: cleanTasks,
+        modelIds: Array.isArray(modelIds) ? modelIds : [],
+      })
+    } catch (e) {
+      return { error: e.message }
+    }
   })
 
   ipcMain.handle('arena:benchmark-delete', (_e, id) => {
@@ -184,8 +333,13 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     abortControllers.set(`bench:${id}`, controller)
 
     try {
+      const fallbackRoot = require('../tools/sandbox').getWorkspaceRoot() || process.cwd()
       for (const task of bench.tasks) {
-        const content = String(task || '').trim()
+        const isObj = typeof task === 'object' && task !== null
+        const content = isObj ? String(task.prompt || '').trim() : String(task || '').trim()
+        const verifyCommand = isObj ? sanitizeVerifyCommand(task.verifyCommand) : null
+        const taskCwd = isObj && task.cwd ? resolveTaskCwd(task.cwd, fallbackRoot) : fallbackRoot
+        const expectedExitCode = isObj && typeof task.expectedExitCode === 'number' ? task.expectedExitCode : 0
         if (!content) continue
         // 并行跑该任务下所有模型(复用 arena 并发语义), 等待全部完成
         const round = await Promise.all(selected.map(async (m) => {
@@ -203,9 +357,18 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
             })
             const u = normalizeUsage(usage)
             const cost = u ? computeCost(m, u) : 0
-            return { modelId: m.id, ok: !!answer && !String(answer).startsWith('[Error'), latency: Date.now() - start, cost }
+            let ok = !!answer && !String(answer).startsWith('[Error')
+            let verified = false
+
+            // P1-09 SWE-bench: 真实测试命令校验 (Pass/Fail)
+            if (ok && verifyCommand) {
+              verified = true
+              ok = await runVerifyCommand(verifyCommand, taskCwd, controller.signal, expectedExitCode)
+            }
+
+            return { modelId: m.id, ok, latency: Date.now() - start, cost, verified }
           } catch (err) {
-            return { modelId: m.id, ok: false, latency: Date.now() - start, cost: 0 }
+            return { modelId: m.id, ok: false, latency: Date.now() - start, cost: 0, verified: false }
           } finally {
             clearTimeout(timeout)
             controller.signal.removeEventListener('abort', onOuterAbort)
@@ -218,6 +381,10 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
           acc.total_ms += r.latency
           acc.total_cost += r.cost
           if (r.ok) acc.wins += 1
+          if (r.verified) {
+            acc.verified_runs = (acc.verified_runs || 0) + 1
+            if (r.ok) acc.verified_passes = (acc.verified_passes || 0) + 1
+          }
         }
       }
     } finally {
@@ -239,6 +406,49 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     const c = abortControllers.get(`bench:${id}`)
     if (c) { c.abort(); abortControllers.delete(`bench:${id}`) }
   })
+
+  // P1-09: SWE-bench 官方与个人基准模板预设
+  ipcMain.handle('arena:benchmark-templates', () => {
+    return [
+      {
+        id: 'swe-bench-core',
+        name: 'SWE-bench 本地核心代码基准 (SWE-bench Local)',
+        description: '真实代码修复与测试驱动评估，自动执行测试命令校验 Pass/Fail 率',
+        tasks: [
+          {
+            name: '修测试与功能验证',
+            prompt: '请分析当前项目中的单元测试，定位并修复问题',
+            verifyCommand: 'npx vitest run test/recipes.test.js',
+          },
+          {
+            name: '安全回归防线',
+            prompt: '检查项目安全边界防范与路径规范',
+            verifyCommand: 'npx vitest run test/securityRegression.test.js',
+          },
+          {
+            name: '项目配置解析',
+            prompt: '验证项目级配置文件解析正确性',
+            verifyCommand: 'npx vitest run test/projectConfig.test.js',
+          },
+        ],
+      },
+      {
+        id: 'coding-general',
+        name: '通用编程与算法问答 (Coding Q&A)',
+        description: '基础代码生成、算法解释与结构化输出基准',
+        tasks: [
+          '用 TypeScript 实现一个支持 TTL 和 LRU 淘汰策略的高性能内存缓存类',
+          '分析并解释快速排序与三向切分快速排序在大规模重复元素下的复杂度差异',
+          '编写一段防范 SQL 注入与路径穿越的代码示例并给出审计要点',
+        ],
+      },
+    ]
+  })
 }
 
-module.exports = { registerArenaHandlers }
+module.exports = {
+  registerArenaHandlers,
+  runVerifyCommand,
+  sanitizeVerifyCommand,
+  resolveTaskCwd,
+}
