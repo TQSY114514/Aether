@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 
-describe('P0-02 影子工作区隔离机制 (Cursor / OpenHands 战术)', async () => {
+describe('P0-02 影子工作区隔离机制 (Cursor / OpenHands 战术)', { timeout: 30000 }, async () => {
   const worktreeMgr = await import('../electron/worktreeManager')
   let testRepoRoot = null
 

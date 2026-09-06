@@ -6,6 +6,12 @@ const { shouldWriteQuickTitle, quickTitleOf } = require('./chat-send.handler')
 const log = require('../logger')
 const abortControllers = new Map()
 
+/**
+ * Sanitize and validate verifyCommand string for benchmark tasks.
+ * Rejects non-strings, strings containing null bytes, and excessively long inputs.
+ * @param {any} cmd - Candidate command string
+ * @returns {string|null} Validated command or null
+ */
 function sanitizeVerifyCommand(cmd) {
   if (typeof cmd !== 'string') return null
   const trimmed = cmd.trim()
@@ -13,6 +19,13 @@ function sanitizeVerifyCommand(cmd) {
   return trimmed
 }
 
+/**
+ * Constrain task cwd within the fallback workspace sandbox root.
+ * Prevents directory traversal attacks via relative paths like `../../`.
+ * @param {string|null|undefined} taskCwd - Candidate cwd
+ * @param {string} fallbackRoot - Workspace sandbox root
+ * @returns {string} Safe absolute cwd
+ */
 function resolveTaskCwd(taskCwd, fallbackRoot) {
   const base = path.resolve(fallbackRoot || process.cwd())
   if (!taskCwd || typeof taskCwd !== 'string') return base
@@ -24,6 +37,11 @@ function resolveTaskCwd(taskCwd, fallbackRoot) {
   return resolved
 }
 
+/**
+ * Terminate a spawned child process and its entire process tree cleanly.
+ * Uses taskkill /T /F on Windows and SIGTERM/SIGKILL on POSIX platforms.
+ * @param {import('child_process').ChildProcess} child
+ */
 function killProcessTree(child) {
   if (!child || !child.pid) return
   if (process.platform === 'win32') {
@@ -36,6 +54,14 @@ function killProcessTree(child) {
   }
 }
 
+/**
+ * Asynchronously execute a benchmark verification command with timeout and abort support.
+ * @param {string} verifyCommand - Shell command to execute
+ * @param {string} taskCwd - Working directory constrained within workspace
+ * @param {AbortSignal} [signal] - Optional abort signal
+ * @param {number} [expectedExitCode=0] - Expected process exit code
+ * @returns {Promise<boolean>} True if command exited with expectedExitCode
+ */
 function runVerifyCommand(verifyCommand, taskCwd, signal, expectedExitCode = 0) {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve(false)
@@ -98,6 +124,12 @@ function runVerifyCommand(verifyCommand, taskCwd, signal, expectedExitCode = 0) 
   })
 }
 
+/**
+ * Register all Arena IPC handlers (arena:send, arena:stop, arena:vote, arena:benchmark-*).
+ * @param {import('electron').IpcMain} ipcMain
+ * @param {object} db - Database access layer
+ * @param {() => import('electron').WebContents|null} [getWebContents]
+ */
 function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   ipcMain.handle('arena:send', async (event, { sessionId, content, modelIds, personaId, temperatures }) => {
     const allModels = db.getAllModels()
@@ -414,4 +446,9 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   })
 }
 
-module.exports = { registerArenaHandlers }
+module.exports = {
+  registerArenaHandlers,
+  runVerifyCommand,
+  sanitizeVerifyCommand,
+  resolveTaskCwd,
+}

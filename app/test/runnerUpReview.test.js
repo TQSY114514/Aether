@@ -3,88 +3,114 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import Database from 'better-sqlite3'
+import { createRequire } from 'module'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+
+const nodeRequire = createRequire(import.meta.url)
 
 describe('P0-MM 第二名模型交叉复核 (Runner-Up Review)', () => {
-  let testDb = null
+  let database = null
+  let tmpDir = null
+  let restoredEntry = null
+  let p1, p2, pDisabled
+  let mGpt4o, mClaude, mMini, mDisabled
 
-  beforeAll(() => {
-    testDb = new Database(':memory:')
-    testDb.exec(`
-      CREATE TABLE provider (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1
-      );
-      CREATE TABLE model (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        provider_id INTEGER NOT NULL,
-        model_name TEXT NOT NULL,
-        is_primary INTEGER NOT NULL DEFAULT 0
-      );
-      CREATE TABLE model_score (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        model_id INTEGER NOT NULL,
-        intent TEXT NOT NULL,
-        score REAL NOT NULL DEFAULT 1000
-      );
-    `)
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aether-runner-up-test-'))
+    const electronPath = nodeRequire.resolve('electron')
+    restoredEntry = nodeRequire.cache[electronPath]
+    nodeRequire.cache[electronPath] = {
+      id: electronPath,
+      filename: electronPath,
+      loaded: true,
+      exports: {
+        app: { getPath: () => tmpDir },
+        safeStorage: {
+          isEncryptionAvailable: () => true,
+          encryptString: (s) => Buffer.from(String(s)),
+          decryptString: (b) => b.toString(),
+        },
+      },
+    }
 
-    // 插入两个 Provider 和三个 Model
-    testDb.exec("INSERT INTO provider (id, name, enabled) VALUES (1, 'OpenAI', 1), (2, 'Anthropic', 1)")
-    testDb.exec("INSERT INTO model (id, provider_id, model_name, is_primary) VALUES (1, 1, 'gpt-4o', 1), (2, 2, 'claude-3-5-sonnet', 0), (3, 1, 'gpt-4o-mini', 0)")
+    database = await import('../electron/database')
+    database.initDatabase()
 
-    // 设定 ELO 分数：claude-3-5-sonnet (1200) > gpt-4o (1150) > gpt-4o-mini (950)
-    testDb.exec("INSERT INTO model_score (model_id, intent, score) VALUES (2, 'coding', 1200), (1, 'coding', 1150), (3, 'coding', 950)")
+    // 插入两个可用 Provider 和一个禁用 Provider
+    p1 = database.addProvider({ name: 'OpenAI', api_url: 'https://api.openai.com/v1', enabled: 1 }).lastInsertRowid
+    p2 = database.addProvider({ name: 'Anthropic', api_url: 'https://api.anthropic.com', enabled: 1 }).lastInsertRowid
+    pDisabled = database.addProvider({ name: 'DisabledCo', api_url: 'https://api.disabled.com', enabled: 0 }).lastInsertRowid
+
+    // 插入四个 Model
+    mGpt4o = database.addModel({ provider_id: p1, model_name: 'gpt-4o', is_primary: 1 }).lastInsertRowid
+    mClaude = database.addModel({ provider_id: p2, model_name: 'claude-3-5-sonnet', is_primary: 0 }).lastInsertRowid
+    mMini = database.addModel({ provider_id: p1, model_name: 'gpt-4o-mini', is_primary: 0 }).lastInsertRowid
+    mDisabled = database.addModel({ provider_id: pDisabled, model_name: 'disabled-supermodel', is_primary: 0 }).lastInsertRowid
+
+    // 设定 ELO 分数：disabled-supermodel (1500) > claude-3-5-sonnet (1200) > gpt-4o (1150) > gpt-4o-mini (950)
+    database.run("INSERT INTO model_score (model_id, intent, score) VALUES (?, 'coding', 1200)", mClaude)
+    database.run("INSERT INTO model_score (model_id, intent, score) VALUES (?, 'coding', 1150)", mGpt4o)
+    database.run("INSERT INTO model_score (model_id, intent, score) VALUES (?, 'coding', 950)", mMini)
+    database.run("INSERT INTO model_score (model_id, intent, score) VALUES (?, 'coding', 1500)", mDisabled)
   })
 
   afterAll(() => {
-    if (testDb) testDb.close()
+    if (database && typeof database.closeDatabase === 'function') database.closeDatabase()
+    if (restoredEntry === undefined) {
+      const electronPath = nodeRequire.resolve('electron')
+      delete nodeRequire.cache[electronPath]
+    }
+    try { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
   })
 
-  function queryRunnerUp(intent, excludeModelId) {
-    const targetIntent = intent || 'general'
-    const excludeSql = excludeModelId ? 'AND ms.model_id != ?' : ''
-    const params = excludeModelId ? [targetIntent, excludeModelId] : [targetIntent]
-    const scores = testDb.prepare(`
-      SELECT ms.score, ms.model_id, m.model_name, m.provider_id, p.name as provider_name
-      FROM model_score ms
-      JOIN model m ON ms.model_id = m.id
-      JOIN provider p ON m.provider_id = p.id
-      WHERE ms.intent = ? AND p.enabled = 1 ${excludeSql}
-      ORDER BY ms.score DESC
-      LIMIT 1
-    `).all(...params)
-
-    if (scores.length > 0) {
-      const runnerUp = scores[0]
-      return {
-        intent: targetIntent,
-        model_id: Number(runnerUp.model_id),
-        model_name: runnerUp.model_name,
-        provider_id: Number(runnerUp.provider_id),
-        provider_name: runnerUp.provider_name,
-        score: runnerUp.score,
-        route_reason: `Runner-up ELO ${runnerUp.score.toFixed(0)} (${targetIntent})`
-      }
-    }
-    return null
-  }
-
   it('当第一名主选 claude-3-5-sonnet 时，第二名成功锁定 gpt-4o', () => {
-    const runnerUp = queryRunnerUp('coding', 2) // exclude claude (id=2)
+    const runnerUp = database.getRunnerUpModel('coding', mClaude)
     expect(runnerUp).not.toBeNull()
     expect(runnerUp.model_name).toBe('gpt-4o')
-    expect(runnerUp.model_id).toBe(1)
+    expect(runnerUp.model_id).toBe(mGpt4o)
     expect(runnerUp.score).toBe(1150)
   })
 
   it('当第一名主选 gpt-4o 时，第二名成功锁定 claude-3-5-sonnet', () => {
-    const runnerUp = queryRunnerUp('coding', 1) // exclude gpt-4o (id=1)
+    const runnerUp = database.getRunnerUpModel('coding', mGpt4o)
     expect(runnerUp).not.toBeNull()
     expect(runnerUp.model_name).toBe('claude-3-5-sonnet')
-    expect(runnerUp.model_id).toBe(2)
+    expect(runnerUp.model_id).toBe(mClaude)
     expect(runnerUp.score).toBe(1200)
+  })
+
+  it('正确过滤禁用 Provider (disabled provider filtering)', () => {
+    // disabled-supermodel 分数最高 (1500)，但所在 provider.enabled=0，绝不能被推荐
+    const runnerUp = database.getRunnerUpModel('coding', null)
+    expect(runnerUp).not.toBeNull()
+    expect(runnerUp.model_id).toBe(mClaude)
+    expect(runnerUp.model_name).not.toBe('disabled-supermodel')
+  })
+
+  it('当主选 Provider 被禁用时，平滑选择其他可用 Provider 的次优模型', () => {
+    database.run('UPDATE provider SET enabled = 0 WHERE id = ?', p2)
+    // 排除 gpt-4o，且 Claude 的 provider 被禁用，应顺延到 gpt-4o-mini
+    const runnerUp = database.getRunnerUpModel('coding', mGpt4o)
+    expect(runnerUp).not.toBeNull()
+    expect(runnerUp.model_id).toBe(mMini)
+    expect(runnerUp.model_name).toBe('gpt-4o-mini')
+    // 恢复 provider 2
+    database.run('UPDATE provider SET enabled = 1 WHERE id = ?', p2)
+  })
+
+  it('当无匹配 ELO 分数时，回退到主模型或可用模型 (fallback behavior)', () => {
+    // 没有 math 分数
+    const runnerUp = database.getRunnerUpModel('math', mClaude)
+    expect(runnerUp).not.toBeNull()
+    expect(runnerUp.model_id).toBe(mGpt4o)
+    expect(runnerUp.route_reason).toBe('Secondary fallback')
+
+    // 当主模型本身被排除时，回退到下一个可用模型
+    const fallbackNext = database.getRunnerUpModel('math', mGpt4o)
+    expect(fallbackNext).not.toBeNull()
+    expect(fallbackNext.model_id).not.toBe(mGpt4o)
   })
 
   it('featureFlags: agent.runnerUpReview 开关正确注册且默认可用', async () => {

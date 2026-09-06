@@ -21,6 +21,12 @@ const LOCAL_HOST_RE = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 // M5: request body cap — stop buffering and drop the connection past this.
 const MAX_BODY_BYTES = 16 * 1024 * 1024
 
+/**
+ * Validate Host header to protect against DNS rebinding attacks (QVD-2026-57410).
+ * Only localhost, 127.0.0.1, and [::1] (with optional port) are permitted.
+ * @param {import('http').IncomingMessage} req
+ * @returns {boolean} True if Host header represents a safe loopback host
+ */
 function _hostAllowed(req) {
   const host = req.headers.host
   if (!host || typeof host !== 'string') return false
