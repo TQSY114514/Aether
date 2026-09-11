@@ -14,9 +14,10 @@ function registerSystemHandlers(ipcMain, app, getWebContents) {
 
   ipcMain.handle('system:set-auto-launch', (_e, enabled) => {
     try {
+      // Electron 44 移除了 openAsHidden 选项（仅 macOS 12 及以下生效）；
+      // Windows 打包目标（portable/nsis）本就忽略该选项。
       app.setLoginItemSettings({
         openAtLogin: !!enabled,
-        openAsHidden: true,
         path: process.execPath,
       })
       return { ok: true, enabled: !!enabled }
