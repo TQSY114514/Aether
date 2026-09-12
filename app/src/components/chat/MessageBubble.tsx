@@ -12,7 +12,7 @@ import ThinkingBlock from './ThinkingBlock'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
-function MessageBubble({ message, searchHighlight }: { message: Message; searchHighlight?: string }) {
+function MessageBubble({ message, searchHighlight, active }: { message: Message; searchHighlight?: string; active?: boolean }) {
   const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -134,7 +134,7 @@ function MessageBubble({ message, searchHighlight }: { message: Message; searchH
             )}
           </div>
         )}
-        <div onClick={onBubbleClick} className={`rounded-2xl px-4 py-3 text-sm leading-relaxed break-words relative transition-shadow duration-200 ${
+        <div onClick={onBubbleClick} className={`rounded-2xl px-4 py-3 text-sm leading-relaxed break-words relative transition-shadow duration-200 ${active ? 'msg-anchor-flash' : ''} ${
           isUser
             ? 'text-white rounded-br-md hover:shadow-lg'
             : isError

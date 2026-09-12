@@ -1,0 +1,51 @@
+name: Feature Request
+description: Propose an idea or improvement for Aether
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing! A short, specific description helps the maintainer evaluate it against the roadmap ([docs/roadmap.md](../docs/roadmap.md)).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: The pain point or missing capability this feature addresses.
+      placeholder: |
+        When I ... I have to manually ... because Aether can't ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Desired behavior
+      description: What should Aether do instead?
+      placeholder: |
+        Aether should ... so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds, existing tools, or prior art you have tried.
+  - type: dropdown
+    id: form
+    attributes:
+      label: Which form would this affect?
+      multiple: true
+      options:
+        - Desktop app (Windows)
+        - Terminal TUI (aether tui)
+        - CLI (headless)
+        - SDK / RPC
+        - Shared agent core
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority for you
+      options:
+        - Nice to have
+        - Important
+        - Blocking my workflow

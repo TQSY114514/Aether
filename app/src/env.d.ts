@@ -276,6 +276,9 @@ interface Window {
       // aetherai:// 协议事件(todo 17): open(workspace 路径) / tui / new / chat
       onOpen: (callback: (payload: { action: string; workspace?: string; raw?: string }) => void) => () => void
     }
+    fs: {
+      listDir: (dir: string, sessionId?: number | null) => Promise<{ ok: boolean; entries?: { name: string; isDir: boolean }[]; error?: string }>
+    },
     agent: {
       getWorkspace: (sessionId?: number) => Promise<string>
       setWorkspace: (opts: { dir?: string | null; sessionId?: number }) => Promise<{ success: boolean; root: string }>

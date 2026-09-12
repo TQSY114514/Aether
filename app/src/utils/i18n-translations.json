@@ -646,6 +646,8 @@
       "settings.agent.safe_mode_enabled": "安全模式已启用: 关闭 {0} 个实验功能",
       "settings.agent.safe_mode_already": "已是安全模式(无实验功能开启)",
       "settings.agent.safe_mode_failed": "安全模式应用失败",
+  "settings.agent.shadow_workspace": "影子工作区",
+  "settings.agent.shadow_workspace_hint": "Auto 模式先在隔离的 git worktree 中执行变更，验证通过后自动合并回工作区；失败的任务自动回滚,不弄脏开发环境。需目标目录是 git 仓库。",
       "settings.agent.capability_default": "默认",
       "capability.axis.filesystem": "文件系统",
       "capability.axis.shell": "Shell 命令",

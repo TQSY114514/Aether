@@ -416,3 +416,18 @@ select[class]:open {
 [dir="rtl"] select[class] {
   background-position: left 0.55rem center;
 }
+
+/* Message anchor flash: briefly rings the message a search jump landed on. */
+@keyframes msg-anchor-flash {
+  0% {
+    box-shadow: 0 0 0 2px var(--accent);
+    background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+    background-color: transparent;
+  }
+}
+.msg-anchor-flash {
+  animation: msg-anchor-flash 1.6s ease-out forwards;
+}

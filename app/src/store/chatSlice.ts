@@ -21,6 +21,14 @@ import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, en
 
 const _injectedMsgIds = new Set<number>()
 const _undoStack: { sessionId: number; messages: Message[] }[] = []
+const _redoStack: { sessionId: number; messages: Message[] }[] = []
+const UNDO_STACK_LIMIT = 50
+/** Push a pre-mutation snapshot; a new mutation clears the redo chain. */
+function pushUndo(sessionId: number, messages: Message[], clearRedo = true) {
+  _undoStack.push({ sessionId, messages: [...messages] })
+  if (_undoStack.length > UNDO_STACK_LIMIT) _undoStack.shift()
+  if (clearRedo) _redoStack.length = 0
+}
 
 function clearStreaming(sid: number | null) {
   return (s: AppState): Partial<AppState> => {
@@ -241,6 +249,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     let userIdx = -1
     for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === "user") { userIdx = i; break } }
     if (userIdx < 0) return
+    pushUndo(currentSessionId, messages)
     const regeneratedMsgId = messages.slice(userIdx + 1).find(m => m.role === "assistant")?.id
     set((s) => {
       const next: any = {
@@ -293,18 +302,34 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     if (userMsgs.length === 0) return
     const lastUser = userMsgs[userMsgs.length - 1]
     // Push current state to undo stack before editing
-    _undoStack.push({ sessionId: currentSessionId, messages: [...messages] })
+    pushUndo(currentSessionId, messages)
     // Dispatch a custom event that ChatInput listens for
     window.dispatchEvent(new CustomEvent('aether:edit-last-user', { detail: { content: lastUser.content } }))
   },
 
   undoLastEdit: () => {
-    const { currentSessionId } = get()
+    const { currentSessionId, messages } = get()
     if (!currentSessionId) return
     // Find the last undo entry for this session
     for (let i = _undoStack.length - 1; i >= 0; i--) {
       if (_undoStack[i].sessionId === currentSessionId) {
         const entry = _undoStack.splice(i, 1)[0]
+        _redoStack.push({ sessionId: currentSessionId, messages: [...messages] })
+        if (_redoStack.length > UNDO_STACK_LIMIT) _redoStack.shift()
+        set({ messages: entry.messages })
+        return
+      }
+    }
+  },
+
+  redo: () => {
+    const { currentSessionId, messages } = get()
+    if (!currentSessionId) return
+    // Find the last redo entry for this session
+    for (let i = _redoStack.length - 1; i >= 0; i--) {
+      if (_redoStack[i].sessionId === currentSessionId) {
+        const entry = _redoStack.splice(i, 1)[0]
+        pushUndo(currentSessionId, messages, false)
         set({ messages: entry.messages })
         return
       }
@@ -320,6 +345,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     if (!target || target.role !== "user") return
     const content = newContent.trim()
     if (!content) return
+    pushUndo(currentSessionId, messages)
     await window.electronAPI.message.update(messageId, { content })
     await window.electronAPI.message.deleteAfter(currentSessionId, messageId)
     const idx = messages.findIndex(m => m.id === messageId)

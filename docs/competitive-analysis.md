@@ -7,10 +7,10 @@
 
 ## 1. 对比范围与评分维度
 
-**对比工具（18 个，覆盖三大主流形态）**：
-- **终端与混合编程类 Agent**：Claude Code、Codex CLI、Amp (ampagent)、OpenCode、Aider、Gemini CLI、Kimi CLI
-- **IDE 插件、云端 Review 与桌面编辑 Agent**：Cursor、Gemini Code Assist (GitHub App/Bot)、Windsurf (Cascade)、Trae (字节跳动)、Cline / Roo Code、GitHub Copilot
-- **全自主平台与开源框架**：OpenHands、Devin、OpenClaw (AI 龙虾)、DeepSeek Harness (DSH)、Hermes Agent
+**对比工具（26 个，覆盖三大主流形态；2026-09-12 生态扩展调研补充，详见第 8 节）**：
+- **终端与混合编程类 Agent**：Claude Code、Codex CLI、Amp (ampagent)、OpenCode、Aider、Gemini CLI、Kimi CLI、Qwen Code（阿里）、Goose（Block / Linux Foundation）、Pi（Zehner+Ronacher）、Crush (Charmbracelet)、Continue CLI、Warp、Plandex、Open Interpreter（现为 Codex fork）、agentty
+- **IDE 插件、云端 Review 与桌面编辑 Agent**：Cursor（SpaceX 收购）、Gemini Code Assist (GitHub App/Bot)、Devin Desktop（原 Windsurf，Cognition 收购后更名）、Trae (字节跳动)、Cline / Kilo Code（Roo Code 已于 2026-05 停维护归档）、GitHub Copilot、Antigravity (Google)
+- **全自主平台与开源框架**：OpenHands、Devin、Manus（2025-12 被 Meta 以 $2B+ 收购）、OpenClaw (AI 龙虾)、DeepSeek Harness (DSH)、Hermes Agent
 
 **评分维度（9 个，1–5 分）**：
 
@@ -42,9 +42,9 @@
 | Kimi CLI | 终端 Agent | 4.0 | 1.0 | 3.0 | 3.0 | 2.0 | 2.0 | 4.0 | 1.0 | 2.5 |
 | Cursor | IDE / 桌面 | 4.0 | 4.0 | 3.0 | 3.5 | 2.0 | 3.0 | 2.0 | 5.0 | 5.0 |
 | Gemini Code Assist | IDE/PR 审查 | 4.0 | 2.0 | 4.0 | 4.0 | 1.5 | 3.0 | 2.0 | 4.5 | 4.5 |
-| Windsurf | IDE / 桌面 | 4.0 | 4.0 | 3.0 | 3.5 | 2.0 | 3.0 | 2.0 | 4.5 | 4.0 |
+| Devin Desktop (原 Windsurf) | IDE / 桌面 | 4.5 | 4.0 | 3.5 | 3.5 | 1.5 | 3.0 | 2.0 | 4.5 | 4.0 |
 | Trae | IDE / 桌面 | 4.0 | 3.5 | 3.5 | 3.5 | 2.0 | 2.0 | 2.0 | 4.5 | 3.5 |
-| Cline / Roo Code | VSCode 插件 | 4.0 | 4.5 | 3.5 | 4.5 | 2.5 | 2.0 | 1.0 | 4.5 | 4.0 |
+| Cline / Kilo Code (Roo 停维护) | VSCode 插件 | 4.0 | 4.5 | 3.5 | 4.5 | 2.5 | 2.0 | 1.0 | 4.5 | 4.0 |
 | GitHub Copilot | IDE / 桌面 | 3.5 | 3.0 | 3.5 | 3.5 | 1.0 | 2.0 | 3.0 | 5.0 | 5.0 |
 | OpenHands | 全自主平台 | 5.0 | 4.0 | 4.0 | 4.0 | 3.0 | 4.0 | 3.0 | 3.0 | 4.0 |
 | Devin | 全自主平台 | 5.0 | 1.0 | 3.5 | 3.5 | 1.0 | 3.0 | 1.0 | 3.5 | 3.5 |
@@ -157,3 +157,32 @@ radar-beta
 Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代码生成的深度上，单模型深绑定的 Claude Code 与原生 IDE Cursor 依然处于绝对顶峰（Coding 9.8 vs Aether 9.1）。
 
 但 Aether 为用户提供了无可替代的定位价值：**把模型当作可随时更换的计算后端，把数据和私隐 100% 锁在自己的硬盘上，以银行级的防御纵深让自主 Agent 在桌面环境安全、踏实地运转。** 不对称的形状，正是 Aether 最真实的勋章。
+
+---
+
+## 8. 2026-09-12 生态扩展调研补充（18→26 款）
+
+> 本节为 2026-09-12 全景扩展调研增量，冲掉第 1-2 节中已过时的事实（Roo Code 停维护、Windsurf 更名）。新进工具未评 9 维分，原因是发布期过短评分无意义；本文件后续新一轮评分时再并入总表。完整调研见知识库 `03-开发日志/2026-09-12-Agent工具全景扩展调研与生态动态盘点.md`。
+
+### 新增工具速览
+
+| 工具 | 形态 | 一句话定位 | 对 Aether 的参考价值 |
+|:---|:---|:---|:---|
+| **DSH (DeepSeek Harness)** | 开源引擎 | 「一切皆插件」Cordis 内核、PTC 程序化工具调用、append-only trajectory 自压缩，system prompt ~6k；发布 12h 50k stars / 4 天 126k | **同赛道唯一真对手**：本地/多模型/引擎化。Aether 的答案=安全纵深+双形态+评估体系，并需开源运营对冲其社区加速度 |
+| **Pi** | 终端 harness | 极简 system prompt（~2-3k），Zehner+Ronacher | harness 效率命题：prompt 每省 1k token 都是成本与表现双赢 |
+| **Crush** | TUI | Charm 出品，LSP-aware agentic TUI | TUI 美学与 LSP 感知值得借鉴 |
+| **Goose** | 终端/DevOps | 围绕 MCP 设计，捐给 Linux Foundation | Recipe/MCP 生态运营样本 |
+| **Qwen Code** | CLI | 阿里开源 coder CLI | 中国生态对 CLI 形态的回归 |
+| **Kilo Code** | VSCode 插件 | Cline 家族现役主力（Roo 停维护后）；Orchestrator + 可见子步骤 to-do | 任务透明化的 to-do 列表心智 |
+| **Continue CLI** | 终端/CI | 转型 Continuous AI：agent 上 PR 当 CI status checks | 验证闭环上 CI 的方向 |
+| **Open Interpreter** | 桌面/CLI | 重构为 Codex fork；OS 沙箱 + model-specific harness emulation | 按模型塑 agent loop 的多模型心智 |
+| **Manus** | 云端 | Meta $2B+ 收购的通用任务 agent | 云端通用任务天花板参考 |
+
+### 生态关键动态（评分表外）
+
+- Cursor 被 SpaceX 全资收购（2026-08），内置 Cursor Router 智能模型路由——Aether Arena ELO 路由的竞品对应物。
+- Claude Code 2026-03 源码泄露事件；AGENTS.md 已成跨工具互操作事实标准。
+- Windsurf 2025-07 被 Cognition 收购后更名 Devin Desktop，自有模型 SWE-1.5（SWE-bench ~78%）+ Turbo Mode。
+- OpenHands 完成 $23.8M Series A；Manus 被 Meta 收购（2025-12-30）。
+- 中国市场：四大厂（阿里 Qoder / 腾讯 CodeBuddy / 百度 Comate / 字节 TRAE）全部 IDE+CLI+云三端覆盖；月活渗透率 >85%。
+- **Aether 应对北极星不变**：把新增 26 款对手当作「可吸收的心智」而非「可抄袭的表面」，护城河仍是安全×本地×多模型评估三位一体。

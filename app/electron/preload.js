@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fetchModels: (id) => ipcRenderer.invoke('provider:fetch-models', id),
     detectOllama: () => ipcRenderer.invoke('provider:detect-ollama'),
   },
+  fs: {
+    listDir: (dir, sessionId) => ipcRenderer.invoke('fs:list-dir', dir, sessionId),
+  },
   agent: {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
     setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', typeof opts === 'string' ? { dir: opts } : opts),

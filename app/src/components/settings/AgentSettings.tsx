@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
-import { Shield, ShieldCheck, FolderOpen, FileText, HardDrive, TerminalSquare, Globe } from 'lucide-react'
+import { Shield, ShieldCheck, FolderOpen, FileText, HardDrive, TerminalSquare, Globe, GitBranch } from 'lucide-react'
 
 // Capability axis options（与 capabilityPolicy.js 三态对齐）
 const AXIS_OPTIONS = ['allow', 'ask', 'deny'] as const
@@ -27,6 +27,7 @@ export default function AgentSettings() {
   const [busy, setBusy] = useState(false)
   const [maxIter, setMaxIter] = useState(25)
   const [autoMemory, setAutoMemory] = useState(true)
+  const [shadowEnabled, setShadowEnabled] = useState(false)
   const [projectInst, setProjectInst] = useState<{ has: boolean; fileName: string | null }>({ has: false, fileName: null })
   // Capability axis policies（评审 P0-2）: null = 未配置(纯 5 档行为)
   const [axes, setAxes] = useState<Record<string, AxisPolicy | null>>({ filesystem: null, shell: null, network: null })
@@ -43,6 +44,14 @@ export default function AgentSettings() {
     try { window.electronAPI?.settings?.get?.('auto_memory_enabled').then((v) => setAutoMemory(v !== '0')).catch(() => {}) } catch {}
     // Check for project instruction file (CLAUDE.md / .aetherai.md) in workspace.
     try { window.electronAPI?.agent?.hasProjectInstructions?.().then(setProjectInst).catch(() => {}) } catch {}
+    // Load shadow workspace feature flag (P3.3): Auto-mode executes changes in
+    // an isolated git worktree and verifies before applying.
+    try {
+      window.electronAPI?.flags?.list?.().then((list) => {
+        const f = (list || []).find((x) => x.key === 'agent.shadowWorkspace')
+        if (f) setShadowEnabled(f.enabled)
+      }).catch(() => {})
+    } catch {}
     // Load capability axis policies
     try {
       Promise.all([
@@ -77,6 +86,14 @@ export default function AgentSettings() {
   const saveAutoMemory = async (v: boolean) => {
     setAutoMemory(v)
     try { await window.electronAPI?.settings?.set?.('auto_memory_enabled', v ? '1' : '0') } catch {}
+  }
+
+  const saveShadow = async (v: boolean) => {
+    setShadowEnabled(v)
+    try {
+      const r = await window.electronAPI?.flags?.set?.('agent.shadowWorkspace', v)
+      if (!r?.ok) setShadowEnabled(!v)
+    } catch { setShadowEnabled(!v) }
   }
 
   const pickFolder = async () => {
@@ -252,6 +269,23 @@ export default function AgentSettings() {
             <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm"
               style={{ left: autoMemory ? '20px' : '2px' }} />
           </button>
+        </div>
+
+        {/* Shadow Workspace (P3.3) — Auto mode executes changes in an isolated git worktree, verifies, then applies. */}
+        <div className="flex items-start gap-2 p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.06)', border: '1px solid var(--border)' }}>
+          <GitBranch size={13} className="text-green-500 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.shadow_workspace')}</p>
+              <button onClick={() => saveShadow(!shadowEnabled)}
+                className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                style={{ backgroundColor: shadowEnabled ? 'var(--accent)' : 'var(--border)' }}>
+                <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm"
+                  style={{ left: shadowEnabled ? '20px' : '2px' }} />
+              </button>
+            </div>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.shadow_workspace_hint')}</p>
+          </div>
         </div>
       </div>
     </div>
