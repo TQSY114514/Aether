@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, ListTodo, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
-import TaskPanel, { tx } from '@/components/tasks/TaskPanel'
+import FileTree from './FileTree'
+
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
 
@@ -70,9 +71,6 @@ export default function Sidebar() {
   const deleteSession = useStore((s) => s.deleteSession)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const loadSessions = useStore((s) => s.loadSessions)
-  const tasksOpen = useStore((s) => s.tasksOpen)
-  const setTasksOpen = useStore((s) => s.setTasksOpen)
-  const runningTasks = useStore((s) => s.tasks.filter((x) => x.status === 'running').length)
   const { confirm } = useUI()
 
   const [renamingId, setRenamingId] = useState<number | null>(null)
@@ -154,6 +152,7 @@ export default function Sidebar() {
           )}
         </div>
       </div>
+      <FileTree />
       <div className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
         {groups.length === 0 && (
           <div className="text-center py-8 text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -270,15 +269,8 @@ export default function Sidebar() {
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
-        {/* Background tasks (功能 A): a drawer toggle, not a view — the page
-            switch lives in App.tsx and stays untouched. */}
-        <NavItem icon={ListTodo} label={tx('sidebar.nav.tasks', '任务')} active={tasksOpen}
-          onClick={() => setTasksOpen(!tasksOpen)} badge={runningTasks} />
         <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>
-      {/* Fixed-position drawer; renders null unless `tasksOpen`. Mounted here so
-          it hydrates from task.list() as soon as the sidebar exists. */}
-      <TaskPanel />
     </div>
   )
 }

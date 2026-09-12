@@ -24,6 +24,13 @@ asar: true
 # Publish provider: electron-updater reads latest.yml from the latest GitHub
 # Release asset list. owner/repo are also auto-detected from git remote, but set
 # explicitly to be safe. token is NEVER put here — it comes from GH_TOKEN in CI.
+# CN mirror: electron-builder downloads the Electron dist zip from GitHub
+# releases, which is flaky from mainland networks (ECONNRESET on 44.3.0).
+# npmmirror hosts both the Electron dist and electron-builder binaries;
+# electronDownload.mirror covers the Electron zip, .npmrc covers the rest.
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+
 publish:
   provider: github
   owner: TQSY114514

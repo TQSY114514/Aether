@@ -335,6 +335,8 @@
   "settings.agent.safe_mode_enabled": "Safe mode enabled: {0} experimental features turned off",
   "settings.agent.safe_mode_already": "Already in safe mode (no experimental features active)",
   "settings.agent.safe_mode_failed": "Failed to apply safe mode",
+  "settings.agent.shadow_workspace": "Shadow Workspace",
+  "settings.agent.shadow_workspace_hint": "Auto mode runs changes inside an isolated git worktree, verifies the result, then merges back to your workspace. Failed tasks roll back automatically without dirtying your dev environment.",
   "settings.agent.capability_title": "Capability Axis (Capability-based)",
   "settings.agent.capability_desc": "Control agent permissions per capability axis, overriding the 5-level mode. allow = permit, ask = confirm each time, deny = block; leave empty to fall back to level mode.",
   "settings.agent.project_inst": "Project Instructions",

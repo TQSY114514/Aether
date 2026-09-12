@@ -298,6 +298,7 @@ export interface AppState {
   regenerate: () => Promise<void>
   editLastUserMessage: () => void
   undoLastEdit: () => void
+  redo: () => void
   editMessage: (messageId: number, newContent: string) => Promise<void>
   sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[], overrides?: { agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom' }) => Promise<void>
   loadMessages: (sessionId: number) => Promise<void>

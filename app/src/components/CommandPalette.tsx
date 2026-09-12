@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
-import { Search, MessageSquare, Cpu, Server, Sparkles, Settings as SettingsIcon, Brain, Shield, Zap } from 'lucide-react'
+import { tx } from '@/components/tasks/TaskPanel'
+import { Search, MessageSquare, Cpu, Server, Sparkles, Settings as SettingsIcon, Brain, Shield, Zap, ListTodo } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Global command palette (Ctrl+K). Fuzzy-search across sessions, models,
@@ -53,6 +54,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   const setThinkingEnabled = useStore((s) => s.setThinkingEnabled)
   const effortLevel = useStore((s) => s.effortLevel)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
+  const setTasksOpen = useStore((s) => s.setTasksOpen)
 
   useEffect(() => { if (open) { setQ(''); setSel(0); setTimeout(() => inputRef.current?.focus(), 0) } }, [open])
 
@@ -69,6 +71,8 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     pages.forEach(([view, label, icon]) => {
       cmds.push({ id: `page-${view}`, label, group: t('cmd.group.navigate'), icon, run: () => { setCurrentView(view as any); onClose() } })
     })
+    // Background tasks (任务驾驶舱，入口收敛自侧边栏常驻)
+    cmds.push({ id: 'tasks', label: tx('sidebar.nav.tasks', '后台任务'), group: t('cmd.group.navigate'), icon: ListTodo, run: () => { setTasksOpen(true); onClose() } })
     // Agent modes
     const modes: [string, string, typeof Brain][] = [
       ['ask', t('agent.mode.ask'), Shield],
@@ -106,7 +110,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
       } })
     })
     return cmds
-  }, [sessions, allModels, setCurrentView, setAgentMode, setEffortLevel, selectSession, saveSessionConfig, currentSessionId, onClose])
+  }, [sessions, allModels, setCurrentView, setAgentMode, setEffortLevel, selectSession, saveSessionConfig, currentSessionId, setTasksOpen, onClose])
 
   const filtered = useMemo(() => {
     if (!q.trim()) return commands

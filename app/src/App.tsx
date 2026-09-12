@@ -21,6 +21,8 @@ import CommandPalette from '@/components/CommandPalette'
 import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import CompletionToasts from '@/components/chat/CompletionToasts'
+import { useShortcuts } from '@/hooks/useShortcuts'
+import TaskPanel from '@/components/tasks/TaskPanel'
 import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
 import { useFeatureFlag } from '@/utils/featureFlags'
 import { PanelLeft } from 'lucide-react'
@@ -188,46 +190,34 @@ export default function App() {
     return () => off?.()
   }, [])
 
-  // Keyboard shortcuts — use getState() to avoid re-binding on every store change.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setPaletteOpen(o => !o)
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === '?') {
-        e.preventDefault()
-        setShortcutsOpen(o => !o)
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault()
-        setShortcutsOpen(o => !o)
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        e.preventDefault()
-        useStore.getState().newChat()
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
+  // Keyboard shortcuts — bound from the central registry (src/shortcuts.ts).
+  // New shortcuts are registered there and show up in the help overlay for free.
+  useShortcuts([
+    { id: 'toggle-palette', run: () => setPaletteOpen((o) => !o) },
+    { id: 'toggle-shortcuts', run: () => setShortcutsOpen((o) => !o) },
+    { id: 'new-chat', run: () => useStore.getState().newChat() },
+    {
+      id: 'regenerate',
+      when: () => {
         const s = useStore.getState()
-        if (s.currentSessionId && s.messages.length > 0) { e.preventDefault(); s.regenerate() }
-        return
-      }
-      if (e.key === 'Escape') {
-        if (shortcutsOpenRef.current) return // ShortcutOverlay handles its own ESC
+        return !!s.currentSessionId && s.messages.length > 0
+      },
+      run: () => useStore.getState().regenerate(),
+    },
+    {
+      id: 'stop',
+      when: () => !shortcutsOpenRef.current, // ShortcutOverlay handles its own ESC
+      run: () => {
         const s = useStore.getState()
-        if (s.sending) { e.preventDefault(); s.stopGeneration() }
+        if (s.sending) s.stopGeneration()
         else if (s.currentView !== 'chat') s.setCurrentView('chat')
-      }
-      if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); useStore.getState().goBack() }
-      if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); useStore.getState().goForward() }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+      },
+    },
+    { id: 'history-back', run: () => useStore.getState().goBack() },
+    { id: 'history-forward', run: () => useStore.getState().goForward() },
+    { id: 'undo', skipWhenEditable: true, run: () => useStore.getState().undoLastEdit() },
+    { id: 'redo', skipWhenEditable: true, run: () => useStore.getState().redo() },
+  ])
 
   const renderPage = () => {
     switch (currentView) {
@@ -278,12 +268,13 @@ export default function App() {
           {renderPage()}
         </main>
         <CompletionToasts />
+        <TaskPanel />
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-        {showWizard && onboardingDone === false && providers.length === 0 && (
-          <FirstRunWizard onDone={() => setOnboardingDone(true)} />
+{showWizard && onboardingDone === false && (
+        <FirstRunWizard onDone={() => setOnboardingDone(true)} />
         )}
       </div>
     </ErrorBoundary>

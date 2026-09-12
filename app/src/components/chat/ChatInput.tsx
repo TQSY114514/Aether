@@ -454,6 +454,29 @@ export default function ChatInput() {
     })
   }
 
+  // Sidebar file tree: insert an @file reference at the cursor position.
+  useEffect(() => {
+    const onOpenFile = (e: Event) => {
+      const p = (e as CustomEvent<string>).detail
+      if (!p) return
+      const before = input.slice(0, refCursor)
+      const sp = before && !before.endsWith(' ') ? ' ' : ''
+      const next = before + sp + '@' + p + ' ' + input.slice(refCursor)
+      const pos = (before + sp + '@' + p + ' ').length
+      setInput(next)
+      setRefCursor(pos)
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current
+        if (ta) {
+          ta.focus()
+          ta.setSelectionRange(pos, pos)
+        }
+      })
+    }
+    window.addEventListener('aether:open-file', onOpenFile)
+    return () => window.removeEventListener('aether:open-file', onOpenFile)
+  }, [input, refCursor])
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const el = textareaRef.current
     if (showSlash && slashResults.length > 0) {

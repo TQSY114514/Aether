@@ -342,7 +342,10 @@ export default function ChatWindow() {
     getItemKey: (index) => virtualMessages[index].id,
   })
 
-  const [searchQuery, setSearchQuery] = useState('')
+  // Search query lives in the store (messageSearchQuery) so the highlight
+  // survives ChatWindow unmount/remount (view switches / session hopping).
+  const messageSearchQuery = useStore((s) => s.messageSearchQuery)
+  const setMessageSearchQuery = useStore((s) => s.setMessageSearchQuery)
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
   // Use the virtualizer to jump to a message — works even for off-screen rows
   // (which are not in the DOM under virtual scrolling) by index lookup.
@@ -405,7 +408,7 @@ export default function ChatWindow() {
     if (currentSessionId) {
       loadMessages(currentSessionId)
     }
-    setSearchQuery('')
+setMessageSearchQuery('')
     setTimeout(scrollToBottom, 50)
   }, [currentSessionId, loadMessages, scrollToBottom])
 
@@ -417,11 +420,11 @@ export default function ChatWindow() {
 
   // Search: debounce the query used for filtering so typing doesn't trigger
   // a filter + scrollIntoView on every keystroke.
-  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState(messageSearchQuery)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
-    setSearchQuery(q)
+    setMessageSearchQuery(q)
     if (debounceTimer.current) clearTimeout(debounceTimer.current)
     debounceTimer.current = setTimeout(() => setDebouncedQuery(q), 200)
   }
@@ -445,11 +448,12 @@ export default function ChatWindow() {
     if (matchIds.length === 0) return
     const next = (matchIdx + delta + matchIds.length) % matchIds.length
     setMatchIdx(next)
+    setActiveMsgId(matchIds[next])
     scrollToMsg(matchIds[next])
   }
   // When the debounced query changes, jump to the first match so the counter
   // is live (only fires after the 200ms debounce).
-  useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
+  useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); setActiveMsgId(matchIds[0]); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
 
   // Token & activity stats for the current session (/tokens HUD)
   const sessionStats = useMemo(() => {
@@ -480,10 +484,10 @@ export default function ChatWindow() {
       <div className="px-4 py-1.5 shrink-0 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
-          <input value={searchQuery} onChange={handleSearchChange}
+          <input value={messageSearchQuery} onChange={handleSearchChange}
             placeholder={t('chat.search_placeholder')} autoComplete="off"
             className="w-full bg-transparent outline-none text-xs" style={{ color: 'var(--text-primary)' }} />
-          {searchQuery && (
+          {messageSearchQuery && (
             <>
               <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
                 {matchCount > 0 ? `${matchIdx + 1}/${matchCount}` : `0/${matchCount}`}
@@ -496,7 +500,7 @@ export default function ChatWindow() {
                 aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
                 <ChevronDown size={13} className="text-gray-400" />
               </button>
-              <button onClick={() => setSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
+              <button onClick={() => setMessageSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
                 <X size={12} className="text-gray-400" />
               </button>
             </>
@@ -593,7 +597,7 @@ export default function ChatWindow() {
                       paddingBottom: '14px',
                     }}
                   >
-                    <MessageBubble message={msg} searchHighlight={searchQuery} />
+                    <MessageBubble message={msg} searchHighlight={messageSearchQuery} active={msg.id === activeMsgId} />
                   </div>
                 )
               })}

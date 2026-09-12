@@ -21,6 +21,10 @@ const { extractFile } = require('./symbolExtractor')
 
 // Module-level cache: rootDir → { map, mtime, fileCache: Map<absPath, { mtime, extraction }> }
 const _cache = new Map()
+let _memorySeeder = null
+// Seam for wiring repo-map rebuilds into long-term memory (Brain). The caller
+// (agent.handler) sets it; repoMap stays dependency-free.
+function setMemorySeeder(fn) { _memorySeeder = fn }
 
 function toPosix(p) {
   return String(p).split(path.sep).join('/')
@@ -162,6 +166,10 @@ async function generateRepoMap(rootDir, options = {}) {
   let newest = 0
   for (const f of files) if (f.modified > newest) newest = f.modified
   entry.map = map
+  if (_memorySeeder) {
+    // Only fires on a genuine (re)build — incremental cache hits skip this.
+    try { _memorySeeder(buildRepoMapDigest(map), rootDir) } catch {}
+  }
   entry.mtime = newest
   return map
 }
@@ -304,10 +312,19 @@ async function isIndexStale(rootDir) {
 
 function invalidateCache(rootDir) { _cache.delete(rootDir) }
 
+// Compact digest of a repo map for long-term memory (≈40 scored lines,
+// well under 0.5k tokens) — enough to recall project topology later.
+function buildRepoMapDigest(map) {
+  if (!map) return null
+  return buildRepoMapText(map, 40)
+}
+
 module.exports = {
   generateRepoMap,
   buildRepoMapText,
   buildRepoMapMessage,
+  buildRepoMapDigest,
+  setMemorySeeder,
   getChangedFiles,
   getCachedMap,
   isIndexStale,

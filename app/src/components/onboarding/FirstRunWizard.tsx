@@ -82,7 +82,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
 
   // One-click import from Claude Code / OpenCode. Auto-discovers the standard
   // config paths, creates providers/models via the new IPC, reloads the store
-  // (so the App mount gate sees providers), then jumps to the permission step.
+  // (so the App mount gate sees providers), then jumps to the first-session step.
   const runImport = async () => {
     if (importing) return
     setImporting(true)
@@ -100,6 +100,8 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
       setImporting(false)
     }
   }
+
+  const [createdSession, setCreatedSession] = useState(false)
 
   const saveProvider = async () => {
     if (!preset || busy) return
@@ -128,7 +130,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
           }
         }
       }
-      setStep('permission')
+      setStep('first-session')
     } catch {
       setError(t('onboarding.error'))
     } finally {
@@ -244,6 +246,33 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
                 style={{ backgroundColor: 'var(--accent)' }}>
                 {busy ? <span>{t('onboarding.fetch')}</span> : <><span>{t('onboarding.next')}</span><ArrowRight size={12} /></>}
               </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'first-session' && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Check size={14} style={{ color: 'var(--accent)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>创建第一个会话</span>
+            </div>
+            <p className="text-[11px] mb-4 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              模型已就绪。先创建一个会话、向 Aether 提出你的第一个问题。下一步会带你认识命令执行的权限模式。
+            </p>
+            <div className="mt-5 flex items-center justify-between">
+              <button onClick={finish}
+                className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setStep('permission')}
+                  className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>继续</button>
+                <button onClick={() => { useStore.getState().newChat(); setCreatedSession(true) }} disabled={createdSession}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg text-white disabled:opacity-60 transition-opacity"
+                  style={{ backgroundColor: 'var(--accent)' }}>
+                  {createdSession ? <><span>已创建 ✓</span></> : <><span>创建第一个会话</span><ArrowRight size={12} /></>}
+                </button>
+              </div>
             </div>
           </div>
         )}

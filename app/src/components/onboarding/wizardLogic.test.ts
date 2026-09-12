@@ -102,9 +102,9 @@ describe('choiceOffersImport', () => {
 })
 
 describe('stepAfterImport', () => {
-  it('jumps to the permission step when at least one provider was created', () => {
-    expect(stepAfterImport(1)).toBe('permission')
-    expect(stepAfterImport(3)).toBe('permission')
+  it('routes through the first-session step when at least one provider was created', () => {
+    expect(stepAfterImport(1)).toBe('first-session')
+    expect(stepAfterImport(3)).toBe('first-session')
   })
 
   it('falls back to the template picker when nothing was found', () => {

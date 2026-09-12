@@ -16,8 +16,8 @@ import { ListTodo, X, Play, Pause, ClipboardList, Loader2, CheckCircle2, CircleS
 // `ViewType` page, because the page switch lives in App.tsx and this feature
 // must not touch it. Non-modal matters: clicking a task opens its session in the
 // main area while the panel stays put, so you can read one task and start another.
-// Mounted by Sidebar and anchored at its inline-start edge (260px = Sidebar's
-// width), so collapsing the sidebar hides the drawer too; reopening restores it.
+// Mounted at App root and anchored at the sidebar's inline-start edge — 260px
+// expanded / 40px collapsed rail — so the drawer tracks the sidebar's state.
 // z-[100] keeps it under PermissionDialog (z-101) — a background task's confirm
 // prompt must stay clickable on top of the panel.
 //
@@ -37,7 +37,7 @@ import { ListTodo, X, Play, Pause, ClipboardList, Loader2, CheckCircle2, CircleS
 // The `task.*` / `sidebar.nav.tasks` i18n keys are added to i18n.base.json
 // centrally. Until they land, `t()` echoes the key — so fall back to a readable
 // label instead of rendering "task.title". A no-op once the keys exist.
-// Exported for Sidebar's nav label (same temporary shim, one implementation).
+// Exported for CommandPalette's nav label (same temporary shim, one implementation).
 export function tx(key: string, fallback: string, ...args: (string | number)[]): string {
   const s = t(key, ...args)
   if (s !== key) return s
@@ -86,6 +86,7 @@ export default function TaskPanel() {
   const tasksOpen = useStore((s) => s.tasksOpen)
   const setTasksOpen = useStore((s) => s.setTasksOpen)
   const tasks = useStore((s) => s.tasks)
+  const sidebarOpen = useStore((s) => s.sidebarOpen)
   const removeTask = useStore((s) => s.removeTask)
   const selectSession = useStore((s) => s.selectSession)
   const setCurrentView = useStore((s) => s.setCurrentView)
@@ -231,7 +232,7 @@ export default function TaskPanel() {
   return (
     <aside className="fixed top-0 bottom-0 w-[360px] z-[100] flex flex-col animate-blur-fade"
       style={{
-        insetInlineStart: 260,
+        insetInlineStart: sidebarOpen ? 260 : 40,
         backgroundColor: 'var(--bg-primary)',
         borderInlineEnd: '1px solid var(--border)',
         boxShadow: '0 0 24px rgba(0,0,0,0.14)',

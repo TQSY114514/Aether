@@ -1311,7 +1311,10 @@ Reply ONLY with JSON:
             })
           }
         }
-        let rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
+        // Multimodal-safe: tools may return a content parts array (e.g. web_visualize
+        // returns [{type:'text'},{type:'image_url'}]); String() would flatten it to
+        // "[object Object]". Pass arrays through so vision models see the image.
+        let rawContent = entry.error ? `[error: ${entry.error}]` : (typeof entry.result === 'string' ? entry.result : (Array.isArray(entry.result) ? entry.result : String(entry.result ?? '')))
         // 工具失败的错误摘要注入（审查建议: 不只看原始 stderr）:
         // classifyToolError 已产出 recovery(分类+修复建议), 拼接进 tool 结果,
         // 模型下一轮直接看到"哪里错了+该怎么做", 而不是自己去猜原始输出。
