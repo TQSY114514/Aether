@@ -2,13 +2,13 @@
 <rect x="0" y="0" width="1000" height="760" rx="16" fill="#0d1117"/>
 <rect x="0.5" y="0.5" width="999" height="759" rx="15.5" fill="none" stroke="#21262d"/>
 <text x="40" y="44" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="19" font-weight="700" fill="#e6edf3">Aether · Agent 诚实自评雷达 <tspan fill="#8b949e" font-weight="400" font-size="13.5">(2026-09 最新评估)</tspan></text>
-<text x="40" y="68" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">全面对比 16 款主流 Agent 工具 · 8 大核心维度能力画像</text>
+<text x="40" y="68" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">全面对比 18 款主流 Agent 工具 · 8 大核心维度能力画像</text>
 <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11">
 <rect x="720" y="18" width="240" height="74" rx="6" fill="#161b22" stroke="#21262d"/>
 <rect x="732" y="28" width="10" height="10" rx="2" fill="#6366f1" fill-opacity="0.36" stroke="#818cf8" stroke-width="1.8"/>
 <text x="748" y="37" fill="#e0e7ff" font-weight="600">Aether 自评 (v0.8.2+)</text>
 <line x1="732" y1="50" x2="742" y2="50" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>
-<text x="748" y="53" fill="#8b949e">同类最佳包络 (16 款竞品峰值)</text>
+<text x="748" y="53" fill="#8b949e">同类最佳包络 (18 款竞品峰值)</text>
 <line x1="732" y1="70" x2="742" y2="70" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.8"/>
 <text x="748" y="73" fill="#7dd3fc">Claude Code (终端标杆)</text>
 <line x1="732" y1="85" x2="742" y2="85" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.8"/>
@@ -35,24 +35,24 @@
 <polygon points="500.0,166.9 635.1,222.9 689.1,358.0 635.1,493.1 500.0,543.3 364.9,493.1 324.5,358.0 364.9,222.9" fill="none" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4"/>
 <polygon points="500.0,166.9 589.6,268.4 636.5,358.0 635.1,493.1 500.0,543.3 375.9,482.1 353.8,358.0 389.7,247.7" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
 <polygon points="500.0,168.8 603.4,254.6 636.5,358.0 617.2,475.2 500.0,523.8 389.7,468.3 373.3,358.0 364.9,222.9" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
-<polygon points="500.0,186.4 626.9,231.1 693.0,358.0 632.4,490.4 500.0,533.5 362.1,495.9 308.9,358.0 366.3,224.3" fill="#6366f1" fill-opacity="0.32" stroke="#818cf8" stroke-width="2.2" stroke-linejoin="round"/>
-<circle cx="500.0" cy="186.4" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<polygon points="500.0,180.6 626.9,231.1 693.0,358.0 633.7,491.7 500.0,541.3 362.1,495.9 308.9,358.0 366.3,224.3" fill="#6366f1" fill-opacity="0.32" stroke="#818cf8" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="500.0" cy="180.6" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="626.9" cy="231.1" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="693.0" cy="358.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
-<circle cx="632.4" cy="490.4" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
-<circle cx="500.0" cy="533.5" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="633.7" cy="491.7" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="500.0" cy="541.3" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="362.1" cy="495.9" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="308.9" cy="358.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="366.3" cy="224.3" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
-<text x="500.0" y="129.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">编程 Agent <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">8.8</tspan><tspan fill="#8b949e" font-size="10"> (-1.0)</tspan></text>
+<text x="500.0" y="129.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">编程 Agent <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.1</tspan><tspan fill="#8b949e" font-size="10"> (-0.7)</tspan></text>
 <text x="500.0" y="143.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Coding · Peak 9.8</text>
 <text x="654.9" y="195.1" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">通用任务 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.2</tspan><tspan fill="#8b949e" font-size="10"> (-0.6)</tspan></text>
 <text x="654.9" y="209.1" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">General · Peak 9.8</text>
 <text x="719.0" y="360.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">多模型/供应商 <tspan fill="#4ade80" font-size="11.5" font-weight="700">9.9</tspan><tspan fill="#4ade80" font-size="10"> (★领先)</tspan></text>
 <text x="719.0" y="374.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Multi-provider · Peak 9.7</text>
-<text x="654.9" y="524.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">扩展生态 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.6</tspan><tspan fill="#8b949e" font-size="10"> (-0.2)</tspan></text>
+<text x="654.9" y="524.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">扩展生态 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.7</tspan><tspan fill="#8b949e" font-size="10"> (-0.1)</tspan></text>
 <text x="654.9" y="538.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Ecosystem · Peak 9.8</text>
-<text x="500.0" y="591.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">多 Agent 编排 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.0</tspan><tspan fill="#8b949e" font-size="10"> (-0.5)</tspan></text>
+<text x="500.0" y="591.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">多 Agent 编排 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.4</tspan><tspan fill="#8b949e" font-size="10"> (-0.1)</tspan></text>
 <text x="500.0" y="605.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Multi-agent · Peak 9.5</text>
 <text x="345.1" y="524.9" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">安全/权限 <tspan fill="#4ade80" font-size="11.5" font-weight="700">10.0</tspan><tspan fill="#4ade80" font-size="10"> (★领先)</tspan></text>
 <text x="345.1" y="538.9" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Safety · Peak 9.8</text>
@@ -60,16 +60,18 @@
 <text x="281.0" y="374.0" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Local &amp; private · Peak 9.0</text>
 <text x="345.1" y="195.1" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">桌面/终端双形态 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.7</tspan><tspan fill="#8b949e" font-size="10"> (-0.1)</tspan></text>
 <text x="345.1" y="209.1" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Desktop &amp; TUI UX · Peak 9.8</text>
-<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11">
-<rect x="40" y="636" width="920" height="62" rx="8" fill="#161b22" stroke="#21262d"/>
-<text x="54" y="654" fill="#8b949e" font-weight="600">对比竞品矩阵（16款）：</text>
-<text x="54" y="672" fill="#c9d1d9">
-  <tspan fill="#7dd3fc" font-weight="600">终端类</tspan>: Claude Code · Codex · OpenCode · Aider · Gemini CLI · Kimi CLI  ｜  
-  <tspan fill="#fcd34d" font-weight="600">IDE/桌面</tspan>: Cursor · Windsurf · Trae · Cline · Copilot
+<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10.5">
+<rect x="40" y="626" width="920" height="76" rx="8" fill="#161b22" stroke="#21262d"/>
+<text x="54" y="643" fill="#8b949e" font-weight="600">对比竞品矩阵（18款）：</text>
+<text x="54" y="661" fill="#c9d1d9">
+  <tspan fill="#7dd3fc" font-weight="600">终端/混合</tspan>: Claude Code · Codex · Amp · OpenCode · Aider · Gemini CLI · Kimi CLI
 </text>
-<text x="54" y="688" fill="#c9d1d9">
+<text x="54" y="677" fill="#c9d1d9">
+  <tspan fill="#fcd34d" font-weight="600">IDE/评审</tspan>: Cursor · Windsurf · Trae · Cline · GitHub Copilot · Gemini Code Assist
+</text>
+<text x="54" y="693" fill="#c9d1d9">
   <tspan fill="#c084fc" font-weight="600">自主平台</tspan>: OpenHands · Devin · OpenClaw · DeepSeek Harness · Hermes Agent
 </text>
 </g>
-<text x="40" y="726" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10" fill="#6e7681">客观自评 · 形状即定位：Aether 强在「本地隐私」、「三层沙箱安全」与「多模型自由切换」；在单一极端编程任务上坦然落后于 Claude Code/Cursor，绝不顶格美化。</text>
+<text x="40" y="728" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="9.5" fill="#6e7681">客观自评 · 形状即定位：Aether 强在「本地隐私」、「三层沙箱安全」与「多模型自由切换」；在单一极端编程任务上坦然落后于 Claude Code/Cursor，绝不顶格美化。</text>
 </svg>

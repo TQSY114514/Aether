@@ -49,11 +49,11 @@ Aether 採用**雙輪驅動架構**發布，提供完全平等的雙形態體驗
 
 ---
 
-**Aether 在哪一檔——誠實版。** 依據公開資料對 16 款主流終端 / IDE / 平台 Agent 工具進行系統自評（2026-09 最新評估；是估計，不是跑分）。我們把不對稱的形狀原樣畫出來：強在「本地隱私」、「三層沙箱安全」與「多模型自由切換」等軸；單模型極致編程能力坦然與第一梯隊存在客觀差距。這就是你選擇 Aether 時接受的真實取捨。完整競品深度對比詳見 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
+**Aether 在哪一檔——誠實版。** 依據公開資料對 18 款主流終端 / IDE / 平台 Agent 工具進行系統自評（2026-09 最新評估；是估計，不是跑分）。我們把不對稱的形狀原樣畫出來：強在「本地隱私」、「三層沙箱安全」與「多模型自由切換」等軸；單模型極致編程能力坦然與第一梯隊存在客觀差距。這就是你選擇 Aether 時接受的真實取捨。完整競品深度對比詳見 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
 
-<p align="center"><img src="./assets/agent-radar-2026.zh-TW.svg" width="760" alt="Aether 誠實自評雷達: 對比 16 款主流終端 / IDE / 平台 Agent 工具" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.zh-TW.svg" width="760" alt="Aether 誠實自評雷達: 對比 18 款主流終端 / IDE / 平台 Agent 工具" /></p>
 
-<sub>圖表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——16 款工具評分逐字內嵌其中，可用 <code>node app/scripts/gen-radar.cjs</code> 本地復現。</sub>
+<sub>圖表由 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> 生成——18 款工具評分逐字內嵌其中，可用 <code>node app/scripts/gen-radar.cjs</code> 本地復現。</sub>
 
 ---
 
