@@ -7,9 +7,9 @@
 
 ## 1. 对比范围与评分维度
 
-**对比工具（16 个，覆盖三大主流形态）**：
-- **终端编程类 Agent**：Claude Code、Codex CLI、OpenCode、Aider、Gemini CLI、Kimi CLI
-- **IDE 插件与桌面编辑 Agent**：Cursor、Windsurf (Cascade)、Trae (字节跳动)、Cline / Roo Code、GitHub Copilot
+**对比工具（18 个，覆盖三大主流形态）**：
+- **终端与混合编程类 Agent**：Claude Code、Codex CLI、Amp (ampagent)、OpenCode、Aider、Gemini CLI、Kimi CLI
+- **IDE 插件、云端 Review 与桌面编辑 Agent**：Cursor、Gemini Code Assist (GitHub App/Bot)、Windsurf (Cascade)、Trae (字节跳动)、Cline / Roo Code、GitHub Copilot
 - **全自主平台与开源框架**：OpenHands、Devin、OpenClaw (AI 龙虾)、DeepSeek Harness (DSH)、Hermes Agent
 
 **评分维度（9 个，1–5 分）**：
@@ -18,13 +18,13 @@
 |------|-------------|------|
 | Agent 自主性 | Autonomy | 无需人工干预完成长链任务的能力（工具循环、迭代预算、子任务派生、故障自愈） |
 | 多模型灵活性 | Multi-model | 可接入的 provider / 模型广度，含本地模型（Ollama）与 BYOK 自定义端点 |
-| 安全与权限 | Safety | 权限门阶梯、三层沙箱、环境变量脱敏、路径 Jail、Taint 污染追踪、Unified Diff 审查 |
-| 可扩展性 | Extensibility | MCP stdio/HTTP、SKILL.md 声明式扩展、10 点生命周期 hooks、插件 SDK |
+| 安全与权限 | Safety | 权限门阶梯、三层沙箱、影子工作区、环境变量脱敏、路径 Jail、Taint 追踪、Diff 审查 |
+| 可扩展性 | Extensibility | 官方工程配方、`.aether/config.json`、MCP stdio/HTTP、SKILL.md、生命周期 hooks |
 | 本地优先隐私 | Local-first | 数据是否完全留于本机 SQLite、是否脱离云端可用、零遥测、密钥系统级隔离 |
-| 评估与基准工具 | Evaluation | 内置模型对比评测、Arena 盲测投票、ELO 排行榜、Prompt 效果复测能力 |
+| 评估与基准工具 | Evaluation | 内置模型对比评测、SWE-bench 本地测试验证、Arena 盲测投票、ELO 排行榜 |
 | 终端体验 | Terminal UX | 终端交互质量（CLI / 原生 TUI、按键响应、流式输出、撤销回滚） |
 | IDE·桌面体验 | IDE/Desktop UX | GUI 交互完整度（时光机抽屉、Diff 代码预览、主题透明度、模型切换体验） |
-| 生态成熟度 | Ecosystem | 开源社区规模、文档生态、多语言支持、三方 Skill/MCP 市场规模 |
+| 生态成熟度 | Ecosystem | 开源社区规模、文档生态、多语言支持、三方 Skill/MCP/Recipe 市场规模 |
 
 ---
 
@@ -32,14 +32,16 @@
 
 | 工具 | 分类 | Autonomy | Multi-model | Safety | Extensibility | Local-first | Evaluation | Terminal UX | IDE/Desktop UX | Ecosystem |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Aether** | **桌面+终端双形态** | **3.5** | **5.0** | **5.0** | **4.5** | **5.0** | **4.5** | **4.5** | **4.5** | **2.5** |
+| **Aether** | **桌面+终端双形态** | **4.0** | **5.0** | **5.0** | **5.0** | **5.0** | **4.8** | **4.5** | **4.5** | **3.5** |
 | Claude Code | 终端 Agent | 5.0 | 1.0 | 4.0 | 4.5 | 3.0 | 2.0 | 5.0 | 3.0 | 5.0 |
 | Codex CLI | 终端 Agent | 4.0 | 2.0 | 4.5 | 3.5 | 2.0 | 2.0 | 4.5 | 3.0 | 4.0 |
+| Amp | 终端/混合 Agent | 4.0 | 3.5 | 4.0 | 4.0 | 2.0 | 3.5 | 4.5 | 4.5 | 4.0 |
 | OpenCode | 终端 Agent | 4.0 | 5.0 | 3.0 | 4.0 | 3.0 | 2.0 | 5.0 | 2.0 | 4.0 |
 | Aider | 终端 Agent | 3.5 | 4.5 | 3.0 | 2.5 | 3.5 | 3.0 | 4.0 | 1.0 | 4.0 |
 | Gemini CLI | 终端 Agent | 4.0 | 2.0 | 3.5 | 4.0 | 2.0 | 2.0 | 4.0 | 2.0 | 4.0 |
 | Kimi CLI | 终端 Agent | 4.0 | 1.0 | 3.0 | 3.0 | 2.0 | 2.0 | 4.0 | 1.0 | 2.5 |
 | Cursor | IDE / 桌面 | 4.0 | 4.0 | 3.0 | 3.5 | 2.0 | 3.0 | 2.0 | 5.0 | 5.0 |
+| Gemini Code Assist | IDE/PR 审查 | 4.0 | 2.0 | 4.0 | 4.0 | 1.5 | 3.0 | 2.0 | 4.5 | 4.5 |
 | Windsurf | IDE / 桌面 | 4.0 | 4.0 | 3.0 | 3.5 | 2.0 | 3.0 | 2.0 | 4.5 | 4.0 |
 | Trae | IDE / 桌面 | 4.0 | 3.5 | 3.5 | 3.5 | 2.0 | 2.0 | 2.0 | 4.5 | 3.5 |
 | Cline / Roo Code | VSCode 插件 | 4.0 | 4.5 | 3.5 | 4.5 | 2.5 | 2.0 | 1.0 | 4.5 | 4.0 |
@@ -54,29 +56,31 @@
 
 ## 3. 分组雷达图对比
 
-### 图 A：终端编程 Agent 对比 (Aether vs Claude Code / Codex / OpenCode / Aider / Gemini CLI)
+### 图 A：终端与混合编程 Agent 对比 (Aether vs Claude Code / Codex / Amp / OpenCode / Aider / Gemini CLI)
 
 ```mermaid
 radar-beta
-  title Terminal Coding Agents (2026-09)
+  title Terminal & Hybrid Coding Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3.5, 5.0, 5.0, 4.5, 5.0, 4.5, 4.5, 4.5, 2.5}
+  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
   curve claude["Claude Code"]{5.0, 1.0, 4.0, 4.5, 3.0, 2.0, 5.0, 3.0, 5.0}
   curve codex["Codex CLI"]{4.0, 2.0, 4.5, 3.5, 2.0, 2.0, 4.5, 3.0, 4.0}
+  curve amp["Amp"]{4.0, 3.5, 4.0, 4.0, 2.0, 3.5, 4.5, 4.5, 4.0}
   curve opencode["OpenCode"]{4.0, 5.0, 3.0, 4.0, 3.0, 2.0, 5.0, 2.0, 4.0}
   curve aider["Aider"]{3.5, 4.5, 3.0, 2.5, 3.5, 3.0, 4.0, 1.0, 4.0}
   max 5
   min 0
 ```
 
-### 图 B：IDE 与桌面编程 Agent 对比 (Aether vs Cursor / Windsurf / Trae / Cline / Copilot)
+### 图 B：IDE、云端 Review 与桌面编程 Agent 对比 (Aether vs Cursor / Gemini Code Assist / Windsurf / Trae / Cline / Copilot)
 
 ```mermaid
 radar-beta
   title IDE & Desktop Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3.5, 5.0, 5.0, 4.5, 5.0, 4.5, 4.5, 4.5, 2.5}
+  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
   curve cursor["Cursor"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 5.0, 5.0}
+  curve gemini["Gemini Code Assist"]{4.0, 2.0, 4.0, 4.0, 1.5, 3.0, 2.0, 4.5, 4.5}
   curve windsurf["Windsurf"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 4.5, 4.0}
   curve trae["Trae"]{4.0, 3.5, 3.5, 3.5, 2.0, 2.0, 2.0, 4.5, 3.5}
   curve cline["Cline"]{4.0, 4.5, 3.5, 4.5, 2.5, 2.0, 1.0, 4.5, 4.0}
@@ -90,7 +94,7 @@ radar-beta
 radar-beta
   title Autonomous Platform Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3.5, 5.0, 5.0, 4.5, 5.0, 4.5, 4.5, 4.5, 2.5}
+  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
   curve openhands["OpenHands"]{5.0, 4.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0, 4.0}
   curve devin["Devin"]{5.0, 1.0, 3.5, 3.5, 1.0, 3.0, 1.0, 3.5, 3.5}
   curve openclaw["OpenClaw"]{4.5, 4.0, 2.0, 4.0, 3.5, 2.0, 3.5, 2.5, 3.0}
@@ -100,40 +104,44 @@ radar-beta
   min 0
 ```
 
-### 全景自评雷达矢量图（16款对照生成）
+### 全景自评雷达矢量图（18款对照生成）
 
 <p align="center">
-  <img src="../assets/agent-radar-2026.svg" width="760" alt="Aether 诚实自评雷达: 16款主流 Agent 工具全景对比" />
+  <img src="../assets/agent-radar-2026.svg" width="760" alt="Aether 诚实自评雷达: 18款主流 Agent 工具全景对比" />
 </p>
 
 ---
 
 ## 4. Aether 在 2026-09 的核心差异化壁垒
 
-对比行业 16 款产品，Aether 的非对称优势非常鲜明：
+对比行业 18 款产品，Aether 的非对称优势非常鲜明：
 
 1. **顶级纵深安全体系（Safety 满分 5.0，全场最高）**：
    - **轻量化三层沙箱**：L1 策略与能力轴门禁 + L2 环境变量正则脱敏（凭据隔离）与敏感路径 Jail + L3 可选容器化后端；
-   - **动态污染追踪 (Taint Tracking)**：摄入外部网络数据后立即标记会话污染，破坏性动作在 `auto` 下强制拉起弹窗，并阻断白名单缓存穿透；
-   - **前置 Unified Diff 语法高亮审查**：写文件与补丁前先渲染红绿行级 Diff，根绝盲目放行导致的恶意代码注入；
-   - **CJK 安全的 Unicode 隐写清洗**：抗击 25.5% 穿透率的 `unicode_hidden` 与零宽字符攻击，同时保护中文标点不受损；
-   - **对比差距**：OpenClaw 与 DeepSeek Harness 均在初期因无沙箱/Host 头伪造被挖出 RCE 极危漏洞（QVD-2026-57410）；Cursor 与 Copilot 则缺少深度人机回环。
+   - **Auto 模式影子工作区沙盒 (Shadow Workspace)**：基于 Git Worktree 物理隔离执行目录，分支漂移严格保护，成功安全合并、失败彻底回滚，绝不污染用户主工作区代码；
+   - **动态污染追踪 (Taint Tracking) 与审计收据卡**：摄入外部非受信内容后立即标记污染，阻断静默写穿；审批弹窗升级为标准化动词/目标/回滚审计收据；
+   - **前置 Unified Diff 语法高亮审查**：写文件与补丁前先渲染行级 Diff，杜绝盲目放行；
+   - **网关 DNS Rebinding 物理拦截**：严格绑定回环与 Host 头校验（QVD-2026-57410），集中式安全回归套件常态化巡检。
 2. **纯粹的 Local-First 隐私防线（Local-first 满分 5.0）**：
-   - 会话、记忆、图谱、任务轨迹全量落盘于本地 SQLite，无任何遥测、无账号、无云端中转；API Key 本地加密隔离，子进程环境全面清洗。
-3. **多模型自由切换 + 内置同行评审竞技场（Multi-model 5.0 + Evaluation 4.5）**：
-   - 支持 OpenAI / Claude / DeepSeek / Gemini / Ollama / 本地 Gateway；内置 Model Arena（一题多模型并发作答与实时 ELO 盲测评级），全行业独家。
+   - 会话、记忆、图谱、任务轨迹全量落盘于本地 SQLite WAL，无任何遥测、无账号、无云端中转；动态出站域名台账与敏感凭据预发送静态门禁。
+3. **多模型自由切换 + 亚军对抗复核 + 内置基准评测（Multi-model 5.0 + Evaluation 4.8）**：
+   - 支持 OpenAI / Claude / DeepSeek / Gemini / Ollama / 本地 Gateway；内置 Model Arena 盲测与 ELO 动态智能路由；
+   - **第二名双模型对抗复核 (Runner-Up Review)**：根据本地 ELO 胜率调用意图第二名模型对破坏性改动进行对抗审查，有效抑制单一模型盲目幻觉；
+   - **个人 SWE-bench 本地评测套件**：真实执行 `verifyCommand` 检验退出码，精准计算 Pass@1 解决率。
 4. **桌面 + 终端双形态无缝漫游（Terminal 4.5 + Desktop 4.5）**：
-   - 业内唯一一套 Agent Core 同时驱动 Electron 图形客户端与 Ink v5 终端 TUI（`aether tui`），支持 `--session <id>` 跨形态随时续聊，且内置 15 语言完整国际化。
+   - 业内唯一一套 Agent Core 同时驱动 Electron 图形客户端与 Ink v5 终端 TUI（`aether tui`），内置 8 款官方工程配方（Curated Recipes）与仓库级配置即代码（`.aether/config.json`）。
 
 ---
 
-## 5. 向 16 款竞品学到了什么（吸收与演进）
+## 5. 向 18 款竞品学到了什么（吸收与演进）
 
 | 竞品 | 代表形态 | Aether 吸收的精髓 |
 |:---|:---|:---|
-| **Claude Code** | 终端标杆 | 吸收其进程级权限提示；反向防御其曾曝光的 Unicode 变体撇号隐写机制。 |
+| **Claude Code** | 终端标杆 | 吸收其进程级权限提示与收据卡设计；反向防御其曾曝光的 Unicode 变体撇号隐写机制。 |
 | **Codex CLI** | 终端沙箱 | 吸收 OS 级沙箱清晰心智模型（只读/询问/完全访问）；严格约束非交互模式。 |
+| **Amp** | 终端/云端混合 | 吸收其云端/终端双轨协同（`amp sync`）、Orbs 隔离沙箱与主动意图转向（Steer, Don't Queue）哲学。 |
 | **Cursor** | IDE 顶流 | 吸收前置 Diff 审查与语法高亮心智；坚持拒绝臃肿全量 IDE，保持轻量工作台。 |
+| **Gemini Code Assist** | IDE / GitHub PR 审查 | 吸收其 GitHub PR Review 自动化审查、Commit 级建议与大上下文仓库全景理解心智。 |
 | **Windsurf (Cascade)** | 流式感知 | 吸收其长程任务实时流式进展反馈，落地 `AgentRunTimeline` 时光机抽屉。 |
 | **Trae** | 字节跳动 IDE | 吸收网安一体化 Agent（如 DeepSec）实战思路，将渗透防御内建为常驻中间件。 |
 | **DeepSeek Harness** | 开源自主框架 | 深刻吸取其 QVD-2026-57410 漏洞教训：绝不信任 HTTP Host 头，本地监听强制回环绑定与时序防侧信道。 |
@@ -146,6 +154,6 @@ radar-beta
 
 ## 6. 结语与客观定位
 
-Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代码生成的深度上，单模型深绑定的 Claude Code 与原生 IDE Cursor 依然处于绝对顶峰（Coding 9.8 vs Aether 8.8）。
+Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代码生成的深度上，单模型深绑定的 Claude Code 与原生 IDE Cursor 依然处于绝对顶峰（Coding 9.8 vs Aether 9.1）。
 
 但 Aether 为用户提供了无可替代的定位价值：**把模型当作可随时更换的计算后端，把数据和私隐 100% 锁在自己的硬盘上，以银行级的防御纵深让自主 Agent 在桌面环境安全、踏实地运转。** 不对称的形状，正是 Aether 最真实的勋章。

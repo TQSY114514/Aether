@@ -51,11 +51,11 @@ Aether は**デュアルエンジン・アーキテクチャ**として提供さ
 
 ---
 
-**Aether の現在地 — 率直な自己評価。** 公開情報に基づき、主要なターミナル / IDE / プラットフォーム系エージェントツール16種との詳細な自己評価を実施しました（2026-09 最新評価；ベンチマークではなく推定値）。私たちはこの非対称な形状をありのままに提示しています。「ローカルファースト」「3層サンドボックスの安全性」「複数モデルの自由切替」において業界をリードする一方、単一モデルによる純粋なコーディング能力ではトップ集団に後れを取っている現実を率直に認めています。詳細な比較分析は [docs/competitive-analysis.md](docs/competitive-analysis.md) をご覧ください。
+**Aether の現在地 — 率直な自己評価。** 公開情報に基づき、主要なターミナル / IDE / プラットフォーム系エージェントツール18種との詳細な自己評価を実施しました（2026-09 最新評価；ベンチマークではなく推定値）。私たちはこの非対称な形状をありのままに提示しています。「ローカルファースト」「3層サンドボックスの安全性」「複数モデルの自由切替」において業界をリードする一方、単一モデルによる純粋なコーディング能力ではトップ集団に後れを取っている現実を率直に認めています。詳細な比較分析は [docs/competitive-analysis.md](docs/competitive-analysis.md) をご覧ください。
 
-<p align="center"><img src="./assets/agent-radar-2026.ja.svg" width="760" alt="Aether 正直な自己評価レーダー: 主要エージェント16種との比較" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.ja.svg" width="760" alt="Aether 正直な自己評価レーダー: 主要エージェント18種との比較" /></p>
 
-<sub>チャートは <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> により生成されました。16 種のツールスコアが埋め込まれており、<code>node app/scripts/gen-radar.cjs</code> で再現可能です。</sub>
+<sub>チャートは <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> により生成されました。18 種のツールスコアが埋め込まれており、<code>node app/scripts/gen-radar.cjs</code> で再現可能です。</sub>
 
 ---
 
