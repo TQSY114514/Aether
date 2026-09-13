@@ -157,7 +157,7 @@ export function applyTheme(theme: string, hasBackground = false, setCleanup?: (f
     window.electronAPI.system.setTitleBarOverlay({
       color: '#00000000',
       symbolColor: isDark ? '#E8E8F0' : '#374151',
-      height: 34,
+      height: 48,
     }).catch(() => {})
   }
 }

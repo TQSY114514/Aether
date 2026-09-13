@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useStore } from '@/store'
-import { Sparkles, Keyboard, Cpu, Brain, MessageSquare, Code, FlaskConical, ShieldCheck, Terminal, FileText, Lightbulb, Compass } from 'lucide-react'
+import { Sparkles, Keyboard, Brain, MessageSquare, Code, FlaskConical, ShieldCheck, Terminal, FileText, Lightbulb, Compass } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 const POOL = [
@@ -24,11 +24,6 @@ function pickFour(seed: number): typeof POOL {
 export default function EmptyState({ noSession = false }: { noSession?: boolean }) {
   const createSession = useStore((s) => s.createSession)
   const currentSessionId = useStore((s) => s.currentSessionId)
-  const allModels = useStore((s) => s.allModels)
-  const sessionConfigs = useStore((s) => s.sessionConfigs)
-  const effortLevel = useStore((s) => s.effortLevel)
-  const thinkingEnabled = useStore((s) => s.thinkingEnabled)
-  const defaultModelId = useStore((s) => s.defaultModelId)
 
   const startWith = async (prompt: string) => {
     if (!currentSessionId) await createSession()
@@ -51,24 +46,6 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
     return pickFour(sid + dayOfYear)
   }, [currentSessionId])
 
-  // 优先读当前会话已配置的模型(覆盖"有会话但无消息"的空窗口场景),
-  // 无会话时回退到全局默认模型,最后回退到 primary/第一个。
-  const activeModel = useMemo(() => {
-    const sid = currentSessionId
-    const cfgModelId = sid ? sessionConfigs[sid]?.modelId : null
-    if (cfgModelId) {
-      const found = allModels.find(m => m.id === cfgModelId)
-      if (found) return found
-    }
-    if (defaultModelId) {
-      const found = allModels.find(m => m.id === defaultModelId)
-      if (found) return found
-    }
-    return allModels.find(m => m.is_primary) || allModels[0]
-  }, [currentSessionId, sessionConfigs, defaultModelId, allModels])
-  const effortLabel = { low: t('effort.low'), medium: t('effort.medium'), high: t('effort.high') }[effortLevel]
-  const showEffort = thinkingEnabled
-
   return (
     <div className="w-full flex flex-col items-center justify-center px-4 pt-6 pb-4">
       <div className="w-full max-w-xl text-center">
@@ -80,23 +57,9 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         <h2 className="text-xl font-semibold mb-1 tracking-tight" style={{ color: 'var(--text-primary)' }}>
           {noSession ? t('chat.no_session') : t('empty.welcome')}
         </h2>
-        <p className="text-xs mb-3.5 max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-xs mb-5 max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
           {t('empty.subtitle')}
         </p>
-
-        {/* Active model + thinking-effort hint */}
-        {activeModel && (
-          <div className="flex items-center justify-center gap-2 mb-5">
-            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-              <Cpu size={11} className="text-[var(--text-muted)]" />{activeModel.display_name || activeModel.model_name}
-            </span>
-            {showEffort && (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-                <Brain size={11} style={{ color: 'var(--accent)' }} />{t('empty.effort')}: {effortLabel}
-              </span>
-            )}
-          </div>
-        )}
 
         {noSession ? (
           <>

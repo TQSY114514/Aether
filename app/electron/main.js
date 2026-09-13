@@ -207,7 +207,7 @@ function createWindow() {
     titleBarOverlay: isWin ? {
       color: '#00000000',
       symbolColor: '#71717a',
-      height: 34,
+      height: 48,
     } : (isMac ? true : false),
     trafficLightPosition: isMac ? { x: 14, y: 16 } : undefined,
     webPreferences: {
