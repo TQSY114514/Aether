@@ -98,7 +98,7 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
         const isWinner = voted && r.model_id === winnerId
         const isLoser = voted && r.model_id !== winnerId
         return (
-          <div key={key} className="border rounded-xl overflow-hidden animate-blur-fade"
+          <div key={key} className="border rounded-lg overflow-hidden animate-blur-fade"
             style={{
               borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
               opacity: isLoser ? 0.5 : isRevealed ? 1 : 0,
@@ -156,6 +156,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const bubbleRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
   const thinkingRafRef = useRef<number>(0)
+  const mdRafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
   const activeMidRef = useRef<number | null>(null)
 
@@ -182,7 +183,10 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       const buf = s.streamingBySession[sessionId]
       if (!buf) return
 
-      const mid = buf.messageId
+      const mid = buf.messageId != null
+        ? buf.messageId
+        : (Object.keys(s.thinkingBlocksByMessage).map(Number).pop() ?? Object.keys(s.toolCallsByMessage).map(Number).pop() ?? null)
+
       if (mid != null && activeMidRef.current !== null && activeMidRef.current !== mid) {
         resetLocalState()
       }
@@ -204,18 +208,18 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         setToolCalls(tc)
       }
 
-      // -- Main content: direct DOM write for O(1) per-token performance --
+      // -- Main content: RAF-throttled real-time Markdown rendering --
       if (!ref.current) return
       const newLen = buf.content.length
       if (newLen === lastLenRef.current) return
       lastLenRef.current = newLen
 
-      const escaped = buf.content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>')
-      ref.current.innerHTML = escaped
+      cancelAnimationFrame(mdRafRef.current)
+      mdRafRef.current = requestAnimationFrame(() => {
+        mdRafRef.current = 0
+        if (!ref.current) return
+        ref.current.innerHTML = renderMarkdown(buf.content)
+      })
 
       if (bubbleRef.current) {
         bubbleRef.current.style.minHeight = ''
@@ -233,26 +237,31 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       unsub()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current)
+      if (mdRafRef.current) cancelAnimationFrame(mdRafRef.current)
     }
   }, [sessionId, isAtBottom, resetLocalState])
 
   return (
-    <div id={`msg-streaming-${sessionId}`} className="flex justify-start message-enter">
-      <div className="w-full" style={{ maxWidth: '85%' }}>
-        <div className="flex items-center gap-2 mb-1.5 px-1">
-          <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }}>
-            <span className="text-white text-[10px] font-medium">AI</span>
+    <div id={`msg-streaming-${sessionId}`} className="w-full flex flex-col message-enter py-2.5">
+      <div className="w-full">
+        {/* Assistant Header - Calm Design Token aligned with MessageBubble */}
+        <div className="flex items-center gap-2 mb-1.5 px-0.5">
+          <div
+            className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 border"
+            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+          >
+            <span className="text-[10px] font-mono font-medium" style={{ color: 'var(--text-secondary)' }}>AI</span>
           </div>
-          <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Assistant</span>
-          <span className="flex items-center gap-0.5 ml-1">
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
+          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Assistant</span>
+          <span className="inline-flex items-center gap-0.5 ml-1">
+            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
           </span>
         </div>
-        <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
-          style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
+
+        {/* Assistant Content Stream */}
+        <div ref={bubbleRef} className="w-full text-xs leading-relaxed break-words relative transition-all">
           {thinkingText && (
             <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
           )}
@@ -342,7 +351,10 @@ export default function ChatWindow() {
     getItemKey: (index) => virtualMessages[index].id,
   })
 
-  const [searchQuery, setSearchQuery] = useState('')
+  // Search query lives in the store (messageSearchQuery) so the highlight
+  // survives ChatWindow unmount/remount (view switches / session hopping).
+  const messageSearchQuery = useStore((s) => s.messageSearchQuery)
+  const setMessageSearchQuery = useStore((s) => s.setMessageSearchQuery)
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
   // Use the virtualizer to jump to a message — works even for off-screen rows
   // (which are not in the DOM under virtual scrolling) by index lookup.
@@ -398,6 +410,20 @@ export default function ChatWindow() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
+  // Search: debounce the query used for filtering so typing doesn't trigger
+  // a filter + scrollIntoView on every keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState(messageSearchQuery)
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearSearch = useCallback(() => {
+    setMessageSearchQuery('')
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+      debounceTimer.current = null
+    }
+    setDebouncedQuery('')
+    setActiveMsgId(null)
+  }, [setMessageSearchQuery])
+
   // Always reload messages when switching sessions. The messages array belongs
   // to whichever session was active when it was last set; switching back needs
   // a fresh load so cross-session streaming completion doesn't leave stale data.
@@ -405,9 +431,9 @@ export default function ChatWindow() {
     if (currentSessionId) {
       loadMessages(currentSessionId)
     }
-    setSearchQuery('')
+    clearSearch()
     setTimeout(scrollToBottom, 50)
-  }, [currentSessionId, loadMessages, scrollToBottom])
+  }, [currentSessionId, loadMessages, scrollToBottom, clearSearch])
 
   // Only auto-scroll when the user is already near the bottom (normal reading
   // position). If they scrolled up to read history, don't yank them back down.
@@ -415,13 +441,9 @@ export default function ChatWindow() {
     if (isAtBottom) scrollToBottom()
   }, [messages, isAtBottom, scrollToBottom])
 
-  // Search: debounce the query used for filtering so typing doesn't trigger
-  // a filter + scrollIntoView on every keystroke.
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
-    setSearchQuery(q)
+    setMessageSearchQuery(q)
     if (debounceTimer.current) clearTimeout(debounceTimer.current)
     debounceTimer.current = setTimeout(() => setDebouncedQuery(q), 200)
   }
@@ -445,11 +467,12 @@ export default function ChatWindow() {
     if (matchIds.length === 0) return
     const next = (matchIdx + delta + matchIds.length) % matchIds.length
     setMatchIdx(next)
+    setActiveMsgId(matchIds[next])
     scrollToMsg(matchIds[next])
   }
   // When the debounced query changes, jump to the first match so the counter
   // is live (only fires after the 200ms debounce).
-  useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
+  useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); setActiveMsgId(matchIds[0]); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
 
   // Token & activity stats for the current session (/tokens HUD)
   const sessionStats = useMemo(() => {
@@ -469,9 +492,9 @@ export default function ChatWindow() {
     }
   }, [messages])
 
-  // Empty chat: render EmptyState centered inside a non-scrolling flex box.
-  // When there ARE messages the same container is overflow-y-auto (虚拟列表滚动);
-  // keeping the empty state inside that scroller is what let it scroll before.
+  // Empty chat: render EmptyState safely centered via flex + my-auto.
+  // When the window is short, my-auto prevents negative scroll / top clipping,
+  // keeping the hero icon completely in view while allowing scroll if needed.
   const isEmptyChat = messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0
 
   return (
@@ -480,10 +503,10 @@ export default function ChatWindow() {
       <div className="px-4 py-1.5 shrink-0 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
-          <input value={searchQuery} onChange={handleSearchChange}
+          <input value={messageSearchQuery} onChange={handleSearchChange}
             placeholder={t('chat.search_placeholder')} autoComplete="off"
             className="w-full bg-transparent outline-none text-xs" style={{ color: 'var(--text-primary)' }} />
-          {searchQuery && (
+          {messageSearchQuery && (
             <>
               <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
                 {matchCount > 0 ? `${matchIdx + 1}/${matchCount}` : `0/${matchCount}`}
@@ -496,7 +519,7 @@ export default function ChatWindow() {
                 aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
                 <ChevronDown size={13} className="text-gray-400" />
               </button>
-              <button onClick={() => setSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
+              <button onClick={clearSearch} className="p-0.5 rounded hover:bg-[var(--border)]">
                 <X size={12} className="text-gray-400" />
               </button>
             </>
@@ -562,8 +585,8 @@ export default function ChatWindow() {
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'flex-1 flex items-center justify-center overflow-hidden px-4 py-6' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6'}>
-        <div className="max-w-3xl mx-auto chat-gap">
+      <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'scroll-bounce flex-1 overflow-y-auto px-4 py-4 flex flex-col' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6'}>
+        <div className={isEmptyChat ? 'max-w-3xl mx-auto w-full my-auto' : 'max-w-3xl mx-auto chat-gap'}>
           {isEmptyChat && (
             <EmptyState />
           )}
@@ -593,7 +616,7 @@ export default function ChatWindow() {
                       paddingBottom: '14px',
                     }}
                   >
-                    <MessageBubble message={msg} searchHighlight={searchQuery} />
+                    <MessageBubble message={msg} searchHighlight={messageSearchQuery} active={msg.id === activeMsgId} />
                   </div>
                 )
               })}
@@ -609,17 +632,17 @@ export default function ChatWindow() {
 
           {/* Arena results */}
           {arenaError && (
-            <div className="border rounded-xl p-3 text-sm" style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-secondary)' }}>⚠ {arenaError}</div>
+            <div className="border rounded-lg p-3 text-sm" style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-secondary)' }}>⚠ {arenaError}</div>
           )}
           {activeHints.map((h) => (
-            <div key={h.flag} className="rounded-xl p-3 border flex items-start gap-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div key={h.flag} className="rounded-lg p-3 border flex items-start gap-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
               <Lightbulb size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
               <span className="text-xs flex-1" style={{ color: 'var(--text-secondary)' }}>{h.text}</span>
               <button onClick={() => dismissHint(h.flag)} className="text-[10px] shrink-0 px-2 py-0.5 rounded border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('hint.got_it')}</button>
             </div>
           ))}
           {proposedHabits.map((h) => (
-            <div key={h.key} className="rounded-xl p-3 border-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div key={h.key} className="rounded-lg p-3 border-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
               <div className="flex items-start gap-2">
                 <Brain size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
                 <div className="flex-1 min-w-0">

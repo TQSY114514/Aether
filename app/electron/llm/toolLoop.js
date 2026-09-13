@@ -1311,7 +1311,10 @@ Reply ONLY with JSON:
             })
           }
         }
-        let rawContent = entry.error ? `[error: ${entry.error}]` : String(entry.result ?? '')
+        // Multimodal-safe: tools may return a content parts array (e.g. web_visualize
+        // returns [{type:'text'},{type:'image_url'}]); String() would flatten it to
+        // "[object Object]". Pass arrays through so vision models see the image.
+        let rawContent = entry.error ? `[error: ${entry.error}]` : (typeof entry.result === 'string' ? entry.result : (Array.isArray(entry.result) ? entry.result : String(entry.result ?? '')))
         // 工具失败的错误摘要注入（审查建议: 不只看原始 stderr）:
         // classifyToolError 已产出 recovery(分类+修复建议), 拼接进 tool 结果,
         // 模型下一轮直接看到"哪里错了+该怎么做", 而不是自己去猜原始输出。
@@ -1359,7 +1362,10 @@ Reply ONLY with JSON:
             }
           } catch {}
         }
-        totalChars += rawContent.length
+        const rawContentSize = Array.isArray(rawContent)
+          ? JSON.stringify(rawContent).length
+          : (typeof rawContent === 'string' ? rawContent.length : String(rawContent ?? '').length)
+        totalChars += rawContentSize
         convo.push({ role: 'tool', tool_call_id: tc.id, content: rawContent })
       }
 
@@ -1576,20 +1582,35 @@ Reply ONLY with JSON:
 async function runToolWithTimeout(tool, args, ctx, signal) {
   let lastResult
   for (let attempt = 0; attempt <= TOOL_RETRY_MAX; attempt++) {
+    if (signal?.aborted) return { error: 'aborted' }
+    const attemptCtrl = new AbortController()
+    const onParentAbort = () => attemptCtrl.abort()
+    if (signal) signal.addEventListener('abort', onParentAbort, { once: true })
+    const attemptCtx = { ...ctx, signal: attemptCtrl.signal }
+
     const result = await new Promise((resolve) => {
       let done = false
       const finish = (val) => {
         if (done) return
         done = true
         clearTimeout(timer)
-        if (signal) signal.removeEventListener('abort', onAbort)
+        if (signal) {
+          signal.removeEventListener('abort', onParentAbort)
+          signal.removeEventListener('abort', onAbort)
+        }
         resolve(val)
       }
-      const timer = setTimeout(() => finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` }), TOOL_TIMEOUT_MS)
-      const onAbort = () => finish({ error: 'aborted' })
+      const timer = setTimeout(() => {
+        attemptCtrl.abort()
+        finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` })
+      }, TOOL_TIMEOUT_MS)
+      const onAbort = () => {
+        attemptCtrl.abort()
+        finish({ error: 'aborted' })
+      }
       if (signal) signal.addEventListener('abort', onAbort, { once: true })
       Promise.resolve()
-        .then(() => tool.run(args, ctx))
+        .then(() => tool.run(args, attemptCtx))
         .then((result) => finish({ result }))
         .catch((e) => finish({ error: e && e.message ? e.message : String(e) }))
     })

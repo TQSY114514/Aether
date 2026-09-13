@@ -152,7 +152,7 @@ export default function LearningGraphPage() {
               return (
                 <button key={node.id}
                   onClick={() => setSelected(node)}
-                  className="w-full text-left flex items-start gap-3 p-2.5 rounded-xl border hover:bg-[var(--bg-secondary)] transition-colors"
+                  className="w-full text-left flex items-start gap-3 p-2.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
                   style={{ borderColor: selected?.id === node.id ? 'var(--accent)' : 'var(--border)', backgroundColor: selected?.id === node.id ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}>
                   <span className="w-3 h-3 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: COLORS[node.type] || COLORS.default }} />
                   <div className="flex-1 min-w-0">
@@ -168,7 +168,7 @@ export default function LearningGraphPage() {
           {/* Detail panel */}
           <div className="col-span-1">
             {selected ? (
-              <div className="rounded-xl border p-3 sticky top-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+              <div className="rounded-lg border p-3 sticky top-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[selected.type] || COLORS.default }} />
                   <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t(`learning_graph.${selected.type}`)}</span>

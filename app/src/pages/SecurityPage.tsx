@@ -12,6 +12,7 @@ import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2, FolderOpen, 
 
 // 默认开启的硬安全加固(非 flag, 始终生效)—— 证明「默认安全」。
 const SECURITY_CAPABILITIES: { name: string; desc: string }[] = [
+  { name: '零外部遥测 (0-Telemetry)', desc: '100% 本地离线，无三方隐私埋点，审计日志完整保存在本地 SQLite' },
   { name: '命令白名单沙箱', desc: '默认拒绝非白名单命令，多段命令逐段校验' },
   { name: '敏感路径写保护', desc: '.aetherai/hooks、.git、.ssh 等默认拒写' },
   { name: '权限阶梯', desc: 'plan / 只读 / ask / 完全访问，危险工具需确认' },
@@ -124,7 +125,7 @@ export default function SecurityPage() {
         <div className="flex items-baseline justify-between mb-1">
           <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>安全</h1>
           <button onClick={applySafeMode} disabled={busy}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border transition-colors hover:bg-[var(--bg-secondary)] disabled:opacity-50"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             {busy ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
             一键安全默认 (safe mode)
@@ -135,14 +136,14 @@ export default function SecurityPage() {
         </p>
 
         {/* 1. 安全能力清单 */}
-        <div className="rounded-xl border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+        <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center gap-1.5 mb-3">
             <ShieldCheck size={15} style={{ color: 'var(--success)' }} />
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>默认安全能力</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {SECURITY_CAPABILITIES.map((c) => (
-              <div key={c.name} className="flex items-start gap-2 rounded-lg px-2.5 py-2" style={{ backgroundColor: 'var(--content-bg)' }}>
+              <div key={c.name} className="flex items-start gap-2 rounded-md px-2.5 py-2 border border-[var(--border)]" style={{ backgroundColor: 'var(--content-bg)' }}>
                 <Lock size={11} className="mt-0.5 shrink-0" style={{ color: 'var(--success)' }} />
                 <div className="min-w-0">
                   <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{c.name}</div>
@@ -154,7 +155,7 @@ export default function SecurityPage() {
         </div>
 
         {/* 2. 能力轴 */}
-        <div className="rounded-xl border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+        <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center gap-1.5 mb-3">
             <ShieldAlert size={15} style={{ color: 'var(--warning)' }} />
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>能力轴</span>
@@ -170,7 +171,7 @@ export default function SecurityPage() {
                 const Icon = ax.icon
                 const current = capabilities[ax.key] || 'ask'
                 return (
-                  <div key={ax.key} className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2" style={{ backgroundColor: 'var(--content-bg)' }}>
+                  <div key={ax.key} className="flex items-center justify-between gap-3 rounded-md px-2.5 py-2 border border-[var(--border)]" style={{ backgroundColor: 'var(--content-bg)' }}>
                     <div className="flex items-center gap-2 min-w-0">
                       <Icon size={13} className="shrink-0" style={{ color: 'var(--text-secondary)' }} />
                       <div className="min-w-0">
@@ -178,7 +179,7 @@ export default function SecurityPage() {
                         <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{ax.desc}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-0.5 shrink-0 rounded-lg p-0.5" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                    <div className="flex items-center gap-0.5 shrink-0 rounded-md p-0.5" style={{ backgroundColor: 'var(--bg-secondary)' }}>
                       {CAPABILITY_OPTIONS.map((opt) => (
                         <button
                           key={opt.value}
@@ -202,14 +203,14 @@ export default function SecurityPage() {
 
         {/* 3. 安全 flag */}
         {flags.length > 0 && (
-          <div className="rounded-xl border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <div className="flex items-center gap-1.5 mb-3">
               <ShieldAlert size={15} style={{ color: 'var(--warning)' }} />
               <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>安全开关（可调）</span>
             </div>
             <div className="space-y-1.5">
               {flags.map((f) => (
-                <div key={f.key} className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-1.5" style={{ backgroundColor: 'var(--content-bg)' }}>
+                <div key={f.key} className="flex items-center justify-between gap-3 rounded-md px-2.5 py-1.5 border border-[var(--border)]" style={{ backgroundColor: 'var(--content-bg)' }}>
                   <div className="min-w-0">
                     <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{f.key}</div>
                     <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{f.description}</div>
@@ -234,7 +235,7 @@ export default function SecurityPage() {
           {loading ? (
             <div className="text-center py-10 text-sm" style={{ color: 'var(--text-muted)' }}>加载中…</div>
           ) : audit.length === 0 ? (
-            <div className="rounded-xl border px-4 py-8 text-center text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+            <div className="rounded-lg border px-4 py-8 text-center text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
               还没有 agent 活动记录。开个工具循环任务后这里会显示每次调用。
             </div>
           ) : (

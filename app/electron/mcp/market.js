@@ -198,14 +198,29 @@ async function fetchRegistry(search) {
   return [...byName.values()].map(toCatalogEntry)
 }
 
-// Community server list pulled from the registry. Never throws — on failure it
-// logs and returns an empty list so the UI can show a friendly empty state.
+// Catalog-entry shape for a curated popular server (same fields as a
+// registry-derived entry, so the UI can render + install it identically).
+function toPopularEntry(p) {
+  return {
+    name: p.name,
+    title: p.title,
+    description: p.description,
+    version: p.version,
+    repositoryUrl: p.repositoryUrl,
+    installable: true,
+    config: p.config,
+  }
+}
+
+// Community server list pulled from the registry. Never throws — when the
+// registry is unreachable it falls back to the curated popular list so the
+// market stays useful offline (matches the module header contract).
 async function list() {
   try {
     return await fetchRegistry()
   } catch (e) {
-    log.warn('MCP market list failed:', e.message)
-    return []
+    log.warn('MCP market list failed, falling back to curated popular list:', e.message)
+    return POPULAR.map(toPopularEntry)
   }
 }
 
@@ -217,9 +232,9 @@ async function search(query) {
   try {
     return await fetchRegistry(q)
   } catch (e) {
-    log.warn('MCP market search failed:', e.message)
+    log.warn('MCP market search failed, falling back to curated popular list:', e.message)
     const needle = q.toLowerCase()
-    return POPULAR.filter(p => (p.title + ' ' + p.description + ' ' + p.name).toLowerCase().includes(needle))
+    return POPULAR.filter(p => (p.title + ' ' + p.description + ' ' + p.name).toLowerCase().includes(needle)).map(toPopularEntry)
   }
 }
 

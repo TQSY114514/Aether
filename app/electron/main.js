@@ -92,6 +92,7 @@ const { registerConfigHandlers } = require('./ipc/config.handler')
 const { registerConfigImportHandler } = require('./ipc/config-import.handler')
 const { registerMcpHandlers } = require('./ipc/mcp.handler')
 const { registerAgentHandlers } = require('./ipc/agent.handler')
+const { registerFsHandlers } = require('./ipc/fs.handler')
 const { registerGitHandlers } = require('./ipc/git.handler')
 const { registerSkillsHandlers } = require('./ipc/skills.handler')
 const { registerTaskHandlers } = require('./ipc/task.handler')
@@ -193,12 +194,22 @@ function createWindow() {
   const pngPath = path.join(resBase, 'icon.png')
   const iconPath = (process.platform === 'win32' && fs.existsSync(icoPath)) ? icoPath : pngPath
 
+  const isWin = process.platform === 'win32'
+  const isMac = process.platform === 'darwin'
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     icon: iconPath,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: isWin ? {
+      color: '#00000000',
+      symbolColor: '#71717a',
+      height: 34,
+    } : (isMac ? true : false),
+    trafficLightPosition: isMac ? { x: 14, y: 16 } : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -343,6 +354,7 @@ function setupIpcHandlers() {
   registerConfigImportHandler(ipcMain, db)
   registerMcpHandlers(ipcMain, db)
   registerAgentHandlers(ipcMain, db)
+  registerFsHandlers(ipcMain, db)
   registerGitHandlers(ipcMain, db)
   registerSkillsHandlers(ipcMain, db)
   registerTaskHandlers(ipcMain, db, () => mainWindow?.webContents)

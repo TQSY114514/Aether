@@ -104,3 +104,88 @@ export { foo, Bar }
     expect(byName.get('Bar').locEnd).toBe(12)
   })
 })
+
+describe('extractFile additional languages (C/C++/C#/PHP/Ruby)', () => {
+  it('extracts C/C++ includes, types and function definitions', () => {
+    const content = `#include <stdio.h>
+#include "local.h"
+
+struct Point {
+  int x, y;
+};
+
+static int add(int a, int b) {
+  return a + b;
+}
+
+int main(int argc, char** argv) {
+  return 0;
+}
+`
+    const abs = write('sample.cpp', content)
+    const result = extractFile(abs, content)
+    expect(result.language).toBe('cpp')
+    expect(result.imports).toContain('stdio.h')
+    expect(result.imports).toContain('local.h')
+    expect(result.symbols).toEqual(expect.arrayContaining(['Point', 'add', 'main']))
+    expect(result.symbols.length).toBe(result.symbolLocs.length)
+  })
+
+  it('extracts C# usings, types and methods', () => {
+    const content = `using System;
+using System.Collections.Generic;
+
+namespace App {
+  public class Greeter {
+    public string Greet(string name) {
+      return "hi " + name;
+    }
+  }
+}
+`
+    const abs = write('Sample.cs', content)
+    const result = extractFile(abs, content)
+    expect(result.language).toBe('csharp')
+    expect(result.imports).toContain('System')
+    expect(result.symbols).toEqual(expect.arrayContaining(['Greeter', 'Greet']))
+  })
+
+  it('extracts PHP use/class/function', () => {
+    const content = `<?php
+use App\\Service\\Mailer;
+
+abstract class Controller {
+  public function handle($req) {
+    return $req;
+  }
+}
+
+function helper($x) { return $x; }
+`
+    const abs = write('sample.php', content)
+    const result = extractFile(abs, content)
+    expect(result.language).toBe('php')
+    expect(result.imports).toContain('Mailer')
+    expect(result.symbols).toEqual(expect.arrayContaining(['Controller', 'handle', 'helper']))
+  })
+
+  it('extracts Ruby require/class/module/def', () => {
+    const content = `require 'json'
+require_relative './helper'
+
+module Util
+  class Parser
+    def parse(str)
+      str
+    end
+  end
+end
+`
+    const abs = write('sample.rb', content)
+    const result = extractFile(abs, content)
+    expect(result.language).toBe('ruby')
+    expect(result.imports).toContain('json')
+    expect(result.imports).toContain('./helper')
+    expect(result.symbols).toEqual(expect.arrayContaining(['Util', 'Parser', 'parse']))
+  })
+})

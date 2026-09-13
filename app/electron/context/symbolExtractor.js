@@ -10,6 +10,10 @@ const PY_EXTS = new Set(['.py'])
 const RUST_EXTS = new Set(['.rs'])
 const GO_EXTS = new Set(['.go'])
 const JAVA_EXTS = new Set(['.java', '.kt'])
+const C_EXTS = new Set(['.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'])
+const CS_EXTS = new Set(['.cs'])
+const PHP_EXTS = new Set(['.php'])
+const RUBY_EXTS = new Set(['.rb'])
 
 /**
  * Extract symbols from a single file.
@@ -26,6 +30,10 @@ function extractFile(filePath, content) {
   if (RUST_EXTS.has(ext)) return extractRust(content, filePath, lang)
   if (GO_EXTS.has(ext)) return extractGo(content, filePath, lang)
   if (JAVA_EXTS.has(ext)) return extractJava(content, filePath, lang)
+  if (C_EXTS.has(ext)) return extractC(content, filePath, lang)
+  if (CS_EXTS.has(ext)) return extractCSharp(content, filePath, lang)
+  if (PHP_EXTS.has(ext)) return extractPHP(content, filePath, lang)
+  if (RUBY_EXTS.has(ext)) return extractRuby(content, filePath, lang)
   return null
 }
 
@@ -35,6 +43,10 @@ function detectLanguage(ext) {
   if (RUST_EXTS.has(ext)) return 'rust'
   if (GO_EXTS.has(ext)) return 'go'
   if (JAVA_EXTS.has(ext)) return ext === '.kt' ? 'kotlin' : 'java'
+  if (C_EXTS.has(ext)) return (ext === '.c' || ext === '.h') ? 'c' : 'cpp'
+  if (CS_EXTS.has(ext)) return 'csharp'
+  if (PHP_EXTS.has(ext)) return 'php'
+  if (RUBY_EXTS.has(ext)) return 'ruby'
   return ext.slice(1)
 }
 
@@ -201,6 +213,83 @@ function extractJava(content, filePath, lang) {
     if (cm) { symbols.push(cm[1]); symbolLocs.push({ name: cm[1], locStart: idx + 1, locEnd: idx + 1 }) }
     const mm = line.match(/^(?:public\s+)?(?:static\s+)?(?:abstract\s+)?[\w<>\[\]]+\s+(\w+)\s*\(/)
     if (mm) { symbols.push(mm[1]); symbolLocs.push({ name: mm[1], locStart: idx + 1, locEnd: idx + 1 }) }
+  }
+  return { path: filePath, imports, exports: [], symbols, symbolLocs, language: lang }
+}
+
+function extractC(content, filePath, lang) {
+  const imports = []
+  const symbols = []
+  const symbolLocs = []
+  const lines = content.split('\n')
+  // class/struct/enum/union/namespace declarations.
+  const TYPE_RE = /^\s*(?:typedef\s+)?(?:class|struct|enum(?:\s+class)?|union|namespace)\s+(\w+)/
+  // Function definitions: leading type/template tokens, a name, then a `(...)` list
+  // and an opening brace. Keyword-led control statements are excluded.
+  const FN_RE = /^\s*(?!if\b|for\b|while\b|switch\b|return\b|else\b|do\b|case\b|catch\b|sizeof\b)[\w:<>,*&\s~]+\b(\w+)\s*\([^;{}]*\)\s*(?:const\s*)?(?:noexcept\s*)?\{/
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx]
+    const im = line.match(/^\s*#\s*include\s*[<"]([^>"]+)[>"]/)
+    if (im) imports.push(im[1])
+    const tm = line.match(TYPE_RE)
+    if (tm) { symbols.push(tm[1]); symbolLocs.push({ name: tm[1], locStart: idx + 1, locEnd: idx + 1 }); continue }
+    const fm = line.match(FN_RE)
+    if (fm) { symbols.push(fm[1]); symbolLocs.push({ name: fm[1], locStart: idx + 1, locEnd: idx + 1 }) }
+  }
+  return { path: filePath, imports, exports: [], symbols, symbolLocs, language: lang }
+}
+
+function extractCSharp(content, filePath, lang) {
+  const imports = []
+  const symbols = []
+  const symbolLocs = []
+  const lines = content.split('\n')
+  const TYPE_RE = /^\s*(?:(?:public|private|protected|internal|static|abstract|sealed|partial|readonly)\s+)*(?:class|interface|struct|enum|record)\s+(\w+)/
+  const FN_RE = /^\s*(?:public|private|protected|internal|static|virtual|override|abstract|async|sealed|extern|unsafe|partial|new)\s+[\w<>\[\],?.]+\s+(\w+)\s*\(/
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx]
+    const im = line.match(/^\s*using\s+(?:static\s+)?([\w.]+)\s*;/)
+    if (im) imports.push(im[1].split('.')[0])
+    const tm = line.match(TYPE_RE)
+    if (tm) { symbols.push(tm[1]); symbolLocs.push({ name: tm[1], locStart: idx + 1, locEnd: idx + 1 }); continue }
+    const fm = line.match(FN_RE)
+    if (fm) { symbols.push(fm[1]); symbolLocs.push({ name: fm[1], locStart: idx + 1, locEnd: idx + 1 }) }
+  }
+  return { path: filePath, imports, exports: [], symbols, symbolLocs, language: lang }
+}
+
+function extractPHP(content, filePath, lang) {
+  const imports = []
+  const symbols = []
+  const symbolLocs = []
+  const lines = content.split('\n')
+  const TYPE_RE = /^\s*(?:abstract\s+|final\s+)?(?:class|interface|trait|enum)\s+(\w+)/
+  const FN_RE = /^\s*(?:(?:public|private|protected|static|final|abstract)\s+)*function\s+(\w+)/
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx]
+    const im = line.match(/^\s*use\s+([\w\\]+)\s*;/)
+    if (im) imports.push(im[1].split('\\').pop())
+    const tm = line.match(TYPE_RE)
+    if (tm) { symbols.push(tm[1]); symbolLocs.push({ name: tm[1], locStart: idx + 1, locEnd: idx + 1 }); continue }
+    const fm = line.match(FN_RE)
+    if (fm) { symbols.push(fm[1]); symbolLocs.push({ name: fm[1], locStart: idx + 1, locEnd: idx + 1 }) }
+  }
+  return { path: filePath, imports, exports: [], symbols, symbolLocs, language: lang }
+}
+
+function extractRuby(content, filePath, lang) {
+  const imports = []
+  const symbols = []
+  const symbolLocs = []
+  const lines = content.split('\n')
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx]
+    const im = line.match(/^\s*require(?:_relative)?\s+['"]([^'"]+)['"]/)
+    if (im) imports.push(im[1])
+    const tm = line.match(/^\s*(?:class|module)\s+([\w:]+)/)
+    if (tm) { symbols.push(tm[1]); symbolLocs.push({ name: tm[1], locStart: idx + 1, locEnd: idx + 1 }) }
+    const fm = line.match(/^\s*def\s+(?:self\.)?([\w?!=]+)/)
+    if (fm) { symbols.push(fm[1]); symbolLocs.push({ name: fm[1], locStart: idx + 1, locEnd: idx + 1 }) }
   }
   return { path: filePath, imports, exports: [], symbols, symbolLocs, language: lang }
 }

@@ -130,7 +130,7 @@ export default function SkillsPage() {
               const stat = statsMap.get(s.name)
               const successRate = stat?.successRate ?? null
               return (
-                <div key={s.name} className="rounded-xl p-4" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                <div key={s.name} className="rounded-lg p-4" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ export default function SkillsPage() {
 
         {/* Auto-draft suggestions */}
         {candidates.length > 0 && (
-          <div className="mt-8 rounded-xl p-4" style={{ border: '1px solid var(--warning)', backgroundColor: 'rgba(234,179,8,0.03)' }}>
+          <div className="mt-8 rounded-lg p-4" style={{ border: '1px solid var(--warning)', backgroundColor: 'rgba(234,179,8,0.03)' }}>
             <div className="flex items-center gap-2 mb-2">
               <Wand2 size={14} style={{ color: 'var(--accent)' }} />
               <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.skills.auto_draft_title', '建议自动生成')}</span>
@@ -211,7 +211,7 @@ export default function SkillsPage() {
         )}
 
         {/* How skills work */}
-        <div className="mt-8 rounded-xl p-4" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+        <div className="mt-8 rounded-lg p-4" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center gap-2 mb-2">
             <BookOpen size={14} style={{ color: 'var(--text-muted)' }} />
             <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t('settings.skills.hint')}</span>

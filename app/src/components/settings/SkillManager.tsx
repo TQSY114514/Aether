@@ -123,7 +123,7 @@ export default function SkillManager() {
   }
 
   return (
-    <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+    <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <Boxes size={15} style={{ color: 'var(--accent)' }} />

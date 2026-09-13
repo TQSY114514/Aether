@@ -81,3 +81,5 @@ fix_test.js
 # ── Agent tooling runtime state (auto-generated, never commit) ──
 /.evolver/
 /evolution-skills/
+
+/.serena/

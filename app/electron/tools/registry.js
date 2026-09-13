@@ -3,7 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const { spawn, spawnSync } = require('child_process')
 const { runCommand, runCommandSync } = require('./exec')
-const { checkWritePath, checkCommand, isInsideWorkspace } = require('./sandbox')
+const { checkWritePath, checkCommand, isInsideWorkspace, getWorkspaceRoot } = require('./sandbox')
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
 const { checkSSRF, checkSSRFHostname } = require('./ssrf')
 const { resolveBackendForMode } = require('../exec/resolveBackend')
@@ -471,6 +471,106 @@ const TOOLS = [
       return `<!-- EXTERNAL_WEB_FETCH -->\n${text.slice(0, 16384)}${text.length > 16384 ? '\n[truncated]' : ''}`
     } catch (e) { return `[error: ${e.message}]` } finally { clearTimeout(timeout) }
   }},
+  { name: 'web_visualize', description: 'Render a web page in an offscreen browser and return a screenshot (PNG saved under workspace/.aether/screenshots/, plus an inline image for vision models). Requires an Electron window session.', risk: 'safe', parameters: { type: 'object', properties: { url: { type: 'string' }, width: { type: 'number' }, height: { type: 'number' }, waitMs: { type: 'number' } }, required: ['url'] }, run: async (args, ctx) => {
+    const url = String(args.url || ''); if (!url) throw new Error('url required')
+    if (ctx?.db) { try { const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy'); if (policyActive(ctx.db)) { const a2 = checkUrlPolicy(ctx.db, url); if (!a2.ok) return `[blocked]` } } catch { return `[blocked: network policy check failed]` } }
+    const ssrf = checkSSRF(url); if (!ssrf.ok) return `[blocked]`
+    let parsed; try { parsed = new URL(url) } catch { return '[invalid]' }
+    try { await checkSSRFHostname(parsed.hostname) } catch (e) { return `[blocked: ${e.message}]` }
+    // Offscreen capture requires the Electron main process; headless (CLI / TUI /
+    // tests) resolves require('electron') to a path string, so degrade gracefully.
+    let electron = null
+    try { electron = require('electron') } catch { /* headless */ }
+    if (!electron || typeof electron.BrowserWindow !== 'function') return '[web_visualize unavailable: requires Electron main process]'
+    const width = Math.min(Math.max(Number(args.width) || 1280, 320), 2560)
+    const height = Math.min(Math.max(Number(args.height) || 800, 240), 1920)
+    const waitMs = Math.min(Math.max(Number(args.waitMs) || 2000, 0), 15000)
+    let win = null
+    try {
+      win = new electron.BrowserWindow({ show: false, width, height, webPreferences: { partition: 'web_visualize', offscreen: true, sandbox: true, backgroundThrottling: false } })
+      // Cancel-aware: abort in-progress load and cleanup window if signal triggers
+      if (ctx?.signal?.aborted) throw new Error('aborted')
+      const onAbort = () => {
+        try {
+          if (win && !win.isDestroyed()) {
+            win.webContents.stop()
+            win.destroy()
+          }
+        } catch {}
+      }
+      if (ctx?.signal) ctx.signal.addEventListener('abort', onAbort, { once: true })
+
+      // Validate every redirect and navigation destination against SSRF policy and network policy
+      win.webContents.on('will-redirect', (event, navigationUrl) => {
+        if (!isWebNavigationAllowed(navigationUrl, ctx)) event.preventDefault()
+      })
+      win.webContents.on('will-navigate', (event, navigationUrl) => {
+        if (!isWebNavigationAllowed(navigationUrl, ctx)) event.preventDefault()
+      })
+
+      // Capture page JS console output so the LLM can diagnose why a page renders
+      // blank/broken. Electron 44 passes a details object as the primary callback
+      // arg (old positional level/message/line/sourceId args are deprecated);
+      // guard for both shapes, and bound collection (50 entries max).
+      const consoleLogs = []
+      win.webContents.on('console-message', (details) => {
+        const d = details && typeof details === 'object' ? details : {}
+        const level = typeof d.level === 'number'
+          ? (['debug', 'info', 'warning', 'error'][d.level] || 'info')
+          : typeof d.level === 'string' ? d.level : 'info'
+        const message = String(d.message || '').slice(0, 500)
+        if (message && consoleLogs.length < 50) {
+          consoleLogs.push({ level, message, line: d.lineNumber || 0, url: String(d.sourceId || '') })
+        }
+      })
+      await win.loadURL(url, { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Aether/1.0 Chrome/120.0.0.0 Safari/537.36' })
+      if (waitMs > 0) {
+        await new Promise((r, reject) => {
+          const timer = setTimeout(r, waitMs)
+          if (ctx?.signal) {
+            ctx.signal.addEventListener('abort', () => {
+              clearTimeout(timer)
+              reject(new Error('aborted'))
+            }, { once: true })
+          }
+        })
+      }
+      const img = await win.webContents.capturePage()
+      if (img.isEmpty()) return '[error: empty capture]'
+      let filePath = null
+      let allowDiskWrite = false
+      if (ctx?.agentMode !== 'plan' && ctx?.agentMode !== 'review') {
+        if (ctx?.db && typeof ctx.db.getSetting === 'function') {
+          try {
+            if (ctx.db.getSetting('capability.filesystem') === 'allow') {
+              allowDiskWrite = true
+            }
+          } catch {}
+        }
+      }
+      if (allowDiskWrite) {
+        try {
+          const wsRoot = (() => { try { return getWorkspaceRoot(ctx?.sessionId) } catch { return process.cwd() } })() || process.cwd()
+          const shotsDir = path.join(wsRoot, '.aether', 'screenshots')
+          fs.mkdirSync(shotsDir, { recursive: true })
+          filePath = path.join(shotsDir, `web_visualize-${Date.now()}.png`)
+          fs.writeFileSync(filePath, img.toPNG())
+        } catch {}
+      }
+      // Inline copy: cap the long edge so vision token spend stays bounded.
+      const inlineSize = 640
+      const scale = Math.min(1, inlineSize / Math.max(img.getSize().width, img.getSize().height))
+      const thumb = scale < 1 ? img.resize({ width: Math.round(img.getSize().width * scale) }) : img
+      const b64 = thumb.toPNG().toString('base64')
+      const textHeader = filePath
+        ? `Screenshot saved to ${filePath} (${img.getSize().width}x${img.getSize().height})`
+        : `Screenshot captured in-memory (${img.getSize().width}x${img.getSize().height})`
+      return [
+        { type: 'text', text: `${textHeader}${formatConsoleLogs(consoleLogs)}` },
+        { type: 'image_url', image_url: { url: `data:image/png;base64,${b64}` } },
+      ]
+    } catch (e) { return `[error: ${e.message}]` } finally { if (win && !win.isDestroyed()) win.destroy() }
+  }},
 
   // 鈹€鈹€ Platform tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   { name: 'use_skill', description: 'Load a skill by name.', risk: 'safe', parameters: { type: 'object', properties: { skill_name: { type: 'string' } }, required: ['skill_name'] }, run: (args) => {
@@ -621,5 +721,47 @@ TOOLS.push(
 function getTool(name) { return TOOLS.find(t => t.name === name) }
 function toolsPayload() { return TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) }
 
-module.exports = { TOOLS, getTool, toolsPayload, parseUnifiedDiff, applyHunks }
+// Format captured renderer console entries for the web_visualize reply.
+// Surfaces only warnings/errors (the high-signal subset for diagnosing broken
+// page renders); info/debug noise is dropped. Returns '' when nothing useful
+// was logged. Bounded: 500 chars/message (already sliced at capture), 20 lines.
+function formatConsoleLogs(logs) {
+  const out = []
+  for (const l of Array.isArray(logs) ? logs : []) {
+    const level = typeof l.level === 'number'
+      ? (['debug', 'info', 'warning', 'error'][l.level] || 'info')
+      : String(l.level || 'info')
+    if (level !== 'warning' && level !== 'error') continue
+    const loc = l.line ? ` (${l.url}:${l.line})` : ''
+    out.push(`${level}: ${l.message}${loc}`)
+    if (out.length >= 20) break
+  }
+  return out.length ? '\n\nPage console (warnings/errors):\n' + out.join('\n') : ''
+}
+
+// Validate redirect and navigation destinations against SSRF policy and network policy
+function isWebNavigationAllowed(destUrl, ctx) {
+  if (ctx?.db) {
+    try {
+      const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
+      if (policyActive(ctx.db)) {
+        const a2 = checkUrlPolicy(ctx.db, destUrl)
+        if (!a2.ok) return false
+      }
+    } catch {
+      return false
+    }
+  }
+  const s = checkSSRF(destUrl)
+  if (!s.ok) return false
+  try {
+    const u = new URL(destUrl)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+  } catch {
+    return false
+  }
+  return true
+}
+
+module.exports = { TOOLS, getTool, toolsPayload, parseUnifiedDiff, applyHunks, formatConsoleLogs, isWebNavigationAllowed }
 

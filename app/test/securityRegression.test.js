@@ -67,6 +67,31 @@ describe('P0-06 外部 RCE 与真实攻击回归套件', () => {
       expect(_hostAllowed({ headers: { host: null } })).toBe(false)
       expect(_hostAllowed({ headers: { host: '' } })).toBe(false)
     })
+
+    it('边界: IPv4 映射 IPv6 / 非 127.0.0.1 回环 / 接口区标识均拒绝', () => {
+      expect(_hostAllowed({ headers: { host: '[::ffff:127.0.0.1]' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '[::ffff:7f00:1]' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '127.0.0.2' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '127.1.2.3' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '[fe80::1%25eth0]' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '[::01]' } })).toBe(false)
+    })
+
+    it('边界: 畸形/空端口与追加域名拒绝, 合法端口放行', () => {
+      expect(_hostAllowed({ headers: { host: 'localhost:' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '[::1]:abc' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: 'localhost:35791:evil' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '[::1]evil.com' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: 'localhost:99999' } })).toBe(true)
+    })
+
+    it('边界: 头内空白/换行走私与重复 Host 头(逗号拼接)均拒绝', () => {
+      expect(_hostAllowed({ headers: { host: ' 127.0.0.1 ' } })).toBe(true)
+      expect(_hostAllowed({ headers: { host: ' .localhost' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: 'localhost\r\nevil.com' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '127.0.0.1, evil.com' } })).toBe(false)
+      expect(_hostAllowed({ headers: { host: '127.0.0.1\u200Bevil.com' } })).toBe(false)
+    })
   })
 
   describe('2. Unicode 隐写与 Prompt 注入绕过防御', async () => {
@@ -74,6 +99,7 @@ describe('P0-06 外部 RCE 与真实攻击回归套件', () => {
       stripInvisibleChars,
       foldFullWidthLatin,
       canonicalizeHomoglyphs,
+      sanitizeUnicode,
       detectHiddenUnicode,
     } = await import('../electron/tools/unicodeSanitizer')
     const { stripInjectionPatterns } = await import('../electron/llm/promptInjection')
@@ -103,6 +129,43 @@ describe('P0-06 外部 RCE 与真实攻击回归套件', () => {
       const report = detectHiddenUnicode(payload)
       expect(report.hasHidden).toBe(true)
       expect(report.types).toContain('U+200B')
+    })
+
+    it('边界: RTL 覆盖符 / 变体选择符 / 软连字符 / 不可打印控制符剥离, 合法控制符保留', () => {
+      expect(stripInvisibleChars('x\u202Ey')).toBe('xy')
+      expect(stripInvisibleChars('x\u202Dy')).toBe('xy')
+      expect(stripInvisibleChars('a\uFE0Fb')).toBe('ab')
+      expect(stripInvisibleChars('a\u00ADb')).toBe('ab')
+      expect(stripInvisibleChars('a\u001Bb')).toBe('ab')
+      expect(stripInvisibleChars('a\u0007b')).toBe('ab')
+      expect(stripInvisibleChars('a\tb\nc\rd')).toBe('a\tb\nc\rd')
+    })
+
+    it('边界: 全角数字/字母折叠, 全流水线对 CJK 标点安全', () => {
+      expect(foldFullWidthLatin('０１２３ａｂｃ')).toBe('0123abc')
+      const steg = '\uFF49\uFF47\uFF4E\uFF4F\uFF52\uFF45\u200C\u200B all\u2014previous'
+      expect(sanitizeUnicode(steg)).toBe('ignore all-previous')
+      expect(sanitizeUnicode('中文，。“”！？：；\u200D')).toBe('中文，。“”！？：；')
+    })
+
+    it('边界: 同形撇号全变体归一为 ASCII 撇号', () => {
+      expect(canonicalizeHomoglyphs('user\u02B9s')).toBe("user's")
+      expect(canonicalizeHomoglyphs('user\u02BCs')).toBe("user's")
+      expect(canonicalizeHomoglyphs('user\u02CAs')).toBe("user's")
+      expect(canonicalizeHomoglyphs('user\u02CBs')).toBe("user's")
+      expect(canonicalizeHomoglyphs('user\u2032s')).toBe("user's")
+    })
+
+    it('边界: detectHiddenUnicode 多类型统计与数量', () => {
+      const payload = 'a\u200Bb\u200Dc\u202Ed\uFE0F'
+      const report = detectHiddenUnicode(payload)
+      expect(report.hasHidden).toBe(true)
+      expect(report.count).toBe(4)
+      expect(report.types).toContain('U+200B')
+      expect(report.types).toContain('U+200D')
+      expect(report.types).toContain('U+202E')
+      expect(report.types).toContain('U+FE0F')
+      expect(detectHiddenUnicode('clean text')).toEqual({ hasHidden: false, count: 0, types: [] })
     })
   })
 

@@ -2,6 +2,25 @@
 
 All notable changes to AetherAI are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Sidebar File Tree (侧边文件树).** Browse the workspace, copy absolute paths, and click any file to insert an `@reference` into the chat input — all through the new `fs:list-dir` IPC with containment checks.
+- **Global Undo / Redo (全局撤销/重做).** `Ctrl+Z` now undoes the last user-message edit, regenerate, or history rewrite across chats (50-step stack); `Ctrl+Shift+Z` redoes. Shortcut prompts are skipped while a text field is focused.
+- **RepoMap ↔ Memory linkage.** The project map digest is written into long-term memory (`type='project', kind='repo_map'`) after artifact builds, so future sessions recall the repo structure.
+- **Three-step first-run wizard (三步新手向导).** New "Create your first session" step after provider import; the wizard now survives past provider setup (mount gate no longer unmounts it).
+
+### Changed
+
+- **Search highlight persists across restarts (搜索结果持久化高亮).** The search query survives conversation switching and the matched message flashes on jump.
+- **Shortcut registry centralized (快捷键注册表).** All 13 shortcuts live in one typed registry (`src/shortcuts.ts` + `src/hooks/useShortcuts.ts`), auto-grouped in the shortcut help overlay.
+
+### Security
+
+- **Expanded security regression suite (安全回归扩测).** 22 new cases: DNS rebinding containment, Unicode steganography detection, homoglyph apostrophe prompts, env-sanitizer case/type hardening — 52 tests green.
+- **electron-builder China-mirror fix (国内镜像下载).** `electronDownload.mirror` + `ELECTRON_BUILDER_BINARIES_MIRROR` cover the binary download path for mainland networks.
+
 ## [0.8.2] - 2026-09-05
 
 ### Added

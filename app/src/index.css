@@ -5,27 +5,31 @@
 :root {
   --bg-primary: #FFFFFF;
   --content-bg: #FFFFFF;
-  --bg-secondary: #F8F9FA;
-  --border: #E5E7EB;
-  --text-primary: #1A1A1A;
-  --text-secondary: #6B7280;
-  --text-muted: #9CA3AF;
-  --accent: #2563EB;
-  --accent-hover: #1D4ED8;
+  --bg-secondary: #F4F4F5;
+  --border: #E4E4E7;
+  --text-primary: #09090B;
+  --text-secondary: #71717A;
+  --text-muted: #A1A1AA;
+  --accent: #18181B;
+  --accent-hover: #27272A;
   --error: #DC2626;
   --success: #16A34A;
   --warning: #D97706;
-  --sidebar-width: 260px;
-  --radius-sm: 6px;
+  --sidebar-width: 250px;
+  --radius-xs: 3px;
+  --radius-sm: 5px;
   --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-card: 0 1px 4px rgba(0,0,0,0.06);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
-  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
-  --shadow-xl: 0 12px 32px rgba(0,0,0,0.14);
-  --font-sans: 'Inter', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'SF Pro Display', 'HarmonyOS Sans SC', 'PingFang SC', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --ease-desktop: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,6 +48,29 @@ body {
 }
 
 ::selection { background-color: var(--accent); color: white; }
+
+/* ── Window Controls Overlay (WCO) & Window Dragging ──────────────────────────
+   Enables frameless immersive title bar with native Windows/macOS window controls.
+   Headers with .app-drag are draggable to move the window, while buttons and
+   inputs within them automatically remain interactive via -webkit-app-region: no-drag. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+.app-drag button,
+.app-drag select,
+.app-drag input,
+.app-drag textarea,
+.app-drag a,
+.app-drag [role="button"],
+.app-drag .app-no-drag {
+  -webkit-app-region: no-drag;
+}
+.wco-pr {
+  padding-right: 140px;
+}
 
 /* ── Code blocks (rendered by markdown.ts) ─────────────────────────────────
    A header bar with the language label + a copy button sits above the code;
@@ -128,10 +155,22 @@ select option {
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 10px 30px -10px var(--accent); }
-  50% { box-shadow: 0 10px 40px -5px var(--accent), 0 0 20px -5px var(--accent-hover); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
 }
-.animate-pulse-glow { animation: pulseGlow 3s ease-in-out infinite; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-fade-in { animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tab-fade-in  { animation: fadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+.press-scale {
+  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.press-scale:active {
+  transform: scale(0.98);
+}
 
 .message-enter { animation: springUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 .cursor-blink { animation: blink 0.8s step-end infinite; }
@@ -241,8 +280,8 @@ select option {
   width: 240px;
   background: var(--content-bg, var(--bg-primary));
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
   animation: scaleIn 0.12s ease-out;
   transform-origin: bottom left;
@@ -331,10 +370,10 @@ select option {
 .context-menu {
   position: fixed;
   z-index: 9999;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   min-width: 180px;
   padding: 4px 0;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-lg);
   animation: menuFadeIn 0.12s ease-out;
 }
 @keyframes menuFadeIn {
@@ -415,4 +454,19 @@ select[class]:open {
 }
 [dir="rtl"] select[class] {
   background-position: left 0.55rem center;
+}
+
+/* Message anchor flash: briefly rings the message a search jump landed on. */
+@keyframes msg-anchor-flash {
+  0% {
+    box-shadow: 0 0 0 2px var(--accent);
+    background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+    background-color: transparent;
+  }
+}
+.msg-anchor-flash {
+  animation: msg-anchor-flash 1.6s ease-out forwards;
 }

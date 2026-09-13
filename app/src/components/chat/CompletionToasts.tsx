@@ -21,7 +21,7 @@ export default function CompletionToasts() {
       {toasts.map((toast) => (
         <div key={toast.id}
           onClick={() => handleClick(toast)}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl border shadow-lg text-xs cursor-pointer hover:opacity-80 transition-all max-w-[260px]"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border shadow-lg text-xs cursor-pointer hover:opacity-80 transition-all max-w-[260px]"
           style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--accent)', color: 'var(--text-primary)' }}>
           <Bell size={12} className="shrink-0" style={{ color: 'var(--accent)' }} />
           <span className="flex-1 truncate">{toast.sessionTitle}</span>

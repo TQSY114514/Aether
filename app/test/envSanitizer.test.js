@@ -69,4 +69,44 @@ describe('envSanitizer', () => {
       }
     }
   })
+
+  it('边界: 密钥识别大小写不敏感, 子串陷阱不误伤', () => {
+    expect(isSensitiveEnvKey('openai_api_key')).toBe(true)
+    expect(isSensitiveEnvKey('OPENROUTER_API_KEY')).toBe(true)
+    expect(isSensitiveEnvKey('GitHub_Token')).toBe(true)
+    expect(isSensitiveEnvKey('npm_token')).toBe(true)
+    expect(isSensitiveEnvKey('MONKEY')).toBe(false)
+    expect(isSensitiveEnvKey('KEYCHAIN')).toBe(false)
+    expect(isSensitiveEnvKey('DATABASE_PASSWORD')).toBe(true)
+    expect(isSensitiveEnvKey('AWS_ACCESS_KEY_ID')).toBe(true)
+    expect(isSensitiveEnvKey('SSH_AUTH_SOCK')).toBe(true)
+    expect(isSensitiveEnvKey('DOCKER_AUTH_CONFIG')).toBe(true)
+  })
+
+  it('边界: 前缀规则覆盖各主流供应商与 npm token', () => {
+    const prefixes = ['OPENAI', 'ANTHROPIC', 'GEMINI', 'DEEPSEEK', 'GROQ', 'MISTRAL', 'PERPLEXITY', 'COHERE', 'OPENROUTER', 'AETHER', 'GITHUB', 'GH', 'NPM', 'AWS', 'AZURE', 'DISCORD', 'SLACK', 'TELEGRAM']
+    for (const p of prefixes) {
+      expect(isSensitiveEnvKey(`${p}_API_KEY`)).toBe(true)
+      expect(isSensitiveEnvKey(`${p}_TOKEN`)).toBe(true)
+    }
+  })
+
+  it('边界: sanitizeProcessEnv 保留安全变量并类型归一 extraEnv', () => {
+    const cleaned = sanitizeProcessEnv(
+      { SAFE_VAR: 'ok', openai_api_key: 'sk-x', MONKEY: 'banana' },
+      { EXTRA_NUM: 42, EXTRA_BOOL: true, EXTRA_NULL: null, EXTRA_UNDEF: undefined },
+    )
+    expect(cleaned.SAFE_VAR).toBe('ok')
+    expect(cleaned.MONKEY).toBe('banana')
+    expect(cleaned.openai_api_key).toBeUndefined()
+    expect(cleaned.EXTRA_NUM).toBe('42')
+    expect(cleaned.EXTRA_BOOL).toBe('true')
+    expect(cleaned.EXTRA_NULL).toBeUndefined()
+    expect(cleaned.EXTRA_UNDEF).toBeUndefined()
+  })
+
+  it('边界: 非对象 baseEnv 不抛错, 仅合入 extraEnv', () => {
+    const cleaned = sanitizeProcessEnv(null, { ONLY: 'x' })
+    expect(cleaned).toEqual({ ONLY: 'x' })
+  })
 })
