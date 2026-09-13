@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   History,
   X,
@@ -134,11 +135,11 @@ export default function AgentRunTimeline({
     setExpandedDiffs((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
+      {/* Backdrop — covers the entire screen including sidebar */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-200"
+        className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-200"
         onClick={onClose}
       />
 
@@ -147,25 +148,41 @@ export default function AgentRunTimeline({
         className="relative w-full max-w-xl h-full flex flex-col border-l shadow-2xl animate-fade-in"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
       >
-        {/* Header */}
+        {/* Header: Close button on LEFT, title in middle, actions on right, no competing X near WCO */}
         <div
-          className="flex items-center justify-between px-5 py-3.5 border-b wco-pr"
+          className="h-12 flex items-center justify-between px-4 border-b wco-pr shrink-0"
           style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
         >
-          <div className="flex items-center gap-2.5">
-            <History size={18} style={{ color: 'var(--accent)' }} />
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {t('agent.timeline.title')}
-            </h2>
-            <span
-              className="text-[10px] px-2 py-0.5 rounded-full font-mono"
-              style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}
+          {/* Left: Close button + Title + Turns count */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium hover:bg-[var(--bg-primary)] transition-colors cursor-pointer shrink-0"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+              title="关闭运行轨迹 (Esc)"
+              aria-label="关闭运行轨迹"
             >
-              {logs.length} turns
-            </span>
+              <X size={14} />
+              <span>关闭</span>
+              <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-[var(--bg-primary)] border text-[var(--text-muted)]" style={{ borderColor: 'var(--border)' }}>Esc</kbd>
+            </button>
+            <div className="h-4 w-px bg-[var(--border)] shrink-0" />
+            <div className="flex items-center gap-2 truncate">
+              <History size={16} style={{ color: 'var(--accent)' }} className="shrink-0" />
+              <h2 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                {t('agent.timeline.title')}
+              </h2>
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-mono shrink-0"
+                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}
+              >
+                {logs.length} turns
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right: Actions only (Rollback, Refresh) — absolutely NO close button here to avoid collision with WCO */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleRollback}
               disabled={rollingBack || loading}
@@ -179,19 +196,11 @@ export default function AgentRunTimeline({
             <button
               onClick={fetchLogs}
               disabled={loading}
-              className="p-1.5 rounded-lg border hover:bg-[var(--bg-primary)] transition-colors"
+              className="p-1.5 rounded-lg border hover:bg-[var(--bg-primary)] transition-colors cursor-pointer"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
               title="Refresh timeline"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg border hover:bg-[var(--bg-primary)] transition-colors"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-              title="Close"
-            >
-              <X size={14} />
             </button>
           </div>
         </div>
@@ -388,6 +397,7 @@ export default function AgentRunTimeline({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
