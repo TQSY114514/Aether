@@ -2,24 +2,36 @@
 
 All notable changes to AetherAI are documented here.
 
-## [Unreleased]
+## [0.9.0] - 2026-09-13
 
 ### Added
 
-- **Sidebar File Tree (侧边文件树).** Browse the workspace, copy absolute paths, and click any file to insert an `@reference` into the chat input — all through the new `fs:list-dir` IPC with containment checks.
-- **Global Undo / Redo (全局撤销/重做).** `Ctrl+Z` now undoes the last user-message edit, regenerate, or history rewrite across chats (50-step stack); `Ctrl+Shift+Z` redoes. Shortcut prompts are skipped while a text field is focused.
-- **RepoMap ↔ Memory linkage.** The project map digest is written into long-term memory (`type='project', kind='repo_map'`) after artifact builds, so future sessions recall the repo structure.
-- **Three-step first-run wizard (三步新手向导).** New "Create your first session" step after provider import; the wizard now survives past provider setup (mount gate no longer unmounts it).
+- **Aether UI/UX V2 Redesign (桌面原生转录流与现代化设计系统):**
+  - **Real-Time Markdown Streaming (基于 RAF 节流的实时 Markdown 渲染):** 引入 `requestAnimationFrame` 调度机制，在流式生成期间每帧实时渲染公式、标题、加粗、表格与语法高亮代码块，杜绝主线程卡顿。
+  - **Live Thinking & Tool Observability (实时推理思考与工具调用可视化):** `messageId` 状态机强同步，流式期间自动展开 `ThinkingBlock` 并实时展示 `ToolCallBlock`，告别生成后才突现的体验断层。
+  - **Transcript Flow Layout (去 AI Slop 转录流):** 全面废除传统 SMS 气泡框与浮夸渐变光晕，采用工整严密的桌面工作台转录流（Transcript）风格。
+  - **Pixel-Perfect Windows WCO Alignment (标题栏等高对齐):** 将 Windows 沉浸式 `titleBarOverlay.height` 从 34px 提升至 48px，与全站顶栏 `h-12` 像素级 1:1 贴合，消除系统三键错位与悬停底色断层。
+  - **Sidebar GPU Acceleration:** 侧边栏宽度过渡加入 GPU 硬件加速，彻底消除折叠/展开动画卡顿。
+- **Autonomous Self-Evolution (全自动静默自进化看板):**
+  - 后台静默运转 Hermes Loop + GEP 遗传进化协议反思提炼，每 20 次工具调用轨迹触发一次自主经验沉淀；
+  - 移除了繁琐的手动执行与策略单选按钮，升级为单总开关（`skills.selfEvolution`）全局受控；
+  - 实时监视 `STRATEGY.md` 规则库与历史进化胶囊（Evolution Capsules）时间线。
+- **Settings Page 4-Tab Reorganization (设置页 4 大现代分类 Tab 架构):**
+  - 将既有 18 个功能模块重构为 4 大顶级分类 Tab：`通用与外观`、`会话与智能体`、`能力与扩展`、`系统与高级`，消除长卷轴频繁滚动的痛点。
+- **Git Worktree Shadow Workspaces (全自动物理隔离影子工作区):**
+  - Auto 模式下基于 Git Worktree 在独立物理目录执行变动，分支漂移自动拦截，失败彻底回滚，成功安全合入主分支。
+- **2026-09 Honest Self-Assessment Radar (20 款竞品全景自评雷达):**
+  - 对标范围扩充至 20 款主流 Agent 工具（新增 Roo Code、Continue、Amp、Gemini Code Assist）；
+  - 全量重新渲染 14 种语言的 1000x760 高清矢量图。
+- **Sidebar File Tree (侧边文件树):** Browse workspace, copy absolute paths, insert `@reference`.
+- **Global Undo / Redo (全局撤销/重做):** `Ctrl+Z` / `Ctrl+Shift+Z` 跨会话撤销与历史恢复。
+- **RepoMap ↔ Memory Linkage:** Project map digest written into long-term memory after artifact builds.
+- **Three-Step First-Run Wizard:** Smooth onboarding flow surviving provider setup.
 
-### Changed
+### Security & Hardening
 
-- **Search highlight persists across restarts (搜索结果持久化高亮).** The search query survives conversation switching and the matched message flashes on jump.
-- **Shortcut registry centralized (快捷键注册表).** All 13 shortcuts live in one typed registry (`src/shortcuts.ts` + `src/hooks/useShortcuts.ts`), auto-grouped in the shortcut help overlay.
-
-### Security
-
-- **Expanded security regression suite (安全回归扩测).** 22 new cases: DNS rebinding containment, Unicode steganography detection, homoglyph apostrophe prompts, env-sanitizer case/type hardening — 52 tests green.
-- **electron-builder China-mirror fix (国内镜像下载).** `electronDownload.mirror` + `ELECTRON_BUILDER_BINARIES_MIRROR` cover the binary download path for mainland networks.
+- **Expanded security regression suite:** 22 new cases for DNS rebinding containment, Unicode steganography detection, and homoglyph apostrophe prompts.
+- **electron-builder China-mirror fix:** Binary downloads backed by mirror configuration for mainland networks.
 
 ## [0.8.2] - 2026-09-05
 
