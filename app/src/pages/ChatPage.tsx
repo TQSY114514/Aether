@@ -141,8 +141,8 @@ export default function ChatPage() {
             </Tooltip>
           </div>
         </div>
-        {/* 空态容器: flex-col + my-auto 安全居中，避免超高时顶部截断方块图标 */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto scroll-bounce px-4 py-4">
+        {/* 空态容器: 确保充足的顶部呼吸空间，彻底消除方块图标被标题栏边缘截断问题 */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto scroll-bounce px-4 pt-6 pb-4">
           <div className="my-auto w-full max-w-3xl mx-auto flex flex-col items-center">
             <EmptyState noSession={true} />
           </div>

@@ -140,7 +140,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
-      <div className="w-full max-w-lg rounded-xl border p-6" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
+      <div className="w-full max-w-lg rounded-lg border p-6" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
         <div className="flex items-start justify-between mb-5">
           <div>
             <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{t('onboarding.title')}</h2>

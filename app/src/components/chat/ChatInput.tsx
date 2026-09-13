@@ -637,7 +637,7 @@ export default function ChatInput() {
         )}
         <AgentTaskDeck sessionId={currentSessionId} />
         <AgentActionHUD sessionId={currentSessionId} />
-        <div className={cn('relative flex items-end gap-2 rounded-2xl border px-4 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20')}
+        <div className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
             <div className="slash-menu" role="listbox" aria-label="Slash commands">
@@ -659,26 +659,26 @@ export default function ChatInput() {
           )}
           <InputReference value={input} cursorPos={refCursor} visible onSelect={handleReferenceSelect} />
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-lg hover:bg-[var(--border)] transition-colors disabled:opacity-30">
-            <Paperclip size={16} className="text-gray-400" />
+          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] transition-colors disabled:opacity-30">
+            <Paperclip size={15} className="text-gray-400" />
           </button>
           <textarea ref={textareaRef} value={input} onChange={handleInputChange} onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)} onKeyDown={handleKeyDown} onPaste={handlePaste}
             placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isStreaming ? '⚡ 输入中途纠偏指令 (Steer) / 按回车插话...' : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
-            rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm leading-relaxed py-1 max-h-[200px]"
+            rows={1} className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning} />
           {isArenaRunning || (isStreaming && !input.trim()) ? (
-            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
-              <Square size={14} />
+            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
+              <Square size={13} />
             </button>
           ) : isStreaming && input.trim() ? (
             <button onClick={() => handleSubmit()}
-              className="shrink-0 p-2.5 rounded-xl bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-sm animate-pulse" title="⚡ 插入纠偏 (Steer)" aria-label="插入纠偏">
-              <Zap size={14} />
+              className="shrink-0 p-2 rounded-md bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-sm animate-pulse" title="⚡ 插入纠偏 (Steer)" aria-label="插入纠偏">
+              <Zap size={13} />
             </button>
           ) : (
             <button onClick={() => handleSubmit()} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2.5 rounded-xl bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
-              <Send size={14} />
+              className={cn('shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
+              <Send size={13} />
             </button>
           )}
         </div>
@@ -712,25 +712,12 @@ export default function ChatInput() {
                 }} />
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            <div className="flex items-center gap-2 shrink-0 ml-auto">
               {totalInputTokens > 0 && (
-                <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
+                <span className="text-[10px] tabular-nums shrink-0 font-mono" style={{ color: 'var(--text-muted)' }}>
                   {t('chat.tokens_estimate', String(totalInputTokens))}
                 </span>
               )}
-              {/* Outbound Privacy Ledger Pill (P1-11) */}
-              <div
-                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0"
-                style={{
-                  borderColor: 'rgba(34,197,94,0.3)',
-                  backgroundColor: 'rgba(34,197,94,0.06)',
-                  color: 'var(--success)',
-                }}
-                title={`🔒 0-Telemetry / 零遥测保护\n已配置出站端点：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有数据与历史对话仅保存在本地 SQLite。`}
-              >
-                <ShieldCheck size={11} className="shrink-0" />
-                <span className="font-mono font-medium">0-Telemetry</span>
-              </div>
               <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden sm:inline">{t('empty.hint.slash')}</span>
             </div>
           </div>

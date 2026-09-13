@@ -34,10 +34,10 @@ export default function QuestionDialog() {
   return (
     <div className="fixed inset-0 z-[102] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 animate-blur-fade" />
-      <div className="relative w-full max-w-md rounded-2xl border shadow-xl p-5 animate-blur-fade"
+      <div className="relative w-full max-w-md rounded-lg border shadow-xl p-5 animate-blur-fade"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(37,99,235,0.1)' }}>
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(37,99,235,0.1)' }}>
             <HelpCircle size={16} style={{ color: 'var(--accent)' }} />
           </div>
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t('agent.question.title')}</h3>
@@ -50,7 +50,7 @@ export default function QuestionDialog() {
               <div className="space-y-1.5">
                 {q.options.map((o) => (
                   <button key={o.label} onClick={() => setSelections(s => ({ ...s, [qi]: o.label }))}
-                    className="w-full text-left px-3 py-2 rounded-lg border transition-colors"
+                    className="w-full text-left px-3 py-2 rounded-md border transition-colors"
                     style={selections[qi] === o.label
                       ? { borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }
                       : { borderColor: 'var(--border)' }}>
@@ -60,7 +60,7 @@ export default function QuestionDialog() {
                 ))}
                 {/* "Other" — let the user type a custom answer */}
                 <button onClick={() => setSelections(s => ({ ...s, [qi]: '__other__' }))}
-                  className="w-full text-left px-3 py-2 rounded-lg border transition-colors"
+                  className="w-full text-left px-3 py-2 rounded-md border transition-colors"
                   style={selections[qi] === '__other__'
                     ? { borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }
                     : { borderColor: 'var(--border)' }}>
@@ -69,7 +69,7 @@ export default function QuestionDialog() {
                 {selections[qi] === '__other__' && (
                   <input autoFocus value={custom[qi] || ''} onChange={(e) => setCustom(s => ({ ...s, [qi]: e.target.value }))}
                     placeholder={t('agent.question.type_answer')}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border outline-none" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }} />
+                    className="w-full px-3 py-1.5 text-xs rounded-md border outline-none" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }} />
                 )}
               </div>
             </div>
@@ -77,11 +77,11 @@ export default function QuestionDialog() {
         </div>
         <div className="flex justify-end gap-2">
           <button onClick={() => { resolve(req.reqId, req.questions.map(q => ({ question: q.question, answer: '(cancelled)' }))); setCustom({}) }}
-            className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            className="px-3.5 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             <span className="flex items-center gap-1"><X size={11} />{t('agent.question.cancel')}</span>
           </button>
           <button onClick={submit} disabled={req.questions.some((_, i) => !selections[i])}
-            className="px-3.5 py-1.5 text-xs rounded-lg text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="px-3.5 py-1.5 text-xs rounded-md text-white transition-opacity hover:opacity-90 disabled:opacity-40"
             style={{ backgroundColor: 'var(--accent)' }}>{t('agent.question.submit')}</button>
         </div>
       </div>

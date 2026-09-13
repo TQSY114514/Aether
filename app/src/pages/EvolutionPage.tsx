@@ -123,7 +123,10 @@ export default function EvolutionPage() {
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>🧬 {t('sidebar.nav.evolution')}</h1>
+            <div className="flex items-center gap-2">
+              <GitBranch size={18} style={{ color: 'var(--accent)' }} />
+              <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{t('sidebar.nav.evolution')}</h1>
+            </div>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('evolution.desc')}</p>
           </div>
           <div className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
@@ -131,8 +134,27 @@ export default function EvolutionPage() {
           </div>
         </div>
 
+        {/* Background Auto-Loop Status Indicator */}
+        <div className="rounded-lg border p-3.5 mb-5 flex items-start justify-between gap-3"
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="flex items-start gap-2.5 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+            <div>
+              <div className="text-xs font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <span>后台自主进化循环 (Hermes Loop)</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  自动触发 (每 20 次工具轨迹)
+                </span>
+              </div>
+              <p className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                Agent 运行时每累计 20 次工具调用轨迹，系统会自动在后台基于执行结果进行反思、提取经验并自动提炼至策略库（STRATEGY.md）。下方提供即时手动触发与策略库人工干预能力。
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Run evolution cycle — strategy picker + trigger */}
-        <div className="rounded-xl border p-4 mb-6" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+        <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
           <div className="flex items-center gap-1.5 mb-3">
             <Sparkles size={14} style={{ color: 'var(--accent)' }} />
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('evolution.run_title')}</span>
@@ -141,7 +163,7 @@ export default function EvolutionPage() {
             {STRATEGIES.map(s => (
               <button key={s}
                 onClick={() => setStrategy(s)}
-                className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
+                className="text-xs px-3 py-1.5 rounded-md border transition-colors"
                 style={{
                   borderColor: strategy === s ? 'var(--accent)' : 'var(--border)',
                   backgroundColor: strategy === s ? 'var(--bg-secondary)' : 'var(--bg-primary)',
@@ -154,7 +176,7 @@ export default function EvolutionPage() {
           <button
             onClick={() => runCycle(strategy)}
             disabled={running}
-            className="inline-flex items-center gap-2 text-xs px-3.5 py-2 rounded-lg font-medium transition-opacity disabled:opacity-50"
+            className="inline-flex items-center gap-2 text-xs px-3.5 py-2 rounded-md font-medium transition-opacity disabled:opacity-50"
             style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
             {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
             {running ? t('evolution.running') : t('evolution.run')}
@@ -162,7 +184,7 @@ export default function EvolutionPage() {
         </div>
 
         {/* Strategy library — reflection-distilled entries (bounded STRATEGY.md) */}
-        <div className="rounded-xl border p-4 mb-6" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+        <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
           <div className="flex items-center justify-between gap-2 mb-1">
             <div className="flex items-center gap-1.5">
               <BookOpen size={14} style={{ color: 'var(--accent)' }} />
@@ -177,13 +199,13 @@ export default function EvolutionPage() {
           )}
           <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('evolution.strategyLib.desc')}</p>
           {strategies.length === 0 ? (
-            <div className="text-xs py-3 text-center rounded-lg border border-dashed mb-3" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+            <div className="text-xs py-3 text-center rounded-md border border-dashed mb-3" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
               {t('evolution.strategyLib.empty')}
             </div>
           ) : (
             <div className="space-y-1.5 mb-3">
               {strategies.map(s => (
-                <div key={s.id} className="flex items-start gap-2 text-xs px-2.5 py-2 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                <div key={s.id} className="flex items-start gap-2 text-xs px-2.5 py-2 rounded-md border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                   <span className="shrink-0 tabular-nums pt-px" style={{ color: 'var(--accent)' }}>S{s.id}</span>
                   <span className="flex-1 leading-relaxed" style={{ color: 'var(--text-primary)' }}>{s.text}</span>
                   <button
@@ -203,20 +225,20 @@ export default function EvolutionPage() {
               onChange={e => setNewEntry(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') addEntry() }}
               placeholder={t('evolution.strategyLib.placeholder')}
-              className="flex-1 min-w-[200px] text-xs px-3 py-2 rounded-lg border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+              className="flex-1 min-w-[200px] text-xs px-3 py-2 rounded-md border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
               style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
             />
             <button
               onClick={addEntry}
               disabled={!newEntry.trim()}
-              className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-lg border transition-opacity disabled:opacity-40"
+              className="inline-flex items-center gap-1 text-xs px-3 py-2 rounded-md border transition-opacity disabled:opacity-40"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               <Plus size={12} />{t('evolution.strategyLib.add')}
             </button>
             <button
               onClick={reflectNow}
               disabled={reflecting}
-              className="inline-flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg font-medium transition-opacity disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-md font-medium transition-opacity disabled:opacity-50"
               style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
               {reflecting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
               {reflecting ? t('evolution.strategyLib.reflecting') : t('evolution.strategyLib.reflect')}
@@ -228,7 +250,7 @@ export default function EvolutionPage() {
         {loading ? (
           <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>{t('evolution.loading')}</div>
         ) : events.length === 0 ? (
-          <div className="rounded-xl border p-8 text-center" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="rounded-lg border p-8 text-center" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <History size={20} className="mx-auto mb-2 text-gray-400" />
             <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('evolution.empty')}</div>
           </div>
@@ -240,7 +262,7 @@ export default function EvolutionPage() {
               const blast = parseBlast(ev)
               const strat = ev.strategy || 'balanced'
               return (
-                <div key={idx} className="rounded-xl border p-3.5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                <div key={idx} className="rounded-lg border p-3.5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{ev.capsule_id}</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--border)', color: 'var(--text-secondary)' }}>

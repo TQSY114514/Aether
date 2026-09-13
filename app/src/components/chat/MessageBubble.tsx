@@ -110,111 +110,197 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   }, [searchHighlight, isUser, hlRe])
 
   return (
-    <div id={`msg-${message.id}`} className={`flex ${isUser ? 'justify-end' : 'justify-start'} message-enter group`}>
-      <div className={`${isUser ? '' : 'w-full'} ${isError ? 'opacity-80' : ''}`}
-        style={{ maxWidth: `${isUser ? Math.min(bubbleWidth, 85) : bubbleWidth}%` }}>
-        {!isUser && (
-          <div className="flex items-center gap-2 mb-1.5 px-1">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }}>
-              <span className="text-white text-[10px] font-medium">AI</span>
+    <div id={`msg-${message.id}`} className={`w-full flex flex-col message-enter group py-2.5 ${active ? 'msg-anchor-flash' : ''}`}>
+      {isUser ? (
+        <div className="flex flex-col items-end w-full">
+          <div
+            className="max-w-[85%] rounded-lg border px-3.5 py-2.5 text-xs leading-relaxed break-words relative transition-all"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderColor: 'var(--border)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {editing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      submitEdit()
+                    }
+                    if (e.key === 'Escape') setEditing(false)
+                  }}
+                  rows={3}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-md border outline-none resize-none bg-[var(--content-bg)]"
+                  style={{ borderColor: 'var(--accent)' }}
+                />
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                  >
+                    {t('chat.cancel')}
+                  </button>
+                  <button
+                    onClick={submitEdit}
+                    disabled={sending || !draft.trim()}
+                    className="px-2.5 py-1 text-xs rounded-md text-white disabled:opacity-40 transition-opacity"
+                    style={{ backgroundColor: 'var(--accent)' }}
+                  >
+                    {t('chat.edit.submit')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              renderContent(message.content)
+            )}
+          </div>
+          <div className="flex items-center gap-1 px-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {message.created_at && (
+              <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <button
+              onClick={handleCopy}
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors"
+              title={t('chat.copy')}
+              aria-label={t('chat.copy')}
+            >
+              {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
+            </button>
+            {!isStreaming && !editing && (
+              <button
+                onClick={startEdit}
+                disabled={sending}
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors disabled:opacity-30"
+                title={t('chat.edit')}
+                aria-label={t('chat.edit')}
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="w-full">
+          {/* Assistant Header */}
+          <div className="flex items-center gap-2 mb-1.5 px-0.5">
+            <div
+              className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 border"
+              style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+            >
+              <span className="text-[10px] font-mono font-medium" style={{ color: 'var(--text-secondary)' }}>AI</span>
             </div>
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
               {isError ? t('chat.error_short') : isAborted ? t('chat.aborted') : 'Assistant'}
             </span>
             {isFallback && message.model_used && (
-              <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 font-mono">
                 {t('chat.fallback_label', message.model_used)}
               </span>
             )}
             {message.arena_model && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
-                🏟 {message.arena_model}
+              <span className="text-[10px] px-1.5 py-0.5 rounded border font-mono" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                {message.arena_model}
+              </span>
+            )}
+            {message.created_at && (
+              <span className="text-[10px] ml-auto tabular-nums opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--text-muted)' }}>
+                {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
           </div>
-        )}
-        <div onClick={onBubbleClick} className={`rounded-2xl px-4 py-3 text-sm leading-relaxed break-words relative transition-shadow duration-200 ${active ? 'msg-anchor-flash' : ''} ${
-          isUser
-            ? 'text-white rounded-br-md hover:shadow-lg'
-            : isError
-            ? 'bg-red-50 border border-red-200 text-red-700 rounded-bl-md'
-            : 'border rounded-bl-md hover:shadow-soft'
-        }`} style={isUser
-          ? { background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }
-          : isError ? undefined
-          : { backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}>
-          {!isUser && thinkingBlocks && (
-            <ThinkingBlock text={thinkingBlocks} />
-          )}
-          {!isUser && toolCalls && toolCalls.length > 0 && (
-            <div className="mb-2 space-y-1">
-              {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
-            </div>
-          )}
-          {/* Image attachments shown inline (multimodal support) */}
-          {message.attachment && message.attachment.kind === 'image' && (
-            <div className="mb-2 rounded-lg overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
-              <img src={message.attachment.preview || message.attachment.mime} alt={message.attachment.name}
-                className="max-w-full max-h-[300px] object-contain bg-black/5" />
-            </div>
-          )}
-          {isUser && editing ? (
-            <div className="space-y-2">
-              <textarea value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit() } if (e.key === 'Escape') setEditing(false) }}
-                rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg border outline-none resize-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--accent)' }} />
-              <div className="flex gap-2">
-                <button onClick={submitEdit} disabled={sending || !draft.trim()} className="px-3 py-1 text-xs rounded-lg text-white disabled:opacity-40 transition-opacity" style={{ backgroundColor: 'var(--accent)' }}>{t('chat.edit.submit')}</button>
-                <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('chat.cancel')}</button>
+
+          <div
+            onClick={onBubbleClick}
+            className={`w-full text-xs leading-relaxed break-words relative transition-all ${
+              isError ? 'p-3 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400' : ''
+            }`}
+          >
+            {thinkingBlocks && <ThinkingBlock text={thinkingBlocks} />}
+            {toolCalls && toolCalls.length > 0 && (
+              <div className="mb-2 space-y-1">
+                {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
               </div>
-            </div>
-          ) : renderContent(message.content)}
-          {isStreaming && (
-            <span className="inline-flex items-center gap-0.5 ml-0.5 mt-1">
-              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-            </span>
-          )}
-          {isError && message.error_message && (
-            <details className="mt-2 text-xs text-red-400">
-              <summary className="cursor-pointer">{t('chat.error.detail')}</summary>
-              <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px]">{message.error_message}</pre>
-            </details>
-          )}
+            )}
+            {message.attachment && message.attachment.kind === 'image' && (
+              <div className="mb-2 rounded-md overflow-hidden border max-w-sm" style={{ borderColor: 'var(--border)' }}>
+                <img
+                  src={message.attachment.preview || message.attachment.mime}
+                  alt={message.attachment.name}
+                  className="max-w-full max-h-[300px] object-contain bg-black/5"
+                />
+              </div>
+            )}
+            {renderContent(message.content)}
+            {isStreaming && (
+              <span className="inline-flex items-center gap-0.5 ml-1 mt-1">
+                <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+                <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+                <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+              </span>
+            )}
+            {isError && message.error_message && (
+              <details className="mt-2 text-xs text-red-400">
+                <summary className="cursor-pointer">{t('chat.error.detail')}</summary>
+                <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px]">{message.error_message}</pre>
+              </details>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 px-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleCopy}
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors"
+              title={t('chat.copy')}
+              aria-label={t('chat.copy')}
+            >
+              {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
+            </button>
+            {!isStreaming && !isError && (
+              <button
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors"
+                title={t('chat.regenerate')}
+                aria-label={t('chat.regenerate')}
+                onClick={() => regenerate()}
+              >
+                <RefreshCw size={12} />
+              </button>
+            )}
+            {isAborted && !isStreaming && (
+              <button
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-colors"
+                style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+                title={t('chat.continue_tooltip')}
+                aria-label={t('chat.continue')}
+                onClick={() => continueMessage()}
+                disabled={sending}
+              >
+                <Play size={10} />
+                <span>{t('chat.continue')}</span>
+              </button>
+            )}
+            {isError && !isStreaming && (
+              <button
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-colors"
+                style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+                title={t('chat.retry')}
+                aria-label={t('chat.retry')}
+                onClick={() => regenerate()}
+              >
+                <RefreshCw size={10} />
+                <span>{t('chat.retry')}</span>
+              </button>
+            )}
+          </div>
         </div>
-        <div className={cn('flex items-center gap-0.5 px-1 mt-1 opacity-0 group-hover:opacity-100 transition-all duration-200', isUser ? 'justify-end' : 'justify-start')}>
-          {message.created_at && (
-            <span className="text-[10px] mr-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--text-muted)' }}>
-              {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          <button onClick={handleCopy} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors" title={t('chat.copy')} aria-label={t('chat.copy')}>
-            {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} style={{ color: 'var(--text-muted)' }} />}
-          </button>
-          {isUser && !isStreaming && !editing && (
-            <button onClick={startEdit} disabled={sending} className="p-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-30" title={t('chat.edit')} aria-label={t('chat.edit')}>
-              <Pencil size={12} style={{ color: 'var(--text-muted)' }} />
-            </button>
-          )}
-          {!isUser && !isStreaming && !isError && (
-            <button className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors" title={t('chat.regenerate')} aria-label={t('chat.regenerate')} onClick={() => regenerate()}>
-              <RefreshCw size={12} style={{ color: 'var(--text-muted)' }} />
-            </button>
-          )}
-          {!isUser && isAborted && !isStreaming && (
-            <button className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] transition-colors" style={{ backgroundColor: 'var(--accent)', color: '#fff' }} title={t('chat.continue_tooltip')} aria-label={t('chat.continue')} onClick={() => continueMessage()} disabled={sending}>
-              <Play size={11} />{t('chat.continue')}
-            </button>
-          )}
-          {!isUser && isError && !isStreaming && (
-            <button className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] transition-colors" style={{ backgroundColor: 'var(--error)', color: '#fff' }} title={t('chat.retry')} aria-label={t('chat.retry')} onClick={() => regenerate()}>
-              <RefreshCw size={11} />{t('chat.retry')}
-            </button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
