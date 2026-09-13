@@ -87,11 +87,11 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         {/* Active model + thinking-effort hint */}
         {activeModel && (
           <div className="flex items-center justify-center gap-2 mb-5">
-            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               <Cpu size={11} className="text-[var(--text-muted)]" />{activeModel.display_name || activeModel.model_name}
             </span>
             {showEffort && (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                 <Brain size={11} style={{ color: 'var(--accent)' }} />{t('empty.effort')}: {effortLabel}
               </span>
             )}

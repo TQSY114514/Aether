@@ -156,15 +156,13 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
             className="flex items-center gap-1.5 px-2 py-0.5 rounded-md font-medium text-[11px] shrink-0"
             style={{
               backgroundColor: isToolRunning
-                ? 'rgba(245, 158, 11, 0.15)'
-                : hasSubagents
-                ? 'rgba(6, 182, 212, 0.15)'
-                : 'rgba(59, 130, 246, 0.15)',
+                ? 'rgba(217, 119, 6, 0.12)'
+                : 'var(--border)',
               color: isToolRunning
-                ? 'var(--warning, #f59e0b)'
+                ? 'var(--warning)'
                 : hasSubagents
-                ? '#06b6d4'
-                : 'var(--accent)',
+                ? 'var(--text-primary)'
+                : 'var(--text-primary)',
             }}
           >
             {isToolRunning ? (

@@ -667,12 +667,12 @@ export default function ChatInput() {
             rows={1} className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning} />
           {isArenaRunning || (isStreaming && !input.trim()) ? (
-            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
-              <Square size={13} />
+            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
+              <Square size={13} fill="currentColor" />
             </button>
           ) : isStreaming && input.trim() ? (
             <button onClick={() => handleSubmit()}
-              className="shrink-0 p-2 rounded-md bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-sm animate-pulse" title="⚡ 插入纠偏 (Steer)" aria-label="插入纠偏">
+              className="shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-opacity shadow-sm" title="⚡ 插入纠偏 (Steer)" aria-label="插入纠偏">
               <Zap size={13} />
             </button>
           ) : (
@@ -683,9 +683,9 @@ export default function ChatInput() {
           )}
         </div>
 
-        {!isStreaming && !isArenaRunning && (
-          <div className="flex items-center justify-between gap-1.5 px-0.5 mt-1.5 flex-wrap min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+        <div className="flex items-center justify-between gap-1.5 px-0.5 mt-1.5 flex-wrap min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            {!isStreaming && !isArenaRunning && (
               <div className="flex items-center gap-1 shrink-0">
                 {slashCommands.slice(0, 2).map((cmd) => (
                   <button key={cmd.id} onClick={() => {
@@ -695,34 +695,39 @@ export default function ChatInput() {
                   }} className="qaction">{cmd.name}</button>
                 ))}
               </div>
-              <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
-              <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
-              <ModelSelector providers={providers} allModels={allModels}
-                activeModelId={activeModelId}
-                modelSuggestion={modelSuggestion}
-                scoreByModel={scoreByModel}
-                currentPrompt={input}
-                onSelect={(mid, pid) => {
-                  if (currentSessionId) {
-                    saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
-                  } else {
-                    // Blank page: set default for new sessions
-                    useStore.getState().setDefaultModel(mid)
-                  }
-                }} />
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0 ml-auto">
-              {totalInputTokens > 0 && (
-                <span className="text-[10px] tabular-nums shrink-0 font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {t('chat.tokens_estimate', String(totalInputTokens))}
-                </span>
-              )}
-              <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden sm:inline">{t('empty.hint.slash')}</span>
-            </div>
+            )}
+            <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
+            <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
+            <ModelSelector providers={providers} allModels={allModels}
+              activeModelId={activeModelId}
+              modelSuggestion={modelSuggestion}
+              scoreByModel={scoreByModel}
+              currentPrompt={input}
+              onSelect={(mid, pid) => {
+                if (currentSessionId) {
+                  saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
+                } else {
+                  // Blank page: set default for new sessions
+                  useStore.getState().setDefaultModel(mid)
+                }
+              }} />
           </div>
-        )}
-        {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
+
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {isStreaming ? (
+              <StreamingStatusBar sessionId={currentSessionId} />
+            ) : (
+              <>
+                {totalInputTokens > 0 && (
+                  <span className="text-[10px] tabular-nums shrink-0 font-mono" style={{ color: 'var(--text-muted)' }}>
+                    {t('chat.tokens_estimate', String(totalInputTokens))}
+                  </span>
+                )}
+                <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden sm:inline">{t('empty.hint.slash')}</span>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
