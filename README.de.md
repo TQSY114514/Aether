@@ -51,11 +51,11 @@ Aether setzt auf eine **Dual-Engine-Architektur**, die zwei gleichberechtigte er
 
 ---
 
-**Aethers aktuelle Position — ehrlich bewertet.** Selbstbewertung im Vergleich zu 18 führenden Terminal-, IDE- und Plattform-Agenten auf Basis öffentlich zugänglicher Daten (2026-09 neueste Bewertung; Schätzungen, keine Benchmarks). Wir zeigen die asymmetrische Form ungeschönt: Führend bei lokaler Privatsphäre, 3-stufiger Sandbox-Sicherheit und Multi-Provider-Freiheit; wir räumen den Rückstand beim reinen Coding gegenüber Claude Code/Cursor offen ein. Detaillierter Vergleich siehe [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Wo Aether steht.** Selbstbewertung der veröffentlichten v0.8.2 im Vergleich zu 20 führenden Terminal-, IDE- und Plattform-Agenten auf Basis öffentlicher Daten (2026-09; subjektive Schätzungen, keine Benchmarks). Nur zwei Achsen liegen gleichauf mit dem Besten der Klasse: Multi-Provider-Freiheit und lokale Privatsphäre. Bei Coding, Ökosystem, Multi-Agent-Orchestrierung, Sicherheit (App-Layer-Sandbox, keine OS-Isolation, nur Windows) sowie Desktop-/TUI-Reife liegt Aether noch hinter der Spitze — und das Diagramm zeigt es. Begründung pro Achse und die breitere 29-Tool-Übersicht: [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
-<p align="center"><img src="./assets/agent-radar-2026.de.svg" width="760" alt="Aether Ehrliches Selbsteinschätzungs-Radar vs. 20 Peer-Agenten" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.de.svg" width="760" alt="Aether Selbsteinschätzungs-Radar vs. 20 Peer-Agenten" /></p>
 
-<sub>Diagramm generiert durch <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — Werte für alle 18 Tools eingebettet; reproduzierbar mit <code>node app/scripts/gen-radar.cjs</code>.</sub>
+<sub>Diagramm generiert durch <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — Werte für alle 20 Tools eingebettet; reproduzierbar mit <code>node app/scripts/gen-radar.cjs</code>.</sub>
 
 ---
 

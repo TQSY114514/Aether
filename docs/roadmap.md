@@ -19,7 +19,7 @@
 - **行业全景与 Aether 架构设计**：详见 [2026 AI Agent 行业观察](industry_observation_2026.md)，明确了 S/A/B 级战略底座优先级（Agent Runtime、Permission System、Context Engine）。
 - **品类名收敛（采纳 OpenClaw）**：对外统一 **Local-first Agent Workbench (with built-in Arena)** —— 不再用 Multi-Agent 当品类词（最弱关联格），也不再用 Multi-model 充作品类；Arena 是差异点，不是品类。已落 README 双语第一屏与 GitHub About/topics。
 - **护城河叙事（GPT）**：Arena → Model Intelligence → Router，一句话讲清「竞技场产生数据 → 数据变建议 → 建议驱动路由」的闭环。
-- **诚实雷达（Hermes）**：自评 CSV 逐字内嵌 `app/scripts/gen-radar.cjs`，生成 `assets/agent-radar-2026.svg` 入 README 双语。禁顶格美化——编程轴对同类最佳 -2.3 的差距如实画出，不对称形状即定位证据。
+- **诚实雷达（Hermes）**：自评 CSV 逐字内嵌 `app/scripts/gen-radar.cjs`，生成 `assets/agent-radar-2026.svg` 入 README 双语。禁顶格美化——2026-09 按 v0.8.2 实际交付重打分后，仅多模型与本地隐私两轴与同类最佳同档，编程 -2.8 / 生态 -5.8 / 多 Agent -3.5 / 安全 -2.8 / UX -3.3 的差距如实画出；逐轴依据见 `docs/competitive-analysis.md` 第 4 节。
 - **GPT P0 四项对账现状**：
 
 | 输入项 | 现状核对（2026-08-26） | 处置 |

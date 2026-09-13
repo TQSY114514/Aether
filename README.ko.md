@@ -51,11 +51,11 @@ Aether는 **듀얼 엔진 아키텍처**로 제공되며, 완전히 동등한 �
 
 ---
 
-**Aether의 현재 위치 — 솔직한 자체 평가.** 공개 정보를 기반으로 18개 주요 터미널/IDE/플랫폼 에이전트 도구와 자체 평가를 진행했습니다(2026-09 최신 평가; 벤치마크가 아닌 추정치). 비대칭적 형상을 솔직하게 공개합니다: 로컬 프라이버시, 3단계 샌드박스 보안, 다중 모델 전환에서 우수하며, 순수 코딩에서의 Claude Code/Cursor 대비 격차를 숨김없이 인정합니다. 자세한 비교는 [docs/competitive-analysis.md](docs/competitive-analysis.md)를 참조하세요.
+**Aether의 현재 위치.** 공개 정보를 기반으로, 출시된 v0.8.2를 20개 주요 터미널/IDE/플랫폼 에이전트 도구와 비교한 자체 평가입니다(2026-09; 벤치마크가 아닌 주관적 추정치). 동종 최고 수준과 같은 축은 다중 프로바이더 전환과 로컬 프라이버시 두 가지뿐입니다. 코딩, 생태계, 멀티 에이전트, 보안(앱 계층 샌드박스만 존재, OS 수준 격리 없음, Windows 전용), 데스크톱/TUI 경험은 아직 최상위 그룹에 미치지 못하며 차트에 그대로 반영했습니다. 축별 근거와 29개 도구 조사는 [docs/competitive-analysis.md](docs/competitive-analysis.md)를 참조하세요.
 
-<p align="center"><img src="./assets/agent-radar-2026.ko.svg" width="760" alt="Aether 솔직한 자체 평가 레이더: 20개 주요 에이전트 도구 비교" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.ko.svg" width="760" alt="Aether 자체 평가 레이더: 20개 주요 에이전트 도구 비교" /></p>
 
-<sub>차트는 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a>로 생성되었으며 <code>node app/scripts/gen-radar.cjs</code>로 재현할 수 있습니다.</sub>
+<sub>차트는 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a>로 생성되었으며 20개 도구의 점수가 그대로 포함되어 있습니다. <code>node app/scripts/gen-radar.cjs</code>로 재현할 수 있습니다.</sub>
 
 ---
 

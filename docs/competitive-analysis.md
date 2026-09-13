@@ -1,7 +1,8 @@
 # Aether 竞品调研：主流 Agent 工具雷达图对比（2026-09 最新版）
 
 > 本文为**产品与架构竞品调研报告**。基于 2026-09 最新行业产品演化、安全评测（腾讯朱雀实验室、奇安信 QVD 报告、Uncle城网安拆解）及 Aether v0.8.2+ 架构验收数据进行全面更新。
-> 评分为定性主观评分（1–5 分制与雷达图 10 分制对应），方法与时效声明见文末第 7 节。
+> 评分为定性主观评分（1–5 分制；README 雷达图使用 8 轴 10 分制，两者的对应关系与逐轴依据见第 4 节），方法与时效声明见文末第 7 节。
+> 2026-09 修订：Aether 一行按**已发布的 v0.8.2 实际交付**重新打分，不再计入 roadmap 与 Experimental 功能的预期价值。
 
 ---
 
@@ -32,7 +33,7 @@
 
 | 工具 | 分类 | Autonomy | Multi-model | Safety | Extensibility | Local-first | Evaluation | Terminal UX | IDE/Desktop UX | Ecosystem |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Aether** | **桌面+终端双形态** | **4.0** | **5.0** | **5.0** | **5.0** | **5.0** | **4.8** | **4.5** | **4.5** | **3.5** |
+| **Aether (v0.8.2)** | **桌面+终端双形态** | **3.5** | **4.5** | **3.5** | **3.5** | **4.5** | **3.5** | **3.0** | **3.5** | **2.0** |
 | Claude Code | 终端 Agent | 5.0 | 1.0 | 4.0 | 4.5 | 3.0 | 2.0 | 5.0 | 3.0 | 5.0 |
 | Codex CLI | 终端 Agent | 4.0 | 2.0 | 4.5 | 3.5 | 2.0 | 2.0 | 4.5 | 3.0 | 4.0 |
 | Amp | 终端/混合 Agent | 4.0 | 3.5 | 4.0 | 4.0 | 2.0 | 3.5 | 4.5 | 4.5 | 4.0 |
@@ -64,7 +65,7 @@
 radar-beta
   title Terminal & Hybrid Coding Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
+  curve aether["Aether"]{3.5, 4.5, 3.5, 3.5, 4.5, 3.5, 3.0, 3.5, 2.0}
   curve claude["Claude Code"]{5.0, 1.0, 4.0, 4.5, 3.0, 2.0, 5.0, 3.0, 5.0}
   curve codex["Codex CLI"]{4.0, 2.0, 4.5, 3.5, 2.0, 2.0, 4.5, 3.0, 4.0}
   curve amp["Amp"]{4.0, 3.5, 4.0, 4.0, 2.0, 3.5, 4.5, 4.5, 4.0}
@@ -80,7 +81,7 @@ radar-beta
 radar-beta
   title IDE & Desktop Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
+  curve aether["Aether"]{3.5, 4.5, 3.5, 3.5, 4.5, 3.5, 3.0, 3.5, 2.0}
   curve cursor["Cursor"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 5.0, 5.0}
   curve gemini["Gemini Code Assist"]{4.0, 2.0, 4.0, 4.0, 1.5, 3.0, 2.0, 4.5, 4.5}
   curve devin_desktop["Devin Desktop"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 4.5, 4.0}
@@ -96,7 +97,7 @@ radar-beta
 radar-beta
   title Autonomous Platform Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
+  curve aether["Aether"]{3.5, 4.5, 3.5, 3.5, 4.5, 3.5, 3.0, 3.5, 2.0}
   curve openhands["OpenHands"]{5.0, 4.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0, 4.0}
   curve devin["Devin"]{5.0, 1.0, 3.5, 3.5, 1.0, 3.0, 1.0, 3.5, 3.5}
   curve openclaw["OpenClaw"]{4.5, 4.0, 2.0, 4.0, 3.5, 2.0, 3.5, 2.5, 3.0}
@@ -109,29 +110,29 @@ radar-beta
 ### 全景自评雷达矢量图（20款对照生成）
 
 <p align="center">
-  <img src="../assets/agent-radar-2026.svg" width="760" alt="Aether 诚实自评雷达: 20款主流 Agent 工具全景对比" />
+  <img src="../assets/agent-radar-2026.svg" width="760" alt="Aether 自评雷达: 20款主流 Agent 工具全景对比" />
 </p>
+
+> 由 `app/scripts/gen-radar.cjs` 生成；20 款竞品分值全部内嵌在脚本中，`node app/scripts/gen-radar.cjs` 可复现。虚线为 20 款竞品的逐轴峰值（同类最佳包络）。
 
 ---
 
-## 4. Aether 在 2026-09 的核心差异化壁垒
+## 4. Aether v0.8.2 逐轴自评依据（雷达图 8 轴，0–10 分）
 
-对比行业 20 款产品，Aether 的非对称优势非常鲜明：
+雷达图分值与本表 9 维分的对应：Coding/General ≈ Autonomy + Evaluation；Multi-provider = Multi-model；Ecosystem ≈ Extensibility + Ecosystem；Multi-agent ⊂ Autonomy；Safety = Safety；Local = Local-first；UX = Terminal UX + IDE/Desktop UX。打分原则：**只看 v0.8.2 已发布、README 能力表标为 Stable 的功能**；标为 Experimental 的功能计入方向，不计入分值。
 
-1. **顶级纵深安全体系（Safety 满分 5.0，全场最高）**：
-   - **轻量化三层沙箱**：L1 策略与能力轴门禁 + L2 环境变量正则脱敏（凭据隔离）与敏感路径 Jail + L3 可选容器化后端；
-   - **Auto 模式影子工作区沙盒 (Shadow Workspace)**：基于 Git Worktree 物理隔离执行目录，分支漂移严格保护，成功安全合并、失败彻底回滚，绝不污染用户主工作区代码；
-   - **动态污染追踪 (Taint Tracking) 与审计收据卡**：摄入外部非受信内容后立即标记污染，阻断静默写穿；审批弹窗升级为标准化动词/目标/回滚审计收据；
-   - **前置 Unified Diff 语法高亮审查**：写文件与补丁前先渲染行级 Diff，杜绝盲目放行；
-   - **网关 DNS Rebinding 物理拦截**：严格绑定回环与 Host 头校验（QVD-2026-57410），集中式安全回归套件常态化巡检。
-2. **纯粹的 Local-First 隐私防线（Local-first 满分 5.0）**：
-   - 会话、记忆、图谱、任务轨迹全量落盘于本地 SQLite WAL，无任何遥测、无账号、无云端中转；动态出站域名台账与敏感凭据预发送静态门禁。
-3. **多模型自由切换 + 亚军对抗复核 + 内置基准评测（Multi-model 5.0 + Evaluation 4.8）**：
-   - 支持 OpenAI / Claude / DeepSeek / Gemini / Ollama / 本地 Gateway；内置 Model Arena 盲测与 ELO 动态智能路由；
-   - **第二名双模型对抗复核 (Runner-Up Review)**：根据本地 ELO 胜率调用意图第二名模型对破坏性改动进行对抗审查，有效抑制单一模型盲目幻觉；
-   - **个人 SWE-bench 本地评测套件**：真实执行 `verifyCommand` 检验退出码，精准计算 Pass@1 解决率。
-4. **桌面 + 终端双形态无缝漫游（Terminal 4.5 + Desktop 4.5）**：
-   - 业内唯一一套 Agent Core 同时驱动 Electron 图形客户端与 Ink v5 终端 TUI（`aether tui`），内置 8 款官方工程配方（Curated Recipes）与仓库级配置即代码（`.aether/config.json`）。
+| 轴 | Aether | 同类峰值 | 依据（优势 / 差距） |
+|:---|:---:|:---:|:---|
+| Coding | 7.0 | 9.8 (Claude Code / Cursor) | 优势：42 个内置工具、LSP、repo map、Runner-Up Review、`git:undo` 回滚。差距：Aether 没有自有模型，编程上限 = 接入模型 + harness；`evals/coding` 自述为 tiny benchmark，仓库内**没有**可引用的 SWE-bench / Pass@1 数字。 |
+| General | 7.0 | 9.8 | 同一 harness 用于非编程任务；无浏览器 / computer-use 能力，长链任务依赖 Experimental 的层次化规划。 |
+| Multi-provider | 9.0 | 9.7 (OpenCode) | OpenAI 兼容 / Claude / DeepSeek / Ollama / 本地 Gateway，Model Arena 盲测 + ELO 路由。OpenCode / Aider / Cline 同样 BYOK，因此不高于同类峰值。 |
+| Ecosystem | 4.0 | 9.8 (Claude Code) | MCP stdio / SKILL.md / hooks / `.aether/config.json` 均已实现但标为 Experimental；无第三方市场，社区规模为单人维护（仓库 4 star）。与 Claude Code / Cursor 的差距是量级而非小数点。 |
+| Multi-agent | 6.0 | 9.5 (OpenHands) | 后台任务队列（`backgroundTasks.js`）稳定；层次化规划 / 子任务派生为 Experimental；Arena 是多模型投票，不是多 Agent 编排。 |
+| Safety | 7.0 | 9.8 (Codex) | 优势：命令白名单 + shell 元字符拦截（`sandboxExecutor.js`）、realpath 路径 Jail 与敏感路径保护（`sandbox.js`）、环境变量脱敏、Shadow Workspace、Taint 追踪、Diff 前置审查、可选 Docker 后端。差距：**全部为应用层策略**，没有 OS 级沙箱（seatbelt / Landlock / seccomp），且仅支持 Windows；Codex 的 OS 沙箱模型仍是标杆。 |
+| Local & private | 9.0 | 9.0 | 全量 SQLite WAL 本地落盘，无账号、无遥测、无云端中转。OpenCode 等同样完全本地，故为同档（±0）而非领先。 |
+| Desktop & TUI UX | 6.5 | 9.8 (Cursor) | 桌面聊天与 Agent 工作台 Stable；TUI / CLI / RPC / SDK 均为 Experimental；仅 Windows、安装包未签名（SmartScreen 提示）。 |
+
+**结论**：Aether 真正站得住的差异化只有两点——**模型可随时更换**与**数据 100% 留在本机**，并在此基础上叠加一套较完整的应用层安全策略。其余各轴的目标是「够用且诚实」，不是「同类最佳」。
 
 ---
 
@@ -156,15 +157,15 @@ radar-beta
 
 ## 6. 结语与客观定位
 
-Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代码生成的深度上，单模型深绑定的 Claude Code 与原生 IDE Cursor 依然处于绝对顶峰（Coding 9.8 vs Aether 9.1）。
+Aether 不宣称“全方位超越第一梯队”。在纯代码生成深度上，Claude Code 与 Cursor 处于绝对顶峰（Coding 9.8 vs Aether 7.0）；在生态、多 Agent 编排、OS 级沙箱与产品打磨上，Aether 同样落后于各轴的领先者，第 4 节已逐轴列出差距。
 
-但 Aether 为用户提供了无可替代的定位价值：**把模型当作可随时更换的计算后端，把数据和私隐 100% 锁在自己的硬盘上，以银行级的防御纵深让自主 Agent 在桌面环境安全、踏实地运转。** 不对称的形状，正是 Aether 最真实的勋章。
+Aether 提供的定位价值是明确而有限的：**把模型当作可随时更换的计算后端，把数据 100% 留在自己的硬盘上，并用一套应用层的权限阶梯与沙箱策略让 Agent 在桌面环境可控地运转。** 雷达图的不对称形状是对这一取舍的如实记录，而不是勋章。
 
 ---
 
 ## 7. 2026-09-12 生态扩展调研补充（18→29 款）
 
-> 本节为 2026-09-12 全景扩展调研增量，冲掉第 1-2 节中已过时的事实（Roo Code 停维护、Windsurf 更名）。新进工具未评 9 维分，原因是发布期过短评分无意义；本文件后续新一轮评分时再并入总表。完整调研见知识库 `03-开发日志/2026-09-12-Agent工具全景扩展调研与生态动态盘点.md`。
+> 本节为 2026-09-12 全景扩展调研增量，冲掉第 1-2 节中已过时的事实（Roo Code 停维护、Windsurf 更名）。新进工具未评 9 维分，原因是发布期过短评分无意义；本文件后续新一轮评分时再并入总表。**因此 29 款是调研范围，20 款是实际评分与雷达图对照范围**，README 与雷达图统一使用 20。完整调研见知识库 `03-开发日志/2026-09-12-Agent工具全景扩展调研与生态动态盘点.md`。
 
 ### 新增工具速览
 
