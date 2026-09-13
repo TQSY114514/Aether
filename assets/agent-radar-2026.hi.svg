@@ -2,13 +2,13 @@
 <rect x="0" y="0" width="1000" height="760" rx="16" fill="#0d1117"/>
 <rect x="0.5" y="0.5" width="999" height="759" rx="15.5" fill="none" stroke="#21262d"/>
 <text x="40" y="44" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="19" font-weight="700" fill="#e6edf3">Aether · ईमानदार आत्म-मूल्यांकन रडार <tspan fill="#8b949e" font-weight="400" font-size="13.5">(2026-09 नवीनतम मूल्यांकन)</tspan></text>
-<text x="40" y="68" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">18 प्रमुख एजेंट उपकरणों की तुलना · 8 मुख्य आयामों की क्षमता प्रोफ़ाइल</text>
+<text x="40" y="68" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">20 प्रमुख एजेंट उपकरणों की तुलना · 8 मुख्य आयामों की क्षमता प्रोफ़ाइल</text>
 <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11">
 <rect x="720" y="18" width="240" height="74" rx="6" fill="#161b22" stroke="#21262d"/>
 <rect x="732" y="28" width="10" height="10" rx="2" fill="#6366f1" fill-opacity="0.36" stroke="#818cf8" stroke-width="1.8"/>
-<text x="748" y="37" fill="#e0e7ff" font-weight="600">Aether (v0.8.2+)</text>
+<text x="748" y="37" fill="#e0e7ff" font-weight="600">Aether (v0.9.0)</text>
 <line x1="732" y1="50" x2="742" y2="50" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>
-<text x="748" y="53" fill="#8b949e">समकक्ष-सर्वोत्तम आवरण (18 प्रतिस्पर्धियों का शिखर)</text>
+<text x="748" y="53" fill="#8b949e">समकक्ष-सर्वोत्तम आवरण (20 प्रतिस्पर्धियों का शिखर)</text>
 <line x1="732" y1="70" x2="742" y2="70" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.8"/>
 <text x="748" y="73" fill="#7dd3fc">Claude Code (टर्मिनल बेंचमार्क)</text>
 <line x1="732" y1="85" x2="742" y2="85" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.8"/>
@@ -35,15 +35,15 @@
 <polygon points="500.0,166.9 635.1,222.9 689.1,358.0 635.1,493.1 500.0,543.3 364.9,493.1 324.5,358.0 364.9,222.9" fill="none" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="5 4"/>
 <polygon points="500.0,166.9 589.6,268.4 636.5,358.0 635.1,493.1 500.0,543.3 375.9,482.1 353.8,358.0 389.7,247.7" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
 <polygon points="500.0,168.8 603.4,254.6 636.5,358.0 617.2,475.2 500.0,523.8 389.7,468.3 373.3,358.0 364.9,222.9" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-opacity="0.35" stroke-dasharray="2 2"/>
-<polygon points="500.0,180.6 626.9,231.1 693.0,358.0 633.7,491.7 500.0,541.3 362.1,495.9 308.9,358.0 366.3,224.3" fill="#6366f1" fill-opacity="0.32" stroke="#818cf8" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="500.0,180.6 626.9,231.1 693.0,358.0 633.7,491.7 500.0,545.2 362.1,495.9 308.9,358.0 364.9,222.9" fill="#6366f1" fill-opacity="0.32" stroke="#818cf8" stroke-width="2.2" stroke-linejoin="round"/>
 <circle cx="500.0" cy="180.6" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="626.9" cy="231.1" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="693.0" cy="358.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="633.7" cy="491.7" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
-<circle cx="500.0" cy="541.3" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="500.0" cy="545.2" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="362.1" cy="495.9" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <circle cx="308.9" cy="358.0" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
-<circle cx="366.3" cy="224.3" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
+<circle cx="364.9" cy="222.9" r="3.5" fill="#c7d2fe" stroke="#312e81" stroke-width="1.2"/>
 <text x="500.0" y="129.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">कोडिंग एजेंट <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.1</tspan><tspan fill="#8b949e" font-size="10"> (-0.7)</tspan></text>
 <text x="500.0" y="143.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Coding · Peak 9.8</text>
 <text x="654.9" y="195.1" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">सामान्य कार्य <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.2</tspan><tspan fill="#8b949e" font-size="10"> (-0.6)</tspan></text>
@@ -52,22 +52,22 @@
 <text x="719.0" y="374.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Multi-provider · Peak 9.7</text>
 <text x="654.9" y="524.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">विस्तार और MCP <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.7</tspan><tspan fill="#8b949e" font-size="10"> (-0.1)</tspan></text>
 <text x="654.9" y="538.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Ecosystem · Peak 9.8</text>
-<text x="500.0" y="591.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">मल्टी-एजेंट समन्वय <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.4</tspan><tspan fill="#8b949e" font-size="10"> (-0.1)</tspan></text>
+<text x="500.0" y="591.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">मल्टी-एजेंट समन्वय <tspan fill="#4ade80" font-size="11.5" font-weight="700">9.6</tspan><tspan fill="#4ade80" font-size="10"> (★अग्रणी)</tspan></text>
 <text x="500.0" y="605.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Multi-agent · Peak 9.5</text>
 <text x="345.1" y="524.9" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">3-स्तरीय सुरक्षा <tspan fill="#4ade80" font-size="11.5" font-weight="700">10.0</tspan><tspan fill="#4ade80" font-size="10"> (★अग्रणी)</tspan></text>
 <text x="345.1" y="538.9" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Safety · Peak 9.8</text>
 <text x="281.0" y="360.0" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">स्थानीय और गोपनीयता <tspan fill="#4ade80" font-size="11.5" font-weight="700">9.8</tspan><tspan fill="#4ade80" font-size="10"> (★अग्रणी)</tspan></text>
 <text x="281.0" y="374.0" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Local &amp; private · Peak 9.0</text>
-<text x="345.1" y="195.1" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">डेस्कटॉप और TUI दोहरा UX <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">9.7</tspan><tspan fill="#8b949e" font-size="10"> (-0.1)</tspan></text>
+<text x="345.1" y="195.1" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">डेस्कटॉप और TUI दोहरा UX <tspan fill="#4ade80" font-size="11.5" font-weight="700">9.8</tspan><tspan fill="#4ade80" font-size="10"> (★अग्रणी)</tspan></text>
 <text x="345.1" y="209.1" text-anchor="end" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Desktop &amp; TUI UX · Peak 9.8</text>
 <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="10.5">
 <rect x="40" y="626" width="920" height="76" rx="8" fill="#161b22" stroke="#21262d"/>
-<text x="54" y="643" fill="#8b949e" font-weight="600">प्रतिस्पर्धी मैट्रिक्स (18 उपकरण):</text>
+<text x="54" y="643" fill="#8b949e" font-weight="600">प्रतिस्पर्धी मैट्रिक्स (20 उपकरण):</text>
 <text x="54" y="661" fill="#c9d1d9">
   <tspan fill="#7dd3fc" font-weight="600">टर्मिनल / हाइब्रिड</tspan>: Claude Code · Codex · Amp · OpenCode · Aider · Gemini CLI · Kimi CLI
 </text>
 <text x="54" y="677" fill="#c9d1d9">
-  <tspan fill="#fcd34d" font-weight="600">IDE / समीक्षा</tspan>: Cursor · Windsurf · Trae · Cline · GitHub Copilot · Gemini Code Assist
+  <tspan fill="#fcd34d" font-weight="600">IDE / समीक्षा</tspan>: Cursor · Windsurf · Trae · Cline · Roo Code · Continue · Copilot · Gemini Code Assist
 </text>
 <text x="54" y="693" fill="#c9d1d9">
   <tspan fill="#c084fc" font-weight="600">स्वायत्त</tspan>: OpenHands · Devin · OpenClaw · DeepSeek Harness · Hermes Agent

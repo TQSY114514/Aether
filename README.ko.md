@@ -53,7 +53,7 @@ Aether는 **듀얼 엔진 아키텍처**로 제공되며, 완전히 동등한 �
 
 **Aether의 현재 위치 — 솔직한 자체 평가.** 공개 정보를 기반으로 18개 주요 터미널/IDE/플랫폼 에이전트 도구와 자체 평가를 진행했습니다(2026-09 최신 평가; 벤치마크가 아닌 추정치). 비대칭적 형상을 솔직하게 공개합니다: 로컬 프라이버시, 3단계 샌드박스 보안, 다중 모델 전환에서 우수하며, 순수 코딩에서의 Claude Code/Cursor 대비 격차를 숨김없이 인정합니다. 자세한 비교는 [docs/competitive-analysis.md](docs/competitive-analysis.md)를 참조하세요.
 
-<p align="center"><img src="./assets/agent-radar-2026.ko.svg" width="760" alt="Aether 솔직한 자체 평가 레이더: 18개 주요 에이전트 도구 비교" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.ko.svg" width="760" alt="Aether 솔직한 자체 평가 레이더: 20개 주요 에이전트 도구 비교" /></p>
 
 <sub>차트는 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a>로 생성되었으며 <code>node app/scripts/gen-radar.cjs</code>로 재현할 수 있습니다.</sub>
 
