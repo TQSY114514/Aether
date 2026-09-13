@@ -5,7 +5,7 @@ import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import Tooltip from '@/components/Tooltip'
-import { Cpu, FlaskConical } from 'lucide-react'
+import { FlaskConical } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // Trust badge dot color → tailwind class
@@ -61,11 +61,6 @@ export default function ChatPage() {
   const activeModelId = cfg?.modelId ?? null
   const currentPersonaId = cfg?.personaId ?? null
 
-  const models = activeProviderId ? (modelsByProvider[activeProviderId] || []) : []
-  const currentModel = models.find(m => m.id === activeModelId)
-  const currentProvider = providers.find(p => p.id === activeProviderId)
-  const currentPersona = personas.find(p => p.id === currentPersonaId)
-
   const allModelOptions = useMemo(() => providers.map(p => {
     const ms = allModels.filter(m => m.provider_id === p.id)
     if (ms.length === 0) return null
@@ -97,13 +92,13 @@ export default function ChatPage() {
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <div className="min-h-12 py-1.5 border-b flex flex-wrap items-center justify-between px-4 shrink-0 app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
+        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             {chatMode === 'arena' ? (
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1.5">
                 <select value={localArenaIds[0] ?? ''} onChange={(e) => {
                   const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
                   syncLocalArena(ids)
@@ -157,25 +152,16 @@ export default function ChatPage() {
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }} {...arenaBgStyle}>
       <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2">
-          {currentModel && currentProvider && (
-            <Tooltip text={t('tooltip.model_badge')}>
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs font-medium" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                <Cpu size={12} className="text-gray-400" />
-                <span style={{ color: 'var(--text-secondary)' }}>{currentProvider.name}</span>
-                <span style={{ color: 'var(--text-primary)' }}>{currentModel.model_name}</span>
-              </div>
-            </Tooltip>
-          )}
           {trustBadge && currentSessionId && (
             <Tooltip text={`Trust: ${trustBadge.trust}/100 · ${TRUST_TIP[trustBadge.color] || trustBadge.label}`}>
               <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: TRUST_DOT[trustBadge.color] || '#888' }} />
             </Tooltip>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           {/* Arena model selectors — shown when in arena mode */}
           {chatMode === 'arena' ? (
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <select value={localArenaIds[0] ?? ''} onChange={(e) => {
                 const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
                 syncLocalArena(ids)
