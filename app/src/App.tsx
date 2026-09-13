@@ -48,6 +48,9 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
+  const [initDone, setInitDone] = useState(false)
+  const [wizardActive, setWizardActive] = useState(false)
+  const wizardStartedRef = useRef(false)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const backgroundOpacity = useStore((s) => s.backgroundOpacity)
   const backgroundBlur = useStore((s) => s.backgroundBlur)
@@ -65,6 +68,16 @@ export default function App() {
     }).catch(() => { if (!cancelled) setOnboardingDone(false) })
     return () => { cancelled = true }
   }, [])
+
+  // Activate onboarding wizard only for true first-run (no providers and onboarding not done).
+  // Once started, keep it mounted across provider creation or import until onDone() completes.
+  useEffect(() => {
+    if (wizardStartedRef.current) return
+    if (initDone && onboardingDone === false && showWizard && providers.length === 0) {
+      wizardStartedRef.current = true
+      setWizardActive(true)
+    }
+  }, [initDone, onboardingDone, showWizard, providers.length])
 
   // Keep shortcutsOpenRef in sync with state so the keyboard handler (empty dep
   // array) can read the current value without re-binding on every toggle.
@@ -124,14 +137,18 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      await Promise.all([
-        loadSettings(),
-        loadProviders(),
-        loadSessions(),
-        loadPersonas(),
-        loadScores(),
-        loadAllModels(),
-      ])
+      try {
+        await Promise.all([
+          loadSettings(),
+          loadProviders(),
+          loadSessions(),
+          loadPersonas(),
+          loadScores(),
+          loadAllModels(),
+        ])
+      } finally {
+        setInitDone(true)
+      }
       // Build modelsByProvider from the already-loaded allModels — avoids N
       // extra IPC round-trips (one per provider). This cuts startup time
       // significantly when multiple providers are configured.
@@ -273,8 +290,11 @@ export default function App() {
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-        {showWizard && onboardingDone === false && providers.length === 0 && (
-          <FirstRunWizard onDone={() => setOnboardingDone(true)} />
+        {showWizard && wizardActive && !onboardingDone && (
+          <FirstRunWizard onDone={() => {
+            setWizardActive(false)
+            setOnboardingDone(true)
+          }} />
         )}
       </div>
     </ErrorBoundary>

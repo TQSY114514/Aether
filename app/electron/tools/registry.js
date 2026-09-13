@@ -500,23 +500,12 @@ const TOOLS = [
       }
       if (ctx?.signal) ctx.signal.addEventListener('abort', onAbort, { once: true })
 
-      // Validate every redirect and navigation destination against SSRF policy
-      const isNavigationAllowed = (destUrl) => {
-        const s = checkSSRF(destUrl)
-        if (!s.ok) return false
-        try {
-          const u = new URL(destUrl)
-          if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
-        } catch {
-          return false
-        }
-        return true
-      }
+      // Validate every redirect and navigation destination against SSRF policy and network policy
       win.webContents.on('will-redirect', (event, navigationUrl) => {
-        if (!isNavigationAllowed(navigationUrl)) event.preventDefault()
+        if (!isWebNavigationAllowed(navigationUrl, ctx)) event.preventDefault()
       })
       win.webContents.on('will-navigate', (event, navigationUrl) => {
-        if (!isNavigationAllowed(navigationUrl)) event.preventDefault()
+        if (!isWebNavigationAllowed(navigationUrl, ctx)) event.preventDefault()
       })
 
       // Capture page JS console output so the LLM can diagnose why a page renders
@@ -751,5 +740,29 @@ function formatConsoleLogs(logs) {
   return out.length ? '\n\nPage console (warnings/errors):\n' + out.join('\n') : ''
 }
 
-module.exports = { TOOLS, getTool, toolsPayload, parseUnifiedDiff, applyHunks, formatConsoleLogs }
+// Validate redirect and navigation destinations against SSRF policy and network policy
+function isWebNavigationAllowed(destUrl, ctx) {
+  if (ctx?.db) {
+    try {
+      const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
+      if (policyActive(ctx.db)) {
+        const a2 = checkUrlPolicy(ctx.db, destUrl)
+        if (!a2.ok) return false
+      }
+    } catch {
+      return false
+    }
+  }
+  const s = checkSSRF(destUrl)
+  if (!s.ok) return false
+  try {
+    const u = new URL(destUrl)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+  } catch {
+    return false
+  }
+  return true
+}
+
+module.exports = { TOOLS, getTool, toolsPayload, parseUnifiedDiff, applyHunks, formatConsoleLogs, isWebNavigationAllowed }
 
