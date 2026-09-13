@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" role="img" aria-label="Aether · Agent 诚实自评雷达">
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" role="img" aria-label="Aether · Agent 能力与架构自评雷达">
 <rect x="0" y="0" width="1000" height="760" rx="16" fill="#0d1117"/>
 <rect x="0.5" y="0.5" width="999" height="759" rx="15.5" fill="none" stroke="#21262d"/>
-<text x="40" y="44" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="19" font-weight="700" fill="#e6edf3">Aether · Agent 诚实自评雷达 <tspan fill="#8b949e" font-weight="400" font-size="13.5">(2026-09 最新评估)</tspan></text>
+<text x="40" y="44" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="19" font-weight="700" fill="#e6edf3">Aether · Agent 能力与架构自评雷达 <tspan fill="#8b949e" font-weight="400" font-size="13.5">(2026-09 定性估计 · 非基准跑分)</tspan></text>
 <text x="40" y="68" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12" fill="#8b949e">全面对比 20 款主流 Agent 工具 · 8 大核心维度能力画像</text>
 <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="11">
 <rect x="720" y="18" width="240" height="74" rx="6" fill="#161b22" stroke="#21262d"/>
@@ -48,7 +48,7 @@
 <text x="500.0" y="143.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Coding · Peak 9.8</text>
 <text x="654.9" y="195.1" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">通用任务 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">8.0</tspan><tspan fill="#8b949e" font-size="10"> (-1.8)</tspan></text>
 <text x="654.9" y="209.1" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">General · Peak 9.8</text>
-<text x="719.0" y="360.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">多模型/供应商 <tspan fill="#4ade80" font-size="11.5" font-weight="700">9.7</tspan><tspan fill="#4ade80" font-size="10"> (★领先)</tspan></text>
+<text x="719.0" y="360.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">多模型/供应商 <tspan fill="#4ade80" font-size="11.5" font-weight="700">9.7</tspan><tspan fill="#4ade80" font-size="10"> (±0)</tspan></text>
 <text x="719.0" y="374.0" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">Multi-provider · Peak 9.7</text>
 <text x="654.9" y="524.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">扩展架构 <tspan fill="#a5b4fc" font-size="11.5" font-weight="700">8.8</tspan><tspan fill="#8b949e" font-size="10"> (-1.0)</tspan></text>
 <text x="654.9" y="538.9" text-anchor="start" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">MCP &amp; Skills · Peak 9.8</text>

@@ -51,7 +51,7 @@ Aether s'appuie sur une **architecture à double moteur**, offrant deux interfac
 
 ---
 
-**Où se situe Aether — en toute honnêteté.** Évaluation comparative face à 18 outils d'agents majeurs (Terminal, IDE et plateformes autonomes) à partir de données publiques (évaluation 2026-09 ; estimations, pas de benchmarks). Nous présentons la géométrie asymétrique sans fard : en tête pour la confidentialité locale, la sécurité du bac à sable à 3 niveaux et le libre choix multi-fournisseurs ; nous reconnaissons sans détours l'écart en programmation brute face à Claude Code et Cursor. Pour une analyse détaillée, voir [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Où se situe Aether — en toute honnêteté.** Évaluation comparative face à 20 outils d'agents majeurs (Terminal, IDE et plateformes autonomes) à partir de données publiques (évaluation 2026-09 ; estimations, pas de benchmarks). Nous présentons la géométrie asymétrique sans fard : en tête pour la confidentialité locale, la sécurité du bac à sable à 3 niveaux et le libre choix multi-fournisseurs ; nous reconnaissons sans détours l'écart en programmation brute face à Claude Code et Cursor. Pour une analyse détaillée, voir [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
 <p align="center"><img src="./assets/agent-radar-2026.fr.svg" width="760" alt="Radar d'auto-évaluation honnête Aether vs 20 pairs" /></p>
 
