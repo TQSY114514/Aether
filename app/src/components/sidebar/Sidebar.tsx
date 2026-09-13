@@ -127,7 +127,7 @@ export default function Sidebar() {
 
   return (
     <div className="w-[260px] h-full flex flex-col shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
-      <div className="h-12 flex items-center justify-between px-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div className="h-12 flex items-center justify-between px-4 shrink-0 app-drag" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>Aether</span>
         </div>

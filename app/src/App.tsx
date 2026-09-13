@@ -25,8 +25,22 @@ import { useShortcuts } from '@/hooks/useShortcuts'
 import TaskPanel from '@/components/tasks/TaskPanel'
 import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
 import { useFeatureFlag } from '@/utils/featureFlags'
-import { PanelLeft } from 'lucide-react'
+import { PanelLeft, ChevronLeft } from 'lucide-react'
 import { t } from '@/utils/i18n'
+
+const VIEW_TITLES: Record<string, string> = {
+  models: 'sidebar.nav.models',
+  agents: 'sidebar.nav.personas',
+  scores: 'sidebar.nav.arena',
+  memory: 'sidebar.nav.memory',
+  settings: 'sidebar.nav.settings',
+  tokens: 'settings.tools.tokens',
+  evolution: 'settings.tools.evolution',
+  learning: 'settings.tools.learning',
+  skills: 'settings.tools.skills',
+  security: 'settings.nav.security',
+  learningStatus: 'sidebar.nav.learning',
+}
 export default function App() {
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
@@ -49,6 +63,7 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
   const [initDone, setInitDone] = useState(false)
+  const [providersLoaded, setProvidersLoaded] = useState(false)
   const [wizardActive, setWizardActive] = useState(false)
   const wizardStartedRef = useRef(false)
   const backgroundImage = useStore((s) => s.backgroundImage)
@@ -69,15 +84,15 @@ export default function App() {
     return () => { cancelled = true }
   }, [])
 
-  // Activate onboarding wizard only for true first-run (no providers and onboarding not done).
+  // Activate onboarding wizard only for true first-run (providers loaded successfully, 0 providers, and onboarding not done).
   // Once started, keep it mounted across provider creation or import until onDone() completes.
   useEffect(() => {
     if (wizardStartedRef.current) return
-    if (initDone && onboardingDone === false && showWizard && providers.length === 0) {
+    if (initDone && providersLoaded && onboardingDone === false && showWizard && providers.length === 0) {
       wizardStartedRef.current = true
       setWizardActive(true)
     }
-  }, [initDone, onboardingDone, showWizard, providers.length])
+  }, [initDone, providersLoaded, onboardingDone, showWizard, providers.length])
 
   // Keep shortcutsOpenRef in sync with state so the keyboard handler (empty dep
   // array) can read the current value without re-binding on every toggle.
@@ -140,12 +155,14 @@ export default function App() {
       try {
         await Promise.all([
           loadSettings(),
-          loadProviders(),
+          loadProviders().then(() => setProvidersLoaded(true)),
           loadSessions(),
           loadPersonas(),
           loadScores(),
           loadAllModels(),
         ])
+      } catch (err) {
+        console.error('[Aether] init store load error:', err)
       } finally {
         setInitDone(true)
       }
@@ -274,14 +291,32 @@ export default function App() {
         ) : (
           /* Collapsed: slim expand rail with a single button — visible on every
              view (chat, settings, memory, ...), not just chat. */
-          <div className="w-10 shrink-0 flex flex-col items-center pt-3" style={{ borderRight: '1px solid var(--border)', backgroundColor: 'var(--bg-primary)' }}>
+          <div className="w-10 shrink-0 flex flex-col items-center pt-3 app-drag" style={{ borderRight: '1px solid var(--border)', backgroundColor: 'var(--bg-primary)' }}>
             <button onClick={toggleSidebar} aria-label="Open sidebar" title={t('sidebar.nav.expand')}
-              className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
+              className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors app-no-drag">
               <PanelLeft size={16} className="text-[var(--text-muted)]" />
             </button>
           </div>
         )}
         <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
+          {currentView !== 'chat' && (
+            <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentView('chat')}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors app-no-drag cursor-pointer"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                  title={t('chat.mode.normal')}
+                >
+                  <ChevronLeft size={14} />
+                  <span>{t('chat.mode.normal')}</span>
+                </button>
+                <span className="text-sm font-semibold tracking-tight ml-1" style={{ color: 'var(--text-primary)' }}>
+                  {VIEW_TITLES[currentView] ? t(VIEW_TITLES[currentView]) : currentView}
+                </span>
+              </div>
+            </div>
+          )}
           {renderPage()}
         </main>
         <CompletionToasts />

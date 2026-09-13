@@ -5,10 +5,20 @@ const sharp = require('sharp')
 const ROOT = path.resolve(__dirname, '..', '..')
 const ASSETS_DIR = path.join(ROOT, 'assets')
 const RESOURCES_DIR = path.join(ROOT, 'app', 'resources')
-const BRAIN_DIR = 'C:/Users/zhrls/.gemini/antigravity/brain/36d64745-8042-49b4-a6a2-fe5e63de4a06'
+const heroArg = process.argv[2]
+const logoArg = process.argv[3]
+const DEFAULT_BRAIN_DIR = 'C:/Users/zhrls/.gemini/antigravity/brain/36d64745-8042-49b4-a6a2-fe5e63de4a06'
+const HERO_SRC = heroArg || (fs.existsSync(path.join(DEFAULT_BRAIN_DIR, 'readme_hero_banner_1789272543441.jpg'))
+  ? path.join(DEFAULT_BRAIN_DIR, 'readme_hero_banner_1789272543441.jpg')
+  : path.join(ASSETS_DIR, 'readme-hero.png'))
+const LOGO_SRC = logoArg || (fs.existsSync(path.join(DEFAULT_BRAIN_DIR, 'refined_emblem_logo_1789268725359.jpg'))
+  ? path.join(DEFAULT_BRAIN_DIR, 'refined_emblem_logo_1789268725359.jpg')
+  : path.join(ASSETS_DIR, 'logo-256.png'))
 
-const HERO_SRC = path.join(BRAIN_DIR, 'readme_hero_banner_1789272543441.jpg')
-const LOGO_SRC = path.join(BRAIN_DIR, 'refined_emblem_logo_1789268725359.jpg')
+if (!fs.existsSync(HERO_SRC) || !fs.existsSync(LOGO_SRC)) {
+  console.error('[apply-new-brand] Source image missing:', { HERO_SRC, LOGO_SRC })
+  process.exit(1)
+}
 
 const SIZES = [16, 24, 32, 48, 64, 128, 256]
 

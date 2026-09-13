@@ -265,6 +265,7 @@ interface Window {
       clipboardWrite: (text: string) => Promise<{ ok: boolean; error?: string }>
       clipboardRead: () => Promise<{ ok: boolean; text?: string; error?: string }>
       registerFileAssociations: () => Promise<{ ok: boolean; error?: string }>
+      setTitleBarOverlay: (opts?: { color?: string; symbolColor?: string; height?: number }) => Promise<{ ok: boolean; error?: string }>
     }
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>

@@ -196,6 +196,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clipboardWrite: (text) => ipcRenderer.invoke('system:clipboard-write', text),
     clipboardRead: () => ipcRenderer.invoke('system:clipboard-read'),
     registerFileAssociations: () => ipcRenderer.invoke('system:register-file-associations'),
+    setTitleBarOverlay: (opts) => ipcRenderer.invoke('system:set-title-bar-overlay', opts),
   },
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts),

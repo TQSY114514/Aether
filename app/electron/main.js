@@ -194,12 +194,22 @@ function createWindow() {
   const pngPath = path.join(resBase, 'icon.png')
   const iconPath = (process.platform === 'win32' && fs.existsSync(icoPath)) ? icoPath : pngPath
 
+  const isWin = process.platform === 'win32'
+  const isMac = process.platform === 'darwin'
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     icon: iconPath,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: isWin ? {
+      color: '#00000000',
+      symbolColor: '#71717a',
+      height: 48,
+    } : (isMac ? true : false),
+    trafficLightPosition: isMac ? { x: 14, y: 16 } : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

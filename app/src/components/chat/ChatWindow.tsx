@@ -483,9 +483,9 @@ export default function ChatWindow() {
     }
   }, [messages])
 
-  // Empty chat: render EmptyState centered inside a non-scrolling flex box.
-  // When there ARE messages the same container is overflow-y-auto (虚拟列表滚动);
-  // keeping the empty state inside that scroller is what let it scroll before.
+  // Empty chat: render EmptyState safely centered via flex + my-auto.
+  // When the window is short, my-auto prevents negative scroll / top clipping,
+  // keeping the hero icon completely in view while allowing scroll if needed.
   const isEmptyChat = messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0
 
   return (
@@ -576,8 +576,8 @@ export default function ChatWindow() {
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'flex-1 flex items-center justify-center overflow-hidden px-4 py-6' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6'}>
-        <div className="max-w-3xl mx-auto chat-gap">
+      <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'scroll-bounce flex-1 overflow-y-auto px-4 py-4 flex flex-col' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6'}>
+        <div className={isEmptyChat ? 'max-w-3xl mx-auto w-full my-auto' : 'max-w-3xl mx-auto chat-gap'}>
           {isEmptyChat && (
             <EmptyState />
           )}

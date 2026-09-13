@@ -538,16 +538,15 @@ const TOOLS = [
       const img = await win.webContents.capturePage()
       if (img.isEmpty()) return '[error: empty capture]'
       let filePath = null
-      let allowDiskWrite = true
-      if (ctx?.agentMode === 'plan' || ctx?.agentMode === 'review') {
-        allowDiskWrite = false
-      }
-      if (ctx?.db && typeof ctx.db.getSetting === 'function') {
-        try {
-          if (ctx.db.getSetting('capability.filesystem') === 'deny') {
-            allowDiskWrite = false
-          }
-        } catch {}
+      let allowDiskWrite = false
+      if (ctx?.agentMode !== 'plan' && ctx?.agentMode !== 'review') {
+        if (ctx?.db && typeof ctx.db.getSetting === 'function') {
+          try {
+            if (ctx.db.getSetting('capability.filesystem') === 'allow') {
+              allowDiskWrite = true
+            }
+          } catch {}
+        }
       }
       if (allowDiskWrite) {
         try {
