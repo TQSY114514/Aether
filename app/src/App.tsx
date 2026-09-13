@@ -306,7 +306,9 @@ export default function App() {
               </div>
             </div>
           )}
-          {renderPage()}
+          <div key={currentView} className="flex-1 flex flex-col min-h-0 page-fade-in">
+            {renderPage()}
+          </div>
         </main>
         <CompletionToasts />
         <TaskPanel />
