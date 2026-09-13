@@ -51,7 +51,7 @@ O Aether adota uma **arquitetura de motor duplo**, oferecendo duas interfaces de
 
 ---
 
-**Onde o Aether se posiciona.** Autoavaliação da v0.8.2 lançada frente a 20 ferramentas de agentes líderes (terminal, IDE e plataformas) com base em dados públicos (2026-09; estimativas subjetivas, não benchmarks). Apenas dois eixos estão no nível do melhor da categoria: liberdade multi-provedor e privacidade local. Em código, ecossistema, orquestração multi-agente, segurança (sandbox na camada da aplicação, sem isolamento do SO, apenas Windows) e experiência desktop / TUI, o Aether ainda fica atrás do primeiro grupo — e o gráfico mostra isso. Justificativa por eixo e o panorama ampliado de 29 ferramentas: [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Onde o Aether se posiciona.** Autoavaliação da v0.9.0 lançada frente a 20 ferramentas de agentes líderes (terminal, IDE e plataformas) com base em dados públicos (2026-09; estimativas subjetivas, não benchmarks). Apenas dois eixos estão no nível do melhor da categoria: liberdade multi-provedor e privacidade local. Em código, ecossistema, orquestração multi-agente, segurança (sandbox na camada da aplicação, sem isolamento do SO, apenas Windows) e experiência desktop / TUI, o Aether ainda fica atrás do primeiro grupo — e o gráfico mostra isso. Justificativa por eixo e o panorama ampliado de 29 ferramentas: [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
 <p align="center"><img src="./assets/agent-radar-2026.pt.svg" width="760" alt="Radar de autoavaliação do Aether vs 20 pares" /></p>
 

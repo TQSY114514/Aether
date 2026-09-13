@@ -61,7 +61,7 @@ Aether 采用**双轮驱动架构**发布，提供完全平等的双形态体验
 
 **本地优先。** 密钥、对话与记忆都存于本地 SQLite,除发往你所配置的提供商外,绝不离开你的电脑。无账号、无云同步、无遥测。你的数据最安全的地方,就是你的设备。
 
-**Aether 在哪一档。** 依据公开资料，以已发布的 v0.8.2 对比 20 款主流终端 / IDE / 平台 Agent 工具进行自评（2026-09；是主观估计，不是跑分）。只有两根轴与同类最佳同档：多模型自由切换与本地隐私。其余各轴——编程能力、扩展生态、多 Agent 编排、安全（应用层沙箱，无 OS 级隔离，仅 Windows）、桌面 / 终端体验——与第一梯队仍有明确差距，图上如实画出。逐轴依据与更大范围的 29 款调研见 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
+**Aether 在哪一档。** 依据公开资料，以已发布的 v0.9.0 对比 20 款主流终端 / IDE / 平台 Agent 工具进行自评（2026-09；是主观估计，不是跑分）。只有两根轴与同类最佳同档：多模型自由切换与本地隐私。其余各轴——编程能力、扩展生态、多 Agent 编排、安全（应用层沙箱，无 OS 级隔离，仅 Windows）、桌面 / 终端体验——与第一梯队仍有明确差距，图上如实画出。逐轴依据与更大范围的 29 款调研见 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
 
 <p align="center"><img src="./assets/agent-radar-2026.zh-CN.svg" width="760" alt="Aether 自评雷达: 对比 20 款主流终端 / IDE / 平台 Agent 工具 (Claude Code / Codex / Cursor / Windsurf / Trae / Devin / OpenHands / DSH / Amp / Gemini Code Assist 等)" /></p>
 

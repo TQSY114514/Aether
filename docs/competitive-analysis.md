@@ -2,7 +2,7 @@
 
 > 本文为**产品与架构竞品调研报告**。基于 2026-09 最新行业产品演化、安全评测（腾讯朱雀实验室、奇安信 QVD 报告、Uncle城网安拆解）及 Aether v0.8.2+ 架构验收数据进行全面更新。
 > 评分为定性主观评分（1–5 分制；README 雷达图使用 8 轴 10 分制，两者的对应关系与逐轴依据见第 4 节），方法与时效声明见文末第 7 节。
-> 2026-09 修订：Aether 一行按**已发布的 v0.8.2 实际交付**重新打分，不再计入 roadmap 与 Experimental 功能的预期价值。
+> 2026-09 修订：Aether 一行按**已发布的 v0.9.0 实际交付**重新打分，不再计入 roadmap 与 Experimental 功能的预期价值。
 
 ---
 
@@ -33,7 +33,7 @@
 
 | 工具 | 分类 | Autonomy | Multi-model | Safety | Extensibility | Local-first | Evaluation | Terminal UX | IDE/Desktop UX | Ecosystem |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Aether (v0.8.2)** | **桌面+终端双形态** | **3.5** | **4.5** | **3.5** | **3.5** | **4.5** | **3.5** | **3.0** | **3.5** | **2.0** |
+| **Aether (v0.9.0)** | **桌面+终端双形态** | **3.5** | **4.5** | **3.5** | **3.5** | **4.5** | **3.5** | **3.0** | **3.5** | **2.0** |
 | Claude Code | 终端 Agent | 5.0 | 1.0 | 4.0 | 4.5 | 3.0 | 2.0 | 5.0 | 3.0 | 5.0 |
 | Codex CLI | 终端 Agent | 4.0 | 2.0 | 4.5 | 3.5 | 2.0 | 2.0 | 4.5 | 3.0 | 4.0 |
 | Amp | 终端/混合 Agent | 4.0 | 3.5 | 4.0 | 4.0 | 2.0 | 3.5 | 4.5 | 4.5 | 4.0 |
@@ -117,9 +117,9 @@ radar-beta
 
 ---
 
-## 4. Aether v0.8.2 逐轴自评依据（雷达图 8 轴，0–10 分）
+## 4. Aether v0.9.0 逐轴自评依据（雷达图 8 轴，0–10 分）
 
-雷达图分值与本表 9 维分的对应：Coding/General ≈ Autonomy + Evaluation；Multi-provider = Multi-model；Ecosystem ≈ Extensibility + Ecosystem；Multi-agent ⊂ Autonomy；Safety = Safety；Local = Local-first；UX = Terminal UX + IDE/Desktop UX。打分原则：**只看 v0.8.2 已发布、README 能力表标为 Stable 的功能**；标为 Experimental 的功能计入方向，不计入分值。
+雷达图分值与本表 9 维分的对应：Coding/General ≈ Autonomy + Evaluation；Multi-provider = Multi-model；Ecosystem ≈ Extensibility + Ecosystem；Multi-agent ⊂ Autonomy；Safety = Safety；Local = Local-first；UX = Terminal UX + IDE/Desktop UX。打分原则：**只看 v0.9.0 已发布、README 能力表标为 Stable 的功能**；标为 Experimental 的功能计入方向，不计入分值。
 
 | 轴 | Aether | 同类峰值 | 依据（优势 / 差距） |
 |:---|:---:|:---:|:---|

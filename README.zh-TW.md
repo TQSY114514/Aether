@@ -49,7 +49,7 @@ Aether 採用**雙輪驅動架構**發布，提供完全平等的雙形態體驗
 
 ---
 
-**Aether 在哪一檔。** 依據公開資料，以已發布的 v0.8.2 對比 20 款主流終端 / IDE / 平台 Agent 工具進行自評（2026-09；是主觀估計，不是跑分）。只有兩根軸與同類最佳同檔：多模型自由切換與本地隱私。其餘各軸——編程能力、擴展生態、多 Agent 編排、安全（應用層沙箱，無 OS 級隔離，僅 Windows）、桌面 / 終端體驗——與第一梯隊仍有明確差距，圖上如實畫出。逐軸依據與更大範圍的 29 款調研見 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
+**Aether 在哪一檔。** 依據公開資料，以已發布的 v0.9.0 對比 20 款主流終端 / IDE / 平台 Agent 工具進行自評（2026-09；是主觀估計，不是跑分）。只有兩根軸與同類最佳同檔：多模型自由切換與本地隱私。其餘各軸——編程能力、擴展生態、多 Agent 編排、安全（應用層沙箱，無 OS 級隔離，僅 Windows）、桌面 / 終端體驗——與第一梯隊仍有明確差距，圖上如實畫出。逐軸依據與更大範圍的 29 款調研見 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
 
 <p align="center"><img src="./assets/agent-radar-2026.zh-TW.svg" width="760" alt="Aether 自評雷達: 對比 20 款主流終端 / IDE / 平台 Agent 工具" /></p>
 

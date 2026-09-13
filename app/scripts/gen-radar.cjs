@@ -2,7 +2,7 @@
 /**
  * gen-radar.cjs — generates localized radar SVGs in assets/
  *
- * Data source: SCORES below (self-assessed 2026-09 against v0.8.2, the latest
+ * Data source: SCORES below (self-assessed 2026-09 against v0.9.0, the latest
  * released tag). Per-axis rationale for the Aether row lives in
  * docs/competitive-analysis.md section 4; keep both in sync.
  * Generates:
@@ -30,7 +30,7 @@ const path = require('path');
 // Axis order: Coding, General, Multi-provider, Ecosystem, Multi-agent, Safety,
 //             Local & private, Desktop & TUI UX
 const SCORES = {
-  // Aether v0.8.2 — scored against what ships, not the roadmap:
+  // Aether v0.9.0 — scored against what ships, not the roadmap:
   //   Coding 7.0        harness only (42 tools, LSP, repo map); no own model, no
   //                     published SWE-bench / Pass@1 numbers (evals/coding is tiny)
   //   General 7.0       same harness applied outside code; no browser/computer use
@@ -84,7 +84,7 @@ const I18N = {
     title: 'Aether · Agent 自评雷达',
     titleTag: '(2026-09 · 主观估计，非跑分)',
     subtitle: '对比 20 款主流 Agent 工具 · 8 维度自评',
-    legendAether: 'Aether 自评 (v0.8.2)',
+    legendAether: 'Aether 自评 (v0.9.0)',
     legendPeerBest: '同类最佳包络 (20 款竞品峰值)',
     legendClaude: 'Claude Code (终端标杆)',
     legendCursor: 'Cursor (IDE 标杆)',
@@ -110,7 +110,7 @@ const I18N = {
     title: 'Aether · Agent Self-Assessment Radar',
     titleTag: '(2026-09 · subjective estimates, not benchmarks)',
     subtitle: 'Self-scored vs 20 Leading Agent Tools · 8 Dimensions',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Peer-Best Envelope (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal Benchmark)',
     legendCursor: 'Cursor (IDE Benchmark)',
@@ -136,7 +136,7 @@ const I18N = {
     title: 'Aether · Agent 自評雷達',
     titleTag: '(2026-09 · 主觀估計，非跑分)',
     subtitle: '對比 20 款主流 Agent 工具 · 8 維度自評',
-    legendAether: 'Aether 自評 (v0.8.2)',
+    legendAether: 'Aether 自評 (v0.9.0)',
     legendPeerBest: '同類最佳包絡 (20 款競品峰值)',
     legendClaude: 'Claude Code (終端標竿)',
     legendCursor: 'Cursor (IDE 標竿)',
@@ -162,7 +162,7 @@ const I18N = {
     title: 'Aether · 樞機經緯 躬自審度星網',
     titleTag: '(2026-09 · 平心權量，非競分)',
     subtitle: '衡較二十方名家樞機 · 八緯自度圖譜',
-    legendAether: 'Aether 躬省度數 (v0.8.2)',
+    legendAether: 'Aether 躬省度數 (v0.9.0)',
     legendPeerBest: '諸子冠絕包絡（二十家之峰）',
     legendClaude: 'Claude Code (端几之表率)',
     legendCursor: 'Cursor (工坊之表率)',
@@ -188,7 +188,7 @@ const I18N = {
     title: 'Aether · Agent 自己評価レーダー',
     titleTag: '(2026-09 · 主観的推定、ベンチマークではない)',
     subtitle: '主要エージェント20種との比較 · 8軸の自己評価',
-    legendAether: 'Aether 自己評価 (v0.8.2)',
+    legendAether: 'Aether 自己評価 (v0.9.0)',
     legendPeerBest: '同種ベスト包絡線 (20種競合の最高値)',
     legendClaude: 'Claude Code (ターミナル基準)',
     legendCursor: 'Cursor (IDE 基準)',
@@ -214,7 +214,7 @@ const I18N = {
     title: 'Aether · Agent 자체 평가 레이더',
     titleTag: '(2026-09 · 주관적 추정, 벤치마크 아님)',
     subtitle: '20개 주요 에이전트 도구 비교 · 8개 축 자체 평가',
-    legendAether: 'Aether 자체 평가 (v0.8.2)',
+    legendAether: 'Aether 자체 평가 (v0.9.0)',
     legendPeerBest: '동급 최고 포락선 (20개 도구 최고점)',
     legendClaude: 'Claude Code (터미널 벤치마크)',
     legendCursor: 'Cursor (IDE 벤치마크)',
@@ -240,7 +240,7 @@ const I18N = {
     title: 'Aether · Agent Selbsteinschätzungs-Radar',
     titleTag: '(2026-09 · subjektive Schätzung, kein Benchmark)',
     subtitle: 'Selbstbewertung gegen 20 führende Agenten · 8 Dimensionen',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Peer-Best-Hüllkurve (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal-Referenz)',
     legendCursor: 'Cursor (IDE-Referenz)',
@@ -266,7 +266,7 @@ const I18N = {
     title: 'Aether · Radar d\'auto-évaluation',
     titleTag: '(2026-09 · estimation subjective, pas un benchmark)',
     subtitle: 'Auto-évaluation face à 20 agents de pointe · 8 dimensions',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Enveloppe du meilleur pair (pic 20 pairs)',
     legendClaude: 'Claude Code (Réf. Terminal)',
     legendCursor: 'Cursor (Réf. IDE)',
@@ -292,7 +292,7 @@ const I18N = {
     title: 'Aether · Radar de autoevaluación',
     titleTag: '(2026-09 · estimación subjetiva, no benchmark)',
     subtitle: 'Autoevaluación frente a 20 herramientas de agentes líderes · 8 dimensiones',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Envolvente del mejor par (pico de 20 pares)',
     legendClaude: 'Claude Code (Ref. Terminal)',
     legendCursor: 'Cursor (Ref. IDE)',
@@ -318,7 +318,7 @@ const I18N = {
     title: 'Aether · Radar de Autoavaliação',
     titleTag: '(2026-09 · estimativa subjetiva, não benchmark)',
     subtitle: 'Autoavaliação frente a 20 ferramentas de agentes líderes · 8 dimensões',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Envelope do melhor par (pico de 20 pares)',
     legendClaude: 'Claude Code (Ref. Terminal)',
     legendCursor: 'Cursor (Ref. IDE)',
@@ -344,7 +344,7 @@ const I18N = {
     title: 'Aether · Радар самооценки',
     titleTag: '(2026-09 · субъективная оценка, не бенчмарк)',
     subtitle: 'Самооценка против 20 ведущих агентов · 8 измерений',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Огибающая лучших аналогов (пик 20 систем)',
     legendClaude: 'Claude Code (Эталон Terminal)',
     legendCursor: 'Cursor (Эталон IDE)',
@@ -370,7 +370,7 @@ const I18N = {
     title: 'Aether · Радар самооцінки',
     titleTag: '(2026-09 · суб\'єктивна оцінка, не бенчмарк)',
     subtitle: 'Самооцінка проти 20 провідних агентів · 8 вимірів',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Обвідна найкращих аналогів (пік 20 систем)',
     legendClaude: 'Claude Code (Еталон Terminal)',
     legendCursor: 'Cursor (Еталон IDE)',
@@ -396,7 +396,7 @@ const I18N = {
     title: 'Aether · رادار التقييم الذاتي',
     titleTag: '(2026-09 · تقدير ذاتي، ليس معياراً قياسياً)',
     subtitle: 'تقييم ذاتي مقابل 20 وكيلاً رائداً · 8 أبعاد',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'غلاف أفضل الأقران (قمة 20 وكيلاً)',
     legendClaude: 'Claude Code (معيار الطرفية)',
     legendCursor: 'Cursor (معيار بيئة التطوير)',
@@ -422,7 +422,7 @@ const I18N = {
     title: 'Aether · आत्म-मूल्यांकन रडार',
     titleTag: '(2026-09 · व्यक्तिपरक अनुमान, बेंचमार्क नहीं)',
     subtitle: '20 प्रमुख एजेंट उपकरणों से तुलना · 8 आयामों का आत्म-मूल्यांकन',
-    legendAether: 'Aether (v0.8.2)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'समकक्ष-सर्वोत्तम आवरण (20 प्रतिस्पर्धियों का शिखर)',
     legendClaude: 'Claude Code (टर्मिनल बेंचमार्क)',
     legendCursor: 'Cursor (IDE बेंचमार्क)',

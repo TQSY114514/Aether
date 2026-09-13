@@ -49,7 +49,7 @@ Aether 發佈以雙形態並行，兩者氣脈同流，無有上下。深潛之�
 
 ---
 
-**Aether 居於何處。** 稽考公天下諸書，以已頒之 v0.8.2 衡較二十方名家樞機（2026-09；乃平心權量，非競分）。惟「萬宗並納」「玄圃內隱」二緯與諸家之冠同列；運算、生態、群策、禦侮（僅應用層之藩籬，無系統級隔離，獨行於 Windows）、几席端流諸緯，坦承猶遜於前列，圖中如實繪之。逐緯所據與二十九家之廣考，詳載於 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
+**Aether 居於何處。** 稽考公天下諸書，以已頒之 v0.9.0 衡較二十方名家樞機（2026-09；乃平心權量，非競分）。惟「萬宗並納」「玄圃內隱」二緯與諸家之冠同列；運算、生態、群策、禦侮（僅應用層之藩籬，無系統級隔離，獨行於 Windows）、几席端流諸緯，坦承猶遜於前列，圖中如實繪之。逐緯所據與二十九家之廣考，詳載於 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
 
 <p align="center"><img src="./assets/agent-radar-2026.zh-WEN.svg" width="760" alt="Aether 躬自審度星網: 衡較二十方名家樞機" /></p>
 

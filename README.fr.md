@@ -51,7 +51,7 @@ Aether s'appuie sur une **architecture à double moteur**, offrant deux interfac
 
 ---
 
-**Où se situe Aether.** Auto-évaluation de la v0.8.2 publiée face à 20 outils d'agents majeurs (terminal, IDE, plateformes) à partir de données publiques (2026-09 ; estimations subjectives, pas de benchmarks). Seuls deux axes sont au niveau du meilleur de la catégorie : le libre choix multi-fournisseurs et la confidentialité locale. Sur le codage, l'écosystème, l'orchestration multi-agents, la sécurité (bac à sable applicatif, sans isolation OS, Windows uniquement) et l'expérience desktop / TUI, Aether reste derrière le premier groupe — et le graphique le montre. Justification par axe et panorama élargi à 29 outils : [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Où se situe Aether.** Auto-évaluation de la v0.9.0 publiée face à 20 outils d'agents majeurs (terminal, IDE, plateformes) à partir de données publiques (2026-09 ; estimations subjectives, pas de benchmarks). Seuls deux axes sont au niveau du meilleur de la catégorie : le libre choix multi-fournisseurs et la confidentialité locale. Sur le codage, l'écosystème, l'orchestration multi-agents, la sécurité (bac à sable applicatif, sans isolation OS, Windows uniquement) et l'expérience desktop / TUI, Aether reste derrière le premier groupe — et le graphique le montre. Justification par axe et panorama élargi à 29 outils : [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
 <p align="center"><img src="./assets/agent-radar-2026.fr.svg" width="760" alt="Radar d'auto-évaluation Aether vs 20 pairs" /></p>
 

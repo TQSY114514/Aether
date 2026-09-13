@@ -51,7 +51,7 @@ Aether setzt auf eine **Dual-Engine-Architektur**, die zwei gleichberechtigte er
 
 ---
 
-**Wo Aether steht.** Selbstbewertung der veröffentlichten v0.8.2 im Vergleich zu 20 führenden Terminal-, IDE- und Plattform-Agenten auf Basis öffentlicher Daten (2026-09; subjektive Schätzungen, keine Benchmarks). Nur zwei Achsen liegen gleichauf mit dem Besten der Klasse: Multi-Provider-Freiheit und lokale Privatsphäre. Bei Coding, Ökosystem, Multi-Agent-Orchestrierung, Sicherheit (App-Layer-Sandbox, keine OS-Isolation, nur Windows) sowie Desktop-/TUI-Reife liegt Aether noch hinter der Spitze — und das Diagramm zeigt es. Begründung pro Achse und die breitere 29-Tool-Übersicht: [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Wo Aether steht.** Selbstbewertung der veröffentlichten v0.9.0 im Vergleich zu 20 führenden Terminal-, IDE- und Plattform-Agenten auf Basis öffentlicher Daten (2026-09; subjektive Schätzungen, keine Benchmarks). Nur zwei Achsen liegen gleichauf mit dem Besten der Klasse: Multi-Provider-Freiheit und lokale Privatsphäre. Bei Coding, Ökosystem, Multi-Agent-Orchestrierung, Sicherheit (App-Layer-Sandbox, keine OS-Isolation, nur Windows) sowie Desktop-/TUI-Reife liegt Aether noch hinter der Spitze — und das Diagramm zeigt es. Begründung pro Achse und die breitere 29-Tool-Übersicht: [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
 <p align="center"><img src="./assets/agent-radar-2026.de.svg" width="760" alt="Aether Selbsteinschätzungs-Radar vs. 20 Peer-Agenten" /></p>
 
