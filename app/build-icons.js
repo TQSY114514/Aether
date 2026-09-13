@@ -119,9 +119,11 @@ async function main() {
   }
 
   for (const name of ICONS) {
-    const src = path.join(ASSETS_DIR, `${name}.svg`)
-    if (!fs.existsSync(src)) {
-      console.log(`[skip] ${src} not found`)
+    const srcPng = path.join(ASSETS_DIR, `${name}.png`)
+    const srcSvg = path.join(ASSETS_DIR, `${name}.svg`)
+    const src = fs.existsSync(srcPng) ? srcPng : (fs.existsSync(srcSvg) ? srcSvg : null)
+    if (!src) {
+      console.log(`[skip] ${name} not found`)
       continue
     }
 
@@ -129,33 +131,38 @@ async function main() {
       const out = path.join(ASSETS_DIR, `${name}-${size}.png`)
       console.log(`[${name}] ${size}px -> ${path.relative(ROOT, out)}`)
       await sharp(src)
-        .resize(size, size, { fit: 'contain', background: name === 'logo-dark' ? '#0a0a0f' : { r: 255, g: 255, b: 255, alpha: 0 } })
+        .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png()
         .toFile(out)
     }
   }
 
   // Generate app/resources/icon.png and icon-dark.png (256x256)
-  const logoSvg = path.join(ASSETS_DIR, 'logo.svg')
-  const logoDarkSvg = path.join(ASSETS_DIR, 'logo-dark.svg')
+  const logoPngSrc = path.join(ASSETS_DIR, 'logo.png')
+  const logoSvgSrc = path.join(ASSETS_DIR, 'logo.svg')
+  const logoSrc = fs.existsSync(logoPngSrc) ? logoPngSrc : logoSvgSrc
 
-  if (fs.existsSync(logoSvg)) {
+  const logoDarkPngSrc = path.join(ASSETS_DIR, 'logo-dark.png')
+  const logoDarkSvgSrc = path.join(ASSETS_DIR, 'logo-dark.svg')
+  const logoDarkSrc = fs.existsSync(logoDarkPngSrc) ? logoDarkPngSrc : logoDarkSvgSrc
+
+  if (fs.existsSync(logoSrc)) {
     const iconPng = path.join(RESOURCES_DIR, 'icon.png')
-    await sharp(logoSvg)
+    await sharp(logoSrc)
       .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(iconPng)
     console.log(`[resource] 256px -> ${path.relative(ROOT, iconPng)}`)
 
     const iconIco = path.join(RESOURCES_DIR, 'icon.ico')
-    await generateIco(logoSvg, iconIco)
+    await generateIco(logoSrc, iconIco)
     console.log(`[resource] multi-res ICO -> ${path.relative(ROOT, iconIco)}`)
   }
 
-  if (fs.existsSync(logoDarkSvg)) {
+  if (fs.existsSync(logoDarkSrc)) {
     const iconDarkPng = path.join(RESOURCES_DIR, 'icon-dark.png')
-    await sharp(logoDarkSvg)
-      .resize(256, 256, { fit: 'contain', background: '#0a0a0f' })
+    await sharp(logoDarkSrc)
+      .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toFile(iconDarkPng)
     console.log(`[resource] 256px -> ${path.relative(ROOT, iconDarkPng)}`)
