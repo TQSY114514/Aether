@@ -74,13 +74,16 @@ Aether 采用**双轮驱动架构**发布，提供完全平等的双形态体验
 Aether 有两点真正不同——一个拒绝「出其不意」的 **安全优先 Agent**,和一个让你「测试模型而非盲信单一模型」的 **多模型竞技场**。其余能力都在为此服务。
 
 | 能力 | 说明 | 成熟度 |
-|---|---|---|
+|---|---|:---:|
 | **安全优先沙箱** | 白名单命令沙箱(多段命令逐段校验)、敏感路径写入保护、外部内容消毒、规划 → 只读 → 询问 → 完全访问 的权限阶梯。 | `Beta` |
 | **多模型竞技场** | 一个提示同时发给多个模型,投票选出最佳,ELO 排名实时追踪。 | `Beta` |
 | **多提供商聊天** | 对话中随时切换 OpenAI、Claude、DeepSeek 与任何 OpenAI 兼容端点。 | `Stable` |
-| **Agent 工具循环** | 42 个内置工具,Plan-Act-Observe 循环。 | `Beta` |
+| **Agent 工具循环** | 42 个内置工具,Plan-Act-Observe 循环,循环检测与上下文压缩。 | `Beta` |
+| **影子工作区** | 基于 Git worktree（`worktreeManager.js`）与 Docker 的隔离试验环境，改动试跑无误后再应用。 | `Beta` |
+| **自主进化引擎** | 静默 Hermes 循环配合 GEP 遗传反思，基于任务实测反馈自适应调优策略与工具选择。 | `Beta` |
+| **UI/UX V2 现代界面** | 遵循反 AI-slop 规范，RAF 节流高帧率实时流式渲染，思考过程与工具调用动态呈现，48px WCO 标题栏对齐。 | `Stable` |
 | **技能与扩展** | 即插即用 `SKILL.md`、MCP 服务器、10 点钩子系统。 | `Experimental` |
-| **结构化记忆** | Agent 跨会话回忆偏好与过往决策。 | `Beta` |
+| **结构化记忆** | Agent 跨会话回忆偏好与过往决策，存储于本地 SQLite。 | `Beta` |
 | **层次化规划** | 复杂请求自动分解为并行子任务。 | `Experimental` |
 | **上下文压缩** | 长对话自动摘要且不丢工具调用对。 | `Beta` |
 | **本地优先隐私** | 对话、密钥、人设都在本地 SQLite。数据不离开你的机器。 | `Stable` |
@@ -132,7 +135,7 @@ aether "summarize README.md"
 echo '{"type":"request","reqId":"c1","method":"listModels","params":{}}' | aether --mode rpc
 ```
 
-`aether` 与 `aetherai` 指向同一个包。`npm install -g aetherai@0.8.0` 可锁定到桌面版同一版本。
+`aether` 与 `aetherai` 指向同一个包。`npm install -g aetherai@0.9.0` 可锁定到桌面版同一版本。
 
 > **与 GUI 共享数据** — 两个产品共用同一 SQLite 数据库(`%APPDATA%/aetherai/aetherai.db`)。桌面端开启的会话可在 TUI 续接,反之亦然。
 
@@ -210,6 +213,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 
 | 功能 | 状态 | 说明 |
 |---|:---:|---|
+| **UI/UX V2 与流式渲染** | `Stable` | RAF 节流高帧率平滑 Markdown 渲染、思考力度指示器、实时工具调用展示与检查器。 |
 | **多提供商** | `Stable` | 单一适配层;新增提供商 = 一个文件。覆盖 OpenRouter、Together、DeepSeek、Ollama、LM Studio…… |
 | **并发流式** | `Stable` | 一个聊天流式输出时,可在另一个对话继续输入。 |
 | **思考力度滑杆** | `Beta` | 真实参数:OpenAI o 系列 / gpt-5 / 经中转的 Claude。仅对推理模型生效。 |
@@ -222,6 +226,8 @@ node cli.js tui --smoke      # headless 状态机冒烟
 ### Agent(函数调用)
 
 - `Beta` **42 个内置工具** — 文件操作(`read_file`、`list_dir`、`glob_find`、`grep_search`、`write_file`、`edit_file`、`apply_patch`)、网络(`web_search`、`web_fetch`)、Shell(`run_command`)、git 与 GitHub(`git_status`、`git_diff`、`git_log`、`git_commit`、`git_push`、`git_create_branch`、`github_pr_create/list/merge/review`、`github_issue_create/list`、`github_release_create`、`github_actions_status`)、代码智能(`find_symbol`、`lsp_definition`、`lsp_references`、`lsp_diagnostics`、`lsp_code_actions`、`lsp_rename`)、Agent 元操作(`use_skill`、`ask_user`、`todo_write`、`delegate_task`、`task`、`memory_save/list/search`、`get_project_context`、`review_code`、`debug_loop`、`test_first`)——配 Plan-Act-Observe 循环、实时推理轨迹 + 任务清单、循环检测、工具级超时、可配置迭代预算(默认 25 轮)、上下文压缩。
+- `Beta` **Git worktree 影子工作区** — 基于 `.aether/worktrees/` 的隔离试验运行环境，改动试跑无误后再同步主工作区。
+- `Beta` **全屏运行时间线** — 全屏模态弹层（`createPortal`），实时展示工具序列、执行耗时、Token 消耗与审计记录，不污染主聊天流。
 - `Experimental` **层次化规划** — 复杂请求自动生成任务分解。
 - `Experimental` **子 Agent 委派** — 经 `delegate_task` 并行运行独立子任务。
 - `Stable` **权限模式** — 风险递进阶梯:
@@ -238,9 +244,10 @@ node cli.js tui --smoke      # headless 状态机冒烟
 - `Beta` **上下文压缩** — 自动摘要更早的历史(工具调用/结果对完整保留;标识符原样保留)。
 - `Beta` **工具调用修复** — 自动修复畸形 JSON、缺失参数、未加引号键与截断调用。
 
-### 记忆与学习
+### 记忆与进化
 
-- `Beta` **自动长期记忆** — 每轮前注入相关记忆;自动提取并保存关键事实。可在 设置 - Agent 中开关。
+- `Beta` **自动长期记忆** — 每轮前注入相关记忆;自动提取并保存关键事实。可在 设置 - Agent 与安全 中开关。
+- `Beta` **Hermes 静默自进化** — 后台循环配合 GEP 基因进化协议遗传反思，基于任务实测结果与竞技场投票自适应调优策略与工具选择。
 - `Experimental` **习惯学习器** — 检测重复偏好(如"总是用 Claude")并提议自动应用的技能。
 - `Beta` **审计日志** — 每轮 Agent 执行的追踪记录,便于调试。
 
@@ -261,6 +268,7 @@ node cli.js tui --smoke      # headless 状态机冒烟
 
 | 设置 | 状态 | 说明 |
 |---|:---:|---|
+| **现代化 4 栏设置** | `Stable` | 清晰划分为通用设置、模型与提供商、Agent 与安全、存储与数据四大板块 |
 | **高级模型设置** | `Stable` | Max tokens、temperature、top_p、自定义系统前缀、按语言自动标题、思考力度 |
 | **自定义背景** | `Stable` | 上传图片,透明度/模糊控制 |
 | **人设** | `Stable` | 系统提示预设,按会话切换 |
@@ -272,6 +280,25 @@ node cli.js tui --smoke      # headless 状态机冒烟
 ### 隐私
 
 > **所有数据留在本地。** Aether 不收集、不上传任何关于你的信息。API 密钥、对话、人设都存储在本地 SQLite 数据库。唯一的出站网络请求只会发往你配置的 LLM 提供商。Agent 行为如何被约束:[docs/security-practices.md](./docs/security-practices.md)。
+
+---
+
+## 🗺️ 路线图与里程碑
+
+Aether 的演进路线坚持**核心稳定性优先**，兼顾**开发者级智能自主**。完整优先级与对账详见 [docs/roadmap.md](./docs/roadmap.md)。
+
+### v0.9.0 已交付里程碑
+- ✅ **UI/UX V2 现代界面体系**：遵循 `docs/ui-design.md` 严苛反 AI-slop 规范，RAF 节流高帧率实时 Markdown 流式渲染，思考过程与工具调用动态呈现，48px WCO 标题栏对齐，以及全屏运行时间线弹层（`AgentRunTimeline`）。
+- ✅ **Git Worktree 影子工作区**：隔离的 Git 工作树验证环境（`worktreeManager.js`），支持 Agent 试验性修改的试跑与编译自检，防止污染主开发目录。
+- ✅ **自主进化引擎（Hermes Loop & GEP）**：静默自进化后台循环配合基因进化协议（GEP）遗传反思，基于任务执行结果自适应调优策略与工具选择。
+- ✅ **现代化 4 栏设置中心**：重构划分为通用设置、模型与提供商、Agent 与安全、存储与数据四大板块。
+- ✅ **校准版 20 款竞品诚实雷达**：开源可复现的 20 款工具 8 维能力评估，直面单模型代码能力的客观差距，突出本地优先与安全优势。
+
+### 当前与后续重点 (P2 / P3)
+- 🚀 **项目级全局拓扑（Repo Map & 语义上下文引擎）**：引入 Tree-sitter / AST 代码结构索引，生成紧凑项目拓扑图注入上下文，替代昂贵的粗暴正则搜索。
+- 🚀 **MCP 插件市场与可视化管理**：内置可视化市场，一键安装并编排外部 Model Context Protocol 服务器。
+- 🚀 **Web 视觉与终端双重自主验证**：赋予 Agent 无头浏览器操作能力（页面渲染与控制台报错巡检），打通“改代码 → 跑起来 → 看结果 → 自动修”闭环。
+- 🎯 **持续性能与稳定性**：微秒级 IPC 响应、流式吞吐压测、零泄漏任务生命周期管理。
 
 ---
 
@@ -357,44 +384,36 @@ console.log(classifyAgentMode({ prompt: 'delete the file' })) // { mode: 'ask', 
 
 ```
 app/
-├── electron/              # 主进程 (Node)
-│   ├── database.js        # better-sqlite3 数据层 — 25+ 张表 (WAL)
-│   ├── ipc/               # IPC 处理器 (chat / arena / session / mcp / ...)
-│   │   ├── chat.handler.js    # THE 中央处理器 (540 行)
+├── electron/              # 主进程 (Node.js / CommonJS)
+│   ├── database.js        # better-sqlite3 数据层 (WAL 模式, 25+ 张表)
+│   ├── featureFlags.js    # 特性开关集中注册表
+│   ├── worktreeManager.js # Git worktree 影子工作区管理器
+│   ├── ipc/               # 领域驱动 IPC 处理器 (chat, arena, session, mcp, ...)
+│   │   ├── chat.handler.js    # 核心聊天与工具执行编排器
 │   │   ├── arena.handler.js   # 多模型竞技场 + ELO
-│   │   ├── agent.handler.js   # 工作区管理
+│   │   ├── agent.handler.js   # 工作区与能力管理
 │   │   └── ...
-│   ├── llm/               # LLM 抽象层 (~3,700 行, 19 个文件)
-│   │   ├── providerAdapter.js # 按 api_format 分发 (openai/anthropic)
-│   │   ├── openaiAdapter.js   # OpenAI 兼容 SSE 流式 + 重试
-│   │   ├── anthropicAdapter.js# Anthropic Messages API
-│   │   ├── credentialPool.js  # 多密钥轮换 + 冷却
-│   │   ├── toolLoop.js        # Plan-Act-Observe + 迭代预算
-│   │   ├── planning.js        # 层次化任务分解
-│   │   ├── subAgent.js        # 并行子 Agent 委派
-│   │   ├── compaction.js      # 上下文压缩(保留配对)
-│   │   ├── autoMemory.js      # 长期结构化记忆
-│   │   ├── habitLearner.js    # 重复偏好 → 自动技能
-│   │   ├── hooks.js           # 10 点扩展钩子
-│   │   ├── skills.js          # SKILL.md 加载器 (Claude Code 格式)
-│   │   ├── modelAdvisor.js    # 启发式模型建议
-│   │   ├── toolCallRepair.js  # 畸形工具调用修复
-│   │   ├── auditLog.js        # 每轮 Agent 执行追踪
+│   ├── llm/               # LLM 抽象层 (~60+ 文件)
+│   │   ├── toolLoop.js        # Plan-Act-Observe 循环 + 迭代预算
+│   │   ├── providerAdapter.js # 多提供商适配分发 (OpenAI, Anthropic, DeepSeek, ...)
+│   │   ├── compaction.js      # 上下文压缩(保留工具调用对)
+│   │   ├── autoMemory.js      # 长期结构化记忆 (SQLite)
+│   │   ├── hermesLoop.js      # 静默自进化后台循环
 │   │   └── ...
-│   ├── tools/             # 内置工具注册表 + 沙箱
-│   │   ├── registry.js       # 16 个工具定义 (OpenClaw 启发)
-│   │   └── sandbox.js        # 三层防御 (工作区根、穿越守卫、黑名单)
-│   ├── mcp/               # MCP 客户端 + 服务器管理器
-│   ├── main.js / preload.js
-├── src/                   # 渲染进程 (React + TS + Zustand)
-│   ├── store/index.ts     # Zustand 全局状态 (~1,000 行)
-│   ├── components/        # UI (chat / sidebar / settings / ui)
-│   ├── pages/             # Chat / Models / Persona / Settings / Scores / ...
-│   ├── utils/             # i18n (15 locales) / theme / markdown
-│   └── types/
-├── skills/                # 内置技能 (release-checklist, git-commit)
-├── commands/              # 内置斜杠命令 (/code, /explain, /polish, ...)
-└── resources/             # 应用图标
+│   ├── evolution/         # GEP 遗传反思与策略突变引擎
+│   ├── exec/              # 执行后端 (local, docker, ssh, worktree)
+│   ├── tools/             # 内置工具注册表 (42 个工具) + 三层沙箱
+│   ├── mcp/               # 外部 stdio MCP 客户端与管理器
+│   ├── sdk/               # 供外部引用的 Electron-free SDK (aetherai/sdk)
+│   └── main.js / preload.js
+├── src/                   # 桌面渲染进程 (React 18 + TS + Zustand + Tailwind)
+│   ├── store/index.ts     # 全局响应式状态管理中心
+│   ├── components/        # UI 组件 (chat, sidebar, settings, timeline, modals)
+│   ├── pages/             # Chat, Models, Persona, Settings, Scores
+│   └── utils/             # 主题 tokens、i18n (15 种语言)、Markdown 渲染器
+├── tui/                   # Ink v5 交互式终端客户端 (aether tui)
+├── skills/                # 内置技能包
+└── commands/              # 内置斜杠命令 (/code, /explain, ...)
 ```
 
 ---
