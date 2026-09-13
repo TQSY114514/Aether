@@ -162,6 +162,16 @@ export function applyTheme(theme: string, hasBackground = false, setCleanup?: (f
   root.style.setProperty('--content-secondary', hasBackground
     ? (vars['--content-secondary-trans'] || 'rgba(255,255,255,0.55)')
     : (vars['--bg-secondary'] || solid))
+
+  // Sync native Window Controls Overlay buttons color with theme
+  if (typeof window !== 'undefined' && window.electronAPI?.system?.setTitleBarOverlay) {
+    const isDark = resolved === 'dark' || resolved === 'cyberpunk' || resolved === 'retro'
+    window.electronAPI.system.setTitleBarOverlay({
+      color: '#00000000',
+      symbolColor: isDark ? '#E8E8F0' : '#374151',
+      height: 48,
+    }).catch(() => {})
+  }
 }
 
 export function getThemes() {

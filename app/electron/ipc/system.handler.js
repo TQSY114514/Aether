@@ -95,6 +95,25 @@ function registerSystemHandlers(ipcMain, app, getWebContents) {
       return { ok: false, error: e && e.message ? e.message : String(e) }
     }
   })
+
+  // 窗口沉浸式标题栏 Overlay 控制 (WCO): 动态调整标题栏三键颜色与背景色
+  ipcMain.handle('system:set-title-bar-overlay', (_e, { color, symbolColor, height } = {}) => {
+    try {
+      const { BrowserWindow } = require('electron')
+      const win = BrowserWindow.fromWebContents(_e.sender)
+      if (win && typeof win.setTitleBarOverlay === 'function') {
+        const opts = {}
+        if (color !== undefined) opts.color = color
+        if (symbolColor !== undefined) opts.symbolColor = symbolColor
+        if (height !== undefined) opts.height = height
+        win.setTitleBarOverlay(opts)
+        return { ok: true }
+      }
+      return { ok: false, error: 'not supported or window unavailable' }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
 }
 
 module.exports = { registerSystemHandlers }

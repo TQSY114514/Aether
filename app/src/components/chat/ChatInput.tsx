@@ -684,50 +684,55 @@ export default function ChatInput() {
         </div>
 
         {!isStreaming && !isArenaRunning && (
-          <div className="flex items-center gap-1.5 px-0.5 mt-1.5 flex-nowrap">
-            <div className="flex items-center gap-1 shrink-0">
-              {slashCommands.slice(0, 2).map((cmd) => (
-                <button key={cmd.id} onClick={() => {
-                  const prompt = cmd.prompt
-                  if (prompt) setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
-                  textareaRef.current?.focus()
-                }} className="qaction">{cmd.name}</button>
-              ))}
+          <div className="flex items-center justify-between gap-1.5 px-0.5 mt-1.5 flex-wrap min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <div className="flex items-center gap-1 shrink-0">
+                {slashCommands.slice(0, 2).map((cmd) => (
+                  <button key={cmd.id} onClick={() => {
+                    const prompt = cmd.prompt
+                    if (prompt) setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
+                    textareaRef.current?.focus()
+                  }} className="qaction">{cmd.name}</button>
+                ))}
+              </div>
+              <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
+              <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
+              <ModelSelector providers={providers} allModels={allModels}
+                activeModelId={activeModelId}
+                modelSuggestion={modelSuggestion}
+                scoreByModel={scoreByModel}
+                currentPrompt={input}
+                onSelect={(mid, pid) => {
+                  if (currentSessionId) {
+                    saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
+                  } else {
+                    // Blank page: set default for new sessions
+                    useStore.getState().setDefaultModel(mid)
+                  }
+                }} />
             </div>
-            <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
-            <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
-            <ModelSelector providers={providers} allModels={allModels}
-              activeModelId={activeModelId}
-              modelSuggestion={modelSuggestion}
-              scoreByModel={scoreByModel}
-              currentPrompt={input}
-              onSelect={(mid, pid) => {
-                if (currentSessionId) {
-                  saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
-                } else {
-                  // Blank page: set default for new sessions
-                  useStore.getState().setDefaultModel(mid)
-                }
-              }} />
-            {totalInputTokens > 0 && (
-              <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
-                {t('chat.tokens_estimate', String(totalInputTokens))}
-              </span>
-            )}
-            {/* Outbound Privacy Ledger Pill (P1-11) */}
-            <div
-              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0 ml-auto"
-              style={{
-                borderColor: 'rgba(34,197,94,0.3)',
-                backgroundColor: 'rgba(34,197,94,0.06)',
-                color: 'var(--success)',
-              }}
-              title={`🔒 0-Telemetry / 零遥测保护\n已配置出站端点：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有数据与历史对话仅保存在本地 SQLite。`}
-            >
-              <ShieldCheck size={11} className="shrink-0" />
-              <span className="font-mono font-medium">0-Telemetry</span>
+
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+              {totalInputTokens > 0 && (
+                <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
+                  {t('chat.tokens_estimate', String(totalInputTokens))}
+                </span>
+              )}
+              {/* Outbound Privacy Ledger Pill (P1-11) */}
+              <div
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0"
+                style={{
+                  borderColor: 'rgba(34,197,94,0.3)',
+                  backgroundColor: 'rgba(34,197,94,0.06)',
+                  color: 'var(--success)',
+                }}
+                title={`🔒 0-Telemetry / 零遥测保护\n已配置出站端点：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有数据与历史对话仅保存在本地 SQLite。`}
+              >
+                <ShieldCheck size={11} className="shrink-0" />
+                <span className="font-mono font-medium">0-Telemetry</span>
+              </div>
+              <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden sm:inline">{t('empty.hint.slash')}</span>
             </div>
-            <span className="text-[10px] text-[var(--text-muted)] shrink-0">{t('empty.hint.slash')}</span>
           </div>
         )}
         {isStreaming && <StreamingStatusBar sessionId={currentSessionId} />}
@@ -985,9 +990,10 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
         className="p-1 px-1.5 rounded-lg border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer"
         style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
         title={t('chat.model_auto_route_desc')}
+        aria-label={t('chat.model_auto_route')}
       >
         <Sparkles size={11} className="text-amber-500 shrink-0" />
-        <span className="hidden sm:inline font-medium">{t('chat.model_auto_route')}</span>
+        <span className="hidden xl:inline font-medium">{t('chat.model_auto_route')}</span>
       </button>
     </div>
   )

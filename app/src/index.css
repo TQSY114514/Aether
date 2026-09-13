@@ -45,6 +45,29 @@ body {
 
 ::selection { background-color: var(--accent); color: white; }
 
+/* ── Window Controls Overlay (WCO) & Window Dragging ──────────────────────────
+   Enables frameless immersive title bar with native Windows/macOS window controls.
+   Headers with .app-drag are draggable to move the window, while buttons and
+   inputs within them automatically remain interactive via -webkit-app-region: no-drag. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+.app-drag button,
+.app-drag select,
+.app-drag input,
+.app-drag textarea,
+.app-drag a,
+.app-drag [role="button"],
+.app-drag .app-no-drag {
+  -webkit-app-region: no-drag;
+}
+.wco-pr {
+  padding-right: 140px;
+}
+
 /* ── Code blocks (rendered by markdown.ts) ─────────────────────────────────
    A header bar with the language label + a copy button sits above the code;
    the button text swaps to "已复制" briefly (driven by MessageBubble's click

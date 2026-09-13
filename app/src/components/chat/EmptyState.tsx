@@ -70,24 +70,24 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
   const showEffort = thinkingEnabled
 
   return (
-    <div className="flex-1 flex items-center justify-center px-6 py-6">
+    <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-2 my-auto">
       <div className="w-full max-w-xl text-center">
         {/* Hero icon with pulse animation */}
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 relative animate-pulse-glow"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))', boxShadow: '0 10px 30px -10px var(--accent)' }}>
-          <Sparkles size={28} className="text-white" />
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 relative animate-pulse-glow shrink-0"
+          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))', boxShadow: '0 8px 24px -8px var(--accent)' }}>
+          <Sparkles size={26} className="text-white" />
         </div>
 
-        <h2 className="text-2xl font-semibold mb-2 tracking-tight" style={{ color: 'var(--text-primary)' }}>
+        <h2 className="text-2xl font-semibold mb-1.5 tracking-tight" style={{ color: 'var(--text-primary)' }}>
           {noSession ? t('chat.no_session') : t('empty.welcome')}
         </h2>
-        <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
           {t('empty.subtitle')}
         </p>
 
         {/* Active model + thinking-effort hint */}
         {activeModel && (
-          <div className="flex items-center justify-center gap-2.5 mb-8">
+          <div className="flex items-center justify-center gap-2.5 mb-6">
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               <Cpu size={11} className="text-[var(--text-muted)]" />{activeModel.display_name || activeModel.model_name}
             </span>
@@ -102,7 +102,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         {noSession ? (
           <>
             {/* Onboarding Choices Grid */}
-            <div className="grid grid-cols-2 gap-3 mb-6 text-left">
+            <div className="grid grid-cols-2 gap-3 mb-4 text-left">
               <button onClick={() => startWith('我想随意聊聊')}
                 className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `0ms` }}>
@@ -145,7 +145,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
             </div>
 
             {/* Import Configuration */}
-            <div className="flex justify-center mb-8">
+            <div className="flex justify-center mb-4">
               <button onClick={() => { alert('Importing config from Claude Code / OpenCode will be supported in the next release.'); }}
                 className="text-[11px] px-3 py-1.5 rounded-full border transition-colors hover:bg-[var(--bg-tertiary)]"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
@@ -154,7 +154,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
             </div>
           </>
         ) : (
-          <div className="grid grid-cols-2 gap-3 mb-8 text-left">
+          <div className="grid grid-cols-2 gap-3 mb-5 text-left">
             {examples.map((ex, i) => (
               <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}
                 className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
@@ -170,7 +170,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         )}
 
         {/* Quick recipe shortcuts (P1-07 Curated Recipes) */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
           <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>配方直达:</span>
           {[
             { id: 'fix-failing-tests', label: '修测试', fallback: '请执行项目测试命令（如 npm test / pytest），定位所有失败或异常的用例。阅读相关代码与堆栈信息，做出最小化修复，并重新运行测试直到全部通过。最后总结修复原因。' },
@@ -199,7 +199,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         </div>
 
         {noSession && (
-          <div className="mt-6">
+          <div className="mt-4">
             <button onClick={() => createSession()} className="px-5 py-2.5 text-white text-sm rounded-xl hover:opacity-90 transition-all shadow-lg"
               style={{ backgroundColor: 'var(--accent)', boxShadow: '0 4px 12px -2px var(--accent)' }}>{t('chat.create')}</button>
           </div>
