@@ -51,7 +51,7 @@ O Aether adota uma **arquitetura de motor duplo**, oferecendo duas interfaces de
 
 ---
 
-**Onde o Aether se posiciona — com total honestidade.** Autoavaliação frente a 18 ferramentas de agentes líderes (terminal, IDE e plataformas autônomas) com base em dados públicos (avaliação de 2026-09; estimativas, não benchmarks). Apresentamos a forma assimétrica sem filtros: liderança em privacidade local, segurança em 3 níveis e flexibilidade multi-modelo; reconhecemos com franqueza a distância em código bruto frente ao Claude Code e Cursor. Para uma análise aprofundada, veja [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Onde o Aether se posiciona — com total honestidade.** Autoavaliação frente a 20 ferramentas de agentes líderes (terminal, IDE e plataformas autônomas) com base em dados públicos (avaliação de 2026-09; estimativas, não benchmarks). Apresentamos a forma assimétrica sem filtros: liderança em privacidade local, segurança em 3 níveis e flexibilidade multi-modelo; reconhecemos com franqueza a distância em código bruto frente ao Claude Code e Cursor. Para uma análise aprofundada, veja [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
 <p align="center"><img src="./assets/agent-radar-2026.pt.svg" width="760" alt="Radar de Autoavaliação Honesta do Aether vs 20 pares" /></p>
 
