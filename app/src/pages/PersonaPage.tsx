@@ -64,21 +64,21 @@ export default function PersonaPage() {
             <button onClick={handleImport} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
               <Upload size={14} />{t('persona.import')}
             </button>
-            <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
               <Plus size={14} />{t('persona.add')}
             </button>
           </div>
         </div>
 
         {showAdd && (
-          <div className="mb-6 p-4 rounded-xl space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="mb-6 p-4 rounded-lg space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('persona.name')}
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+              className="w-full px-3 py-2 text-sm rounded-md border outline-none focus:border-gray-300 bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
             <textarea value={newPrompt} onChange={(e) => setNewPrompt(e.target.value)} placeholder={t('persona.prompt')}
-              rows={4} className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 resize-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+              rows={4} className="w-full px-3 py-2 text-sm rounded-md border outline-none focus:border-gray-300 resize-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
             <div className="flex gap-2">
-              <button onClick={handleAdd} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80">{t('models.save')}</button>
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
+              <button onClick={handleAdd} className="px-4 py-2 bg-[var(--accent)] text-white text-xs font-medium rounded-md hover:opacity-90 transition-opacity">{t('models.save')}</button>
+              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
             </div>
           </div>
         )}
@@ -88,16 +88,16 @@ export default function PersonaPage() {
             <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>{t('persona.no_personas')}</div>
           )}
           {personas.map((persona) => (
-            <div key={persona.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <div key={persona.id} className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
               {editingId === persona.id ? (
                 <div className="p-4 space-y-3">
                   <input value={editName} onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+                    className="w-full px-3 py-2 text-sm rounded-md border outline-none focus:border-gray-300 bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
                   <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)}
-                    rows={4} className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:border-gray-300 resize-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
+                    rows={4} className="w-full px-3 py-2 text-sm rounded-md border outline-none focus:border-gray-300 resize-none font-mono bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }} />
                   <div className="flex gap-2">
-                    <button onClick={() => handleSaveEdit(persona.id)} className="px-4 py-1.5 bg-black text-white text-xs rounded-lg hover:opacity-80">{t('models.save')}</button>
-                    <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
+                    <button onClick={() => handleSaveEdit(persona.id)} className="px-4 py-1.5 bg-[var(--accent)] text-white text-xs font-medium rounded-md hover:opacity-90 transition-opacity">{t('models.save')}</button>
+                    <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
                   </div>
                 </div>
               ) : (

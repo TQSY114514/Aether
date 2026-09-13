@@ -85,7 +85,7 @@ export default function FeatureFlagsSettings() {
 
   return (
     <>
-      <div className="rounded-xl p-4 mb-4" style={{ border: '1px solid var(--border)' }}>
+      <div className="rounded-lg p-4 mb-4" style={{ border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -114,7 +114,7 @@ export default function FeatureFlagsSettings() {
 
       <div className="space-y-4">
         {Object.entries(grouped).map(([cat, list]) => (
-          <div key={cat} className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div key={cat} className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--text-muted)' }}>
               {cat}
             </h3>

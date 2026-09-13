@@ -32,7 +32,7 @@ export default function AdvancedSettings() {
   return (
     <>
       {/* Generation params */}
-      <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+      <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
         <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.generation')}</h2>
         <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>{t('settings.generation.desc')}</p>
         <div className="space-y-4">
@@ -75,7 +75,7 @@ export default function AdvancedSettings() {
       </div>
 
       {/* Title generation */}
-      <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+      <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
         <h2 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>{t('settings.titles')}</h2>
         <div className="space-y-3">
           <label className="flex items-center justify-between cursor-pointer">

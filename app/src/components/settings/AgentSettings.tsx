@@ -143,7 +143,7 @@ export default function AgentSettings() {
   }
 
   return (
-    <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+    <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center gap-2 mb-1">
         <Shield size={15} style={{ color: 'var(--accent)' }} />
         <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.title')}</h2>

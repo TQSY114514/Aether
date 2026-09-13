@@ -312,7 +312,7 @@ export default function Sidebar() {
           </div>
         ))}
         {ctxMenu && (
-          <div className="fixed z-50 rounded-xl border shadow-lg py-1 min-w-[180px]"
+          <div className="fixed z-50 rounded-lg border shadow-lg py-1 min-w-[180px]"
             style={{ left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 200), backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
             onClick={(e) => e.stopPropagation()}>
             <button onClick={() => { setCtxMenu(null); handleDoubleClick(ctxMenu.session) }}

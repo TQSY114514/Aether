@@ -56,7 +56,7 @@ function GatewayCard() {
   }
 
   return (
-    <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+    <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Plug size={16} className="text-gray-400 shrink-0" />
@@ -146,7 +146,7 @@ function UpdateCard() {
   }
 
   return (
-    <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+    <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-start gap-3">
           <Download size={16} className="text-gray-400 mt-0.5 shrink-0" />
@@ -270,7 +270,7 @@ export default function SettingPage() {
           <McpSettings />
 
           {/* Language */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>{t('settings.language')}</h2>
             <select value={language} onChange={(e) => setLanguage(e.target.value as any)}
               className="w-full max-w-xs px-3 py-2 text-sm rounded-lg border outline-none"
@@ -280,7 +280,7 @@ export default function SettingPage() {
           </div>
 
           {/* Theme */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>{t('settings.theme')}</h2>
             <div className="flex gap-2 flex-wrap">
               {(['light', 'auto', 'dark', 'blue', 'glass', 'retro'] as const).map((tKey) => (
@@ -294,7 +294,7 @@ export default function SettingPage() {
           </div>
 
           {/* Background Image */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.background')}</h2>
             <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.background.desc')}</p>
             <div className="flex items-center gap-3 mb-3">
@@ -342,7 +342,7 @@ export default function SettingPage() {
           </div>
 
           {/* Display customization */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-4" style={{ color: 'var(--text-primary)' }}>{t('settings.display', '显示')}</h2>
             <div className="space-y-4">
               <div>
@@ -400,7 +400,7 @@ export default function SettingPage() {
           <DefaultChatSettings />
 
           {/* Advanced */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-4" style={{ color: 'var(--text-primary)' }}>{t('settings.advanced')}</h2>
             <div className="space-y-4">
               <div>
@@ -457,7 +457,7 @@ export default function SettingPage() {
           <SkillsSettings />
 
           {/* Data & tools — dev-facing views kept off the sidebar */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.tools.title')}</h2>
             <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.tools.desc')}</p>
             <div className="grid grid-cols-1 gap-2">
@@ -486,7 +486,7 @@ export default function SettingPage() {
           <UpdateCard />
 
           {/* About */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <div className="flex items-start gap-3">
               <Info size={16} className="text-gray-400 mt-0.5 shrink-0" />
               <div>
@@ -499,7 +499,7 @@ export default function SettingPage() {
           </div>
 
           {/* Features */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{t('settings.features')}</h2>
             <ul className="text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
               {['providers', 'chat', 'persona', 'arena', 'route'].map(k => (
@@ -509,7 +509,7 @@ export default function SettingPage() {
           </div>
 
           {/* Data */}
-          <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+          <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
             <h2 className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{t('settings.data')}</h2>
             <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.data_desc')}</p>
             <div className="flex gap-2">

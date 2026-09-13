@@ -118,7 +118,7 @@ export default function PermissionDialog() {
         )}
 
         {/* Receipt-style Explanation Card */}
-        <div className="rounded-xl border p-3.5 mb-3 space-y-2.5" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <div className="rounded-lg border p-3.5 mb-3 space-y-2.5" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
           {/* Receipt Grid: Action Verb & Target */}
           <div className="grid grid-cols-2 gap-2 pb-2 border-b text-[11px]" style={{ borderColor: 'var(--border)' }}>
             <div>

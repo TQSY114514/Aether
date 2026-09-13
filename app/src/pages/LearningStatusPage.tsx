@@ -81,7 +81,7 @@ export default function LearningStatusPage() {
         {loading ? (
           <div className="text-center py-16 text-sm" style={{ color: 'var(--text-muted)' }}>加载中…</div>
         ) : totalLearned === 0 ? (
-          <div className="rounded-xl border p-10 text-center" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="rounded-lg border p-10 text-center" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <Brain size={28} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>agent 还没沉淀下什么</p>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -94,7 +94,7 @@ export default function LearningStatusPage() {
               <button
                 key={c.key}
                 onClick={() => setCurrentView(c.view)}
-                className="group text-left rounded-xl border p-4 transition-colors hover:bg-[var(--bg-secondary)]"
+                className="group text-left rounded-lg border p-4 transition-colors hover:bg-[var(--bg-secondary)]"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
               >
                 <div className="flex items-center justify-between mb-3">

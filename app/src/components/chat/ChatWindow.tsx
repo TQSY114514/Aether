@@ -98,7 +98,7 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
         const isWinner = voted && r.model_id === winnerId
         const isLoser = voted && r.model_id !== winnerId
         return (
-          <div key={key} className="border rounded-xl overflow-hidden animate-blur-fade"
+          <div key={key} className="border rounded-lg overflow-hidden animate-blur-fade"
             style={{
               borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
               opacity: isLoser ? 0.5 : isRevealed ? 1 : 0,
@@ -251,7 +251,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
             <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
           </span>
         </div>
-        <div ref={bubbleRef} className="rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed break-words"
+        <div ref={bubbleRef} className="rounded-lg rounded-bl-sm border px-4 py-3 text-sm leading-relaxed break-words"
           style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
           {thinkingText && (
             <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
@@ -623,17 +623,17 @@ export default function ChatWindow() {
 
           {/* Arena results */}
           {arenaError && (
-            <div className="border rounded-xl p-3 text-sm" style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-secondary)' }}>⚠ {arenaError}</div>
+            <div className="border rounded-lg p-3 text-sm" style={{ borderColor: 'var(--error)', color: 'var(--error)', backgroundColor: 'var(--bg-secondary)' }}>⚠ {arenaError}</div>
           )}
           {activeHints.map((h) => (
-            <div key={h.flag} className="rounded-xl p-3 border flex items-start gap-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div key={h.flag} className="rounded-lg p-3 border flex items-start gap-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
               <Lightbulb size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
               <span className="text-xs flex-1" style={{ color: 'var(--text-secondary)' }}>{h.text}</span>
               <button onClick={() => dismissHint(h.flag)} className="text-[10px] shrink-0 px-2 py-0.5 rounded border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('hint.got_it')}</button>
             </div>
           ))}
           {proposedHabits.map((h) => (
-            <div key={h.key} className="rounded-xl p-3 border-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div key={h.key} className="rounded-lg p-3 border-2" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
               <div className="flex items-start gap-2">
                 <Brain size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
                 <div className="flex-1 min-w-0">
