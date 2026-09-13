@@ -1,17 +1,17 @@
 import { useMemo } from 'react'
 import { useStore } from '@/store'
-import { Sparkles, Keyboard, Cpu, Brain } from 'lucide-react'
+import { Sparkles, Keyboard, Cpu, Brain, MessageSquare, Code, FlaskConical, ShieldCheck, Terminal, FileText, Lightbulb, Compass } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 const POOL = [
-  { icon: '💡', titleKey: 'empty.example.explain', prompt: '用通俗的语言解释一下什么是向量数据库，以及它和传统数据库的区别' },
-  { icon: '✍️', titleKey: 'empty.example.write', prompt: '帮我写一封正式的请假邮件，说明下周三到周五因病请假' },
-  { icon: '💻', titleKey: 'empty.example.code', prompt: '用 Python 实现一个简单的 LRU 缓存类，带注释' },
-  { icon: '🌍', titleKey: 'empty.example.translate', prompt: '把这段话翻译成英文并润色得更地道：今天天气很好，适合出去散步' },
-  { icon: '🧠', titleKey: 'empty.example.brainstorm', prompt: '帮我头脑风暴 10 个适合大学生周末做的副业点子，附简要可行性' },
-  { icon: '📚', titleKey: 'empty.example.summarize', prompt: '把下面这段长文压缩成 3 个要点，用中文：[粘贴文本]' },
-  { icon: '🐛', titleKey: 'empty.example.debug', prompt: '这段代码报错了，帮我找出原因并修复：[粘贴代码]' },
-  { icon: '🎓', titleKey: 'empty.example.teach', prompt: '用费曼学习法教我一个你假设我完全不懂的概念：区块链' },
+  { icon: Lightbulb, titleKey: 'empty.example.explain', prompt: '用通俗的语言解释一下什么是向量数据库，以及它和传统数据库的区别' },
+  { icon: FileText, titleKey: 'empty.example.write', prompt: '帮我写一封正式的请假邮件，说明下周三到周五因病请假' },
+  { icon: Code, titleKey: 'empty.example.code', prompt: '用 Python 实现一个简单的 LRU 缓存类，带注释' },
+  { icon: Compass, titleKey: 'empty.example.translate', prompt: '把这段话翻译成英文并润色得更地道：今天天气很好，适合出去散步' },
+  { icon: Brain, titleKey: 'empty.example.brainstorm', prompt: '帮我头脑风暴 10 个适合大学生周末做的副业点子，附简要可行性' },
+  { icon: MessageSquare, titleKey: 'empty.example.summarize', prompt: '把下面这段长文压缩成 3 个要点，用中文：[粘贴文本]' },
+  { icon: Terminal, titleKey: 'empty.example.debug', prompt: '这段代码报错了，帮我找出原因并修复：[粘贴代码]' },
+  { icon: Sparkles, titleKey: 'empty.example.teach', prompt: '用费曼学习法教我一个你假设我完全不懂的概念：区块链' },
 ]
 
 function pickFour(seed: number): typeof POOL {
@@ -70,29 +70,28 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
   const showEffort = thinkingEnabled
 
   return (
-    <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-2 my-auto">
+    <div className="w-full flex flex-col items-center justify-center px-4 pt-6 pb-4">
       <div className="w-full max-w-xl text-center">
-        {/* Hero icon with pulse animation */}
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 relative animate-pulse-glow shrink-0"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))', boxShadow: '0 8px 24px -8px var(--accent)' }}>
-          <Sparkles size={26} className="text-white" />
+        {/* Brand symbol */}
+        <div className="w-10 h-10 rounded-lg border border-[var(--border)] flex items-center justify-center mx-auto mb-3.5 shrink-0 bg-[var(--bg-secondary)] shadow-sm">
+          <Terminal size={18} className="text-[var(--text-primary)]" />
         </div>
 
-        <h2 className="text-2xl font-semibold mb-1.5 tracking-tight" style={{ color: 'var(--text-primary)' }}>
+        <h2 className="text-xl font-semibold mb-1 tracking-tight" style={{ color: 'var(--text-primary)' }}>
           {noSession ? t('chat.no_session') : t('empty.welcome')}
         </h2>
-        <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-xs mb-3.5 max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
           {t('empty.subtitle')}
         </p>
 
         {/* Active model + thinking-effort hint */}
         {activeModel && (
-          <div className="flex items-center justify-center gap-2.5 mb-6">
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+          <div className="flex items-center justify-center gap-2 mb-5">
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
               <Cpu size={11} className="text-[var(--text-muted)]" />{activeModel.display_name || activeModel.model_name}
             </span>
             {showEffort && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px]" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
                 <Brain size={11} style={{ color: 'var(--accent)' }} />{t('empty.effort')}: {effortLabel}
               </span>
             )}
@@ -102,11 +101,11 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
         {noSession ? (
           <>
             {/* Onboarding Choices Grid */}
-            <div className="grid grid-cols-2 gap-3 mb-4 text-left">
+            <div className="grid grid-cols-2 gap-2.5 mb-4 text-left">
               <button onClick={() => startWith('我想随意聊聊')}
-                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `0ms` }}>
-                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">💬</span>
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+                <MessageSquare size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>General Chat</div>
                   <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Ask questions, brainstorm, or write text</div>
@@ -114,9 +113,9 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
               </button>
               
               <button onClick={() => startWith('帮我写一段代码')}
-                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `50ms` }}>
-                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">💻</span>
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+                <Code size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>Code & Agent</div>
                   <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Generate code, fix bugs, or run commands</div>
@@ -124,9 +123,9 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
               </button>
 
               <button onClick={() => { useStore.getState().setChatMode('arena'); createSession(); }}
-                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `100ms` }}>
-                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">⚔️</span>
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+                <FlaskConical size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>Compare Models</div>
                   <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Run Arena mode to benchmark side-by-side</div>
@@ -134,38 +133,32 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
               </button>
 
               <button onClick={() => startWith('我想要连接本地模型（Ollama/LM Studio），请告诉我怎么设置')}
-                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `150ms` }}>
-                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">🔒</span>
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+                <ShieldCheck size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>Use Local Model</div>
                   <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>Keep data offline with Ollama or LM Studio</div>
                 </div>
               </button>
             </div>
-
-            {/* Import Configuration */}
-            <div className="flex justify-center mb-4">
-              <button onClick={() => { alert('Importing config from Claude Code / OpenCode will be supported in the next release.'); }}
-                className="text-[11px] px-3 py-1.5 rounded-full border transition-colors hover:bg-[var(--bg-tertiary)]"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-                ↓ 导入 Claude Code / OpenCode 历史与配置
-              </button>
-            </div>
           </>
         ) : (
-          <div className="grid grid-cols-2 gap-3 mb-5 text-left">
-            {examples.map((ex, i) => (
-              <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}
-                className="group flex items-start gap-3 p-3.5 rounded-xl border transition-all duration-200 text-left hover:shadow-lg hover:-translate-y-0.5 hover:border-[var(--accent)] animate-blur-fade"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', animationDelay: `${i * 50}ms` }}>
-                <span className="text-lg leading-none mt-0.5 group-hover:scale-110 transition-transform">{ex.icon}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>{t(ex.titleKey)}</div>
-                  <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>{ex.prompt}</div>
-                </div>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2.5 mb-4 text-left">
+            {examples.map((ex) => {
+              const Icon = ex.icon
+              return (
+                <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}
+                  className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                  style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+                  <Icon size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>{t(ex.titleKey)}</div>
+                    <div className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--text-muted)' }}>{ex.prompt}</div>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )}
 

@@ -127,18 +127,17 @@ export default function AgentStatusBar({ sessionId }: { sessionId: number | null
             {budgetNote}
           </span>
         )}
-        {/* Outbound Privacy Ledger (P1-11) */}
+        {/* Outbound Privacy Indicator */}
         <div
-          className="ml-auto flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0"
+          className="ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border cursor-help shrink-0 opacity-75 hover:opacity-100 transition-opacity"
           style={{
-            borderColor: 'rgba(34,197,94,0.3)',
-            backgroundColor: 'rgba(34,197,94,0.08)',
-            color: 'var(--success)',
+            borderColor: 'var(--border)',
+            color: 'var(--text-muted)',
           }}
-          title={`🔒 0-Telemetry / 零遥测保护\n出站端点白名单：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有对话与长期记忆仅保存在本地 SQLite。`}
+          title={`🔒 本地隐私保护 / 零遥测\n出站端点白名单：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有对话与长期记忆仅保存在本地 SQLite。`}
         >
-          <ShieldCheck size={10} className="shrink-0" />
-          <span className="font-mono font-medium">0-Telemetry</span>
+          <ShieldCheck size={11} className="shrink-0 text-[var(--success)]" />
+          <span className="font-mono text-[10px]">local-only</span>
         </div>
       </div>
     </div>

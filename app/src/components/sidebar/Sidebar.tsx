@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield, PanelLeft } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import FileTree from './FileTree'
@@ -70,6 +70,7 @@ export default function Sidebar() {
   const createSession = useStore((s) => s.createSession)
   const deleteSession = useStore((s) => s.deleteSession)
   const toggleSidebar = useStore((s) => s.toggleSidebar)
+  const sidebarOpen = useStore((s) => s.sidebarOpen)
   const loadSessions = useStore((s) => s.loadSessions)
   const { confirm } = useUI()
 
@@ -107,7 +108,6 @@ export default function Sidebar() {
   }
   const previewOf = (text: string) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
 
-
   // Close context menu on outside click
   useEffect(() => {
     if (!ctxMenu) return
@@ -126,15 +126,91 @@ export default function Sidebar() {
   }
 
   return (
-    <div className="w-[260px] h-full flex flex-col shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
-      <div className="h-12 flex items-center justify-between px-4 shrink-0 app-drag" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>Aether</span>
-        </div>
-        <button onClick={toggleSidebar} className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors">
-          <ChevronLeft size={16} className="text-[var(--text-muted)]" />
-        </button>
+    <aside
+      className="h-full flex flex-col shrink-0 select-none overflow-hidden transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+      style={{
+        width: sidebarOpen ? 250 : 44,
+        backgroundColor: 'var(--bg-secondary)',
+        borderRight: '1px solid var(--border)',
+      }}
+    >
+      <div className="h-12 flex items-center justify-between px-3 shrink-0 app-drag border-b border-[var(--border)]">
+        {sidebarOpen ? (
+          <>
+            <div className="flex items-center gap-2 pl-1">
+              <span className="text-xs font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>Aether</span>
+            </div>
+            <button
+              onClick={toggleSidebar}
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/60 transition-colors app-no-drag"
+              title={t('sidebar.nav.collapse') || 'Collapse sidebar'}
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={toggleSidebar}
+            className="mx-auto p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/60 transition-colors app-no-drag"
+            title={t('sidebar.nav.expand') || 'Open sidebar'}
+            aria-label="Open sidebar"
+          >
+            <PanelLeft size={16} />
+          </button>
+        )}
       </div>
+
+      {!sidebarOpen ? (
+        <div className="flex-1 flex flex-col items-center py-2 gap-1 app-no-drag">
+          <button
+            onClick={() => useStore.getState().newChat()}
+            className="p-2 rounded-md hover:bg-[var(--border)]/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            title={t('chat.new')}
+          >
+            <Plus size={16} />
+          </button>
+          <div className="w-5 my-1.5 border-t border-[var(--border)]" />
+          <div className="mt-auto flex flex-col items-center gap-1 w-full pb-2">
+            <button
+              onClick={() => setCurrentView('models')}
+              className={`p-2 rounded-md transition-colors ${currentView === 'models' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
+              title={t('sidebar.nav.models')}
+            >
+              <Server size={16} />
+            </button>
+            <button
+              onClick={() => setCurrentView('agents')}
+              className={`p-2 rounded-md transition-colors ${currentView === 'agents' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
+              title={t('sidebar.nav.personas')}
+            >
+              <User size={16} />
+            </button>
+            <button
+              onClick={() => setCurrentView('scores')}
+              className={`p-2 rounded-md transition-colors ${currentView === 'scores' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
+              title={t('sidebar.nav.arena')}
+            >
+              <Trophy size={16} />
+            </button>
+            <button
+              onClick={() => setCurrentView('memory')}
+              className={`p-2 rounded-md transition-colors ${currentView === 'memory' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
+              title={t('sidebar.nav.memory')}
+            >
+              <Brain size={16} />
+            </button>
+            <button
+              onClick={() => setCurrentView('settings')}
+              className={`p-2 rounded-md transition-colors ${currentView === 'settings' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
+              title={t('sidebar.nav.settings')}
+            >
+              <Settings size={16} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 flex flex-col min-h-0 w-[250px]">
       <div className="p-2 shrink-0">
         <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
           <Plus size={16} className="text-[var(--text-secondary)]" />{t('chat.new')}
@@ -264,24 +340,26 @@ export default function Sidebar() {
         )}
         <AgentHistory />
       </div>
-      <div className="p-2 space-y-0.5 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
         <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>
-    </div>
+        </div>
+      )}
+    </aside>
   )
 }
 
 function NavItem({ icon: Icon, label, active, onClick, badge }: { icon: any; label: string; active: boolean; onClick: () => void; badge?: number }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-all duration-150 ${active ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
-      style={active ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
-      <Icon size={16} className={active ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} />{label}
+    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${active ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/40 hover:text-[var(--text-primary)]'}`}>
+      <Icon size={15} className={active ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'} />
+      <span className="truncate">{label}</span>
       {badge ? (
-        <span className="ms-auto flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full tabular-nums" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+        <span className="ms-auto flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded-full tabular-nums bg-[var(--accent)] text-white">
           <Loader2 size={8} className="animate-spin" />{badge}
         </span>
       ) : null}

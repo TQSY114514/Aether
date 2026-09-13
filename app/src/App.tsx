@@ -286,18 +286,7 @@ export default function App() {
               transform: backgroundBlur > 0 ? 'scale(1.05)' : undefined,
             }} />
         )}
-        {sidebarOpen ? (
-          <Sidebar />
-        ) : (
-          /* Collapsed: slim expand rail with a single button — visible on every
-             view (chat, settings, memory, ...), not just chat. */
-          <div className="w-10 shrink-0 flex flex-col items-center pt-3 app-drag" style={{ borderRight: '1px solid var(--border)', backgroundColor: 'var(--bg-primary)' }}>
-            <button onClick={toggleSidebar} aria-label="Open sidebar" title={t('sidebar.nav.expand')}
-              className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors app-no-drag">
-              <PanelLeft size={16} className="text-[var(--text-muted)]" />
-            </button>
-          </div>
-        )}
+        <Sidebar />
         <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
           {currentView !== 'chat' && (
             <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
