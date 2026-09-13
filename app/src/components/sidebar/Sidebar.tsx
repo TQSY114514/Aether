@@ -162,10 +162,10 @@ export default function Sidebar() {
       </div>
 
       {!sidebarOpen ? (
-        <div className="flex-1 flex flex-col items-center py-2 gap-1 app-no-drag">
+        <div className="flex-1 flex flex-col items-center py-2 gap-1 app-no-drag w-[44px] tab-fade-in">
           <button
             onClick={() => useStore.getState().newChat()}
-            className="p-2 rounded-md hover:bg-[var(--border)]/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            className="p-2 rounded-md hover:bg-[var(--border)]/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors active:scale-[0.95]"
             title={t('chat.new')}
           >
             <Plus size={16} />
@@ -210,7 +210,7 @@ export default function Sidebar() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col min-h-0 w-[250px]">
+        <div className="flex-1 flex flex-col min-h-0 w-[250px] tab-fade-in">
       <div className="p-2 shrink-0">
         <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
           <Plus size={16} className="text-[var(--text-secondary)]" />{t('chat.new')}

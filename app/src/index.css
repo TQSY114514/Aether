@@ -158,7 +158,19 @@ select option {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.85; }
 }
-.animate-pulse-glow { animation: pulseGlow 4s ease-in-out infinite; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-fade-in { animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tab-fade-in  { animation: fadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+.press-scale {
+  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.press-scale:active {
+  transform: scale(0.98);
+}
 
 .message-enter { animation: springUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
 .cursor-blink { animation: blink 0.8s step-end infinite; }
@@ -268,8 +280,8 @@ select option {
   width: 240px;
   background: var(--content-bg, var(--bg-primary));
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
   animation: scaleIn 0.12s ease-out;
   transform-origin: bottom left;
@@ -358,10 +370,10 @@ select option {
 .context-menu {
   position: fixed;
   z-index: 9999;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   min-width: 180px;
   padding: 4px 0;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-lg);
   animation: menuFadeIn 0.12s ease-out;
 }
 @keyframes menuFadeIn {
