@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/readme-hero.png" width="780" alt="Aether" />
+<img src="./assets/readme-hero.png" width="480" alt="Aether" />
 
 # Aether
 
