@@ -147,7 +147,7 @@ export interface AppState {
   // Navigation
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
-  newChat: () => void
+  newChat: () => Promise<number | null>
   // Chat mode
   sessions: Session[]
   currentSessionId: number | null

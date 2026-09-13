@@ -254,10 +254,10 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Check size={14} style={{ color: 'var(--accent)' }} />
-              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>创建第一个会话</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('onboarding.first_session')}</span>
             </div>
             <p className="text-[11px] mb-4 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-              模型已就绪。先创建一个会话、向 Aether 提出你的第一个问题。下一步会带你认识命令执行的权限模式。
+              {t('onboarding.first_session_desc')}
             </p>
             <div className="mt-5 flex items-center justify-between">
               <button onClick={finish}
@@ -266,11 +266,16 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
               <div className="flex items-center gap-2">
                 <button onClick={() => setStep('permission')}
                   className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>继续</button>
-                <button onClick={() => { useStore.getState().newChat(); setCreatedSession(true) }} disabled={createdSession}
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('onboarding.continue')}</button>
+                <button onClick={async () => {
+                  try {
+                    const sid = await useStore.getState().newChat()
+                    if (sid != null) setCreatedSession(true)
+                  } catch {}
+                }} disabled={createdSession}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg text-white disabled:opacity-60 transition-opacity"
                   style={{ backgroundColor: 'var(--accent)' }}>
-                  {createdSession ? <><span>已创建 ✓</span></> : <><span>创建第一个会话</span><ArrowRight size={12} /></>}
+                  {createdSession ? <><span>{t('onboarding.created')}</span></> : <><span>{t('onboarding.first_session')}</span><ArrowRight size={12} /></>}
                 </button>
               </div>
             </div>

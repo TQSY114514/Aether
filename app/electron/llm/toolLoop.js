@@ -1362,7 +1362,10 @@ Reply ONLY with JSON:
             }
           } catch {}
         }
-        totalChars += rawContent.length
+        const rawContentSize = Array.isArray(rawContent)
+          ? JSON.stringify(rawContent).length
+          : (typeof rawContent === 'string' ? rawContent.length : String(rawContent ?? '').length)
+        totalChars += rawContentSize
         convo.push({ role: 'tool', tool_call_id: tc.id, content: rawContent })
       }
 
@@ -1579,20 +1582,32 @@ Reply ONLY with JSON:
 async function runToolWithTimeout(tool, args, ctx, signal) {
   let lastResult
   for (let attempt = 0; attempt <= TOOL_RETRY_MAX; attempt++) {
+    if (signal?.aborted) return { error: 'aborted' }
+    const attemptCtrl = new AbortController()
+    const onParentAbort = () => attemptCtrl.abort()
+    if (signal) signal.addEventListener('abort', onParentAbort, { once: true })
+    const attemptCtx = { ...ctx, signal: attemptCtrl.signal }
+
     const result = await new Promise((resolve) => {
       let done = false
       const finish = (val) => {
         if (done) return
         done = true
         clearTimeout(timer)
-        if (signal) signal.removeEventListener('abort', onAbort)
+        if (signal) signal.removeEventListener('abort', onParentAbort)
         resolve(val)
       }
-      const timer = setTimeout(() => finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` }), TOOL_TIMEOUT_MS)
-      const onAbort = () => finish({ error: 'aborted' })
+      const timer = setTimeout(() => {
+        attemptCtrl.abort()
+        finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` })
+      }, TOOL_TIMEOUT_MS)
+      const onAbort = () => {
+        attemptCtrl.abort()
+        finish({ error: 'aborted' })
+      }
       if (signal) signal.addEventListener('abort', onAbort, { once: true })
       Promise.resolve()
-        .then(() => tool.run(args, ctx))
+        .then(() => tool.run(args, attemptCtx))
         .then((result) => finish({ result }))
         .catch((e) => finish({ error: e && e.message ? e.message : String(e) }))
     })

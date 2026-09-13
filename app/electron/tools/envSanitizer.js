@@ -12,7 +12,7 @@
 //   - Merges caller-supplied extraEnv safely
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SENSITIVE_KEY_PATTERN = /(?:_KEY$|^KEY$|_TOKEN$|^TOKEN$|_SECRET$|^SECRET$|PASSWORD|PASSWD|_AUTH$|^AUTH$|CREDENTIAL|PRIVATE|ACCESS_KEY)/i
+const SENSITIVE_KEY_PATTERN = /(?:_KEY$|^KEY$|_TOKEN$|^TOKEN$|_SECRET$|^SECRET$|PASSWORD|PASSWD|_AUTH$|^AUTH$|CREDENTIAL|PRIVATE|ACCESS_KEY|SSH_AUTH_SOCK|DOCKER_AUTH_CONFIG)/i
 
 const SPECIFIC_SENSITIVE_PREFIXES = [
   'OPENAI_',

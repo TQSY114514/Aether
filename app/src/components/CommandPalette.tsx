@@ -110,7 +110,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
       } })
     })
     return cmds
-  }, [sessions, allModels, setCurrentView, setAgentMode, setEffortLevel, selectSession, saveSessionConfig, currentSessionId, setTasksOpen, onClose])
+  }, [sessions, allModels, setCurrentView, setAgentMode, setEffortLevel, selectSession, saveSessionConfig, currentSessionId, setTasksOpen, onClose, language])
 
   const filtered = useMemo(() => {
     if (!q.trim()) return commands

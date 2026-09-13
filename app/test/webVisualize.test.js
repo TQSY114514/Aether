@@ -81,7 +81,7 @@ describe('web_visualize headless degradation', () => {
     // 在纯 Node/vitest 下 require('electron') 返回路径字符串(或抛错),BrowserWindow 非函数。
     const out = await t.run({ url: 'https://example.com/', width: 800, height: 600, waitMs: 0 }, {})
     expect(typeof out).toBe('string')
-    expect(out).toMatch(/web_visualize unavailable|blocked|error/)
+    expect(out).toBe('[web_visualize unavailable: requires Electron main process]')
     // SSRF 关起的 example.com 是公网域名,不应被 [blocked] 拦;断言是非"截图成功"形态即可。
     expect(Array.isArray(out)).toBe(false)
   })

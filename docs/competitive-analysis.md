@@ -7,7 +7,7 @@
 
 ## 1. 对比范围与评分维度
 
-**对比工具（26 个，覆盖三大主流形态；2026-09-12 生态扩展调研补充，详见第 8 节）**：
+**对比工具（29 个，覆盖三大主流形态；2026-09-12 生态扩展调研补充，详见第 7 节）**：
 - **终端与混合编程类 Agent**：Claude Code、Codex CLI、Amp (ampagent)、OpenCode、Aider、Gemini CLI、Kimi CLI、Qwen Code（阿里）、Goose（Block / Linux Foundation）、Pi（Zehner+Ronacher）、Crush (Charmbracelet)、Continue CLI、Warp、Plandex、Open Interpreter（现为 Codex fork）、agentty
 - **IDE 插件、云端 Review 与桌面编辑 Agent**：Cursor（SpaceX 收购）、Gemini Code Assist (GitHub App/Bot)、Devin Desktop（原 Windsurf，Cognition 收购后更名）、Trae (字节跳动)、Cline / Kilo Code（Roo Code 已于 2026-05 停维护归档）、GitHub Copilot、Antigravity (Google)
 - **全自主平台与开源框架**：OpenHands、Devin、Manus（2025-12 被 Meta 以 $2B+ 收购）、OpenClaw (AI 龙虾)、DeepSeek Harness (DSH)、Hermes Agent
@@ -72,7 +72,7 @@ radar-beta
   min 0
 ```
 
-### 图 B：IDE、云端 Review 与桌面编程 Agent 对比 (Aether vs Cursor / Gemini Code Assist / Windsurf / Trae / Cline / Copilot)
+### 图 B：IDE、云端 Review 与桌面编程 Agent 对比 (Aether vs Cursor / Gemini Code Assist / Devin Desktop / Trae / Cline / Copilot)
 
 ```mermaid
 radar-beta
@@ -81,7 +81,7 @@ radar-beta
   curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
   curve cursor["Cursor"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 5.0, 5.0}
   curve gemini["Gemini Code Assist"]{4.0, 2.0, 4.0, 4.0, 1.5, 3.0, 2.0, 4.5, 4.5}
-  curve windsurf["Windsurf"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 4.5, 4.0}
+  curve devin_desktop["Devin Desktop"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 4.5, 4.0}
   curve trae["Trae"]{4.0, 3.5, 3.5, 3.5, 2.0, 2.0, 2.0, 4.5, 3.5}
   curve cline["Cline"]{4.0, 4.5, 3.5, 4.5, 2.5, 2.0, 1.0, 4.5, 4.0}
   max 5
@@ -142,7 +142,7 @@ radar-beta
 | **Amp** | 终端/云端混合 | 吸收其云端/终端双轨协同（`amp sync`）、Orbs 隔离沙箱与主动意图转向（Steer, Don't Queue）哲学。 |
 | **Cursor** | IDE 顶流 | 吸收前置 Diff 审查与语法高亮心智；坚持拒绝臃肿全量 IDE，保持轻量工作台。 |
 | **Gemini Code Assist** | IDE / GitHub PR 审查 | 吸收其 GitHub PR Review 自动化审查、Commit 级建议与大上下文仓库全景理解心智。 |
-| **Windsurf (Cascade)** | 流式感知 | 吸收其长程任务实时流式进展反馈，落地 `AgentRunTimeline` 时光机抽屉。 |
+| **Devin Desktop (原 Windsurf Cascade)** | 流式感知 | 吸收其长程任务实时流式进展反馈，落地 `AgentRunTimeline` 时光机抽屉。 |
 | **Trae** | 字节跳动 IDE | 吸收网安一体化 Agent（如 DeepSec）实战思路，将渗透防御内建为常驻中间件。 |
 | **DeepSeek Harness** | 开源自主框架 | 深刻吸取其 QVD-2026-57410 漏洞教训：绝不信任 HTTP Host 头，本地监听强制回环绑定与时序防侧信道。 |
 | **Hermes Agent** | 进化框架 | 吸收声明式技能生态与自迭代经验；完善 `SKILL.md` 的能力边界。 |
@@ -160,7 +160,7 @@ Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代�
 
 ---
 
-## 8. 2026-09-12 生态扩展调研补充（18→26 款）
+## 7. 2026-09-12 生态扩展调研补充（18→29 款）
 
 > 本节为 2026-09-12 全景扩展调研增量，冲掉第 1-2 节中已过时的事实（Roo Code 停维护、Windsurf 更名）。新进工具未评 9 维分，原因是发布期过短评分无意义；本文件后续新一轮评分时再并入总表。完整调研见知识库 `03-开发日志/2026-09-12-Agent工具全景扩展调研与生态动态盘点.md`。
 

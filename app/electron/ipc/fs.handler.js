@@ -23,9 +23,20 @@ function registerFsHandlers(ipcMain, db) {
     if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
       return { ok: false, error: 'outside_workspace' }
     }
+    let canonicalRoot, canonicalDir
+    try {
+      canonicalRoot = await fs.realpath(root)
+      canonicalDir = await fs.realpath(resolved)
+    } catch {
+      return { ok: false, error: 'read_failed' }
+    }
+    const canonicalRel = path.relative(canonicalRoot, canonicalDir)
+    if (canonicalRel === '..' || canonicalRel.startsWith(`..${path.sep}`) || path.isAbsolute(canonicalRel)) {
+      return { ok: false, error: 'outside_workspace' }
+    }
     let entries
     try {
-      const dirents = await fs.readdir(resolved, { withFileTypes: true })
+      const dirents = await fs.readdir(canonicalDir, { withFileTypes: true })
       entries = dirents
         .filter((d) => !SKIP.has(d.name))
         .map((d) => ({ name: d.name, isDir: d.isDirectory() }))

@@ -401,6 +401,20 @@ export default function ChatWindow() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
+  // Search: debounce the query used for filtering so typing doesn't trigger
+  // a filter + scrollIntoView on every keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState(messageSearchQuery)
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearSearch = useCallback(() => {
+    setMessageSearchQuery('')
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+      debounceTimer.current = null
+    }
+    setDebouncedQuery('')
+    setActiveMsgId(null)
+  }, [setMessageSearchQuery])
+
   // Always reload messages when switching sessions. The messages array belongs
   // to whichever session was active when it was last set; switching back needs
   // a fresh load so cross-session streaming completion doesn't leave stale data.
@@ -408,9 +422,9 @@ export default function ChatWindow() {
     if (currentSessionId) {
       loadMessages(currentSessionId)
     }
-setMessageSearchQuery('')
+    clearSearch()
     setTimeout(scrollToBottom, 50)
-  }, [currentSessionId, loadMessages, scrollToBottom])
+  }, [currentSessionId, loadMessages, scrollToBottom, clearSearch])
 
   // Only auto-scroll when the user is already near the bottom (normal reading
   // position). If they scrolled up to read history, don't yank them back down.
@@ -418,10 +432,6 @@ setMessageSearchQuery('')
     if (isAtBottom) scrollToBottom()
   }, [messages, isAtBottom, scrollToBottom])
 
-  // Search: debounce the query used for filtering so typing doesn't trigger
-  // a filter + scrollIntoView on every keystroke.
-  const [debouncedQuery, setDebouncedQuery] = useState(messageSearchQuery)
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
     setMessageSearchQuery(q)
@@ -500,7 +510,7 @@ setMessageSearchQuery('')
                 aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
                 <ChevronDown size={13} className="text-gray-400" />
               </button>
-              <button onClick={() => setMessageSearchQuery('')} className="p-0.5 rounded hover:bg-[var(--border)]">
+              <button onClick={clearSearch} className="p-0.5 rounded hover:bg-[var(--border)]">
                 <X size={12} className="text-gray-400" />
               </button>
             </>

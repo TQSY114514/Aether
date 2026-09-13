@@ -487,7 +487,38 @@ const TOOLS = [
     const waitMs = Math.min(Math.max(Number(args.waitMs) || 2000, 0), 15000)
     let win = null
     try {
-      win = new electron.BrowserWindow({ show: false, width, height, webPreferences: { offscreen: true, sandbox: true, backgroundThrottling: false } })
+      win = new electron.BrowserWindow({ show: false, width, height, webPreferences: { partition: 'web_visualize', offscreen: true, sandbox: true, backgroundThrottling: false } })
+      // Cancel-aware: abort in-progress load and cleanup window if signal triggers
+      if (ctx?.signal?.aborted) throw new Error('aborted')
+      const onAbort = () => {
+        try {
+          if (win && !win.isDestroyed()) {
+            win.webContents.stop()
+            win.destroy()
+          }
+        } catch {}
+      }
+      if (ctx?.signal) ctx.signal.addEventListener('abort', onAbort, { once: true })
+
+      // Validate every redirect and navigation destination against SSRF policy
+      const isNavigationAllowed = (destUrl) => {
+        const s = checkSSRF(destUrl)
+        if (!s.ok) return false
+        try {
+          const u = new URL(destUrl)
+          if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+        } catch {
+          return false
+        }
+        return true
+      }
+      win.webContents.on('will-redirect', (event, navigationUrl) => {
+        if (!isNavigationAllowed(navigationUrl)) event.preventDefault()
+      })
+      win.webContents.on('will-navigate', (event, navigationUrl) => {
+        if (!isNavigationAllowed(navigationUrl)) event.preventDefault()
+      })
+
       // Capture page JS console output so the LLM can diagnose why a page renders
       // blank/broken. Electron 44 passes a details object as the primary callback
       // arg (old positional level/message/line/sourceId args are deprecated);
@@ -504,21 +535,50 @@ const TOOLS = [
         }
       })
       await win.loadURL(url, { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Aether/1.0 Chrome/120.0.0.0 Safari/537.36' })
-      if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs))
+      if (waitMs > 0) {
+        await new Promise((r, reject) => {
+          const timer = setTimeout(r, waitMs)
+          if (ctx?.signal) {
+            ctx.signal.addEventListener('abort', () => {
+              clearTimeout(timer)
+              reject(new Error('aborted'))
+            }, { once: true })
+          }
+        })
+      }
       const img = await win.webContents.capturePage()
       if (img.isEmpty()) return '[error: empty capture]'
-      const wsRoot = (() => { try { return getWorkspaceRoot(ctx?.sessionId) } catch { return process.cwd() } })() || process.cwd()
-      const shotsDir = path.join(wsRoot, '.aether', 'screenshots')
-      fs.mkdirSync(shotsDir, { recursive: true })
-      const filePath = path.join(shotsDir, `web_visualize-${Date.now()}.png`)
-      fs.writeFileSync(filePath, img.toPNG())
+      let filePath = null
+      let allowDiskWrite = true
+      if (ctx?.agentMode === 'plan' || ctx?.agentMode === 'review') {
+        allowDiskWrite = false
+      }
+      if (ctx?.db && typeof ctx.db.getSetting === 'function') {
+        try {
+          if (ctx.db.getSetting('capability.filesystem') === 'deny') {
+            allowDiskWrite = false
+          }
+        } catch {}
+      }
+      if (allowDiskWrite) {
+        try {
+          const wsRoot = (() => { try { return getWorkspaceRoot(ctx?.sessionId) } catch { return process.cwd() } })() || process.cwd()
+          const shotsDir = path.join(wsRoot, '.aether', 'screenshots')
+          fs.mkdirSync(shotsDir, { recursive: true })
+          filePath = path.join(shotsDir, `web_visualize-${Date.now()}.png`)
+          fs.writeFileSync(filePath, img.toPNG())
+        } catch {}
+      }
       // Inline copy: cap the long edge so vision token spend stays bounded.
       const inlineSize = 640
       const scale = Math.min(1, inlineSize / Math.max(img.getSize().width, img.getSize().height))
       const thumb = scale < 1 ? img.resize({ width: Math.round(img.getSize().width * scale) }) : img
       const b64 = thumb.toPNG().toString('base64')
+      const textHeader = filePath
+        ? `Screenshot saved to ${filePath} (${img.getSize().width}x${img.getSize().height})`
+        : `Screenshot captured in-memory (${img.getSize().width}x${img.getSize().height})`
       return [
-        { type: 'text', text: `Screenshot saved to ${filePath} (${img.getSize().width}x${img.getSize().height})${formatConsoleLogs(consoleLogs)}` },
+        { type: 'text', text: `${textHeader}${formatConsoleLogs(consoleLogs)}` },
         { type: 'image_url', image_url: { url: `data:image/png;base64,${b64}` } },
       ]
     } catch (e) { return `[error: ${e.message}]` } finally { if (win && !win.isDestroyed()) win.destroy() }
