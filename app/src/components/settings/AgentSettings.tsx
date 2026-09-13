@@ -278,6 +278,9 @@ export default function AgentSettings() {
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.shadow_workspace')}</p>
               <button onClick={() => saveShadow(!shadowEnabled)}
+                role="switch"
+                aria-checked={shadowEnabled}
+                aria-label={t('settings.agent.shadow_workspace')}
                 className="relative w-10 h-5 rounded-full transition-colors shrink-0"
                 style={{ backgroundColor: shadowEnabled ? 'var(--accent)' : 'var(--border)' }}>
                 <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm"

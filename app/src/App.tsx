@@ -273,8 +273,8 @@ export default function App() {
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-{showWizard && onboardingDone === false && (
-        <FirstRunWizard onDone={() => setOnboardingDone(true)} />
+        {showWizard && onboardingDone === false && providers.length === 0 && (
+          <FirstRunWizard onDone={() => setOnboardingDone(true)} />
         )}
       </div>
     </ErrorBoundary>

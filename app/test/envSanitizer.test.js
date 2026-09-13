@@ -78,6 +78,9 @@ describe('envSanitizer', () => {
     expect(isSensitiveEnvKey('MONKEY')).toBe(false)
     expect(isSensitiveEnvKey('KEYCHAIN')).toBe(false)
     expect(isSensitiveEnvKey('DATABASE_PASSWORD')).toBe(true)
+    expect(isSensitiveEnvKey('AWS_ACCESS_KEY_ID')).toBe(true)
+    expect(isSensitiveEnvKey('SSH_AUTH_SOCK')).toBe(true)
+    expect(isSensitiveEnvKey('DOCKER_AUTH_CONFIG')).toBe(true)
   })
 
   it('边界: 前缀规则覆盖各主流供应商与 npm token', () => {
