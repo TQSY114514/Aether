@@ -156,7 +156,7 @@ export default function InputReference({ value, cursorPos, onSelect, visible }: 
   return (
     <div
       ref={ref}
-      className="absolute bottom-full left-0 mb-2 w-80 max-h-60 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] backdrop-blur-xl shadow-2xl z-50 p-1 font-sans"
+      className="absolute bottom-full left-0 mb-2 w-80 max-h-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] backdrop-blur-xl shadow-2xl z-50 p-1 font-sans"
     >
       <div className="px-3 py-1.5 text-[11px] font-medium text-[var(--text-muted)] border-b border-[var(--border)] flex items-center justify-between">
         <span>{prefixInfo.label}</span>

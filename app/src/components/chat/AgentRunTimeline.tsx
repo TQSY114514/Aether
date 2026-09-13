@@ -215,7 +215,7 @@ export default function AgentRunTimeline({
               return (
                 <div
                   key={log.id}
-                  className="rounded-xl border overflow-hidden transition-all duration-150"
+                  className="rounded-lg border overflow-hidden transition-all duration-150"
                   style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
                 >
                   {/* Turn Summary Bar */}

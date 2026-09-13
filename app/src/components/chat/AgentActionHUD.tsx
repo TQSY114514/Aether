@@ -135,7 +135,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
 
   return (
     <div
-      className="mb-2 rounded-xl border shadow-sm transition-all duration-200"
+      className="mb-2 rounded-lg border shadow-sm transition-all duration-200"
       style={{
         backgroundColor: 'var(--bg-secondary)',
         borderColor: isToolRunning
@@ -147,7 +147,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
     >
       {/* ── 1. Top HUD Capsule (Always Visible while running) ── */}
       <div
-        className="flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-[var(--hover-bg)] transition-colors rounded-xl cursor-pointer"
+        className="flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-[var(--hover-bg)] transition-colors rounded-lg cursor-pointer"
         onClick={() => setIsExpanded((prev) => !prev)}
       >
         {/* Left: Status Pill + Active Action / Plan */}

@@ -101,7 +101,7 @@ export default function ScoresPage() {
         {metrics.length > 0 && (
           <div className="mb-6">
             <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>{t('scores.metrics.title')}</h2>
-            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
@@ -137,7 +137,7 @@ export default function ScoresPage() {
         {Object.entries(byIntent).map(([intent, rows]) => (
           <div key={intent} className="mb-6">
             <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>{intentLabels[intent] || intent}</h2>
-            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>

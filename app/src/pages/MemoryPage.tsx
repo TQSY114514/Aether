@@ -187,7 +187,7 @@ export default function MemoryPage() {
 
         {/* Undo-delete banner */}
         {deleted && (
-          <div className="w-full mb-4 rounded-xl border p-3 flex items-center justify-between text-sm transition-all"
+          <div className="w-full mb-4 rounded-lg border p-3 flex items-center justify-between text-sm transition-all"
             style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
             <span className="truncate mr-3" style={{ color: 'var(--text-secondary)' }}>
               已删除: "{deleted.content.slice(0, 40)}{deleted.content.length > 40 ? '…' : ''}"
@@ -203,7 +203,7 @@ export default function MemoryPage() {
         {/* Conflict banner */}
         {conflicts.length > 0 && (
           <button onClick={() => setShowConflicts(!showConflicts)}
-            className="w-full mb-4 rounded-xl border-2 p-3 flex items-center gap-2 text-sm transition-colors"
+            className="w-full mb-4 rounded-lg border-2 p-3 flex items-center gap-2 text-sm transition-colors"
             style={{ borderColor: 'var(--warning)', backgroundColor: 'rgba(234,179,8,0.05)' }}>
             <AlertTriangle size={16} style={{ color: 'var(--warning)' }} />
             <span style={{ color: 'var(--warning)' }}>{conflicts.length} 个记忆冲突需要解决</span>
@@ -214,7 +214,7 @@ export default function MemoryPage() {
         {showConflicts && conflicts.length > 0 && (
           <div className="mb-4 space-y-2">
             {conflicts.map((c) => (
-              <div key={c.memoryId} className="rounded-xl border p-3" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
+              <div key={c.memoryId} className="rounded-lg border p-3" style={{ borderColor: 'var(--warning)', backgroundColor: 'var(--bg-secondary)' }}>
                 <div className="text-[10px] font-medium mb-1.5" style={{ color: 'var(--warning)' }}>冲突记忆</div>
                 <div className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>较新: "{c.content}"</div>
                 <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>旧: "{c.conflictingContent}"</div>
@@ -308,7 +308,7 @@ export default function MemoryPage() {
             </div>
           )}
           {filtered.map((entry) => (
-            <div key={entry.id} className="rounded-xl p-3" style={{ border: entry.conflicts_with ? '2px solid var(--warning)' : '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div key={entry.id} className="rounded-lg p-3" style={{ border: entry.conflicts_with ? '2px solid var(--warning)' : '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
               {editingId === entry.id ? (
                 <div className="space-y-2">
                   <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}

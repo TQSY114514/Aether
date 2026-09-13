@@ -193,7 +193,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
 
         {noSession && (
           <div className="mt-4">
-            <button onClick={() => createSession()} className="px-5 py-2.5 text-white text-sm rounded-xl hover:opacity-90 transition-all shadow-lg"
+            <button onClick={() => createSession()} className="px-5 py-2.5 text-white text-sm rounded-lg hover:opacity-90 transition-all shadow-lg"
               style={{ backgroundColor: 'var(--accent)', boxShadow: '0 4px 12px -2px var(--accent)' }}>{t('chat.create')}</button>
           </div>
         )}

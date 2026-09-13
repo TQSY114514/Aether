@@ -33,7 +33,7 @@ export default function DefaultChatSettings() {
   }, [modelOptions])
 
   return (
-    <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+    <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
       <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.default_chat')}</h2>
       <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>{t('settings.default_chat.desc')}</p>
       <div className="space-y-4">

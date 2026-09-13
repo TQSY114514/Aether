@@ -100,7 +100,7 @@ export default function McpSettings() {
   }
 
   return (
-    <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)' }}>
+    <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Plug size={14} className="text-gray-400" />

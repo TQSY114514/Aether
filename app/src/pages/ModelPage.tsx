@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { Plus, Trash2, RefreshCw, Check, X, Globe, Key, Wifi, Edit2, Save } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Check, X, Globe, Key, Wifi, Edit2, Save, Bot } from 'lucide-react'
 import Tooltip from '@/components/Tooltip'
 import { t } from '@/utils/i18n'
 import { PROVIDER_PRESETS } from '@/components/onboarding/providerPresets'
@@ -11,7 +11,7 @@ function PresetButtons({ onPick }: { onPick: (p: { name: string; api_url: string
       {PROVIDER_PRESETS.map((p) => (
         <button key={p.name} onClick={() => onPick(p)}
           title={p.local ? t('models.presets.local_hint') : t('models.presets.hint')}
-          className="px-2 py-1 text-xs rounded-lg border hover:bg-[var(--content-bg)] transition-colors"
+          className="px-2 py-1 text-xs rounded-md border hover:bg-[var(--content-bg)] transition-colors"
           style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
           {p.name}
         </button>
@@ -105,22 +105,22 @@ export default function ModelPage() {
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('models.subtitle')}</p>
           </div>
           <button onClick={() => setShowAdd(!showAdd)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)' }}>
             <Plus size={14} />{t('models.add_provider')}
           </button>
         </div>
 
         {showAdd && (
-          <div className="mb-6 p-4 rounded-xl space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="mb-6 p-4 rounded-lg space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <div>
               <div className="text-xs mb-1.5" style={{ color: 'var(--text-muted)' }}>{t('models.presets')}</div>
               <div className="flex items-center gap-2 flex-wrap">
                 <PresetButtons onPick={(p) => { setNewProvider({ name: p.name, api_url: p.api_url, api_key: '', api_format: p.api_format }); setShowAdd(true) }} />
                 <button onClick={detectOllama} disabled={ollamaBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-white disabled:opacity-50 transition-opacity"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md text-white disabled:opacity-50 transition-opacity"
                   style={{ backgroundColor: 'var(--accent)' }}>
-                  🦙 {ollamaBusy ? '检测中…' : '一键检测本地 Ollama'}
+                  <Bot size={13} /> {ollamaBusy ? '检测中…' : '一键检测本地 Ollama'}
                 </button>
               </div>
               {ollamaMsg && (
@@ -129,28 +129,28 @@ export default function ModelPage() {
             </div>
             <input value={newProvider.name} onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
               placeholder={t('models.add_provider_name')}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
+              className="w-full px-3 py-2 text-sm rounded-md outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <input value={newProvider.api_url} onChange={(e) => setNewProvider({ ...newProvider, api_url: e.target.value })}
               placeholder={t('models.add_provider_url')}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
+              className="w-full px-3 py-2 text-sm rounded-md outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <input value={newProvider.api_key} onChange={(e) => setNewProvider({ ...newProvider, api_key: e.target.value })}
               placeholder={t('models.add_provider_key')} type="password"
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none focus:border-gray-300 bg-[var(--content-bg)]"
+              className="w-full px-3 py-2 text-sm rounded-md outline-none focus:border-gray-300 bg-[var(--content-bg)]"
               style={{ border: '1px solid var(--border)' }} />
             <div className="flex items-center gap-2">
               <label className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>{t('models.api_format')}</label>
               <select value={newProvider.api_format} onChange={(e) => setNewProvider({ ...newProvider, api_format: e.target.value })}
-                className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
+                className="flex-1 px-2 py-1.5 text-xs rounded-md border outline-none bg-[var(--content-bg)]" style={{ borderColor: 'var(--border)' }}>
                 <option value="openai">OpenAI (/chat/completions)</option>
                 <option value="anthropic">Anthropic (/messages)</option>
                 <option value="responses">OpenAI Responses (/responses)</option>
               </select>
             </div>
             <div className="flex gap-2">
-              <button onClick={handleAddProvider} className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:opacity-80">{t('models.save')}</button>
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
+              <button onClick={handleAddProvider} className="px-4 py-2 bg-[var(--accent)] text-white text-xs font-medium rounded-md hover:opacity-90 transition-opacity">{t('models.save')}</button>
+              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('models.cancel')}</button>
             </div>
           </div>
         )}
@@ -169,7 +169,7 @@ export default function ModelPage() {
             const isEditing = editingProviderId === provider.id
 
             return (
-              <div key={provider.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <div key={provider.id} className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
                 <div className="p-4" style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">

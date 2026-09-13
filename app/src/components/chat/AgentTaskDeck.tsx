@@ -44,7 +44,7 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
   const HeaderIcon = allDone ? CheckCircle2 : ListChecks
 
   return (
-    <div className="mb-2 rounded-xl border overflow-hidden shadow-sm transition-all"
+    <div className="mb-2 rounded-lg border overflow-hidden shadow-sm transition-all"
       style={{
         backgroundColor: 'var(--bg-secondary)',
         borderColor: accent,

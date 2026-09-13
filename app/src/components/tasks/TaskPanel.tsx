@@ -232,7 +232,7 @@ export default function TaskPanel() {
   return (
     <aside className="fixed top-0 bottom-0 w-[360px] z-[100] flex flex-col animate-blur-fade"
       style={{
-        insetInlineStart: sidebarOpen ? 260 : 40,
+        insetInlineStart: sidebarOpen ? 250 : 44,
         backgroundColor: 'var(--bg-primary)',
         borderInlineEnd: '1px solid var(--border)',
         boxShadow: '0 0 24px rgba(0,0,0,0.14)',
@@ -249,7 +249,7 @@ export default function TaskPanel() {
           </span>
         )}
         <button onClick={() => setTasksOpen(false)}
-          className="ms-auto p-1.5 rounded-md hover:bg-[var(--border)] transition-colors"
+          className="ms-auto p-1.5 rounded-md hover:bg-[var(--border)] transition-colors cursor-pointer"
           title={tx('task.close', '关闭')} aria-label={tx('task.close', '关闭')}>
           <X size={14} className="text-[var(--text-muted)]" />
         </button>
@@ -257,7 +257,7 @@ export default function TaskPanel() {
 
       {/* Composer */}
       <div className="p-2.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="rounded-xl border p-2" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <div className="rounded-lg border p-2" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
           <textarea value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); start() } }}
             rows={3} placeholder={tx('task.placeholder', '描述一个让 agent 在后台独立完成的任务…')}
@@ -265,7 +265,7 @@ export default function TaskPanel() {
           <div className="flex items-center gap-1.5 mt-1.5">
             <Cpu size={12} className="text-gray-400 shrink-0" />
             <select value={String(modelId ?? '')} onChange={(e) => setPickedModelId(Number(e.target.value) || null)}
-              className="flex-1 min-w-0 text-[11px] rounded-lg border px-2 py-1 outline-none bg-[var(--content-bg)]"
+              className="flex-1 min-w-0 text-[11px] rounded-md border px-2 py-1 outline-none bg-[var(--content-bg)]"
               style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               title={tx('task.model', '任务使用的模型')}>
               <option value="" disabled>{tx('task.select_model', '选择模型')}</option>
@@ -278,7 +278,7 @@ export default function TaskPanel() {
               ))}
             </select>
             <button onClick={start} disabled={busy || !input.trim()}
-              className="shrink-0 flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="shrink-0 flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-md transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer"
               style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
               {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
               {busy ? tx('task.starting', '启动中…') : tx('task.start', '开始任务')}
@@ -286,7 +286,7 @@ export default function TaskPanel() {
           </div>
           <div className="flex items-center gap-1 mt-1.5 text-[10px]" style={{ color: 'var(--text-muted)' }}>
             <Shield size={10} className="shrink-0" />
-            <div className="flex items-center gap-0.5 rounded-lg border p-0.5" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-0.5 rounded-md border p-0.5" style={{ borderColor: 'var(--border)' }}>
               <button onClick={() => { setPlanMode(false); setModeTouched(true) }}
                 className="px-1.5 py-0.5 rounded-md transition-colors"
                 style={planMode ? { color: 'var(--text-muted)' } : { backgroundColor: 'var(--border)', color: 'var(--text-primary)' }}>
@@ -329,7 +329,7 @@ export default function TaskPanel() {
           const detail = task.status === 'error' && task.error ? task.error : task.lastProgress
           return (
             <div key={task.id} onClick={() => openTask(task)}
-              className="group rounded-xl border px-2.5 py-2 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]"
+              className="group rounded-lg border px-2.5 py-2 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]"
               style={{ backgroundColor: 'var(--bg-secondary)', borderColor: running ? color : 'var(--border)' }}
               title={tx('task.open_hint', '点击打开任务会话，查看完整轨迹')}>
               <div className="flex items-center gap-1.5">

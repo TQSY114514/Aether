@@ -145,7 +145,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   return (
     <div className="fixed inset-0 z-[110] flex items-start justify-center pt-[12vh] p-4">
       <div className="absolute inset-0 bg-black/40 animate-blur-fade" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-2xl border shadow-xl overflow-hidden animate-blur-fade"
+      <div className="relative w-full max-w-lg rounded-lg border shadow-xl overflow-hidden animate-blur-fade"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
           <Search size={16} className="text-gray-400 shrink-0" />
