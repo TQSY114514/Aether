@@ -135,7 +135,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
 
   return (
     <div
-      className="mb-2 rounded-xl border shadow-sm transition-all duration-200"
+      className="mb-2 rounded-lg border shadow-sm transition-all duration-200"
       style={{
         backgroundColor: 'var(--bg-secondary)',
         borderColor: isToolRunning
@@ -147,7 +147,7 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
     >
       {/* ── 1. Top HUD Capsule (Always Visible while running) ── */}
       <div
-        className="flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-[var(--hover-bg)] transition-colors rounded-xl cursor-pointer"
+        className="flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-[var(--hover-bg)] transition-colors rounded-lg cursor-pointer"
         onClick={() => setIsExpanded((prev) => !prev)}
       >
         {/* Left: Status Pill + Active Action / Plan */}
@@ -156,15 +156,13 @@ export default function AgentActionHUD({ sessionId }: { sessionId: number | null
             className="flex items-center gap-1.5 px-2 py-0.5 rounded-md font-medium text-[11px] shrink-0"
             style={{
               backgroundColor: isToolRunning
-                ? 'rgba(245, 158, 11, 0.15)'
-                : hasSubagents
-                ? 'rgba(6, 182, 212, 0.15)'
-                : 'rgba(59, 130, 246, 0.15)',
+                ? 'rgba(217, 119, 6, 0.12)'
+                : 'var(--border)',
               color: isToolRunning
-                ? 'var(--warning, #f59e0b)'
+                ? 'var(--warning)'
                 : hasSubagents
-                ? '#06b6d4'
-                : 'var(--accent)',
+                ? 'var(--text-primary)'
+                : 'var(--text-primary)',
             }}
           >
             {isToolRunning ? (

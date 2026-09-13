@@ -78,10 +78,10 @@ export default function PermissionDialog() {
   return (
     <div className="fixed inset-0 z-[101] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 animate-blur-fade" onClick={() => resolve(req.reqId, false)} />
-      <div className="relative w-full max-w-lg rounded-2xl border shadow-xl p-5 animate-blur-fade"
+      <div className="relative w-full max-w-lg rounded-lg border shadow-xl p-5 animate-blur-fade"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: isTainted ? 'var(--error)' : 'var(--border)' }}>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: isTainted ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.1)' }}>
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: isTainted ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.1)' }}>
             <Icon size={16} style={{ color: 'var(--error)' }} />
           </div>
           <div>
@@ -118,7 +118,7 @@ export default function PermissionDialog() {
         )}
 
         {/* Receipt-style Explanation Card */}
-        <div className="rounded-xl border p-3.5 mb-3 space-y-2.5" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <div className="rounded-lg border p-3.5 mb-3 space-y-2.5" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
           {/* Receipt Grid: Action Verb & Target */}
           <div className="grid grid-cols-2 gap-2 pb-2 border-b text-[11px]" style={{ borderColor: 'var(--border)' }}>
             <div>
@@ -266,16 +266,16 @@ export default function PermissionDialog() {
           {t('agent.permission.desc')}
         </p>
         <div className="flex justify-end gap-2 flex-wrap">
-          <button onClick={handleDeny} className="px-3.5 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+          <button onClick={handleDeny} className="px-3.5 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('agent.permission.deny')}</button>
           <button onClick={handleAllowSession}
-            className="px-3.5 py-1.5 text-xs rounded-lg border transition-colors hover:opacity-90"
+            className="px-3.5 py-1.5 text-xs rounded-md border transition-colors hover:opacity-90"
             style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}>{t('agent.permission.allow_session')}</button>
           <button onClick={handleAllowRemember}
-            className="px-3.5 py-1.5 text-xs rounded-lg border transition-colors hover:opacity-90"
+            className="px-3.5 py-1.5 text-xs rounded-md border transition-colors hover:opacity-90"
             style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>{t('agent.permission.allow_remember')}</button>
           <button onClick={handleAllowOnce}
-            className="px-3.5 py-1.5 text-xs rounded-lg text-white transition-opacity hover:opacity-90"
+            className="px-3.5 py-1.5 text-xs rounded-md text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: 'var(--error)' }}>{t('agent.permission.allow_once')}</button>
         </div>
       </div>

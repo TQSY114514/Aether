@@ -149,7 +149,7 @@ export default function AgentRunTimeline({
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-5 py-4 border-b"
+          className="flex items-center justify-between px-5 py-3.5 border-b wco-pr"
           style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
         >
           <div className="flex items-center gap-2.5">
@@ -215,7 +215,7 @@ export default function AgentRunTimeline({
               return (
                 <div
                   key={log.id}
-                  className="rounded-xl border overflow-hidden transition-all duration-150"
+                  className="rounded-lg border overflow-hidden transition-all duration-150"
                   style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
                 >
                   {/* Turn Summary Bar */}

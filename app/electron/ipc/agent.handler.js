@@ -55,6 +55,10 @@ function registerAgentHandlers(ipcMain, db) {
     if (!root) return { ok: false, error: 'no workspace configured' }
     try {
       const { projectIndexer, dependencyGraph, repoMap } = require('../context')
+      repoMap.setMemorySeeder((digest, rootDir) => {
+        if (!digest || typeof db.addMemoryWithProvenance !== 'function') return
+        try { db.addMemoryWithProvenance(digest, 'project', null, 'system', { kind: 'repo_map' }, rootDir) } catch {}
+      })
       projectIndexer.invalidateCache(root)
       repoMap.invalidateCache(root)
       const graph = await projectIndexer.indexWorkspace(root)

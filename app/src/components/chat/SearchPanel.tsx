@@ -355,7 +355,7 @@ export default function SearchPanel({ open, onClose, currentSessionId, onJumpToM
       }}
     >
       <div
-        className="mx-3 mt-2 rounded-xl overflow-hidden flex flex-col"
+        className="mx-3 mt-2 rounded-lg overflow-hidden flex flex-col"
         style={{
           backgroundColor: 'var(--content-bg, var(--bg-primary))',
           border: '1px solid var(--border)',

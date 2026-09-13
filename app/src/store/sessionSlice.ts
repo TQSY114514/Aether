@@ -64,11 +64,14 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     return sid
   },
 
-  newChat: () => {
+  newChat: async () => {
     set({ currentView: "chat", arenaResults: [], arenaResultsSessionId: null, arenaPending: 0, chatMode: "normal" } as any)
-    get().createSession().catch(() => {
+    try {
+      return await get().createSession()
+    } catch {
       set({ currentSessionId: null, messages: [] })
-    })
+      return null
+    }
   },
 
   selectSession: async (id) => {

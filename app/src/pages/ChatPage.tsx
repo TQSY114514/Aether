@@ -97,7 +97,7 @@ export default function ChatPage() {
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <div className="min-h-12 py-1.5 border-b flex flex-wrap items-center justify-between px-4 shrink-0" style={{ borderColor: 'var(--border)' }}>
+        <div className="min-h-12 py-1.5 border-b flex flex-wrap items-center justify-between px-4 shrink-0 app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
@@ -141,10 +141,11 @@ export default function ChatPage() {
             </Tooltip>
           </div>
         </div>
-        {/* 空态容器:flex 让 EmptyState 的 flex-1 生效并在内部居中;
-            min-h-0 + overflow-hidden 防止内容超高时撑出滚动条(改为裁剪) */}
-        <div className="flex-1 min-h-0 flex overflow-hidden">
-          <EmptyState noSession={true} />
+        {/* 空态容器: 确保充足的顶部呼吸空间，彻底消除方块图标被标题栏边缘截断问题 */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto scroll-bounce px-4 pt-6 pb-4">
+          <div className="my-auto w-full max-w-3xl mx-auto flex flex-col items-center">
+            <EmptyState noSession={true} />
+          </div>
         </div>
         <ChatInput />
       </div>
@@ -154,7 +155,7 @@ export default function ChatPage() {
   // ── View 3: Active chat ──
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }} {...arenaBgStyle}>
-      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2">
           {currentModel && currentProvider && (
             <Tooltip text={t('tooltip.model_badge')}>

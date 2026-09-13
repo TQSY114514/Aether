@@ -219,7 +219,7 @@ export default function TokenPage() {
 function Tile({ label, value, sub, accent, accent2, small }: { label: string; value: string; sub?: string; accent?: boolean; accent2?: boolean; small?: boolean }) {
   const color = accent ? 'var(--accent)' : accent2 ? 'var(--success)' : 'var(--text-primary)'
   return (
-    <div className="rounded-xl p-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+    <div className="rounded-lg p-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
       <div className={`${small ? 'text-base' : 'text-xl'} font-bold`} style={{ color }}>{value}</div>
       {sub && <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</div>}
       <div className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
@@ -229,7 +229,7 @@ function Tile({ label, value, sub, accent, accent2, small }: { label: string; va
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl p-4 mb-4" style={{ border: '1px solid var(--border)' }}>
+    <div className="rounded-lg p-4 mb-4" style={{ border: '1px solid var(--border)' }}>
       <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>{title}</h2>
       {children}
     </div>

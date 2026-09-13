@@ -89,7 +89,7 @@ export default function BenchmarkPanel() {
       </p>
 
       {editing && (
-        <div className="p-4 rounded-xl mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+        <div className="p-4 rounded-lg mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="套件名称(如: 我的编码任务)"
             className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)]"
             style={{ borderColor: 'var(--border)' }} />
@@ -121,7 +121,7 @@ export default function BenchmarkPanel() {
       )}
 
       {benches.length === 0 && !editing && (
-        <div className="p-4 rounded-xl text-center" style={{ border: '1px dashed var(--border)' }}>
+        <div className="p-4 rounded-lg text-center" style={{ border: '1px dashed var(--border)' }}>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>还没有基准套件 — 点右上角"新建套件"开始</p>
         </div>
       )}
@@ -133,7 +133,7 @@ export default function BenchmarkPanel() {
             .map(([id, r]) => ({ id: Number(id), r, m: lastModels[Number(id)] }))
             .sort((a, b) => (b.r.wins / Math.max(1, b.r.runs)) - (a.r.wins / Math.max(1, a.r.runs))) : []
           return (
-            <div key={b.id} className="p-3.5 rounded-xl" style={{ border: '1px solid var(--border)' }}>
+            <div key={b.id} className="p-3.5 rounded-lg" style={{ border: '1px solid var(--border)' }}>
               <div className="flex items-center justify-between mb-2">
                 <div className="min-w-0">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{b.name}</p>

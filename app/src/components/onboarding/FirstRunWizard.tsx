@@ -82,7 +82,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
 
   // One-click import from Claude Code / OpenCode. Auto-discovers the standard
   // config paths, creates providers/models via the new IPC, reloads the store
-  // (so the App mount gate sees providers), then jumps to the permission step.
+  // (so the App mount gate sees providers), then jumps to the first-session step.
   const runImport = async () => {
     if (importing) return
     setImporting(true)
@@ -100,6 +100,8 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
       setImporting(false)
     }
   }
+
+  const [createdSession, setCreatedSession] = useState(false)
 
   const saveProvider = async () => {
     if (!preset || busy) return
@@ -128,7 +130,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
           }
         }
       }
-      setStep('permission')
+      setStep('first-session')
     } catch {
       setError(t('onboarding.error'))
     } finally {
@@ -138,7 +140,7 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
-      <div className="w-full max-w-lg rounded-xl border p-6" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
+      <div className="w-full max-w-lg rounded-lg border p-6" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
         <div className="flex items-start justify-between mb-5">
           <div>
             <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{t('onboarding.title')}</h2>
@@ -244,6 +246,38 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
                 style={{ backgroundColor: 'var(--accent)' }}>
                 {busy ? <span>{t('onboarding.fetch')}</span> : <><span>{t('onboarding.next')}</span><ArrowRight size={12} /></>}
               </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'first-session' && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Check size={14} style={{ color: 'var(--accent)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('onboarding.first_session')}</span>
+            </div>
+            <p className="text-[11px] mb-4 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              {t('onboarding.first_session_desc')}
+            </p>
+            <div className="mt-5 flex items-center justify-between">
+              <button onClick={finish}
+                className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{t('onboarding.skip')}</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setStep('permission')}
+                  className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('onboarding.continue')}</button>
+                <button onClick={async () => {
+                  try {
+                    const sid = await useStore.getState().newChat()
+                    if (sid != null) setCreatedSession(true)
+                  } catch {}
+                }} disabled={createdSession}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-lg text-white disabled:opacity-60 transition-opacity"
+                  style={{ backgroundColor: 'var(--accent)' }}>
+                  {createdSession ? <><span>{t('onboarding.created')}</span></> : <><span>{t('onboarding.first_session')}</span><ArrowRight size={12} /></>}
+                </button>
+              </div>
             </div>
           </div>
         )}

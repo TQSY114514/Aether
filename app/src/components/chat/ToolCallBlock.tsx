@@ -92,35 +92,35 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const failureKey = tool.failureKind && FAILURE_LABELS[tool.failureKind] ? FAILURE_LABELS[tool.failureKind] : null
 
   return (
-    <div className="rounded-lg border mb-2 overflow-hidden" style={{ borderColor: dangerous ? 'var(--warning)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)] transition-colors" title={tool.name}>
-        {open ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
-        {dangerous ? <ShieldAlert size={12} style={{ color: 'var(--warning)' }} /> : <ShieldCheck size={12} className="text-gray-400" />}
-        <span className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{label}</span>
+    <div className="rounded-md border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors" title={tool.name}>
+        {open ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />}
+        {dangerous ? <ShieldAlert size={12} className="text-amber-500 shrink-0" /> : <ShieldCheck size={12} className="text-[var(--text-muted)] shrink-0" />}
+        <span className="font-medium truncate text-left" style={{ color: 'var(--text-primary)' }}>{label}</span>
         {dangerous && (
-          <span className="text-[9px] px-1 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>{t('tool.risk.dangerous')}</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-medium shrink-0 border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">{t('tool.risk.dangerous')}</span>
         )}
         {failureKey && tool.error && (
-          <span className="text-[9px] px-1 py-0.5 rounded font-medium shrink-0" style={{ backgroundColor: 'rgba(234,179,8,0.15)', color: 'var(--warning)' }}>{t(failureKey)}</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-medium shrink-0 border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">{t(failureKey)}</span>
         )}
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex items-center gap-2 shrink-0">
           {tool.result != null && tool.latencyMs != null && (
-            <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{tool.latencyMs < 1000 ? `${tool.latencyMs}ms` : `${(tool.latencyMs/1000).toFixed(1)}s`}</span>
+            <span className="text-[10px] font-mono tabular-nums opacity-60" style={{ color: 'var(--text-muted)' }}>{tool.latencyMs < 1000 ? `${tool.latencyMs}ms` : `${(tool.latencyMs/1000).toFixed(1)}s`}</span>
           )}
           {running && elapsed != null && (
-            <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>{(elapsed/1000).toFixed(1)}s</span>
+            <span className="text-[10px] font-mono tabular-nums opacity-60" style={{ color: 'var(--text-muted)' }}>{(elapsed/1000).toFixed(1)}s</span>
           )}
-          <span className="flex items-center gap-1" style={{ color: status.color }}>
+          <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: status.color }}>
             <StatusIcon size={11} />{status.label}
           </span>
         </span>
       </button>
       {open && (
-        <div className="px-3 pb-2.5 space-y-1.5">
+        <div className="px-2.5 pb-2 pt-1 border-t border-[var(--border)] space-y-1.5" style={{ backgroundColor: 'var(--content-bg)' }}>
           {hasArgs ? (
             <div>
-              <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.args')}</div>
-              <pre className="text-[11px] font-mono whitespace-pre-wrap break-all" style={{ color: 'var(--text-secondary)' }}>{JSON.stringify(tool.args, null, 2)}</pre>
+              <div className="text-[10px] font-mono mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.args')}</div>
+              <pre className="text-[11px] font-mono p-1.5 rounded border border-[var(--border)] whitespace-pre-wrap break-all bg-[var(--bg-secondary)]" style={{ color: 'var(--text-secondary)' }}>{JSON.stringify(tool.args, null, 2)}</pre>
             </div>
           ) : null}
           {tool.result != null && (

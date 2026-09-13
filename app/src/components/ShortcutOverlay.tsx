@@ -1,21 +1,8 @@
 import { useEffect } from 'react'
-import { useStore } from '@/store'
+import { SHORTCUTS } from '@/shortcuts'
 import { t } from '@/utils/i18n'
 
-const SHORTCUTS = [
-  { keys: ['Ctrl', 'N'], desc: t('empty.hint.new') },
-  { keys: ['Ctrl', 'K'], desc: 'Command palette' },
-  { keys: ['Ctrl', 'R'], desc: 'Regenerate last reply' },
-  { keys: ['Ctrl', 'E'], desc: 'Edit last message' },
-  { keys: ['Ctrl', 'Z'], desc: 'Undo last edit' },
-  { keys: ['Ctrl', 'Shift', 'C'], desc: 'Copy code block' },
-  { keys: ['Esc'], desc: 'Stop generating / close dialogs' },
-  { keys: ['Alt', '←'], desc: 'Back in session history' },
-  { keys: ['Alt', '→'], desc: 'Forward in session history' },
-  { keys: ['Enter'], desc: 'Send message' },
-  { keys: ['Shift', 'Enter'], desc: 'New line in input' },
-  { keys: ['/'], desc: t('empty.hint.slash') },
-]
+const GROUPS = ['global', 'chat', 'navigation'] as const
 
 function KeyBadge({ label }: { label: string }) {
   return (
@@ -41,25 +28,30 @@ export default function ShortcutOverlay({ open, onClose }: { open: boolean; onCl
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 animate-blur-fade" />
-      <div className="relative w-full max-w-md rounded-2xl border shadow-2xl p-6 animate-blur-fade"
+      <div className="relative w-full max-w-md rounded-lg border shadow-xl p-6 animate-blur-fade"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Keyboard Shortcuts</h2>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t('shortcuts.title')}</h2>
           <button onClick={onClose} className="p-1 rounded-md hover:bg-[var(--border)] transition-colors">
             <kbd className="text-[10px] px-1.5 py-0.5 rounded border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>ESC</kbd>
           </button>
         </div>
-        <div className="space-y-2.5">
-          {SHORTCUTS.map((s, i) => (
-            <div key={i} className="flex items-center justify-between py-1.5">
-              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.desc}</span>
-              <div className="flex items-center gap-1">
-                {s.keys.map(k => <KeyBadge key={k} label={k} />)}
-              </div>
+        <div className="space-y-4">
+          {GROUPS.map((g) => (
+            <div key={g}>
+              <h3 className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{t(`shortcuts.group.${g}`)}</h3>
+              {SHORTCUTS.filter((s) => s.group === g).map((s) => (
+                <div key={s.id} className="flex items-center justify-between py-1.5">
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.desc}</span>
+                  <div className="flex items-center gap-1">
+                    {s.combos.map((c) => <KeyBadge key={c} label={c.replace('ArrowLeft', '←').replace('ArrowRight', '→')} />)}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
-        <p className="text-[10px] mt-4 text-center" style={{ color: 'var(--text-muted)' }}>Press <kbd className="px-1 rounded border" style={{ borderColor: 'var(--border)' }}>?</kbd> or <kbd className="px-1 rounded border" style={{ borderColor: 'var(--border)' }}>Shift+/</kbd> to toggle</p>
+        <p className="text-[10px] mt-4 text-center" style={{ color: 'var(--text-muted)' }}>Press <kbd className="px-1 rounded border" style={{ borderColor: 'var(--border)' }}>Ctrl+?</kbd> or <kbd className="px-1 rounded border" style={{ borderColor: 'var(--border)' }}>Ctrl+/</kbd> to toggle</p>
       </div>
     </div>
   )
