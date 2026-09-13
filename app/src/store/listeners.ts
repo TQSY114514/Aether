@@ -70,6 +70,14 @@ export function ensureChunkListener() {
       }))
       return
     }
+    if (buf && messageId && buf.messageId !== messageId) {
+      getStore().setState((s) => ({
+        streamingBySession: {
+          ...s.streamingBySession,
+          [sessionId]: { ...s.streamingBySession[sessionId], messageId },
+        },
+      }))
+    }
     if (done) {
       flushStreamUpdates()
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
@@ -145,8 +153,12 @@ export function ensureToolCallListener() {
     getStore().setState((s) => {
       const sid = sessionId || s.currentSessionId
       const nextStreaming = { ...s.streamingBySession }
-      if (sid && !nextStreaming[sid]) {
-        nextStreaming[sid] = { content: "", messageId }
+      if (sid) {
+        if (!nextStreaming[sid]) {
+          nextStreaming[sid] = { content: "", messageId }
+        } else if (messageId && nextStreaming[sid].messageId !== messageId) {
+          nextStreaming[sid] = { ...nextStreaming[sid], messageId }
+        }
       }
       const existing = s.toolCallsByMessage[messageId] || []
       const last = existing[existing.length - 1]
@@ -303,13 +315,34 @@ export function ensureSubagentListener() {
 export function ensureThinkingListener() {
   if (_thinkingListenerInstalled) return
   _thinkingListenerInstalled = true
+
+  window.electronAPI.chat.onThinkingStart?.(({ messageId, sessionId }) => {
+    if (!messageId) return
+    getStore().setState((s) => {
+      const sid = sessionId || s.currentSessionId
+      const nextStreaming = { ...s.streamingBySession }
+      if (sid) {
+        if (!nextStreaming[sid]) {
+          nextStreaming[sid] = { content: "", messageId }
+        } else if (nextStreaming[sid].messageId !== messageId) {
+          nextStreaming[sid] = { ...nextStreaming[sid], messageId }
+        }
+      }
+      return { streamingBySession: nextStreaming }
+    })
+  })
+
   window.electronAPI.chat.onThinkingChunk?.(({ messageId, sessionId, delta }) => {
     if (!messageId || !delta) return
     getStore().setState((s) => {
       const sid = sessionId || s.currentSessionId
       const nextStreaming = { ...s.streamingBySession }
-      if (sid && !nextStreaming[sid]) {
-        nextStreaming[sid] = { content: "", messageId }
+      if (sid) {
+        if (!nextStreaming[sid]) {
+          nextStreaming[sid] = { content: "", messageId }
+        } else if (nextStreaming[sid].messageId !== messageId) {
+          nextStreaming[sid] = { ...nextStreaming[sid], messageId }
+        }
       }
       return {
         streamingBySession: nextStreaming,

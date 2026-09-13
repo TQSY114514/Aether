@@ -156,6 +156,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const bubbleRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
   const thinkingRafRef = useRef<number>(0)
+  const mdRafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
   const activeMidRef = useRef<number | null>(null)
 
@@ -182,7 +183,10 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       const buf = s.streamingBySession[sessionId]
       if (!buf) return
 
-      const mid = buf.messageId
+      const mid = buf.messageId != null
+        ? buf.messageId
+        : (Object.keys(s.thinkingBlocksByMessage).map(Number).pop() ?? Object.keys(s.toolCallsByMessage).map(Number).pop() ?? null)
+
       if (mid != null && activeMidRef.current !== null && activeMidRef.current !== mid) {
         resetLocalState()
       }
@@ -204,18 +208,18 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         setToolCalls(tc)
       }
 
-      // -- Main content: direct DOM write for O(1) per-token performance --
+      // -- Main content: RAF-throttled real-time Markdown rendering --
       if (!ref.current) return
       const newLen = buf.content.length
       if (newLen === lastLenRef.current) return
       lastLenRef.current = newLen
 
-      const escaped = buf.content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>')
-      ref.current.innerHTML = escaped
+      cancelAnimationFrame(mdRafRef.current)
+      mdRafRef.current = requestAnimationFrame(() => {
+        mdRafRef.current = 0
+        if (!ref.current) return
+        ref.current.innerHTML = renderMarkdown(buf.content)
+      })
 
       if (bubbleRef.current) {
         bubbleRef.current.style.minHeight = ''
@@ -233,26 +237,31 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       unsub()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       if (thinkingRafRef.current) cancelAnimationFrame(thinkingRafRef.current)
+      if (mdRafRef.current) cancelAnimationFrame(mdRafRef.current)
     }
   }, [sessionId, isAtBottom, resetLocalState])
 
   return (
-    <div id={`msg-streaming-${sessionId}`} className="flex justify-start message-enter">
-      <div className="w-full" style={{ maxWidth: '85%' }}>
-        <div className="flex items-center gap-2 mb-1.5 px-1">
-          <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }}>
-            <span className="text-white text-[10px] font-medium">AI</span>
+    <div id={`msg-streaming-${sessionId}`} className="w-full flex flex-col message-enter py-2.5">
+      <div className="w-full">
+        {/* Assistant Header - Calm Design Token aligned with MessageBubble */}
+        <div className="flex items-center gap-2 mb-1.5 px-0.5">
+          <div
+            className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 border"
+            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+          >
+            <span className="text-[10px] font-mono font-medium" style={{ color: 'var(--text-secondary)' }}>AI</span>
           </div>
-          <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Assistant</span>
-          <span className="flex items-center gap-0.5 ml-1">
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-[var(--accent)] typing-dot" />
+          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Assistant</span>
+          <span className="inline-flex items-center gap-0.5 ml-1">
+            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
+            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
           </span>
         </div>
-        <div ref={bubbleRef} className="rounded-lg rounded-bl-sm border px-4 py-3 text-sm leading-relaxed break-words"
-          style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', transition: 'min-height 0.1s ease' }}>
+
+        {/* Assistant Content Stream */}
+        <div ref={bubbleRef} className="w-full text-xs leading-relaxed break-words relative transition-all">
           {thinkingText && (
             <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
           )}
