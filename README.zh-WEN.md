@@ -49,11 +49,11 @@ Aether 發佈以雙形態並行，兩者氣脈同流，無有上下。深潛之�
 
 ---
 
-**Aether 居於何處 —— 誠直之衡。** 稽考公天下諸書，衡較二十方名家樞機（2026-09 最新驗度；乃平心權量，非誇飾之競分）。吾輩存真去偽，直書其貌：「玄圃內隱」、「金城禦侮」與「萬宗並納」拔萃當世；而獨門純藝之算，坦承有遜於 Claude Code 與 Cursor 之輩，不作矯飾。詳考載於 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
+**Aether 居於何處。** 稽考公天下諸書，以已頒之 v0.9.0 衡較二十方名家樞機（2026-09；乃平心權量，非競分）。惟「萬宗並納」「玄圃內隱」二緯與諸家之冠同列；運算、生態、群策、禦侮（僅應用層之藩籬，無系統級隔離，獨行於 Windows）、几席端流諸緯，坦承猶遜於前列，圖中如實繪之。逐緯所據與二十九家之廣考，詳載於 [docs/competitive-analysis.md](docs/competitive-analysis.md)。
 
-<p align="center"><img src="./assets/agent-radar-2026.zh-WEN.svg" width="760" alt="Aether 躬自審度星網: 衡較十八方名家樞機" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.zh-WEN.svg" width="760" alt="Aether 躬自審度星網: 衡較二十方名家樞機" /></p>
 
-<sub>圖出於 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> —— 十六家算度俱納於中，可以 <code>node app/scripts/gen-radar.cjs</code> 驗知。</sub>
+<sub>圖出於 <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> —— 二十家算度俱納於中，可以 <code>node app/scripts/gen-radar.cjs</code> 驗知。</sub>
 
 ---
 

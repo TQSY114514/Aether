@@ -51,11 +51,11 @@ Aether adopta una **arquitectura de doble motor**, ofreciendo dos interfaces de 
 
 ---
 
-**Dónde se sitúa Aether — con total honestidad.** Autoevaluación frente a 18 herramientas de agentes líderes (terminal, IDE y plataformas autónomas) a partir de información pública (evaluación de 2026-09; estimaciones, no benchmarks). Presentamos la geometría asimétrica sin retoques: líder en privacidad local, seguridad de sandbox de 3 niveles y flexibilidad multi-modelo; reconocemos sin rodeos la distancia en código puro frente a Claude Code y Cursor. Para un análisis detallado, consulta [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Dónde se sitúa Aether.** Autoevaluación de la v0.9.0 publicada frente a 20 herramientas de agentes líderes (terminal, IDE y plataformas) a partir de información pública (2026-09; estimaciones subjetivas, no benchmarks). Solo dos ejes están a la altura del mejor de su clase: libertad multi-proveedor y privacidad local. En código, ecosistema, orquestación multi-agente, seguridad (sandbox a nivel de aplicación, sin aislamiento del SO, solo Windows) y experiencia desktop / TUI, Aether sigue por detrás del primer grupo, y el gráfico lo muestra. Justificación por eje y panorama ampliado a 29 herramientas: [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
-<p align="center"><img src="./assets/agent-radar-2026.es.svg" width="760" alt="Radar de autoevaluación honesto de Aether vs 20 pares" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.es.svg" width="760" alt="Radar de autoevaluación de Aether vs 20 pares" /></p>
 
-<sub>Gráfico generado por <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — puntuaciones incrustadas textualmente; reproducible con <code>node app/scripts/gen-radar.cjs</code>.</sub>
+<sub>Gráfico generado por <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — puntuaciones de las 20 herramientas incrustadas textualmente; reproducible con <code>node app/scripts/gen-radar.cjs</code>.</sub>
 
 ---
 

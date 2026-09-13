@@ -51,11 +51,11 @@ O Aether adota uma **arquitetura de motor duplo**, oferecendo duas interfaces de
 
 ---
 
-**Onde o Aether se posiciona — com total honestidade.** Autoavaliação frente a 18 ferramentas de agentes líderes (terminal, IDE e plataformas autônomas) com base em dados públicos (avaliação de 2026-09; estimativas, não benchmarks). Apresentamos a forma assimétrica sem filtros: liderança em privacidade local, segurança em 3 níveis e flexibilidade multi-modelo; reconhecemos com franqueza a distância em código bruto frente ao Claude Code e Cursor. Para uma análise aprofundada, veja [docs/competitive-analysis.md](docs/competitive-analysis.md).
+**Onde o Aether se posiciona.** Autoavaliação da v0.9.0 lançada frente a 20 ferramentas de agentes líderes (terminal, IDE e plataformas) com base em dados públicos (2026-09; estimativas subjetivas, não benchmarks). Apenas dois eixos estão no nível do melhor da categoria: liberdade multi-provedor e privacidade local. Em código, ecossistema, orquestração multi-agente, segurança (sandbox na camada da aplicação, sem isolamento do SO, apenas Windows) e experiência desktop / TUI, o Aether ainda fica atrás do primeiro grupo — e o gráfico mostra isso. Justificativa por eixo e o panorama ampliado de 29 ferramentas: [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
-<p align="center"><img src="./assets/agent-radar-2026.pt.svg" width="760" alt="Radar de Autoavaliação Honesta do Aether vs 20 pares" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.pt.svg" width="760" alt="Radar de autoavaliação do Aether vs 20 pares" /></p>
 
-<sub>Gráfico gerado por <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — pontuações incorporadas literalmente; reproduzível via <code>node app/scripts/gen-radar.cjs</code>.</sub>
+<sub>Gráfico gerado por <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — pontuações das 20 ferramentas incorporadas literalmente; reproduzível via <code>node app/scripts/gen-radar.cjs</code>.</sub>
 
 ---
 

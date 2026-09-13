@@ -2,7 +2,9 @@
 /**
  * gen-radar.cjs — generates localized radar SVGs in assets/
  *
- * Data source: aether_agent_radar_scores_2026_09 (updated 2026-09, v0.9.0 release).
+ * Data source: SCORES below (self-assessed 2026-09 against v0.9.0, the latest
+ * released tag). Per-axis rationale for the Aether row lives in
+ * docs/competitive-analysis.md section 4; keep both in sync.
  * Generates:
  *   - assets/agent-radar-2026.svg (default zh-CN / canonical)
  *   - assets/agent-radar-2026.<lang>.svg for 14 supported locales:
@@ -24,10 +26,27 @@
 const fs = require('fs');
 const path = require('path');
 
-// ─── 20 Competitor Benchmark Scores (2026-09 最新评估) ──────────────────────
+// ─── 20 Competitor Benchmark Scores (2026-09, subjective 0-10 estimates) ────
+// Axis order: Coding, General, Multi-provider, Ecosystem, Multi-agent, Safety,
+//             Local & private, Desktop & TUI UX
 const SCORES = {
-  // Aether (2026-09 v0.9.0 客观校准: 守住本地隐私与多模型优势，如实呈现纯编程与通用任务客观差距，拒绝虚高)
-  'Aether':             [7.8, 8.0, 9.7, 8.8, 8.2, 9.3, 9.7, 8.8],
+  // Aether v0.9.0 — scored against what ships, not the roadmap:
+  //   Coding 7.0        harness only (42 tools, LSP, repo map); no own model, no
+  //                     published SWE-bench / Pass@1 numbers (evals/coding is tiny)
+  //   General 7.0       same harness applied outside code; no browser/computer use
+  //   Multi-provider 9.0 OpenAI-compatible / Claude / DeepSeek / Ollama + Arena +
+  //                     ELO routing; OpenCode/Aider/Cline are equally BYOK
+  //   Ecosystem 4.0     MCP / SKILL.md / hooks exist but are marked Experimental;
+  //                     no third-party market, single-maintainer community
+  //   Multi-agent 6.0   hierarchical planning is Experimental; Arena is
+  //                     multi-model voting, not multi-agent orchestration
+  //   Safety 7.0        app-layer whitelist + regex + realpath jail + optional
+  //                     Docker backend; no OS-level sandbox (seatbelt/Landlock),
+  //                     Windows-only
+  //   Local 9.0         SQLite, no account, no telemetry; on par with OpenCode
+  //   UX 6.5            Desktop chat is Stable; TUI/CLI/SDK are Experimental,
+  //                     Windows-only, unsigned installer
+  'Aether':             [7.0, 7.0, 9.0, 4.0, 6.0, 7.0, 9.0, 6.5],
 
   // 终端与混合编程 Agent (Terminal & Hybrid Coding Agents)
   'Claude Code':        [9.8, 6.5, 7.0, 9.8, 9.5,  9.0, 7.5, 8.0],
@@ -62,9 +81,9 @@ const PEERS = Object.keys(SCORES).filter((k) => k !== SELF);
 // ─── i18n Localization Dictionary ───────────────────────────────────────────
 const I18N = {
   'zh-CN': {
-    title: 'Aether · Agent 诚实自评雷达',
-    titleTag: '(2026-09 最新评估)',
-    subtitle: '全面对比 20 款主流 Agent 工具 · 8 大核心维度能力画像',
+    title: 'Aether · Agent 自评雷达',
+    titleTag: '(2026-09 · 主观估计，非跑分)',
+    subtitle: '对比 20 款主流 Agent 工具 · 8 维度自评',
     legendAether: 'Aether 自评 (v0.9.0)',
     legendPeerBest: '同类最佳包络 (20 款竞品峰值)',
     legendClaude: 'Claude Code (终端标杆)',
@@ -75,7 +94,7 @@ const I18N = {
       { primary: '编程 Agent', secondary: 'Coding' },
       { primary: '通用任务', secondary: 'General' },
       { primary: '多模型/供应商', secondary: 'Multi-provider' },
-      { primary: '扩展架构', secondary: 'MCP & Skills' },
+      { primary: '扩展生态', secondary: 'Ecosystem' },
       { primary: '多 Agent 编排', secondary: 'Multi-agent' },
       { primary: '安全/权限', secondary: 'Safety' },
       { primary: '本地/隐私', secondary: 'Local & private' },
@@ -85,12 +104,12 @@ const I18N = {
     catTerminal: '终端/混合',
     catIde: 'IDE/评审',
     catAuto: '自主平台',
-    footnote: '客观自评 · 形状即定位：Aether 强在「本地隐私」、「三层沙箱安全」与「多模型自由切换」；在单一极端编程任务上坦然落后于 Claude Code/Cursor，绝不顶格美化。',
+    footnote: '自评，非跑分：Aether 在「多模型切换」与「本地隐私」上与同类最佳同档；编程、生态、多 Agent、安全、UX 与第一梯队仍有明确差距。逐轴依据见 docs/competitive-analysis.md。',
   },
   'en': {
-    title: 'Aether · Agent Honest Self-Assessment Radar',
-    titleTag: '(2026-09 Latest Assessment)',
-    subtitle: 'Comprehensive Benchmark vs 18 Leading Agent Tools · 8 Core Dimensions',
+    title: 'Aether · Agent Self-Assessment Radar',
+    titleTag: '(2026-09 · subjective estimates, not benchmarks)',
+    subtitle: 'Self-scored vs 20 Leading Agent Tools · 8 Dimensions',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Peer-Best Envelope (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal Benchmark)',
@@ -98,25 +117,25 @@ const I18N = {
     leadBadge: '★Lead',
     peakLabel: 'Peak',
     axes: [
-      { primary: 'Coding Agent', secondary: 'Specialized Task' },
-      { primary: 'General Tasks', secondary: 'Autonomous Scope' },
-      { primary: 'Multi-Provider', secondary: 'Zero-Lockin BYOK' },
-      { primary: 'Extensibility', secondary: 'MCP & Skills' },
-      { primary: 'Multi-Agent', secondary: 'Sub-Agent Routing' },
-      { primary: '3-Tier Safety', secondary: 'Diff & Taint Sandbox' },
-      { primary: 'Local & Privacy', secondary: 'SQLite & Zero-Telemetry' },
-      { primary: 'Desktop & TUI Dual UX', secondary: 'GUI & Terminal Sync' },
+      { primary: 'Coding Agent', secondary: 'Coding' },
+      { primary: 'General Tasks', secondary: 'General' },
+      { primary: 'Multi-Provider', secondary: 'Multi-provider' },
+      { primary: 'Extensibility & Ecosystem', secondary: 'Ecosystem' },
+      { primary: 'Multi-Agent', secondary: 'Multi-agent' },
+      { primary: 'Safety / Permissions', secondary: 'Safety' },
+      { primary: 'Local & Privacy', secondary: 'Local & private' },
+      { primary: 'Desktop & TUI UX', secondary: 'Desktop & TUI UX' },
     ],
     matrixLabel: 'Peer Benchmark Matrix (20 Tools):',
     catTerminal: 'Terminal / Hybrid',
     catIde: 'IDE / Review',
     catAuto: 'Autonomous',
-    footnote: 'Honest Self-Assessment · Shape as Positioning: Aether excels in local privacy, 3-tier sandbox safety, and multi-provider agility; raw coding trails Claude Code/Cursor without artificial inflating.',
+    footnote: 'Self-assessed, not benchmarked: Aether is on par with peer-best at multi-provider and local privacy; coding, ecosystem, multi-agent, safety and UX still trail the top tier. Per-axis rationale: docs/competitive-analysis.md.',
   },
   'zh-TW': {
-    title: 'Aether · Agent 誠實自評雷達',
-    titleTag: '(2026-09 最新評估)',
-    subtitle: '全面對比 20 款主流 Agent 工具 · 8 大核心維度能力畫像',
+    title: 'Aether · Agent 自評雷達',
+    titleTag: '(2026-09 · 主觀估計，非跑分)',
+    subtitle: '對比 20 款主流 Agent 工具 · 8 維度自評',
     legendAether: 'Aether 自評 (v0.9.0)',
     legendPeerBest: '同類最佳包絡 (20 款競品峰值)',
     legendClaude: 'Claude Code (終端標竿)',
@@ -137,12 +156,12 @@ const I18N = {
     catTerminal: '終端/混合',
     catIde: 'IDE/審查',
     catAuto: '自主平台',
-    footnote: '客觀自評 · 形狀即定位：Aether 強在「本地隱私」、「三層沙箱安全」與「多模型自由切換」；在單一極端編程任務上坦然落後於 Claude Code/Cursor，絕不頂格美化。',
+    footnote: '自評，非跑分：Aether 在「多模型切換」與「本地隱私」上與同類最佳同檔；編程、生態、多 Agent、安全、UX 與第一梯隊仍有明確差距。逐軸依據見 docs/competitive-analysis.md。',
   },
   'zh-WEN': {
     title: 'Aether · 樞機經緯 躬自審度星網',
-    titleTag: '(2026-09 最新驗度)',
-    subtitle: '衡較二十方名家樞機 · 八緯至極能力圖譜',
+    titleTag: '(2026-09 · 平心權量，非競分)',
+    subtitle: '衡較二十方名家樞機 · 八緯自度圖譜',
     legendAether: 'Aether 躬省度數 (v0.9.0)',
     legendPeerBest: '諸子冠絕包絡（二十家之峰）',
     legendClaude: 'Claude Code (端几之表率)',
@@ -163,12 +182,12 @@ const I18N = {
     catTerminal: '端几/兼納',
     catIde: '工坊/詳校',
     catAuto: '玄機自主',
-    footnote: '直筆省度 · 形神歸位：Aether 雄於「本地隱默」、「三重營壘安全」及「萬流並蓄」；純藝運算則坦承弗及 Claude Code 與 Cursor，絕不矯飾虛榮。',
+    footnote: '躬省而非競分：Aether 於「萬流並蓄」「本地隱默」與諸家之冠同列；運算、生態、群策、禦侮、几席諸緯，坦承猶遜於前列。逐緯所據，詳見 docs/competitive-analysis.md。',
   },
   'ja': {
-    title: 'Aether · Agent 正直な自己評価レーダー',
-    titleTag: '(2026-09 最新評価)',
-    subtitle: '主要エージェント20種との徹底比較 · 8大コア能力プロファイル',
+    title: 'Aether · Agent 自己評価レーダー',
+    titleTag: '(2026-09 · 主観的推定、ベンチマークではない)',
+    subtitle: '主要エージェント20種との比較 · 8軸の自己評価',
     legendAether: 'Aether 自己評価 (v0.9.0)',
     legendPeerBest: '同種ベスト包絡線 (20種競合の最高値)',
     legendClaude: 'Claude Code (ターミナル基準)',
@@ -189,12 +208,12 @@ const I18N = {
     catTerminal: 'ターミナル/ハイブリッド',
     catIde: 'IDE/レビュー',
     catAuto: '自律型プラットフォーム',
-    footnote: '客観的自己評価 · 形状こそが位置づけ: Aetherは「ローカル・プライバシー」「3層サンドボックス」「複数モデル切替」でリード。過度な美化を排し、単一コーディングでのClaude Code/Cursorとの差を率直に提示。',
+    footnote: '自己評価であり実測ではない: Aetherは「複数モデル切替」「ローカル・プライバシー」で同類最高と同水準。コーディング、生態系、マルチAgent、安全性、UXはトップ層に明確な差がある。各軸の根拠は docs/competitive-analysis.md。',
   },
   'ko': {
-    title: 'Aether · Agent 솔직한 자체 평가 레이더',
-    titleTag: '(2026-09 최신 평가)',
-    subtitle: '20개 주요 에이전트 도구 비교 · 8대 핵심 역량 프로파일',
+    title: 'Aether · Agent 자체 평가 레이더',
+    titleTag: '(2026-09 · 주관적 추정, 벤치마크 아님)',
+    subtitle: '20개 주요 에이전트 도구 비교 · 8개 축 자체 평가',
     legendAether: 'Aether 자체 평가 (v0.9.0)',
     legendPeerBest: '동급 최고 포락선 (20개 도구 최고점)',
     legendClaude: 'Claude Code (터미널 벤치마크)',
@@ -215,12 +234,12 @@ const I18N = {
     catTerminal: '터미널/하이브리드',
     catIde: 'IDE/리뷰',
     catAuto: '자율 플랫폼',
-    footnote: '솔직한 자체 평가 · 형태가 곧 포지셔닝: Aether는 로컬 프라이버시, 3단계 샌드박스, 다중 모델 전환에서 우수하며, 순수 코딩에서의 Claude Code/Cursor 대비 격차를 과장 없이 솔직하게 인정합니다.',
+    footnote: '자체 평가이며 실측이 아님: Aether는 다중 모델 전환과 로컬 프라이버시에서 동급 최고와 같은 수준이며, 코딩·생태계·멀티 Agent·보안·UX는 최상위권과 분명한 격차가 있습니다. 축별 근거: docs/competitive-analysis.md.',
   },
   'de': {
-    title: 'Aether · Agent Ehrliches Selbsteinschätzungs-Radar',
-    titleTag: '(2026-09 Bewertung)',
-    subtitle: 'Benchmark gegen 18 führende Agenten · 8 Kernkompetenzen',
+    title: 'Aether · Agent Selbsteinschätzungs-Radar',
+    titleTag: '(2026-09 · subjektive Schätzung, kein Benchmark)',
+    subtitle: 'Selbstbewertung gegen 20 führende Agenten · 8 Dimensionen',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Peer-Best-Hüllkurve (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal-Referenz)',
@@ -233,7 +252,7 @@ const I18N = {
       { primary: 'Multi-Modell / Provider', secondary: 'Multi-provider' },
       { primary: 'Erweiterbarkeit & MCP', secondary: 'Ecosystem' },
       { primary: 'Multi-Agenten', secondary: 'Multi-agent' },
-      { primary: '3-Stufen-Sicherheit', secondary: 'Safety' },
+      { primary: 'Sicherheit / Rechte', secondary: 'Safety' },
       { primary: 'Lokal & Privatsphäre', secondary: 'Local & private' },
       { primary: 'Desktop & TUI Dual-UX', secondary: 'Desktop & TUI UX' },
     ],
@@ -241,12 +260,12 @@ const I18N = {
     catTerminal: 'Terminal / Hybrid',
     catIde: 'IDE / Review',
     catAuto: 'Autonom',
-    footnote: 'Ehrliche Selbsteinschätzung · Form als Positionierung: Aether glänzt bei lokaler Privatsphäre, 3-stufiger Sandbox und Modellauswahl; räumt Rückstand beim reinen Coding gegenüber Claude Code/Cursor offen ein.',
+    footnote: 'Selbsteinschätzung, kein Benchmark: Aether liegt bei Multi-Provider und lokaler Privatsphäre gleichauf mit den Besten; Coding, Ökosystem, Multi-Agent, Sicherheit und UX bleiben klar hinter der Spitze. Begründung je Achse: docs/competitive-analysis.md.',
   },
   'fr': {
-    title: 'Aether · Radar d\'auto-évaluation honnête',
-    titleTag: '(2026-09 Évaluation)',
-    subtitle: 'Comparatif avec 20 agents de pointe · 8 dimensions clés',
+    title: 'Aether · Radar d\'auto-évaluation',
+    titleTag: '(2026-09 · estimation subjective, pas un benchmark)',
+    subtitle: 'Auto-évaluation face à 20 agents de pointe · 8 dimensions',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Enveloppe du meilleur pair (pic 20 pairs)',
     legendClaude: 'Claude Code (Réf. Terminal)',
@@ -259,20 +278,20 @@ const I18N = {
       { primary: 'Multi-modèles / Fournisseurs', secondary: 'Multi-provider' },
       { primary: 'Écosystème & MCP', secondary: 'Ecosystem' },
       { primary: 'Multi-Agents', secondary: 'Multi-agent' },
-      { primary: 'Sécurité à 3 niveaux', secondary: 'Safety' },
+      { primary: 'Sécurité / Permissions', secondary: 'Safety' },
       { primary: 'Local-first & Confidentialité', secondary: 'Local & private' },
       { primary: 'Double UX Bureau & TUI', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'Matrice comparative (18 outils) :',
+    matrixLabel: 'Matrice comparative (20 outils) :',
     catTerminal: 'Terminal / Hybride',
     catIde: 'IDE / Revue',
     catAuto: 'Autonome',
-    footnote: 'Auto-évaluation honnête · La forme reflète le positionnement : Aether excelle en confidentialité locale, bac à sable à 3 niveaux et multi-fournisseurs ; reconnaît sans fard l\'écart de code brut face à Claude Code/Cursor.',
+    footnote: 'Auto-évaluation, pas un benchmark : Aether est au niveau des meilleurs en multi-fournisseurs et confidentialité locale ; code, écosystème, multi-agents, sécurité et UX restent nettement derrière le haut du classement. Détail par axe : docs/competitive-analysis.md.',
   },
   'es': {
-    title: 'Aether · Radar de autoevaluación honesto',
-    titleTag: '(2026-09 Evaluación)',
-    subtitle: 'Comparativa con 18 herramientas de agentes líderes · 8 dimensiones clave',
+    title: 'Aether · Radar de autoevaluación',
+    titleTag: '(2026-09 · estimación subjetiva, no benchmark)',
+    subtitle: 'Autoevaluación frente a 20 herramientas de agentes líderes · 8 dimensiones',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Envolvente del mejor par (pico de 20 pares)',
     legendClaude: 'Claude Code (Ref. Terminal)',
@@ -285,20 +304,20 @@ const I18N = {
       { primary: 'Multi-modelo / Proveedor', secondary: 'Multi-provider' },
       { primary: 'Ecosistema & MCP', secondary: 'Ecosystem' },
       { primary: 'Multi-Agente', secondary: 'Multi-agent' },
-      { primary: 'Seguridad en 3 niveles', secondary: 'Safety' },
+      { primary: 'Seguridad / Permisos', secondary: 'Safety' },
       { primary: 'Local y privacidad', secondary: 'Local & private' },
       { primary: 'UX dual Escritorio y TUI', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'Matriz comparativa (18 herramientas):',
+    matrixLabel: 'Matriz comparativa (20 herramientas):',
     catTerminal: 'Terminal / Híbrido',
     catIde: 'IDE / Revisión',
     catAuto: 'Autónomo',
-    footnote: 'Autoevaluación honesta · La forma como posicionamiento: Aether destaca en privacidad local, sandbox de 3 niveles y multiflexibilidad; asume sin maquillaje la brecha en código frente a Claude Code/Cursor.',
+    footnote: 'Autoevaluación, no benchmark: Aether está a la par de los mejores en multiproveedor y privacidad local; código, ecosistema, multiagente, seguridad y UX siguen claramente por detrás del primer nivel. Detalle por eje: docs/competitive-analysis.md.',
   },
   'pt': {
-    title: 'Aether · Radar de Autoavaliação Honesta',
-    titleTag: '(2026-09 Avaliação)',
-    subtitle: 'Comparação com 18 ferramentas de agentes líderes · 8 dimensões centrais',
+    title: 'Aether · Radar de Autoavaliação',
+    titleTag: '(2026-09 · estimativa subjetiva, não benchmark)',
+    subtitle: 'Autoavaliação frente a 20 ferramentas de agentes líderes · 8 dimensões',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Envelope do melhor par (pico de 20 pares)',
     legendClaude: 'Claude Code (Ref. Terminal)',
@@ -311,20 +330,20 @@ const I18N = {
       { primary: 'Múltiplos modelos / Provedores', secondary: 'Multi-provider' },
       { primary: 'Ecossistema & MCP', secondary: 'Ecosystem' },
       { primary: 'Multi-Agentes', secondary: 'Multi-agent' },
-      { primary: 'Segurança em 3 níveis', secondary: 'Safety' },
+      { primary: 'Segurança / Permissões', secondary: 'Safety' },
       { primary: 'Local-first e privacidade', secondary: 'Local & private' },
       { primary: 'UX dupla Desktop & TUI', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'Matriz comparativa (18 ferramentas):',
+    matrixLabel: 'Matriz comparativa (20 ferramentas):',
     catTerminal: 'Terminal / Híbrido',
     catIde: 'IDE / Revisão',
     catAuto: 'Autônomo',
-    footnote: 'Autoavaliação honesta · A forma é o posicionamento: Aether lidera em privacidade local, sandbox de 3 níveis e multiprovedores; reconhece sem rodeios a distância em código bruto frente ao Claude Code/Cursor.',
+    footnote: 'Autoavaliação, não benchmark: Aether está no nível dos melhores em multiprovedor e privacidade local; código, ecossistema, multiagente, segurança e UX ainda ficam claramente atrás do topo. Detalhe por eixo: docs/competitive-analysis.md.',
   },
   'ru': {
-    title: 'Aether · Честный радар самооценки',
-    titleTag: '(2026-09 Оценка)',
-    subtitle: 'Сравнение с 18 ведущими агентами · 8 ключевых измерений',
+    title: 'Aether · Радар самооценки',
+    titleTag: '(2026-09 · субъективная оценка, не бенчмарк)',
+    subtitle: 'Самооценка против 20 ведущих агентов · 8 измерений',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Огибающая лучших аналогов (пик 20 систем)',
     legendClaude: 'Claude Code (Эталон Terminal)',
@@ -337,20 +356,20 @@ const I18N = {
       { primary: 'Мульти-модели / Провайдеры', secondary: 'Multi-provider' },
       { primary: 'Экосистема и MCP', secondary: 'Ecosystem' },
       { primary: 'Оркестрация мультиагентов', secondary: 'Multi-agent' },
-      { primary: '3-уровневая безопасность', secondary: 'Safety' },
+      { primary: 'Безопасность / права', secondary: 'Safety' },
       { primary: 'Локальность и приватность', secondary: 'Local & private' },
       { primary: 'Двойной UX: десктоп и TUI', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'Матрица аналогов (18 инструментов):',
+    matrixLabel: 'Матрица аналогов (20 инструментов):',
     catTerminal: 'Терминал / Гибрид',
     catIde: 'IDE / Ревью',
     catAuto: 'Автономные',
-    footnote: 'Честная самооценка · Форма как позиционирование: Aether лидирует в локальной приватности, 3-уровневой песочнице и мультипровайдерах; открыто признает отставание в чистом кодинге от Claude Code/Cursor.',
+    footnote: 'Самооценка, не бенчмарк: Aether на уровне лучших по мультипровайдерам и локальной приватности; кодинг, экосистема, мультиагентность, безопасность и UX заметно отстают от лидеров. Обоснование по осям: docs/competitive-analysis.md.',
   },
   'uk': {
-    title: 'Aether · Чесний радар самооцінки',
-    titleTag: '(2026-09 Оцінка)',
-    subtitle: 'Порівняння з 18 провідними агентами · 8 ключових вимірів',
+    title: 'Aether · Радар самооцінки',
+    titleTag: '(2026-09 · суб\'єктивна оцінка, не бенчмарк)',
+    subtitle: 'Самооцінка проти 20 провідних агентів · 8 вимірів',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'Обвідна найкращих аналогів (пік 20 систем)',
     legendClaude: 'Claude Code (Еталон Terminal)',
@@ -363,22 +382,22 @@ const I18N = {
       { primary: 'Мульти-моделі / Провайдери', secondary: 'Multi-provider' },
       { primary: 'Екосистема та MCP', secondary: 'Ecosystem' },
       { primary: 'Оркестрація мультиагентів', secondary: 'Multi-agent' },
-      { primary: '3-рівнева безпека', secondary: 'Safety' },
+      { primary: 'Безпека / права', secondary: 'Safety' },
       { primary: 'Локальність і приватність', secondary: 'Local & private' },
       { primary: 'Подвійний UX: десктоп і TUI', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'Матриця аналогів (18 інструментів):',
+    matrixLabel: 'Матриця аналогів (20 інструментів):',
     catTerminal: 'Термінал / Гібрид',
     catIde: 'IDE / Рев\'ю',
     catAuto: 'Автономні',
-    footnote: 'Чесна самооцінка · Форма як позиціонування: Aether веде в локальній приватності, 3-рівневій пісочниці та мультипровайдерах; відверто визнає відставання в чистому коді від Claude Code/Cursor.',
+    footnote: 'Самооцінка, не бенчмарк: Aether на рівні найкращих за мультипровайдерами та локальною приватністю; кодинг, екосистема, мультиагентність, безпека та UX помітно відстають від лідерів. Обґрунтування за осями: docs/competitive-analysis.md.',
   },
   'ar': {
-    title: 'Aether · رادار التقييم الذاتي الصادق',
-    titleTag: '(2026-09 التقييم الأحدث)',
-    subtitle: 'مقارنة شاملة مع 18 وكيلاً رائداً · رسم بياني لـ 8 أبعاد جوهرية',
+    title: 'Aether · رادار التقييم الذاتي',
+    titleTag: '(2026-09 · تقدير ذاتي، ليس معياراً قياسياً)',
+    subtitle: 'تقييم ذاتي مقابل 20 وكيلاً رائداً · 8 أبعاد',
     legendAether: 'Aether (v0.9.0)',
-    legendPeerBest: 'غلاف أفضل الأقران (قمة 18 وكيلاً)',
+    legendPeerBest: 'غلاف أفضل الأقران (قمة 20 وكيلاً)',
     legendClaude: 'Claude Code (معيار الطرفية)',
     legendCursor: 'Cursor (معيار بيئة التطوير)',
     leadBadge: '★رائد',
@@ -389,20 +408,20 @@ const I18N = {
       { primary: 'تعدد النماذج / المزودين', secondary: 'Multi-provider' },
       { primary: 'التوسع ومنظومة MCP', secondary: 'Ecosystem' },
       { primary: 'تنسيق الوكلاء المتعددين', secondary: 'Multi-agent' },
-      { primary: 'أمان ثلاثي المستويات', secondary: 'Safety' },
+      { primary: 'الأمان / الصلاحيات', secondary: 'Safety' },
       { primary: 'العمل المحلي والخصوصية', secondary: 'Local & private' },
       { primary: 'واجهة مزدوجة للمكتب والطرفية', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'مصفوفة مقارنة الأقران (18 أداة):',
+    matrixLabel: 'مصفوفة مقارنة الأقران (20 أداة):',
     catTerminal: 'الطرفية / الهجين',
     catIde: 'بيئة التطوير / المراجعة',
     catAuto: 'المنصات الذاتية',
-    footnote: 'تقييم ذاتي صادق · الشكل يحدد الهوية: يتفوق Aether في الخصوصية المحلية والأمان ثلاثي المستويات ومرونة النماذج؛ ويعترف بفارق البرمجة الصرفة مقارنة بـ Claude Code/Cursor دون تزييف.',
+    footnote: 'تقييم ذاتي وليس معياراً: Aether بمستوى الأفضل في تعدد المزودين والخصوصية المحلية؛ أما البرمجة والمنظومة وتعدد الوكلاء والأمان وتجربة الاستخدام فلا تزال خلف الصف الأول بوضوح. التفاصيل لكل محور: docs/competitive-analysis.md.',
   },
   'hi': {
-    title: 'Aether · ईमानदार आत्म-मूल्यांकन रडार',
-    titleTag: '(2026-09 नवीनतम मूल्यांकन)',
-    subtitle: '20 प्रमुख एजेंट उपकरणों की तुलना · 8 मुख्य आयामों की क्षमता प्रोफ़ाइल',
+    title: 'Aether · आत्म-मूल्यांकन रडार',
+    titleTag: '(2026-09 · व्यक्तिपरक अनुमान, बेंचमार्क नहीं)',
+    subtitle: '20 प्रमुख एजेंट उपकरणों से तुलना · 8 आयामों का आत्म-मूल्यांकन',
     legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'समकक्ष-सर्वोत्तम आवरण (20 प्रतिस्पर्धियों का शिखर)',
     legendClaude: 'Claude Code (टर्मिनल बेंचमार्क)',
@@ -415,7 +434,7 @@ const I18N = {
       { primary: 'मल्टी-मॉडल / प्रदाता', secondary: 'Multi-provider' },
       { primary: 'विस्तार और MCP', secondary: 'Ecosystem' },
       { primary: 'मल्टी-एजेंट समन्वय', secondary: 'Multi-agent' },
-      { primary: '3-स्तरीय सुरक्षा', secondary: 'Safety' },
+      { primary: 'सुरक्षा / अनुमतियाँ', secondary: 'Safety' },
       { primary: 'स्थानीय और गोपनीयता', secondary: 'Local & private' },
       { primary: 'डेस्कटॉप और TUI दोहरा UX', secondary: 'Desktop & TUI UX' },
     ],
@@ -423,7 +442,7 @@ const I18N = {
     catTerminal: 'टर्मिनल / हाइब्रिड',
     catIde: 'IDE / समीक्षा',
     catAuto: 'स्वायत्त',
-    footnote: 'ईमानदार आत्म-मूल्यांकन · आकार ही स्थिति है: Aether स्थानीय गोपनीयता, 3-स्तरीय सुरक्षा और मल्टी-मॉडल में उत्कृष्ट है; कृत्रिम बढ़ाव के बिना Claude Code/Cursor से कोडिंग में अंतर को स्वीकार करता है।',
+    footnote: 'आत्म-मूल्यांकन, बेंचमार्क नहीं: मल्टी-प्रदाता और स्थानीय गोपनीयता में Aether सर्वोत्तम के बराबर है; कोडिंग, इकोसिस्टम, मल्टी-एजेंट, सुरक्षा और UX शीर्ष स्तर से स्पष्ट रूप से पीछे हैं। प्रति-आयाम आधार: docs/competitive-analysis.md.',
   },
 };
 
@@ -541,10 +560,12 @@ function renderRadarSvg(lang = 'zh-CN') {
     // Vertical shift based on hemisphere
     const dy = sin < -0.7 ? -8 : sin > 0.7 ? 12 : 2;
     const selfScore = selfScores[i];
-    const delta = (selfScore - peerBest[i]).toFixed(1);
-    const isTop = delta >= 0;
+    const deltaNum = selfScore - peerBest[i];
+    const delta = deltaNum.toFixed(1);
+    const isTop = deltaNum > 0.05;
+    const badge = isTop ? dict.leadBadge : Math.abs(deltaNum) < 0.05 ? '±0' : delta;
 
-    parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">${esc(ax.primary)} <tspan fill="${isTop ? '#4ade80' : '#a5b4fc'}" font-size="11.5" font-weight="700">${selfScore.toFixed(1)}</tspan><tspan fill="${isTop ? '#4ade80' : '#8b949e'}" font-size="10"> (${isTop ? dict.leadBadge : delta})</tspan></text>`);
+    parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,'Microsoft YaHei','PingFang SC','Meiryo',sans-serif" font-size="12.5" font-weight="600" fill="#e6edf3">${esc(ax.primary)} <tspan fill="${isTop ? '#4ade80' : '#a5b4fc'}" font-size="11.5" font-weight="700">${selfScore.toFixed(1)}</tspan><tspan fill="${isTop ? '#4ade80' : '#8b949e'}" font-size="10"> (${badge})</tspan></text>`);
     parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + dy + 14).toFixed(1)}" text-anchor="${anchor}" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" fill="#6e7681">${esc(ax.secondary)} · ${dict.peakLabel} ${peerBest[i].toFixed(1)}</text>`);
   });
 
