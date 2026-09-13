@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
 import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, Zap, Sparkles, ShieldCheck, ShieldAlert } from 'lucide-react'
-import AgentActionHUD from './AgentActionHUD'
 import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
@@ -636,7 +635,6 @@ export default function ChatInput() {
           </div>
         )}
         <AgentTaskDeck sessionId={currentSessionId} />
-        <AgentActionHUD sessionId={currentSessionId} />
         <div className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
