@@ -53,7 +53,7 @@ Aether adopta una **arquitectura de doble motor**, ofreciendo dos interfaces de 
 
 **Dónde se sitúa Aether — con total honestidad.** Autoevaluación frente a 18 herramientas de agentes líderes (terminal, IDE y plataformas autónomas) a partir de información pública (evaluación de 2026-09; estimaciones, no benchmarks). Presentamos la geometría asimétrica sin retoques: líder en privacidad local, seguridad de sandbox de 3 niveles y flexibilidad multi-modelo; reconocemos sin rodeos la distancia en código puro frente a Claude Code y Cursor. Para un análisis detallado, consulta [docs/competitive-analysis.md](docs/competitive-analysis.md).
 
-<p align="center"><img src="./assets/agent-radar-2026.es.svg" width="760" alt="Radar de autoevaluación honesto de Aether vs 18 pares" /></p>
+<p align="center"><img src="./assets/agent-radar-2026.es.svg" width="760" alt="Radar de autoevaluación honesto de Aether vs 20 pares" /></p>
 
 <sub>Gráfico generado por <a href="./app/scripts/gen-radar.cjs">app/scripts/gen-radar.cjs</a> — puntuaciones incrustadas textualmente; reproducible con <code>node app/scripts/gen-radar.cjs</code>.</sub>
 

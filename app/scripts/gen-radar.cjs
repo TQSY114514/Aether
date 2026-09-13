@@ -2,7 +2,7 @@
 /**
  * gen-radar.cjs — generates localized radar SVGs in assets/
  *
- * Data source: aether_agent_radar_scores_2026_09 (updated 2026-09, v0.8.2+ release).
+ * Data source: aether_agent_radar_scores_2026_09 (updated 2026-09, v0.9.0 release).
  * Generates:
  *   - assets/agent-radar-2026.svg (default zh-CN / canonical)
  *   - assets/agent-radar-2026.<lang>.svg for 14 supported locales:
@@ -24,10 +24,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// ─── 18 Competitor Benchmark Scores (2026-09 最新评估) ──────────────────────
+// ─── 20 Competitor Benchmark Scores (2026-09 最新评估) ──────────────────────
 const SCORES = {
-  // Aether (2026-09 v0.8.2+ 架构验收: 影子工作区 / 亚军对抗复核 / 配方体系 / 项目配置 / 本地 SWE-bench / 零遥测)
-  'Aether':             [9.1, 9.2, 9.9, 9.7, 9.4, 10.0, 9.8, 9.7],
+  // Aether (2026-09 v0.9.0 架构验收: 影子工作区 / Hermes全自动自进化 / V2转录流与实时Markdown / WCO等高平齐 / 零遥测)
+  'Aether':             [9.1, 9.2, 9.9, 9.7, 9.6, 10.0, 9.8, 9.8],
 
   // 终端与混合编程 Agent (Terminal & Hybrid Coding Agents)
   'Claude Code':        [9.8, 6.5, 7.0, 9.8, 9.5,  9.0, 7.5, 8.0],
@@ -44,6 +44,8 @@ const SCORES = {
   'Windsurf':           [9.5, 7.2, 7.0, 8.3, 8.0,  8.0, 6.5, 9.6],
   'Trae':               [9.3, 7.5, 7.5, 8.5, 8.2,  8.0, 6.5, 9.6],
   'Cline':              [9.1, 7.2, 8.8, 9.4, 7.8,  8.2, 8.5, 8.8],
+  'Roo Code':           [9.4, 7.8, 9.2, 9.5, 8.2,  8.5, 8.6, 8.8],
+  'Continue':           [9.0, 7.2, 9.5, 9.2, 7.5,  8.0, 8.8, 8.5],
   'GitHub Copilot':     [8.8, 7.0, 6.5, 8.0, 7.5,  8.2, 5.5, 9.5],
 
   // 全自主平台与开源框架 (Autonomous Platforms & Frameworks)
@@ -62,9 +64,9 @@ const I18N = {
   'zh-CN': {
     title: 'Aether · Agent 诚实自评雷达',
     titleTag: '(2026-09 最新评估)',
-    subtitle: '全面对比 18 款主流 Agent 工具 · 8 大核心维度能力画像',
-    legendAether: 'Aether 自评 (v0.8.2+)',
-    legendPeerBest: '同类最佳包络 (18 款竞品峰值)',
+    subtitle: '全面对比 20 款主流 Agent 工具 · 8 大核心维度能力画像',
+    legendAether: 'Aether 自评 (v0.9.0)',
+    legendPeerBest: '同类最佳包络 (20 款竞品峰值)',
     legendClaude: 'Claude Code (终端标杆)',
     legendCursor: 'Cursor (IDE 标杆)',
     leadBadge: '★领先',
@@ -79,7 +81,7 @@ const I18N = {
       { primary: '本地/隐私', secondary: 'Local & private' },
       { primary: '桌面/终端双形态', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: '对比竞品矩阵（18款）：',
+    matrixLabel: '对比竞品矩阵（20款）：',
     catTerminal: '终端/混合',
     catIde: 'IDE/评审',
     catAuto: '自主平台',
@@ -89,8 +91,8 @@ const I18N = {
     title: 'Aether · Agent Honest Self-Assessment Radar',
     titleTag: '(2026-09 Latest Assessment)',
     subtitle: 'Comprehensive Benchmark vs 18 Leading Agent Tools · 8 Core Dimensions',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'Peer-Best Envelope (18 Peers Peak)',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'Peer-Best Envelope (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal Benchmark)',
     legendCursor: 'Cursor (IDE Benchmark)',
     leadBadge: '★Lead',
@@ -105,7 +107,7 @@ const I18N = {
       { primary: 'Local & Privacy', secondary: 'SQLite & Zero-Telemetry' },
       { primary: 'Desktop & TUI Dual UX', secondary: 'GUI & Terminal Sync' },
     ],
-    matrixLabel: 'Peer Benchmark Matrix (18 Tools):',
+    matrixLabel: 'Peer Benchmark Matrix (20 Tools):',
     catTerminal: 'Terminal / Hybrid',
     catIde: 'IDE / Review',
     catAuto: 'Autonomous',
@@ -114,9 +116,9 @@ const I18N = {
   'zh-TW': {
     title: 'Aether · Agent 誠實自評雷達',
     titleTag: '(2026-09 最新評估)',
-    subtitle: '全面對比 18 款主流 Agent 工具 · 8 大核心維度能力畫像',
-    legendAether: 'Aether 自評 (v0.8.2+)',
-    legendPeerBest: '同類最佳包絡 (18 款競品峰值)',
+    subtitle: '全面對比 20 款主流 Agent 工具 · 8 大核心維度能力畫像',
+    legendAether: 'Aether 自評 (v0.9.0)',
+    legendPeerBest: '同類最佳包絡 (20 款競品峰值)',
     legendClaude: 'Claude Code (終端標竿)',
     legendCursor: 'Cursor (IDE 標竿)',
     leadBadge: '★領先',
@@ -131,7 +133,7 @@ const I18N = {
       { primary: '本地/隱私', secondary: 'Local & private' },
       { primary: '桌面/終端雙形態', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: '對比競品矩陣（18款）：',
+    matrixLabel: '對比競品矩陣（20款）：',
     catTerminal: '終端/混合',
     catIde: 'IDE/審查',
     catAuto: '自主平台',
@@ -140,9 +142,9 @@ const I18N = {
   'zh-WEN': {
     title: 'Aether · 樞機經緯 躬自審度星網',
     titleTag: '(2026-09 最新驗度)',
-    subtitle: '衡較十八方名家樞機 · 八緯至極能力圖譜',
-    legendAether: 'Aether 躬省度數 (v0.8.2+)',
-    legendPeerBest: '諸子冠絕包絡（十八家之峰）',
+    subtitle: '衡較二十方名家樞機 · 八緯至極能力圖譜',
+    legendAether: 'Aether 躬省度數 (v0.9.0)',
+    legendPeerBest: '諸子冠絕包絡（二十家之峰）',
     legendClaude: 'Claude Code (端几之表率)',
     legendCursor: 'Cursor (工坊之表率)',
     leadBadge: '★冠首',
@@ -157,7 +159,7 @@ const I18N = {
       { primary: '玄圃內隱', secondary: 'Local-first' },
       { primary: '几席端流雙修', secondary: 'Dual UX' },
     ],
-    matrixLabel: '參互棋局（十八流）：',
+    matrixLabel: '參互棋局（二十流）：',
     catTerminal: '端几/兼納',
     catIde: '工坊/詳校',
     catAuto: '玄機自主',
@@ -166,9 +168,9 @@ const I18N = {
   'ja': {
     title: 'Aether · Agent 正直な自己評価レーダー',
     titleTag: '(2026-09 最新評価)',
-    subtitle: '主要エージェント18種との徹底比較 · 8大コア能力プロファイル',
-    legendAether: 'Aether 自己評価 (v0.8.2+)',
-    legendPeerBest: '同種ベスト包絡線 (18種競合の最高値)',
+    subtitle: '主要エージェント20種との徹底比較 · 8大コア能力プロファイル',
+    legendAether: 'Aether 自己評価 (v0.9.0)',
+    legendPeerBest: '同種ベスト包絡線 (20種競合の最高値)',
     legendClaude: 'Claude Code (ターミナル基準)',
     legendCursor: 'Cursor (IDE 基準)',
     leadBadge: '★リード',
@@ -183,7 +185,7 @@ const I18N = {
       { primary: 'ローカル優先 / プライバシー', secondary: 'Local & private' },
       { primary: 'デスクトップ & TUI 両立', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: '比較対象エージェント（18種）：',
+    matrixLabel: '比較対象エージェント（20種）：',
     catTerminal: 'ターミナル/ハイブリッド',
     catIde: 'IDE/レビュー',
     catAuto: '自律型プラットフォーム',
@@ -192,9 +194,9 @@ const I18N = {
   'ko': {
     title: 'Aether · Agent 솔직한 자체 평가 레이더',
     titleTag: '(2026-09 최신 평가)',
-    subtitle: '18개 주요 에이전트 도구 비교 · 8대 핵심 역량 프로파일',
-    legendAether: 'Aether 자체 평가 (v0.8.2+)',
-    legendPeerBest: '동급 최고 포락선 (18개 도구 최고점)',
+    subtitle: '20개 주요 에이전트 도구 비교 · 8대 핵심 역량 프로파일',
+    legendAether: 'Aether 자체 평가 (v0.9.0)',
+    legendPeerBest: '동급 최고 포락선 (20개 도구 최고점)',
     legendClaude: 'Claude Code (터미널 벤치마크)',
     legendCursor: 'Cursor (IDE 벤치마크)',
     leadBadge: '★선도',
@@ -209,7 +211,7 @@ const I18N = {
       { primary: '로컬 우선 / 프라이버시', secondary: 'Local & private' },
       { primary: '데스크톱 & TUI 듀얼 UX', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: '비교 대상 도구 매트릭스 (18종):',
+    matrixLabel: '비교 대상 도구 매트릭스 (20종):',
     catTerminal: '터미널/하이브리드',
     catIde: 'IDE/리뷰',
     catAuto: '자율 플랫폼',
@@ -219,8 +221,8 @@ const I18N = {
     title: 'Aether · Agent Ehrliches Selbsteinschätzungs-Radar',
     titleTag: '(2026-09 Bewertung)',
     subtitle: 'Benchmark gegen 18 führende Agenten · 8 Kernkompetenzen',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'Peer-Best-Hüllkurve (18 Peers Peak)',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'Peer-Best-Hüllkurve (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal-Referenz)',
     legendCursor: 'Cursor (IDE-Referenz)',
     leadBadge: '★Führend',
@@ -235,7 +237,7 @@ const I18N = {
       { primary: 'Lokal & Privatsphäre', secondary: 'Local & private' },
       { primary: 'Desktop & TUI Dual-UX', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'Vergleichsmatrix (18 Tools):',
+    matrixLabel: 'Vergleichsmatrix (20 Tools):',
     catTerminal: 'Terminal / Hybrid',
     catIde: 'IDE / Review',
     catAuto: 'Autonom',
@@ -244,9 +246,9 @@ const I18N = {
   'fr': {
     title: 'Aether · Radar d\'auto-évaluation honnête',
     titleTag: '(2026-09 Évaluation)',
-    subtitle: 'Comparatif avec 18 agents de pointe · 8 dimensions clés',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'Enveloppe du meilleur pair (pic 18 pairs)',
+    subtitle: 'Comparatif avec 20 agents de pointe · 8 dimensions clés',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'Enveloppe du meilleur pair (pic 20 pairs)',
     legendClaude: 'Claude Code (Réf. Terminal)',
     legendCursor: 'Cursor (Réf. IDE)',
     leadBadge: '★Leader',
@@ -271,8 +273,8 @@ const I18N = {
     title: 'Aether · Radar de autoevaluación honesto',
     titleTag: '(2026-09 Evaluación)',
     subtitle: 'Comparativa con 18 herramientas de agentes líderes · 8 dimensiones clave',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'Envolvente del mejor par (pico de 18 pares)',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'Envolvente del mejor par (pico de 20 pares)',
     legendClaude: 'Claude Code (Ref. Terminal)',
     legendCursor: 'Cursor (Ref. IDE)',
     leadBadge: '★Líder',
@@ -297,8 +299,8 @@ const I18N = {
     title: 'Aether · Radar de Autoavaliação Honesta',
     titleTag: '(2026-09 Avaliação)',
     subtitle: 'Comparação com 18 ferramentas de agentes líderes · 8 dimensões centrais',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'Envelope do melhor par (pico de 18 pares)',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'Envelope do melhor par (pico de 20 pares)',
     legendClaude: 'Claude Code (Ref. Terminal)',
     legendCursor: 'Cursor (Ref. IDE)',
     leadBadge: '★Líder',
@@ -323,8 +325,8 @@ const I18N = {
     title: 'Aether · Честный радар самооценки',
     titleTag: '(2026-09 Оценка)',
     subtitle: 'Сравнение с 18 ведущими агентами · 8 ключевых измерений',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'Огибающая лучших аналогов (пик 18 систем)',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'Огибающая лучших аналогов (пик 20 систем)',
     legendClaude: 'Claude Code (Эталон Terminal)',
     legendCursor: 'Cursor (Эталон IDE)',
     leadBadge: '★Лидер',
@@ -349,8 +351,8 @@ const I18N = {
     title: 'Aether · Чесний радар самооцінки',
     titleTag: '(2026-09 Оцінка)',
     subtitle: 'Порівняння з 18 провідними агентами · 8 ключових вимірів',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'Обвідна найкращих аналогів (пік 18 систем)',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'Обвідна найкращих аналогів (пік 20 систем)',
     legendClaude: 'Claude Code (Еталон Terminal)',
     legendCursor: 'Cursor (Еталон IDE)',
     leadBadge: '★Лідер',
@@ -375,7 +377,7 @@ const I18N = {
     title: 'Aether · رادار التقييم الذاتي الصادق',
     titleTag: '(2026-09 التقييم الأحدث)',
     subtitle: 'مقارنة شاملة مع 18 وكيلاً رائداً · رسم بياني لـ 8 أبعاد جوهرية',
-    legendAether: 'Aether (v0.8.2+)',
+    legendAether: 'Aether (v0.9.0)',
     legendPeerBest: 'غلاف أفضل الأقران (قمة 18 وكيلاً)',
     legendClaude: 'Claude Code (معيار الطرفية)',
     legendCursor: 'Cursor (معيار بيئة التطوير)',
@@ -400,9 +402,9 @@ const I18N = {
   'hi': {
     title: 'Aether · ईमानदार आत्म-मूल्यांकन रडार',
     titleTag: '(2026-09 नवीनतम मूल्यांकन)',
-    subtitle: '18 प्रमुख एजेंट उपकरणों की तुलना · 8 मुख्य आयामों की क्षमता प्रोफ़ाइल',
-    legendAether: 'Aether (v0.8.2+)',
-    legendPeerBest: 'समकक्ष-सर्वोत्तम आवरण (18 प्रतिस्पर्धियों का शिखर)',
+    subtitle: '20 प्रमुख एजेंट उपकरणों की तुलना · 8 मुख्य आयामों की क्षमता प्रोफ़ाइल',
+    legendAether: 'Aether (v0.9.0)',
+    legendPeerBest: 'समकक्ष-सर्वोत्तम आवरण (20 प्रतिस्पर्धियों का शिखर)',
     legendClaude: 'Claude Code (टर्मिनल बेंचमार्क)',
     legendCursor: 'Cursor (IDE बेंचमार्क)',
     leadBadge: '★अग्रणी',
@@ -417,7 +419,7 @@ const I18N = {
       { primary: 'स्थानीय और गोपनीयता', secondary: 'Local & private' },
       { primary: 'डेस्कटॉप और TUI दोहरा UX', secondary: 'Desktop & TUI UX' },
     ],
-    matrixLabel: 'प्रतिस्पर्धी मैट्रिक्स (18 उपकरण):',
+    matrixLabel: 'प्रतिस्पर्धी मैट्रिक्स (20 उपकरण):',
     catTerminal: 'टर्मिनल / हाइब्रिड',
     catIde: 'IDE / समीक्षा',
     catAuto: 'स्वायत्त',
@@ -556,7 +558,7 @@ function renderRadarSvg(lang = 'zh-CN') {
   <tspan fill="#7dd3fc" font-weight="600">${esc(dict.catTerminal)}</tspan>: Claude Code · Codex · Amp · OpenCode · Aider · Gemini CLI · Kimi CLI
 </text>`);
   parts.push(`<text x="${BX + 14}" y="${BY + 51}" fill="#c9d1d9">
-  <tspan fill="#fcd34d" font-weight="600">${esc(dict.catIde)}</tspan>: Cursor · Windsurf · Trae · Cline · GitHub Copilot · Gemini Code Assist
+  <tspan fill="#fcd34d" font-weight="600">${esc(dict.catIde)}</tspan>: Cursor · Windsurf · Trae · Cline · Roo Code · Continue · Copilot · Gemini Code Assist
 </text>`);
   parts.push(`<text x="${BX + 14}" y="${BY + 67}" fill="#c9d1d9">
   <tspan fill="#c084fc" font-weight="600">${esc(dict.catAuto)}</tspan>: OpenHands · Devin · OpenClaw · DeepSeek Harness · Hermes Agent
