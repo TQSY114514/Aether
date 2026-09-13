@@ -32,7 +32,7 @@
 
 | 工具 | 分类 | Autonomy | Multi-model | Safety | Extensibility | Local-first | Evaluation | Terminal UX | IDE/Desktop UX | Ecosystem |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Aether** | **桌面+终端双形态** | **4.0** | **5.0** | **5.0** | **5.0** | **5.0** | **4.8** | **4.5** | **4.5** | **3.5** |
+| **Aether** | **桌面+终端双形态** | **3.8** | **4.8** | **4.6** | **4.4** | **4.8** | **4.5** | **4.2** | **4.3** | **3.2** |
 | Claude Code | 终端 Agent | 5.0 | 1.0 | 4.0 | 4.5 | 3.0 | 2.0 | 5.0 | 3.0 | 5.0 |
 | Codex CLI | 终端 Agent | 4.0 | 2.0 | 4.5 | 3.5 | 2.0 | 2.0 | 4.5 | 3.0 | 4.0 |
 | Amp | 终端/混合 Agent | 4.0 | 3.5 | 4.0 | 4.0 | 2.0 | 3.5 | 4.5 | 4.5 | 4.0 |
@@ -64,7 +64,7 @@
 radar-beta
   title Terminal & Hybrid Coding Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
+  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 3.2}
   curve claude["Claude Code"]{5.0, 1.0, 4.0, 4.5, 3.0, 2.0, 5.0, 3.0, 5.0}
   curve codex["Codex CLI"]{4.0, 2.0, 4.5, 3.5, 2.0, 2.0, 4.5, 3.0, 4.0}
   curve amp["Amp"]{4.0, 3.5, 4.0, 4.0, 2.0, 3.5, 4.5, 4.5, 4.0}
@@ -80,7 +80,7 @@ radar-beta
 radar-beta
   title IDE & Desktop Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
+  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 3.2}
   curve cursor["Cursor"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 5.0, 5.0}
   curve gemini["Gemini Code Assist"]{4.0, 2.0, 4.0, 4.0, 1.5, 3.0, 2.0, 4.5, 4.5}
   curve devin_desktop["Devin Desktop"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 4.5, 4.0}
@@ -96,7 +96,7 @@ radar-beta
 radar-beta
   title Autonomous Platform Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{4.0, 5.0, 5.0, 5.0, 5.0, 4.8, 4.5, 4.5, 3.5}
+  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 3.2}
   curve openhands["OpenHands"]{5.0, 4.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0, 4.0}
   curve devin["Devin"]{5.0, 1.0, 3.5, 3.5, 1.0, 3.0, 1.0, 3.5, 3.5}
   curve openclaw["OpenClaw"]{4.5, 4.0, 2.0, 4.0, 3.5, 2.0, 3.5, 2.5, 3.0}
@@ -118,19 +118,19 @@ radar-beta
 
 对比行业 20 款产品，Aether 的非对称优势非常鲜明：
 
-1. **顶级纵深安全体系（Safety 满分 5.0，全场最高）**：
+1. **高等级纵深安全体系（Safety 4.6，仅次于内核级沙箱 Codex 4.8）**：
    - **轻量化三层沙箱**：L1 策略与能力轴门禁 + L2 环境变量正则脱敏（凭据隔离）与敏感路径 Jail + L3 可选容器化后端；
    - **Auto 模式影子工作区沙盒 (Shadow Workspace)**：基于 Git Worktree 物理隔离执行目录，分支漂移严格保护，成功安全合并、失败彻底回滚，绝不污染用户主工作区代码；
    - **动态污染追踪 (Taint Tracking) 与审计收据卡**：摄入外部非受信内容后立即标记污染，阻断静默写穿；审批弹窗升级为标准化动词/目标/回滚审计收据；
    - **前置 Unified Diff 语法高亮审查**：写文件与补丁前先渲染行级 Diff，杜绝盲目放行；
    - **网关 DNS Rebinding 物理拦截**：严格绑定回环与 Host 头校验（QVD-2026-57410），集中式安全回归套件常态化巡检。
-2. **纯粹的 Local-First 隐私防线（Local-first 满分 5.0）**：
+2. **纯粹的 Local-First 隐私防线（Local-first 4.8，全场领先）**：
    - 会话、记忆、图谱、任务轨迹全量落盘于本地 SQLite WAL，无任何遥测、无账号、无云端中转；动态出站域名台账与敏感凭据预发送静态门禁。
-3. **多模型自由切换 + 亚军对抗复核 + 内置基准评测（Multi-model 5.0 + Evaluation 4.8）**：
+3. **多模型自由切换 + 亚军对抗复核 + 内置基准评测（Multi-model 4.8 + Evaluation 4.5）**：
    - 支持 OpenAI / Claude / DeepSeek / Gemini / Ollama / 本地 Gateway；内置 Model Arena 盲测与 ELO 动态智能路由；
    - **第二名双模型对抗复核 (Runner-Up Review)**：根据本地 ELO 胜率调用意图第二名模型对破坏性改动进行对抗审查，有效抑制单一模型盲目幻觉；
    - **个人 SWE-bench 本地评测套件**：真实执行 `verifyCommand` 检验退出码，精准计算 Pass@1 解决率。
-4. **桌面 + 终端双形态无缝漫游（Terminal 4.5 + Desktop 4.5）**：
+4. **桌面 + 终端双形态无缝漫游（Terminal 4.2 + Desktop 4.3）**：
    - 业内唯一一套 Agent Core 同时驱动 Electron 图形客户端与 Ink v5 终端 TUI（`aether tui`），内置 8 款官方工程配方（Curated Recipes）与仓库级配置即代码（`.aether/config.json`）。
 
 ---
@@ -156,7 +156,7 @@ radar-beta
 
 ## 6. 结语与客观定位
 
-Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代码生成的深度上，单模型深绑定的 Claude Code 与原生 IDE Cursor 依然处于绝对顶峰（Coding 9.8 vs Aether 9.1）。
+Aether 绝不盲目宣称“全方位超越第一梯队”。在单一极端代码生成的深度上，单模型深绑定的 Claude Code 与原生 IDE Cursor 依然处于绝对顶峰（Coding 9.8 vs Aether 7.8）。
 
 但 Aether 为用户提供了无可替代的定位价值：**把模型当作可随时更换的计算后端，把数据和私隐 100% 锁在自己的硬盘上，以银行级的防御纵深让自主 Agent 在桌面环境安全、踏实地运转。** 不对称的形状，正是 Aether 最真实的勋章。
 

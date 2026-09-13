@@ -26,8 +26,8 @@ const path = require('path');
 
 // ─── 20 Competitor Benchmark Scores (2026-09 最新评估) ──────────────────────
 const SCORES = {
-  // Aether (2026-09 v0.9.0 架构验收: 影子工作区 / Hermes全自动自进化 / V2转录流与实时Markdown / WCO等高平齐 / 零遥测)
-  'Aether':             [9.1, 9.2, 9.9, 9.7, 9.6, 10.0, 9.8, 9.8],
+  // Aether (2026-09 v0.9.0 客观校准: 守住本地隐私与多模型优势，如实呈现纯编程与通用任务客观差距，拒绝虚高)
+  'Aether':             [7.8, 8.0, 9.7, 8.8, 8.2, 9.3, 9.7, 8.8],
 
   // 终端与混合编程 Agent (Terminal & Hybrid Coding Agents)
   'Claude Code':        [9.8, 6.5, 7.0, 9.8, 9.5,  9.0, 7.5, 8.0],
@@ -75,7 +75,7 @@ const I18N = {
       { primary: '编程 Agent', secondary: 'Coding' },
       { primary: '通用任务', secondary: 'General' },
       { primary: '多模型/供应商', secondary: 'Multi-provider' },
-      { primary: '扩展生态', secondary: 'Ecosystem' },
+      { primary: '扩展架构', secondary: 'MCP & Skills' },
       { primary: '多 Agent 编排', secondary: 'Multi-agent' },
       { primary: '安全/权限', secondary: 'Safety' },
       { primary: '本地/隐私', secondary: 'Local & private' },

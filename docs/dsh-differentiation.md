@@ -35,21 +35,21 @@
 
 | 维度 | Aether | DSH |
 |:---|---:|---:|
-| Agent 自主性 Autonomy | 4.0 | 4.0 |
-| 多模型灵活性 Multi-model | **5.0** | 3.0 |
-| 安全与权限 Safety | **5.0** | 2.0 |
-| 可扩展性 Extensibility | 5.0 | 3.5 |
-| 本地优先隐私 Local-first | **5.0** | 3.0 |
-| 评估与基准 Evaluation | **4.8** | 2.0 |
-| 终端体验 Terminal UX | **4.5** | 3.0 |
-| 桌面体验 Desktop UX | **4.5** | 2.0 |
-| 生态成熟度 Ecosystem | 3.5 | 3.5 |
+| Agent 自主性 Autonomy | 3.8 | 4.0 |
+| 多模型灵活性 Multi-model | **4.8** | 3.0 |
+| 安全与权限 Safety | **4.6** | 2.0 |
+| 可扩展性 Extensibility | **4.4** | 3.5 |
+| 本地优先隐私 Local-first | **4.8** | 3.0 |
+| 评估与基准 Evaluation | **4.5** | 2.0 |
+| 终端体验 Terminal UX | **4.2** | 3.0 |
+| 桌面体验 Desktop UX | **4.3** | 2.0 |
+| 生态成熟度 Ecosystem | 3.2 | 3.5 |
 
 > 分数是定性主观评估，仅用于定位差异形状；DSH 发布窗口过短，生态分未计入其社区加速度（那部分在文化层面，见第 5 节）。
 
 ---
 
-## 3. 安全：Aether 最硬的差异化（Safety 5.0 vs 2.0）
+## 3. 安全：Aether 最硬的差异化（Safety 4.6 vs 2.0）
 
 安全是 Aether 与 DSH 最大的分野。这不是嘴上差距，而是有真实事件对照：
 
