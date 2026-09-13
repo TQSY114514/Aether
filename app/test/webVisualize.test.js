@@ -133,3 +133,35 @@ describe('web_visualize formatConsoleLogs', () => {
     expect(out).not.toContain('err 30')
   })
 })
+
+describe('web_visualize navigation and redirect guard', () => {
+  it('allows safe public http/https URLs', () => {
+    expect(registry.isWebNavigationAllowed('https://example.com/page', {})).toBe(true)
+    expect(registry.isWebNavigationAllowed('http://example.org/', {})).toBe(true)
+  })
+
+  it('blocks private or SSRF destinations', () => {
+    expect(registry.isWebNavigationAllowed('http://127.0.0.1:8080/admin', {})).toBe(false)
+    expect(registry.isWebNavigationAllowed('http://localhost:3000', {})).toBe(false)
+    expect(registry.isWebNavigationAllowed('http://169.254.169.254/latest/meta-data/', {})).toBe(false)
+  })
+
+  it('blocks non-http protocols like file: or javascript:', () => {
+    expect(registry.isWebNavigationAllowed('file:///C:/Windows/system32', {})).toBe(false)
+    expect(registry.isWebNavigationAllowed('javascript:alert(1)', {})).toBe(false)
+  })
+
+  it('validates against network policy when active', () => {
+    const fakeDb = {
+      getSetting: (k) => {
+        if (k === 'feature_flag.network.policy') return 'true'
+        if (k === 'network.policy') return 'whitelist'
+        if (k === 'network.whitelist') return JSON.stringify(['allowed.example.com'])
+        return null
+      },
+      getNetworkPolicyList: () => ({ blocked_domains: ['disallowed.com'] }),
+    }
+    expect(registry.isWebNavigationAllowed('https://allowed.example.com/ok', { db: fakeDb })).toBe(true)
+    expect(registry.isWebNavigationAllowed('https://disallowed.com/bad', { db: fakeDb })).toBe(false)
+  })
+})

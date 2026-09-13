@@ -1594,7 +1594,10 @@ async function runToolWithTimeout(tool, args, ctx, signal) {
         if (done) return
         done = true
         clearTimeout(timer)
-        if (signal) signal.removeEventListener('abort', onParentAbort)
+        if (signal) {
+          signal.removeEventListener('abort', onParentAbort)
+          signal.removeEventListener('abort', onAbort)
+        }
         resolve(val)
       }
       const timer = setTimeout(() => {
