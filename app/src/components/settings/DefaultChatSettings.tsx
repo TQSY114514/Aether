@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import { Award, Zap, Coins } from 'lucide-react'
 
 const PRIORITY_OPTIONS = [
-  { value: 'quality', icon: '🎯' },
-  { value: 'speed', icon: '⚡' },
-  { value: 'cost', icon: '💰' },
+  { value: 'quality', Icon: Award },
+  { value: 'speed', Icon: Zap },
+  { value: 'cost', Icon: Coins },
 ]
 
 export default function DefaultChatSettings() {
@@ -65,9 +66,10 @@ export default function DefaultChatSettings() {
           <div className="flex gap-2">
             {PRIORITY_OPTIONS.map(opt => (
               <button key={opt.value} onClick={() => setModelRoutingPriority(opt.value as any)}
-                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors ${modelRoutingPriority === opt.value ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
+                className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-colors flex items-center justify-center gap-1.5 ${modelRoutingPriority === opt.value ? 'bg-black text-white' : 'hover:bg-[var(--bg-secondary)]'}`}
                 style={modelRoutingPriority !== opt.value ? { borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'var(--content-bg)' } : {}}>
-                {opt.icon} {t(`settings.routing_priority.${opt.value}`)}
+                <opt.Icon size={13} className="shrink-0" />
+                <span>{t(`settings.routing_priority.${opt.value}`)}</span>
               </button>
             ))}
           </div>

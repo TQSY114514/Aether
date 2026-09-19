@@ -44,27 +44,30 @@ export default function ModelPage() {
   const [editData, setEditData] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
   // 一键检测本地 Ollama(学生免费方案): 探测 → 建 provider → 拉模型 → 选中推荐
   const [ollamaBusy, setOllamaBusy] = useState(false)
-  const [ollamaMsg, setOllamaMsg] = useState<string | null>(null)
+  const [ollamaState, setOllamaState] = useState<{ ok: boolean; text: string } | null>(null)
   // Per-provider fetch-models sync result (shown under the fetch button).
   const [fetchMsg, setFetchMsg] = useState<Record<number, string>>({})
 
   const detectOllama = async () => {
     setOllamaBusy(true)
-    setOllamaMsg(null)
+    setOllamaState(null)
     try {
       const r = await window.electronAPI.provider.detectOllama()
       if (r.ok) {
         await loadProviders()
         await loadAllModels()
         if (r.providerId != null) await loadModels(r.providerId)
-        setOllamaMsg(r.recommended
-          ? `✅ 已连接本地 Ollama — ${r.models?.length ?? 0} 个模型, 推荐: ${r.recommended}`
-          : '✅ 已连接本地 Ollama')
+        setOllamaState({
+          ok: true,
+          text: r.recommended
+            ? `已连接本地 Ollama — ${r.models?.length ?? 0} 个模型, 推荐: ${r.recommended}`
+            : '已连接本地 Ollama',
+        })
       } else {
-        setOllamaMsg(`❌ ${r.error || '未检测到 Ollama'}`)
+        setOllamaState({ ok: false, text: r.error || '未检测到 Ollama' })
       }
     } catch {
-      setOllamaMsg('❌ 检测失败')
+      setOllamaState({ ok: false, text: '检测失败' })
     } finally {
       setOllamaBusy(false)
     }
@@ -88,7 +91,7 @@ export default function ModelPage() {
       const res = await window.electronAPI.provider.testLatency(providerId)
       setLatencyResults((prev) => ({ ...prev, [providerId]: res }))
     } catch (e: any) {
-      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: false, latencyMs: -1, errorMessage: e?.message || '测试失败' } }))
+      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: false, latencyMs: -1, errorMessage: e?.message || t('models.test_failed') } }))
     }
     setTestingLatencyId(null)
   }
@@ -110,7 +113,7 @@ export default function ModelPage() {
       }
       setFetchMsg((prev) => ({ ...prev, [providerId]: msg }))
     } catch {
-      setFetchMsg((prev) => ({ ...prev, [providerId]: '拉取失败' }))
+      setFetchMsg((prev) => ({ ...prev, [providerId]: t('models.fetch_failed') }))
     }
     setTestingId(null)
   }
@@ -146,11 +149,14 @@ export default function ModelPage() {
                 <button onClick={detectOllama} disabled={ollamaBusy}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md text-white disabled:opacity-50 transition-opacity"
                   style={{ backgroundColor: 'var(--accent)' }}>
-                  <Bot size={13} /> {ollamaBusy ? '检测中…' : '一键检测本地 Ollama'}
+                  <Bot size={13} /> {ollamaBusy ? t('models.detecting_ollama') : t('models.detect_ollama')}
                 </button>
               </div>
-              {ollamaMsg && (
-                <p className="text-[11px] mt-1.5" style={{ color: ollamaMsg.startsWith('✅') ? 'var(--success)' : 'var(--error)' }}>{ollamaMsg}</p>
+              {ollamaState && (
+                <div className="flex items-center gap-1.5 mt-1.5 text-[11px]" style={{ color: ollamaState.ok ? 'var(--success)' : 'var(--error)' }}>
+                  {ollamaState.ok ? <Check size={12} className="shrink-0" /> : <X size={12} className="shrink-0" />}
+                  <span>{ollamaState.text}</span>
+                </div>
               )}
             </div>
             <input value={newProvider.name} onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
@@ -271,12 +277,12 @@ export default function ModelPage() {
                         {t('models.test')}
                       </button>
                     </Tooltip>
-                    <Tooltip text="测试此供应商 API 的往返网络延迟 (RTT)">
+                    <Tooltip text={t('models.test_latency_hint')}>
                       <button onClick={() => handleTestLatency(provider.id)} disabled={testingLatencyId === provider.id}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
                         style={{ borderColor: 'var(--border)' }}>
                         {testingLatencyId === provider.id ? <RefreshCw size={12} className="animate-spin text-amber-500" /> : <Zap size={12} className="text-amber-500" />}
-                        <span>测试延迟</span>
+                        <span>{t('models.test_latency')}</span>
                       </button>
                     </Tooltip>
                     <Tooltip text={t('tooltip.model_fetch')}>
@@ -310,7 +316,7 @@ export default function ModelPage() {
                       ) : (
                         <span className="text-rose-500 text-[11px] flex items-center gap-1">
                           <X size={12} />
-                          {latencyResults[provider.id].errorMessage || '延迟测试超时'}
+                          {latencyResults[provider.id].errorMessage || t('models.latency_timeout')}
                         </span>
                       )}
                     </div>

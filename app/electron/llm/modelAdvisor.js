@@ -96,7 +96,7 @@ function scoreModel(model, taskType) {
 
 // ─── ModelRouter ─────────────────────────────────────────────────────────
 
-const REASONING_FAMILIES = new Set(['openai', 'claude', 'deepseek', 'qwen'])
+const REASONING_FAMILIES = new Set(['gpt', 'claude', 'deepseek', 'qwen'])
 
 /**
  * Compute dynamic ELO weight based on sample size:
@@ -178,8 +178,8 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
           baseScore *= speedFactor
           if (REASONING_FAMILIES.has(family)) baseScore *= 1.05
         } else if (priority === 'cost') {
-          const pricePerK = m.input_price_per_1k || 0.003
-          const costFactor = Math.max(0.4, 0.01 / (pricePerK + 0.001))
+          const pricePerK = typeof m.input_price_per_1k === 'number' ? m.input_price_per_1k : 0.003
+          const costFactor = pricePerK <= 0 ? 1.25 : Math.max(0.4, Math.min(1.2, 0.003 / (pricePerK + 0.0005)))
           baseScore *= costFactor
         }
 
@@ -312,7 +312,29 @@ function suggestModelExplained({ allModels, userMessage, useTools, intent, eloDa
   }
 }
 
+/**
+ * Assemble intent-aware ELO scores dictionary with fallback.
+ * @param {Array} scores - Raw model scores from database
+ * @param {string} intent - Detected task intent
+ * @returns {Record<number, { score: number, win_count: number, total_count: number, intent: string }>}
+ */
+function buildEloData(scores, intent) {
+  const eloData = {}
+  if (!Array.isArray(scores)) return eloData
+  for (const s of scores) {
+    if (s.model_id && s.intent === intent) {
+      eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0, intent: s.intent }
+    }
+  }
+  for (const s of scores) {
+    if (s.model_id && !eloData[s.model_id]) {
+      eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0, intent: s.intent }
+    }
+  }
+  return eloData
+}
+
 module.exports = {
   suggestModel, suggestModelExplained, routeWithExplanation,
-  classifyTask, detectFamily, ModelRouter, scoreModel, FAMILY_SCORES,
+  classifyTask, detectFamily, ModelRouter, scoreModel, FAMILY_SCORES, buildEloData,
 }

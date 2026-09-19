@@ -88,6 +88,14 @@ function fuzzyFind(fileContent, needle, options = {}) {
     return -1;
   };
 
+  function getCharOffsetForLine(lines, lineIdx) {
+    let offset = 0;
+    for (let k = 0; k < lineIdx && k < lines.length; k++) {
+      offset += lines[k].length + 1;
+    }
+    return offset;
+  }
+
   // 2. Whitespace-normalized match
   const matchIdxNorm = findSubArray(normFileLines, normNeedleLines, (a, b) => a === b);
   if (matchIdxNorm !== -1) {
@@ -95,7 +103,7 @@ function fuzzyFind(fileContent, needle, options = {}) {
     const matchedText = matchedLines.join('\n');
     return {
       found: true,
-      index: fileContent.indexOf(matchedLines[0]),
+      index: getCharOffsetForLine(fileLines, matchIdxNorm),
       matchedText,
       strategy: 'Whitespace-normalized match',
       similarity: 1.0
@@ -132,7 +140,7 @@ function fuzzyFind(fileContent, needle, options = {}) {
       const matchedLines = fileLines.slice(i, i + needleLines.length);
       return {
         found: true,
-        index: fileContent.indexOf(matchedLines[0]),
+        index: getCharOffsetForLine(fileLines, i),
         matchedText: matchedLines.join('\n'),
         strategy: 'Indent-offset match',
         similarity: 1.0
@@ -161,7 +169,7 @@ function fuzzyFind(fileContent, needle, options = {}) {
     const matchedLines = fileLines.slice(bestIdx, bestIdx + needleLines.length);
     return {
       found: true,
-      index: fileContent.indexOf(matchedLines[0]),
+      index: getCharOffsetForLine(fileLines, bestIdx),
       matchedText: matchedLines.join('\n'),
       strategy: 'Line-level Levenshtein sliding window',
       similarity: bestSim

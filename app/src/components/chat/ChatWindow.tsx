@@ -4,9 +4,8 @@ import MessageBubble from './MessageBubble'
 import EmptyState from './EmptyState'
 import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
-import { useOverscrollSpring } from '@/utils/useOverscrollSpring'
 import MessageNav from './MessageNav'
-import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, Activity, History, ShieldAlert } from 'lucide-react'
+import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
@@ -184,9 +183,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
       const buf = s.streamingBySession[sessionId]
       if (!buf) return
 
-      const mid = buf.messageId != null
-        ? buf.messageId
-        : (Object.keys(s.thinkingBlocksByMessage).map(Number).pop() ?? Object.keys(s.toolCallsByMessage).map(Number).pop() ?? null)
+      const mid = buf.messageId != null ? buf.messageId : null
 
       if (mid != null && activeMidRef.current !== null && activeMidRef.current !== mid) {
         resetLocalState()
@@ -280,7 +277,6 @@ export default function ChatWindow() {
   const [isAtBottom, setIsAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  useOverscrollSpring(scrollRef)
 
   // Batch selectors with shallow comparison: only re-renders when selected
   // values actually change, not on every store update.
@@ -409,8 +405,14 @@ export default function ChatWindow() {
     setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80)
   }, [])
 
-  const scrollToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToBottom = useCallback((smooth = false) => {
+    if (scrollRef.current) {
+      if (smooth) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      } else {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
+    }
   }, [])
 
   // Search: debounce the query used for filtering so typing doesn't trigger
@@ -435,13 +437,13 @@ export default function ChatWindow() {
       loadMessages(currentSessionId)
     }
     clearSearch()
-    setTimeout(scrollToBottom, 50)
+    setTimeout(() => scrollToBottom(false), 50)
   }, [currentSessionId, loadMessages, scrollToBottom, clearSearch])
 
   // Only auto-scroll when the user is already near the bottom (normal reading
   // position). If they scrolled up to read history, don't yank them back down.
   useEffect(() => {
-    if (isAtBottom) scrollToBottom()
+    if (isAtBottom) scrollToBottom(false)
   }, [messages, isAtBottom, scrollToBottom])
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -477,24 +479,6 @@ export default function ChatWindow() {
   // is live (only fires after the 200ms debounce).
   useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); setActiveMsgId(matchIds[0]); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
 
-  // Token & activity stats for the current session (/tokens HUD)
-  const sessionStats = useMemo(() => {
-    let totalTokens = 0
-    let totalLatency = 0
-    let modelSet = new Set<string>()
-    for (const m of messages) {
-      if (m.token_count) totalTokens += m.token_count
-      if (m.latency_ms) totalLatency += m.latency_ms
-      if (m.model_used) modelSet.add(m.model_used)
-    }
-    return {
-      tokens: totalTokens,
-      messagesCount: messages.length,
-      latency: totalLatency,
-      models: Array.from(modelSet),
-    }
-  }, [messages])
-
   // Empty chat: render EmptyState safely centered via flex + my-auto.
   // When the window is short, my-auto prevents negative scroll / top clipping,
   // keeping the hero icon completely in view while allowing scroll if needed.
@@ -502,7 +486,7 @@ export default function ChatWindow() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
-      {/* Search & Token HUD bar */}
+      {/* Search HUD bar */}
       <div className="px-4 py-1.5 shrink-0 flex items-center gap-2 relative z-[2]" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--content-bg-trans, var(--bg-primary))', backdropFilter: 'blur(8px)' }}>
         <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
@@ -528,18 +512,6 @@ export default function ChatWindow() {
             </>
           )}
         </div>
-        {sessionStats.messagesCount > 0 && (
-          <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-mono border"
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-            title={`当前会话累计：${sessionStats.tokens.toLocaleString()} Tokens · ${sessionStats.messagesCount} 条消息`}>
-            <Activity size={11} className="text-[var(--accent)]" />
-            <span className="tabular-nums font-medium">
-              {sessionStats.tokens > 1000 ? `${(sessionStats.tokens / 1000).toFixed(1)}k` : sessionStats.tokens} tok
-            </span>
-            <span className="opacity-40">|</span>
-            <span className="tabular-nums">{sessionStats.messagesCount} msgs</span>
-          </div>
-        )}
 
         {currentSessionId && (
           <button

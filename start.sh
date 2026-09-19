@@ -2,7 +2,7 @@
 # Aether POSIX Launcher (Linux / macOS / WSL)
 # Supports Terminal TUI (default) and Desktop Workbench (--desktop).
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -50,7 +50,9 @@ fi
 
 NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])")
 if [ "$NODE_MAJOR" -lt 22 ]; then
-    echo "[!] Node.js version is $(node --version), but >= 22 is recommended."
+    echo "[!] Node.js version is $(node --version), but >= 22 is required."
+    echo "    Please upgrade to Node.js >= 22.0.0."
+    exit 1
 fi
 
 # Enter app directory

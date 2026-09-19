@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, Zap, Sparkles, ShieldCheck, ShieldAlert, Trophy } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Shield, RotateCcw, Zap, Sparkles, ShieldAlert, Trophy } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
@@ -153,19 +153,6 @@ export default function ChatInput() {
     for (const sc of scores) { map[sc.model_id] = Math.round(sc.score) }
     return map
   }, [scores])
-
-  // Outbound hosts for 0-telemetry verification ledger (P1-11)
-  const outboundHosts = useMemo(() => {
-    const set = new Set<string>()
-    for (const p of providers) {
-      if (!p.enabled) continue
-      try {
-        const u = new URL(p.api_url)
-        if (u.hostname) set.add(u.hostname)
-      } catch {}
-    }
-    return Array.from(set)
-  }, [providers])
 
   // Per-session streaming check — NOT a global flag, so one session's stream
   // never blocks another session's input. Arena is also per-session: runArena
@@ -695,19 +682,6 @@ export default function ChatInput() {
             className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning}
           />
-          {input.length > 0 && (
-            <div className="flex items-center shrink-0 self-center px-1.5 py-0.5 select-none overflow-hidden h-6 rounded-md bg-[var(--bg-primary)]/80 border border-[var(--border)] shadow-2xs">
-              <div className="flex items-center gap-0.5 text-[11px] font-mono tabular-nums overflow-hidden leading-none">
-                <span
-                  key={input.length}
-                  className="inline-block animate-digit-slide-up text-[var(--accent)] font-semibold"
-                >
-                  {input.length}
-                </span>
-                <span className="text-[10px] text-[var(--text-muted)] opacity-60">字</span>
-              </div>
-            </div>
-          )}
           {isArenaRunning || (isStreaming && !input.trim()) ? (
             <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale" title={t('chat.stop')} aria-label={t('chat.stop')}>
               <Square size={13} fill="currentColor" />
@@ -765,19 +739,6 @@ export default function ChatInput() {
                     {t('chat.tokens_estimate', String(totalInputTokens))}
                   </span>
                 )}
-                {/* Outbound Privacy Ledger Pill (P1-11) */}
-                <div
-                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0"
-                  style={{
-                    borderColor: 'rgba(34,197,94,0.3)',
-                    backgroundColor: 'rgba(34,197,94,0.06)',
-                    color: 'var(--success)',
-                  }}
-                  title={`🔒 0-Telemetry / 零遥测保护\n已配置出站端点：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有数据与历史对话仅保存在本地 SQLite。`}
-                >
-                  <ShieldCheck size={11} className="shrink-0" />
-                  <span className="font-mono font-medium">0-Telemetry</span>
-                </div>
                 <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden sm:inline">{t('empty.hint.slash')}</span>
               </>
             )}
@@ -987,16 +948,11 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
 
   if (groups.length === 0) return null
 
-  const isAutoSuggested = modelSuggestion && modelSuggestion.suggestedModelId === activeModelId && activeModelId != null
-  const suggestedModel = modelSuggestion && modelSuggestion.suggestedModelId ? allModels.find(m => m.id === modelSuggestion!.suggestedModelId) : null
   const reasonTitle = formatSuggestionReason(modelSuggestion)
   const arenaElo = modelSuggestion?.reasonParts?.arenaElo ?? (modelSuggestion?.reasonParts?.eloTotal && modelSuggestion?.reasonParts?.eloTotal > 0 && modelSuggestion?.reasonParts?.eloScore ? Math.round(modelSuggestion.reasonParts.eloScore) : null)
 
-  // The suggestion badge floats on the select's top-right corner so it never
-  // takes document-flow space, squeezes the select, or covers its text.
   return (
     <div className="flex items-center gap-1.5">
-      <Cpu size={13} className="text-gray-400 shrink-0" />
       <div className="relative shrink-0" title={reasonTitle}>
         <select value={String(activeModelId ?? '')}
           onChange={(e) => {
@@ -1015,22 +971,6 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
             </optgroup>
           ))}
         </select>
-        {!isAutoSuggested && suggestedModel && (
-          <button
-            onClick={() => onSelect(suggestedModel.id, suggestedModel.provider_id)}
-            className="absolute -right-1 -top-1 w-4 h-4 rounded-full flex items-center justify-center hover:scale-110 transition-transform z-20 cursor-pointer shadow-xs"
-            style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
-            title={reasonTitle} aria-label={reasonTitle}>
-            <Wand2 size={9} />
-          </button>
-        )}
-        {isAutoSuggested && (
-          <span className="absolute -right-1 -top-1 w-4 h-4 rounded-full flex items-center justify-center pointer-events-none z-20"
-            style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: 'var(--accent)' }}
-            title={reasonTitle}>
-            <Check size={9} />
-          </span>
-        )}
       </div>
 
       {arenaElo != null && (

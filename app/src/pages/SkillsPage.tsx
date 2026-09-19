@@ -84,7 +84,10 @@ export default function SkillsPage() {
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>✨ {t('settings.skills.title')}</h1>
+            <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Sparkles size={18} style={{ color: 'var(--accent)' }} />
+              <span>{t('settings.skills.title')}</span>
+            </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
               Claude-Code-format SKILL.md 技能 · 按需加载 · 渐进披露
             </p>
@@ -134,7 +137,7 @@ export default function SkillsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm">✨</span>
+                        <Sparkles size={14} className="shrink-0 text-amber-500" />
                         <span className="text-sm font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{s.name}</span>
                         {stat && stat.totalUses > 0 && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"

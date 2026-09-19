@@ -24,7 +24,7 @@ function hasFrontendChanges(auditTrail) {
   for (const entry of auditTrail) {
     // Check tool name
     const name = entry.name || ''
-    if (['write_to_file', 'replace_file_content', 'file_write', 'file_patch', 'apply_patch'].includes(name)) {
+    if (['write_file', 'edit_file', 'write_to_file', 'replace_file_content', 'file_write', 'file_patch', 'apply_patch'].includes(name)) {
       const args = entry.args || {}
       const targetPath = args.path || args.file || args.filePath || args.TargetFile || ''
       if (FRONTEND_EXTS.test(targetPath)) return true
@@ -75,6 +75,7 @@ async function runVisualVerification({
   auditTrail = [],
   previewUrl,
   signal,
+  webViz: injectedWebViz,
 } = {}) {
   // Check feature gate or explicit setting
   const isEnabled = db ? featureFlags.isEnabled(db, 'agent.visualVerification') : false
@@ -87,7 +88,7 @@ async function runVisualVerification({
     return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
   }
 
-  const webViz = getTool('web_visualize')
+  const webViz = injectedWebViz || getTool('web_visualize')
   if (!webViz) {
     return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
   }
@@ -140,7 +141,7 @@ function buildVisualFixPrompt(verification) {
 
   // If web_visualize returned multimodal parts, forward the screenshot part so vision models see it
   if (Array.isArray(verification.result)) {
-    const imagePart = verification.result.find(p => p.type === 'image')
+    const imagePart = verification.result.find(p => p.type === 'image' || p.type === 'image_url')
     if (imagePart) {
       return {
         role: 'user',

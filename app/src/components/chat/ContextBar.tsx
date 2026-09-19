@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '@/store'
+import { t } from '@/utils/i18n'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
 import { DEFAULT_CONTEXT_WINDOW } from '@/utils/constants'
 import { ChevronDown, ChevronUp } from 'lucide-react'
@@ -97,10 +98,10 @@ export default function ContextBar() {
               console.error('Compact error:', err)
             }
           }}
-          title="Compact session context"
+          title={t('chat.compact_hint')}
           className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
         >
-          Compact
+          {t('chat.compact')}
         </button>
         
         {/* Fork button */}
@@ -110,16 +111,16 @@ export default function ContextBar() {
             if (!currentSessionId) return
             try {
               const res = await window.electronAPI.session.fork({ sessionId: currentSessionId })
-              useStore.getState().loadSessions()
-              useStore.getState().selectSession(res.id)
+              await useStore.getState().loadSessions()
+              await useStore.getState().selectSession(res.id)
             } catch (err) {
               console.error('Fork failed:', err)
             }
           }}
-          title="Fork session from current state"
+          title={t('chat.fork_hint')}
           className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
         >
-          Fork
+          {t('chat.fork')}
         </button>
       </div>
 

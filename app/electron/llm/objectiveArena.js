@@ -139,6 +139,11 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
  * @param {string} responseText - Raw response text from model
  * @returns {{ appliedCount: number, conflicts: string[], filesModified: string[], ok: boolean }}
  */
+function isPathInside(parentDir, targetPath) {
+  const rel = path.relative(parentDir, targetPath)
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
 function extractAndApplyPatches(workspaceDir, responseText) {
   const norm = String(responseText || '').replace(/\r\n/g, '\n')
   let appliedCount = 0
@@ -153,7 +158,7 @@ function extractAndApplyPatches(workspaceDir, responseText) {
     const rawFile = (diffMatch[2] || diffMatch[1]).trim()
     const patchBlock = diffMatch[0].trim()
     const abs = path.resolve(baseDir, rawFile)
-    if (abs.startsWith(baseDir) && fs.existsSync(abs)) {
+    if (isPathInside(baseDir, abs) && fs.existsSync(abs)) {
       try {
         const orig = fs.readFileSync(abs, 'utf8')
         const res = applyAnyPatch(orig, patchBlock)
@@ -180,7 +185,7 @@ function extractAndApplyPatches(workspaceDir, responseText) {
       if (fileMatch && !line.includes('<<<<<<<') && !line.includes('>>>>>>>') && !line.includes('=======')) {
         const cand = fileMatch[1].trim()
         const candAbs = path.resolve(baseDir, cand)
-        if (candAbs.startsWith(baseDir) && fs.existsSync(candAbs)) {
+        if (isPathInside(baseDir, candAbs) && fs.existsSync(candAbs)) {
           currentFile = cand
         }
       }
@@ -241,7 +246,17 @@ function copyDirectorySync(src, dest) {
   for (const entry of entries) {
     const srcPath = path.join(src, entry.name)
     const destPath = path.join(dest, entry.name)
-    if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'dist') {
+    if (entry.isSymbolicLink()) {
+      continue
+    }
+    if (entry.name === '.git' || entry.name === 'dist') {
+      continue
+    }
+    if (entry.name === 'node_modules') {
+      try {
+        const targetType = process.platform === 'win32' ? 'junction' : 'dir'
+        fs.symlinkSync(srcPath, destPath, targetType)
+      } catch {}
       continue
     }
     if (entry.isDirectory()) {
@@ -323,7 +338,7 @@ async function runObjectiveEvaluation({
         try {
           const callFn = completeChatMessageFn || completeChatMessage
           const res = await callFn({
-            provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
+            provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: m.api_format || 'openai' },
             model: m,
             messages: [
               { role: 'system', content: systemPrompt },
@@ -374,7 +389,7 @@ async function runObjectiveEvaluation({
           modelId: m.id,
           modelName: m.model_name,
           providerName: m.provider_name,
-          passed: verifyRes.ok,
+          passed: Boolean(verifyRes.ok && patchRes.appliedCount > 0),
           exitCode: verifyRes.exitCode,
           stdout: verifyRes.stdout,
           stderr: verifyRes.stderr,
@@ -428,7 +443,7 @@ async function runObjectiveEvaluation({
     let eloUpdated = false
     if (updateScores && db && winner && losers.length > 0) {
       try {
-        db.recordArenaVote({
+        await db.recordArenaVote({
           prompt,
           winnerModelId: winner.modelId,
           winnerModelName: winner.modelName,

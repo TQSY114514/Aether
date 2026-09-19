@@ -1,8 +1,9 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { Brain, Wrench, Check, AlertCircle, MessageSquare, ShieldAlert, ShieldCheck } from 'lucide-react'
 import ToolCallBlock from './ToolCallBlock'
 import ThinkingBlock from './ThinkingBlock'
 import { t } from '@/utils/i18n'
+import { renderMarkdown } from '@/utils/markdown'
 
 type ToolEntry = {
   name: string
@@ -19,6 +20,7 @@ type ToolEntry = {
   afterSnapshot?: { path: string; content: string; truncated: boolean } | null
   liveOutput?: string
   liveOutputDone?: boolean
+  depth?: number
 }
 
 type PlanStep = {
@@ -89,6 +91,67 @@ function PhaseBadge({ kind }: { kind?: string }) {
   )
 }
 
+type TimelineNode =
+  | { kind: 'step'; key: string; step: PlanStep }
+  | { kind: 'tool'; key: string; tool: ToolEntry }
+
+function buildTimelineNodes(planSteps?: PlanStep[], toolCalls?: ToolEntry[]): TimelineNode[] {
+  const steps = planSteps || []
+  const tools = toolCalls || []
+
+  if (steps.length === 0) {
+    return tools.map((tool, idx) => ({ kind: 'tool', key: `tool-${idx}`, tool }))
+  }
+  if (tools.length === 0) {
+    return steps.map((step, idx) => ({ kind: 'step', key: `step-${idx}`, step }))
+  }
+
+  const hasStepDepth = steps.some(s => s.depth != null)
+  const hasToolDepth = tools.some(t => t.depth != null)
+
+  if (hasStepDepth && hasToolDepth) {
+    const depths = Array.from(new Set([
+      ...steps.map(s => s.depth ?? 0),
+      ...tools.map(t => t.depth ?? 0),
+    ])).sort((a, b) => a - b)
+
+    const nodes: TimelineNode[] = []
+    for (const d of depths) {
+      // Intermediate plan/thought steps
+      const actOrPlanSteps = steps.filter(s => (s.depth ?? 0) === d && s.kind !== 'observe')
+      actOrPlanSteps.forEach((step, idx) => {
+        nodes.push({ kind: 'step', key: `step-d${d}-${idx}`, step })
+      })
+
+      // Tools executed at this step
+      const depthTools = tools.filter(t => (t.depth ?? 0) === d)
+      depthTools.forEach((tool, idx) => {
+        nodes.push({ kind: 'tool', key: `tool-d${d}-${idx}`, tool })
+      })
+
+      // Intermediate observation / feedback steps
+      const observeSteps = steps.filter(s => (s.depth ?? 0) === d && s.kind === 'observe')
+      observeSteps.forEach((step, idx) => {
+        nodes.push({ kind: 'step', key: `step-obs-d${d}-${idx}`, step })
+      })
+    }
+    return nodes
+  }
+
+  // Fallback: interleave sequentially
+  const nodes: TimelineNode[] = []
+  const maxLen = Math.max(steps.length, tools.length)
+  for (let i = 0; i < maxLen; i++) {
+    if (i < steps.length) {
+      nodes.push({ kind: 'step', key: `step-${i}`, step: steps[i] })
+    }
+    if (i < tools.length) {
+      nodes.push({ kind: 'tool', key: `tool-${i}`, tool: tools[i] })
+    }
+  }
+  return nodes
+}
+
 // Unified timeline that interleaves thinking, tool calls, and commentary
 // in a connected vertical flow — replacing the old disconnected card blocks.
 function AgentTimeline({ thinkingText, thinkingStreaming, toolCalls, planSteps, streaming }: AgentTimelineProps) {
@@ -96,6 +159,8 @@ function AgentTimeline({ thinkingText, thinkingStreaming, toolCalls, planSteps, 
   const hasTools = !!toolCalls && toolCalls.length > 0
   const hasSteps = !!planSteps && planSteps.length > 0
   const hasAny = hasThinking || hasTools || hasSteps
+
+  const timelineNodes = useMemo(() => buildTimelineNodes(planSteps, toolCalls), [planSteps, toolCalls])
 
   if (!hasAny) return null
 
@@ -111,7 +176,7 @@ function AgentTimeline({ thinkingText, thinkingStreaming, toolCalls, planSteps, 
       )}
 
       {/* Tool calls + commentary timeline */}
-      {(hasTools || hasSteps) && (
+      {timelineNodes.length > 0 && (
         <div className="relative">
           {/* Vertical timeline line */}
           <div
@@ -120,33 +185,46 @@ function AgentTimeline({ thinkingText, thinkingStreaming, toolCalls, planSteps, 
           />
 
           {/* Interleaved nodes */}
-          <div className="space-y-0.5">
-            {/* Plan step commentary nodes (interspersed) */}
-            {hasSteps && !hasTools && planSteps!.map((step, i) => (
-              <div key={`step-${i}`} className="relative flex items-start gap-2.5 pl-3 py-1 timeline-node-enter">
-                <div className="absolute left-0.5 top-2.5 w-2 h-2 rounded-[1px] border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }} />
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <PhaseBadge kind={step.kind} />
-                  <span className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                    {step.assistantText.slice(0, 120)}{step.assistantText.length > 120 ? '…' : ''}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="space-y-1.5">
+            {timelineNodes.map((node) => {
+              if (node.kind === 'step') {
+                const text = node.step.assistantText?.trim()
+                if (!text) return null
+                return (
+                  <div key={node.key} className="relative pl-3 py-1 timeline-node-enter">
+                    <div
+                      className="absolute left-0.5 top-2.5 w-2 h-2 rounded-[1px] border"
+                      style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+                    />
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <PhaseBadge kind={node.step.kind} />
+                        <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
+                          {t('agent.step', 'Step')} {(node.step.step ?? 0) + 1}
+                        </span>
+                      </div>
+                      <div
+                        className="mc text-xs leading-relaxed break-words px-2.5 py-1.5 rounded border"
+                        style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
+                      />
+                    </div>
+                  </div>
+                )
+              }
 
-            {/* Tool call nodes */}
-            {hasTools && toolCalls!.map((tc, i) => {
+              const tc = node.tool
               const running = tc.result == null && tc.error == null
               const status = tc.error ? 'error' : tc.result != null ? 'success' : 'running'
 
               return (
-                <div key={i} className="relative pl-3 timeline-node-enter">
+                <div key={node.key} className="relative pl-3 timeline-node-enter">
                   {/* Timeline dot */}
                   <div className="absolute left-0 top-2" style={{ left: '1.5px' }}>
                     <StatusDot status={status} dangerous={tc.risk === 'dangerous'} />
                   </div>
 
-                  {/* Tool block — compact mode: integrated into timeline */}
+                  {/* Tool block */}
                   <ToolCallBlock tool={tc} />
                 </div>
               )

@@ -211,8 +211,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       const allModelsForSuggest = db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
       const intent = db.classifyIntent(content)
       const scores = db.getModelScores()
-      const eloData = {}
-      for (const s of scores) { if (s.model_id && s.intent === intent) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0, intent: s.intent } }
+      const eloData = modelAdvisor.buildEloData(scores, intent)
       const priority = db.getSetting('modelRoutingPriority') || 'quality'
       const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData, routingContext: { priority } })
       if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, reasonParts: result.reasonParts, confidence: result.confidence }

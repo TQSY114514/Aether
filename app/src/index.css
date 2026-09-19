@@ -302,11 +302,10 @@ textarea, input {
   background: var(--text-muted);
 }
 
-/* Smooth overscroll with rubber-band containment */
+/* Overscroll containment without fighting scroll position */
 .scroll-bounce {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
 }
 
 /* Hover lift effect for clickable cards */
@@ -764,13 +763,18 @@ div[style*="borderLeft: 2px solid"] {
 
 /* Silky Physics-Based Keyframe Animations */
 .lunar-celestial-spin {
-  transform-origin: 1150px 180px;
+  transform-origin: 0 0;
   animation: lunarOrbitRotate 200s linear infinite;
 }
 
 @keyframes lunarOrbitRotate {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes modalSpringUp {
@@ -826,6 +830,42 @@ div[style*="borderLeft: 2px solid"] {
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── POST-DIGITAL Theme Engine ─────────────────────────────────────────── */
+[data-theme="postdigital"] {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+[data-theme="postdigital"] ::-webkit-scrollbar-thumb {
+  background: #111111 !important;
+  border-radius: 0px !important;
+}
+
+[data-theme="postdigital"] ::-webkit-scrollbar-thumb:hover {
+  background: #001AFF !important;
+}
+
+/* Crisp Brutalist Borders & Mechanical Radius */
+[data-theme="postdigital"] .rounded-lg,
+[data-theme="postdigital"] .rounded-xl,
+[data-theme="postdigital"] .rounded-2xl {
+  border-radius: 2px !important;
+}
+
+[data-theme="postdigital"] .shadow-sm,
+[data-theme="postdigital"] .shadow-md {
+  box-shadow: 2px 2px 0px #111111 !important;
+}
+
+/* Accessibility: prefers-reduced-motion fallback */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 

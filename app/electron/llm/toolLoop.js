@@ -315,7 +315,10 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Generated on first use and cached; incremental updates re-parse only
   // changed files. Best-effort — never blocks the loop on failure.
   try {
-    const lastUserMsg = [...convo].reverse().find(m => m.role === 'user')?.content || ''
+    const lastUserRaw = [...convo].reverse().find(m => m.role === 'user')?.content || ''
+    const lastUserMsg = Array.isArray(lastUserRaw)
+      ? lastUserRaw.map(p => typeof p === 'string' ? p : (p.text || '')).join(' ')
+      : String(lastUserRaw)
     const repoMapMsg = await buildRepoMapMessage({ userMessage: lastUserMsg })
     if (repoMapMsg) {
       const sysIdx = convo.findIndex(m => m.role === 'system')
@@ -766,7 +769,7 @@ Reply in this format:
           // tool crash the whole Promise.all batch. Report it as a tool error.
           return { tc, entry: { name: fn.name, args, result: null, error: `failed to load tool: ${e?.message || fn.name}`, risk: null, latencyMs: null, checkpointId: null, failure_kind: 'tool_load_error' } }
         }
-        const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null, checkpointId: null }
+        const entry = { name: fn.name, args, result: null, error: null, risk: tool ? tool.risk : null, latencyMs: null, checkpointId: null, depth }
 
         // Schema validation: reject arguments that don't match the tool's
         // declared JSON schema — prevents type confusion and missing fields.
@@ -1293,6 +1296,7 @@ Reply ONLY with JSON:
           if (vResult.performed && vResult.hasErrors) {
             visualVerified = true
             const fixMsg = visualVerifier.buildVisualFixPrompt(vResult)
+            if (msg.content) convo.push({ role: 'assistant', content: msg.content })
             convo.push(fixMsg)
             try { onStatus?.({ kind: 'visual_verify', text: `视觉自检捕获报错 (${vResult.errors.length} 项)，触发自动修复循环...` }) } catch {}
             continue

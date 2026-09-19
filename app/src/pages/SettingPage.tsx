@@ -381,7 +381,7 @@ export default function SettingPage() {
               <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.theme')}</h2>
               <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>切换应用整体色彩风格与明暗模式</p>
               <div className="flex gap-2 flex-wrap">
-                {(['light', 'auto', 'dark', 'blue', 'retro', 'metalheart'] as const).map((tKey) => {
+                {(['light', 'auto', 'dark', 'postdigital', 'blue', 'retro', 'metalheart'] as const).map((tKey) => {
                   const isCurrent = theme === tKey
                   return (
                     <button

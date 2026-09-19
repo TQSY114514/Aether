@@ -135,6 +135,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     benchmarkStop: (id) => ipcRenderer.invoke('arena:benchmark-stop', id),
     benchmarkTemplates: () => ipcRenderer.invoke('arena:benchmark-templates'),
     objectiveRun: (data) => ipcRenderer.invoke('arena:objective-run', data),
+    objectiveStop: (data) => ipcRenderer.invoke('arena:objective-stop', data),
     autoRoute: (params) => ipcRenderer.invoke('arena:auto-route', params),
     onModelDone: (cb) => subscribe('arena:model-done', cb),
   },

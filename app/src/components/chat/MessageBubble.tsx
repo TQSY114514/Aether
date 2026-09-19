@@ -224,7 +224,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               isError ? 'p-3 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400' : ''
             }`}
           >
-            {(thinkingBlocks || (toolCalls && toolCalls.length > 0)) && (
+            {(thinkingBlocks || (toolCalls && toolCalls.length > 0) || (planSteps && planSteps.length > 0)) && (
               <AgentTimeline
                 thinkingText={thinkingBlocks || undefined}
                 toolCalls={toolCalls && toolCalls.length > 0 ? toolCalls : undefined}

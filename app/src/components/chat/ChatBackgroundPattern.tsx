@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import PostDigitalBackgroundPattern from './PostDigitalBackgroundPattern'
 
 interface ChatBackgroundPatternProps {
   theme?: string
@@ -474,6 +475,13 @@ function ChatBackgroundPatternComponent({ theme = 'light', className = '' }: Cha
               <line x1="35" y1="853" x2="35" y2="877" />
             </g>
           </>
+        )}
+
+        {/* =========================================================================
+            7. POST-DIGITAL: 实验性工业工程与图表制式美学
+           ========================================================================= */}
+        {resolvedTheme === 'postdigital' && (
+          <PostDigitalBackgroundPattern />
         )}
       </svg>
     </div>

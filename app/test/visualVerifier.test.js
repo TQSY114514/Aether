@@ -88,3 +88,22 @@ describe('buildVisualFixPrompt', () => {
     expect(imgPart.data).toBe('base64imagedata')
   })
 })
+
+describe('runVisualVerification', () => {
+  it('returns performed: false when dev server or URL is unavailable', async () => {
+    const db = { getSetting: vi.fn().mockReturnValue(null) }
+    const res = await runVisualVerification({ db, sessionId: 1, auditTrail: [] })
+    expect(res.performed).toBe(false)
+  })
+
+  it('detects errors when web_visualize tool reports console errors', async () => {
+    const mockWebViz = {
+      run: vi.fn().mockResolvedValue('Page console:\nerror: Uncaught SyntaxError: Unexpected token'),
+    }
+    const res = await runVisualVerification({ previewUrl: 'http://localhost:3000', webViz: mockWebViz })
+    expect(res.performed).toBe(true)
+    expect(res.hasErrors).toBe(true)
+    expect(res.errors.length).toBeGreaterThan(0)
+    expect(res.errors[0]).toContain('SyntaxError')
+  })
+})

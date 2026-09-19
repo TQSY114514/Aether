@@ -906,6 +906,52 @@ function createSession({
   return { lastInsertRowid: Number(info.lastInsertRowid) };
 }
 
+function forkSession(parentSessionId, title) {
+  return db.transaction(() => {
+    const parent = db.prepare('SELECT * FROM session WHERE id = ?').get(parentSessionId);
+    const newTitle = title || (parent?.title ? `${parent.title} (Fork)` : '会话分支');
+    const personaId = parent?.persona_id || null;
+    const config = parent?.config || null;
+
+    const info = db.prepare(
+      'INSERT INTO session (title, persona_id, parent_session_id, config, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, 0)'
+    ).run(newTitle, personaId, parentSessionId, config, localNow());
+    const newSessionId = Number(info.lastInsertRowid);
+
+    const parentMsgs = db.prepare('SELECT * FROM message WHERE session_id = ? ORDER BY id ASC').all(parentSessionId);
+    if (parentMsgs.length > 0) {
+      const insertMsg = db.prepare(`
+        INSERT INTO message (
+          session_id, role, content, model_used, provider_used,
+          token_count, latency_ms, status, error_message,
+          created_at, tokens_in, tokens_out, cost, arena_model, attachment
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const m of parentMsgs) {
+        insertMsg.run(
+          newSessionId,
+          m.role,
+          m.content,
+          m.model_used,
+          m.provider_used,
+          m.token_count,
+          m.latency_ms,
+          m.status,
+          m.error_message,
+          m.created_at || localNow(),
+          m.tokens_in,
+          m.tokens_out,
+          m.cost,
+          m.arena_model,
+          m.attachment
+        );
+      }
+    }
+
+    return { id: newSessionId, title: newTitle };
+  })();
+}
+
 function pruneEmptySessions() {
   db.prepare(
     `DELETE FROM session WHERE is_placeholder = 1 AND NOT EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id)`,
@@ -2421,6 +2467,7 @@ module.exports = {
   getSessions,
   getSession,
   createSession,
+  forkSession,
   pruneEmptySessions,
   renameSession,
   pinSession,

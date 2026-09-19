@@ -115,7 +115,10 @@ export default function LearningGraphPage() {
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>🧠 {t('sidebar.nav.learning')}</h1>
+            <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Brain size={18} style={{ color: 'var(--accent)' }} />
+              <span>{t('sidebar.nav.learning')}</span>
+            </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('learning_graph.desc')}</p>
           </div>
           <div className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>

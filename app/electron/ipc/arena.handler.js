@@ -16,6 +16,8 @@ function sanitizeVerifyCommand(cmd) {
   if (typeof cmd !== 'string') return null
   const trimmed = cmd.trim()
   if (!trimmed || trimmed.includes('\0') || trimmed.length > 1000) return null
+  // Disallow shell chaining / redirection / injection metacharacters
+  if (/[;&|`$<>]|\r|\n/.test(trimmed)) return null
   return trimmed
 }
 
@@ -462,7 +464,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       if (!cleanVerifyCommand) return { error: 'Invalid verification command' }
 
       const controller = new AbortController()
-      const runKey = `objective:${Date.now()}`
+      const runKey = data?.runId ? `objective:${data.runId}` : `objective:${Date.now()}`
       abortControllers.set(runKey, controller)
 
       try {
@@ -486,6 +488,19 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       log.warn('arena:objective-run error:', err)
       return { error: err.message }
     }
+  })
+
+  ipcMain.handle('arena:objective-stop', (_e, data) => {
+    const runId = data?.runId
+    if (!runId) return { ok: false, error: 'runId required' }
+    const runKey = `objective:${runId}`
+    const controller = abortControllers.get(runKey)
+    if (controller) {
+      controller.abort()
+      abortControllers.delete(runKey)
+      return { ok: true }
+    }
+    return { ok: false, error: 'Run not found or already completed' }
   })
 }
 

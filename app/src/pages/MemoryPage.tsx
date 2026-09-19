@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
-import { useUI } from '@/components/ui/feedback'
-import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X } from 'lucide-react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X, Brain } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import { useUI } from '@/components/ui/feedback'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { parseMemoryImport } from '@/utils/memoryImport'
 
 const TYPE_COLORS: Record<string, string> = {
@@ -161,7 +161,7 @@ export default function MemoryPage() {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 100,
     overscan: 10,
-    getItemKey: (index) => filtered[index].id,
+    getItemKey: (index: number) => filtered[index].id,
   })
 
   return (
@@ -172,7 +172,10 @@ export default function MemoryPage() {
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>🧠 {t('sidebar.nav.memory')}</h1>
+            <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Brain size={18} style={{ color: 'var(--accent)' }} />
+              <span>{t('sidebar.nav.memory')}</span>
+            </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>AI 会记住这些信息并在对话中参考 · 来源追踪 · 冲突检测</p>
           </div>
           <div className="flex gap-2">
@@ -289,7 +292,7 @@ export default function MemoryPage() {
             <option value="fact">Fact</option>
             <option value="context">Context</option>
             <option value="relation">Relation</option>
-            <option value="project">Project 🧠</option>
+            <option value="project">Project</option>
           </select>
           <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)}
             placeholder={t('memory.add_placeholder')}
