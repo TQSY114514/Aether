@@ -7,7 +7,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-import { generateRepoMap, buildRepoMapText, invalidateCache, getCachedMap } from '../electron/context/repoMap'
+import { generateRepoMap, buildRepoMapText, invalidateCache, getCachedMap, computeBudgetForRequest } from '../electron/context/repoMap'
 
 let tmpDir
 
@@ -79,5 +79,36 @@ describe('buildRepoMapText', () => {
     expect(text).toContain('src/')
     expect(text).toContain('math.js')
     expect(text).toContain('defs: add')
+  })
+
+  it('adapts token budget dynamically based on task prompt', async () => {
+    const map = await generateRepoMap(tmpDir)
+    const shortText = buildRepoMapText(map, { userMessage: '修复 math.js 里的一个小问题' })
+    const refactorText = buildRepoMapText(map, { userMessage: '对整个项目进行全面架构重构与迁移' })
+    expect(shortText).toContain('# Repo Map')
+    expect(refactorText).toContain('# Repo Map')
+  })
+})
+
+describe('computeBudgetForRequest', () => {
+  it('assigns 1280 tokens for short bug fixes or commands', () => {
+    expect(computeBudgetForRequest('修复加法函数返回值')).toBe(1280)
+    expect(computeBudgetForRequest('check typo in index.js')).toBe(1280)
+  })
+
+  it('assigns 2048 tokens for medium prompts', () => {
+    const mediumPrompt = '请帮我编写一个完整的状态机组件，用于管理异步任务状态，支持待处理、执行中、已完成与错误重试，并且需要记录每一步的状态转移日志以供调试使用。'
+    expect(computeBudgetForRequest(mediumPrompt)).toBe(2048)
+  })
+
+  it('assigns 4096 tokens for long prompts (>500 chars)', () => {
+    const longPrompt = 'A'.repeat(520)
+    expect(computeBudgetForRequest(longPrompt)).toBe(4096)
+  })
+
+  it('assigns 8192 tokens for refactor/architecture tasks', () => {
+    expect(computeBudgetForRequest('重构整个项目的状态管理模块')).toBe(8192)
+    expect(computeBudgetForRequest('refactor codebase to microservices')).toBe(8192)
+    expect(computeBudgetForRequest('对全工程进行架构治理与迁移')).toBe(8192)
   })
 })

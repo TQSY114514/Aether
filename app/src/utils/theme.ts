@@ -53,24 +53,6 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-secondary-trans': 'rgba(241,245,249,0.7)',
     '--shadow-card': '0 1px 3px rgba(15,23,42,0.06)',
   },
-  glass: {
-    '--bg-primary': '#0A0A0C',
-    '--bg-secondary': 'rgba(255,255,255,0.04)',
-    '--border': 'rgba(255,255,255,0.08)',
-    '--text-primary': '#F4F4F5',
-    '--text-secondary': '#A1A1AA',
-    '--text-muted': '#71717A',
-    '--accent': '#38BDF8',
-    '--accent-hover': '#0284C7',
-    '--error': '#EF4444',
-    '--success': '#22C55E',
-    '--warning': '#F59E0B',
-    '--glass-bg': 'rgba(255,255,255,0.05)',
-    '--glass-border': 'rgba(255,255,255,0.1)',
-    '--content-bg-trans': 'rgba(10,10,12,0.75)',
-    '--content-secondary-trans': 'rgba(255,255,255,0.05)',
-    '--shadow-card': '0 4px 16px rgba(0,0,0,0.3)',
-  },
   retro: {
     '--bg-primary': '#F5F0E8',
     '--bg-secondary': '#EDE5D8',
@@ -88,6 +70,24 @@ const THEMES: Record<string, Record<string, string>> = {
     '--content-bg-trans': 'rgba(245,240,232,0.85)',
     '--content-secondary-trans': 'rgba(237,229,216,0.65)',
     '--shadow-card': '0 1px 3px rgba(61,50,41,0.06)',
+  },
+  metalheart: {
+    '--bg-primary': '#F5F7FA',
+    '--bg-secondary': '#FFFFFF',
+    '--border': '#D5DDE7',
+    '--text-primary': '#0F172A',
+    '--text-secondary': '#475569',
+    '--text-muted': '#8898AA',
+    '--accent': '#0284C7',
+    '--accent-hover': '#0369A1',
+    '--error': '#E11D48',
+    '--success': '#059669',
+    '--warning': '#D97706',
+    '--glass-bg': 'rgba(255, 255, 255, 0.88)',
+    '--glass-border': 'rgba(213, 221, 231, 0.7)',
+    '--content-bg-trans': 'rgba(245, 247, 250, 0.88)',
+    '--content-secondary-trans': 'rgba(255, 255, 255, 0.82)',
+    '--shadow-card': '0 2px 10px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
   },
   auto: {
     '--bg-primary': '#AUTO',
@@ -121,12 +121,11 @@ function resolveAutoTheme(): string {
   return 'light'
 }
 
-// setCleanup lets the caller register the cleanup function. When applyTheme
-// is called again with a non-'auto' theme, the old listener is removed.
 export function applyTheme(theme: string, hasBackground = false, setCleanup?: (fn: (() => void) | null) => void) {
   if (_autoCleanup) { _autoCleanup(); _autoCleanup = null }
 
   let resolved = theme
+  if (resolved === 'glass') resolved = 'dark'
   if (theme === 'auto') {
     resolved = resolveAutoTheme()
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -140,6 +139,7 @@ export function applyTheme(theme: string, hasBackground = false, setCleanup?: (f
 
   const vars = THEMES[resolved] || THEMES.light
   const root = document.documentElement
+  root.setAttribute('data-theme', resolved)
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
   // When a custom background image is active, make content surfaces translucent
   // so the image shows through; otherwise use the solid surface color.

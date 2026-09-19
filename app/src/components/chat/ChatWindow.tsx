@@ -13,8 +13,9 @@ import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCallBlock from './ToolCallBlock'
 import TaskCard from './TaskCard'
-import AgentPlanTrace from './AgentPlanTrace'
 import AgentRunTimeline from './AgentRunTimeline'
+import AgentTimeline from './AgentTimeline'
+import ChatBackgroundPattern from './ChatBackgroundPattern'
 
 // Arena results display component with streaming-like animation
 function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, prompt }: {
@@ -262,15 +263,13 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
 
         {/* Assistant Content Stream */}
         <div ref={bubbleRef} className="w-full text-xs leading-relaxed break-words relative transition-all">
-          {thinkingText && (
-            <ThinkingBlock text={thinkingText} streaming={thinkingStreaming} collapsed={false} />
-          )}
-          {toolCalls && toolCalls.length > 0 && (
-            <div className="mb-2 space-y-1">
-              {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
-            </div>
-          )}
-          <div ref={ref} className="mc" />
+          <AgentTimeline
+            thinkingText={thinkingText || undefined}
+            thinkingStreaming={thinkingStreaming}
+            toolCalls={toolCalls.length > 0 ? toolCalls : undefined}
+            streaming
+          />
+          <div ref={ref} className="mc typing-cursor" />
         </div>
       </div>
     </div>
@@ -289,7 +288,7 @@ export default function ChatWindow() {
     messages, currentSessionId, streamingBySession, chatMode,
     toolCallsByMessage, arenaResults, arenaResultsSessionId, arenaPending, arenaError,
     proposedHabits, activeHints, loadMessages,
-    resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId,
+    resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId, theme, backgroundImage,
   } = useStore(useShallow((s) => ({
     messages: s.messages,
     currentSessionId: s.currentSessionId,
@@ -308,7 +307,11 @@ export default function ChatWindow() {
     arenaVote: s.arenaVote,
     arenaVoted: s.arenaVoted,
     arenaVoteWinnerId: s.arenaVoteWinnerId,
+    theme: s.theme,
+    backgroundImage: s.backgroundImage,
   })))
+
+  const hasBg = !!backgroundImage
 
   // Memoize the messages array for referential stability. Streaming chunks
   // update streamingBySession (also in the selector above) which triggers a
@@ -498,9 +501,9 @@ export default function ChatWindow() {
   const isEmptyChat = messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0
 
   return (
-    <div className="flex-1 flex flex-col min-h-0" style={{ position: "relative" }}>
+    <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
       {/* Search & Token HUD bar */}
-      <div className="px-4 py-1.5 shrink-0 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div className="px-4 py-1.5 shrink-0 flex items-center gap-2 relative z-[2]" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--content-bg-trans, var(--bg-primary))', backdropFilter: 'blur(8px)' }}>
         <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
           <input value={messageSearchQuery} onChange={handleSearchChange}
@@ -537,6 +540,7 @@ export default function ChatWindow() {
             <span className="tabular-nums">{sessionStats.messagesCount} msgs</span>
           </div>
         )}
+
         {currentSessionId && (
           <button
             onClick={() => setShowTimeline(true)}
@@ -585,7 +589,7 @@ export default function ChatWindow() {
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'scroll-bounce flex-1 overflow-y-auto px-4 py-4 flex flex-col' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6'}>
+      <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'scroll-bounce flex-1 overflow-y-auto px-4 py-4 flex flex-col relative z-[1]' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6 relative z-[1]'}>
         <div className={isEmptyChat ? 'max-w-3xl mx-auto w-full my-auto' : 'max-w-3xl mx-auto chat-gap'}>
           {isEmptyChat && (
             <EmptyState />

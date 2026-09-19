@@ -143,37 +143,97 @@ select option {
 }
 
 
-/* Animations */
+/* Animations & Silky Desktop Physics */
 @keyframes slideUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes springUp {
-  0% { opacity: 0; transform: translateY(12px) scale(0.97); }
-  60% { transform: translateY(-2px) scale(1.01); }
-  80% { transform: translateY(1px) scale(0.995); }
+  0% { opacity: 0; transform: translateY(10px) scale(0.98); }
+  65% { transform: translateY(-1.5px) scale(1.006); }
+  85% { transform: translateY(0.5px) scale(0.998); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes messageSpringEnter {
+  0% { opacity: 0; transform: translateY(8px) scale(0.99); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes scalePop {
+  0% { transform: scale(0.75); opacity: 0; }
+  65% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 @keyframes pulseGlow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.85; }
 }
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+@keyframes pageSpringEnter {
+  from { opacity: 0; transform: translateY(8px) scale(0.995); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes tabSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.page-fade-in { animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.tab-fade-in  { animation: fadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes placeholderSlide {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 0.75; transform: translateY(0); }
+}
+
+.page-fade-in { animation: pageSpringEnter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.tab-fade-in  { animation: tabSlideIn 0.20s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-placeholder-slide { animation: placeholderSlide 0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-scale-pop { animation: scalePop 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Caret styling & typing animation */
+textarea, input {
+  caret-color: var(--accent);
+}
+
+@keyframes digitSlideUp {
+  0% {
+    opacity: 0.15;
+    transform: translateY(5px);
+  }
+  60% {
+    opacity: 0.9;
+    transform: translateY(-0.5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-digit-slide-up {
+  animation: digitSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 
 .press-scale {
-  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .press-scale:active {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
-.message-enter { animation: springUp 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.message-enter { animation: messageSpringEnter 0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .cursor-blink { animation: blink 0.8s step-end infinite; }
+
+/* Live streaming typing cursor */
+@keyframes typing-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.typing-cursor::after {
+  content: '▋';
+  margin-left: 2px;
+  font-size: 0.85em;
+  color: var(--accent);
+  display: inline-block;
+  vertical-align: baseline;
+  animation: typing-cursor-blink 0.8s steps(1) infinite;
+}
 
 /* Typing indicator dots — gentle wave instead of jarring bounce */
 @keyframes typing-dot {
@@ -470,3 +530,303 @@ select[class]:open {
 .msg-anchor-flash {
   animation: msg-anchor-flash 1.6s ease-out forwards;
 }
+
+/* ── Metalheart (月面/解构拼贴) High-Fidelity Design System ────────────────
+   Direct artistic references:
+   1. 晚风_圆子YUANZI《月面梦记8树海-构成向拼贴插图》
+   2. Andreas Lindholm Metalheart (Y2K cyber-organic / liquid chrome)
+   3. Bilibili《"Reconstruct"》构成向动态拼贴 */
+
+[data-theme="metalheart"] {
+  --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+/* Background: Light Lunar Paper Canvas */
+[data-theme="metalheart"] body,
+[data-theme="metalheart"] #root,
+[data-theme="metalheart"] main {
+  background-color: #F5F7FA !important;
+}
+
+/* Constructivist Collage Framing: Cards & Surface Panels */
+[data-theme="metalheart"] .rounded-lg,
+[data-theme="metalheart"] .rounded-md,
+[data-theme="metalheart"] .rounded-xl {
+  border-color: #D5DDE7;
+}
+
+/* Cards specular top bevel & subtle shadow */
+/* ── Universal Silky Motion Physics for ALL Themes ─────────────────────────
+   Cubic-bezier(0.16, 1, 0.3, 1) spring physics applied across all themes
+   for interactive buttons, inputs, cards, and execution timelines. */
+
+/* Universal Primary Accent Button Physics (ALL Themes) */
+button[style*="var(--accent)"],
+.bg-\[var\(--accent\)\] {
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+button[style*="var(--accent)"]:hover,
+.bg-\[var\(--accent\)\]:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+button[style*="var(--accent)"]:active,
+.bg-\[var\(--accent\)\]:active {
+  transform: scale(0.97) translateY(0);
+}
+
+/* Universal Secondary & Border Buttons (ALL Themes) */
+button.border,
+select.border {
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+button.border:hover {
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+button.border:active {
+  transform: scale(0.98);
+}
+
+/* Universal Chat Input Focus & Interaction Physics (ALL Themes) */
+.input-ring {
+  transition: border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.input-ring:focus-within {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Universal Timeline Connecting Axis Gradient (ALL Themes) */
+.mb-2 > .relative > div.absolute.top-0.bottom-0 {
+  background: linear-gradient(180deg, var(--accent) 0%, rgba(128, 128, 128, 0.25) 60%, var(--border) 100%) !important;
+}
+
+/* Universal Thinking Block Accent Bar & Silky Transition (ALL Themes) */
+div[style*="borderLeft: 2px solid"] {
+  border-radius: 0 6px 6px 0;
+  background: linear-gradient(90deg, rgba(128, 128, 128, 0.05) 0%, transparent 100%);
+  transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-left-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Universal Silky Hover Lift for Cards and Panels (ALL Themes) */
+.hover-lift {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-1.5px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Metalheart Specific Chromatic Enhancements ───────────────────────────── */
+[data-theme="metalheart"] div[style*="var(--bg-secondary)"],
+[data-theme="metalheart"] div[style*="var(--content-bg)"] {
+  background-color: #FFFFFF !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="metalheart"] .input-ring {
+  background: #FFFFFF !important;
+  border: 1px solid #CBD5E1 !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  position: relative;
+}
+
+[data-theme="metalheart"] .input-ring:focus-within {
+  border-color: #0284C7 !important;
+  box-shadow: 
+    0 0 0 1px #0284C7, 
+    0 0 16px rgba(2, 132, 199, 0.16), 
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+}
+
+[data-theme="metalheart"] .input-ring::before {
+  content: "+";
+  position: absolute;
+  top: -8px;
+  left: -4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: bold;
+  color: #0284C7;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+[data-theme="metalheart"] .input-ring::after {
+  content: "+";
+  position: absolute;
+  top: -8px;
+  right: -4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: bold;
+  color: #0284C7;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Metalheart Liquid Cyan-Chrome Accent Button Colors */
+[data-theme="metalheart"] button[style*="var(--accent)"],
+[data-theme="metalheart"] .bg-\[var\(--accent\)\] {
+  background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%) !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.45), 
+    0 2px 8px rgba(2, 132, 199, 0.3) !important;
+}
+
+[data-theme="metalheart"] button[style*="var(--accent)"]:hover,
+[data-theme="metalheart"] .bg-\[var\(--accent\)\]:hover {
+  background: linear-gradient(135deg, #0369A1 0%, #0284C7 100%) !important;
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.6), 
+    0 4px 14px rgba(2, 132, 199, 0.45) !important;
+}
+
+[data-theme="metalheart"] button.border,
+[data-theme="metalheart"] select.border {
+  border-color: #D1D9E4 !important;
+  background-color: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="metalheart"] button.border:hover {
+  border-color: #0284C7 !important;
+  color: #0F172A !important;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.12);
+}
+
+/* Constructivist Code Blocks: Industrial Header Strip with Technical Registration */
+[data-theme="metalheart"] pre.code-block {
+  border: 1px solid #CBD5E1 !important;
+  background: #0F172A !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12) !important;
+  position: relative;
+}
+
+
+[data-theme="metalheart"] pre.code-block .code-head {
+  background: #1E293B !important;
+  border-bottom: 1px solid #334155 !important;
+}
+
+[data-theme="metalheart"] pre.code-block .code-lang {
+  color: #38BDF8 !important;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-theme="metalheart"] .mb-2 > .relative > div.absolute.top-0.bottom-0 {
+  background: linear-gradient(180deg, #0284C7 0%, rgba(2, 132, 199, 0.3) 50%, #CBD5E1 100%) !important;
+}
+
+[data-theme="metalheart"] div[style*="borderLeft: 2px solid"] {
+  border-left-color: #0284C7 !important;
+  background: linear-gradient(90deg, rgba(2, 132, 199, 0.05) 0%, transparent 100%);
+}
+
+
+/* Sidebar in Metalheart */
+[data-theme="metalheart"] aside {
+  background-color: rgba(248, 250, 252, 0.85) !important;
+  border-right: 1px solid #E2E8F0 !important;
+}
+
+/* Active Session in Sidebar */
+[data-theme="metalheart"] aside .session-item.active {
+  background: linear-gradient(90deg, rgba(2, 132, 199, 0.1) 0%, rgba(2, 132, 199, 0.02) 100%) !important;
+  border-left: 2px solid #0284C7 !important;
+}
+
+/* Selection and Scrollbar */
+[data-theme="metalheart"] ::selection {
+  background-color: #0284C7 !important;
+  color: #FFFFFF !important;
+}
+
+[data-theme="metalheart"] ::-webkit-scrollbar-thumb {
+  background: #CBD5E1 !important;
+  border-radius: 2px;
+}
+
+[data-theme="metalheart"] ::-webkit-scrollbar-thumb:hover {
+  background: #0284C7 !important;
+}
+
+/* Silky Physics-Based Keyframe Animations */
+.lunar-celestial-spin {
+  transform-origin: 1150px 180px;
+  animation: lunarOrbitRotate 200s linear infinite;
+}
+
+@keyframes lunarOrbitRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes modalSpringUp {
+  0% { opacity: 0; transform: scale(0.96) translateY(16px); }
+  65% { transform: scale(1.008) translateY(-2px); }
+  85% { transform: scale(0.998) translateY(0.5px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.animate-spring-up {
+  animation: modalSpringUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes timelineNodeEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.timeline-node-enter {
+  animation: timelineNodeEnter 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Universal Interactive Motion Classes (ALL Themes) ──────────────────── */
+/* Session Item in Sidebar: Silky translation on hover and tactile tap */
+.session-item-interactive {
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.session-item-interactive:hover {
+  transform: translateX(2px);
+}
+.session-item-interactive:active {
+  transform: translateX(1px) scale(0.995);
+}
+
+/* Quick Action Reveal inside Session Items (Pin, Delete, Terminal) */
+.action-reveal-silky {
+  transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.12s ease !important;
+}
+
+/* Universal Icon Button Micro-Interaction */
+.icon-btn-silky {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease, background-color 0.15s ease;
+}
+.icon-btn-silky:hover {
+  transform: scale(1.08);
+}
+.icon-btn-silky:active {
+  transform: scale(0.92);
+}
+
+/* Modal Backdrop Blur Fade */
+.modal-backdrop-fade {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+
+

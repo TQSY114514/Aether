@@ -543,8 +543,8 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.auto": "Auto (system)",
     "settings.theme.blue": "Blue",
     "settings.theme.dark": "Dark",
-    "settings.theme.glass": "Glass",
     "settings.theme.light": "Light",
+    "settings.theme.metalheart": "Metalheart",
     "settings.theme.retro": "Retro",
     "settings.title": "Settings",
     "settings.tools.back": "Back to settings",
@@ -1210,8 +1210,8 @@ const translations: Record<string, Record<string, string>> = {
     "settings.theme.auto": ")ɯǝʇsʎs( oʇnɐ",
     "settings.theme.blue": "ǝnlq",
     "settings.theme.dark": "ʞɹɐp",
-    "settings.theme.glass": "ssɐlƃ",
     "settings.theme.light": "ʇɥƃᴉl",
+    "settings.theme.metalheart": "ʇɹɐǝɥlɐʇǝɯ",
     "settings.theme.retro": "oɹʇǝɹ",
     "settings.title": "sƃuᴉʇʇǝs",
     "settings.tools.back": "sƃuᴉʇʇǝs oʇ ʞɔɐq",
@@ -2110,7 +2110,8 @@ const translations: Record<string, Record<string, string>> = {
     "shortcuts.title": "快捷键帮助",
     "shortcuts.group.global": "全局",
     "shortcuts.group.chat": "对话",
-    "shortcuts.group.navigation": "导航"
+    "shortcuts.group.navigation": "导航",
+    "settings.theme.metalheart": "Metalheart (月面/解构)"
   },
   "es": {
     "app.name": "Aether",
@@ -2253,7 +2254,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "Habilidades"
+    "sidebar.nav.skills": "Habilidades",
+    "settings.theme.metalheart": "Metalheart"
   },
   "ja": {
     "app.name": "Aether",
@@ -2396,7 +2398,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "スキル"
+    "sidebar.nav.skills": "スキル",
+    "settings.theme.metalheart": "メタルハート"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -2538,7 +2541,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback": "Rollback this Agent change",
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
-    "tool.rollback.error": "Rollback failed"
+    "tool.rollback.error": "Rollback failed",
+    "settings.theme.metalheart": "月窟金心"
   },
   "fr": {
     "app.name": "Aether",
@@ -2681,7 +2685,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "Compétences"
+    "sidebar.nav.skills": "Compétences",
+    "settings.theme.metalheart": "Metalheart"
   },
   "de": {
     "app.name": "Aether",
@@ -2824,7 +2829,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "Fähigkeiten"
+    "sidebar.nav.skills": "Fähigkeiten",
+    "settings.theme.metalheart": "Metalheart"
   },
   "pt": {
     "app.name": "Aether",
@@ -2967,7 +2973,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "Habilidades"
+    "sidebar.nav.skills": "Habilidades",
+    "settings.theme.metalheart": "Metalheart"
   },
   "ru": {
     "app.name": "Aether",
@@ -3110,7 +3117,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "Навыки"
+    "sidebar.nav.skills": "Навыки",
+    "settings.theme.metalheart": "Metalheart"
   },
   "zh-TW": {
     "app.name": "Aether",
@@ -3278,7 +3286,8 @@ const translations: Record<string, Record<string, string>> = {
     "shortcuts.title": "快速鍵說明",
     "shortcuts.group.global": "全域",
     "shortcuts.group.chat": "對話",
-    "shortcuts.group.navigation": "導覽"
+    "shortcuts.group.navigation": "導覽",
+    "settings.theme.metalheart": "Metalheart (月面/解構)"
   },
   "ar": {
     "app.name": "Aether",
@@ -3421,7 +3430,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "المهارات"
+    "sidebar.nav.skills": "المهارات",
+    "settings.theme.metalheart": "Metalheart"
   },
   "uk": {
     "app.name": "Aether",
@@ -3564,7 +3574,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "Навички"
+    "sidebar.nav.skills": "Навички",
+    "settings.theme.metalheart": "Metalheart"
   },
   "ko": {
     "app.name": "Aether",
@@ -3707,7 +3718,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "스킬"
+    "sidebar.nav.skills": "스킬",
+    "settings.theme.metalheart": "메탈하트"
   },
   "hi": {
     "app.name": "Aether",
@@ -3850,7 +3862,8 @@ const translations: Record<string, Record<string, string>> = {
     "tool.rollback.running": "Rolling back...",
     "tool.rollback.done": "Rolled back",
     "tool.rollback.error": "Rollback failed",
-    "sidebar.nav.skills": "स्किल्स"
+    "sidebar.nav.skills": "स्किल्स",
+    "settings.theme.metalheart": "Metalheart"
   }
 }
 

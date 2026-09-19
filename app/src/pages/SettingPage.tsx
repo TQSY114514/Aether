@@ -40,6 +40,7 @@ import TokenPage from '@/pages/TokenPage'
 import EvolutionPage from '@/pages/EvolutionPage'
 import LearningGraphPage from '@/pages/LearningGraphPage'
 import SkillsPage from '@/pages/SkillsPage'
+import ChatBackgroundPattern from '@/components/chat/ChatBackgroundPattern'
 
 // Sub-panels reachable from the "Data & tools" card.
 type ToolsPanel = 'tokens' | 'evolution' | 'learning' | 'skills' | null
@@ -272,7 +273,7 @@ export default function SettingPage() {
 
   if (toolsPanel) {
     return (
-      <div className="flex-1 flex flex-col min-h-0 page-fade-in" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      <div className="flex-1 flex flex-col min-h-0 page-fade-in bg-transparent">
         {/* Sub-panel back bar */}
         <div className="flex items-center gap-3 px-6 py-3 shrink-0 border-b" style={{ borderColor: 'var(--border)' }}>
           <button
@@ -308,9 +309,12 @@ export default function SettingPage() {
     { id: 'advanced', label: t('settings.tab.advanced'), icon: Wrench },
   ]
 
+  const hasBg = !!backgroundImage
+
   return (
-    <div className="flex-1 overflow-y-auto page-fade-in" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      <div className="max-w-3xl mx-auto px-6 py-8">
+    <div className="flex-1 overflow-y-auto page-fade-in bg-transparent relative">
+      {!hasBg && <ChatBackgroundPattern theme={theme} />}
+      <div className="max-w-3xl mx-auto px-6 py-8 relative z-[1]">
         {/* Top Header */}
         <div className="mb-6">
           <h1 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
@@ -336,7 +340,7 @@ export default function SettingPage() {
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium rounded-md transition-all ${
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium rounded-md transition-all press-scale ${
                   isActive
                     ? 'bg-[var(--content-bg)] shadow-sm font-semibold'
                     : 'hover:bg-[var(--border)]/50'
@@ -377,7 +381,7 @@ export default function SettingPage() {
               <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.theme')}</h2>
               <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>切换应用整体色彩风格与明暗模式</p>
               <div className="flex gap-2 flex-wrap">
-                {(['light', 'auto', 'dark', 'blue', 'glass', 'retro'] as const).map((tKey) => {
+                {(['light', 'auto', 'dark', 'blue', 'retro', 'metalheart'] as const).map((tKey) => {
                   const isCurrent = theme === tKey
                   return (
                     <button

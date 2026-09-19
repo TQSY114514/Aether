@@ -421,13 +421,62 @@ async function _completeChatMessage({ provider, model, messages, signal, options
 // normalizeUsage is imported from ../utils/llmShared
 
 
-// List model ids via GET /models. Returns [] on any failure (handlers treat
-// an empty list as "couldn't fetch" rather than crashing).
+// List model ids via GET /models. Handles pagination (has_more / next_page),
+// multiple response structures (data.data, data.models, array), Ollama /api/tags
+// fallback, and deduplication to avoid missing or duplicate models.
 async function listModels({ provider, signal }) {
-  const res = await fetch(`${baseUrl(provider)}/models`, { headers: headers(provider), signal })
-  if (!res.ok) return []
-  const data = await res.json()
-  return (data.data || []).map(m => m.id || m.name).filter(Boolean)
+  const modelNames = []
+  let url = `${baseUrl(provider)}/models`
+  let pages = 0
+
+  while (url && pages < 10) {
+    pages++
+    try {
+      const res = await fetch(url, { headers: headers(provider), signal })
+      if (!res.ok) {
+        // Fallback for local Ollama endpoints that only expose /api/tags
+        if (res.status === 404 && pages === 1) {
+          const rawBase = baseUrl(provider).replace(/\/v1\/?$/, '')
+          try {
+            const tagRes = await fetch(`${rawBase}/api/tags`, { signal })
+            if (tagRes.ok) {
+              const tagData = await tagRes.json()
+              const tagModels = (tagData.models || []).map(m => m.name || m.model).filter(Boolean)
+              if (tagModels.length > 0) return Array.from(new Set(tagModels))
+            }
+          } catch {}
+        }
+        break
+      }
+
+      const data = await res.json()
+      const rawList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.models)
+            ? data.models
+            : []
+
+      for (const item of rawList) {
+        const name = typeof item === 'string' ? item : (item.id || item.name || item.model)
+        if (name && typeof name === 'string') modelNames.push(name.trim())
+      }
+
+      // Check for pagination
+      if (data.has_more && data.last_id) {
+        url = `${baseUrl(provider)}/models?after=${encodeURIComponent(data.last_id)}`
+      } else if (data.next_page) {
+        url = String(data.next_page).startsWith('http') ? data.next_page : `${baseUrl(provider)}${data.next_page}`
+      } else {
+        break
+      }
+    } catch {
+      break
+    }
+  }
+
+  return Array.from(new Set(modelNames.filter(Boolean)))
 }
 
 // Connectivity probe: try /models first; if 404 (proxy without /models), fall

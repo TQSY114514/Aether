@@ -68,7 +68,7 @@ export default function ScoresPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="flex-1 overflow-y-auto bg-transparent page-fade-in">
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-start justify-between gap-4 mb-2">
           <div>

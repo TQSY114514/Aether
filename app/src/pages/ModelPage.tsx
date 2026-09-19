@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { Plus, Trash2, RefreshCw, Check, X, Globe, Key, Wifi, Edit2, Save, Bot } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Check, X, Globe, Key, Wifi, Edit2, Save, Bot, Zap } from 'lucide-react'
 import Tooltip from '@/components/Tooltip'
 import { t } from '@/utils/i18n'
 import { PROVIDER_PRESETS } from '@/components/onboarding/providerPresets'
@@ -25,6 +25,7 @@ export default function ModelPage() {
   const modelsByProvider = useStore((s) => s.modelsByProvider)
   const loadProviders = useStore((s) => s.loadProviders)
   const addProvider = useStore((s) => s.addProvider)
+  const updateProvider = useStore((s) => s.updateProvider)
   const deleteProvider = useStore((s) => s.deleteProvider)
   const loadModels = useStore((s) => s.loadModels)
   const addModel = useStore((s) => s.addModel)
@@ -32,7 +33,9 @@ export default function ModelPage() {
   const loadAllModels = useStore((s) => s.loadAllModels)
 
   const [testingId, setTestingId] = useState<number | null>(null)
+  const [testingLatencyId, setTestingLatencyId] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; errorMessage?: string }>>({})
+  const [latencyResults, setLatencyResults] = useState<Record<number, { success: boolean; latencyMs: number; errorMessage?: string }>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [newProvider, setNewProvider] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
   const [showAddModel, setShowAddModel] = useState<number | null>(null)
@@ -73,7 +76,21 @@ export default function ModelPage() {
     setTestingId(providerId)
     const result = await window.electronAPI.provider.testConnection(providerId)
     setTestResults((prev) => ({ ...prev, [providerId]: result }))
+    if (result && typeof result.latencyMs === 'number') {
+      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: result.success, latencyMs: result.latencyMs, errorMessage: result.errorMessage } }))
+    }
     setTestingId(null)
+  }
+
+  const handleTestLatency = async (providerId: number) => {
+    setTestingLatencyId(providerId)
+    try {
+      const res = await window.electronAPI.provider.testLatency(providerId)
+      setLatencyResults((prev) => ({ ...prev, [providerId]: res }))
+    } catch (e: any) {
+      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: false, latencyMs: -1, errorMessage: e?.message || '测试失败' } }))
+    }
+    setTestingLatencyId(null)
   }
 
   const handleFetchModels = async (providerId: number) => {
@@ -106,7 +123,7 @@ export default function ModelPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="flex-1 overflow-y-auto bg-transparent page-fade-in">
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -248,15 +265,23 @@ export default function ModelPage() {
                   <div className="flex gap-2 flex-wrap">
                     <Tooltip text={t('tooltip.model_test')}>
                       <button onClick={() => handleTest(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
                         style={{ borderColor: 'var(--border)' }}>
                         {testingId === provider.id ? <RefreshCw size={12} className="animate-spin" /> : <Wifi size={12} />}
                         {t('models.test')}
                       </button>
                     </Tooltip>
+                    <Tooltip text="测试此供应商 API 的往返网络延迟 (RTT)">
+                      <button onClick={() => handleTestLatency(provider.id)} disabled={testingLatencyId === provider.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
+                        style={{ borderColor: 'var(--border)' }}>
+                        {testingLatencyId === provider.id ? <RefreshCw size={12} className="animate-spin text-amber-500" /> : <Zap size={12} className="text-amber-500" />}
+                        <span>测试延迟</span>
+                      </button>
+                    </Tooltip>
                     <Tooltip text={t('tooltip.model_fetch')}>
                       <button onClick={() => handleFetchModels(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
                         style={{ borderColor: 'var(--border)' }}>
                         <RefreshCw size={12} />{t('models.fetch')}
                       </button>
@@ -267,6 +292,27 @@ export default function ModelPage() {
                     <div className={`mt-2 flex items-center gap-1.5 text-xs ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
                       {testResult.success ? <Check size={12} /> : <X size={12} />}
                       {testResult.success ? t('models.success') : (testResult.errorMessage || t('models.fail'))}
+                    </div>
+                  )}
+                  {latencyResults[provider.id] !== undefined && (
+                    <div className="mt-2 flex items-center gap-2 text-xs">
+                      {latencyResults[provider.id].success ? (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[11px] font-semibold border ${
+                          latencyResults[provider.id].latencyMs < 400
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                            : latencyResults[provider.id].latencyMs < 1200
+                              ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                              : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                        }`}>
+                          <Zap size={10} />
+                          {latencyResults[provider.id].latencyMs} ms
+                        </span>
+                      ) : (
+                        <span className="text-rose-500 text-[11px] flex items-center gap-1">
+                          <X size={12} />
+                          {latencyResults[provider.id].errorMessage || '延迟测试超时'}
+                        </span>
+                      )}
                     </div>
                   )}
                   {fetchMsg[provider.id] && (

@@ -107,13 +107,21 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         return p && p.enabled
       })
       const intent = db.classifyIntent(userMessage)
-      // Fetch ELO data for all models — keyed by model_id for the explainable router
+      // Fetch ELO data for all models — match intent-specific ELO first, then fallback
       const scores = db.getModelScores()
       const eloData = {}
       for (const s of scores) {
-        if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 }
+        if (s.model_id && s.intent === intent) {
+          eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0, intent: s.intent }
+        }
       }
-      const result = modelAdvisor.suggestModelExplained({ allModels, userMessage, useTools: true, intent, eloData })
+      for (const s of scores) {
+        if (s.model_id && !eloData[s.model_id]) {
+          eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0, intent: s.intent }
+        }
+      }
+      const priority = db.getSetting('modelRoutingPriority') || 'quality'
+      const result = modelAdvisor.suggestModelExplained({ allModels, userMessage, useTools: true, intent, eloData, routingContext: { priority } })
       if (result) {
         return { suggestedModelId: result.suggestedModelId, reason: result.reason,
           reasonParts: result.reasonParts,
@@ -138,11 +146,18 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       const tier = modelRouter.routeTask(taskType, userMessage || '', 0)
       const autoMode = db.getSetting('modelAutoRoute') === '1'
       const priority = db.getSetting('modelRoutingPriority') || 'quality'
-      // Arena ELO keyed by model_id (from the model_score table).
+      // Arena ELO keyed by model_id (from the model_score table), intent-aware.
       const scores = db.getModelScores()
       const eloData = {}
       for (const s of scores) {
-        if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 }
+        if (s.model_id && s.intent === taskType) {
+          eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0, intent: s.intent }
+        }
+      }
+      for (const s of scores) {
+        if (s.model_id && !eloData[s.model_id]) {
+          eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0, intent: s.intent }
+        }
       }
       const latencyData = db.getModelLatency()
       const suggestion = modelRouter.suggestModelForTier(tier, allModels, { autoMode, priority, eloData, latencyData })

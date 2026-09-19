@@ -22,6 +22,17 @@ function registerProviderHandlers(ipcMain, db) {
     catch (e) { return { success: false, errorMessage: e?.message || String(e) } }
   })
 
+  // Measure latency (RTT in ms) to the provider endpoint or specific model
+  ipcMain.handle('provider:test-latency', async (_e, id, modelName) => {
+    const provider = db.getProvider(id)
+    if (!provider) return { success: false, latencyMs: -1, errorMessage: '供应商未找到' }
+    try {
+      return await testConnection({ provider, model: modelName })
+    } catch (e) {
+      return { success: false, latencyMs: -1, errorMessage: e?.message || String(e) }
+    }
+  })
+
   // Fetch the provider's model list and sync it into the DB: add newly
   // reported models, remove ones the provider no longer exposes, and skip
   // duplicates. Returns the (deduplicated) model names and a sync summary.

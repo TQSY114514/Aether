@@ -136,57 +136,51 @@ export default function AgentRunTimeline({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 lg:p-8 animate-fade-in">
       {/* Backdrop — covers the entire screen including sidebar */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-200"
+        className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-200"
         onClick={onClose}
       />
 
-      {/* Slide-over drawer */}
+      {/* Centered Floating Window */}
       <div
-        className="relative w-full max-w-xl h-full flex flex-col border-l shadow-2xl animate-fade-in"
-        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+        className="relative w-full max-w-3xl h-[82vh] max-h-[850px] rounded-[2px] border-2 shadow-2xl flex flex-col overflow-hidden animate-spring-up"
+        style={{
+          backgroundColor: 'var(--bg-primary)',
+          borderColor: 'var(--border)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border)',
+        }}
       >
-        {/* Header: Close button on LEFT, title in middle, actions on right, no competing X near WCO */}
+        {/* Reticle Corner Marks */}
+        <div className="absolute top-0 left-0 w-2.5 h-2.5 border-t-2 border-l-2 pointer-events-none z-20" style={{ borderColor: 'var(--accent)' }} />
+        <div className="absolute top-0 right-0 w-2.5 h-2.5 border-t-2 border-r-2 pointer-events-none z-20" style={{ borderColor: 'var(--accent)' }} />
+        <div className="absolute bottom-0 left-0 w-2.5 h-2.5 border-b-2 border-l-2 pointer-events-none z-20" style={{ borderColor: 'var(--accent)' }} />
+        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b-2 border-r-2 pointer-events-none z-20" style={{ borderColor: 'var(--accent)' }} />
+
+        {/* Header: Title on Left, Actions + Close on Right */}
         <div
-          className="h-12 flex items-center justify-between px-4 border-b wco-pr shrink-0"
+          className="h-12 flex items-center justify-between px-4 border-b shrink-0"
           style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
         >
-          {/* Left: Close button + Title + Turns count */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              onClick={onClose}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium hover:bg-[var(--bg-primary)] transition-colors cursor-pointer shrink-0"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-              title="关闭运行轨迹 (Esc)"
-              aria-label="关闭运行轨迹"
+          <div className="flex items-center gap-2 truncate">
+            <History size={16} style={{ color: 'var(--accent)' }} className="shrink-0" />
+            <h2 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+              {t('agent.timeline.title')}
+            </h2>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded-[2px] font-mono shrink-0 border"
+              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
             >
-              <X size={14} />
-              <span>关闭</span>
-              <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-[var(--bg-primary)] border text-[var(--text-muted)]" style={{ borderColor: 'var(--border)' }}>Esc</kbd>
-            </button>
-            <div className="h-4 w-px bg-[var(--border)] shrink-0" />
-            <div className="flex items-center gap-2 truncate">
-              <History size={16} style={{ color: 'var(--accent)' }} className="shrink-0" />
-              <h2 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                {t('agent.timeline.title')}
-              </h2>
-              <span
-                className="text-[10px] px-2 py-0.5 rounded-full font-mono shrink-0"
-                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}
-              >
-                {logs.length} turns
-              </span>
-            </div>
+              [ {logs.length} TURNS ]
+            </span>
           </div>
 
-          {/* Right: Actions only (Rollback, Refresh) — absolutely NO close button here to avoid collision with WCO */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleRollback}
               disabled={rollingBack || loading}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium hover:bg-[var(--bg-primary)] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-[2px] border text-xs font-medium hover:bg-[var(--bg-primary)] transition-colors cursor-pointer"
               style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
               title={t('agent.timeline.rollback', '撤销上次修改')}
             >
@@ -196,11 +190,22 @@ export default function AgentRunTimeline({
             <button
               onClick={fetchLogs}
               disabled={loading}
-              className="p-1.5 rounded-lg border hover:bg-[var(--bg-primary)] transition-colors cursor-pointer"
+              className="p-1.5 rounded-[2px] border hover:bg-[var(--bg-primary)] transition-colors cursor-pointer"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
               title="Refresh timeline"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <div className="h-4 w-px bg-[var(--border)] shrink-0 mx-0.5" />
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1 px-2 py-1 rounded-[2px] border text-xs font-medium hover:bg-[var(--bg-primary)] transition-colors cursor-pointer shrink-0"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+              title="关闭运行轨迹 (Esc)"
+              aria-label="关闭运行轨迹"
+            >
+              <X size={14} />
+              <kbd className="text-[10px] font-mono px-1 py-0.2 rounded-[2px] bg-[var(--bg-primary)] border text-[var(--text-muted)]" style={{ borderColor: 'var(--border)' }}>Esc</kbd>
             </button>
           </div>
         </div>
@@ -224,7 +229,7 @@ export default function AgentRunTimeline({
               return (
                 <div
                   key={log.id}
-                  className="rounded-lg border overflow-hidden transition-all duration-150"
+                  className="rounded-[2px] border overflow-hidden transition-all duration-150"
                   style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
                 >
                   {/* Turn Summary Bar */}
@@ -238,15 +243,15 @@ export default function AgentRunTimeline({
                       ) : (
                         <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
                       )}
-                      <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        Turn #{log.turn_id || log.id}
+                      <span className="text-xs font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        [ Turn #{log.turn_id || log.id} ]
                       </span>
-                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      <span className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
                         ({toolCalls.length} tool calls)
                       </span>
                       {hasTaint && (
                         <span
-                          className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
+                          className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-[2px] font-mono font-medium border border-red-500/30"
                           style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--error)' }}
                         >
                           <ShieldAlert size={10} />
@@ -255,7 +260,7 @@ export default function AgentRunTimeline({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    <div className="flex items-center gap-2 shrink-0 text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
                       <Clock size={11} />
                       <span>{new Date(log.created_at).toLocaleTimeString()}</span>
                     </div>
@@ -265,7 +270,7 @@ export default function AgentRunTimeline({
                   {isExpanded && (
                     <div className="border-t p-3 space-y-2.5" style={{ borderColor: 'var(--border)' }}>
                       {toolCalls.length === 0 ? (
-                        <p className="text-[11px] px-2 py-1" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-[11px] font-mono px-2 py-1" style={{ color: 'var(--text-muted)' }}>
                           No tools invoked in this turn.
                         </p>
                       ) : (
@@ -278,7 +283,7 @@ export default function AgentRunTimeline({
                           return (
                             <div
                               key={idx}
-                              className="rounded-lg border p-2.5 space-y-2"
+                              className="rounded-[2px] border p-2.5 space-y-2"
                               style={{
                                 backgroundColor: 'var(--bg-primary)',
                                 borderColor: tc.isTainted ? 'rgba(239,68,68,0.4)' : 'var(--border)',
@@ -288,9 +293,10 @@ export default function AgentRunTimeline({
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 min-w-0">
                                   <div
-                                    className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+                                    className="w-6 h-6 rounded-[2px] border flex items-center justify-center shrink-0"
                                     style={{
                                       backgroundColor: isOk ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                      borderColor: isOk ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
                                     }}
                                   >
                                     <Icon size={12} style={{ color: isOk ? 'var(--success)' : 'var(--error)' }} />
@@ -300,15 +306,15 @@ export default function AgentRunTimeline({
                                   </span>
                                   {tc.depth !== undefined && (
                                     <span
-                                      className="text-[9px] px-1 rounded"
-                                      style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}
+                                      className="text-[9px] px-1 rounded-[2px] border font-mono"
+                                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
                                     >
                                       d:{tc.depth}
                                     </span>
                                   )}
                                   {tc.isTainted && (
                                     <span
-                                      className="text-[9px] px-1.5 py-0.2 rounded font-medium flex items-center gap-0.5"
+                                      className="text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium flex items-center gap-0.5 border border-red-500/30"
                                       style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: 'var(--error)' }}
                                     >
                                       <ShieldAlert size={9} /> Tainted
@@ -319,22 +325,22 @@ export default function AgentRunTimeline({
                                 <div className="flex items-center gap-2 shrink-0">
                                   {tc.latencyMs !== undefined && tc.latencyMs !== null && (
                                     <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
-                                      {tc.latencyMs}ms
+                                      [ {tc.latencyMs}ms ]
                                     </span>
                                   )}
                                   {isOk ? (
                                     <span
-                                      className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded"
+                                      className="flex items-center gap-1 text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-[2px] border border-green-500/30"
                                       style={{ backgroundColor: 'rgba(34,197,94,0.12)', color: 'var(--success)' }}
                                     >
                                       <CheckCircle2 size={10} /> OK
                                     </span>
                                   ) : (
                                     <span
-                                      className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded"
+                                      className="flex items-center gap-1 text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-[2px] border border-red-500/30"
                                       style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--error)' }}
                                     >
-                                      <AlertCircle size={10} /> Fail
+                                      <AlertCircle size={10} /> FAIL
                                     </span>
                                   )}
                                 </div>
@@ -343,7 +349,7 @@ export default function AgentRunTimeline({
                               {/* Args snippet */}
                               {tc.args && Object.keys(tc.args).length > 0 && (
                                 <pre
-                                  className="text-[10px] font-mono rounded p-2 overflow-x-auto whitespace-pre-wrap break-all"
+                                  className="text-[10px] font-mono rounded-[2px] p-2 overflow-x-auto whitespace-pre-wrap break-all border border-[var(--border)]"
                                   style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
                                 >
                                   {JSON.stringify(tc.args, null, 2)}
@@ -353,7 +359,7 @@ export default function AgentRunTimeline({
                               {/* Error display */}
                               {tc.error && (
                                 <div
-                                  className="text-[11px] font-mono rounded p-2 border"
+                                  className="text-[11px] font-mono rounded-[2px] p-2 border"
                                   style={{
                                     backgroundColor: 'rgba(239,68,68,0.06)',
                                     borderColor: 'rgba(239,68,68,0.2)',
@@ -369,15 +375,15 @@ export default function AgentRunTimeline({
                                 <div>
                                   <button
                                     onClick={() => toggleDiff(diffKey)}
-                                    className="flex items-center gap-1 text-[10px] font-medium hover:underline mb-1"
+                                    className="flex items-center gap-1 text-[10px] font-mono font-medium hover:underline mb-1"
                                     style={{ color: 'var(--accent)' }}
                                   >
                                     <FileCode size={11} />
-                                    {showDiff ? 'Hide Diff' : 'View Diff'}
+                                    {showDiff ? '[ HIDE DIFF ]' : '[ VIEW DIFF ]'}
                                   </button>
                                   {showDiff && (
                                     <pre
-                                      className="text-[10px] font-mono rounded p-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-all"
+                                      className="text-[10px] font-mono rounded-[2px] p-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-all border border-[var(--border)]"
                                       style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
                                     >
                                       {tc.diff}

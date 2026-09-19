@@ -71,6 +71,7 @@ export default function App() {
   const backgroundBlur = useStore((s) => s.backgroundBlur)
   const hasBg = backgroundImage !== null
   const providers = useStore((s) => s.providers)
+  const theme = useStore((s) => s.theme)
   // Onboarding wizard: first-run only (no providers + not completed). The flag
   // default is on; fallback=true so it shows before the flags snapshot loads.
   const showWizard = useFeatureFlag('ux.firstRunWizard', true)

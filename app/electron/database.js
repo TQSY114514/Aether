@@ -783,15 +783,31 @@ function syncModels(providerId, fetchedNames) {
   );
   // Empty fetched list => do nothing (transient failure guard).
   if (names.length === 0) return { added: [], removed: [] };
-  const existing = db
+
+  const existingRaw = db
     .prepare(
-      "SELECT id, model_name, is_primary FROM model WHERE provider_id = ?",
+      "SELECT id, model_name, is_primary FROM model WHERE provider_id = ? ORDER BY is_primary DESC, id ASC",
     )
     .all(providerId);
+
+  // Clean up any historical duplicates for this provider in the DB
+  const seenNames = new Set();
+  const existing = [];
+  for (const row of existingRaw) {
+    if (seenNames.has(row.model_name)) {
+      db.prepare("DELETE FROM model WHERE id = ?").run(row.id);
+    } else {
+      seenNames.add(row.model_name);
+      existing.push(row);
+    }
+  }
+
   const existingByName = new Map(existing.map((m) => [m.model_name, m]));
   const fetchedSet = new Set(names);
   const added = [];
   const removed = [];
+
+  // Add new models
   for (const name of names) {
     if (!existingByName.has(name)) {
       db.prepare(
@@ -800,12 +816,15 @@ function syncModels(providerId, fetchedNames) {
       added.push(name);
     }
   }
+
+  // Remove models no longer exposed by the provider
   for (const m of existing) {
     if (!fetchedSet.has(m.model_name)) {
       db.prepare("DELETE FROM model WHERE id = ?").run(m.id);
       removed.push(m.model_name);
     }
   }
+
   // If the primary model was removed, promote the first remaining one so the
   // provider still has a selectable default.
   if (removed.length > 0) {

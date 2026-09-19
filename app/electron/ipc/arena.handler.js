@@ -444,6 +444,49 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       },
     ]
   })
+
+  // Objective Arena: automated code execution + verify command benchmark with auto ELO recording
+  ipcMain.handle('arena:objective-run', async (_e, data) => {
+    try {
+      const { prompt, verifyCommand, cwd, modelIds, expectedExitCode, timeoutMs, updateScores } = data || {}
+      if (!prompt || !verifyCommand) {
+        return { error: 'prompt and verifyCommand are required' }
+      }
+      const allModels = db.getAllModels()
+      const selected = Array.isArray(modelIds) ? allModels.filter(m => modelIds.includes(m.id)) : []
+      if (!selected.length) return { error: 'No models selected' }
+
+      const fallbackRoot = require('../tools/sandbox').getWorkspaceRoot() || process.cwd()
+      const taskCwd = cwd ? resolveTaskCwd(cwd, fallbackRoot) : fallbackRoot
+      const cleanVerifyCommand = sanitizeVerifyCommand(verifyCommand)
+      if (!cleanVerifyCommand) return { error: 'Invalid verification command' }
+
+      const controller = new AbortController()
+      const runKey = `objective:${Date.now()}`
+      abortControllers.set(runKey, controller)
+
+      try {
+        const objectiveArena = require('../llm/objectiveArena')
+        const result = await objectiveArena.runObjectiveEvaluation({
+          db,
+          models: selected,
+          prompt,
+          verifyCommand: cleanVerifyCommand,
+          cwd: taskCwd,
+          expectedExitCode: typeof expectedExitCode === 'number' ? expectedExitCode : 0,
+          timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : 30000,
+          updateScores: updateScores !== false,
+          signal: controller.signal,
+        })
+        return result
+      } finally {
+        abortControllers.delete(runKey)
+      }
+    } catch (err) {
+      log.warn('arena:objective-run error:', err)
+      return { error: err.message }
+    }
+  })
 }
 
 module.exports = {

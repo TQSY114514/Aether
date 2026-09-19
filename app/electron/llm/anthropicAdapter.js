@@ -512,7 +512,19 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
 }
 
-async function listModels() { return [] }
+async function listModels({ provider, signal } = {}) {
+  try {
+    const res = await fetch(`${baseUrl(provider)}/models`, { headers: headers(provider), signal })
+    if (res.ok) {
+      const data = await res.json()
+      const list = Array.isArray(data) ? data : (data.data || data.models || [])
+      const names = list.map(m => typeof m === 'string' ? m : (m.id || m.name)).filter(Boolean)
+      if (names.length > 0) return Array.from(new Set(names))
+    }
+  } catch {}
+  // Fallback default list if /models is not supported by endpoint
+  return ['claude-3-7-sonnet-20250219', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229']
+}
 
 // Connectivity probe: a minimal /messages request with max_tokens:1.
 async function testConnection({ provider }) {

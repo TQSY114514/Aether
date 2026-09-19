@@ -1,9 +1,9 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, Zap, Sparkles, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Cpu, Wand2, Check, Shield, RotateCcw, Zap, Sparkles, ShieldCheck, ShieldAlert, Trophy } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
@@ -15,6 +15,7 @@ type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; d
 type Snippet = { id: number; content: string; preview: string }
 type SlashCommand = { id: string; name: string; description: string; prompt?: string; action?: () => void }
 type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
+
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
@@ -61,6 +62,7 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
     } catch { window.alert('❌ 撤销失败') }
   } },
 ]
+
 
 export default function ChatInput() {
   // Slash commands loaded from IPC (scan CMD.md files). Falls back to defaults.
@@ -119,6 +121,7 @@ export default function ChatInput() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
+
   // Batch store selectors with shallow comparison to reduce re-render triggers.
   const {
     sendMessage, enqueueMessage, removeQueued, stopGeneration,
@@ -172,6 +175,25 @@ export default function ChatInput() {
   const isArenaRunning = chatMode === 'arena' && isStreaming
   // Feature B: true when the current session has an active tool loop (can accept injections).
   const isLooping = isStreaming && loopingSessions.has(currentSessionId ?? -1)
+
+  // Rotating placeholder hints when idle
+  const [hintIndex, setHintIndex] = useState(0)
+  useEffect(() => {
+    if (chatMode === 'arena' || isStreaming || isLooping || input.trim()) return
+    const timer = setInterval(() => {
+      setHintIndex((prev) => (prev + 1) % 3)
+    }, 6000)
+    return () => clearInterval(timer)
+  }, [chatMode, isStreaming, isLooping, input])
+
+  const currentPlaceholder = useMemo(() => {
+    if (chatMode === 'arena') return t('chat.arena.placeholder')
+    if (isStreaming) return '⚡ 输入中途纠偏指令 (Steer) / 按回车插话...'
+    if (isLooping) return t('inject.placeholder')
+    if (hintIndex === 1) return t('empty.hint.slash', '输入 / 唤起快捷指令与预设任务…')
+    if (hintIndex === 2) return t('empty.hint.at', '输入 @ 关联项目文件、代码符号或知识库…')
+    return t('chat.placeholder')
+  }, [chatMode, isStreaming, isLooping, hintIndex])
 
   // Active model for the current session. When switching chats, useMemo re-derives
   // from sessionConfigs. For the blank chat page (no session yet), falls back to
@@ -412,8 +434,9 @@ export default function ChatInput() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
+    const cursor = e.target.selectionStart ?? val.length
     setInput(val)
-    setRefCursor(e.target.selectionStart ?? val.length)
+    setRefCursor(cursor)
     const lastLine = val.split('\n').pop() || ''
     if (lastLine === '/') { setShowSlash(true); setSlashQuery('') }
     else if (lastLine.startsWith('/')) { setShowSlash(true); setSlashQuery(lastLine.slice(1)) }
@@ -568,7 +591,7 @@ export default function ChatInput() {
   }, [input, isStreaming, showSlash, pending.length, snippets.length])
 
   return (
-    <div className="border-t border-[var(--border)] bg-[var(--content-bg)] px-4 py-2.5"
+    <div className="border-t border-[var(--border)] bg-[var(--content-bg)]/85 backdrop-blur-md px-4 py-2.5"
       ref={dropZoneRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -635,7 +658,7 @@ export default function ChatInput() {
           </div>
         )}
         <AgentTaskDeck sessionId={currentSessionId} />
-        <div className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all', 'input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
+        <div className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
             <div className="slash-menu" role="listbox" aria-label="Slash commands">
@@ -657,31 +680,52 @@ export default function ChatInput() {
           )}
           <InputReference value={input} cursorPos={refCursor} visible onSelect={handleReferenceSelect} />
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] transition-colors disabled:opacity-30">
+          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky disabled:opacity-30">
             <Paperclip size={15} className="text-gray-400" />
           </button>
-          <textarea ref={textareaRef} value={input} onChange={handleInputChange} onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)} onKeyDown={handleKeyDown} onPaste={handlePaste}
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleInputChange}
+            onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isStreaming ? '⚡ 输入中途纠偏指令 (Steer) / 按回车插话...' : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
-            rows={1} className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
-            disabled={isArenaRunning} />
+            rows={1}
+            className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
+            disabled={isArenaRunning}
+          />
+          {input.length > 0 && (
+            <div className="flex items-center shrink-0 self-center px-1.5 py-0.5 select-none overflow-hidden h-6 rounded-md bg-[var(--bg-primary)]/80 border border-[var(--border)] shadow-2xs">
+              <div className="flex items-center gap-0.5 text-[11px] font-mono tabular-nums overflow-hidden leading-none">
+                <span
+                  key={input.length}
+                  className="inline-block animate-digit-slide-up text-[var(--accent)] font-semibold"
+                >
+                  {input.length}
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] opacity-60">字</span>
+              </div>
+            </div>
+          )}
           {isArenaRunning || (isStreaming && !input.trim()) ? (
-            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors" title={t('chat.stop')} aria-label={t('chat.stop')}>
+            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale" title={t('chat.stop')} aria-label={t('chat.stop')}>
               <Square size={13} fill="currentColor" />
             </button>
           ) : isStreaming && input.trim() ? (
             <button onClick={() => handleSubmit()}
-              className="shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-opacity shadow-sm" title="⚡ 插入纠偏 (Steer)" aria-label="插入纠偏">
+              className="shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale shadow-sm" title="⚡ 插入纠偏 (Steer)" aria-label="插入纠偏">
               <Zap size={13} />
             </button>
           ) : (
             <button onClick={() => handleSubmit()} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-opacity', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
+              className={cn('shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale hover-lift', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
               <Send size={13} />
             </button>
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-1.5 px-0.5 mt-1.5 flex-wrap min-w-0">
+        <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-wrap min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap min-w-0">
             {!isStreaming && !isArenaRunning && (
               <div className="flex items-center gap-1 shrink-0">
@@ -721,6 +765,19 @@ export default function ChatInput() {
                     {t('chat.tokens_estimate', String(totalInputTokens))}
                   </span>
                 )}
+                {/* Outbound Privacy Ledger Pill (P1-11) */}
+                <div
+                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border cursor-help shrink-0"
+                  style={{
+                    borderColor: 'rgba(34,197,94,0.3)',
+                    backgroundColor: 'rgba(34,197,94,0.06)',
+                    color: 'var(--success)',
+                  }}
+                  title={`🔒 0-Telemetry / 零遥测保护\n已配置出站端点：${outboundHosts.length > 0 ? outboundHosts.join(', ') : '无启用端点'}\n所有数据与历史对话仅保存在本地 SQLite。`}
+                >
+                  <ShieldCheck size={11} className="shrink-0" />
+                  <span className="font-mono font-medium">0-Telemetry</span>
+                </div>
                 <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden sm:inline">{t('empty.hint.slash')}</span>
               </>
             )}
@@ -933,6 +990,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
   const isAutoSuggested = modelSuggestion && modelSuggestion.suggestedModelId === activeModelId && activeModelId != null
   const suggestedModel = modelSuggestion && modelSuggestion.suggestedModelId ? allModels.find(m => m.id === modelSuggestion!.suggestedModelId) : null
   const reasonTitle = formatSuggestionReason(modelSuggestion)
+  const arenaElo = modelSuggestion?.reasonParts?.arenaElo ?? (modelSuggestion?.reasonParts?.eloTotal && modelSuggestion?.reasonParts?.eloTotal > 0 && modelSuggestion?.reasonParts?.eloScore ? Math.round(modelSuggestion.reasonParts.eloScore) : null)
 
   // The suggestion badge floats on the select's top-right corner so it never
   // takes document-flow space, squeezes the select, or covers its text.
@@ -960,14 +1018,14 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
         {!isAutoSuggested && suggestedModel && (
           <button
             onClick={() => onSelect(suggestedModel.id, suggestedModel.provider_id)}
-            className="absolute -right-1.5 -top-1.5 w-4 h-4 rounded-full flex items-center justify-center hover:scale-110 transition-transform z-10 cursor-pointer"
+            className="absolute -right-1 -top-1 w-4 h-4 rounded-full flex items-center justify-center hover:scale-110 transition-transform z-20 cursor-pointer shadow-xs"
             style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
             title={reasonTitle} aria-label={reasonTitle}>
             <Wand2 size={9} />
           </button>
         )}
         {isAutoSuggested && (
-          <span className="absolute -right-1.5 -top-1.5 w-4 h-4 rounded-full flex items-center justify-center pointer-events-none"
+          <span className="absolute -right-1 -top-1 w-4 h-4 rounded-full flex items-center justify-center pointer-events-none z-20"
             style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: 'var(--accent)' }}
             title={reasonTitle}>
             <Check size={9} />
@@ -975,15 +1033,30 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
         )}
       </div>
 
+      {arenaElo != null && (
+        <span
+          className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] shrink-0 select-none shadow-2xs font-mono"
+          style={{
+            borderColor: 'var(--border)',
+            backgroundColor: 'var(--bg-secondary)',
+            color: 'var(--text-secondary)'
+          }}
+          title={reasonTitle || `Arena ELO ${arenaElo}`}
+        >
+          <Trophy size={10} className="text-amber-500 shrink-0" />
+          <span>ELO {arenaElo}</span>
+        </span>
+      )}
+
       <button
         onClick={handleAutoRoute}
-        className="p-1 px-1.5 rounded-lg border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer"
+        className="p-1 px-1.5 sm:px-2 rounded-lg border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer shadow-2xs"
         style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
         title={t('chat.model_auto_route_desc')}
         aria-label={t('chat.model_auto_route')}
       >
         <Sparkles size={11} className="text-amber-500 shrink-0" />
-        <span className="hidden xl:inline font-medium">{t('chat.model_auto_route')}</span>
+        <span className="hidden sm:inline font-medium">{t('chat.model_auto_route')}</span>
       </button>
     </div>
   )

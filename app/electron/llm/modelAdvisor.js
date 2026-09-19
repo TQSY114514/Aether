@@ -28,9 +28,9 @@ function classifyTask(userMessage) {
   const lower = text.toLowerCase()
   const trimmed = text.trim()
 
-  // Short greetings → chitchat
-  if (CHITCHAT_RE.test(trimmed) || trimmed.length < SHORT_MSG_THRESHOLD) {
-    return { primary: 'chitchat', secondary: [], confidence: 0.8 }
+  // Explicit greeting check first
+  if (CHITCHAT_RE.test(trimmed)) {
+    return { primary: 'chitchat', secondary: [], confidence: 0.9 }
   }
 
   // Score each task by regex match count × weight
@@ -42,9 +42,9 @@ function classifyTask(userMessage) {
 
   const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1])
 
-  // No matches → fallback to chitchat
+  // No domain patterns matched → fall back to chitchat (higher confidence if short)
   if (!ranked.length) {
-    return { primary: 'chitchat', secondary: [], confidence: 0.5 }
+    return { primary: 'chitchat', secondary: [], confidence: trimmed.length < SHORT_MSG_THRESHOLD ? 0.8 : 0.5 }
   }
 
   const primary = ranked[0][0]
@@ -98,6 +98,19 @@ function scoreModel(model, taskType) {
 
 const REASONING_FAMILIES = new Set(['openai', 'claude', 'deepseek', 'qwen'])
 
+/**
+ * Compute dynamic ELO weight based on sample size:
+ * - n = 0: 0% (100% heuristic prior for cold start)
+ * - 1 <= n < 5: 15% -> 47% (smooth progressive learning)
+ * - n >= 5: 60% -> 80% (personal ELO dominates)
+ */
+function computeEloWeight(elo) {
+  if (!elo || !elo.total_count || elo.total_count <= 0) return 0
+  const n = elo.total_count
+  if (n < 5) return 0.15 + (n - 1) * 0.08
+  return Math.min(0.80, 0.60 + (n - 5) * 0.05)
+}
+
 class ModelRouter {
   /**
    * @param {object} [options]
@@ -111,56 +124,15 @@ class ModelRouter {
 
   /**
    * Main entry: pick the best model for a turn.
-   * @param {{ allModels: array, userMessage: string, useTools: boolean, routingContext?: { priority?: 'quality'|'speed'|'cost' } }} ctx
-   * @returns {object|null}  winning model object, or null
+   * Shared brain: applies Heuristic Prior + Dynamic Arena ELO + Priority adjustments.
+   * @param {{ allModels: array, userMessage: string, useTools?: boolean, intent?: string, eloData?: object, routingContext?: { priority?: 'quality'|'speed'|'cost' } }} ctx
+   * @returns {object|null} winning model object, or null
    */
-  route({ allModels, userMessage, useTools, routingContext = {} }) {
+  route({ allModels, userMessage, useTools = false, intent, eloData, routingContext = {} }) {
     if (!this.autoMode || !allModels || !allModels.length) return null
-
     try {
-      const task = classifyTask(userMessage)
-      const priority = routingContext.priority || 'quality'
-
-      // Phase 5: Score every available model with priority-aware adjustments.
-      let scored = allModels
-        .map(m => {
-          const baseScore = scoreModel(m, task.primary)
-          const family = detectFamily(m.model_name || m.id || '')
-          let finalScore = baseScore
-
-          // When tools are on, prefer a reasoning-capable family if one scores well
-          if (useTools && baseScore > 0) {
-            if (REASONING_FAMILIES.has(family)) finalScore *= 1.1
-          }
-
-          // Priority-aware adjustments (speed/cost)
-          if (priority === 'speed') {
-            const ctxWindow = m.context_window || 128000
-            const speedFactor = Math.max(0.3, 1 - (ctxWindow / 200000))
-            finalScore = baseScore * speedFactor
-            if (REASONING_FAMILIES.has(family)) finalScore *= 1.05
-          } else if (priority === 'cost') {
-            const pricePerK = m.input_price_per_1k || 0.003
-            const costFactor = Math.max(0.4, 0.01 / (pricePerK + 0.001))
-            finalScore = baseScore * costFactor
-          }
-
-          return { model: m, score: finalScore, baseScore }
-        })
-        .filter(s => s.score > 0)
-        .sort((a, b) => b.score - a.score)
-
-      if (!scored.length) return null
-
-      // When tools are on with quality priority, prefer a reasoning-capable family
-      if (useTools && priority === 'quality') {
-        const pick = scored.find(s =>
-          REASONING_FAMILIES.has(detectFamily(s.model.model_name || s.model.id || ''))
-        )
-        if (pick) return pick.model
-      }
-
-      return scored[0].model
+      const result = routeWithExplanation({ allModels, userMessage, useTools, intent, eloData, routingContext })
+      return result ? result.model : null
     } catch {
       return null
     }
@@ -180,31 +152,49 @@ const TASK_TO_INTENT = {
  * Route with explanation — returns the winning model plus a human-readable
  * rationale that combines heuristic fit + Arena ELO data when available.
  *
- * @param {{ allModels, userMessage, useTools, intent, eloData }} opts
+ * @param {{ allModels, userMessage, useTools, intent, eloData, routingContext }} opts
  *   eloData: optional Map/obj keyed by model_id → { score, win_count, total_count }
  * @returns {{ model, reason, heuristicScores, eloScore, rank, confidence } | null}
  */
-function routeWithExplanation({ allModels, userMessage, useTools, intent, eloData }) {
+function routeWithExplanation({ allModels, userMessage, useTools, intent, eloData, routingContext = {} }) {
   if (!allModels || !allModels.length) return null
 
   try {
     const task = classifyTask(userMessage)
     const taskType = intent || task.primary
     const confidence = task.confidence
+    const priority = routingContext.priority || 'quality'
 
-    // Score every model on heuristic (family × task-type table)
+    // Score every model on heuristic (family × task-type table) + priority adjustments
     const ranked = allModels
       .map(m => {
-        const hScore = scoreModel(m, taskType)
+        let baseScore = scoreModel(m, taskType)
+        const family = detectFamily(m.model_name || m.id || '')
+
+        // Priority-aware adjustments (speed/cost)
+        if (priority === 'speed') {
+          const ctxWindow = m.context_window || 128000
+          const speedFactor = Math.max(0.3, 1 - (ctxWindow / 200000))
+          baseScore *= speedFactor
+          if (REASONING_FAMILIES.has(family)) baseScore *= 1.05
+        } else if (priority === 'cost') {
+          const pricePerK = m.input_price_per_1k || 0.003
+          const costFactor = Math.max(0.4, 0.01 / (pricePerK + 0.001))
+          baseScore *= costFactor
+        }
+
+        const hScore = baseScore
         const elo = eloData?.[m.id]
-        // Blend: heuristic is primary signal; ELO acts as a tiebreaker / confidence boost
-        // When ELO data is available and substantial (≥5 matches), weight it at 30%
-        const eloWeight = (elo && elo.total_count >= 5) ? 0.3 : 0
-        const blended = hScore * (1 - eloWeight) + Math.min(100, (elo?.score ?? 1000) / 20) * eloWeight
+        // Dynamic Arena learning: activate ELO smoothly from 1+ match (60-80% for >= 5 matches)
+        const eloWeight = computeEloWeight(elo)
+        // Normalized ELO: baseline 1000 maps to 80 (standard capable tier),
+        // each 100 ELO points = +5 / -5 points on heuristic scale [10, 100].
+        const normalizedElo = Math.max(10, Math.min(100, 80 + ((elo?.score ?? 1000) - 1000) * 0.05))
+        const blended = hScore * (1 - eloWeight) + normalizedElo * eloWeight
         return {
           model: m, hScore, eloScore: elo?.score ?? null,
           eloWins: elo?.win_count ?? 0, eloTotal: elo?.total_count ?? 0,
-          blended, family: detectFamily(m.model_name || m.id || ''),
+          blended, family,
         }
       })
       .filter(s => s.hScore > 0)
@@ -230,12 +220,8 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
     parts.push(`Task: ${taskLabel}${confidence < 0.5 ? ' (low confidence)' : ''}`)
     parts.push(`Heuristic: ${winner.hScore}/100 as ${winner.family}`)
 
-    if (winner.eloScore !== null) {
-      if (winner.eloTotal >= 5) {
-        parts.push(`Arena ELO: ${winner.eloScore.toFixed(1)} (${winner.eloWins}/${winner.eloTotal})`)
-      } else {
-        parts.push(`Arena ELO: ${winner.eloScore.toFixed(1)} (insufficient data)`)
-      }
+    if (winner.eloScore !== null && winner.eloTotal > 0) {
+      parts.push(`Arena ELO: ${winner.eloScore.toFixed(1)} (${winner.eloWins}/${winner.eloTotal})`)
     }
 
     let reasoningPickUsed = false
@@ -270,7 +256,8 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
         eloScore: winner.eloScore,
         eloWins: winner.eloWins,
         eloTotal: winner.eloTotal,
-        eloReliable: winner.eloTotal >= 5,
+        eloReliable: winner.eloTotal >= 1,
+        arenaElo: (winner.eloTotal > 0 && winner.eloScore) ? Math.round(winner.eloScore) : null,
         useTools: !!useTools,
         reasonPickUsed: reasoningPickUsed,
         closeRace: gap !== null && gap < 5,
@@ -293,12 +280,12 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
 
 /**
  * Suggest the best model for a given request.
- * Signature preserved: suggestModel({ allModels, userMessage, useTools, intent })
+ * Signature preserved & extended: suggestModel({ allModels, userMessage, useTools, intent, eloData, routingContext })
  */
-function suggestModel({ allModels, userMessage, useTools, intent }) {
+function suggestModel({ allModels, userMessage, useTools = false, intent, eloData, routingContext = {} }) {
   try {
     const router = new ModelRouter()
-    return router.route({ allModels, userMessage, useTools })
+    return router.route({ allModels, userMessage, useTools, intent, eloData, routingContext })
   } catch {
     return null
   }
@@ -306,12 +293,12 @@ function suggestModel({ allModels, userMessage, useTools, intent }) {
 
 /**
  * Enhanced suggest with ELO data and explainable rationale.
- * @param {{ allModels, userMessage, useTools, intent, eloData }}
+ * @param {{ allModels, userMessage, useTools, intent, eloData, routingContext }}
  * @returns {{ suggestedModelId, reason, reasonParts, heuristicScores, confidence } | null}
  */
-function suggestModelExplained({ allModels, userMessage, useTools, intent, eloData }) {
+function suggestModelExplained({ allModels, userMessage, useTools, intent, eloData, routingContext = {} }) {
   try {
-    const result = routeWithExplanation({ allModels, userMessage, useTools, intent, eloData })
+    const result = routeWithExplanation({ allModels, userMessage, useTools, intent, eloData, routingContext })
     if (!result) return null
     return {
       suggestedModelId: result.model.id,

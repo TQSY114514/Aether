@@ -53,7 +53,7 @@ export default function PersonaPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="flex-1 overflow-y-auto bg-transparent page-fade-in">
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>

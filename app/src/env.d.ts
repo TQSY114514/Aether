@@ -54,6 +54,7 @@ interface ModelSuggestionReasonParts {
   eloWins?: number
   eloTotal?: number
   eloReliable?: boolean
+  arenaElo?: number | null
   useTools?: boolean
   reasonPickUsed?: boolean
   closeRace?: boolean
@@ -107,6 +108,7 @@ interface Window {
       update: (id: number, data: Partial<Provider>) => Promise<void>
       delete: (id: number) => Promise<void>
       testConnection: (id: number) => Promise<TestConnectionResult>
+      testLatency: (id: number, modelName?: string) => Promise<{ success: boolean; latencyMs: number; errorMessage?: string }>
       fetchModels: (id: number) => Promise<{ names: string[]; added: string[]; removed: string[] }>
       detectOllama: () => Promise<{ ok: boolean; providerId?: number; models?: string[]; recommended?: string | null; error?: string }>
     }
@@ -192,6 +194,7 @@ interface Window {
       benchmarkRun: (data: { id: number; modelIds: number[] }) => Promise<{ lastRun: string; models: Record<number, { model_name: string; provider_name: string }>; results: Record<number, { wins: number; runs: number; total_ms: number; total_cost: number }>; error?: string }>
       benchmarkStop: (id: number) => Promise<void>
       benchmarkTemplates: () => Promise<{ id: string; name: string; description: string; tasks: any[] }[]>
+      objectiveRun: (data: { prompt: string; verifyCommand: string; cwd?: string; modelIds: number[]; expectedExitCode?: number; timeoutMs?: number; updateScores?: boolean }) => Promise<{ prompt: string; verifyCommand: string; winnerId: number | null; winnerName: string | null; isTie: boolean; models: Array<{ modelId: number; modelName: string; providerName?: string; passed: boolean; exitCode: number; stdout: string; stderr: string; durationMs: number; latencyMs: number; cost: number; tokens: number; patchApplied: boolean }>; eloUpdated: boolean; timestamp: string; error?: string }>
       autoRoute: (params?: { prompt?: string; intent?: string }) => Promise<{ intent: string; model_id: number; model_name: string; provider_id: number; provider_name: string; route_reason: string } | null>
       onModelDone: (callback: (payload: { sessionId: number; result: ArenaResult }) => void) => () => void
     }
