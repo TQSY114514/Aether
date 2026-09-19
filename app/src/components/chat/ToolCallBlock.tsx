@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; afterSnapshot?: { path: string; content: string; truncated: boolean } | null }
+type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; afterSnapshot?: { path: string; content: string; truncated: boolean } | null; liveOutput?: string; liveOutputDone?: boolean }
 
 const FAILURE_LABELS: Record<string, string> = {
   timeout: 'tool.failure.timeout',
@@ -123,6 +123,19 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
               <pre className="text-[11px] font-mono p-1.5 rounded border border-[var(--border)] whitespace-pre-wrap break-all bg-[var(--bg-secondary)]" style={{ color: 'var(--text-secondary)' }}>{JSON.stringify(tool.args, null, 2)}</pre>
             </div>
           ) : null}
+          {/* Live terminal output — streamed stdout/stderr from run_command and
+              other streaming tools. Shown while running and after completion so
+              the user can see exactly what the command printed. */}
+          {tool.liveOutput && (
+            <div>
+              <div className="flex items-center gap-1.5 text-[10px] font-mono mb-0.5" style={{ color: 'var(--text-muted)' }}>
+                <Terminal size={10} />
+                <span>stdout</span>
+                {running && !tool.liveOutputDone && <span className="animate-pulse" style={{ color: 'var(--accent)' }}>▋</span>}
+              </div>
+              <pre className="text-[11px] font-mono p-2 rounded border whitespace-pre-wrap break-all max-h-48 overflow-y-auto leading-relaxed" style={{ backgroundColor: '#0d1117', color: '#e6edf3', borderColor: 'var(--border)' }}>{tool.liveOutput}{running && !tool.liveOutputDone && <span className="animate-pulse" style={{ color: 'var(--accent)' }}>▋</span>}</pre>
+            </div>
+          )}
           {tool.result != null && (
             <div>
               <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.result')}</div>

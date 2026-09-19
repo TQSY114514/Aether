@@ -107,7 +107,7 @@ interface Window {
       update: (id: number, data: Partial<Provider>) => Promise<void>
       delete: (id: number) => Promise<void>
       testConnection: (id: number) => Promise<TestConnectionResult>
-      fetchModels: (id: number) => Promise<string[]>
+      fetchModels: (id: number) => Promise<{ names: string[]; added: string[]; removed: string[] }>
       detectOllama: () => Promise<{ ok: boolean; providerId?: number; models?: string[]; recommended?: string | null; error?: string }>
     }
     model: {

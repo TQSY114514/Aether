@@ -42,6 +42,8 @@ export default function ModelPage() {
   // 一键检测本地 Ollama(学生免费方案): 探测 → 建 provider → 拉模型 → 选中推荐
   const [ollamaBusy, setOllamaBusy] = useState(false)
   const [ollamaMsg, setOllamaMsg] = useState<string | null>(null)
+  // Per-provider fetch-models sync result (shown under the fetch button).
+  const [fetchMsg, setFetchMsg] = useState<Record<number, string>>({})
 
   const detectOllama = async () => {
     setOllamaBusy(true)
@@ -77,15 +79,22 @@ export default function ModelPage() {
   const handleFetchModels = async (providerId: number) => {
     setTestingId(providerId)
     try {
-      const modelNames = await window.electronAPI.provider.fetchModels(providerId)
-      const existing = (modelsByProvider[providerId] || []).map(m => m.model_name)
-      const existingSet = new Set(existing)
-      for (const name of modelNames) {
-        if (existingSet.has(name)) continue // skip duplicates from re-fetching
-        await addModel({ provider_id: providerId, model_name: name, is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
-      }
+      const { names, added, removed } = await window.electronAPI.provider.fetchModels(providerId)
       await loadModels(providerId)
-    } catch {}
+      await loadAllModels()
+      let msg
+      if (added.length || removed.length) {
+        const parts = []
+        if (added.length) parts.push(`+${added.length} 新增`)
+        if (removed.length) parts.push(`-${removed.length} 移除`)
+        msg = `同步完成: ${names.length} 个模型 (${parts.join(', ')})`
+      } else {
+        msg = `已是最新 (${names.length} 个模型)`
+      }
+      setFetchMsg((prev) => ({ ...prev, [providerId]: msg }))
+    } catch {
+      setFetchMsg((prev) => ({ ...prev, [providerId]: '拉取失败' }))
+    }
     setTestingId(null)
   }
 
@@ -258,6 +267,11 @@ export default function ModelPage() {
                     <div className={`mt-2 flex items-center gap-1.5 text-xs ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
                       {testResult.success ? <Check size={12} /> : <X size={12} />}
                       {testResult.success ? t('models.success') : (testResult.errorMessage || t('models.fail'))}
+                    </div>
+                  )}
+                  {fetchMsg[provider.id] && (
+                    <div className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      {fetchMsg[provider.id]}
                     </div>
                   )}
                 </div>

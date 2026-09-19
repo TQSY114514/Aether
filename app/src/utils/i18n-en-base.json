@@ -320,6 +320,7 @@
   "scores.metrics.hint": "Aggregated from your local chat and Arena traffic.",
   "settings.about": "About",
   "settings.about_desc": "Aether is a local-first multi-model desktop AI chat client. All data stays on your device.",
+  "settings.report_issue": "Report Issue",
   "settings.advanced": "Advanced",
   "settings.advanced.save": "Save",
   "settings.advanced.saved": "Saved",

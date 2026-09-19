@@ -49,8 +49,9 @@ function importDiagnostics(result: ImportResult | null): ReactNode {
 
 export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
   const addProvider = useStore((s) => s.addProvider)
-  const addModel = useStore((s) => s.addModel)
   const loadProviders = useStore((s) => s.loadProviders)
+  const loadModels = useStore((s) => s.loadModels)
+  const loadAllModels = useStore((s) => s.loadAllModels)
 
   const [step, setStep] = useState<WizardStep>('choice')
   const [preset, setPreset] = useState<Preset | null>(null)
@@ -113,22 +114,11 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
       // The store reloads providers after create; find the fresh row by name.
       const created = [...useStore.getState().providers].reverse().find((p) => p.name === payload.name)
       if (created) {
-        const names = (await window.electronAPI.provider.fetchModels(created.id)) || []
-        const existing = new Set((useStore.getState().modelsByProvider[created.id] || []).map((m) => m.model_name))
-        for (const name of names) {
-          if (!existing.has(name)) {
-            await addModel({
-              provider_id: created.id,
-              model_name: name,
-              is_primary: 0,
-              display_name: null,
-              fallback_order: null,
-              context_window: null,
-              input_price_per_1k: null,
-              output_price_per_1k: null,
-            })
-          }
-        }
+        // fetch-models now syncs the list server-side (adds new, removes stale,
+        // dedupes) — no need to manually add each model here.
+        await window.electronAPI.provider.fetchModels(created.id)
+        await loadModels(created.id)
+        await loadAllModels()
       }
       setStep('first-session')
     } catch {

@@ -157,6 +157,27 @@ function formatShellResult(stdout, stderr, exitCode, timedOut) {
   return r
 }
 
+// Streaming command runner: spawns the command and emits each stdout/stderr
+// chunk via onChunk so the renderer can show live terminal output (Claude
+// Code-style). Resolves with the same shape as runCommand so the existing
+// formatShellResult path is unchanged. Used by run_command when ctx.onStream
+// is available; falls back to the buffered runCommand otherwise.
+function runCommandStreaming(cmd, { cwd, timeoutMs, onChunk }) {
+  const { spawn } = require('child_process')
+  const needsShell = /[|&;`$(){}!\\]/.test(cmd)
+  const command = needsShell ? 'cmd.exe' : cmd
+  const args = needsShell ? ['/c', cmd] : []
+  return new Promise((resolve, reject) => {
+    let stdout = '', stderr = '', timedOut = false
+    const child = spawn(command, args, { cwd, shell: needsShell, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    child.stdout.on('data', (d) => { const s = d.toString(); stdout += s; try { onChunk?.(s) } catch {} })
+    child.stderr.on('data', (d) => { const s = d.toString(); stderr += s; try { onChunk?.(s) } catch {} })
+    const timer = setTimeout(() => { timedOut = true; try { child.kill() } catch {} }, timeoutMs)
+    child.on('error', (e) => { clearTimeout(timer); reject(e) })
+    child.on('close', (code) => { clearTimeout(timer); resolve({ stdout, stderr, exitCode: code || 0, timedOut }) })
+  })
+}
+
 const DOCKER_EXIT_MARKER = 'AETHER_EXIT_CODE:'
 // Sentinel for "our time budget ran out" 鈥?distinct from backend errors so
 // races between backend calls and the deadline resolve unambiguously.
@@ -353,6 +374,20 @@ const TOOLS = [
     // command runs inside an ephemeral no-network container instead of the host shell.
     return resolveBackendForMode(ctx?.agentMode, { db: ctx?.db, configured }).then((backendId) => {
       if (backendId !== 'docker') {
+        // Stream live stdout/stderr to the renderer when ctx.onStream is wired
+        // up (chat/agent turns). Falls back to buffered runCommand for callers
+        // without a streaming sink (e.g. headless SDK without onStream).
+        const onStream = ctx?.onStream
+        if (onStream) {
+          return runCommandStreaming(cmd, {
+            cwd,
+            timeoutMs,
+            onChunk: (text) => { try { onStream({ text, type: 'chunk' }) } catch {} },
+          }).then(({ stdout, stderr, exitCode, timedOut }) => {
+            try { onStream({ text: '', type: 'done' }) } catch {}
+            return formatShellResult(stdout, stderr, exitCode, timedOut)
+          })
+        }
         return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
           .then(({ stdout, stderr, exitCode, timedOut }) => formatShellResult(stdout, stderr, exitCode, timedOut))
       }

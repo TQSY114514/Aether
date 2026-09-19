@@ -112,8 +112,12 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   }
 
   // Stream tool output (run_command stdout, etc.) in real-time.
+  // Always forward, including the done signal (which carries empty text) so
+  // the renderer can stop the live cursor.
   callbacks.onStream = (chunk) => {
-    if (chunk?.text) safeSend('chat:tool-stream', { messageId: msgId, sessionId, text: chunk.text, done: chunk.type === 'done' })
+    if (chunk?.text || chunk?.type === 'done') {
+      safeSend('chat:tool-stream', { messageId: msgId, sessionId, text: chunk.text || '', done: chunk.type === 'done' })
+    }
   }
 
   // Audit log — persists the agent turn trace. Also feeds the real audit
