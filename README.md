@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE)
 [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md)
 
 </div>
 
