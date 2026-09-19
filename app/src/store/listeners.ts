@@ -39,6 +39,7 @@ let _thinkingListenerInstalled = false
 let _loopStateListenerInstalled = false
 let _planStepListenerInstalled = false
 let _usageListenerInstalled = false
+let _toolStreamListenerInstalled = false
 
 // Chunk listener
 
@@ -355,6 +356,32 @@ export function ensureThinkingListener() {
   })
 }
 
+// Tool stream listener — live stdout/stderr from run_command (and future
+// streaming tools). Chunks attach to the currently-running tool call for the
+// message (the last entry with result == null && error == null).
+export function ensureToolStreamListener() {
+  if (_toolStreamListenerInstalled) return
+  _toolStreamListenerInstalled = true
+  window.electronAPI.chat.onToolStream?.(({ messageId, sessionId, text, done }) => {
+    if (!messageId) return
+    getStore().setState((s) => {
+      const calls = s.toolCallsByMessage[messageId]
+      if (!calls || calls.length === 0) return s
+      // Find the running tool call: last entry still awaiting a result.
+      const idx = calls.map((c, i) => ({ c, i })).filter(({ c }) => c.result == null && c.error == null).pop()
+      if (!idx) return s
+      const target = idx.i
+      const next = [...calls]
+      next[target] = { ...next[target], liveOutput: (next[target].liveOutput || "") + (text || "") }
+      if (done) {
+        // Mark the stream finished so the UI can stop showing the live cursor.
+        next[target] = { ...next[target], liveOutputDone: true }
+      }
+      return { toolCallsByMessage: { ...s.toolCallsByMessage, [messageId]: next } }
+    })
+  })
+}
+
 // Loop state listener
 
 export function ensureLoopStateListener() {
@@ -440,6 +467,7 @@ export function ensureAllListeners() {
   ensureTodoListener()
   ensureSubagentListener()
   ensureThinkingListener()
+  ensureToolStreamListener()
   ensureLoopStateListener()
   ensureUsageListener()
   ensureTaskListeners()

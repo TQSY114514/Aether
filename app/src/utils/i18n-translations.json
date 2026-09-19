@@ -336,6 +336,7 @@
       "scores.metrics.hint": "聚合自本机聊天与 Arena 真实流量。",
       "settings.about": "关于",
       "settings.about_desc": "Aether 是本地优先的多模型桌面 AI 聊天客户端，所有数据保留在你的设备上。",
+      "settings.report_issue": "反馈问题",
       "settings.advanced": "高级",
       "settings.advanced.save": "保存",
       "settings.advanced.saved": "已保存",

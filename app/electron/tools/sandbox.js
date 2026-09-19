@@ -264,6 +264,9 @@ const GIT_DANGEROUS_PATTERNS = [
   { re: /\bpush\b[^\n]*\s+-[a-z]*f[a-z]*\b/, msg: 'git push -f is blocked by sandbox' },
   { re: /\breset\b[^\n]*\s+--hard\b/, msg: 'git reset --hard is blocked by sandbox' },
   { re: /\bbranch\b[^\n]*\s+-D\b/, msg: 'git branch -D is blocked by sandbox' },
+  { re: /\s+-c\s*['"]?(core\.editor|sequence\.editor|credential\.helper|diff\.external|pager\.[a-z]+|alias\.[a-z]+)\s*=/i, msg: 'git -c configuration command-execution overrides are blocked by sandbox' },
+  { re: /\s+--(upload-pack|receive-pack)\b/i, msg: 'git --upload-pack/--receive-pack is blocked by sandbox' },
+  { re: /\s+(-u|--exec)\s*['"]?[^-\s][^'"\s]*['"]?\b/i, msg: 'git remote exec override is blocked by sandbox' },
 ]
 
 // Unsafe constructs inside `python -c "..."` / `python -c '...'`.

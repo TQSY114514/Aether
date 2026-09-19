@@ -22,16 +22,20 @@ function registerProviderHandlers(ipcMain, db) {
     catch (e) { return { success: false, errorMessage: e?.message || String(e) } }
   })
 
-  // Fetch the provider's model list — also delegated to the adapter.
+  // Fetch the provider's model list and sync it into the DB: add newly
+  // reported models, remove ones the provider no longer exposes, and skip
+  // duplicates. Returns the (deduplicated) model names and a sync summary.
   ipcMain.handle('provider:fetch-models', async (_e, id) => {
     const provider = db.getProvider(id)
-    if (!provider) return []
+    if (!provider) return { names: [], added: [], removed: [] }
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 10000)
     try {
-      return await listModels({ provider, signal: controller.signal })
+      const names = await listModels({ provider, signal: controller.signal })
+      const { added, removed } = db.syncModels(id, names)
+      return { names, added, removed }
     } catch {
-      return []
+      return { names: [], added: [], removed: [] }
     } finally {
       clearTimeout(timeout)
     }
@@ -67,14 +71,9 @@ function registerProviderHandlers(ipcMain, db) {
       const all = fetched.length ? fetched : models.map(n => ({ model_name: n }))
       const sorted = [...all].sort((a, b) => String(a.model_name).length - String(b.model_name).length)
       const recommended = sorted[0]
-      // Sync model rows into the DB (create missing ones).
+      // Sync model rows into the DB (add missing, remove stale).
       try {
-        const existing = new Set(db.getAllModels().filter(m => m.provider_id === prov.id).map(m => m.model_name))
-        for (const m of all) {
-          if (!existing.has(m.model_name)) {
-            db.addModel({ provider_id: prov.id, model_name: m.model_name, is_primary: 0, display_name: null, fallback_order: null, context_window: null, input_price_per_1k: null, output_price_per_1k: null })
-          }
-        }
+        db.syncModels(prov.id, all.map(m => m.model_name))
       } catch {}
       return {
         ok: true,

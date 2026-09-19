@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import {
   Info,
+  Bug,
   Save,
   Check,
   ImageIcon,
@@ -743,8 +744,21 @@ export default function SettingPage() {
             <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
               <div className="flex items-start gap-3 mb-3">
                 <Info size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
-                <div>
-                  <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.about')}</h2>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.about')}</h2>
+                    <a
+                      href="https://github.com/TQSY114514/Aether/issues/new"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                      style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      title="GitHub Issues"
+                    >
+                      <Bug size={12} className="shrink-0 text-[var(--text-secondary)]" />
+                      <span>{t('settings.report_issue')}</span>
+                    </a>
+                  </div>
                   <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                     {t('settings.about_desc', 'v0.9.0')}
                   </p>
