@@ -41,6 +41,7 @@ const VIEW_TITLES: Record<string, string> = {
   security: 'settings.nav.security',
   learningStatus: 'sidebar.nav.learning',
 }
+/** Render the application shell and route the active workspace page. */
 export default function App() {
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)

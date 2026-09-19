@@ -19,6 +19,7 @@ function tokenFor(msg: { role: string; content: string }): number {
   return estimateTextTokens(text) + overhead
 }
 
+/** Display current context usage and compaction status. */
 export default function ContextBar() {
   const messages = useStore((s) => s.messages)
   const modelsByProvider = useStore((s) => s.modelsByProvider)

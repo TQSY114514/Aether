@@ -4,6 +4,7 @@ import { useUI } from '@/components/ui/feedback'
 import { Plus, Trash2, Download, Upload } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
+/** Render persona creation, editing, and selection controls. */
 export default function PersonaPage() {
   const personas = useStore((s) => s.personas)
   const addPersona = useStore((s) => s.addPersona)

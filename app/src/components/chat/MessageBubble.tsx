@@ -13,6 +13,7 @@ import AgentTimeline from './AgentTimeline'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
+/** Render one conversation message with its rich content and status metadata. */
 function MessageBubble({ message, searchHighlight, active }: { message: Message; searchHighlight?: string; active?: boolean }) {
   const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)

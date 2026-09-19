@@ -59,6 +59,7 @@ const TOOL_ICONS: Record<string, typeof Terminal> = {
   read_url_content: Globe,
 }
 
+/** Render the live agent run as a chronological status timeline. */
 export default function AgentRunTimeline({
   sessionId,
   isOpen,

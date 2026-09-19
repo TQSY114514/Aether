@@ -273,6 +273,7 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   )
 }
 
+/** Render the active conversation, streaming state, and agent activity. */
 export default function ChatWindow() {
   const [isAtBottom, setIsAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)

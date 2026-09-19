@@ -11,6 +11,7 @@ const { getTool: getBuiltinTool } = require('../../tools/registry')
 
 const PERMISSION_TIMEOUT_MS = 120000
 
+/** Resolve a tool name against the merged registry. */
 function resolveTool(name) {
   try {
     return getMergedTool(name) || getBuiltinTool(name)
@@ -19,6 +20,7 @@ function resolveTool(name) {
   }
 }
 
+/** Translate the agent UI mode into the permission policy mode. */
 function agentModeToPermissionMode(agentMode) {
   switch (agentMode) {
     case 'auto':   return 'Auto'

@@ -64,6 +64,7 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
 ]
 
 
+/** Render the chat composer, quick commands, and model controls. */
 export default function ChatInput() {
   // Slash commands loaded from IPC (scan CMD.md files). Falls back to defaults.
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(DEFAULT_COMMANDS)
@@ -915,6 +916,7 @@ function formatSuggestionReason(modelSuggestion: ModelSuggestion | null): string
   return lines.join('\n')
 }
 
+/** Render the searchable model chooser and routing recommendation. */
 function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion, scoreByModel, currentPrompt }: {
   providers: { id: number; name: string }[]
   allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]

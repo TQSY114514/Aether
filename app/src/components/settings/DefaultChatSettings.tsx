@@ -9,6 +9,7 @@ const PRIORITY_OPTIONS = [
   { value: 'cost', Icon: Coins },
 ]
 
+/** Render controls for the default chat behavior. */
 export default function DefaultChatSettings() {
   const defaultModelId = useStore((s) => s.defaultModelId)
   const defaultPersonaId = useStore((s) => s.defaultPersonaId)

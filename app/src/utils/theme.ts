@@ -139,6 +139,7 @@ function resolveAutoTheme(): string {
   return 'light'
 }
 
+/** Apply a named theme and register any listener cleanup it requires. */
 export function applyTheme(theme: string, hasBackground = false, setCleanup?: (fn: (() => void) | null) => void) {
   if (_autoCleanup) { _autoCleanup(); _autoCleanup = null }
 

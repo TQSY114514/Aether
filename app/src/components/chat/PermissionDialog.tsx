@@ -54,6 +54,7 @@ function summarizeArgs(name: string, args: unknown): string {
   return Object.entries(a).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`).join('\n')
 }
 
+/** Render pending tool-permission requests and their available decisions. */
 export default function PermissionDialog() {
   const requests = useStore((s) => s.permissionRequests)
   const resolve = useStore((s) => s.resolvePermission)

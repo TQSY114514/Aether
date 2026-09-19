@@ -512,6 +512,7 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
 }
 
+/** Fetch and deduplicate the model identifiers exposed by an Anthropic endpoint. */
 async function listModels({ provider, signal } = {}) {
   try {
     const res = await fetch(`${baseUrl(provider)}/models`, { headers: headers(provider), signal })
@@ -588,6 +589,5 @@ module.exports = {
   toAnthropicMessages, parseToolUses, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }
-
 
 

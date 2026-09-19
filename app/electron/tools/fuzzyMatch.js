@@ -88,7 +88,8 @@ function fuzzyFind(fileContent, needle, options = {}) {
     return -1;
   };
 
-  function getCharOffsetForLine(lines, lineIdx) {
+/** Convert a zero-based line index into its character offset in joined text. */
+function getCharOffsetForLine(lines, lineIdx) {
     let offset = 0;
     for (let k = 0; k < lineIdx && k < lines.length; k++) {
       offset += lines[k].length + 1;

@@ -36,6 +36,7 @@ function fuzzy(label: string, q: string): number {
   return qi === q.length ? score : -1
 }
 
+/** Render and filter the application command palette. */
 export default function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(0)

@@ -21,6 +21,7 @@ function pickFour(seed: number): typeof POOL {
   return out
 }
 
+/** Render the appropriate chat empty state and starter actions. */
 export default function EmptyState({ noSession = false }: { noSession?: boolean }) {
   const createSession = useStore((s) => s.createSession)
   const currentSessionId = useStore((s) => s.currentSessionId)

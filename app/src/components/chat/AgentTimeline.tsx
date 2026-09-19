@@ -95,6 +95,7 @@ type TimelineNode =
   | { kind: 'step'; key: string; step: PlanStep }
   | { kind: 'tool'; key: string; tool: ToolEntry }
 
+/** Merge plan steps and tool calls into display-ordered timeline nodes. */
 function buildTimelineNodes(planSteps?: PlanStep[], toolCalls?: ToolEntry[]): TimelineNode[] {
   const steps = planSteps || []
   const tools = toolCalls || []

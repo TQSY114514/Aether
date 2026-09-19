@@ -144,6 +144,7 @@ function isPathInside(parentDir, targetPath) {
   return rel && !rel.startsWith('..') && !path.isAbsolute(rel)
 }
 
+/** Extract supported patch formats from a model response and apply them safely. */
 function extractAndApplyPatches(workspaceDir, responseText) {
   const norm = String(responseText || '').replace(/\r\n/g, '\n')
   let appliedCount = 0

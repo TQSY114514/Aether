@@ -54,6 +54,7 @@ const WRITE_TOOLS = new Set([
 ])
 
 let defaultGetTool = null
+/** Resolve a tool name against the merged registry. */
 function resolveTool(name) {
   if (!defaultGetTool) {
     try {
@@ -67,6 +68,7 @@ function resolveTool(name) {
   return defaultGetTool ? defaultGetTool(name) : null
 }
 
+/** Compute safe tool-call concurrency from the requested tool metadata. */
 function getMaxConcurrent(toolCalls, getToolFn = resolveTool) {
   const names = toolCalls.map(tc => (tc.function || {}).name).filter(Boolean)
   const hasWrite = names.some(n => WRITE_TOOLS.has(n))
@@ -182,6 +184,7 @@ class IterationBudget extends IterationBudgetBase {
   }
 }
 
+/** Translate the agent UI mode into the permission policy mode. */
 function agentModeToPermissionMode(agentMode) {
   const map = {
     'plan': 'ReadOnly',
@@ -194,6 +197,7 @@ function agentModeToPermissionMode(agentMode) {
   return map[agentMode] || 'Prompt'
 }
 
+/** Convert a generated plan into the todo shape emitted to the renderer. */
 function planToTodos(plan) {
   if (!plan || !Array.isArray(plan.tasks)) return []
   return plan.tasks.map(t => ({
@@ -203,6 +207,7 @@ function planToTodos(plan) {
   }))
 }
 
+/** Persist normalized usage metrics for one tool-loop model call. */
 function accountToolLoopUsage({ db, sessionId, provider, model, usage, latencyMs, status = 200 }) {
   try {
     if (!db || !usage) return
@@ -229,10 +234,12 @@ function accountToolLoopUsage({ db, sessionId, provider, model, usage, latencyMs
   }
 }
 
+/** Return an awaitable delay. */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+/** Execute a tool with abort propagation and its configured timeout. */
 async function runToolWithTimeout(tool, args, ctx, signal) {
   let lastResult
   for (let attempt = 0; attempt <= TOOL_RETRY_MAX; attempt++) {
@@ -280,6 +287,7 @@ async function runToolWithTimeout(tool, args, ctx, signal) {
   return lastResult
 }
 
+/** Request user permission and fail closed when the request times out. */
 function requestPermissionWithTimeout(requestPermission, payload, timeoutMs = PERMISSION_TIMEOUT_MS) {
   if (!requestPermission) return Promise.resolve(false)
   return new Promise((resolve) => {

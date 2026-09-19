@@ -71,6 +71,7 @@ export function adaptKgData(data: { nodes: { id: string; label: string; type: st
   return { nodes, edges }
 }
 
+/** Render the learned-knowledge graph workspace. */
 export default function LearningGraphPage() {
   const memories = useStore(s => s.memories)
   const loadMemories = useStore(s => s.loadMemories)

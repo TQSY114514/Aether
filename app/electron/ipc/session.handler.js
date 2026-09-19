@@ -1,6 +1,7 @@
 const { clearAllowRules, cleanupSessionControllers } = require('./chat.handler')
 const log = require('../logger')
 
+/** Register session and message lifecycle IPC handlers. */
 function registerSessionHandlers(ipcMain, db) {
   // Simple mutex to serialize prune+create and prevent a concurrent
   // session:list from pruning a session that was just created.

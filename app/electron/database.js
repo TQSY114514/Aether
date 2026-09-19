@@ -770,11 +770,10 @@ function updateModel(id, data) {
 function deleteModel(id) {
   db.prepare("DELETE FROM model WHERE id = ?").run(id);
 }
-// Sync a provider's model list: add any fetched names that are missing, and
-// delete rows whose model_name is no longer reported by the provider. The
-// fetched list is treated as authoritative when non-empty — an empty list
-// (network error / provider down) is a no-op so we never wipe a provider's
-// models on a transient failure. Returns { added: string[], removed: string[] }.
+/**
+ * Synchronize a provider's persisted models with a non-empty authoritative list.
+ * Empty lists are ignored so transient provider failures cannot erase models.
+ */
 function syncModels(providerId, fetchedNames) {
   const names = Array.from(
     new Set(
@@ -906,6 +905,7 @@ function createSession({
   return { lastInsertRowid: Number(info.lastInsertRowid) };
 }
 
+/** Create a session branch by copying the parent configuration and messages. */
 function forkSession(parentSessionId, title) {
   return db.transaction(() => {
     const parent = db.prepare('SELECT * FROM session WHERE id = ?').get(parentSessionId);

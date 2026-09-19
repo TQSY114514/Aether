@@ -21,6 +21,7 @@ const TRUST_TIP: Record<string, string> = {
   red: 'cautious',
 }
 
+/** Compose the sidebar, conversation, and auxiliary chat panels. */
 export default function ChatPage() {
   const currentSessionId = useStore((s) => s.currentSessionId)
   const theme = useStore((s) => s.theme)

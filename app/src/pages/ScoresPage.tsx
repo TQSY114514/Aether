@@ -22,6 +22,7 @@ function fmtRate(v: number | null): string {
   return v == null ? '—' : `${Math.round(v * 100)}%`
 }
 
+/** Render arena ratings and per-model benchmark metrics. */
 export default function ScoresPage() {
   const scores = useStore((s) => s.scores)
   const [metrics, setMetrics] = useState<ArenaModelMetrics[]>([])

@@ -13,6 +13,7 @@ function KeyBadge({ label }: { label: string }) {
   )
 }
 
+/** Render the keyboard-shortcut reference overlay. */
 export default function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => {
     if (!open) return

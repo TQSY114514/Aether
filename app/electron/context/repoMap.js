@@ -224,6 +224,7 @@ function scoreFileNode(node, gitChangedSet, inDegreeMap = null, queryKeywords = 
 }
 
 let _tokenizer = null
+/** Count tokens with the shared tokenizer, falling back to a character estimate. */
 function countTokens(text) {
   if (!text) return 0
   if (_tokenizer === null) {

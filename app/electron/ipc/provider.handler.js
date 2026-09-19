@@ -1,5 +1,6 @@
 const { testConnection, listModels } = require('../llm/providerAdapter')
 
+/** Register provider CRUD, connectivity, latency, and model-sync IPC handlers. */
 function registerProviderHandlers(ipcMain, db) {
   // H2: renderer-facing list/get return a MASKED api_key (sk-1***efgh).
   // Decrypted keys never cross the IPC boundary; internal request paths

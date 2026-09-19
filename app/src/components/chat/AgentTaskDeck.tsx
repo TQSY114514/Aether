@@ -7,6 +7,7 @@ type AgentTaskDeckProps = {
   sessionId: number | null
 }
 
+/** Render background agent tasks associated with the current session. */
 export default function AgentTaskDeck({ sessionId }: { sessionId: number | null }) {
   const [expanded, setExpanded] = useState(false)
   const todosByMessage = useStore((s) => s.todosByMessage)

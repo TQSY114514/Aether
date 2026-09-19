@@ -42,6 +42,7 @@ function cleanupSessionControllers(sessionId) {
 const allowRulesStore = createAllowRulesStore()
 function clearAllowRules(sessionId) { allowRulesStore.clear(sessionId) }
 
+/** Register chat lifecycle handlers around the shared streaming state. */
 function registerChatHandlers(ipcMain, db, getWebContents) {
   auditLog.setDb(db)
   checkpoints.setDb(db)

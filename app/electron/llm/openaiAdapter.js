@@ -421,9 +421,10 @@ async function _completeChatMessage({ provider, model, messages, signal, options
 // normalizeUsage is imported from ../utils/llmShared
 
 
-// List model ids via GET /models. Handles pagination (has_more / next_page),
-// multiple response structures (data.data, data.models, array), Ollama /api/tags
-// fallback, and deduplication to avoid missing or duplicate models.
+/**
+ * List model IDs across OpenAI-compatible response and pagination formats.
+ * Falls back to Ollama's tags endpoint when the standard route is unavailable.
+ */
 async function listModels({ provider, signal }) {
   const modelNames = []
   let url = `${baseUrl(provider)}/models`
@@ -547,4 +548,3 @@ module.exports = {
   normalizeMessages, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }
-
