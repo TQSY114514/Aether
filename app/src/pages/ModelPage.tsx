@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { Plus, Trash2, RefreshCw, Check, X, Globe, Key, Wifi, Edit2, Save, Bot } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Check, X, Globe, Key, Wifi, Edit2, Save, Bot, Zap } from 'lucide-react'
 import Tooltip from '@/components/Tooltip'
 import { t } from '@/utils/i18n'
 import { PROVIDER_PRESETS } from '@/components/onboarding/providerPresets'
@@ -25,6 +25,7 @@ export default function ModelPage() {
   const modelsByProvider = useStore((s) => s.modelsByProvider)
   const loadProviders = useStore((s) => s.loadProviders)
   const addProvider = useStore((s) => s.addProvider)
+  const updateProvider = useStore((s) => s.updateProvider)
   const deleteProvider = useStore((s) => s.deleteProvider)
   const loadModels = useStore((s) => s.loadModels)
   const addModel = useStore((s) => s.addModel)
@@ -32,7 +33,9 @@ export default function ModelPage() {
   const loadAllModels = useStore((s) => s.loadAllModels)
 
   const [testingId, setTestingId] = useState<number | null>(null)
+  const [testingLatencyId, setTestingLatencyId] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; errorMessage?: string }>>({})
+  const [latencyResults, setLatencyResults] = useState<Record<number, { success: boolean; latencyMs: number; errorMessage?: string; modelName?: string }>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [newProvider, setNewProvider] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
   const [showAddModel, setShowAddModel] = useState<number | null>(null)
@@ -41,27 +44,30 @@ export default function ModelPage() {
   const [editData, setEditData] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
   // 一键检测本地 Ollama(学生免费方案): 探测 → 建 provider → 拉模型 → 选中推荐
   const [ollamaBusy, setOllamaBusy] = useState(false)
-  const [ollamaMsg, setOllamaMsg] = useState<string | null>(null)
+  const [ollamaState, setOllamaState] = useState<{ ok: boolean; text: string } | null>(null)
   // Per-provider fetch-models sync result (shown under the fetch button).
   const [fetchMsg, setFetchMsg] = useState<Record<number, string>>({})
 
   const detectOllama = async () => {
     setOllamaBusy(true)
-    setOllamaMsg(null)
+    setOllamaState(null)
     try {
       const r = await window.electronAPI.provider.detectOllama()
       if (r.ok) {
         await loadProviders()
         await loadAllModels()
         if (r.providerId != null) await loadModels(r.providerId)
-        setOllamaMsg(r.recommended
-          ? `✅ 已连接本地 Ollama — ${r.models?.length ?? 0} 个模型, 推荐: ${r.recommended}`
-          : '✅ 已连接本地 Ollama')
+        setOllamaState({
+          ok: true,
+          text: r.recommended
+            ? t('models.ollama_connected_rec', r.models?.length ?? 0, r.recommended)
+            : t('models.ollama_connected'),
+        })
       } else {
-        setOllamaMsg(`❌ ${r.error || '未检测到 Ollama'}`)
+        setOllamaState({ ok: false, text: r.error || t('models.ollama_not_found') })
       }
     } catch {
-      setOllamaMsg('❌ 检测失败')
+      setOllamaState({ ok: false, text: t('models.ollama_detect_failed') })
     } finally {
       setOllamaBusy(false)
     }
@@ -71,9 +77,37 @@ export default function ModelPage() {
 
   const handleTest = async (providerId: number) => {
     setTestingId(providerId)
+    const start = Date.now()
     const result = await window.electronAPI.provider.testConnection(providerId)
+    const latencyMs = typeof result?.latencyMs === 'number' ? result.latencyMs : (Date.now() - start)
     setTestResults((prev) => ({ ...prev, [providerId]: result }))
+    if (result?.success) {
+      setLatencyResults((prev) => ({
+        ...prev,
+        [providerId]: {
+          success: true,
+          latencyMs,
+        },
+      }))
+    } else {
+      setLatencyResults((prev) => {
+        const next = { ...prev }
+        delete next[providerId]
+        return next
+      })
+    }
     setTestingId(null)
+  }
+
+  const handleTestModelLatency = async (providerId: number, modelName: string) => {
+    setTestingLatencyId(providerId)
+    try {
+      const res = await window.electronAPI.provider.testLatency(providerId, modelName)
+      setLatencyResults((prev) => ({ ...prev, [providerId]: { ...res, modelName } }))
+    } catch (e: any) {
+      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: false, latencyMs: -1, errorMessage: e?.message || t('models.test_failed'), modelName } }))
+    }
+    setTestingLatencyId(null)
   }
 
   const handleFetchModels = async (providerId: number) => {
@@ -93,7 +127,7 @@ export default function ModelPage() {
       }
       setFetchMsg((prev) => ({ ...prev, [providerId]: msg }))
     } catch {
-      setFetchMsg((prev) => ({ ...prev, [providerId]: '拉取失败' }))
+      setFetchMsg((prev) => ({ ...prev, [providerId]: t('models.fetch_failed') }))
     }
     setTestingId(null)
   }
@@ -106,7 +140,7 @@ export default function ModelPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="flex-1 overflow-y-auto bg-transparent page-fade-in">
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -129,11 +163,14 @@ export default function ModelPage() {
                 <button onClick={detectOllama} disabled={ollamaBusy}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md text-white disabled:opacity-50 transition-opacity"
                   style={{ backgroundColor: 'var(--accent)' }}>
-                  <Bot size={13} /> {ollamaBusy ? '检测中…' : '一键检测本地 Ollama'}
+                  <Bot size={13} /> {ollamaBusy ? t('models.detecting_ollama') : t('models.detect_ollama')}
                 </button>
               </div>
-              {ollamaMsg && (
-                <p className="text-[11px] mt-1.5" style={{ color: ollamaMsg.startsWith('✅') ? 'var(--success)' : 'var(--error)' }}>{ollamaMsg}</p>
+              {ollamaState && (
+                <div className="flex items-center gap-1.5 mt-1.5 text-[11px]" style={{ color: ollamaState.ok ? 'var(--success)' : 'var(--error)' }}>
+                  {ollamaState.ok ? <Check size={12} className="shrink-0" /> : <X size={12} className="shrink-0" />}
+                  <span>{ollamaState.text}</span>
+                </div>
               )}
             </div>
             <input value={newProvider.name} onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
@@ -248,7 +285,7 @@ export default function ModelPage() {
                   <div className="flex gap-2 flex-wrap">
                     <Tooltip text={t('tooltip.model_test')}>
                       <button onClick={() => handleTest(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
                         style={{ borderColor: 'var(--border)' }}>
                         {testingId === provider.id ? <RefreshCw size={12} className="animate-spin" /> : <Wifi size={12} />}
                         {t('models.test')}
@@ -256,17 +293,42 @@ export default function ModelPage() {
                     </Tooltip>
                     <Tooltip text={t('tooltip.model_fetch')}>
                       <button onClick={() => handleFetchModels(provider.id)} disabled={testingId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
                         style={{ borderColor: 'var(--border)' }}>
                         <RefreshCw size={12} />{t('models.fetch')}
                       </button>
                     </Tooltip>
                   </div>
 
-                  {testResult !== undefined && (
-                    <div className={`mt-2 flex items-center gap-1.5 text-xs ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
-                      {testResult.success ? <Check size={12} /> : <X size={12} />}
-                      {testResult.success ? t('models.success') : (testResult.errorMessage || t('models.fail'))}
+                  {(testResult !== undefined || latencyResults[provider.id] !== undefined) && (
+                    <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
+                      {testResult !== undefined && (
+                        <span className={`inline-flex items-center gap-1 ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
+                          {testResult.success ? <Check size={12} /> : <X size={12} />}
+                          {testResult.success ? t('models.success') : (testResult.errorMessage || t('models.fail'))}
+                        </span>
+                      )}
+                      {latencyResults[provider.id] !== undefined && (
+                        latencyResults[provider.id].success && latencyResults[provider.id].latencyMs >= 0 ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[11px] font-semibold border ${
+                            latencyResults[provider.id].latencyMs < 400
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                              : latencyResults[provider.id].latencyMs < 1200
+                                ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                                : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                          }`}>
+                            <Zap size={10} />
+                            {latencyResults[provider.id].modelName ? `${latencyResults[provider.id].modelName}: ` : ''}
+                            {latencyResults[provider.id].latencyMs} ms
+                          </span>
+                        ) : !latencyResults[provider.id].success && (
+                          <span className="text-rose-500 text-[11px] inline-flex items-center gap-1">
+                            <X size={12} />
+                            {latencyResults[provider.id].modelName ? `[${latencyResults[provider.id].modelName}] ` : ''}
+                            {latencyResults[provider.id].errorMessage || t('models.latency_timeout')}
+                          </span>
+                        )
+                      )}
                     </div>
                   )}
                   {fetchMsg[provider.id] && (
@@ -294,10 +356,19 @@ export default function ModelPage() {
                           <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded shrink-0">{t('models.fallback')} #{model.fallback_order}</span>
                         )}
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); deleteModel(model.id); loadModels(provider.id); loadAllModels() }}
-                        className="p-1 rounded hover:bg-[var(--border)] transition-colors opacity-0 hover:opacity-100 shrink-0">
-                        <Trash2 size={12} className="text-gray-400" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Tooltip text={t('models.test_latency_hint')}>
+                          <button onClick={(e) => { e.stopPropagation(); handleTestModelLatency(provider.id, model.model_name) }}
+                            disabled={testingLatencyId === provider.id}
+                            className="p-1 rounded hover:bg-[var(--border)] transition-colors disabled:opacity-50">
+                            {testingLatencyId === provider.id ? <RefreshCw size={12} className="animate-spin text-amber-500" /> : <Zap size={12} className="text-amber-500" />}
+                          </button>
+                        </Tooltip>
+                        <button onClick={(e) => { e.stopPropagation(); deleteModel(model.id); loadModels(provider.id); loadAllModels() }}
+                          className="p-1 rounded hover:bg-[var(--border)] transition-colors opacity-0 hover:opacity-100">
+                          <Trash2 size={12} className="text-gray-400" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -13,6 +13,7 @@ function KeyBadge({ label }: { label: string }) {
   )
 }
 
+/** Render the keyboard-shortcut reference overlay. */
 export default function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => {
     if (!open) return
@@ -27,8 +28,8 @@ export default function ShortcutOverlay({ open, onClose }: { open: boolean; onCl
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50 animate-blur-fade" />
-      <div className="relative w-full max-w-md rounded-lg border shadow-xl p-6 animate-blur-fade"
+      <div className="absolute inset-0 bg-black/50 modal-backdrop-fade" />
+      <div className="relative w-full max-w-md rounded-lg border shadow-xl p-6 animate-spring-up"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t('shortcuts.title')}</h2>

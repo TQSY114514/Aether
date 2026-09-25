@@ -1,0 +1,261 @@
+// ───────────────────────────────────────────────────────────────────────────
+// Visual Verifier — Closed-loop Frontend & UI Self-Healing Engine.
+//
+// Automatically captures offscreen screenshots and browser console logs
+// using `web_visualize` after frontend code modifications. When UI errors,
+// runtime exceptions, or broken layouts occur, it feeds visual and error feedback
+// back into the tool loop for automated self-healing.
+// ───────────────────────────────────────────────────────────────────────────
+
+const { getTool } = require('../tools/registry')
+const featureFlags = require('../featureFlags')
+const log = require('../logger')
+
+const FRONTEND_EXTS = /\.(tsx|jsx|vue|html|css|svelte|sass|less)$/i
+
+/**
+ * Check if the audit trail contains modifications to frontend UI files.
+ * @param {Array<object>} auditTrail
+ * @returns {boolean}
+ */
+function hasFrontendChanges(auditTrail) {
+  if (!Array.isArray(auditTrail) || auditTrail.length === 0) return false
+
+  for (const entry of auditTrail) {
+    // Check tool name
+    const name = entry.name || ''
+    if (['write_file', 'edit_file', 'write_to_file', 'replace_file_content', 'file_write', 'file_patch', 'apply_patch'].includes(name)) {
+      const args = entry.args || {}
+      const targetPath = args.path || args.file || args.filePath || args.TargetFile || ''
+      if (FRONTEND_EXTS.test(targetPath)) return true
+    }
+    // Also check diff or result if available
+    if (entry.diff && FRONTEND_EXTS.test(entry.diff)) return true
+  }
+  return false
+}
+
+/**
+ * Extract error lines from web_visualize tool results.
+ * @param {string|Array<object>} result
+ * @returns {Array<string>}
+ */
+function extractConsoleErrors(result) {
+  let text = ''
+  if (typeof result === 'string') {
+    text = result
+  } else if (Array.isArray(result)) {
+    const textPart = result.find(p => p.type === 'text')
+    text = textPart ? textPart.text : ''
+  }
+
+  const errors = []
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (/^(error:|uncaught|syntaxerror|typeerror|referenceerror)/i.test(trimmed)) {
+      errors.push(trimmed)
+    }
+  }
+  return errors
+}
+
+/**
+ * Execute visual verification against a local preview / dev server.
+ * @param {object} options
+ * @param {object} [options.db]
+ * @param {string|number} [options.sessionId]
+ * @param {Array<object>} [options.auditTrail]
+ * @param {string} [options.previewUrl]
+ * @param {AbortSignal} [options.signal]
+ * @returns {Promise<{ performed: boolean, ok: boolean, hasErrors: boolean, errors: string[], result: any }>}
+ */
+async function runVisualVerification({
+  db,
+  sessionId,
+  auditTrail = [],
+  previewUrl,
+  signal,
+  agentMode = 'auto',
+  permissionPolicy,
+  confirmPermission,
+  webViz: injectedWebViz,
+} = {}) {
+  if (agentMode === 'off') {
+    return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+  }
+
+  // Check feature gate or explicit setting
+  const isEnabled = db ? featureFlags.isEnabled(db, 'agent.visualVerification') : false
+  if (!isEnabled && !previewUrl) {
+    return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+  }
+
+  // Only run if frontend files were touched
+  if (!previewUrl && !hasFrontendChanges(auditTrail)) {
+    return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+  }
+
+  const webViz = injectedWebViz || getTool('web_visualize')
+  if (!webViz) {
+    return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+  }
+
+  const url = previewUrl || (db && typeof db.getSetting === 'function' ? db.getSetting('agent.previewUrl') : null) || 'http://localhost:5173'
+  const toolArgs = { url, waitMs: 1500 }
+
+  // Enforce project-level tool allow/deny config
+  try {
+    const { getWorkspaceRoot } = require('../tools/registry')
+    const { isToolAllowed } = require('../config/projectConfig')
+    const workspaceRoot = getWorkspaceRoot(sessionId)
+    const allowedCheck = isToolAllowed('web_visualize', workspaceRoot)
+    if (allowedCheck && !allowedCheck.allowed) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+  } catch {}
+
+  // Enforce capability axis & permission policy before running web_visualize
+  let requiresApproval = false
+  let approvalReason = null
+  if (db && typeof db.getSetting === 'function') {
+    try {
+      const { decideAxisPolicy } = require('./capabilityPolicy')
+      const axes = {}
+      for (const axis of ['filesystem', 'shell', 'network']) {
+        const v = db.getSetting(`capability.${axis}`)
+        if (v === 'allow' || v === 'ask' || v === 'deny') axes[axis] = v
+      }
+      if (permissionPolicy && typeof permissionPolicy.withAxisPolicies === 'function') {
+        permissionPolicy.withAxisPolicies(axes)
+      }
+      const ax = decideAxisPolicy('web_visualize', toolArgs, axes)
+      if (ax.matched && ax.policy === 'deny') {
+        return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+      }
+      if (ax.matched && ax.policy === 'ask') {
+        requiresApproval = true
+        approvalReason = `capability policy: ${ax.axis} axis requires approval`
+      }
+    } catch {}
+  }
+
+  const effectiveMode = agentMode === 'auto_confirm'
+    ? (webViz.risk === 'safe' ? 'auto' : 'ask')
+    : agentMode
+  if (webViz.risk === 'dangerous' && (effectiveMode === 'plan' || effectiveMode === 'off')) {
+    return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+  }
+  if (webViz.risk === 'dangerous' && effectiveMode === 'ask') {
+    requiresApproval = true
+  }
+
+  let userDecision = true
+  if (requiresApproval) {
+    if (typeof confirmPermission !== 'function') {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+    const approved = await confirmPermission({
+      name: 'web_visualize',
+      args: toolArgs,
+      risk: webViz.risk || 'safe',
+      reason: approvalReason || 'Visual verification requires approval',
+    })
+    userDecision = typeof approved === 'object' ? Boolean(approved && approved.allowed) : Boolean(approved)
+    if (!userDecision) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+  }
+
+  if (permissionPolicy && typeof permissionPolicy.authorizeWithContext === 'function') {
+    const permissions = require('./permissions')
+    const prompter = {
+      decide: () => userDecision
+        ? permissions.PermissionPromptDecision.Allow
+        : permissions.PermissionPromptDecision.Deny,
+    }
+    const authResult = permissionPolicy.authorizeWithContext('web_visualize', JSON.stringify(toolArgs), null, prompter)
+    if (!authResult || !authResult.authorized) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+  }
+
+  try {
+    const rawRes = await webViz.run(toolArgs, { db, sessionId, signal })
+    let res = rawRes
+    try {
+      const { processToolResult } = require('./toolResultMiddleware')
+      if (typeof processToolResult === 'function') {
+        res = processToolResult('web_visualize', rawRes)
+      }
+    } catch {}
+    if (typeof res === 'string' && /^\[(?:web_visualize unavailable|blocked)/i.test(res.trim())) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: res, url }
+    }
+    const errors = extractConsoleErrors(res)
+    if (typeof res === 'string' && res.startsWith('[error:') && errors.length === 0) {
+      errors.push(res)
+    }
+    const hasErrors = errors.length > 0
+
+    return {
+      performed: true,
+      ok: !hasErrors,
+      hasErrors,
+      errors,
+      result: res,
+      url,
+    }
+  } catch (err) {
+    log.warn('Visual verification failed to execute:', err.message)
+    return {
+      performed: true,
+      ok: false,
+      hasErrors: true,
+      errors: [err.message],
+      result: null,
+      url,
+    }
+  }
+}
+
+/**
+ * Build a structured feedback prompt to inject into convo when visual verification detects issues.
+ * @param {{ url: string, errors: string[], result: any }} verification
+ * @returns {object} Message object ready to append to conversation
+ */
+function buildVisualFixPrompt(verification) {
+  const errorText = verification.errors.length > 0
+    ? verification.errors.join('\n')
+    : 'Page render failure or empty capture detected.'
+
+  const messageText = [
+    `[Visual Verification Alert] The offscreen preview for ${verification.url} encountered errors after your code changes:`,
+    '```',
+    errorText,
+    '```',
+    'Please analyze the errors above, locate the cause in your modified files, and fix it before completing.',
+  ].join('\n')
+
+  // If web_visualize returned multimodal parts, forward the screenshot part so vision models see it
+  if (Array.isArray(verification.result)) {
+    const imagePart = verification.result.find(p => p.type === 'image' || p.type === 'image_url')
+    if (imagePart) {
+      return {
+        role: 'user',
+        content: [
+          { type: 'text', text: messageText },
+          imagePart,
+        ],
+      }
+    }
+  }
+
+  return { role: 'user', content: messageText }
+}
+
+module.exports = {
+  hasFrontendChanges,
+  extractConsoleErrors,
+  runVisualVerification,
+  buildVisualFixPrompt,
+}

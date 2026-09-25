@@ -715,7 +715,7 @@ function getModels(providerId) {
 function getAllModels() {
   return db
     .prepare(
-      "SELECT m.*, p.name as provider_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id",
+      "SELECT m.*, p.name as provider_name, p.api_url, p.api_key, p.api_format FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id",
     )
     .all()
     .map((r) => ({ ...r, api_key: decryptKey(r.api_key) }));
@@ -770,11 +770,10 @@ function updateModel(id, data) {
 function deleteModel(id) {
   db.prepare("DELETE FROM model WHERE id = ?").run(id);
 }
-// Sync a provider's model list: add any fetched names that are missing, and
-// delete rows whose model_name is no longer reported by the provider. The
-// fetched list is treated as authoritative when non-empty — an empty list
-// (network error / provider down) is a no-op so we never wipe a provider's
-// models on a transient failure. Returns { added: string[], removed: string[] }.
+/**
+ * Synchronize a provider's persisted models with a non-empty authoritative list.
+ * Empty lists are ignored so transient provider failures cannot erase models.
+ */
 function syncModels(providerId, fetchedNames) {
   const names = Array.from(
     new Set(
@@ -783,15 +782,31 @@ function syncModels(providerId, fetchedNames) {
   );
   // Empty fetched list => do nothing (transient failure guard).
   if (names.length === 0) return { added: [], removed: [] };
-  const existing = db
+
+  const existingRaw = db
     .prepare(
-      "SELECT id, model_name, is_primary FROM model WHERE provider_id = ?",
+      "SELECT id, model_name, is_primary FROM model WHERE provider_id = ? ORDER BY is_primary DESC, id ASC",
     )
     .all(providerId);
+
+  // Clean up any historical duplicates for this provider in the DB
+  const seenNames = new Set();
+  const existing = [];
+  for (const row of existingRaw) {
+    if (seenNames.has(row.model_name)) {
+      db.prepare("DELETE FROM model WHERE id = ?").run(row.id);
+    } else {
+      seenNames.add(row.model_name);
+      existing.push(row);
+    }
+  }
+
   const existingByName = new Map(existing.map((m) => [m.model_name, m]));
   const fetchedSet = new Set(names);
   const added = [];
   const removed = [];
+
+  // Add new models
   for (const name of names) {
     if (!existingByName.has(name)) {
       db.prepare(
@@ -800,12 +815,15 @@ function syncModels(providerId, fetchedNames) {
       added.push(name);
     }
   }
+
+  // Remove models no longer exposed by the provider
   for (const m of existing) {
     if (!fetchedSet.has(m.model_name)) {
       db.prepare("DELETE FROM model WHERE id = ?").run(m.id);
       removed.push(m.model_name);
     }
   }
+
   // If the primary model was removed, promote the first remaining one so the
   // provider still has a selectable default.
   if (removed.length > 0) {
@@ -885,6 +903,57 @@ function createSession({
     )
     .run(title, persona_id, parentSessionId, localNow());
   return { lastInsertRowid: Number(info.lastInsertRowid) };
+}
+
+/** Create a session branch by copying the parent configuration and messages. */
+function forkSession(parentSessionId, title) {
+  return db.transaction(() => {
+    const parent = db.prepare('SELECT * FROM session WHERE id = ?').get(parentSessionId);
+    if (!parent) {
+      throw new Error(`Session does not exist: ${parentSessionId}`);
+    }
+    const newTitle = title || (parent.title ? `${parent.title} (Fork)` : '会话分支');
+    const personaId = parent.persona_id || null;
+    const config = parent.config || null;
+
+    const info = db.prepare(
+      'INSERT INTO session (title, persona_id, parent_session_id, config, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, 0)'
+    ).run(newTitle, personaId, parentSessionId, config, localNow());
+    const newSessionId = Number(info.lastInsertRowid);
+
+    const parentMsgs = db.prepare('SELECT * FROM message WHERE session_id = ? ORDER BY id ASC').all(parentSessionId);
+    if (parentMsgs.length > 0) {
+      const insertMsg = db.prepare(`
+        INSERT INTO message (
+          session_id, role, content, model_used, provider_used,
+          token_count, latency_ms, status, error_message, arena_model, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertFts = db.prepare(
+        'INSERT INTO messages_fts (content, session_id, message_id) VALUES (?, ?, ?)'
+      );
+      for (const m of parentMsgs) {
+        const msgInfo = insertMsg.run(
+          newSessionId,
+          m.role,
+          m.content,
+          m.model_used,
+          m.provider_used,
+          m.token_count,
+          m.latency_ms,
+          m.status,
+          m.error_message,
+          m.arena_model,
+          m.created_at || localNow()
+        );
+        try {
+          insertFts.run(String(m.content || ''), newSessionId, Number(msgInfo.lastInsertRowid));
+        } catch {}
+      }
+    }
+
+    return { id: newSessionId, title: newTitle };
+  })();
 }
 
 function pruneEmptySessions() {
@@ -2402,6 +2471,7 @@ module.exports = {
   getSessions,
   getSession,
   createSession,
+  forkSession,
   pruneEmptySessions,
   renameSession,
   pinSession,

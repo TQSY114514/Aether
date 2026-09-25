@@ -21,6 +21,7 @@ function pickFour(seed: number): typeof POOL {
   return out
 }
 
+/** Render the appropriate chat empty state and starter actions. */
 export default function EmptyState({ noSession = false }: { noSession?: boolean }) {
   const createSession = useStore((s) => s.createSession)
   const currentSessionId = useStore((s) => s.currentSessionId)
@@ -54,6 +55,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
           <Terminal size={18} className="text-[var(--text-primary)]" />
         </div>
 
+
         <h2 className="text-xl font-semibold mb-1 tracking-tight" style={{ color: 'var(--text-primary)' }}>
           {noSession ? t('chat.no_session') : t('empty.welcome')}
         </h2>
@@ -66,7 +68,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
             {/* Onboarding Choices Grid */}
             <div className="grid grid-cols-2 gap-2.5 mb-4 text-left">
               <button onClick={() => startWith('我想随意聊聊')}
-                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-all hover-lift text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
                 <MessageSquare size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
@@ -76,7 +78,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
               </button>
               
               <button onClick={() => startWith('帮我写一段代码')}
-                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-all hover-lift text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
                 <Code size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
@@ -86,7 +88,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
               </button>
 
               <button onClick={() => { useStore.getState().setChatMode('arena'); createSession(); }}
-                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-all hover-lift text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
                 <FlaskConical size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
@@ -96,7 +98,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
               </button>
 
               <button onClick={() => startWith('我想要连接本地模型（Ollama/LM Studio），请告诉我怎么设置')}
-                className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                className="group flex items-start gap-2.5 p-3 rounded-md border transition-all hover-lift text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
                 <ShieldCheck size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                 <div className="min-w-0 flex-1">
@@ -112,7 +114,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
               const Icon = ex.icon
               return (
                 <button key={ex.titleKey} onClick={() => startWith(ex.prompt)}
-                  className="group flex items-start gap-2.5 p-3 rounded-md border transition-colors text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
+                  className="group flex items-start gap-2.5 p-3 rounded-md border transition-all hover-lift text-left hover:border-[var(--accent)] hover:bg-[var(--bg-secondary)]"
                   style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
                   <Icon size={16} className="text-[var(--text-muted)] mt-0.5 shrink-0 group-hover:text-[var(--text-primary)]" />
                   <div className="min-w-0 flex-1">
@@ -137,7 +139,7 @@ export default function EmptyState({ noSession = false }: { noSession?: boolean 
             <button
               key={item.id}
               onClick={() => startWithRecipe(item.id, item.fallback)}
-              className="px-2.5 py-1 text-xs rounded-lg border transition-colors motion-reduce:transition-none hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2.5 py-1 text-xs rounded-lg border transition-all hover-lift motion-reduce:transition-none hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg, var(--bg-secondary))', color: 'var(--text-secondary)' }}
             >
               {item.label}

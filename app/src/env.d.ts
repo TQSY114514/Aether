@@ -54,6 +54,7 @@ interface ModelSuggestionReasonParts {
   eloWins?: number
   eloTotal?: number
   eloReliable?: boolean
+  arenaElo?: number | null
   useTools?: boolean
   reasonPickUsed?: boolean
   closeRace?: boolean
@@ -107,6 +108,7 @@ interface Window {
       update: (id: number, data: Partial<Provider>) => Promise<void>
       delete: (id: number) => Promise<void>
       testConnection: (id: number) => Promise<TestConnectionResult>
+      testLatency: (id: number, modelName?: string) => Promise<{ success: boolean; latencyMs: number; errorMessage?: string }>
       fetchModels: (id: number) => Promise<{ names: string[]; added: string[]; removed: string[] }>
       detectOllama: () => Promise<{ ok: boolean; providerId?: number; models?: string[]; recommended?: string | null; error?: string }>
     }
@@ -134,7 +136,7 @@ interface Window {
       createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null }) => Promise<{ session: Session & { id: number }; config: { providerId: number | null; modelId: number | null; personaId: number | null }; messages: Message[] }>
       rename: (id: number, title: string) => Promise<void>
       pin: (id: number, pinned: number) => Promise<void>
-      fork: (params: { sessionId: number; title?: string }) => Promise<{ id: number }>
+      fork: (params: { sessionId: number; title?: string }) => Promise<{ id: number; title: string }>
       delete: (id: number) => Promise<void>
       touch: (id: number) => Promise<void>
       getConfig: (id: number) => Promise<{ providerId: number | null; modelId: number | null; personaId: number | null } | null>
@@ -192,6 +194,8 @@ interface Window {
       benchmarkRun: (data: { id: number; modelIds: number[] }) => Promise<{ lastRun: string; models: Record<number, { model_name: string; provider_name: string }>; results: Record<number, { wins: number; runs: number; total_ms: number; total_cost: number }>; error?: string }>
       benchmarkStop: (id: number) => Promise<void>
       benchmarkTemplates: () => Promise<{ id: string; name: string; description: string; tasks: any[] }[]>
+      objectiveRun: (data: { runId: string; prompt: string; verifyCommand: string; cwd?: string; modelIds: number[]; expectedExitCode?: number; timeoutMs?: number; updateScores?: boolean }) => Promise<{ prompt: string; verifyCommand: string; aborted: boolean; baselineAlreadyPassed: boolean; winnerId: number | null; winnerName: string | null; isTie: boolean; models: Array<{ modelId: number; modelName: string; providerName?: string; passed: boolean; aborted: boolean; exitCode: number; stdout: string; stderr: string; durationMs: number; latencyMs: number; cost: number; tokens: number; patchApplied: boolean; filesModified: string[] }>; eloUpdated: boolean; timestamp: string; error?: string }>
+      objectiveStop: (data: { runId: string }) => Promise<{ ok: boolean; error?: string }>
       autoRoute: (params?: { prompt?: string; intent?: string }) => Promise<{ intent: string; model_id: number; model_name: string; provider_id: number; provider_name: string; route_reason: string } | null>
       onModelDone: (callback: (payload: { sessionId: number; result: ArenaResult }) => void) => () => void
     }

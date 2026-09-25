@@ -32,7 +32,7 @@
 
 | 工具 | 分类 | Autonomy | Multi-model | Safety | Extensibility | Local-first | Evaluation | Terminal UX | IDE/Desktop UX | Ecosystem |
 |:---|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Aether** | **桌面+终端双形态** | **3.8** | **4.8** | **4.6** | **4.4** | **4.8** | **4.5** | **4.2** | **4.3** | **3.2** |
+| **Aether** | **桌面+终端双形态** | **3.8** | **4.8** | **4.6** | **4.4** | **4.8** | **4.5** | **4.2** | **4.3** | **1.8** |
 | Claude Code | 终端 Agent | 5.0 | 1.0 | 4.0 | 4.5 | 3.0 | 2.0 | 5.0 | 3.0 | 5.0 |
 | Codex CLI | 终端 Agent | 4.0 | 2.0 | 4.5 | 3.5 | 2.0 | 2.0 | 4.5 | 3.0 | 4.0 |
 | Amp | 终端/混合 Agent | 4.0 | 3.5 | 4.0 | 4.0 | 2.0 | 3.5 | 4.5 | 4.5 | 4.0 |
@@ -64,7 +64,7 @@
 radar-beta
   title Terminal & Hybrid Coding Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 3.2}
+  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 1.8}
   curve claude["Claude Code"]{5.0, 1.0, 4.0, 4.5, 3.0, 2.0, 5.0, 3.0, 5.0}
   curve codex["Codex CLI"]{4.0, 2.0, 4.5, 3.5, 2.0, 2.0, 4.5, 3.0, 4.0}
   curve amp["Amp"]{4.0, 3.5, 4.0, 4.0, 2.0, 3.5, 4.5, 4.5, 4.0}
@@ -80,7 +80,7 @@ radar-beta
 radar-beta
   title IDE & Desktop Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 3.2}
+  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 1.8}
   curve cursor["Cursor"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 5.0, 5.0}
   curve gemini["Gemini Code Assist"]{4.0, 2.0, 4.0, 4.0, 1.5, 3.0, 2.0, 4.5, 4.5}
   curve devin_desktop["Devin Desktop"]{4.0, 4.0, 3.0, 3.5, 2.0, 3.0, 2.0, 4.5, 4.0}
@@ -96,7 +96,7 @@ radar-beta
 radar-beta
   title Autonomous Platform Agents (2026-09)
   axis aut["Autonomy"], mm["Multi-model"], saf["Safety"], ext["Extensibility"], loc["Local-first"], eva["Evaluation"], tux["Terminal UX"], dux["Desktop UX"], eco["Ecosystem"]
-  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 3.2}
+  curve aether["Aether"]{3.8, 4.8, 4.6, 4.4, 4.8, 4.5, 4.2, 4.3, 1.8}
   curve openhands["OpenHands"]{5.0, 4.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0, 4.0}
   curve devin["Devin"]{5.0, 1.0, 3.5, 3.5, 1.0, 3.0, 1.0, 3.5, 3.5}
   curve openclaw["OpenClaw"]{4.5, 4.0, 2.0, 4.0, 3.5, 2.0, 3.5, 2.5, 3.0}
@@ -105,6 +105,9 @@ radar-beta
   max 5
   min 0
 ```
+
+> 💡 **关于生态成熟度 (Ecosystem) 自评 1.8 的诚实说明**：
+> Aether 目前处于早期起步阶段（6 star / 0 fork），我们拒绝在生态维度上打出虚高评分。正是不对称的凹陷形状，才是我们恪守「诚实自评、把精力全部聚焦于本地隐私、多模型路由与三层沙箱」的技术证据。
 
 ### 全景自评雷达矢量图（20款对照生成）
 

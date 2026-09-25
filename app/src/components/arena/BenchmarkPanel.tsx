@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
+import { t } from '@/utils/i18n'
+import { useFeatureFlag } from '@/utils/featureFlags'
 import { Play, Plus, Trash2, FlaskConical, X, Check, Timer, DollarSign } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,6 +23,7 @@ interface Benchmark {
 export default function BenchmarkPanel() {
   const { toast } = useUI()
   const allModels = useStore((s) => s.allModels)
+  const objectiveArenaEnabled = useFeatureFlag('arena.objectiveArena')
   const [benches, setBenches] = useState<Benchmark[]>([])
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState('')
@@ -29,16 +32,58 @@ export default function BenchmarkPanel() {
   const [runningId, setRunningId] = useState<number | null>(null)
   const [lastModels, setLastModels] = useState<Record<number, BenchModel>>({})
 
+  // Objective Sandbox Arena state
+  const [objOpen, setObjOpen] = useState(false)
+  const [objPrompt, setObjPrompt] = useState('')
+  const [objVerifyCmd, setObjVerifyCmd] = useState('npm test')
+  const [objModelIds, setObjModelIds] = useState<number[]>([])
+  const [objRunId, setObjRunId] = useState<string | null>(null)
+  const [objResult, setObjResult] = useState<Awaited<ReturnType<typeof window.electronAPI.arena.objectiveRun>> | null>(null)
+
   const refresh = useCallback(async () => {
     try { setBenches(await window.electronAPI?.arena?.benchmarkList?.() || []) } catch {}
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
 
+  const runObjective = async () => {
+    if (!objPrompt.trim() || !objVerifyCmd.trim() || objModelIds.length === 0) {
+      toast(t('arena.objective.missing_fields'), { type: 'error' })
+      return
+    }
+    const runId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    setObjRunId(runId)
+    setObjResult(null)
+    try {
+      const res = await window.electronAPI.arena.objectiveRun({
+        runId,
+        prompt: objPrompt.trim(),
+        verifyCommand: objVerifyCmd.trim(),
+        modelIds: objModelIds,
+      })
+      if (res?.error) throw new Error(res.error)
+      if (res?.aborted) return
+      setObjResult(res)
+      toast(res.winnerName ? t('arena.objective.done_winner', res.winnerName) : t('arena.objective.done'), { type: 'success' })
+    } catch (e: any) {
+      toast(t('arena.objective.failed', e?.message || ''), { type: 'error' })
+    } finally {
+      setObjRunId((prev) => (prev === runId ? null : prev))
+    }
+  }
+
+  const stopObjective = async () => {
+    if (!objRunId) return
+    try {
+      await window.electronAPI.arena.objectiveStop({ runId: objRunId })
+      toast(t('arena.objective.aborted'), { type: 'info' })
+    } catch {}
+  }
+
   const save = async () => {
     const tasks = tasksText.split('\n').map(s => s.trim()).filter(Boolean)
     if (!name.trim() || !tasks.length || !modelIds.length) {
-      toast('需要名称 + 至少 1 个任务 + 至少 1 个模型', { type: 'error' })
+      toast(t('arena.bench.missing_fields'), { type: 'error' })
       return
     }
     try {
@@ -46,8 +91,8 @@ export default function BenchmarkPanel() {
       if (r?.error) throw new Error(r.error)
       setEditing(false); setName(''); setTasksText(''); setModelIds([])
       await refresh()
-      toast('基准套件已保存', { type: 'success' })
-    } catch (e: any) { toast(`保存失败: ${e?.message || ''}`, { type: 'error' }) }
+      toast(t('arena.bench.saved'), { type: 'success' })
+    } catch (e: any) { toast(t('arena.bench.save_failed', e?.message || ''), { type: 'error' }) }
   }
 
   const del = async (id: number) => {
@@ -61,8 +106,8 @@ export default function BenchmarkPanel() {
       const r = await window.electronAPI?.arena?.benchmarkRun?.({ id: b.id, modelIds: b.model_ids })
       if (r?.error) throw new Error(r.error)
       if (r) { setLastModels(r.models || {}); await refresh() }
-      toast('基准测试完成', { type: 'success' })
-    } catch (e: any) { toast(`运行失败: ${e?.message || ''}`, { type: 'error' }) }
+      toast(t('arena.bench.done'), { type: 'success' })
+    } catch (e: any) { toast(t('arena.bench.run_failed', e?.message || ''), { type: 'error' }) }
     finally { setRunningId(null) }
   }
 
@@ -74,31 +119,101 @@ export default function BenchmarkPanel() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <FlaskConical size={15} style={{ color: 'var(--accent)' }} />
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>个人基准测试(Benchmark)</h2>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{t('arena.bench.title')}</h2>
         </div>
-        {!editing && (
-          <button onClick={() => setEditing(true)}
-            className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-            <Plus size={12} />新建套件
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {objectiveArenaEnabled && (
+            <button onClick={() => setObjOpen((v) => !v)}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <Play size={11} />{t('arena.objective.button')}
+            </button>
+          )}
+          {!editing && (
+            <button onClick={() => setEditing(true)}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <Plus size={12} />{t('arena.bench.new_suite')}
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
-        保存你的常用任务, 一键对多个模型重跑 —— 得到"你的工作负载"的模型排行(胜率/延迟/成本)。
+        {t('arena.bench.subtitle')}
       </p>
 
-      {editing && (
+      {objectiveArenaEnabled && objOpen && (
         <div className="p-4 rounded-lg mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="套件名称(如: 我的编码任务)"
-            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)]"
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('arena.objective.title')}</span>
+            <button onClick={() => setObjOpen(false)} className="p-1 rounded hover:bg-[var(--border)]"><X size={12} /></button>
+          </div>
+          <textarea value={objPrompt} onChange={(e) => setObjPrompt(e.target.value)} rows={3}
+            placeholder={t('arena.objective.prompt_placeholder')}
+            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
             style={{ borderColor: 'var(--border)' }} />
-          <textarea value={tasksText} onChange={(e) => setTasksText(e.target.value)} rows={5}
-            placeholder={'每行一个任务, 例如:\n修复这个 React 组件的 TypeScript 报错\n写一个二分查找并解释\n总结这段代码的架构'}
+          <input value={objVerifyCmd} onChange={(e) => setObjVerifyCmd(e.target.value)}
+            placeholder={t('arena.objective.verify_placeholder')}
             className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
             style={{ borderColor: 'var(--border)' }} />
           <div>
-            <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>选择参与评测的模型({modelIds.length} 个)</p>
+            <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>{t('arena.objective.select_models', objModelIds.length)}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {allModels.filter(m => m.provider_name).map((m) => (
+                <button key={m.id} onClick={() => setObjModelIds((p) => p.includes(m.id) ? p.filter(x => x !== m.id) : [...p, m.id])}
+                  className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${objModelIds.includes(m.id) ? 'text-white' : ''}`}
+                  style={objModelIds.includes(m.id) ? { backgroundColor: 'var(--accent)', borderColor: 'transparent' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                  {m.model_name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            {objRunId ? (
+              <button onClick={stopObjective}
+                className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg border text-rose-500"
+                style={{ borderColor: 'var(--border)' }}>
+                <X size={12} />{t('arena.objective.stop')}
+              </button>
+            ) : (
+              <button onClick={runObjective}
+                className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg text-white"
+                style={{ backgroundColor: 'var(--accent)' }}>
+                <Play size={12} />{t('arena.objective.run')}
+              </button>
+            )}
+          </div>
+          {objResult && Array.isArray(objResult.models) && (
+            <div className="space-y-1 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+              {(objResult as any).baselineAlreadyPassed && (
+                <div className="text-[11px] px-2 py-1.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                  {t('arena.objective.baseline_passed_warn')}
+                </div>
+              )}
+              {objResult.models.map((m) => (
+                <div key={m.modelId} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'var(--bg-primary)' }}>
+                  <span className="font-medium truncate flex-1" style={{ color: 'var(--text-primary)' }}>{m.modelName}</span>
+                  <span className={m.passed ? 'text-emerald-600' : 'text-rose-500'}>{m.passed ? 'PASS' : 'FAIL'}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{m.latencyMs}ms</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{fmtCost(m.cost)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {editing && (
+        <div className="p-4 rounded-lg mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('arena.bench.name_placeholder')}
+            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)]"
+            style={{ borderColor: 'var(--border)' }} />
+          <textarea value={tasksText} onChange={(e) => setTasksText(e.target.value)} rows={5}
+            placeholder={t('arena.bench.tasks_placeholder')}
+            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
+            style={{ borderColor: 'var(--border)' }} />
+          <div>
+            <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>{t('arena.bench.select_models', modelIds.length)}</p>
             <div className="flex flex-wrap gap-1.5">
               {allModels.filter(m => m.provider_name).map((m) => (
                 <button key={m.id} onClick={() => setModelIds((p) => p.includes(m.id) ? p.filter(x => x !== m.id) : [...p, m.id])}
@@ -111,10 +226,10 @@ export default function BenchmarkPanel() {
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setEditing(false)}
-              className="text-[11px] px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>取消</button>
+              className="text-[11px] px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('common.cancel')}</button>
             <button onClick={save}
               className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg text-white" style={{ backgroundColor: 'var(--accent)' }}>
-              <Check size={12} />保存
+              <Check size={12} />{t('common.save')}
             </button>
           </div>
         </div>
@@ -122,7 +237,7 @@ export default function BenchmarkPanel() {
 
       {benches.length === 0 && !editing && (
         <div className="p-4 rounded-lg text-center" style={{ border: '1px dashed var(--border)' }}>
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>还没有基准套件 — 点右上角"新建套件"开始</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('arena.bench.empty')}</p>
         </div>
       )}
 
@@ -138,18 +253,20 @@ export default function BenchmarkPanel() {
                 <div className="min-w-0">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{b.name}</p>
                   <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                    {b.tasks.length} 个任务 · {b.model_ids.length} 个模型{b.last_run ? ` · 上次运行 ${new Date(b.last_run).toLocaleString()}` : ' · 尚未运行'}
+                    {b.last_run
+                      ? t('arena.bench.summary_run', b.tasks.length, b.model_ids.length, new Date(b.last_run).toLocaleString())
+                      : t('arena.bench.summary_never', b.tasks.length, b.model_ids.length)}
                   </p>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
                   <button onClick={() => run(b)} disabled={runningId != null}
                     className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg text-white disabled:opacity-50 transition-opacity"
                     style={{ backgroundColor: 'var(--accent)' }}>
-                    <Play size={11} />{runningId === b.id ? '运行中…' : '重跑'}
+                    <Play size={11} />{runningId === b.id ? t('arena.bench.running') : t('arena.bench.rerun')}
                   </button>
                   <button onClick={() => del(b.id)}
                     className="p-1.5 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
-                    style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }} title="删除">
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }} title={t('common.delete')}>
                     <Trash2 size={12} />
                   </button>
                 </div>

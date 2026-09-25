@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Brain, ChevronDown, ChevronRight, Sparkles } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Brain, ChevronDown, ChevronRight } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 type ThinkingBlockProps = {
@@ -8,48 +8,71 @@ type ThinkingBlockProps = {
   // When true: the block is actively receiving streaming chunks.
   // Auto-expands immediately on first chunk; auto-collapses when streaming ends.
   streaming?: boolean
+  // When true: show first 3 lines as preview (for finalized messages).
+  preview?: boolean
 }
 
-// Collapsible extended-thinking / reasoning block, styled like Claude Code / OpenCode.
-// Shows a distinct slate-indigo container with brain icon, monospace font,
-// and clear visual boundary separating internal thoughts from conversational replies.
-export default function ThinkingBlock({ text, collapsed: initialCollapsed = true, streaming = false }: ThinkingBlockProps) {
+// Collapsible extended-thinking / reasoning block.
+// Redesigned: uses a left accent bar instead of a full border box to feel
+// integrated into the message flow rather than a jarring separate card.
+// Smooth height transition via grid-template-rows for expand/collapse.
+export default function ThinkingBlock({ text, collapsed: initialCollapsed = true, streaming = false, preview = false }: ThinkingBlockProps) {
   const [open, setOpen] = useState(streaming || !initialCollapsed)
+  const contentRef = useRef<HTMLPreElement>(null)
 
-  // Auto-expand during streaming, smoothly collapse after streaming ends
+  // Auto-expand during streaming, collapse after streaming ends with delay.
+  // Long thinking (> 200 chars) stays open longer so user can read.
   useEffect(() => {
     if (streaming) {
       setOpen(true)
-    } else if (initialCollapsed) {
-      const t = setTimeout(() => setOpen(false), 500)
-      return () => clearTimeout(t)
+    } else if (initialCollapsed && !preview) {
+      const delay = text.length > 200 ? 2500 : 1500
+      const timer = setTimeout(() => setOpen(false), delay)
+      return () => clearTimeout(timer)
     }
-  }, [streaming, initialCollapsed])
+  }, [streaming, initialCollapsed, preview, text.length])
+
+  // Auto-scroll to bottom during streaming so latest thinking is visible
+  useEffect(() => {
+    if (streaming && open && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight
+    }
+  }, [text, streaming, open])
 
   if (!text || !text.trim()) return null
 
   const fullLabel = t('thinking.full', '思考过程 (Reasoning)')
   const collapsedLabel = t('thinking.collapsed', '查看思考过程')
+  const lines = text.split('\n')
+  const previewText = preview && !open ? lines.slice(0, 3).join('\n') + (lines.length > 3 ? '\n…' : '') : text
+  const showPreview = preview && !open && lines.length > 3
 
   return (
-    <div className="mb-2.5 rounded-md border overflow-hidden transition-all text-xs"
+    <div
+      className="mb-2 text-xs transition-colors"
       style={{
-        borderColor: streaming ? 'var(--accent)' : 'var(--border)',
-        backgroundColor: 'var(--bg-secondary)',
-      }}>
+        borderLeft: `2px solid ${streaming ? 'var(--accent)' : 'var(--text-muted)'}`,
+        paddingLeft: '10px',
+        opacity: streaming ? 1 : 0.85,
+      }}
+    >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)]/50 transition-colors"
+        className="w-full flex items-center gap-1.5 py-1 text-xs hover:opacity-80 transition-opacity"
       >
         {open
-          ? <ChevronDown size={13} className="text-[var(--text-muted)]" />
-          : <ChevronRight size={13} className="text-[var(--text-muted)]" />}
-        <Brain size={13} className={streaming ? 'text-[var(--text-primary)] animate-pulse' : 'text-[var(--text-muted)]'} />
-        <span className="font-medium text-[11px] tracking-wide" style={{ color: 'var(--text-primary)' }}>
+          ? <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} />
+          : <ChevronRight size={12} style={{ color: 'var(--text-muted)' }} />}
+        <Brain
+          size={12}
+          style={{ color: streaming ? 'var(--text-primary)' : 'var(--text-muted)' }}
+          className={streaming ? 'animate-pulse' : ''}
+        />
+        <span className="font-medium text-[11px]" style={{ color: 'var(--text-primary)' }}>
           {open ? fullLabel : collapsedLabel}
         </span>
         {streaming && (
-          <span className="ml-1 text-[10px] font-mono text-[var(--text-secondary)] animate-pulse">
+          <span className="text-[10px] font-mono animate-pulse" style={{ color: 'var(--text-secondary)' }}>
             thinking…
           </span>
         )}
@@ -57,14 +80,40 @@ export default function ThinkingBlock({ text, collapsed: initialCollapsed = true
           {text.length.toLocaleString()} chars
         </span>
       </button>
-      {open && (
-        <div className="px-3 py-2 border-t border-[var(--border)]" style={{ backgroundColor: 'var(--content-bg)' }}>
-          <pre className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-64 overflow-y-auto leading-relaxed"
-            style={{ color: 'var(--text-secondary)' }}>
-            {text}{streaming && <span className="animate-pulse font-bold text-[var(--accent)]">▋</span>}
+
+      {/* Smooth height transition using grid trick */}
+      <div
+        className="transition-[grid-template-rows] duration-300 ease-out"
+        style={{
+          display: 'grid',
+          gridTemplateRows: open || showPreview ? '1fr' : '0fr',
+        }}
+      >
+        <div className="overflow-hidden">
+          <pre
+            ref={contentRef}
+            className="text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed pt-1 pb-1.5"
+            style={{
+              color: 'var(--text-secondary)',
+              maxHeight: open ? '20rem' : '4.5rem',
+              overflowY: open ? 'auto' : 'hidden',
+              transition: 'max-height 0.3s ease-out',
+            }}
+          >
+            {open ? text : previewText}
+            {streaming && <span className="animate-pulse font-bold" style={{ color: 'var(--accent)' }}>▋</span>}
           </pre>
+          {showPreview && (
+            <button
+              onClick={() => setOpen(true)}
+              className="text-[10px] font-mono pb-1 hover:opacity-70 transition-opacity"
+              style={{ color: 'var(--accent)' }}
+            >
+              {t('thinking.expand', '展开完整思考过程')} ({lines.length} {t('thinking.lines', '行')})
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

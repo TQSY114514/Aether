@@ -54,6 +54,7 @@ function summarizeArgs(name: string, args: unknown): string {
   return Object.entries(a).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`).join('\n')
 }
 
+/** Render pending tool-permission requests and their available decisions. */
 export default function PermissionDialog() {
   const requests = useStore((s) => s.permissionRequests)
   const resolve = useStore((s) => s.resolvePermission)
@@ -77,8 +78,8 @@ export default function PermissionDialog() {
 
   return (
     <div className="fixed inset-0 z-[101] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 animate-blur-fade" onClick={() => resolve(req.reqId, false)} />
-      <div className="relative w-full max-w-lg rounded-lg border shadow-xl p-5 animate-blur-fade"
+      <div className="absolute inset-0 bg-black/40 modal-backdrop-fade" onClick={() => resolve(req.reqId, false)} />
+      <div className="relative w-full max-w-lg rounded-lg border shadow-xl p-5 animate-spring-up"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: isTainted ? 'var(--error)' : 'var(--border)' }}>
         <div className="flex items-center gap-2.5 mb-3">
           <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: isTainted ? 'rgba(239,68,68,0.15)' : 'rgba(220,38,38,0.1)' }}>
@@ -266,16 +267,16 @@ export default function PermissionDialog() {
           {t('agent.permission.desc')}
         </p>
         <div className="flex justify-end gap-2 flex-wrap">
-          <button onClick={handleDeny} className="px-3.5 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
+          <button onClick={handleDeny} className="px-3.5 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-all press-scale"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{t('agent.permission.deny')}</button>
           <button onClick={handleAllowSession}
-            className="px-3.5 py-1.5 text-xs rounded-md border transition-colors hover:opacity-90"
+            className="px-3.5 py-1.5 text-xs rounded-md border transition-all press-scale hover:opacity-90"
             style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}>{t('agent.permission.allow_session')}</button>
           <button onClick={handleAllowRemember}
-            className="px-3.5 py-1.5 text-xs rounded-md border transition-colors hover:opacity-90"
+            className="px-3.5 py-1.5 text-xs rounded-md border transition-all press-scale hover:opacity-90"
             style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>{t('agent.permission.allow_remember')}</button>
           <button onClick={handleAllowOnce}
-            className="px-3.5 py-1.5 text-xs rounded-md text-white transition-opacity hover:opacity-90"
+            className="px-3.5 py-1.5 text-xs rounded-md text-white transition-all press-scale hover:opacity-90 shadow-sm"
             style={{ backgroundColor: 'var(--error)' }}>{t('agent.permission.allow_once')}</button>
         </div>
       </div>

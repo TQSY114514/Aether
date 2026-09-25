@@ -59,7 +59,7 @@ describe('capability axis settings-key contract (TQS-7)', () => {
     const loopBody = codeOnly.slice(loopMatch.index + loopMatch[0].length, i - 1)
     expect(loopBody).toContain('db.getSetting(`capability.${axis}`)')
     const dispatchRefresh = codeOnly.match(
-      /let axisAskReason = null[\s\S]*?permissionPolicy\.withAxisPolicies\(axes\)[\s\S]*?decideAxisPolicy\(fn\.name, axes\)/
+      /let axisAskReason = null[\s\S]*?permissionPolicy\.withAxisPolicies\(axes\)[\s\S]*?decideAxisPolicy\(fn\.name,\s*(?:args,\s*)?axes\)/
     )
     expect(dispatchRefresh).toBeTruthy()
   })

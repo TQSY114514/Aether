@@ -9,7 +9,7 @@
 const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
 const { buildReasoningParams } = require('../llm/reasoning')
-const { maybeCompact, estimateMessagesTokens, estimateTextTokens } = require('../llm/compaction')
+const { maybeCompact, estimateMessagesTokens, estimateTextTokens, foldStaleToolOutputs } = require('../llm/compaction')
 const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
@@ -211,9 +211,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
       const allModelsForSuggest = db.getAllModels().filter(m => { const p = db.getProvider(m.provider_id); return p && p.enabled })
       const intent = db.classifyIntent(content)
       const scores = db.getModelScores()
-      const eloData = {}
-      for (const s of scores) { if (s.model_id && !eloData[s.model_id]) eloData[s.model_id] = { score: s.score, win_count: s.win_count || 0, total_count: s.total_count || 0 } }
-      const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData })
+      const eloData = modelAdvisor.buildEloData(scores, intent)
+      const priority = db.getSetting('modelRoutingPriority') || 'quality'
+      const result = modelAdvisor.suggestModelExplained({ allModels: allModelsForSuggest, userMessage: content, useTools: true, intent, eloData, routingContext: { priority } })
       if (result) modelSuggestion = { suggestedModelId: result.suggestedModelId, reason: result.reason, reasonParts: result.reasonParts, confidence: result.confidence }
     } catch {}
 
@@ -290,7 +290,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
     const beforeCompact = apiMsgs.length
     let compacted
     try {
-      compacted = await maybeCompact({ provider, model, messages: apiMsgs, budget: ctxBudget, sessionId })
+      const folded = foldStaleToolOutputs(apiMsgs)
+      compacted = await maybeCompact({ provider, model, messages: folded, budget: ctxBudget, sessionId })
     } catch (e) {
       compacted = apiMsgs
     }

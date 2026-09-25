@@ -41,6 +41,7 @@ const VIEW_TITLES: Record<string, string> = {
   security: 'settings.nav.security',
   learningStatus: 'sidebar.nav.learning',
 }
+/** Render the application shell and route the active workspace page. */
 export default function App() {
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
@@ -71,6 +72,7 @@ export default function App() {
   const backgroundBlur = useStore((s) => s.backgroundBlur)
   const hasBg = backgroundImage !== null
   const providers = useStore((s) => s.providers)
+  const theme = useStore((s) => s.theme)
   // Onboarding wizard: first-run only (no providers + not completed). The flag
   // default is on; fallback=true so it shows before the flags snapshot loads.
   const showWizard = useFeatureFlag('ux.firstRunWizard', true)
