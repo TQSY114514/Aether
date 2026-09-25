@@ -20,7 +20,7 @@
 [![license](https://img.shields.io/badge/license-Apache--2.0-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#デスクトップ版-windows--推奨)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · **[日本語](./README.ja.md)** · [ロードマップ](./docs/roadmap.md) · [競合分析](./docs/competitive-analysis.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · **[日本語](./README.ja.md)** · [競合分析](./docs/competitive-analysis.md)
 
 </div>
 

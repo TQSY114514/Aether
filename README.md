@@ -20,7 +20,7 @@ Benchmark multiple models concurrently on your actual tasks and route work based
 [![license](https://img.shields.io/badge/license-Apache--2.0-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#1-windows-desktop-installation-primary-edition--recommended)
 
-**[English](./README.md)** · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [Roadmap](./docs/roadmap.md) · [20-Peer Competitive Matrix](./docs/competitive-analysis.md)
+**[English](./README.md)** · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [20-Peer Competitive Matrix](./docs/competitive-analysis.md)
 
 </div>
 
