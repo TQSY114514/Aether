@@ -116,6 +116,27 @@ function applyHunks(original, hunks) {
     const ctxLines = hunk.lines.filter(l => l.type === 'context' || l.type === 'remove').map(l => l.content)
     let matchOffset = -1
 
+    if (ctxLines.length === 0) {
+      const replacement = hunk.lines.filter(l => l.type === 'add').map(l => l.content)
+      if (norm === '' && (hunk.oldStart === 0 || hunk.oldStart === 1)) {
+        result = [...replacement]
+        lineDelta += replacement.length
+        applied++
+        continue
+      }
+      const hasTrailingNewline = result.length > 0 && result[result.length - 1] === ''
+      const effectiveLen = hasTrailingNewline ? result.length - 1 : result.length
+      const insertPos = hunk.oldStart + lineDelta
+      if (insertPos < 0 || insertPos > effectiveLen) {
+        conflicts.push(`hunk at line ${hunk.oldStart}: pure insertion out of bounds (0..${effectiveLen})`)
+        continue
+      }
+      result = [...result.slice(0, insertPos), ...replacement, ...result.slice(insertPos)]
+      lineDelta += replacement.length
+      applied++
+      continue
+    }
+
     // 1. Try local window search around target line index
     const localStart = Math.max(0, idx - 3)
     const localEnd = Math.min(result.length - ctxLines.length, idx + 5)

@@ -75,8 +75,15 @@ async function runVisualVerification({
   auditTrail = [],
   previewUrl,
   signal,
+  agentMode = 'auto',
+  permissionPolicy,
+  confirmPermission,
   webViz: injectedWebViz,
 } = {}) {
+  if (agentMode === 'off') {
+    return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+  }
+
   // Check feature gate or explicit setting
   const isEnabled = db ? featureFlags.isEnabled(db, 'agent.visualVerification') : false
   if (!isEnabled && !previewUrl) {
@@ -94,9 +101,77 @@ async function runVisualVerification({
   }
 
   const url = previewUrl || (db && typeof db.getSetting === 'function' ? db.getSetting('agent.previewUrl') : null) || 'http://localhost:5173'
+  const toolArgs = { url, waitMs: 1500 }
+
+  // Enforce capability axis & permission policy before running web_visualize
+  let requiresApproval = false
+  let approvalReason = null
+  if (db && typeof db.getSetting === 'function') {
+    try {
+      const { decideAxisPolicy } = require('./capabilityPolicy')
+      const axes = {}
+      for (const axis of ['filesystem', 'shell', 'network']) {
+        const v = db.getSetting(`capability.${axis}`)
+        if (v === 'allow' || v === 'ask' || v === 'deny') axes[axis] = v
+      }
+      if (permissionPolicy && typeof permissionPolicy.withAxisPolicies === 'function') {
+        permissionPolicy.withAxisPolicies(axes)
+      }
+      const ax = decideAxisPolicy('web_visualize', axes)
+      if (ax.matched && ax.policy === 'deny') {
+        return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+      }
+      if (ax.matched && ax.policy === 'ask') {
+        requiresApproval = true
+        approvalReason = `capability policy: ${ax.axis} axis requires approval`
+      }
+    } catch {}
+  }
+
+  const effectiveMode = agentMode === 'auto_confirm'
+    ? (webViz.risk === 'safe' ? 'auto' : 'ask')
+    : agentMode
+  if (webViz.risk === 'dangerous' && (effectiveMode === 'plan' || effectiveMode === 'off')) {
+    return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+  }
+  if (webViz.risk === 'dangerous' && effectiveMode === 'ask') {
+    requiresApproval = true
+  }
+  if (permissionPolicy && typeof permissionPolicy.check === 'function') {
+    const decision = permissionPolicy.check('web_visualize', toolArgs, { mode: effectiveMode })
+    if (decision && decision.action === 'deny') {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+    if (decision && decision.action === 'ask') {
+      requiresApproval = true
+      approvalReason = approvalReason || decision.reason
+    }
+  }
+  if (requiresApproval) {
+    if (typeof confirmPermission !== 'function') {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+    const approved = await confirmPermission({
+      name: 'web_visualize',
+      args: toolArgs,
+      risk: webViz.risk || 'safe',
+      reason: approvalReason || 'Visual verification requires approval',
+    })
+    const allowed = typeof approved === 'object' ? Boolean(approved && approved.allowed) : Boolean(approved)
+    if (!allowed) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+  }
 
   try {
-    const res = await webViz.run({ url, waitMs: 1500 }, { db, sessionId, signal })
+    const rawRes = await webViz.run(toolArgs, { db, sessionId, signal })
+    let res = rawRes
+    try {
+      const { processToolResult } = require('./toolResultMiddleware')
+      if (typeof processToolResult === 'function') {
+        res = processToolResult('web_visualize', rawRes)
+      }
+    } catch {}
     const errors = extractConsoleErrors(res)
     const hasErrors = errors.length > 0 || (typeof res === 'string' && res.startsWith('[error:'))
 

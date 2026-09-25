@@ -67,6 +67,7 @@ const FAMILY_SCORES = {
   translation:   { gpt: 90, claude: 88, deepseek: 85, gemini: 80, qwen: 85, llama: 75 },
   math:          { gpt: 92, deepseek: 90, claude: 88, gemini: 75, qwen: 80, llama: 65 },
   chitchat:      { gpt: 85, claude: 85, gemini: 80, deepseek: 75, qwen: 80, llama: 75 },
+  general:       { gpt: 85, claude: 85, gemini: 80, deepseek: 75, qwen: 80, llama: 75 },
 }
 
 /**
@@ -90,7 +91,7 @@ function detectFamily(modelName = '') {
  */
 function scoreModel(model, taskType) {
   const family = detectFamily(model.model_name || model.id || '')
-  const table = FAMILY_SCORES[taskType]
+  const table = FAMILY_SCORES[taskType] || FAMILY_SCORES.general || FAMILY_SCORES.chitchat
   return table ? (table[family] || 0) : 0
 }
 
@@ -161,7 +162,7 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
 
   try {
     const task = classifyTask(userMessage)
-    const taskType = intent || task.primary
+    const taskType = (!intent || intent === 'general') ? task.primary : intent
     const confidence = task.confidence
     const priority = routingContext.priority || 'quality'
 

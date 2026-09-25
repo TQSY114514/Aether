@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
+import { t } from '@/utils/i18n'
 import { Play, Plus, Trash2, FlaskConical, X, Check, Timer, DollarSign } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ export default function BenchmarkPanel() {
 
   const runObjective = async () => {
     if (!objPrompt.trim() || !objVerifyCmd.trim() || objModelIds.length === 0) {
-      toast('请填写评测任务、验证命令并选择至少 1 个模型', { type: 'error' })
+      toast(t('arena.objective.missing_fields'), { type: 'error' })
       return
     }
     const runId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -60,9 +61,9 @@ export default function BenchmarkPanel() {
       })
       if (res?.error) throw new Error(res.error)
       setObjResult(res)
-      toast(res.winnerName ? `客观评测完成 · 胜出: ${res.winnerName}` : '客观评测完成', { type: 'success' })
+      toast(res.winnerName ? t('arena.objective.done_winner', res.winnerName) : t('arena.objective.done'), { type: 'success' })
     } catch (e: any) {
-      toast(`客观评测失败: ${e?.message || ''}`, { type: 'error' })
+      toast(t('arena.objective.failed', e?.message || ''), { type: 'error' })
     } finally {
       setObjRunId(null)
     }
@@ -72,7 +73,7 @@ export default function BenchmarkPanel() {
     if (!objRunId) return
     try {
       await window.electronAPI.arena.objectiveStop({ runId: objRunId })
-      toast('已中止客观评测', { type: 'info' })
+      toast(t('arena.objective.aborted'), { type: 'info' })
     } catch {}
     setObjRunId(null)
   }
@@ -122,7 +123,7 @@ export default function BenchmarkPanel() {
           <button onClick={() => setObjOpen((v) => !v)}
             className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-            <Play size={11} />客观沙箱验证
+            <Play size={11} />{t('arena.objective.button')}
           </button>
           {!editing && (
             <button onClick={() => setEditing(true)}
@@ -140,19 +141,19 @@ export default function BenchmarkPanel() {
       {objOpen && (
         <div className="p-4 rounded-lg mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>客观验证竞技场 (Objective Sandbox Arena)</span>
+            <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('arena.objective.title')}</span>
             <button onClick={() => setObjOpen(false)} className="p-1 rounded hover:bg-[var(--border)]"><X size={12} /></button>
           </div>
           <textarea value={objPrompt} onChange={(e) => setObjPrompt(e.target.value)} rows={3}
-            placeholder="输入编码修复任务描述 (模型将在隔离沙箱中生成补丁并执行验证命令)..."
+            placeholder={t('arena.objective.prompt_placeholder')}
             className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
             style={{ borderColor: 'var(--border)' }} />
           <input value={objVerifyCmd} onChange={(e) => setObjVerifyCmd(e.target.value)}
-            placeholder="验证命令 (如: npm test 或 node test.js)"
+            placeholder={t('arena.objective.verify_placeholder')}
             className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
             style={{ borderColor: 'var(--border)' }} />
           <div>
-            <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>选择候选模型 ({objModelIds.length} 个)</p>
+            <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>{t('arena.objective.select_models', objModelIds.length)}</p>
             <div className="flex flex-wrap gap-1.5">
               {allModels.filter(m => m.provider_name).map((m) => (
                 <button key={m.id} onClick={() => setObjModelIds((p) => p.includes(m.id) ? p.filter(x => x !== m.id) : [...p, m.id])}
@@ -168,13 +169,13 @@ export default function BenchmarkPanel() {
               <button onClick={stopObjective}
                 className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg border text-rose-500"
                 style={{ borderColor: 'var(--border)' }}>
-                <X size={12} />停止验证
+                <X size={12} />{t('arena.objective.stop')}
               </button>
             ) : (
               <button onClick={runObjective}
                 className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg text-white"
                 style={{ backgroundColor: 'var(--accent)' }}>
-                <Play size={12} />运行客观验证
+                <Play size={12} />{t('arena.objective.run')}
               </button>
             )}
           </div>

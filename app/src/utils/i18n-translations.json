@@ -699,7 +699,18 @@
       "shortcuts.group.global": "全局",
       "shortcuts.group.chat": "对话",
       "shortcuts.group.navigation": "导航",
-      "settings.theme.metalheart": "Metalheart (月面/解构)"
+      "arena.objective.button": "客观沙箱验证",
+      "arena.objective.title": "客观验证竞技场 (Objective Sandbox Arena)",
+      "arena.objective.prompt_placeholder": "输入编码修复任务描述 (模型将在隔离沙箱中生成补丁并执行验证命令)...",
+      "arena.objective.verify_placeholder": "验证命令 (如: npm test 或 node test.js)",
+      "arena.objective.select_models": "选择候选模型 ({0} 个)",
+      "arena.objective.stop": "停止验证",
+      "arena.objective.run": "运行客观验证",
+      "arena.objective.missing_fields": "请填写评测任务、验证命令并选择至少 1 个模型",
+      "arena.objective.done_winner": "客观评测完成 · 胜出: {0}",
+      "arena.objective.done": "客观评测完成",
+      "arena.objective.failed": "客观评测失败: {0}",
+      "arena.objective.aborted": "已中止客观评测"
     }
   },
   {

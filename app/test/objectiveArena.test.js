@@ -95,6 +95,59 @@ describe('extractAndApplyPatches', () => {
     const updated = fs.readFileSync(greetingFile, 'utf8')
     expect(updated).toContain('Hello Aether')
   })
+
+  it('resets currentFile when encountering an invalid File header instead of modifying the previous file', () => {
+    const validFile = path.join(tmpDir, 'valid.txt')
+    fs.writeFileSync(validFile, 'line1\nline2\n', 'utf8')
+
+    const patchText = [
+      'File: valid.txt',
+      SEARCH_HEAD,
+      'line1',
+      DIVIDER,
+      'line1_ok',
+      REPLACE_TAIL,
+      'File: ../outside_escape.txt',
+      SEARCH_HEAD,
+      'line2',
+      DIVIDER,
+      'line2_tampered',
+      REPLACE_TAIL,
+    ].join('\n')
+
+    const res = extractAndApplyPatches(tmpDir, patchText)
+    expect(res.ok).toBe(false)
+    expect(res.appliedCount).toBe(1)
+    const updated = fs.readFileSync(validFile, 'utf8')
+    expect(updated).toBe('line1_ok\nline2\n')
+  })
+
+  it('applies pure insertion hunks at start, middle, and end of file', () => {
+    const { applyAnyPatch } = require('../electron/tools/patchEngine')
+    const base = 'a\nb\nc\nd\n'
+    const startRes = applyAnyPatch(base, '@@ -0,0 +1,1 @@\n+HEAD')
+    expect(startRes.applied).toBe(1)
+    expect(startRes.content).toBe('HEAD\na\nb\nc\nd\n')
+
+    const midRes = applyAnyPatch(base, '@@ -2,0 +3,1 @@\n+MID')
+    expect(midRes.applied).toBe(1)
+    expect(midRes.content).toBe('a\nb\nMID\nc\nd\n')
+
+    const endRes = applyAnyPatch(base, '@@ -4,0 +4,1 @@\n+NEW')
+    expect(endRes.applied).toBe(1)
+    expect(endRes.content).toBe('a\nb\nc\nd\nNEW\n')
+  })
+
+  it('routes general chat intent to a recommended model in routeWithExplanation', () => {
+    const { routeWithExplanation } = require('../electron/llm/modelAdvisor')
+    const routed = routeWithExplanation({
+      allModels: [{ id: 1, model_name: 'gpt-4o', provider_id: 1 }],
+      userMessage: '今天天气怎么样',
+      intent: 'general',
+    })
+    expect(routed).not.toBeNull()
+    expect(routed.model.model_name).toBe('gpt-4o')
+  })
 })
 
 describe('runObjectiveEvaluation', () => {

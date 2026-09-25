@@ -1292,7 +1292,15 @@ Reply ONLY with JSON:
       try {
         const visualVerifier = require('./visualVerifier')
         if (visualVerifier.hasFrontendChanges(auditTrail)) {
-          const vResult = await visualVerifier.runVisualVerification({ db, sessionId, auditTrail, signal })
+          const vResult = await visualVerifier.runVisualVerification({
+            db,
+            sessionId,
+            auditTrail,
+            signal,
+            agentMode,
+            permissionPolicy,
+            confirmPermission,
+          })
           if (vResult.performed && vResult.hasErrors) {
             visualVerified = true
             const fixMsg = visualVerifier.buildVisualFixPrompt(vResult)

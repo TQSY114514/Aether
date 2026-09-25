@@ -222,8 +222,11 @@ function extractAndApplyPatches(workspaceDir, responseText) {
       if (fileMatch && !line.includes('<<<<<<<') && !line.includes('>>>>>>>') && !line.includes('=======')) {
         const cand = fileMatch[1].trim()
         const candAbs = path.resolve(baseDir, cand)
+        currentFile = null
         if (isSafeSandboxTarget(baseDir, candAbs)) {
           currentFile = cand
+        } else {
+          conflicts.push(`Rejected invalid or unsafe file target: ${cand}`)
         }
       }
 
@@ -259,7 +262,11 @@ function extractAndApplyPatches(workspaceDir, responseText) {
               } catch (e) {
                 conflicts.push(`Error patching ${currentFile}: ${e.message}`)
               }
+            } else {
+              conflicts.push(`Rejected unsafe target path: ${currentFile}`)
             }
+          } else {
+            conflicts.push('SEARCH/REPLACE block missing valid target file')
           }
           i = j
         }
