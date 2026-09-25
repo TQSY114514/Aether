@@ -9,7 +9,7 @@
 **Stop wondering which model is best — Aether tests them on your own tasks and picks for you.**
 
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
-[![npm downloads](https://img.shields.io/npm/dt/aetherai.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white&label=npm%20downloads)](https://www.npmjs.com/package/aetherai)
+[![npm downloads](https://img.shields.io/npm/dt/aetherai.svg?style=flat-square&color=3fb950&labelColor=161b22&logo=npm&logoColor=white&label=downloads)](https://www.npmjs.com/package/aetherai)
 [![license](https://img.shields.io/badge/license-Apache--2.0-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#-download)
 
