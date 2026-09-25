@@ -63,7 +63,7 @@ async function generatePlan(provider, model, userMessage, signal, options = {}) 
         description: String(t.description || '').trim(),
         dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.map(String) : [],
         parallelGroup: t.parallelGroup ? String(t.parallelGroup) : undefined,
-        status: 'pending',
+        status: i === 0 ? 'in_progress' : 'pending',
         result: null,
       })),
     }
@@ -108,15 +108,83 @@ function planToolsPayload() {
   }]
 }
 
+function promoteNextPendingTask(plan) {
+  if (!plan || !Array.isArray(plan.tasks)) return
+  const hasActive = plan.tasks.some(t => t.status === 'in_progress')
+  if (!hasActive) {
+    const nextPending = plan.tasks.find(t => t.status === 'pending')
+    if (nextPending) nextPending.status = 'in_progress'
+  }
+}
+
 function handlePlanProgress(plan, args) {
-  if (!plan) return false
+  if (!plan || !Array.isArray(plan.tasks)) return false
   const taskId = String(args?.task_id || '')
   const result = String(args?.result || '')
-  const task = plan.tasks.find(t => t.id === taskId)
+  const task = plan.tasks.find(t => t.id === taskId) || plan.tasks.find(t => t.status === 'in_progress')
   if (!task) return false
   task.status = 'completed'
   task.result = result
+  promoteNextPendingTask(plan)
   return true
+}
+
+/**
+ * Heuristic step progression when the model executes real tools without calling
+ * `plan_progress`. Advances one step per productive tool round while keeping at
+ * least the final step in `in_progress` until the model finishes its final turn.
+ */
+function advancePlanOnToolRound(plan, roundResults) {
+  if (!plan || !Array.isArray(plan.tasks) || plan.tasks.length === 0) return false
+  const results = Array.isArray(roundResults) ? roundResults : []
+  if (results.some(r => r && r.isPlan)) {
+    promoteNextPendingTask(plan)
+    return true
+  }
+  const hadSuccessfulTool = results.some(r => r && r.entry && !r.entry.error)
+  if (!hadSuccessfulTool) return false
+
+  const uncompleted = plan.tasks.filter(t => t.status !== 'completed')
+  if (uncompleted.length === 0) return false
+
+  // If no task is in_progress yet, activate the first pending one.
+  let active = plan.tasks.find(t => t.status === 'in_progress')
+  if (!active) {
+    active = uncompleted[0]
+    active.status = 'in_progress'
+    return true
+  }
+
+  // If there is at least one more pending task after `active`, complete `active`
+  // and promote the next pending task to `in_progress`. Keep the final task
+  // `in_progress` until the final response is emitted.
+  if (uncompleted.length > 1) {
+    active.status = 'completed'
+    if (!active.result) {
+      const toolNames = results.filter(r => r && r.entry && !r.entry.error).map(r => r.entry.name).slice(0, 3).join(', ')
+      active.result = toolNames ? `completed via ${toolNames}` : 'completed'
+    }
+    promoteNextPendingTask(plan)
+    return true
+  }
+  return false
+}
+
+/**
+ * Mark all remaining tasks in a plan as `completed` when the agent loop finishes
+ * its final response (`finalStatus === 'success'`).
+ */
+function finalizePlanOnComplete(plan) {
+  if (!plan || !Array.isArray(plan.tasks) || plan.tasks.length === 0) return false
+  let changed = false
+  for (const t of plan.tasks) {
+    if (t.status !== 'completed') {
+      t.status = 'completed'
+      if (!t.result) t.result = 'completed'
+      changed = true
+    }
+  }
+  return changed
 }
 
 function planSummary(plan) {
@@ -135,6 +203,8 @@ module.exports = {
   planSystemBlock,
   planToolsPayload,
   handlePlanProgress,
+  advancePlanOnToolRound,
+  finalizePlanOnComplete,
   planSummary,
   PLANNING_PROMPT,
 }

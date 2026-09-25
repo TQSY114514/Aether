@@ -224,6 +224,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateState: (name, state) => ipcRenderer.invoke('skills:updateState', name, state),
     pin: (name, pinned) => ipcRenderer.invoke('skills:pin', name, pinned),
     importDir: () => ipcRenderer.invoke('skills:importDir'),
+    importUrl: (source) => ipcRenderer.invoke('skills:importUrl', source),
   },
   recipe: {
     list: (workspaceRoot) => ipcRenderer.invoke('recipe:list', workspaceRoot),

@@ -563,7 +563,7 @@ export default function ChatWindow() {
       )}
 
       <div ref={scrollRef} onScroll={handleScroll} className={isEmptyChat ? 'scroll-bounce flex-1 overflow-y-auto px-4 py-4 flex flex-col relative z-[1]' : 'scroll-bounce flex-1 overflow-y-auto px-4 py-6 relative z-[1]'}>
-        <div className={isEmptyChat ? 'max-w-3xl mx-auto w-full my-auto' : 'max-w-3xl mx-auto chat-gap'}>
+        <div className={isEmptyChat ? 'max-w-3xl mx-auto w-full my-auto' : 'max-w-3xl mx-auto w-full chat-gap'}>
           {isEmptyChat && (
             <EmptyState />
           )}

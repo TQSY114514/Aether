@@ -38,6 +38,98 @@ let _db = null            // injected lazily by startTask/restorePendingTasks
 // Rules are keyed per child-sessionId so each task is isolated.
 const taskAllowRules = createAllowRulesStore()
 
+// ZCode-inspired branchGeneration isolation & notification batch coalescing:
+// Prevents in-flight background tasks or subagent messages from a rolled-back /
+// truncated timeline from polluting the new conversation branch, and coalesces
+// multiple completed task notifications of the same priority into a single turn.
+const _sessionBranchGenerations = new Map() // sessionKey -> number
+const _completedNotificationQueue = []      // Array of completed task notifications
+
+function getBranchGeneration(sessionId) {
+  const key = String(sessionId ?? 'default')
+  return _sessionBranchGenerations.get(key) || 0
+}
+
+function bumpBranchGeneration(sessionId) {
+  const key = String(sessionId ?? 'default')
+  const next = getBranchGeneration(sessionId) + 1
+  _sessionBranchGenerations.set(key, next)
+  // Purge any queued notifications belonging to an older branch generation
+  for (let i = _completedNotificationQueue.length - 1; i >= 0; i -= 1) {
+    const item = _completedNotificationQueue[i]
+    if (String(item.parentSessionId ?? item.sessionId ?? 'default') === key && item.branchGeneration < next) {
+      _completedNotificationQueue.splice(i, 1)
+    }
+  }
+  return next
+}
+
+function enqueueTaskNotification(notification) {
+  if (!notification) return false
+  const targetSession = notification.parentSessionId ?? notification.sessionId ?? 'default'
+  const currentGen = getBranchGeneration(targetSession)
+  const itemGen = notification.branchGeneration ?? currentGen
+  if (itemGen < currentGen) {
+    // Discard stale notification from a rolled-back branch generation
+    return false
+  }
+  _completedNotificationQueue.push({
+    ...notification,
+    parentSessionId: targetSession,
+    priority: Number(notification.priority) || 0,
+    branchGeneration: itemGen,
+    completedAt: notification.completedAt || Date.now(),
+  })
+  return true
+}
+
+/**
+ * Drain all pending task notifications for `sessionId` that share the highest
+ * pending priority and match the current `branchGeneration` (ZCode dequeueNextBatch).
+ */
+function dequeueCompletedBatch(sessionId) {
+  const key = String(sessionId ?? 'default')
+  const currentGen = getBranchGeneration(sessionId)
+  // First purge any stale items for this session
+  for (let i = _completedNotificationQueue.length - 1; i >= 0; i -= 1) {
+    const item = _completedNotificationQueue[i]
+    if (String(item.parentSessionId ?? item.sessionId ?? 'default') === key && item.branchGeneration < currentGen) {
+      _completedNotificationQueue.splice(i, 1)
+    }
+  }
+  const candidates = _completedNotificationQueue.filter(
+    (item) => String(item.parentSessionId ?? item.sessionId ?? 'default') === key
+  )
+  if (candidates.length === 0) return Object.freeze([])
+
+  const maxPriority = Math.max(...candidates.map((c) => Number(c.priority) || 0))
+  const batch = []
+  for (let i = _completedNotificationQueue.length - 1; i >= 0; i -= 1) {
+    const item = _completedNotificationQueue[i]
+    if (
+      String(item.parentSessionId ?? item.sessionId ?? 'default') === key &&
+      (Number(item.priority) || 0) === maxPriority
+    ) {
+      batch.unshift(item)
+      _completedNotificationQueue.splice(i, 1)
+    }
+  }
+  return Object.freeze(batch)
+}
+
+function formatNotificationBatch(batch) {
+  if (!Array.isArray(batch) || batch.length === 0) return ''
+  if (batch.length === 1) {
+    const item = batch[0]
+    return `[Background Task #${item.taskId} (${item.status})]: ${item.finalContent || item.error || item.title || ''}`
+  }
+  const lines = [`[Background Tasks Completed (${batch.length} coalesced)]:`]
+  for (const item of batch) {
+    lines.push(`- Task #${item.taskId} (${item.title || 'untitled'} — ${item.status}): ${(item.finalContent || item.error || '').slice(0, 500)}`)
+  }
+  return lines.join('\n')
+}
+
 // Injected by initBackgroundTasks — provides access to the main BrowserWindow
 // webContents so permission/question dialog events reach the global renderer.
 let _getWebContents = () => null
@@ -299,8 +391,24 @@ async function runTask(record) {
     record.status       = 'done'
     record.finalContent = finalContent
     record.controller   = null
-    persist(record)
-    emit(id, { type: 'done', payload: { taskId: id, sessionId, finalContent } })
+    const targetParent = record.parentSessionId ?? sessionId
+    if ((record.branchGeneration ?? 0) < getBranchGeneration(targetParent)) {
+      record.staleBranchDiscarded = true
+      persist(record)
+    } else {
+      persist(record)
+      enqueueTaskNotification({
+        taskId: id,
+        sessionId,
+        parentSessionId: targetParent,
+        priority: record.priority,
+        branchGeneration: record.branchGeneration ?? getBranchGeneration(targetParent),
+        status: 'done',
+        title: record.title,
+        finalContent,
+      })
+      emit(id, { type: 'done', payload: { taskId: id, sessionId, finalContent } })
+    }
 
   } catch (err) {
     record.controller = null
@@ -325,9 +433,25 @@ async function runTask(record) {
       }
       record.error = errMsg
       record.status = 'error'
-      persist(record)
-      try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'error', error_message: errMsg }) } catch {}
-      emit(id, { type: 'error', payload: { taskId: id, error: errMsg } })
+      const targetParent = record.parentSessionId ?? sessionId
+      if ((record.branchGeneration ?? 0) < getBranchGeneration(targetParent)) {
+        record.staleBranchDiscarded = true
+        persist(record)
+      } else {
+        persist(record)
+        try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'error', error_message: errMsg }) } catch {}
+        enqueueTaskNotification({
+          taskId: id,
+          sessionId,
+          parentSessionId: targetParent,
+          priority: record.priority,
+          branchGeneration: record.branchGeneration ?? getBranchGeneration(targetParent),
+          status: 'error',
+          title: record.title,
+          error: errMsg,
+        })
+        emit(id, { type: 'error', payload: { taskId: id, error: errMsg } })
+      }
     }
   }
 
@@ -382,11 +506,14 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
     max_retry: maxRetry,
   })
 
+  const targetParentSession = parentSessionId ?? childSessionId
   const record = {
     id: rowId,
     rowId,
     db,
     sessionId: childSessionId,
+    parentSessionId: targetParentSession,
+    branchGeneration: getBranchGeneration(targetParentSession),
     // plan 模式先入 plan 态（runTask 首个分支处理）；否则 queued（queue 模式）或 running（legacy）。
     status: agentMode === 'plan' ? 'plan' : (queueOn ? 'queued' : 'running'),
     title,
@@ -590,4 +717,9 @@ module.exports = {
   MAX_CONCURRENT_TASKS: DEFAULT_CONCURRENT_TASKS,
   getConcurrencyLimit,
   initBackgroundTasks,
+  getBranchGeneration,
+  bumpBranchGeneration,
+  enqueueTaskNotification,
+  dequeueCompletedBatch,
+  formatNotificationBatch,
 }

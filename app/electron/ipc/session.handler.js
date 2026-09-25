@@ -12,9 +12,11 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:rename', (_e, id, title) => db.renameSession(id, title))
   ipcMain.handle('session:pin', (_e, id, pinned) => db.pinSession(id, pinned))
   ipcMain.handle('session:fork', (_e, { sessionId, title }) => {
+    try { require('../llm/backgroundTasks').bumpBranchGeneration(sessionId) } catch {}
     return db.forkSession(sessionId, title)
   })
   ipcMain.handle('session:delete', (_e, id) => {
+    try { require('../llm/backgroundTasks').bumpBranchGeneration(id) } catch {}
     try { db.deleteSession(id) } catch (e) { log.warn('session:delete db error:', e) }
     try { clearAllowRules(id) } catch {}
     try { cleanupSessionControllers(id) } catch {}
@@ -24,7 +26,10 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:set-config', (_e, id, config) => db.setSessionConfig(id, config))
   ipcMain.handle('message:list', (_e, sessionId) => db.getMessages(sessionId))
   ipcMain.handle('message:update', (_e, id, data) => db.updateMessage(id, data))
-  ipcMain.handle('message:delete-after', (_e, sessionId, afterId) => db.deleteMessagesAfter(sessionId, afterId))
+  ipcMain.handle('message:delete-after', (_e, sessionId, afterId) => {
+    try { require('../llm/backgroundTasks').bumpBranchGeneration(sessionId) } catch {}
+    return db.deleteMessagesAfter(sessionId, afterId)
+  })
   ipcMain.handle('message:delete-arena', (_e, sessionId) => db.deleteArenaAssistantMessages(sessionId))
   ipcMain.handle('message:add-normal', (_e, msg) => db.addNormalMessage(msg))
 

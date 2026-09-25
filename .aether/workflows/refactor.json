@@ -1,0 +1,31 @@
+{
+  "id": "refactor",
+  "name": "Refactoring",
+  "description": "Safe refactoring: analyze, plan, execute, review.",
+  "steps": [
+    {
+      "type": "analyze",
+      "role": "explore",
+      "description": "Analyze the code to understand dependencies and impact.",
+      "tools": ["read_file", "grep_search", "codebase_graph", "glob_find"]
+    },
+    {
+      "type": "plan",
+      "role": "explore",
+      "description": "Plan the refactoring steps to minimize risk.",
+      "tools": ["read_file"]
+    },
+    {
+      "type": "execute",
+      "role": "build",
+      "description": "Execute the refactoring.",
+      "tools": null
+    },
+    {
+      "type": "review",
+      "role": "review",
+      "description": "Review the refactored code.",
+      "tools": ["read_file", "grep_search"]
+    }
+  ]
+}

@@ -98,6 +98,7 @@ async function runPlanPhase({ db, provider, model, userRequest, signal, roles })
       model,
       signal,
       agentMode: 'auto',
+      readOnly: true,
       subagentConfig: { cleanup: 'keep' },
     })
     return outputs.map((o, i) => ({
@@ -189,6 +190,7 @@ Respond in a structured format.`
     model,
     signal,
     agentMode: 'auto',
+    readOnly: true,
     subagentConfig: { cleanup: 'keep' },
   })
 

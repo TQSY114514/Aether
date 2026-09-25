@@ -158,20 +158,169 @@ async function _runSubagent({
   }
 }
 
-// ─── Parallel sub-agent execution ────────────────────────────────────────
+// ─── Parallel sub-agent execution & write_paths preflight (P0-2) ─────────
+const MAX_PARALLEL_WRITERS = 3
 
-async function runParallel(tasks, shared) {
-  if (!shared.db) throw new Error('runParallel: db is required')
+function normalizeWritePath(rawPath) {
+  const s = String(rawPath || '').trim().replace(/\\/g, '/')
+  const stripped = s.replace(/^(\.\/)+/, '').replace(/\/+$/, '')
+  const withoutGlob = stripped.replace(/\/\*\*?$/, '')
+  if (!withoutGlob || withoutGlob === '.' || withoutGlob === '*' || withoutGlob === '**') {
+    return '' // whole workspace
+  }
+  return withoutGlob
+}
+
+function pathsOverlap(rawA, rawB) {
+  const a = normalizeWritePath(rawA)
+  const b = normalizeWritePath(rawB)
+  if (a === '' || b === '') return true
+  if (a === b) return true
+  return a.startsWith(b + '/') || b.startsWith(a + '/')
+}
+
+function normalizeParallelTask(item, index, shared = {}) {
+  const sharedReadOnly = shared.readOnly === true || shared.agentMode === 'plan'
+  if (typeof item === 'string') {
+    return {
+      index,
+      prompt: item,
+      isWriter: !sharedReadOnly,
+      wholeWorkspace: !sharedReadOnly,
+      writePaths: [],
+      effectiveMode: sharedReadOnly ? 'plan' : (shared.agentMode || 'auto'),
+    }
+  }
+  const obj = item && typeof item === 'object' ? item : {}
+  const prompt = String(obj.task || obj.prompt || '').trim()
+  const hasWritePathsArray = Array.isArray(obj.write_paths) || Array.isArray(obj.writePaths)
+  const rawPaths = Array.isArray(obj.write_paths)
+    ? obj.write_paths
+    : (Array.isArray(obj.writePaths) ? obj.writePaths : null)
+  const explicitReadOnly =
+    sharedReadOnly ||
+    obj.read_only === true ||
+    obj.readOnly === true ||
+    obj.mode === 'plan' ||
+    obj.agentMode === 'plan' ||
+    (hasWritePathsArray && rawPaths.length === 0)
+
+  if (explicitReadOnly) {
+    return {
+      index,
+      prompt,
+      isWriter: false,
+      wholeWorkspace: false,
+      writePaths: [],
+      effectiveMode: 'plan',
+    }
+  }
+
+  if (!hasWritePathsArray || !rawPaths || rawPaths.length === 0) {
+    return {
+      index,
+      prompt,
+      isWriter: true,
+      wholeWorkspace: true,
+      writePaths: [''],
+      effectiveMode: obj.mode || obj.agentMode || shared.agentMode || 'auto',
+    }
+  }
+
+  const normalized = rawPaths.map(normalizeWritePath)
+  const claimsRoot = normalized.some(p => p === '')
+  return {
+    index,
+    prompt,
+    isWriter: true,
+    wholeWorkspace: claimsRoot,
+    writePaths: normalized,
+    effectiveMode: obj.mode || obj.agentMode || shared.agentMode || 'auto',
+  }
+}
+
+function validateParallelWritePaths(tasks, shared = {}) {
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return { ok: true, writers: 0, total: 0, normalizedTasks: [] }
+  }
+  const maxWriters = typeof shared.maxParallelWriters === 'number' && shared.maxParallelWriters > 0
+    ? shared.maxParallelWriters
+    : MAX_PARALLEL_WRITERS
+  const normalizedTasks = tasks.map((t, i) => normalizeParallelTask(t, i, shared))
+  const writers = normalizedTasks.filter(t => t.isWriter)
+
+  if (writers.length > maxWriters) {
+    return {
+      ok: false,
+      code: 'MAX_PARALLEL_WRITERS_EXCEEDED',
+      writers: writers.length,
+      total: normalizedTasks.length,
+      error: `Parallel write preflight failed: ${writers.length} writers requested, exceeding max_parallel_writers=${maxWriters} (fail-closed, 0 sub-agents started).`,
+    }
+  }
+
+  if (writers.length > 1) {
+    const wholeLockers = writers.filter(w => w.wholeWorkspace)
+    if (wholeLockers.length > 0) {
+      return {
+        ok: false,
+        code: 'WHOLE_WORKSPACE_CONFLICT',
+        writers: writers.length,
+        total: normalizedTasks.length,
+        conflicts: wholeLockers.map(w => w.index),
+        error: `Parallel write preflight failed: task #${wholeLockers[0].index + 1} omits write_paths (occupies entire workspace) while ${writers.length} parallel writers are scheduled. Declare disjoint write_paths or mark read-only tasks with write_paths: [] (fail-closed, 0 sub-agents started).`,
+      }
+    }
+
+    for (let i = 0; i < writers.length; i++) {
+      for (let j = i + 1; j < writers.length; j++) {
+        const wA = writers[i]
+        const wB = writers[j]
+        for (const pA of wA.writePaths) {
+          for (const pB of wB.writePaths) {
+            if (pathsOverlap(pA, pB)) {
+              return {
+                ok: false,
+                code: 'WRITE_PATH_OVERLAP',
+                writers: writers.length,
+                total: normalizedTasks.length,
+                conflicts: [{ taskA: wA.index, pathA: pA, taskB: wB.index, pathB: pB }],
+                error: `Parallel write preflight failed: overlapping write_paths between task #${wA.index + 1} ("${pA || '.'}") and task #${wB.index + 1} ("${pB || '.'}") (fail-closed, 0 sub-agents started).`,
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    writers: writers.length,
+    total: normalizedTasks.length,
+    normalizedTasks,
+  }
+}
+
+async function runParallel(tasks, shared = {}) {
+  if (!shared || !shared.db) throw new Error('runParallel: db is required')
   if (!Array.isArray(tasks) || tasks.length === 0) return []
 
-  // Atomic counter for globally unique subagent IDs across concurrent calls
+  const preflight = validateParallelWritePaths(tasks, shared)
+  if (!preflight.ok) {
+    const err = new Error(preflight.error)
+    err.code = preflight.code
+    err.preflight = preflight
+    throw err
+  }
+
   let _subagentCounter = 0
-  const runners = tasks.map((task, i) => {
+  const runners = preflight.normalizedTasks.map((normTask, i) => {
+    const task = normTask.prompt
     return (async () => {
       const startTime = Date.now()
-      // Use crypto.randomUUID() for guaranteed uniqueness in concurrent scenarios
-      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID 
-        ? crypto.randomUUID().slice(0, 8) 
+      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID().slice(0, 8)
         : `${Date.now()}-${++_subagentCounter}-${Math.random().toString(36).slice(2, 8)}`
       const subagentId = `sa_${startTime}_${uniqueId}_${i + 1}`
       try {
@@ -182,6 +331,8 @@ async function runParallel(tasks, shared) {
           task: String(task).slice(0, 80),
           status: 'running',
           startedAt: startTime,
+          writePaths: normTask.writePaths,
+          isWriter: normTask.isWriter,
         })
       } catch {}
       const iterations = 0
@@ -193,7 +344,7 @@ async function runParallel(tasks, shared) {
           model: shared.model,
           prompt: task,
           signal: shared.signal,
-          agentMode: shared.agentMode || 'plan',
+          agentMode: normTask.effectiveMode || shared.agentMode || 'plan',
           callbacks: shared.callbacks || {},
           config: shared.subagentConfig || {},
         })
@@ -248,4 +399,13 @@ async function runParallel(tasks, shared) {
 }
 
 async function runSubagent(args) { return subagentLimit.run(() => _runSubagent(args)) }
-module.exports = { runSubagent, runParallel, SUBAGENT_SYSTEM_PROMPT, DEFAULT_SUBAGENT_CONFIG }
+module.exports = {
+  runSubagent,
+  runParallel,
+  validateParallelWritePaths,
+  pathsOverlap,
+  normalizeWritePath,
+  MAX_PARALLEL_WRITERS,
+  SUBAGENT_SYSTEM_PROMPT,
+  DEFAULT_SUBAGENT_CONFIG,
+}

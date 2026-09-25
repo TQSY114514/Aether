@@ -6,6 +6,7 @@ import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
 import ChatBackgroundPattern from '@/components/chat/ChatBackgroundPattern'
 import Tooltip from '@/components/Tooltip'
+import HoverMarquee from '@/components/ui/HoverMarquee'
 import { FlaskConical } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
@@ -24,6 +25,11 @@ const TRUST_TIP: Record<string, string> = {
 /** Compose the sidebar, conversation, and auxiliary chat panels. */
 export default function ChatPage() {
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const sessions = useStore((s) => s.sessions)
+  const activeSessionTitle = useMemo(() => {
+    const found = sessions.find((s) => s.id === currentSessionId)
+    return found?.title || t('chat.new')
+  }, [sessions, currentSessionId])
   const theme = useStore((s) => s.theme)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const hasBg = !!backgroundImage
@@ -99,10 +105,16 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
         {!hasBg && <ChatBackgroundPattern theme={theme} />}
         <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
+          <div
+            className={`flex items-center gap-2 min-w-0 overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-out ${
+              chatMode === 'arena'
+                ? 'max-w-0 opacity-0 pointer-events-none mr-0'
+                : 'max-w-[260px] opacity-100 mr-3'
+            }`}
+          >
+            <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
             {/* Arena model selectors with smooth expand/collapse entrance & exit transition */}
             <div
               className={`flex items-center gap-1.5 flex-nowrap whitespace-nowrap shrink-0 overflow-hidden transition-[max-width,opacity] duration-200 ease-out ${
@@ -178,14 +190,25 @@ export default function ChatPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-transparent relative overflow-hidden" {...arenaBgStyle}>
       {!hasBg && <ChatBackgroundPattern theme={theme} />}
       <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center gap-2">
+        <div
+          className={`flex items-center gap-2.5 min-w-0 overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-out app-no-drag ${
+            chatMode === 'arena'
+              ? 'max-w-0 opacity-0 pointer-events-none mr-0'
+              : 'flex-1 max-w-[340px] opacity-100 mr-3'
+          }`}
+        >
           {trustBadge && currentSessionId && (
             <Tooltip text={`Trust: ${trustBadge.trust}/100 · ${TRUST_TIP[trustBadge.color] || trustBadge.label}`}>
               <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: TRUST_DOT[trustBadge.color] || '#888' }} />
             </Tooltip>
           )}
+          <HoverMarquee
+            text={activeSessionTitle}
+            className="text-sm font-medium flex-1 min-w-0"
+            style={{ color: 'var(--text-primary)' }}
+          />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
           {/* Arena model selectors with smooth expand/collapse entrance & exit transition */}
           <div
             className={`flex items-center gap-1.5 flex-nowrap whitespace-nowrap shrink-0 overflow-hidden transition-[max-width,opacity] duration-200 ease-out ${

@@ -246,6 +246,11 @@ const TOOLS = [
     const p = String(args.path || ''); if (!p) throw new Error('path is required'); guardWorkspaceRead(p, ctx, 'path')
     const buf = fs.readFileSync(p); let text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
     const offset = Number(args.offset) || 0; const limit = Number(args.limit) || 0
+    try {
+      const stat = fs.statSync(p)
+      const { recordReadFileState } = require('./editMatchers')
+      recordReadFileState(ctx?.sessionId, p, { offset: offset || 1, limit: limit || undefined, mtimeMs: stat.mtimeMs })
+    } catch {}
     if (offset > 1 || limit > 0) { const lines = text.split('\n'); const start = Math.max(0, (offset ? offset - 1 : 0)); text = (limit > 0 ? lines.slice(start, start + limit) : lines.slice(start)).join('\n') }
     return text + (buf.length > MAX_READ_BYTES ? `\n\n[truncated, ${buf.length} bytes total]` : '')
   }},
@@ -315,37 +320,87 @@ const TOOLS = [
   { name: 'write_file', description: 'Write text to a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const c = String(args.content ?? ''); if (!p) throw new Error('path is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
+    try {
+      if (fs.existsSync(p)) {
+        const stat = fs.statSync(p)
+        const { checkStaleReadBeforeEdit } = require('./editMatchers')
+        const staleCheck = checkStaleReadBeforeEdit(ctx?.sessionId, p, stat.mtimeMs)
+        if (!staleCheck.ok) throw new Error(staleCheck.reason)
+      }
+    } catch (e) {
+      if (e && e.message && e.message.includes('modified externally since it was last read')) throw e
+    }
     await fs.promises.mkdir(path.dirname(p), { recursive: true }); await fs.promises.writeFile(p, c, 'utf-8')
+    try {
+      const stat = fs.statSync(p)
+      const { recordReadFileState } = require('./editMatchers')
+      recordReadFileState(ctx?.sessionId, p, { offset: 1, mtimeMs: stat.mtimeMs })
+    } catch {}
     return `wrote ${c.length} chars to ${p}`
   }},
-  { name: 'edit_file', description: 'Replace text in a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, old_string: { type: 'string' }, new_string: { type: 'string' } }, required: ['path', 'old_string', 'new_string'] }, run: async (args, ctx) => {
+  { name: 'edit_file', description: 'Replace text in a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, old_string: { type: 'string' }, new_string: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['path', 'old_string', 'new_string'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const o = String(args.old_string ?? ''); const n = String(args.new_string ?? '')
+    const replaceAll = Boolean(args.replace_all)
     if (!p || !o) throw new Error('path and old_string are required')
     if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
+    try {
+      const stat = fs.statSync(p)
+      const { checkStaleReadBeforeEdit } = require('./editMatchers')
+      const staleCheck = checkStaleReadBeforeEdit(ctx?.sessionId, p, stat.mtimeMs)
+      if (!staleCheck.ok) throw new Error(staleCheck.reason)
+    } catch (e) {
+      if (e && e.message && e.message.includes('modified externally since it was last read')) throw e
+    }
     const orig = await fs.promises.readFile(p, 'utf-8')
-    let idx = orig.indexOf(o)
-    let matchLen = o.length
-    if (idx === -1) {
-      // Fall back to fuzzy matching
+    const { findEditMatch, normalizeReplacementForMatch, preserveQuoteStyle } = require('./editMatchers')
+    const hasCrLf = orig.includes('\r\n')
+    const normOrig = hasCrLf ? orig.replace(/\r\n/g, '\n') : orig
+    const normOld = o.replace(/\r\n/g, '\n')
+    const normNew = n.replace(/\r\n/g, '\n')
+    const match = findEditMatch({ content: normOrig, search: normOld, replaceAll })
+    let updated
+    if (match.status === 'matched') {
+      const normalizedReplacement = preserveQuoteStyle(
+        normOld,
+        match.actualString,
+        normalizeReplacementForMatch(match.strategy, normNew)
+      )
+      if (replaceAll && match.candidateCount > 1) {
+        updated = normOrig.split(match.actualString).join(normalizedReplacement)
+      } else {
+        updated = normOrig.slice(0, match.index) + normalizedReplacement + normOrig.slice(match.index + match.actualString.length)
+      }
+    } else if (match.status === 'ambiguous') {
+      throw new Error(
+        match.strategy === 'exact'
+          ? 'old_string is not unique'
+          : `old_string is ambiguous in ${p} (${match.candidateCount} matches via ${match.strategy}). Please include more surrounding context lines to make it unique.`
+      )
+    } else {
+      // Fall back to existing similarity-based fuzzyFind for diagnostic closestLines
       const { fuzzyFind } = require('./fuzzyMatch')
-      const result = fuzzyFind(orig, o)
+      const result = fuzzyFind(normOrig, normOld)
       if (!result.found) {
         if (result.ambiguous) {
           throw new Error(`old_string is ambiguous in ${p} (multiple matching or similar regions found). Please include more surrounding context lines to make it unique.`)
         }
-        // Build actionable error message with closest match
         let errMsg = `old_string not found in ${p}`
         if (result.closestLines) {
           errMsg += `\nClosest match (similarity: ${(result.similarity * 100).toFixed(0)}%):\n---\n${result.closestLines}\n---\nPlease verify the exact content and retry with 2-3 lines of surrounding context.`
         }
         throw new Error(errMsg)
       }
-      idx = result.index
-      matchLen = result.matchedText.length
-    } else if (orig.indexOf(o, idx + 1) !== -1) {
-      throw new Error('old_string is not unique')
+      updated = normOrig.slice(0, result.index) + normNew + normOrig.slice(result.index + result.matchedText.length)
     }
-    await fs.promises.writeFile(p, orig.slice(0, idx) + n + orig.slice(idx + matchLen), 'utf-8')
+    if (hasCrLf) {
+      updated = updated.replace(/\n/g, '\r\n')
+    }
+    await fs.promises.writeFile(p, updated, 'utf-8')
+    try {
+      const stat = fs.statSync(p)
+      const { recordReadFileState } = require('./editMatchers')
+      recordReadFileState(ctx?.sessionId, p, { offset: 1, mtimeMs: stat.mtimeMs })
+    } catch {}
     return `edited ${p}`
   }},
   { name: 'apply_patch', description: 'Apply a unified diff patch or Aider-style SEARCH/REPLACE blocks. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, patch: { type: 'string' } }, required: ['path', 'patch'] }, run: async (args, ctx) => {
@@ -405,12 +460,15 @@ const TOOLS = [
     try { ctx?.onTodoUpdate?.(todos) } catch {}
     return `Updated ${todos.length} todo item(s).`
   }},
-  { name: 'delegate_task', description: 'Delegate parallel sub-tasks to sub-agents.', risk: 'dangerous', parameters: { type: 'object', properties: { tasks: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 } }, required: ['tasks'] }, run: async (args, ctx) => {
+  { name: 'delegate_task', description: 'Delegate parallel sub-tasks to sub-agents. Parallel writers MUST declare non-overlapping write_paths (omitting write_paths claims the entire workspace and blocks other parallel writers; pass write_paths: [] or read_only: true for read-only tasks; max 3 parallel writers).', risk: 'dangerous', parameters: { type: 'object', properties: { tasks: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { task: { type: 'string', description: 'Sub-task instruction' }, prompt: { type: 'string' }, write_paths: { type: 'array', items: { type: 'string' }, description: 'Disjoint relative file/directory paths this writer touches (omit = whole workspace, [] = read-only)' }, read_only: { type: 'boolean' } }, required: ['task'] }] }, minItems: 1, maxItems: 5 } }, required: ['tasks'] }, run: async (args, ctx) => {
     const tasks = Array.isArray(args.tasks) ? args.tasks.filter(Boolean) : []
     if (!tasks.length) throw new Error('tasks must be non-empty')
     const SA = require('../llm/subAgent'); const shared = { db: ctx.db, provider: ctx.provider, model: ctx.model, signal: ctx.signal, options: ctx.options || {}, agentMode: 'auto', parentSessionId: ctx.sessionId, onSubagentEvent: ctx.onSubagentEvent }
     const results = await SA.runParallel(tasks, shared)
-    return results.map((r, i) => `### Task ${i + 1}: ${tasks[i].slice(0, 80)}\n${r.success ? r.output : `(failed: ${r.error})`}`).join('\n\n')
+    return results.map((r, i) => {
+      const label = typeof tasks[i] === 'string' ? tasks[i] : (tasks[i]?.task || tasks[i]?.prompt || '')
+      return `### Task ${i + 1}: ${String(label).slice(0, 80)}\n${r.success ? r.output : `(failed: ${r.error})`}`
+    }).join('\n\n')
   }},
   { name: 'run_agent', description: 'Spawn a specialized sub-agent (explore/build/review/research/debug).', risk: 'dangerous', parameters: { type: 'object', properties: { role: { type: 'string', enum: ['explore', 'build', 'review', 'research', 'debug'] }, task: { type: 'string' }, maxIterations: { type: 'number' } }, required: ['role', 'task'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
@@ -758,7 +816,17 @@ TOOLS.push(
 
 // ── Exports ──────────────────────────────────────────────────────────────
 function getTool(name) { return TOOLS.find(t => t.name === name) }
-function toolsPayload() { return TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) }
+function toolsPayload(mode, opts = {}) {
+  const list = mode === 'plan' ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
+  const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+  if (opts && opts.cacheStable === false) return raw
+  try {
+    const { sortToolsForCacheStability } = require('../llm/toolRouter')
+    return sortToolsForCacheStability(raw)
+  } catch {
+    return raw
+  }
+}
 
 // Format captured renderer console entries for the web_visualize reply.
 // Surfaces only warnings/errors (the high-signal subset for diagnosing broken

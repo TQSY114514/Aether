@@ -84,9 +84,30 @@ export function ensureChunkListener() {
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
       _pendingDeltas = {}
       const sid = sessionId
+      const finishedMsgId = messageId || (buf && buf.messageId) || null
       requestAnimationFrame(() => {
         const st = getStore().getState()
         const isStopping = _stoppingSessionId === sid
+        if (!isStopping) {
+          // Auto-finalize any todos left in_progress/pending when the agent turn finishes normally
+          const nextTodosByMsg = { ...st.todosByMessage }
+          let todosChanged = false
+          const targetMsgIds = new Set<number>()
+          if (finishedMsgId) targetMsgIds.add(finishedMsgId)
+          for (const m of st.messages) {
+            if (m.session_id === sid && nextTodosByMsg[m.id]) targetMsgIds.add(m.id)
+          }
+          for (const mid of targetMsgIds) {
+            const list = nextTodosByMsg[mid]
+            if (Array.isArray(list) && list.some(item => item.status !== 'completed')) {
+              nextTodosByMsg[mid] = list.map(item => ({ ...item, status: 'completed' as const }))
+              todosChanged = true
+            }
+          }
+          if (todosChanged) {
+            getStore().setState({ todosByMessage: nextTodosByMsg })
+          }
+        }
         if (st.currentSessionId !== sid) {
           getStore().getState().pinSession(sid, 0).then(() => {
             const s = getStore().getState().sessions.find(x => x.id === sid)

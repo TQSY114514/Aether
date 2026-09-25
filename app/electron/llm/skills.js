@@ -238,8 +238,140 @@ function getCommand(id) { return _commands.get(id) || null }
 // Re-scan skills AND commands together (convenience for callers).
 function rescan() { scanSkills(); scanCommands() }
 
+// ───────────────────────────────────────────────────────────────────────────
+// GitHub / URL Skill Importer (P0-3: align with `npx skills add` mental model)
+// Supports:
+//   - GitHub shorthand: "owner/repo", "owner/repo/skills/my-skill", "github:owner/repo#branch"
+//   - GitHub tree/blob URL: "https://github.com/owner/repo/tree/main/skills/security-audit"
+//   - Direct raw URL to SKILL.md: "https://.../SKILL.md"
+// ───────────────────────────────────────────────────────────────────────────
+function sanitizeImportedSkillName(raw) {
+  const s = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+  if (!s || s.includes('..') || s.startsWith('.')) return null
+  return s.slice(0, 64)
+}
+
+function resolveSkillSourceUrl(source) {
+  const raw = String(source || '').trim()
+  if (!raw) return null
+
+  // Direct HTTP(S) URL
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw)
+      if (u.hostname === 'github.com') {
+        // Convert github.com/<owner>/<repo>/(blob|tree)/<branch>/<path> -> raw.githubusercontent.com
+        const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/')
+        if (parts.length >= 2) {
+          const owner = parts[0]
+          const repo = parts[1].replace(/\.git$/i, '')
+          let branch = 'main'
+          let subPath = ''
+          if ((parts[2] === 'tree' || parts[2] === 'blob') && parts.length >= 4) {
+            branch = parts[3]
+            subPath = parts.slice(4).join('/')
+          } else if (parts.length > 2) {
+            subPath = parts.slice(2).join('/')
+          }
+          const skillMdPath = subPath.endsWith('SKILL.md')
+            ? subPath
+            : (subPath ? `${subPath.replace(/\/+$/, '')}/SKILL.md` : 'SKILL.md')
+          return {
+            kind: 'github',
+            owner,
+            repo,
+            branch,
+            subPath,
+            rawSkillUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skillMdPath}`,
+          }
+        }
+      }
+      return {
+        kind: 'url',
+        rawSkillUrl: raw.endsWith('.md') ? raw : `${raw.replace(/\/+$/, '')}/SKILL.md`,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // GitHub shorthand: github:owner/repo#branch or owner/repo[/subpath][#branch]
+  const cleaned = raw.replace(/^github:/i, '')
+  const [pathPart, branchPart] = cleaned.split('#')
+  const segments = pathPart.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)
+  if (segments.length >= 2 && /^[A-Za-z0-9_.-]+$/.test(segments[0]) && /^[A-Za-z0-9_.-]+$/.test(segments[1])) {
+    const owner = segments[0]
+    const repo = segments[1].replace(/\.git$/i, '')
+    const branch = branchPart || 'main'
+    const subPath = segments.slice(2).join('/')
+    const skillMdPath = subPath.endsWith('SKILL.md')
+      ? subPath
+      : (subPath ? `${subPath}/SKILL.md` : 'SKILL.md')
+    return {
+      kind: 'github',
+      owner,
+      repo,
+      branch,
+      subPath,
+      rawSkillUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skillMdPath}`,
+    }
+  }
+
+  return null
+}
+
+async function importSkillFromUrl(source, opts = {}) {
+  try {
+    const resolved = resolveSkillSourceUrl(source)
+    if (!resolved || !resolved.rawSkillUrl) {
+      return { ok: false, error: 'Invalid skill source URL or GitHub shorthand (expected owner/repo or https://...)' }
+    }
+
+    const fetchFn = opts.fetch || global.fetch
+    if (typeof fetchFn !== 'function') {
+      return { ok: false, error: 'fetch is not available in this runtime' }
+    }
+
+    const resp = await fetchFn(resolved.rawSkillUrl)
+    if (!resp || !resp.ok) {
+      return { ok: false, error: `Failed to fetch SKILL.md (${resp ? resp.status : 'network error'}): ${resolved.rawSkillUrl}` }
+    }
+
+    const text = await resp.text()
+    const { meta } = parseFrontmatter(text)
+    if (!meta.name || !meta.description) {
+      return { ok: false, error: 'Remote SKILL.md is missing required YAML frontmatter (name, description)' }
+    }
+
+    const safeName = sanitizeImportedSkillName(meta.name)
+    if (!safeName) {
+      return { ok: false, error: `Invalid skill name in frontmatter: ${meta.name}` }
+    }
+
+    const targetRoot = opts.targetRoot || path.join(app.getPath('userData'), 'skills')
+    const skillDir = path.join(targetRoot, safeName)
+    fs.mkdirSync(skillDir, { recursive: true })
+    const skillFilePath = path.join(skillDir, 'SKILL.md')
+    fs.writeFileSync(skillFilePath, text, 'utf-8')
+
+    // Persist origin metadata in frontmatter-adjacent manifest for provenance
+    const provenancePath = path.join(skillDir, '.origin.json')
+    fs.writeFileSync(provenancePath, JSON.stringify({
+      source: String(source),
+      resolvedUrl: resolved.rawSkillUrl,
+      importedAt: new Date().toISOString(),
+    }, null, 2), 'utf-8')
+
+    scanSkills()
+    return { ok: true, name: safeName, filePath: skillFilePath, resolvedUrl: resolved.rawSkillUrl }
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) }
+  }
+}
+
 module.exports = {
   scanSkills, getSkills, getSkill, getSkillBody, formatSkillsForPrompt, parseFrontmatter, upsertSkill,
   scanCommands, getCommands, getCommand, rescan,
   recordSkillUse, getSkillUsage, resetSkillUsage, loadSkillUsage,
+  resolveSkillSourceUrl, importSkillFromUrl, sanitizeImportedSkillName,
 }

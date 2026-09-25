@@ -314,6 +314,7 @@ interface Window {
       updateState: (name: string, state: string) => Promise<{ ok: boolean }>
       pin: (name: string, pinned: boolean) => Promise<{ ok: boolean }>
       importDir: () => Promise<{ ok: boolean; count?: number; error?: string }>
+      importUrl: (source: string) => Promise<{ ok: boolean; name?: string; filePath?: string; resolvedUrl?: string; error?: string }>
     }
     recipe: {
       list: (workspaceRoot?: string) => Promise<Recipe[]>

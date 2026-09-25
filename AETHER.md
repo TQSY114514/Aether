@@ -116,7 +116,7 @@ D:\Aether/
 ## 5. 交互与 UI 系统 (UI/UX System)
 
 ### 5.1 现代 Agent HUD 与任务甲板（对齐 OpenCode / Hermes）
-- **`AgentActionHUD.tsx`**：
+- **`AgentStatusBar.tsx`**：
   - 吸顶固定在输入框（`ChatInput`）正上方。
   - 动态展示当前执行工具（`⚡ write_file (src/...)` / `🧠 深度思考中`）、步骤轮次（`第 3 / 25 轮`）、实时耗时与打字干预提示。
 - **`AgentTaskDeck.tsx`**：

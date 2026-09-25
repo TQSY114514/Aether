@@ -314,7 +314,7 @@ export default function SettingPage() {
   return (
     <div className="flex-1 overflow-y-auto page-fade-in bg-transparent relative">
       {!hasBg && <ChatBackgroundPattern theme={theme} />}
-      <div className="max-w-3xl mx-auto px-6 py-8 relative z-[1]">
+      <div className="max-w-3xl mx-auto w-full px-6 py-8 relative z-[1]">
         {/* Top Header */}
         <div className="mb-6">
           <h1 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>

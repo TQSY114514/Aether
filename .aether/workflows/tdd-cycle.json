@@ -1,0 +1,32 @@
+{
+  "id": "tdd-cycle",
+  "name": "TDD Fix & Verify Cycle",
+  "description": "Diagnose, then iteratively fix and test until verification condition passes.",
+  "steps": [
+    {
+      "type": "diagnose",
+      "role": "debug",
+      "description": "Diagnose the failing test or requirement.",
+      "tools": ["read_file", "grep_search", "run_command"]
+    },
+    {
+      "type": "iterate",
+      "kind": "cycle",
+      "maxCycles": 3,
+      "until": "ALL_TESTS_PASSED|VERIFIED_OK",
+      "description": "Iteratively apply fixes and run tests until ALL_TESTS_PASSED or VERIFIED_OK appears in output.",
+      "steps": [
+        {
+          "type": "fix",
+          "role": "build",
+          "description": "Apply targeted code changes to resolve the failure."
+        },
+        {
+          "type": "verify",
+          "role": "review",
+          "description": "Verify tests pass and emit VERIFIED_OK when satisfied."
+        }
+      ]
+    }
+  ]
+}

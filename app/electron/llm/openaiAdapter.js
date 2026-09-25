@@ -204,6 +204,7 @@ function parseSSELine(line) {
   try {
     const parsed = JSON.parse(data)
     const delta = parsed.choices?.[0]?.delta || {}
+    const finish_reason = parsed.choices?.[0]?.finish_reason || undefined
     const reasoning = delta.reasoning_content || delta.reasoning || ''
     const content = delta.content || ''
     const tool_calls = delta.tool_calls || undefined
@@ -211,6 +212,7 @@ function parseSSELine(line) {
       delta: content,
       reasoning: reasoning || undefined,
       tool_calls,
+      finish_reason,
       usage: parsed.usage ? normalizeUsage(parsed.usage) : null,
     }
   } catch {
@@ -318,6 +320,7 @@ async function _completeChatMessage({ provider, model, messages, signal, options
   let fullContent = ''
   let fullReasoning = ''
   let finalUsage = null
+  let finalFinishReason = undefined
   const toolCallsMap = {}
   let isJsonDetected = false
 
@@ -335,8 +338,9 @@ async function _completeChatMessage({ provider, model, messages, signal, options
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
       for (const line of lines) {
-        const { delta, reasoning, tool_calls, usage } = parseSSELine(line)
+        const { delta, reasoning, tool_calls, finish_reason, usage } = parseSSELine(line)
         if (usage) finalUsage = usage
+        if (finish_reason) finalFinishReason = finish_reason
         if (reasoning) {
           fullReasoning += reasoning
           try { onThinking?.(reasoning) } catch {}
@@ -363,6 +367,7 @@ async function _completeChatMessage({ provider, model, messages, signal, options
     try {
       const data = JSON.parse(buffer.trim())
       const msg = data.choices?.[0]?.message || {}
+      const finish_reason = data.choices?.[0]?.finish_reason || undefined
       let content = msg.content || ''
       let reasoning = msg.reasoning_content || msg.reasoning || ''
       if (!reasoning && content.includes('<think>')) {
@@ -372,13 +377,14 @@ async function _completeChatMessage({ provider, model, messages, signal, options
       }
       if (reasoning) { try { onThinking?.(reasoning) } catch {} }
       if (content) { try { onStream?.(content) } catch {} }
-      return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning }
+      return { content, tool_calls: msg.tool_calls, usage: data.usage, reasoning, finish_reason }
     } catch {}
   }
 
   if (buffer.startsWith('data: ')) {
-    const { delta, reasoning, tool_calls, usage } = parseSSELine(buffer)
+    const { delta, reasoning, tool_calls, finish_reason, usage } = parseSSELine(buffer)
     if (usage) finalUsage = usage
+    if (finish_reason) finalFinishReason = finish_reason
     if (reasoning) {
       fullReasoning += reasoning
       try { onThinking?.(reasoning) } catch {}
@@ -414,7 +420,8 @@ async function _completeChatMessage({ provider, model, messages, signal, options
     content: fullContent,
     tool_calls: toolCallsArray.length > 0 ? toolCallsArray : undefined,
     usage: finalUsage,
-    reasoning: fullReasoning
+    reasoning: fullReasoning,
+    finish_reason: finalFinishReason,
   }
 }
 
