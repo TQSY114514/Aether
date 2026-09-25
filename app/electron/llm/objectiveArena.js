@@ -56,7 +56,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
   return new Promise((resolve) => {
     const start = Date.now()
     if (signal?.aborted) {
-      return resolve({ ok: false, exitCode: -1, stdout: '', stderr: 'Aborted', durationMs: 0 })
+      return resolve({ ok: false, exitCode: -1, timedOut: false, stdout: '', stderr: 'Aborted', durationMs: 0 })
     }
 
     const env = { ...process.env }
@@ -70,6 +70,13 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
       env[pathKey] = env[pathKey]
         ? `${hostBin}${path.delimiter}${env[pathKey]}`
         : hostBin
+      try {
+        const hostPkgUrl = require('url').pathToFileURL(path.join(hostWorkspaceDir, 'package.json')).href
+        const hooksSrc = `export async function resolve(s,c,n){try{return await n(s,c)}catch(e){if(e&&e.code==='ERR_MODULE_NOT_FOUND'&&!s.startsWith('.')&&!s.startsWith('/')&&!s.startsWith('file:')){return n(s,{...c,parentURL:${JSON.stringify(hostPkgUrl)}})}throw e}}`
+        const regSrc = `import{register}from'node:module';register(${JSON.stringify('data:text/javascript,' + encodeURIComponent(hooksSrc))});`
+        const importFlag = `--import=data:text/javascript,${encodeURIComponent(regSrc)}`
+        env.NODE_OPTIONS = env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ${importFlag}` : importFlag
+      } catch {}
     }
 
     let child
@@ -82,7 +89,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
         stdio: ['ignore', 'pipe', 'pipe'],
       })
     } catch (e) {
-      return resolve({ ok: false, exitCode: -1, stdout: '', stderr: e.message, durationMs: Date.now() - start })
+      return resolve({ ok: false, exitCode: -1, timedOut: false, stdout: '', stderr: e.message, durationMs: Date.now() - start })
     }
 
     const MAX_CAPTURE = 256 * 1024
@@ -107,7 +114,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
         finished = true
         cleanup()
         killProcessTree(child)
-        resolve({ ok: false, exitCode: -1, stdout, stderr: stderr + '\nAborted', durationMs: Date.now() - start })
+        resolve({ ok: false, exitCode: -1, timedOut: false, stdout, stderr: stderr + '\nAborted', durationMs: Date.now() - start })
       }
     }
 
@@ -121,6 +128,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
         resolve({
           ok: false,
           exitCode: -1,
+          timedOut: true,
           stdout,
           stderr: stderr + `\nTimed out after ${timeoutMs}ms`,
           durationMs: Date.now() - start,
@@ -132,7 +140,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
       if (!finished) {
         finished = true
         cleanup()
-        resolve({ ok: false, exitCode: -1, stdout, stderr: stderr + '\n' + err.message, durationMs: Date.now() - start })
+        resolve({ ok: false, exitCode: -1, timedOut: false, stdout, stderr: stderr + '\n' + err.message, durationMs: Date.now() - start })
       }
     })
 
@@ -143,6 +151,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
         resolve({
           ok: code === expectedExitCode,
           exitCode: code ?? -1,
+          timedOut: false,
           stdout,
           stderr,
           durationMs: Date.now() - start,
@@ -208,6 +217,8 @@ function extractAndApplyPatches(workspaceDir, responseText) {
       } catch (e) {
         conflicts.push(`Error patching ${rawFile}: ${e.message}`)
       }
+    } else {
+      conflicts.push(`Rejected invalid or unsafe file target: ${rawFile}`)
     }
   }
 

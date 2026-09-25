@@ -60,12 +60,13 @@ export default function BenchmarkPanel() {
         modelIds: objModelIds,
       })
       if (res?.error) throw new Error(res.error)
+      if (res?.aborted) return
       setObjResult(res)
       toast(res.winnerName ? t('arena.objective.done_winner', res.winnerName) : t('arena.objective.done'), { type: 'success' })
     } catch (e: any) {
       toast(t('arena.objective.failed', e?.message || ''), { type: 'error' })
     } finally {
-      setObjRunId(null)
+      setObjRunId((prev) => (prev === runId ? null : prev))
     }
   }
 

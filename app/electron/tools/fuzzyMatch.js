@@ -67,7 +67,8 @@ function fuzzyFind(fileContent, needle, options = {}) {
     };
   }
 
-  const fileLines = fileContent.split(/\r?\n/);
+  const rawFileLines = fileContent.split('\n');
+  const fileLines = rawFileLines.map(l => l.replace(/\r$/, ''));
   const needleLines = needle.split(/\r?\n/);
   const normFileLines = fileLines.map(l => l.trimEnd());
   const normNeedleLines = needleLines.map(l => l.trimEnd());
@@ -88,8 +89,8 @@ function fuzzyFind(fileContent, needle, options = {}) {
     return -1;
   };
 
-/** Convert a zero-based line index into its character offset in joined text. */
-function getCharOffsetForLine(lines, lineIdx) {
+  /** Convert a zero-based line index into its exact character offset in fileContent. */
+  function getCharOffsetForLine(lines, lineIdx) {
     let offset = 0;
     for (let k = 0; k < lineIdx && k < lines.length; k++) {
       offset += lines[k].length + 1;
@@ -97,14 +98,23 @@ function getCharOffsetForLine(lines, lineIdx) {
     return offset;
   }
 
+  /** Slice exact matched span (preserving CRLF if present) from fileContent. */
+  function sliceMatchedSpan(lineIdx, lineCount) {
+    const index = getCharOffsetForLine(rawFileLines, lineIdx);
+    const spanLen = rawFileLines.slice(lineIdx, lineIdx + lineCount).join('\n').replace(/\r$/, '').length;
+    return {
+      index,
+      matchedText: fileContent.slice(index, index + spanLen),
+    };
+  }
+
   // 2. Whitespace-normalized match
   const matchIdxNorm = findSubArray(normFileLines, normNeedleLines, (a, b) => a === b);
   if (matchIdxNorm !== -1) {
-    const matchedLines = fileLines.slice(matchIdxNorm, matchIdxNorm + needleLines.length);
-    const matchedText = matchedLines.join('\n');
+    const { index, matchedText } = sliceMatchedSpan(matchIdxNorm, needleLines.length);
     return {
       found: true,
-      index: getCharOffsetForLine(fileLines, matchIdxNorm),
+      index,
       matchedText,
       strategy: 'Whitespace-normalized match',
       similarity: 1.0
@@ -138,11 +148,11 @@ function getCharOffsetForLine(lines, lineIdx) {
     }
     
     if (match) {
-      const matchedLines = fileLines.slice(i, i + needleLines.length);
+      const { index, matchedText } = sliceMatchedSpan(i, needleLines.length);
       return {
         found: true,
-        index: getCharOffsetForLine(fileLines, i),
-        matchedText: matchedLines.join('\n'),
+        index,
+        matchedText,
         strategy: 'Indent-offset match',
         similarity: 1.0
       };
@@ -167,11 +177,11 @@ function getCharOffsetForLine(lines, lineIdx) {
   }
 
   if (bestSim > 0.85 && bestIdx !== -1) {
-    const matchedLines = fileLines.slice(bestIdx, bestIdx + needleLines.length);
+    const { index, matchedText } = sliceMatchedSpan(bestIdx, needleLines.length);
     return {
       found: true,
-      index: getCharOffsetForLine(fileLines, bestIdx),
-      matchedText: matchedLines.join('\n'),
+      index,
+      matchedText,
       strategy: 'Line-level Levenshtein sliding window',
       similarity: bestSim
     };

@@ -103,6 +103,17 @@ async function runVisualVerification({
   const url = previewUrl || (db && typeof db.getSetting === 'function' ? db.getSetting('agent.previewUrl') : null) || 'http://localhost:5173'
   const toolArgs = { url, waitMs: 1500 }
 
+  // Enforce project-level tool allow/deny config
+  try {
+    const { getWorkspaceRoot } = require('../tools/registry')
+    const { isToolAllowed } = require('../config/projectConfig')
+    const workspaceRoot = getWorkspaceRoot(sessionId)
+    const allowedCheck = isToolAllowed('web_visualize', workspaceRoot)
+    if (allowedCheck && !allowedCheck.allowed) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+  } catch {}
+
   // Enforce capability axis & permission policy before running web_visualize
   let requiresApproval = false
   let approvalReason = null
@@ -117,7 +128,7 @@ async function runVisualVerification({
       if (permissionPolicy && typeof permissionPolicy.withAxisPolicies === 'function') {
         permissionPolicy.withAxisPolicies(axes)
       }
-      const ax = decideAxisPolicy('web_visualize', axes)
+      const ax = decideAxisPolicy('web_visualize', toolArgs, axes)
       if (ax.matched && ax.policy === 'deny') {
         return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
       }
@@ -137,16 +148,8 @@ async function runVisualVerification({
   if (webViz.risk === 'dangerous' && effectiveMode === 'ask') {
     requiresApproval = true
   }
-  if (permissionPolicy && typeof permissionPolicy.check === 'function') {
-    const decision = permissionPolicy.check('web_visualize', toolArgs, { mode: effectiveMode })
-    if (decision && decision.action === 'deny') {
-      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
-    }
-    if (decision && decision.action === 'ask') {
-      requiresApproval = true
-      approvalReason = approvalReason || decision.reason
-    }
-  }
+
+  let userDecision = true
   if (requiresApproval) {
     if (typeof confirmPermission !== 'function') {
       return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
@@ -157,8 +160,21 @@ async function runVisualVerification({
       risk: webViz.risk || 'safe',
       reason: approvalReason || 'Visual verification requires approval',
     })
-    const allowed = typeof approved === 'object' ? Boolean(approved && approved.allowed) : Boolean(approved)
-    if (!allowed) {
+    userDecision = typeof approved === 'object' ? Boolean(approved && approved.allowed) : Boolean(approved)
+    if (!userDecision) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
+    }
+  }
+
+  if (permissionPolicy && typeof permissionPolicy.authorizeWithContext === 'function') {
+    const permissions = require('./toolLoop/permission')
+    const prompter = {
+      decide: () => userDecision
+        ? permissions.PermissionPromptDecision.Allow
+        : permissions.PermissionPromptDecision.Deny,
+    }
+    const authResult = permissionPolicy.authorizeWithContext('web_visualize', JSON.stringify(toolArgs), null, prompter)
+    if (!authResult || !authResult.authorized) {
       return { performed: false, ok: true, hasErrors: false, errors: [], result: null }
     }
   }

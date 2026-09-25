@@ -447,6 +447,7 @@ async function listModels({ provider, signal }) {
             }
           } catch {}
         }
+        if (pages > 1) return []
         break
       }
 
@@ -473,6 +474,7 @@ async function listModels({ provider, signal }) {
         break
       }
     } catch {
+      if (pages > 1) return []
       break
     }
   }

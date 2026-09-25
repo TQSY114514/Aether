@@ -876,7 +876,7 @@ Reply in this format:
                 if (v === 'allow' || v === 'ask' || v === 'deny') axes[axis] = v
               }
               permissionPolicy.withAxisPolicies(axes)
-              const ax = decideAxisPolicy(fn.name, axes)
+              const ax = decideAxisPolicy(fn.name, args, axes)
               if (ax.matched && ax.policy === 'ask') {
                 axisAskReason = `capability policy: ${ax.axis} axis requires approval`
               }
@@ -1286,6 +1286,7 @@ Reply ONLY with JSON:
         shadowSuccess = true
         return summary
       }
+      try { compaction.foldStaleToolOutputs(convo) } catch {}
       loopStateMachine.transition(LoopStates.PLANNING, { step: depth + 1 })
       continue
     }

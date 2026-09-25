@@ -35,7 +35,7 @@ export default function ModelPage() {
   const [testingId, setTestingId] = useState<number | null>(null)
   const [testingLatencyId, setTestingLatencyId] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; errorMessage?: string }>>({})
-  const [latencyResults, setLatencyResults] = useState<Record<number, { success: boolean; latencyMs: number; errorMessage?: string }>>({})
+  const [latencyResults, setLatencyResults] = useState<Record<number, { success: boolean; latencyMs: number; errorMessage?: string; modelName?: string }>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [newProvider, setNewProvider] = useState({ name: '', api_url: '', api_key: '', api_format: 'openai' })
   const [showAddModel, setShowAddModel] = useState<number | null>(null)
@@ -318,13 +318,13 @@ export default function ModelPage() {
                                 : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
                           }`}>
                             <Zap size={10} />
-                            {(latencyResults[provider.id] as any).modelName ? `${(latencyResults[provider.id] as any).modelName}: ` : ''}
+                            {latencyResults[provider.id].modelName ? `${latencyResults[provider.id].modelName}: ` : ''}
                             {latencyResults[provider.id].latencyMs} ms
                           </span>
                         ) : !latencyResults[provider.id].success && (
                           <span className="text-rose-500 text-[11px] inline-flex items-center gap-1">
                             <X size={12} />
-                            {(latencyResults[provider.id] as any).modelName ? `[${(latencyResults[provider.id] as any).modelName}] ` : ''}
+                            {latencyResults[provider.id].modelName ? `[${latencyResults[provider.id].modelName}] ` : ''}
                             {latencyResults[provider.id].errorMessage || t('models.latency_timeout')}
                           </span>
                         )

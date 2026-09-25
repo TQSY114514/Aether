@@ -1521,7 +1521,7 @@ const translations: Record<string, Record<string, string>> = {
     "agent.permission.allow_session": "本会话允许",
     "agent.status.running": "Agent 运行中",
     "agent.status.iterations": "{0} 步",
-    "agent.step": "步骤 {0}",
+    "agent.step": "步骤",
     "agent.permission.allow_remember": "永久允许",
     "agent.permission.alternatives": "替代方案",
     "agent.permission.axis_ask": "能力策略：{0} 类操作需要你的确认",
