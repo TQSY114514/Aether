@@ -207,7 +207,9 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 - **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — 迭代预算控制与优雅收尾机制（`iterationBudget.js`）、SQLite + FTS5 长期记忆（`autoMemory.js`）、本地实体关系图谱（`knowledgeGraph.js`）、长对话轨迹压缩（`trajectory.js`）及长效技能习得（`habitLearner.js`）。
 - **[OpenCode](https://github.com/sst/opencode)** — 终端 TUI 键盘状态机与 Timed Leader Key（`keyHandlers.js`）、`DialogSelect` 窗口化列表、编译期 Prompt 缓存策略（`cachePolicy.js`）及上下文预算管理器（`contextBudget.js`）。
 - **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI 表现层与 LLM 传输层解耦抽象（`agentMessage.js`）、统一事件流遥测架构（`agentEvents.js`）及运行中动态指令转向（`steering.js`）。
-- **ZCode** — 后台任务 `branchGeneration` 隔离与通知批次合并（`backgroundTasks.js`）、Prompt Cache 系统块排序与零 LLM 成本本地微压缩（`microcompact.js`）、多策略代码编辑匹配器（`editMatchers.js`）。
+- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 级级联模糊代码编辑匹配器（`editMatchers.js`）、写前只读时间戳防覆盖哨兵（`sessionContext.js` `readFileState`）、两阶段零 LLM 成本本地微压缩（`microcompact.js`）、后台任务 `branchGeneration` 隔离与通知批次合并（`backgroundTasks.js`）、内置多 Agent 角色与工作流编排模板（`.aether/agents`、`.aether/workflows`）及 GitHub URL / `owner/repo` 技能一键安装（`skills.js`）。
+- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent 运行时控制平面治理设计（`AgentSettings.tsx`）、多 Agent 角色权限隔离与交叉验证机制（`securityAudit.js` 中 `Hunter != Verifier`、`agentRoles.js`）及计划步骤自动推进与完成态终态闭合机制（`planning.js`）。
+- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — 多粒度本地代码仓库检索与上下文感知搜索管线灵感（`registry.js`、`repoMap.js`）。
 - **[OpenAI Codex CLI](https://github.com/openai/codex)** — 基于测试与 Git Diff 证据的验证闭环（`toolLoop.js`）、TUI 紧凑运行计时器、单键权限直达（`y/s/a/n`）与快照回退（`rewind`）交互。
 - **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` 容错补丁解析引擎（`patchEngine.js`）、Git 工作流集成与压缩交接提示词设计。
 - **[Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code)** — 冗余工具输出折叠裁剪（`compaction.js`）与可见子步骤任务追踪设计。
