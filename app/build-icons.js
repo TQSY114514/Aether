@@ -5,7 +5,7 @@ const sharp = require('sharp')
 const ROOT = path.resolve(__dirname, '..')
 const ASSETS_DIR = path.join(ROOT, 'assets')
 const RESOURCES_DIR = path.join(__dirname, 'resources')
-const ICONS = ['logo', 'logo-dark', 'logo-mark']
+const ICONS = ['logo', 'logo-dark']
 const SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 async function generateIco(svgPath, outIcoPath) {
@@ -119,11 +119,9 @@ async function main() {
   }
 
   for (const name of ICONS) {
-    const srcPng = path.join(ASSETS_DIR, `${name}.png`)
-    const srcSvg = path.join(ASSETS_DIR, `${name}.svg`)
-    const src = fs.existsSync(srcPng) ? srcPng : (fs.existsSync(srcSvg) ? srcSvg : null)
-    if (!src) {
-      console.log(`[skip] ${name} not found`)
+    const src = path.join(ASSETS_DIR, `${name}.png`)
+    if (!fs.existsSync(src)) {
+      console.log(`[skip] ${name}.png not found`)
       continue
     }
 
@@ -138,13 +136,8 @@ async function main() {
   }
 
   // Generate app/resources/icon.png and icon-dark.png (256x256)
-  const logoPngSrc = path.join(ASSETS_DIR, 'logo.png')
-  const logoSvgSrc = path.join(ASSETS_DIR, 'logo.svg')
-  const logoSrc = fs.existsSync(logoPngSrc) ? logoPngSrc : logoSvgSrc
-
-  const logoDarkPngSrc = path.join(ASSETS_DIR, 'logo-dark.png')
-  const logoDarkSvgSrc = path.join(ASSETS_DIR, 'logo-dark.svg')
-  const logoDarkSrc = fs.existsSync(logoDarkPngSrc) ? logoDarkPngSrc : logoDarkSvgSrc
+  const logoSrc = path.join(ASSETS_DIR, 'logo.png')
+  const logoDarkSrc = path.join(ASSETS_DIR, 'logo-dark.png')
 
   if (fs.existsSync(logoSrc)) {
     const iconPng = path.join(RESOURCES_DIR, 'icon.png')

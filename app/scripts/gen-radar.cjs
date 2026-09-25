@@ -599,7 +599,8 @@ function main() {
 
   const args = process.argv.slice(2);
   const langArg = args.find((a) => a.startsWith('--lang='));
-  const targetLangs = langArg ? [langArg.split('=')[1]] : Object.keys(I18N);
+  const allArg = args.includes('--all');
+  const targetLangs = langArg ? [langArg.split('=')[1]] : (allArg ? Object.keys(I18N) : ['en', 'zh-CN', 'ja']);
 
   console.log(`Generating radar SVGs for locales: ${targetLangs.join(', ')}...`);
 
