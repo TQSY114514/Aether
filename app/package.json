@@ -72,6 +72,7 @@
   ],
   "scripts": {
     "aether": "node cli.js",
+    "gen:notices": "node scripts/gen-third-party-notices.mjs",
     "dev:renderer": "vite",
     "dev:electron": "electron .",
     "dev": "concurrently -k \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",

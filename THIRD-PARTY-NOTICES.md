@@ -3,7 +3,13 @@
 本文件列出随 Aether 一同分发的第三方组件及其许可条款。
 Aether 自身的许可见 [`LICENSE`](./LICENSE)，版权归属声明见 [`NOTICE`](./NOTICE)。
 
-清单由 `app/package-lock.json` 的生产依赖闭包生成（共 **32** 个组件），按许可分组。
+清单由 `app/package-lock.json` 的生产依赖闭包生成（共 **30** 个组件），按许可分组。
+
+> **适用范围**：本清单描述仓库在生成时锁定的生产依赖闭包，也就是随桌面安装包一同打包的组件版本。
+> 通过 npm 安装 `aetherai` 时依赖由你的包管理器就地解析安装（`dependencies` 使用 `^` 区间），实际安装的版本可能不同 ——
+> 那种情况下请以 `node_modules` 中各组件自带的 LICENSE 文件为准。
+>
+> 重新生成：`node app/scripts/gen-third-party-notices.mjs`（根目录与本目录两份必须完全一致）。
 
 ## 组件清单 / Component Index
 
@@ -11,13 +17,11 @@ Aether 自身的许可见 [`LICENSE`](./LICENSE)，版权归属声明见 [`NOTIC
 | :--- | :--- | :--- |
 | `@tanstack/react-virtual` | 3.14.11 | MIT |
 | `@tanstack/virtual-core` | 3.17.9 | MIT |
-| `@types/react` | 19.3.0 | MIT |
 | `@types/trusted-types` | 2.0.7 | MIT |
 | `argparse` | 2.0.1 | Python-2.0 |
 | `base64-js` | 1.5.1 | MIT |
 | `better-sqlite3` | 13.0.3 | MIT |
 | `builder-util-runtime` | 9.7.0 | MIT |
-| `csstype` | 3.2.3 | MIT |
 | `debug` | 4.4.3 | MIT |
 | `dompurify` | 3.4.15 | (MPL-2.0 OR Apache-2.0) |
 | `electron-updater` | 6.8.9 | MIT |
@@ -68,30 +72,26 @@ SOFTWARE.
 
 - `@tanstack/react-virtual@3.14.11` — Copyright (c) 2021-present Tanner Linsley
 - `@tanstack/virtual-core@3.17.9` — Copyright (c) 2021-present Tanner Linsley
-- `@types/react@19.3.0` — Copyright (c) Microsoft Corporation.
 - `@types/trusted-types@2.0.7` — Copyright (c) Microsoft Corporation.
 - `base64-js@1.5.1` — Copyright (c) 2014 Jameson Little
 - `better-sqlite3@13.0.3` — Copyright (c) 2017 Joshua Wise
 - `builder-util-runtime@9.7.0` — Copyright (c) 2015 Loopline Systems
-- `csstype@3.2.3` — Copyright (c) 2017-2018 Fredrik Nicol
 - `debug@4.4.3` — Copyright (c) 2014-2017 TJ Holowaychuk <tj@vision-media.ca>
 - `electron-updater@6.8.9` — Copyright (c) 2015 Loopline Systems
 - `fs-extra@10.1.0` — Copyright (c) 2011-2017 JP Richardson
-- `js-tiktoken@1.0.21` — (未附带独立版权行)
+- `js-tiktoken@1.0.21` — 包内未附带独立版权行（许可声明见其 `package.json`）
 - `js-yaml@4.3.2` — Copyright (C) 2011-2015 by Vitaly Puzrin
 - `jsonfile@6.2.1` — Copyright (c) 2012-2015, JP Richardson <jprichardson@gmail.com>
-- `lazy-val@1.0.5` — (未附带独立版权行)
+- `lazy-val@1.0.5` — 包内未附带独立版权行（许可声明见其 `package.json`）
 - `lodash.escaperegexp@4.1.2` — Copyright jQuery Foundation and other contributors <https://jquery.org/>
 - `lodash.isequal@4.5.0` — Copyright JS Foundation and other contributors <https://js.foundation/>
 - `ms@2.1.3` — Copyright (c) 2020 Vercel, Inc.
 - `node-addon-api@8.9.0` — Copyright (c) 2017 [Node.js API collaborators](https://github.com/nodejs/node-addon-api#collaborators)
-- `react@19.3.0` — Copyright (c) Meta Platforms, Inc. and affiliates.
 - `react-dom@19.3.0` — Copyright (c) Meta Platforms, Inc. and affiliates.
+- `react@19.3.0` — Copyright (c) Meta Platforms, Inc. and affiliates.
 - `scheduler@0.28.0` — Copyright (c) Meta Platforms, Inc. and affiliates.
 - `tiny-typed-emitter@2.1.0` — Copyright (c) 2020 Zurab Benashvili (binier) <zura.bena@gmail.com>
 - `universalify@2.0.1` — Copyright (c) 2017, Ryan Zimmerman <opensrc@ryanzim.com>
-- `js-tiktoken@1.0.21` — 包内未附带独立版权行（许可声明见其 `package.json`）
-- `lazy-val@1.0.5` — 包内未附带独立版权行（许可声明见其 `package.json`）
 - `zustand@5.0.15` — Copyright (c) 2019 Paul Henschel
 
 ## (MPL-2.0 OR Apache-2.0)
@@ -189,27 +189,28 @@ Apache License
 
    4. Redistribution. You may reproduce and distribute copies of the
       Work or Derivative Works thereof in any medium, with or without
-      modifications, and in Source or Object form, provided that You meet
-      the following conditions:
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
 
-      (a) You must give any other recipients of the Work or Derivative Works
-          a copy of this License; and
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
 
       (b) You must cause any modified files to carry prominent notices
           stating that You changed the files; and
 
-      (c) You must retain, in the Source form of any Derivative Works that
-          You distribute, all copyright, patent, trademark, and attribution
-          notices from the Source form of the Work, excluding those notices
-          that do not pertain to any part of the Derivative Works; and
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
 
       (d) If the Work includes a "NOTICE" text file as part of its
           distribution, then any Derivative Works that You distribute must
           include a readable copy of the attribution notices contained
           within such NOTICE file, excluding those notices that do not
-          pertain to any part of the Derivative Works, in at least one of
-          the following places: within a NOTICE text file distributed as
-          part of the Derivative Works; within the Source form or
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
           documentation, if provided along with the Derivative Works; or,
           within a display generated by the Derivative Works, if and
           wherever such third-party notices normally appear. The contents
@@ -231,6 +232,9 @@ Apache License
       any Contribution intentionally submitted for inclusion in the Work
       by You to the Licensor shall be under the terms and conditions of
       this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
 
    6. Trademarks. This License does not grant permission to use the trade
       names, trademarks, service marks, or product names of the Licensor,
@@ -263,11 +267,39 @@ Apache License
       the Work or Derivative Works thereof, You may choose to offer,
       and charge a fee for, acceptance of support, warranty, indemnity,
       or other liability obligations and/or rights consistent with this
-      License. However, in accepting such obligations, you may act only
-      on your own behalf and on your sole responsibility, not on behalf
-      of any other Contributor.
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 ```
 
 ## BSD-3-Clause
@@ -372,12 +404,11 @@ software or this license, under any kind of legal claim.***
 
 适用组件：`graceful-fs@4.2.11`, `semver@7.7.4`
 
-（本组正文，来自 `semver`）
-
+（本组正文，来自 `graceful-fs@4.2.11`）
 ```
 The ISC License
 
-Copyright (c) Isaac Z. Schlueter and Contributors
+Copyright (c) 2011-2022 Isaac Z. Schlueter, Ben Noordhuis, and Contributors
 
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
@@ -394,8 +425,7 @@ IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 适用组件：`lucide-react@1.45.0`
 
-（本组正文，来自 `lucide-react`）
-
+（本组正文，来自 `lucide-react@1.45.0`）
 ```
 ISC License
 
@@ -529,32 +559,176 @@ prepared by Licensee.
 3. In the event Licensee prepares a derivative work that is based on
 or incorporates Python or any part thereof, and wants to make
 the derivative work available to others as provided herein, then
-Licensee hereby agrees to include in any such work a brief summary
-of the changes made to Python.
+Licensee hereby agrees to include in any such work a brief summary of
+the changes made to Python.
 
-4. PSF is making Python available to Licensee on an "AS IS" basis.
-PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED.
-BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND DISCLAIMS
-ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS FOR
-ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT INFRINGE
-ANY THIRD PARTY RIGHTS.
+4. PSF is making Python available to Licensee on an "AS IS"
+basis.  PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR
+IMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND
+DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS
+FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT
+INFRINGE ANY THIRD PARTY RIGHTS.
 
 5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON
-FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS A
-RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON, OR ANY
-DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS
+A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON,
+OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
 
 6. This License Agreement will automatically terminate upon a material
 breach of its terms and conditions.
 
-7. Nothing in this License Agreement shall be interpreted or construed
-as a grant of any rights to use the trade names, trademarks, or service
-marks of PSF, except as permitted by this License Agreement.
+7. Nothing in this License Agreement shall be deemed to create any
+relationship of agency, partnership, or joint venture between PSF and
+Licensee.  This License Agreement does not grant permission to use PSF
+trademarks or trade name in a trademark sense to endorse or promote
+products or services of Licensee, or any third party.
 
-8. This License Agreement is governed by the laws of the State of Virginia,
-United States. Without limiting the foregoing, with regard to this
-License Agreement, the parties specifically agree to submit to the
-personal jurisdiction of, and agree that venue shall be in, the federal
-courts of the Eastern District of Virginia, United States.
+8. By copying, installing or otherwise using Python, Licensee
+agrees to be bound by the terms and conditions of this License
+Agreement.
+
+
+BEOPEN.COM LICENSE AGREEMENT FOR PYTHON 2.0
+-------------------------------------------
+
+BEOPEN PYTHON OPEN SOURCE LICENSE AGREEMENT VERSION 1
+
+1. This LICENSE AGREEMENT is between BeOpen.com ("BeOpen"), having an
+office at 160 Saratoga Avenue, Santa Clara, CA 95051, and the
+Individual or Organization ("Licensee") accessing and otherwise using
+this software in source or binary form and its associated
+documentation ("the Software").
+
+2. Subject to the terms and conditions of this BeOpen Python License
+Agreement, BeOpen hereby grants Licensee a non-exclusive,
+royalty-free, world-wide license to reproduce, analyze, test, perform
+and/or display publicly, prepare derivative works, distribute, and
+otherwise use the Software alone or in any derivative version,
+provided, however, that the BeOpen Python License is retained in the
+Software, alone or in any derivative version prepared by Licensee.
+
+3. BeOpen is making the Software available to Licensee on an "AS IS"
+basis.  BEOPEN MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR
+IMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, BEOPEN MAKES NO AND
+DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS
+FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE SOFTWARE WILL NOT
+INFRINGE ANY THIRD PARTY RIGHTS.
+
+4. BEOPEN SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF THE
+SOFTWARE FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS
+AS A RESULT OF USING, MODIFYING OR DISTRIBUTING THE SOFTWARE, OR ANY
+DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+
+5. This License Agreement will automatically terminate upon a material
+breach of its terms and conditions.
+
+6. This License Agreement shall be governed by and interpreted in all
+respects by the law of the State of California, excluding conflict of
+law provisions.  Nothing in this License Agreement shall be deemed to
+create any relationship of agency, partnership, or joint venture
+between BeOpen and Licensee.  This License Agreement does not grant
+permission to use BeOpen trademarks or trade names in a trademark
+sense to endorse or promote products or services of Licensee, or any
+third party.  As an exception, the "BeOpen Python" logos available at
+http://www.pythonlabs.com/logos.html may be used according to the
+permissions granted on that web page.
+
+7. By copying, installing or otherwise using the software, Licensee
+agrees to be bound by the terms and conditions of this License
+Agreement.
+
+
+CNRI LICENSE AGREEMENT FOR PYTHON 1.6.1
+---------------------------------------
+
+1. This LICENSE AGREEMENT is between the Corporation for National
+Research Initiatives, having an office at 1895 Preston White Drive,
+Reston, VA 20191 ("CNRI"), and the Individual or Organization
+("Licensee") accessing and otherwise using Python 1.6.1 software in
+source or binary form and its associated documentation.
+
+2. Subject to the terms and conditions of this License Agreement, CNRI
+hereby grants Licensee a nonexclusive, royalty-free, world-wide
+license to reproduce, analyze, test, perform and/or display publicly,
+prepare derivative works, distribute, and otherwise use Python 1.6.1
+alone or in any derivative version, provided, however, that CNRI's
+License Agreement and CNRI's notice of copyright, i.e., "Copyright (c)
+1995-2001 Corporation for National Research Initiatives; All Rights
+Reserved" are retained in Python 1.6.1 alone or in any derivative
+version prepared by Licensee.  Alternately, in lieu of CNRI's License
+Agreement, Licensee may substitute the following text (omitting the
+quotes): "Python 1.6.1 is made available subject to the terms and
+conditions in CNRI's License Agreement.  This Agreement together with
+Python 1.6.1 may be located on the Internet using the following
+unique, persistent identifier (known as a handle): 1895.22/1013.  This
+Agreement may also be obtained from a proxy server on the Internet
+using the following URL: http://hdl.handle.net/1895.22/1013".
+
+3. In the event Licensee prepares a derivative work that is based on
+or incorporates Python 1.6.1 or any part thereof, and wants to make
+the derivative work available to others as provided herein, then
+Licensee hereby agrees to include in any such work a brief summary of
+the changes made to Python 1.6.1.
+
+4. CNRI is making Python 1.6.1 available to Licensee on an "AS IS"
+basis.  CNRI MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR
+IMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, CNRI MAKES NO AND
+DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS
+FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON 1.6.1 WILL NOT
+INFRINGE ANY THIRD PARTY RIGHTS.
+
+5. CNRI SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON
+1.6.1 FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS
+A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON 1.6.1,
+OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+
+6. This License Agreement will automatically terminate upon a material
+breach of its terms and conditions.
+
+7. This License Agreement shall be governed by the federal
+intellectual property law of the United States, including without
+limitation the federal copyright law, and, to the extent such
+U.S. federal law does not apply, by the law of the Commonwealth of
+Virginia, excluding Virginia's conflict of law provisions.
+Notwithstanding the foregoing, with regard to derivative works based
+on Python 1.6.1 that incorporate non-separable material that was
+previously distributed under the GNU General Public License (GPL), the
+law of the Commonwealth of Virginia shall govern this License
+Agreement only as to issues arising under or with respect to
+Paragraphs 4, 5, and 7 of this License Agreement.  Nothing in this
+License Agreement shall be deemed to create any relationship of
+agency, partnership, or joint venture between CNRI and Licensee.  This
+License Agreement does not grant permission to use CNRI trademarks or
+trade name in a trademark sense to endorse or promote products or
+services of Licensee, or any third party.
+
+8. By clicking on the "ACCEPT" button where indicated, or by copying,
+installing or otherwise using Python 1.6.1, Licensee agrees to be
+bound by the terms and conditions of this License Agreement.
+
+        ACCEPT
+
+
+CWI LICENSE AGREEMENT FOR PYTHON 0.9.0 THROUGH 1.2
+--------------------------------------------------
+
+Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,
+The Netherlands.  All rights reserved.
+
+Permission to use, copy, modify, and distribute this software and its
+documentation for any purpose and without fee is hereby granted,
+provided that the above copyright notice appear in all copies and that
+both that copyright notice and this permission notice appear in
+supporting documentation, and that the name of Stichting Mathematisch
+Centrum or CWI not be used in advertising or publicity pertaining to
+distribution of the software without specific, written prior
+permission.
+
+STICHTING MATHEMATISCH CENTRUM DISCLAIMS ALL WARRANTIES WITH REGARD TO
+THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS, IN NO EVENT SHALL STICHTING MATHEMATISCH CENTRUM BE LIABLE
+FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
-

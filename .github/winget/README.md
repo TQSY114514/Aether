@@ -14,6 +14,8 @@
 #   4. 提 PR, 等社区审核合并(通常 1-3 天)
 #
 # 注意: 每次发版都要更新哈希(SHA256)与版本号。
+# 注意: License 字段必须与所提交的版本一致 —— v0.9.1 及以前为 MIT; 自 Apache-2.0 切换
+#       (见 CHANGELOG 的 [Unreleased] 段) 之后的版本填 Apache-2.0。下面示例是 v0.8.0, 故保留 MIT。
 
 # ─── 本文件是模板, 实际 manifest 需按 wingetcreate 输出替换 ───
 PackageIdentifier: Aether.Aether
@@ -21,7 +23,7 @@ PackageVersion: 0.8.0
 PackageLocale: en-US
 Publisher: TQSY114514
 PackageName: Aether
-License: Apache-2.0
+License: MIT
 ShortDescription: Local-first multi-model AI workbench - chat with any model, run a safe coding agent, compare models side-by-side
 InstallerType: exe
 Installers:

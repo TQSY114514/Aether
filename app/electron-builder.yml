@@ -15,6 +15,15 @@ extraResources:
     to: resources
     filter:
       - "**/*"
+  # Licence/notice files are also listed under `files` (inside app.asar). These copies
+  # land next to the archive as plain readable files, so desktop users can actually
+  # find the attribution without unpacking the asar.
+  - from: LICENSE
+    to: LICENSE
+  - from: NOTICE
+    to: NOTICE
+  - from: THIRD-PARTY-NOTICES.md
+    to: THIRD-PARTY-NOTICES.md
 files:
   - electron/**/*
   - dist/**/*
