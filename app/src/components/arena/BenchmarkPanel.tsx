@@ -181,6 +181,11 @@ export default function BenchmarkPanel() {
           </div>
           {objResult && Array.isArray(objResult.models) && (
             <div className="space-y-1 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+              {(objResult as any).baselineAlreadyPassed && (
+                <div className="text-[11px] px-2 py-1.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                  {t('arena.objective.baseline_passed_warn')}
+                </div>
+              )}
               {objResult.models.map((m) => (
                 <div key={m.modelId} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'var(--bg-primary)' }}>
                   <span className="font-medium truncate flex-1" style={{ color: 'var(--text-primary)' }}>{m.modelName}</span>

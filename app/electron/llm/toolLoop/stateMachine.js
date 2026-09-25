@@ -12,10 +12,21 @@ const { LoopPhase, StepScheduler } = require('./scheduler')
 const { RuntimeDriver } = require('./runtime')
 const log = require('../../logger')
 
+const LoopStates = {
+  IDLE: LoopPhase.INIT,
+  PLANNING: LoopPhase.PLAN,
+  EXECUTING_TOOLS: LoopPhase.ACT,
+  OBSERVING: LoopPhase.OBSERVE,
+  VERIFYING: LoopPhase.VERIFY,
+  COMPLETED: LoopPhase.COMPLETE,
+  FAILED: LoopPhase.ERROR,
+  ...LoopPhase,
+}
+
 class ToolStateMachine {
   /**
    * @param {object} options
-   * @param {RuntimeDriver} options.runtime
+   * @param {RuntimeDriver} [options.runtime]
    * @param {StepScheduler} [options.scheduler]
    * @param {object} [options.permission]
    * @param {object} [options.options]
@@ -25,6 +36,55 @@ class ToolStateMachine {
     this.scheduler = options.scheduler || new StepScheduler(options.options)
     this.permission = options.permission
     this.options = options.options || {}
+    this.sessionId = options.sessionId || null
+    this.state = this.scheduler.createInitialState(options.userMessage || '')
+    this.history = []
+  }
+
+  /**
+   * Transition the state machine to a new phase and advance scheduler state.
+   * @param {string} nextPhase
+   * @param {object} [meta]
+   * @returns {object} Updated state
+   */
+  transition(nextPhase, meta = {}) {
+    const prevPhase = this.state ? this.state.phase : LoopPhase.INIT
+    const targetPhase = nextPhase || LoopPhase.PLAN
+    if (targetPhase === LoopStates.EXECUTING_TOOLS) {
+      this.state = {
+        ...this.state,
+        phase: LoopPhase.ACT,
+        depth: typeof meta.step === 'number' ? meta.step : (this.state.depth + 1),
+      }
+    } else if (targetPhase === LoopStates.VERIFYING) {
+      this.state = {
+        ...this.state,
+        phase: LoopPhase.VERIFY,
+        verificationNeeded: true,
+      }
+    } else if (targetPhase === LoopStates.COMPLETED) {
+      this.state = this.scheduler.step(
+        { ...this.state, verificationNeeded: false },
+        { type: 'VERIFICATION_PASSED', payload: meta }
+      )
+    } else if (targetPhase === LoopStates.FAILED) {
+      this.state = this.scheduler.step(
+        this.state,
+        { type: 'ABORTED', payload: { error: meta.finalStatus || 'failed' } }
+      )
+    } else {
+      this.state = {
+        ...this.state,
+        phase: targetPhase,
+      }
+    }
+    this.history.push({
+      from: prevPhase,
+      to: this.state.phase,
+      meta,
+      ts: Date.now(),
+    })
+    return this.state
   }
 
   /**
@@ -59,6 +119,7 @@ class ToolStateMachine {
       }
     }
 
+    this.state = state
     return {
       state,
       messages: convo,
@@ -72,5 +133,6 @@ class ToolStateMachine {
 module.exports = {
   ToolStateMachine,
   LoopPhase,
+  LoopStates,
   StepScheduler,
 }

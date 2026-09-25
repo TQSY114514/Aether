@@ -710,7 +710,8 @@
       "arena.objective.done_winner": "客观评测完成 · 胜出: {0}",
       "arena.objective.done": "客观评测完成",
       "arena.objective.failed": "客观评测失败: {0}",
-      "arena.objective.aborted": "已中止客观评测"
+      "arena.objective.aborted": "已中止客观评测",
+      "arena.objective.baseline_passed_warn": "未修改前的基线验证命令已通过或超时，无法区分有效修复与无关修改，本轮不记胜出。"
     }
   },
   {

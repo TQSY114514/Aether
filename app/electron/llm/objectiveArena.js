@@ -379,10 +379,10 @@ async function runObjectiveEvaluation({
       baselineTempDir,
       signal,
       expectedExitCode,
-      Math.min(timeoutMs, 15000),
+      timeoutMs,
       baseCwd,
     )
-    const baselineAlreadyPassed = Boolean(baselineRes.ok)
+    const baselineAlreadyPassed = Boolean(baselineRes.ok || baselineRes.timedOut)
 
     const roundResults = await Promise.all(
       selectedModels.map(async (m) => {

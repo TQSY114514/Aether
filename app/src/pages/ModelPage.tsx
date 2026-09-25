@@ -96,9 +96,9 @@ export default function ModelPage() {
     setTestingLatencyId(providerId)
     try {
       const res = await window.electronAPI.provider.testLatency(providerId, modelName)
-      setLatencyResults((prev) => ({ ...prev, [providerId]: res }))
+      setLatencyResults((prev) => ({ ...prev, [providerId]: { ...res, modelName } }))
     } catch (e: any) {
-      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: false, latencyMs: -1, errorMessage: e?.message || t('models.test_failed') } }))
+      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: false, latencyMs: -1, errorMessage: e?.message || t('models.test_failed'), modelName } }))
     }
     setTestingLatencyId(null)
   }
@@ -301,17 +301,26 @@ export default function ModelPage() {
                           {testResult.success ? t('models.success') : (testResult.errorMessage || t('models.fail'))}
                         </span>
                       )}
-                      {latencyResults[provider.id]?.success && latencyResults[provider.id].latencyMs >= 0 && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[11px] font-semibold border ${
-                          latencyResults[provider.id].latencyMs < 400
-                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                            : latencyResults[provider.id].latencyMs < 1200
-                              ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-                              : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
-                        }`}>
-                          <Zap size={10} />
-                          {latencyResults[provider.id].latencyMs} ms
-                        </span>
+                      {latencyResults[provider.id] !== undefined && (
+                        latencyResults[provider.id].success && latencyResults[provider.id].latencyMs >= 0 ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[11px] font-semibold border ${
+                            latencyResults[provider.id].latencyMs < 400
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                              : latencyResults[provider.id].latencyMs < 1200
+                                ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                                : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                          }`}>
+                            <Zap size={10} />
+                            {(latencyResults[provider.id] as any).modelName ? `${(latencyResults[provider.id] as any).modelName}: ` : ''}
+                            {latencyResults[provider.id].latencyMs} ms
+                          </span>
+                        ) : !latencyResults[provider.id].success && (
+                          <span className="text-rose-500 text-[11px] inline-flex items-center gap-1">
+                            <X size={12} />
+                            {(latencyResults[provider.id] as any).modelName ? `[${(latencyResults[provider.id] as any).modelName}] ` : ''}
+                            {latencyResults[provider.id].errorMessage || t('models.latency_timeout')}
+                          </span>
+                        )
                       )}
                     </div>
                   )}

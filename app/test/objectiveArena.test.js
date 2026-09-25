@@ -148,6 +148,18 @@ describe('extractAndApplyPatches', () => {
     expect(routed).not.toBeNull()
     expect(routed.model.model_name).toBe('gpt-4o')
   })
+
+  it('transitions ToolStateMachine across PLANNING, EXECUTING_TOOLS, VERIFYING, and COMPLETED states', () => {
+    const { ToolStateMachine, LoopStates } = require('../electron/llm/toolLoop/stateMachine')
+    const sm = new ToolStateMachine({ sessionId: 42 })
+    expect(sm.transition(LoopStates.PLANNING, { model: 'gpt-4o' }).phase).toBe('plan')
+    expect(sm.transition(LoopStates.EXECUTING_TOOLS, { step: 1, count: 2 }).phase).toBe('act')
+    expect(sm.transition(LoopStates.VERIFYING, { phase: 'visual' }).phase).toBe('verify')
+    const done = sm.transition(LoopStates.COMPLETED, { finalStatus: 'success' })
+    expect(done.phase).toBe('complete')
+    expect(done.isDone).toBe(true)
+    expect(sm.history.length).toBe(4)
+  })
 })
 
 describe('runObjectiveEvaluation', () => {

@@ -64,6 +64,7 @@
   "arena.objective.done": "Objective evaluation complete",
   "arena.objective.failed": "Objective evaluation failed: {0}",
   "arena.objective.aborted": "Objective evaluation aborted",
+  "arena.objective.baseline_passed_warn": "Baseline verification command already passed or timed out before patching; candidate wins are withheld.",
   "agent.timeline.title": "Run Timeline & Trajectory",
   "agent.timeline.empty": "No execution logs recorded for this session yet.",
   "agent.timeline.tainted_badge": "External Taint",

@@ -163,6 +163,7 @@ const translations: Record<string, Record<string, string>> = {
     "arena.objective.done": "Objective evaluation complete",
     "arena.objective.failed": "Objective evaluation failed: {0}",
     "arena.objective.aborted": "Objective evaluation aborted",
+    "arena.objective.baseline_passed_warn": "Baseline verification command already passed or timed out before patching; candidate wins are withheld.",
     "agent.timeline.title": "Run Timeline & Trajectory",
     "agent.timeline.empty": "No execution logs recorded for this session yet.",
     "agent.timeline.tainted_badge": "External Taint",
@@ -860,6 +861,7 @@ const translations: Record<string, Record<string, string>> = {
     "arena.objective.done": "ǝʇǝldɯoɔ uoᴉʇɐnlɐʌǝ ǝʌᴉʇɔǝɾqo",
     "arena.objective.failed": " :pǝlᴉɐɟ uoᴉʇɐnlɐʌǝ ǝʌᴉʇɔǝɾqo{0}",
     "arena.objective.aborted": "pǝʇɹoqɐ uoᴉʇɐnlɐʌǝ ǝʌᴉʇɔǝɾqo",
+    "arena.objective.baseline_passed_warn": ".plǝɥɥʇᴉʍ ǝɹɐ suᴉʍ ǝʇɐpᴉpuɐɔ ;ƃuᴉɥɔʇɐd ǝɹoɟǝq ʇno pǝɯᴉʇ ɹo pǝssɐd ʎpɐǝɹlɐ puɐɯɯoɔ uoᴉʇɐɔᴉɟᴉɹǝʌ ǝuᴉlǝsɐq",
     "agent.timeline.title": "ʎɹoʇɔǝɾɐɹʇ & ǝuᴉlǝɯᴉʇ unɹ",
     "agent.timeline.empty": ".ʇǝʎ uoᴉssǝs sᴉɥʇ ɹoɟ pǝpɹoɔǝɹ sƃol uoᴉʇnɔǝxǝ ou",
     "agent.timeline.tainted_badge": "ʇuᴉɐʇ lɐuɹǝʇxǝ",
@@ -2200,7 +2202,8 @@ const translations: Record<string, Record<string, string>> = {
     "arena.objective.done_winner": "客观评测完成 · 胜出: {0}",
     "arena.objective.done": "客观评测完成",
     "arena.objective.failed": "客观评测失败: {0}",
-    "arena.objective.aborted": "已中止客观评测"
+    "arena.objective.aborted": "已中止客观评测",
+    "arena.objective.baseline_passed_warn": "未修改前的基线验证命令已通过或超时，无法区分有效修复与无关修改，本轮不记胜出。"
   },
   "es": {
     "app.name": "Aether",
