@@ -675,7 +675,7 @@ async function runObjectiveEvaluation({
         // If all passed, margin of 20% end-to-end latency difference determines clean win
         if (top.latencyMs < runnerUp.latencyMs * 0.8) {
           winner = top
-          losers.push(runnerUp)
+          losers.push(...passedModels.slice(1))
         } else {
           isTie = true
         }
