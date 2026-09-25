@@ -184,7 +184,7 @@ export default function Sidebar() {
                 <button
                   key={id}
                   onClick={() => setCurrentView(id)}
-                  className={`relative p-2 rounded-md transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer ${active ? 'text-[var(--accent)] bg-[var(--content-bg)] shadow-xs' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60 hover:text-[var(--text-primary)]'}`}
+                  className={`relative p-2 rounded-md transition-all duration-200 hover:scale-110 active:scale-95 motion-reduce:transform-none motion-reduce:transition-none cursor-pointer ${active ? 'text-[var(--accent)] bg-[var(--content-bg)] shadow-xs' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60 hover:text-[var(--text-primary)]'}`}
                   title={title}
                   aria-label={title}
                 >
@@ -340,9 +340,9 @@ export default function Sidebar() {
 
 function NavItem({ icon: Icon, label, active, onClick, badge }: { icon: any; label: string; active: boolean; onClick: () => void; badge?: number }) {
   return (
-    <button onClick={onClick} className={`group relative w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all duration-200 press-scale cursor-pointer ${active ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-xs font-semibold' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/40 hover:text-[var(--text-primary)] hover:translate-x-0.5'}`}>
-      <span className={`absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent)] transition-all duration-200 ${active ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-50'}`} />
-      <Icon size={15} className={`transition-all duration-200 group-hover:scale-110 ${active ? 'text-[var(--accent)] scale-105' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'}`} />
+    <button onClick={onClick} className={`group relative w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all duration-200 motion-reduce:transform-none motion-reduce:transition-none press-scale cursor-pointer ${active ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-xs font-semibold' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/40 hover:text-[var(--text-primary)] hover:translate-x-0.5'}`}>
+      <span className={`absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent)] transition-all duration-200 motion-reduce:transform-none motion-reduce:transition-none ${active ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-50'}`} />
+      <Icon size={15} className={`transition-all duration-200 motion-reduce:transform-none motion-reduce:transition-none group-hover:scale-110 ${active ? 'text-[var(--accent)] scale-105' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'}`} />
       <span className="truncate">{label}</span>
       {badge ? (
         <span className="ms-auto flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded-full tabular-nums bg-[var(--accent)] text-white">

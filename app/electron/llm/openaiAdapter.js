@@ -468,24 +468,34 @@ async function listModels({ provider, signal }) {
       // Check for pagination (restrict to same origin to prevent credential leakage / SSRF)
       const providerBase = baseUrl(provider)
       const providerOrigin = new URL(providerBase).origin
-      if (data.has_more && data.last_id) {
-        url = `${providerBase}/models?after=${encodeURIComponent(data.last_id)}`
+      let nextUrl = null
+      if (data.has_more) {
+        if (!data.last_id) return []
+        nextUrl = `${providerBase}/models?after=${encodeURIComponent(data.last_id)}`
       } else if (data.next_page) {
         try {
           const candidateUrl = new URL(String(data.next_page), providerBase)
-          if (candidateUrl.origin !== providerOrigin) break
-          url = candidateUrl.href
+          if (candidateUrl.origin !== providerOrigin) return []
+          nextUrl = candidateUrl.href
         } catch {
-          break
+          return []
         }
       } else {
+        url = null
         break
       }
+
+      if (nextUrl === url) return []
+      url = nextUrl
     } catch {
       if (pages > 1) return []
       break
     }
   }
+
+  // If loop exited while url still points to an unvisited next page (e.g., hit MAX_PAGES),
+  // return [] to avoid destructive syncModels pruning on a truncated list.
+  if (url && pages >= MAX_PAGES) return []
 
   return Array.from(new Set(modelNames.filter(Boolean)))
 }

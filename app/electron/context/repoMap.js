@@ -350,16 +350,21 @@ function buildRepoMapText(map, optsOrMaxLines = 160) {
 
   // Binary search for token budget if output exceeds maxTokens
   if (countTokens(bestText) > maxTokens && high > 1) {
+    let foundFit = false
     while (low <= high) {
       const mid = Math.floor((low + high) / 2)
       const selected = scored.slice(0, mid).map(s => s.node)
       const candText = renderWithFiles(selected, allFileNodes.length - mid)
       if (countTokens(candText) <= maxTokens) {
         bestText = candText
+        foundFit = true
         low = mid + 1 // try to fit more
       } else {
         high = mid - 1 // prune down
       }
+    }
+    if (!foundFit) {
+      bestText = renderWithFiles(scored.slice(0, 1).map(s => s.node), allFileNodes.length - 1)
     }
   }
 

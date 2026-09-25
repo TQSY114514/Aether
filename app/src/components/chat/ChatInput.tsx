@@ -678,7 +678,7 @@ export default function ChatInput() {
             onSelect={(e) => setRefCursor((e.target as HTMLTextAreaElement).selectionStart)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={chatMode === 'arena' ? t('chat.arena.placeholder') : isStreaming ? '⚡ 输入中途纠偏指令 (Steer) / 按回车插话...' : isLooping ? t('inject.placeholder') : t('chat.placeholder')}
+            placeholder={currentPlaceholder}
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning}

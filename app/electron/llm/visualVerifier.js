@@ -189,7 +189,10 @@ async function runVisualVerification({
       }
     } catch {}
     const errors = extractConsoleErrors(res)
-    const hasErrors = errors.length > 0 || (typeof res === 'string' && res.startsWith('[error:'))
+    if (typeof res === 'string' && res.startsWith('[error:') && errors.length === 0) {
+      errors.push(res)
+    }
+    const hasErrors = errors.length > 0
 
     return {
       performed: true,

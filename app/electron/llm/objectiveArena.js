@@ -457,6 +457,47 @@ async function runObjectiveEvaluation({
       }
     }
 
+    // Build a bounded, deterministic snapshot of editable workspace source files so
+    // every candidate model receives identical relative paths and source text for SEARCH blocks.
+    let enrichedUserPrompt = prompt
+    try {
+      const candidates = []
+      const walk = async (dir) => {
+        if (candidates.length >= 40) return
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true }).catch(() => [])
+        for (const ent of entries) {
+          if (candidates.length >= 40) break
+          const full = path.join(dir, ent.name)
+          if (ent.isDirectory()) {
+            if (!SKIP_COPY_DIRS.has(ent.name) && !ent.name.startsWith('.')) await walk(full)
+          } else if (ent.isFile() && /\.(js|ts|jsx|tsx|mjs|cjs|py|json|css|html)$/i.test(ent.name)) {
+            const rel = path.relative(baseCwd, full).replace(/\\/g, '/')
+            if (!isSafeSandboxTarget(baseCwd, full, protectedRelFiles)) continue
+            candidates.push({ rel, full })
+          }
+        }
+      }
+      await walk(baseCwd)
+      // Prioritize files mentioned in the prompt, then sort lexicographically
+      candidates.sort((a, b) => {
+        const aHit = prompt.includes(path.basename(a.rel)) ? 0 : 1
+        const bHit = prompt.includes(path.basename(b.rel)) ? 0 : 1
+        return aHit !== bHit ? aHit - bHit : a.rel.localeCompare(b.rel)
+      })
+      const contextParts = []
+      let totalChars = 0
+      for (const item of candidates.slice(0, 12)) {
+        if (totalChars >= 24000) break
+        const content = await fs.promises.readFile(item.full, 'utf8').catch(() => '')
+        if (!content || content.length > 16000) continue
+        contextParts.push(`File: ${item.rel}\n\`\`\`\n${content}\n\`\`\``)
+        totalChars += content.length
+      }
+      if (contextParts.length > 0) {
+        enrichedUserPrompt = `${prompt}\n\nWorkspace Source Context:\n${contextParts.join('\n\n')}`
+      }
+    } catch {}
+
     const roundResults = await Promise.all(
       selectedModels.map(async (m) => {
         if (signal && signal.aborted) {
@@ -514,7 +555,7 @@ async function runObjectiveEvaluation({
             model: m,
             messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: prompt },
+              { role: 'user', content: enrichedUserPrompt },
             ],
             signal,
           })

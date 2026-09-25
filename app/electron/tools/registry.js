@@ -330,6 +330,9 @@ const TOOLS = [
       const { fuzzyFind } = require('./fuzzyMatch')
       const result = fuzzyFind(orig, o)
       if (!result.found) {
+        if (result.ambiguous) {
+          throw new Error(`old_string is ambiguous in ${p} (multiple matching or similar regions found). Please include more surrounding context lines to make it unique.`)
+        }
         // Build actionable error message with closest match
         let errMsg = `old_string not found in ${p}`
         if (result.closestLines) {

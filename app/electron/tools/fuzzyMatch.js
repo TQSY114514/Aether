@@ -111,6 +111,13 @@ function fuzzyFind(fileContent, needle, options = {}) {
   // 2. Whitespace-normalized match
   const matchIdxNorm = findSubArray(normFileLines, normNeedleLines, (a, b) => a === b);
   if (matchIdxNorm !== -1) {
+    const secondIdxNorm = findSubArray(normFileLines.slice(matchIdxNorm + 1), normNeedleLines, (a, b) => a === b);
+    if (secondIdxNorm !== -1) {
+      result.ambiguous = true;
+      result.closestLines = fileLines.slice(matchIdxNorm, matchIdxNorm + needleLines.length).join('\n');
+      result.similarity = 1.0;
+      return result;
+    }
     const { index, matchedText } = sliceMatchedSpan(matchIdxNorm, needleLines.length);
     return {
       found: true,
@@ -124,6 +131,7 @@ function fuzzyFind(fileContent, needle, options = {}) {
   // 3. Indent-offset match
   const needleIndentMatch = needleLines[0].match(/^[ \t]*/);
   const needleIndent = needleIndentMatch ? needleIndentMatch[0] : '';
+  const indentMatches = [];
   
   for (let i = 0; i <= fileLines.length - needleLines.length; i++) {
     const fileIndentMatch = fileLines[i].match(/^[ \t]*/);
@@ -148,20 +156,30 @@ function fuzzyFind(fileContent, needle, options = {}) {
     }
     
     if (match) {
-      const { index, matchedText } = sliceMatchedSpan(i, needleLines.length);
-      return {
-        found: true,
-        index,
-        matchedText,
-        strategy: 'Indent-offset match',
-        similarity: 1.0
-      };
+      indentMatches.push(i);
     }
+  }
+
+  if (indentMatches.length === 1) {
+    const { index, matchedText } = sliceMatchedSpan(indentMatches[0], needleLines.length);
+    return {
+      found: true,
+      index,
+      matchedText,
+      strategy: 'Indent-offset match',
+      similarity: 1.0
+    };
+  } else if (indentMatches.length > 1) {
+    result.ambiguous = true;
+    result.closestLines = fileLines.slice(indentMatches[0], indentMatches[0] + needleLines.length).join('\n');
+    result.similarity = 1.0;
+    return result;
   }
 
   // 4. Line-level Levenshtein sliding window
   let bestSim = 0;
   let bestIdx = -1;
+  const thresholdMatches = [];
   
   for (let i = 0; i <= fileLines.length - needleLines.length; i++) {
     let simSum = 0;
@@ -170,13 +188,30 @@ function fuzzyFind(fileContent, needle, options = {}) {
     }
     const avgSim = simSum / needleLines.length;
     
+    if (avgSim > 0.85) {
+      thresholdMatches.push({ idx: i, sim: avgSim });
+    }
     if (avgSim > bestSim) {
       bestSim = avgSim;
       bestIdx = i;
     }
   }
 
+  // Filter non-overlapping candidate regions exceeding the 0.85 threshold
+  const distinctCandidates = [];
+  for (const cand of thresholdMatches) {
+    if (distinctCandidates.every(prev => Math.abs(prev.idx - cand.idx) >= Math.max(1, needleLines.length))) {
+      distinctCandidates.push(cand);
+    }
+  }
+
   if (bestSim > 0.85 && bestIdx !== -1) {
+    if (distinctCandidates.length > 1) {
+      result.ambiguous = true;
+      result.closestLines = fileLines.slice(bestIdx, bestIdx + needleLines.length).join('\n');
+      result.similarity = bestSim;
+      return result;
+    }
     const { index, matchedText } = sliceMatchedSpan(bestIdx, needleLines.length);
     return {
       found: true,
