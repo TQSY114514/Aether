@@ -149,7 +149,7 @@ describe('extractAndApplyPatches', () => {
     expect(routed.model.model_name).toBe('gpt-4o')
   })
 
-  it('transitions ToolStateMachine across PLANNING, EXECUTING_TOOLS, VERIFYING, and COMPLETED states', () => {
+  it('transitions ToolStateMachine across PLANNING, EXECUTING_TOOLS, VERIFYING, COMPLETED, and FAILED states', () => {
     const { ToolStateMachine, LoopStates } = require('../electron/llm/toolLoop/stateMachine')
     const sm = new ToolStateMachine({ sessionId: 42 })
     expect(sm.transition(LoopStates.PLANNING, { model: 'gpt-4o' }).phase).toBe('plan')
@@ -159,6 +159,16 @@ describe('extractAndApplyPatches', () => {
     expect(done.phase).toBe('complete')
     expect(done.isDone).toBe(true)
     expect(sm.history.length).toBe(4)
+
+    const smBudget = new ToolStateMachine({ sessionId: 43 })
+    const failedBudget = smBudget.transition(LoopStates.FAILED, { finalStatus: 'budget_exhausted' })
+    expect(failedBudget.phase).toBe('error')
+    expect(failedBudget.error).toBe('budget_exhausted')
+
+    const smAbort = new ToolStateMachine({ sessionId: 44 })
+    const failedAbort = smAbort.transition(LoopStates.FAILED, { finalStatus: 'aborted' })
+    expect(failedAbort.phase).toBe('error')
+    expect(failedAbort.error).toBe('aborted')
   })
 })
 

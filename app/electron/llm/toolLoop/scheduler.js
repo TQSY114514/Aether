@@ -121,7 +121,7 @@ class StepScheduler {
           ...state,
           phase: LoopPhase.ERROR,
           isDone: true,
-          error: 'aborted',
+          error: (payload && payload.error) ? payload.error : 'aborted',
         }
       }
 

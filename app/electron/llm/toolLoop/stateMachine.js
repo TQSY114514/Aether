@@ -68,10 +68,16 @@ class ToolStateMachine {
         { type: 'VERIFICATION_PASSED', payload: meta }
       )
     } else if (targetPhase === LoopStates.FAILED) {
-      this.state = this.scheduler.step(
-        this.state,
-        { type: 'ABORTED', payload: { error: meta.finalStatus || 'failed' } }
-      )
+      const reason = meta.finalStatus || meta.error || 'aborted'
+      if (reason === 'budget_exhausted') {
+        const next = this.scheduler.step(this.state, { type: 'BUDGET_EXHAUSTED', payload: meta })
+        this.state = { ...next, phase: LoopPhase.ERROR, error: 'budget_exhausted' }
+      } else {
+        this.state = this.scheduler.step(
+          this.state,
+          { type: 'ABORTED', payload: { error: reason } }
+        )
+      }
     } else {
       this.state = {
         ...this.state,

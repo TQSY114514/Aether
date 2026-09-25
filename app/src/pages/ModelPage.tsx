@@ -81,14 +81,21 @@ export default function ModelPage() {
     const result = await window.electronAPI.provider.testConnection(providerId)
     const latencyMs = typeof result?.latencyMs === 'number' ? result.latencyMs : (Date.now() - start)
     setTestResults((prev) => ({ ...prev, [providerId]: result }))
-    setLatencyResults((prev) => ({
-      ...prev,
-      [providerId]: {
-        success: Boolean(result?.success),
-        latencyMs: result?.success ? latencyMs : -1,
-        errorMessage: result?.errorMessage,
-      },
-    }))
+    if (result?.success) {
+      setLatencyResults((prev) => ({
+        ...prev,
+        [providerId]: {
+          success: true,
+          latencyMs,
+        },
+      }))
+    } else {
+      setLatencyResults((prev) => {
+        const next = { ...prev }
+        delete next[providerId]
+        return next
+      })
+    }
     setTestingId(null)
   }
 
