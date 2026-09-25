@@ -54,5 +54,5 @@
 
   <!-- 底部渐变分隔线 -->
   <rect x="324" y="248" width="436" height="2" fill="url(#heroFade)" opacity="0.5"/>
-  <text x="324" y="272" font-family="'Inter','Segoe UI',sans-serif" font-size="11" fill="#818cf8" opacity="0.5">Electron · React · TypeScript · sql.js · MIT</text>
+  <text x="324" y="272" font-family="'Inter','Segoe UI',sans-serif" font-size="11" fill="#818cf8" opacity="0.5">Electron · React · TypeScript · sql.js · Apache-2.0</text>
 </svg>
