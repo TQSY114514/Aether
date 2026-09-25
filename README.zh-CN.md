@@ -187,22 +187,40 @@ flowchart LR
 
 ## 客观能力定位（对比 20 款主流 Agent）
 
-Aether 的设计重心在于**本地数据主权、多模型横向评测、细粒度权限安全以及 GUI/TUI 双端一致性**。在单模型代码补全速度与超大型代码库的专有云端索引上，独立开源工作台与 Cursor、Claude Code 等商业产品存在客观差距（下方雷达图基于 `app/scripts/gen-radar.cjs` 公开评分生成，不做满分美化）：
+Aether 拒绝“八边形全满”的宣传式打分。我们的优势集中在**本地 SQLite 数据主权 (`9.4/10`)** 与 **多模型自由切换 + 内置 Arena 评测 (`9.2/10`)**；在 **安全与权限门 (`8.4/10`)** 上具备 6 轴门禁与可选 Docker 沙箱，但由于 Windows 默认本地后端运行在用户态而非 OS 内核级沙箱，客观低于 Codex CLI (`9.8`) 与 Claude Code (`9.0`)；在 **单一编程深度 (`6.8/10`)** 与 **早期社区生态 (`6.5/10`)** 上，我们如实画出与 Cursor、Claude Code 等成熟商业产品的代差（下方雷达图由 `node app/scripts/gen-radar.cjs` 生成）：
 
 <div align="center">
-  <img src="./assets/agent-radar-2026.zh-CN.svg" width="88%" alt="Aether · Agent 能力与架构自评雷达" />
+  <img src="./assets/agent-radar-2026.zh-CN.svg" width="88%" alt="Aether · Agent 能力与架构客观自评雷达" />
 </div>
 
-详细的 8 维度评分标准与 20 款工具对比表格见 [docs/competitive-analysis.md](./docs/competitive-analysis.md)。
+详细的 8 维度扣分依据、短板说明与 20 款工具对比表格见 [docs/competitive-analysis.md](./docs/competitive-analysis.md)。
 
 ---
 
 ## 致谢 (Acknowledgements)
 
-Aether 的架构与实现参考并借鉴了以下开源项目与设计思想：
+Aether 的架构设计与具体模块实现参考并吸收了以下开源项目与工程先驱的设计思想（按代码模块溯源）：
 
-- **Agent 运行时与交互**：[Claude Code](https://claude.ai/code)（验证闭环、生命周期钩子、权限阶梯与 Ask/Plan 模式）、[pi](https://github.com/badlogic/pi-mono)（`AgentMessage` 消息解耦抽象与运行中 `steer()` 机制）、[OpenClaw](https://github.com/openclaw/openclaw)（上下文压缩算法、死循环检测与结果脱敏中间件）、[Hermes Agent](https://github.com/NousResearch/hermes-agent)（迭代预算控制与 SQLite + FTS5 长期记忆）、[OpenCode](https://github.com/sst/opencode)（TUI 键盘交互与权限门设计）、[Aider](https://github.com/Aider-AI/aider)（Git 集成流）、[OpenAI Codex](https://github.com/openai/codex)（进程树隔离）、[Evolver](https://github.com/EvoMap/evolver)、[DS4](https://gist.github.com/antirez)、[Continue](https://github.com/continuedev/continue)、[Grok Build](https://x.ai)。
-- **UI 与基础组件**：[shadcn/ui](https://github.com/shadcn-ui/ui) · [Magic UI](https://github.com/magicuidesign/magicui) · [cc-switch](https://github.com/farion1231/cc-switch) · [Model Context Protocol (MCP)](https://modelcontextprotocol.io) · [new-api](https://github.com/QuantumNous/new-api)。
+### Agent 框架与运行时机制
+- **[Claude Code](https://claude.ai/code) (Anthropic)** — 自动测试验证闭环（`debugAgent.js`）、10 点生命周期钩子规范（`hooks.js`）、权限阶梯模型（`trustEngine.js`）、`Ctrl+T` 任务面板、`ask_user` 结构化交互及文件修改行内 Diff 预审（`toolImpact.js`）。
+- **[OpenClaw](https://github.com/openclaw/openclaw)** — 上下文分块压缩算法（`compaction.js`）、工具调用损坏自愈（`toolCallRepair.js`）、只读工具结果缓存（`toolCache.js`）、语义死循环哈希检测（`toolResultHash.js`）及工具输出脱敏截断中间件（`toolResultMiddleware.js`）。
+- **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — 迭代预算控制与优雅收尾机制（`iterationBudget.js`）、SQLite + FTS5 长期记忆（`autoMemory.js`）、本地实体关系图谱（`knowledgeGraph.js`）、长对话轨迹压缩（`trajectory.js`）及长效技能习得（`habitLearner.js`）。
+- **[OpenCode](https://github.com/sst/opencode)** — 终端 TUI 键盘状态机与 Timed Leader Key（`keyHandlers.js`）、`DialogSelect` 窗口化列表、编译期 Prompt 缓存策略（`cachePolicy.js`）及上下文预算管理器（`contextBudget.js`）。
+- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI 表现层与 LLM 传输层解耦抽象（`agentMessage.js`）、统一事件流遥测架构（`agentEvents.js`）及运行中动态指令转向（`steering.js`）。
+- **ZCode** — 后台任务 `branchGeneration` 隔离与通知批次合并（`backgroundTasks.js`）、Prompt Cache 系统块排序与零 LLM 成本本地微压缩（`microcompact.js`）、多策略代码编辑匹配器（`editMatchers.js`）。
+- **[OpenAI Codex CLI](https://github.com/openai/codex)** — 基于测试与 Git Diff 证据的验证闭环（`toolLoop.js`）、TUI 紧凑运行计时器、单键权限直达（`y/s/a/n`）与快照回退（`rewind`）交互。
+- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` 容错补丁解析引擎（`patchEngine.js`）、Git 工作流集成与压缩交接提示词设计。
+- **[Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code)** — 冗余工具输出折叠裁剪（`compaction.js`）与可见子步骤任务追踪设计。
+- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — 上下文 Token 预算估算（`contextBudget.js`）、审批模式切换及 `aichat` 50ms 事件流防抖聚合渲染（`runSession.js`）。
+- **[Evolver](https://github.com/EvoMap/evolver)** — 基因组进化协议 (GEP) 策略反思架构。
+- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** — 执行前层次化任务分解与规划思想（`planning.js`）。
+- **[Continue](https://github.com/continuedev/continue)** — 声明式配置即代码规范（`.aether/config.json`）。
+- **[Grok Build](https://x.ai) & [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — 专门化子 Agent 角色划分（`agentRoles.js`）、长程任务执行状态机（`longRunningTask.js`）与运行时间线抽屉灵感。
+- **DeepSeek Harness (DSH)** — 本地网关回环绑定与 HTTP Host 头安全校验实践（QVD-2026-57410 防御参考）及 README 徽章视觉规范。
+
+### 核心基础设施与 UI 生态
+- **运行时与存储底座**：[Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com)。
+- **组件与协议设计**：[Model Context Protocol (MCP)](https://modelcontextprotocol.io) · [shadcn/ui](https://github.com/shadcn-ui/ui) · [Magic UI](https://github.com/magicuidesign/magicui) · [cc-switch](https://github.com/farion1231/cc-switch) · [new-api](https://github.com/QuantumNous/new-api)。
 
 ---
 

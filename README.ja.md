@@ -54,7 +54,7 @@
   <img src="./assets/agent-radar-2026.ja.svg" width="88%" alt="Aether 主要エージェント20種との誠実な自己評価レーダーチャート" />
 </p>
 
-Aether の強みは **ローカルファーストのプライバシー、複数モデルの柔軟性、多層サンドボックスの安全性** にあります。単一モデルによる純粋なコーディング支援において Cursor のような大規模な商用 IDE 環境の完全な代替を目指しているわけではないことを率直に認め、あらゆるモデルを安心・透明に扱える信頼性の高いワークベンチを提供することを目指しています。
+Aether の客観的な優位性は **ローカルファーストのプライバシー (`9.4/10`)、マルチモデル・ブラインド Arena (`9.2/10`)、および権限安全ゲート (`8.4/10`)** にあります。一方で、単一モデルの純粋なコーディング能力（`6.8/10`、AST リポジトリインデックスや独自 Fast-Apply モデルの未搭載）やエコシステム成熟度（`6.5/10`、個人開発段階）においては、Claude Code や Cursor などの大規模商用ツールとの客観的な差を率直に認めています（詳細な減点根拠は [docs/competitive-analysis.md](./docs/competitive-analysis.md) を参照）。
 
 ---
 
@@ -110,29 +110,37 @@ start.bat        # 依存関係をインストールし、フロントエンド�
 
 ## 謝辞 (Acknowledgements)
 
-Aether は以下の革新的なオープンソースプロジェクトとアーキテクチャの知見に基づいています:
+Aether の設計とコードベースは、以下のオープンソースプロジェクトやエンジニアリング実践から具体的な知見を得ています:
 
 ### Agent フレームワークとランタイム設計
 
-- [Claude Code](https://claude.ai/code) (Anthropic) — 検証デバッグループ（`debugAgent.js`）、10 点ライフサイクルフック（`hooks.js`）、権限ラダー（`trustEngine.js`）、ターミナルストリーミング実行、および Ask/Plan/Yolo モードパラダイム。
-- [pi](https://github.com/badlogic/pi-mono) (Mario Zechner) — `AgentMessage` 抽象化（UI 表現層と LLM 通信層の分離）、統合イベントストリームテレメトリ、および実行中の動的割り込み（`agent.steer()`）。
-- [OpenClaw](https://github.com/openclaw/openclaw) — コンテキスト圧縮アルゴリズム、ツール呼び出し無限ループ検知、イベントストリームオーケストレーション、およびツール結果サニタイズミドルウェア。
-- [Hermes Agent](https://github.com/NousResearch/hermes-agent) — 反復バジェット制御、構造化長期 SQLite メモリ、および FTS5 メモリ検索。
-- [Evolver](https://github.com/EvoMap/evolver) — ゲノム進化プロトコル (GEP) 内省アーキテクチャ。
-- [Aider](https://github.com/Aider-AI/aider) — LLM コーディングアシスタントの対話パターンと Git ワークフロー統合。
+- [Claude Code](https://claude.ai/code) (Anthropic) — 検証デバッグループ（`debugAgent.js`）、10 点ライフサイクルフック（`hooks.js`）、6 軸権限ラダー（`trustEngine.js`）、ターミナルストリーミング実行、および Ask/Plan/Auto/Yolo モードパラダイム。
+- [pi](https://github.com/badlogic/pi-mono) (Mario Zechner) — `AgentMessage` 二重表現抽象化（`agentMessage.js`）、統合イベントストリームテレメトリ（`eventStream.js`）、実行中の動的割り込み（`agent.steer()`）、およびチェックポイント巻き戻し（`rollback.js`）。
+- [ZCode](https://github.com/Au-Zone/zcode) — ゼロ LLM コストのローカルマイクロ圧縮とプロンプトキャッシュ安定ブロック順序（`microcompact.js`）、バックグラウンドタスクのブランチ世代分離と通知集約（`backgroundTasks.js`）、および多段階編集フォールバックマッチャー（`editMatchers.js`）。
+- [OpenClaw](https://github.com/openclaw/openclaw) — コンテキスト圧縮アルゴリズム、ツール呼び出し無限ループ検知、イベントストリームオーケストレーション、およびツール結果サニタイズミドルウェア（`toolResultMiddleware.js`）。
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent) — 反復バジェット制御（`iterationBudget.js`）、スキル自動合成ループ（`skillSynthesis.js`）、および `<untrusted_memory>` 注入ラッパーを備えた構造化 SQLite + FTS5 メモリ。
+- [Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code) — ツール出力のコンテキスト折りたたみ・トリミング戦略（`compaction.js`）および可視化サブステップ追跡。
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat) — トークン見積もりと承認モード切り替え（`contextBudget.js`）、および TUI の 50ms イベントストリームデバウンス集約（`runSession.js`）。
+- [DeepSeek Harness (DSH)](https://github.com/deepseek-ai) — QVD-2026-57410 ループバックバインドおよび HTTP Host ヘッダー検証による DNS Rebinding 防御（`gatewayServer.js`）。
+- [Evolver](https://github.com/EvoMap/evolver) — ゲノム進化プロトコル (GEP) 自己内省アーキテクチャ（`gep.js`）。
+- [Aider](https://github.com/Aider-AI/aider) — Search/Replace 編集ブロックフォールバックと Git ワークフロー統合。
 - [OpenCode](https://github.com/sst/opencode) — TUI キーボードナビゲーション、パーミッションゲート UX、プロンプトキャッシュポリシー。
-- [OpenAI Codex](https://github.com/openai/codex) — プロセスツリー分離と証拠ベースの自動検証コンセプト。
+- [OpenAI Codex](https://github.com/openai/codex) — プロセスツリー分離と証拠ベースの自動検証コンセプト（`verifyLoop.js`）。
+- [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com) — `AgentRunTimeline` 実行タイムラインドロワーと実行中の動的ステアリング UX。
 - [DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo) — 実行前の階層的タスク分解と計画設計。
 - [Continue](https://github.com/continuedev/continue) — 宣言的設定スキーマ（"config is code"）。
 - [Grok Build](https://x.ai) — 特化型 Agent ロールと長時間実行パターン。
 
-### UI、インフラストラクチャおよびツール
+### コアインフラストラクチャ、UI およびプロトコル
 
-- [shadcn/ui](https://github.com/shadcn-ui/ui) — コンポーネント再利用手法とクリーンなユーティリティトークン。
-- [Magic UI](https://github.com/magicuidesign/magicui) — 依存関係ゼロの CSS アニメーション。
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) — 単一ファイル WAL ストレージ、FTS5 全文検索、`kg_nodes`/`kg_edges` グラフメモリを支える高速同期 SQLite ドライバー。
+- [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) — `aether tui` ターミナルインターフェースの React レンダリングエンジン。
+- [Zustand](https://github.com/pmndrs/zustand) (Poimandres) — レンダラー状態管理とマルチモデル並行ストリーム調整。
+- [Electron](https://www.electronjs.org) · [React](https://react.dev) · [Tailwind CSS](https://tailwindcss.com) — デスクトップクロスプラットフォームランタイムと UI 基盤。
+- [shadcn/ui](https://github.com/shadcn-ui/ui) & [Magic UI](https://github.com/magicuidesign/magicui) — コンポーネント設計手法と軽量 CSS アニメーション。
 - [cc-switch](https://github.com/farion1231/cc-switch) — 利用統計・コストダッシュボードのレイアウトインスピレーション。
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io) — 標準化されたツール統合プロトコル。
-- [new-api](https://github.com/QuantumNous/new-api) — 推論エフォートパラメータマッピングとリレー形式変換。
+- [new-api](https://github.com/QuantumNous/new-api) — 推論エフォートパラメータマッピングとマルチプロバイダーリレー形式変換。
 
 ---
 
