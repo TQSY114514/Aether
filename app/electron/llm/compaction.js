@@ -231,7 +231,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
       try {
         // UPDATE 滚动合并：把上一版摘要交给模型，在它基础上并入增量段落，
         // 摘要永远只有一份最新六段结构版本（替代 [Later] 字符串拼接）。
-        const newSummary = await summarizeHistory({ provider, model, history: newSinceLast, signal, prevSummary: prev.summary })
+        const newSummary = await summarizeHistory({ provider, model, history: newSinceLast, signal, prevSummary: prev.summary, db: ctx?.db, sessionId, onEscalation: ctx?.onEscalation })
         if (newSummary) {
           summary = newSummary
         }
@@ -253,7 +253,7 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
   // Full summarization if incremental didn't produce a result
   if (!summary) {
     try {
-      summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal })
+      summary = await summarizeHistory({ provider, model, history: nonSystemOlder, signal, db: ctx?.db, sessionId, onEscalation: ctx?.onEscalation })
     } catch {
       const fallbackSplit = findKeepPoint(nonSystemOlder, budget)
       const keep = nonSystemOlder.slice(fallbackSplit)
@@ -333,7 +333,7 @@ function buildSummarizeMessages(prevSummary, chunkText) {
   ]
 }
 
-async function summarizeHistory({ provider, model, history, signal, prevSummary }) {
+async function summarizeHistory({ provider, model, history, signal, prevSummary, db = null, sessionId = null, onEscalation = null }) {
   // Drop non-conversational noise (empty tool results, silent assistant turns)
   // so the summary budget goes to real content.
   const realHistory = history.filter(m => {
@@ -347,27 +347,62 @@ async function summarizeHistory({ provider, model, history, signal, prevSummary 
     if (m.tool_calls) return `[${m.role}] ${c || ''}\n[tool calls: ${JSON.stringify(m.tool_calls.map(t => t.function?.name))}]`
     return `[${m.role}] ${c}`
   }).join('\n')
-  // Guard against hanging forever when the provider is unreachable (e.g. tests).
-  const ctrl = new AbortController()
-  const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
-  const fetchPromise = completeChat({
-    provider, model,
-    // TQS-5: instructions in the system message, untrusted transcript in the
-    // user message — never combined into one prompt.
-    messages: buildSummarizeMessages(prevSummary || null, transcript.slice(0, 24000)),
-    signal: ctrl.signal,
-    options: { max_tokens: 900, temperature: 0.2 },
+
+  // P1-1: Flash-first auxiliary model selection + visible escalation audit
+  const modelRouter = require('./modelRouter')
+  const aux = modelRouter.resolveAuxiliaryTarget({
+    db,
+    provider,
+    model,
+    taskType: 'compaction-summary',
+    sessionId,
+    onEscalation,
   })
+  const msgs = buildSummarizeMessages(prevSummary || null, transcript.slice(0, 24000))
+
+  async function invokeWithTarget(targetProvider, targetModel) {
+    const ctrl = new AbortController()
+    const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
+    const fetchPromise = completeChat({
+      provider: targetProvider,
+      model: targetModel,
+      messages: msgs,
+      signal: ctrl.signal,
+      options: { max_tokens: 900, temperature: 0.2 },
+    })
+    try {
+      const out = await Promise.race([
+        fetchPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('summarize fetch timeout')), FETCH_CONNECT_TIMEOUT_MS)),
+      ])
+      clearTimeout(guard)
+      return out
+    } catch (e) {
+      clearTimeout(guard)
+      throw e
+    }
+  }
+
   let text
   try {
-    text = await Promise.race([
-      fetchPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('summarize fetch timeout')), FETCH_CONNECT_TIMEOUT_MS)),
-    ])
-    clearTimeout(guard)
+    text = await invokeWithTarget(aux.provider, aux.model)
   } catch (e) {
-    clearTimeout(guard)
-    throw e
+    // If a distinct fast model failed, visibly escalate to primary model (never silent!)
+    if (!aux.escalated && aux.fallbackModel && aux.fallbackModel !== aux.model) {
+      modelRouter.recordTierEscalation({
+        db,
+        sessionId,
+        taskType: 'compaction-summary',
+        fromTier: 'fast',
+        fromModel: aux.model,
+        toModel: aux.fallbackModel,
+        reason: `fast_model_failed:${e?.message || 'error'}`,
+        onEscalation,
+      })
+      text = await invokeWithTarget(aux.fallbackProvider || provider, aux.fallbackModel)
+    } else {
+      throw e
+    }
   }
   return (text || '').trim()
 }
@@ -390,8 +425,13 @@ const FOLD_TOOLS = new Set([
 const FOLD_MIN_ROUNDS_AGO = 3
 const FOLD_MIN_LENGTH = 200 // don't bother folding tiny outputs
 
-function foldStaleToolOutputs(messages) {
+function foldStaleToolOutputs(messages, options = {}) {
   if (!Array.isArray(messages) || messages.length === 0) return messages
+
+  const minRoundsAgo = typeof options.minRoundsAgo === 'number' && options.minRoundsAgo > 0
+    ? options.minRoundsAgo
+    : FOLD_MIN_ROUNDS_AGO
+  const preservePrefix = options.preservePrefix === true
 
   // Build a map of tool_call_id → { round, toolName }
   const callMeta = new Map()
@@ -408,6 +448,38 @@ function foldStaleToolOutputs(messages) {
   }
 
   const totalRounds = round
+  // Option A (preservePrefix: true): keep all already-sent messages in-place byte-identical
+  // so the KV cache prefix never suffers sliding-window invalidation on every round >= 4.
+  // If any tool outputs just crossed the stale window on this turn, append a tail hint
+  // allowing the model to re-invoke read_file if exact lines are needed again.
+  if (preservePrefix) {
+    const result = messages.slice()
+    const newlyStale = []
+    for (const msg of messages) {
+      if (msg.role === 'tool' && msg.tool_call_id) {
+        const meta = callMeta.get(msg.tool_call_id)
+        const content = typeof msg.content === 'string' ? msg.content : ''
+        const roundsAgo = totalRounds - (meta ? meta.round : totalRounds)
+        const isFoldable = meta
+          && FOLD_TOOLS.has(meta.name)
+          && roundsAgo === minRoundsAgo
+          && content.length >= FOLD_MIN_LENGTH
+          && !/\berror\b|\bfail\b|\bexception\b/i.test(content.slice(0, 200))
+        if (isFoldable) {
+          const lines = content.split('\n').length
+          newlyStale.push(`${meta.name}#r${meta.round}(${lines}L)`)
+        }
+      }
+    }
+    if (newlyStale.length > 0 && options.appendTailNote === true) {
+      result.push({
+        role: 'user',
+        content: `[上下文归档提示: 早期工具输出 ${newlyStale.join(', ')} 已超出活跃窗口；前缀保持不变以复用缓存，如需最新文件详情可重新调用 read_file]`,
+      })
+    }
+    return result
+  }
+
   const result = []
   for (const msg of messages) {
     if (msg.role === 'tool' && msg.tool_call_id) {
@@ -416,14 +488,14 @@ function foldStaleToolOutputs(messages) {
       const roundsAgo = totalRounds - (meta ? meta.round : totalRounds)
       const isFoldable = meta
         && FOLD_TOOLS.has(meta.name)
-        && roundsAgo >= FOLD_MIN_ROUNDS_AGO
+        && roundsAgo >= minRoundsAgo
         && content.length >= FOLD_MIN_LENGTH
         // Never fold error outputs — they may still be relevant
         && !/\berror\b|\bfail\b|\bexception\b/i.test(content.slice(0, 200))
 
       if (isFoldable) {
         const lines = content.split('\n').length
-        const skeleton = `[${meta.name} → ${lines} lines, ${roundsAgo} rounds ago (folded for context savings)]`
+        const skeleton = `[${meta.name} → ${lines} lines, round #${meta.round} (${roundsAgo} rounds ago, folded for context savings)]`
         result.push({ ...msg, content: skeleton })
         continue
       }

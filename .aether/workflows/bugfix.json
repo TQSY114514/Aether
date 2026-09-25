@@ -1,0 +1,31 @@
+{
+  "id": "bugfix",
+  "name": "Bug Fix",
+  "description": "Systematic bug fixing: diagnose, fix, test, and verify.",
+  "steps": [
+    {
+      "type": "diagnose",
+      "role": "debug",
+      "description": "Trace the bug to its root cause.",
+      "tools": ["read_file", "grep_search", "run_command"]
+    },
+    {
+      "type": "fix",
+      "role": "build",
+      "description": "Apply the fix.",
+      "tools": null
+    },
+    {
+      "type": "test",
+      "role": "build",
+      "description": "Verify the fix works and does not regress.",
+      "tools": ["read_file", "run_command"]
+    },
+    {
+      "type": "verify",
+      "role": "review",
+      "description": "Review the fix for correctness and side effects.",
+      "tools": ["read_file", "grep_search"]
+    }
+  ]
+}

@@ -267,21 +267,59 @@ function _usedExternalTools(db, sessionId) {
   } catch { return false }
 }
 
-async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace }) {
+async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onEscalation }) {
   try {
     // H5: 本轮消费过 external 工具结果 → 跳过本次入库，防止被污染的外部
     // 内容经提取持久化、再在后续会话中回注（跨会话持久注入）。
     if (_usedExternalTools(db, sessionId)) return
     const transcript = `User: ${String(userMessage || '').slice(0, 2000)}\n\nAssistant: ${String(assistantReply || '').slice(0, 3000)}`
-    const text = await completeChat({
-      provider, model,
-      messages: [
-        { role: 'system', content: EXTRACTION_PROMPT },
-        { role: 'user', content: transcript },
-      ],
-      signal,
-      options: { max_tokens: 300, temperature: 0.1 },
+    const modelRouter = require('./modelRouter')
+    const aux = modelRouter.resolveAuxiliaryTarget({
+      db,
+      provider,
+      model,
+      taskType: 'memory-extract',
+      sessionId,
+      onEscalation,
     })
+    let text
+    try {
+      text = await completeChat({
+        provider: aux.provider,
+        model: aux.model,
+        messages: [
+          { role: 'system', content: EXTRACTION_PROMPT },
+          { role: 'user', content: transcript },
+        ],
+        signal,
+        options: { max_tokens: 300, temperature: 0.1 },
+      })
+    } catch (e) {
+      if (!aux.escalated && aux.fallbackModel && aux.fallbackModel !== aux.model) {
+        modelRouter.recordTierEscalation({
+          db,
+          sessionId,
+          taskType: 'memory-extract',
+          fromTier: 'fast',
+          fromModel: aux.model,
+          toModel: aux.fallbackModel,
+          reason: `fast_model_failed:${e?.message || 'error'}`,
+          onEscalation,
+        })
+        text = await completeChat({
+          provider: aux.fallbackProvider || provider,
+          model: aux.fallbackModel,
+          messages: [
+            { role: 'system', content: EXTRACTION_PROMPT },
+            { role: 'user', content: transcript },
+          ],
+          signal,
+          options: { max_tokens: 300, temperature: 0.1 },
+        })
+      } else {
+        throw e
+      }
+    }
     if (!text || !text.trim()) return
     const entries = text.trim().split('\n')
       .map(l => l.trim())

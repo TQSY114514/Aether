@@ -1,0 +1,19 @@
+{
+  "id": "broadcast-review",
+  "name": "Multi-Role Broadcast Review",
+  "description": "Parallel multi-role inspection followed by synthesis.",
+  "steps": [
+    {
+      "type": "multi-inspect",
+      "kind": "broadcast",
+      "roles": ["explore", "review", "debug"],
+      "description": "Inspect the target module concurrently from architecture, code review, and edge-case failure angles."
+    },
+    {
+      "type": "summarize",
+      "role": "review",
+      "description": "Synthesize the multi-perspective broadcast reports into a prioritized action plan.",
+      "tools": ["read_file", "grep_search"]
+    }
+  ]
+}

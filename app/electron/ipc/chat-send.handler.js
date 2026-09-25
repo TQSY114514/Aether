@@ -714,19 +714,62 @@ ipcMain.handle('chat:complete', handleChatComplete)
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15000)
-      // max_tokens 必须给足: 中转站/中继可能把模型路由到推理模型(如 agnes-2.5-flash),
-      // 推理模型的 reasoning_content 会先消耗 token——30 上限时思考过程把额度全吃掉,
-      // content 返回空串 → 标题退化为输入截断（"不生成摘要标题"实测根因）。
-      // 200 给思考+输出留出余量; reasoning_effort=low 压低思考长度、加快返回。
-      const text = await completeChat({
-        provider, model,
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: `用户：${content}\n\n助手：${(fullContent || '').slice(0, 800)}` },
-        ],
-        signal: controller.signal,
-        options: { max_tokens: 200, temperature: 0.2, reasoning_effort: 'low' },
+      const modelRouter = require('../llm/modelRouter')
+      const onEscalation = (esc) => {
+        try {
+          getWebContents()?.send('chat:status', {
+            messageId: 0,
+            sessionId,
+            text: esc.uiText,
+            kind: 'model_escalation',
+            escalation: esc,
+          })
+        } catch {}
+      }
+      const aux = modelRouter.resolveAuxiliaryTarget({
+        db,
+        provider,
+        model,
+        taskType: 'session-title',
+        sessionId,
+        onEscalation,
       })
+      const titleMsgs = [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: `用户：${content}\n\n助手：${(fullContent || '').slice(0, 800)}` },
+      ]
+      let text
+      try {
+        text = await completeChat({
+          provider: aux.provider,
+          model: aux.model,
+          messages: titleMsgs,
+          signal: controller.signal,
+          options: { max_tokens: 200, temperature: 0.2, reasoning_effort: 'low' },
+        })
+      } catch (e) {
+        if (!aux.escalated && aux.fallbackModel && aux.fallbackModel !== aux.model) {
+          modelRouter.recordTierEscalation({
+            db,
+            sessionId,
+            taskType: 'session-title',
+            fromTier: 'fast',
+            fromModel: aux.model,
+            toModel: aux.fallbackModel,
+            reason: `fast_model_failed:${e?.message || 'error'}`,
+            onEscalation,
+          })
+          text = await completeChat({
+            provider: aux.fallbackProvider || provider,
+            model: aux.fallbackModel,
+            messages: titleMsgs,
+            signal: controller.signal,
+            options: { max_tokens: 200, temperature: 0.2, reasoning_effort: 'low' },
+          })
+        } else {
+          throw e
+        }
+      }
       clearTimeout(timeout)
       // 推理模型的 content 可能带前导换行/空白, 清理后取首行有效短语
       const cleaned = (text || '').trim().replace(/^[“”『]|[“”』]$/g, '').replace(/[。.!！？?]/g, '').trim()

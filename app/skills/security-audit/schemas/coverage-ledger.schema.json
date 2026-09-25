@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SecurityAuditCoverageLedger",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "workspace",
+    "mode",
+    "capabilities",
+    "summary",
+    "files_scanned",
+    "files_skipped"
+  ]
+}

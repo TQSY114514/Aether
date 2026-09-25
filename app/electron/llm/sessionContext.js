@@ -48,29 +48,17 @@ function buildSessionContext({ db, sessionId, personaId, userMessage } = {}) {
   const prefix = []
   let memoryCount = 0
 
-  // 1) persona system 块
+  // 1) persona system 块 (stable cache prefix)
   if (personaId != null && db) {
     try {
       const row = db.prepare('SELECT id, name, prompt FROM persona WHERE id = ?').get(Number(personaId))
       if (row && row.prompt) {
-        prefix.push({ role: 'system', content: `[Persona: ${row.name || String(row.id)}]\n${row.prompt}` })
+        prefix.push({ role: 'system', content: `[Persona: ${row.name || String(row.id)}]\n${row.prompt}`, cacheHint: 'stable' })
       }
     } catch { /* persona 表缺失/行缺失 → 跳过 */ }
   }
 
-  // 2) 记忆注入（autoMemory.prefetch，keyword 相关度；无 getMemories 面时跳过）
-  const memDb = ensureMemDb(db)
-  if (memDb && userMessage) {
-    try {
-      const block = autoMemory.prefetch(memDb, String(userMessage))
-      if (block) {
-        prefix.push({ role: 'system', content: block })
-        memoryCount = block.split('\n').filter((l) => l.trim().startsWith('- ')).length
-      }
-    } catch { /* 记忆表缺失/查询失败 → 跳过 */ }
-  }
-
-  // 3) Context Engine 核心扩充 (AGENTS.md)
+  // 2) Context Engine 核心扩充 (AGENTS.md — stable workspace prefix, placed BEFORE dynamic memory!)
   try {
     const fs = require('fs')
     const path = require('path')
@@ -88,12 +76,24 @@ function buildSessionContext({ db, sessionId, personaId, userMessage } = {}) {
         if (fs.existsSync(agentsMdPath)) {
           const agentsMd = fs.readFileSync(agentsMdPath, 'utf8')
           if (agentsMd && agentsMd.trim()) {
-            prefix.push({ role: 'system', content: `[Workspace Context: AGENTS.md]\n${agentsMd.slice(0, 8000)}` })
+            prefix.push({ role: 'system', content: `[Workspace Context: AGENTS.md]\n${agentsMd.slice(0, 8000)}`, cacheHint: 'stable' })
           }
         }
       }
     }
   } catch { /* 容错：防止因文件读取失败导致会话崩溃 */ }
+
+  // 3) 记忆注入（autoMemory.prefetch，keyword 相关度；dynamic per-turn suffix so stable prefix stays cache-hot）
+  const memDb = ensureMemDb(db)
+  if (memDb && userMessage) {
+    try {
+      const block = autoMemory.prefetch(memDb, String(userMessage))
+      if (block) {
+        prefix.push({ role: 'system', content: block, cacheHint: 'dynamic' })
+        memoryCount = block.split('\n').filter((l) => l.trim().startsWith('- ')).length
+      }
+    } catch { /* 记忆表缺失/查询失败 → 跳过 */ }
+  }
 
   return { prefix, memoryCount }
 }

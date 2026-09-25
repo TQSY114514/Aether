@@ -16,8 +16,8 @@
 //   - verification routing: cheap checks use fast model, deep review uses standard
 // ───────────────────────────────────────────────────────────────────────────
 
-// Model name patterns for each tier. Matched against model_name (lowercase).
-const FAST_RE = /^(haiku|flash|gemini-2\.0-flash|gpt-4o-mini|qwen2\.5-(1\.5|3|7)b)/i
+// Model name patterns for each tier. Matched against model_name (case-insensitive).
+const FAST_RE = /(haiku|flash|gpt-4o-mini|gpt-4\.1-mini|gpt-4\.1-nano|qwen2\.5-(1\.5|3|7)b|qwen-turbo)/i
 const THINK_RE = /^(opus|claude-4|o3|o4-mini|gemini-2\.5-pro|deepseek-r1|qwq)/i
 
 // Task patterns that can safely use a cheap model.
@@ -153,4 +153,144 @@ function needsExtendedThinking(userMessage, historyLength) {
   return msg.length > 800 || historyLength > 15 || complexRe.test(msg)
 }
 
-module.exports = { routeTask, suggestModelForTier, needsExtendedThinking }
+// ─── P1-1: Auxiliary Calls Flash-First + Visible Escalation ────────────────
+// Compaction summarization, AutoMemory extraction/recall, and Session Title
+// distillation default to the FAST tier (FAST_RE). If no FAST model exists in
+// the pool (or the FAST model call errors out and escalates to the primary
+// model), the escalation MUST be recorded in the audit trail and surfaced to
+// the UI — silent escalation to an expensive model is prohibited.
+const _escalationAuditLog = []
+
+function getEscalationAuditLog(limit = 50) {
+  return _escalationAuditLog.slice(-limit)
+}
+
+function clearEscalationAuditLog() {
+  _escalationAuditLog.length = 0
+}
+
+function recordTierEscalation({ db, sessionId = null, taskType = 'auxiliary', fromTier = 'fast', fromModel = null, toModel, reason = 'no_fast_model_available', onEscalation } = {}) {
+  const toModelName = (toModel && typeof toModel === 'object') ? (toModel.model_name || String(toModel.id || 'unknown')) : String(toModel || 'unknown')
+  const entry = {
+    kind: 'model_tier_escalation',
+    taskType: String(taskType || 'auxiliary'),
+    taskKind: String(taskType || 'auxiliary'),
+    fromTier,
+    fromModel: fromModel ? ((typeof fromModel === 'object') ? fromModel.model_name : String(fromModel)) : 'fast-tier (unavailable)',
+    toModel: toModelName,
+    reason,
+    sessionId,
+    timestamp: new Date().toISOString(),
+    uiText: `⚡ 辅助任务[${taskType}] 升档至 ${toModelName} (${reason})`,
+  }
+  _escalationAuditLog.push(entry)
+  if (_escalationAuditLog.length > 200) _escalationAuditLog.shift()
+
+  try {
+    if (db && typeof db.setSetting === 'function') {
+      db.setSetting('llm.lastAuxiliaryEscalation', JSON.stringify(entry))
+    }
+    if (db && typeof db.addAuditLog === 'function' && sessionId != null) {
+      db.addAuditLog({ sessionId, turnId: 0, payload: entry })
+    }
+  } catch {}
+
+  try {
+    if (typeof onEscalation === 'function') onEscalation(entry)
+  } catch {}
+
+  return entry
+}
+
+/**
+ * Resolve a FAST-tier { provider, model } for an auxiliary task.
+ * If primaryModel is already a FAST_RE model, uses it directly without escalation.
+ * If another enabled model matches FAST_RE, selects it.
+ * Otherwise escalates to primaryModel and records a visible escalation event.
+ */
+function resolveAuxiliaryTarget(arg1 = {}, arg2, arg3, arg4, arg5) {
+  const opts = (arg1 && typeof arg1 === 'object' && ('provider' in arg1 || 'model' in arg1 || 'taskType' in arg1))
+    ? arg1
+    : { db: arg1, provider: arg2, model: arg3, taskType: arg4, onEscalation: arg5 }
+  const { db, provider, model, models: explicitModels = null, taskType = 'auxiliary', sessionId = null, onEscalation } = opts
+
+  const primaryName = (model && typeof model === 'object') ? (model.model_name || '') : String(model || '')
+  if (FAST_RE.test(primaryName)) {
+    return {
+      provider,
+      model,
+      tier: 'fast',
+      escalated: false,
+      escalation: null,
+    }
+  }
+
+  let pool = Array.isArray(explicitModels) ? explicitModels : []
+  if (!pool.length && db) {
+    try {
+      if (typeof db.getEnabledModels === 'function') pool = db.getEnabledModels() || []
+      else if (typeof db.getModels === 'function') pool = db.getModels() || []
+      else if (typeof db.listModels === 'function') pool = db.listModels() || []
+    } catch {}
+  }
+
+  // Prefer FAST_RE models from the same provider first, then any enabled provider
+  const fastCandidates = pool.filter(m => m && m.model_name && FAST_RE.test(m.model_name) && m.enabled !== 0)
+  const sameProviderFast = provider && provider.id != null
+    ? fastCandidates.filter(m => m.provider_id === provider.id)
+    : []
+  const picked = sameProviderFast[0] || fastCandidates[0] || null
+
+  if (picked) {
+    let pickedProvider = provider
+    if (picked.provider_id && (!provider || picked.provider_id !== provider.id)) {
+      try {
+        if (db && typeof db.getProviderById === 'function') {
+          pickedProvider = db.getProviderById(picked.provider_id) || provider
+        }
+      } catch {}
+    }
+    return {
+      provider: pickedProvider,
+      model: picked,
+      tier: 'fast',
+      escalated: false,
+      escalation: null,
+      fallbackProvider: provider,
+      fallbackModel: model,
+    }
+  }
+
+  // No FAST_RE model available in pool -> visible escalation to primary model
+  const escalation = recordTierEscalation({
+    db,
+    sessionId,
+    taskType,
+    fromTier: 'fast',
+    fromModel: null,
+    toModel: model,
+    reason: 'no_fast_model_in_pool',
+    onEscalation,
+  })
+
+  return {
+    provider,
+    model,
+    tier: 'escalated_primary',
+    escalated: true,
+    escalation,
+  }
+}
+
+module.exports = {
+  FAST_RE,
+  THINK_RE,
+  FAST_TASK_RE,
+  routeTask,
+  suggestModelForTier,
+  needsExtendedThinking,
+  resolveAuxiliaryTarget,
+  recordTierEscalation,
+  getEscalationAuditLog,
+  clearEscalationAuditLog,
+}

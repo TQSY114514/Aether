@@ -46,6 +46,7 @@ const FLAG_DEFS = [
   // Phase 2 — agent quality (external review P0-1)
   { key: 'agent.toolRouter',     default: true,  category: 'agent',      description: 'Inject only task-relevant tools per turn (core always, github/lsp/agent/memory/git on keyword match)' },
   { key: 'agent.toolRouter.staged', default: false, category: 'agent',   description: 'Stage-aware tool routing: re-estimate the task stage (explore/build/verify/deliver) each round and merge in its tool categories (additive only)' },
+  { key: 'agent.cachePrefixStability', default: true, category: 'agent', description: 'Prefix cache stability invariant: order always-on/MCP tools before staged categories, append-only stage routing, and preserve sent message prefix across rounds' },
   { key: 'agent.shrinkRetry',    default: false, category: 'agent',      description: 'Auto scope-reduction retry: when the iteration budget runs out or a loop guard blocks, shrink to one completable increment and add a few rounds (fires at most once per run)' },
   // Phase 3 — code understanding + orchestration
   { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },

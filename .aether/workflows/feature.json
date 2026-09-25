@@ -1,0 +1,37 @@
+{
+  "id": "feature",
+  "name": "Feature Implementation",
+  "description": "Full feature lifecycle: understand requirements, plan implementation, write code, test, and review.",
+  "steps": [
+    {
+      "type": "understand",
+      "role": "explore",
+      "description": "Explore the codebase to understand existing patterns and architecture relevant to this feature.",
+      "tools": ["read_file", "grep_search", "glob_find", "codebase_graph"]
+    },
+    {
+      "type": "plan",
+      "role": "explore",
+      "description": "Create a detailed implementation plan based on codebase exploration.",
+      "tools": ["read_file", "grep_search"]
+    },
+    {
+      "type": "implement",
+      "role": "build",
+      "description": "Implement the feature according to the plan.",
+      "tools": null
+    },
+    {
+      "type": "test",
+      "role": "build",
+      "description": "Write and run tests to verify the implementation.",
+      "tools": ["read_file", "run_command", "grep_search"]
+    },
+    {
+      "type": "review",
+      "role": "review",
+      "description": "Review the implementation for bugs, security, and style.",
+      "tools": ["read_file", "grep_search", "glob_find"]
+    }
+  ]
+}

@@ -180,10 +180,45 @@ function routerEnabled(flagEnabled) {
   return flagEnabled !== false
 }
 
+// ─── 前缀缓存排序纪律（P0-1 Step 1b）─────────────────────────────────────────
+// 规则：
+//   Bucket 0: CORE_TOOLS（核心工具，首轮起恒注入）
+//   Bucket 1: 未分类工具（!KNOWN_TOOLS，含未分类内置与 MCP 工具，routeTools 首轮起恒注入）
+//   Bucket 2..6: 按阶段推进顺序排列的按需类别（lsp -> agent -> git -> memory -> github）
+// 同桶内保持输入相对顺序（稳定排序），使阶段追加退化为尾部追加。
+const CATEGORY_BUCKET_ORDER = ['lsp', 'agent', 'git', 'memory', 'github']
+const TOOL_TO_BUCKET = new Map()
+for (const c of CORE_TOOLS) TOOL_TO_BUCKET.set(c, 0)
+CATEGORY_BUCKET_ORDER.forEach((cat, idx) => {
+  for (const t of CATEGORY_TOOLS[cat] || []) {
+    TOOL_TO_BUCKET.set(t, 2 + idx)
+  }
+})
+
+function getToolPrefixBucket(toolName) {
+  const name = String(toolName || '')
+  if (TOOL_TO_BUCKET.has(name)) return TOOL_TO_BUCKET.get(name)
+  // !KNOWN_TOOLS（含未分类内置工具与 MCP 工具）：恒注入，排在所有类别工具之前
+  return 1
+}
+
+function sortToolsForCacheStability(payload) {
+  if (!Array.isArray(payload) || payload.length <= 1) return Array.isArray(payload) ? payload.slice() : []
+  return payload
+    .map((item, idx) => {
+      const name = (item && item.function && item.function.name) || (item && item.name) || ''
+      return { item, idx, bucket: getToolPrefixBucket(name) }
+    })
+    .sort((a, b) => (a.bucket !== b.bucket ? a.bucket - b.bucket : a.idx - b.idx))
+    .map(entry => entry.item)
+}
+
 module.exports = {
   routeTools,
   routerEnabled,
   inferStage,
+  sortToolsForCacheStability,
+  getToolPrefixBucket,
   _categories: CATEGORY_TOOLS,
   _stageCategories: STAGE_CATEGORIES,
 }

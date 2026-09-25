@@ -2,19 +2,22 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { ListChecks, CheckCircle2, ChevronDown, ChevronUp, Loader2, Check, Circle, Play } from 'lucide-react'
+import HoverMarquee from '@/components/ui/HoverMarquee'
 
 type AgentTaskDeckProps = {
   sessionId: number | null
 }
 
 /** Render background agent tasks associated with the current session. */
-export default function AgentTaskDeck({ sessionId }: { sessionId: number | null }) {
+export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
   const [expanded, setExpanded] = useState(false)
   const todosByMessage = useStore((s) => s.todosByMessage)
   const messages = useStore((s) => s.messages)
+  const streamingBySession = useStore((s) => s.streamingBySession)
+  const isStreaming = !!(sessionId && streamingBySession[sessionId])
 
   // Find the most recent message's todos
-  const latestTodos = useMemo(() => {
+  const rawTodos = useMemo(() => {
     // Strict session scoping: only find todos belonging to current sessionId
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
@@ -25,8 +28,22 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
         }
       }
     }
+    const streamMsgId = sessionId ? streamingBySession[sessionId]?.messageId : null
+    if (streamMsgId && todosByMessage[streamMsgId]?.length) {
+      return todosByMessage[streamMsgId]
+    }
     return []
-  }, [messages, todosByMessage, sessionId])
+  }, [messages, todosByMessage, sessionId, streamingBySession])
+
+  // When the stream has completed (!isStreaming), never leave tasks stuck in
+  // 'in_progress' or 'pending' on step 1.
+  const latestTodos = useMemo(() => {
+    if (!rawTodos || rawTodos.length === 0) return []
+    if (!isStreaming) {
+      return rawTodos.map((item) => ({ ...item, status: 'completed' as const }))
+    }
+    return rawTodos
+  }, [rawTodos, isStreaming])
 
   if (!latestTodos || latestTodos.length === 0) return null
 
@@ -55,7 +72,7 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
         onClick={() => setExpanded(!expanded)}>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <HeaderIcon size={14} style={{ color: accent }} className="shrink-0" />
-          <span className="font-semibold text-xs" style={{ color: 'var(--text-primary)' }}>
+          <span className="font-semibold text-xs shrink-0" style={{ color: 'var(--text-primary)' }}>
             {allDone ? '任务全部完成' : '任务执行计划'}
           </span>
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full font-bold tabular-nums shrink-0"
@@ -63,12 +80,14 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
             {completed}/{total}
           </span>
           {!expanded && focus && !allDone && (
-            <div className="flex items-center gap-1 min-w-0 truncate text-xs" style={{ color: 'var(--text-secondary)' }}>
-              <span className="opacity-40">·</span>
-              <Loader2 size={11} className="animate-spin text-amber-400 shrink-0" />
-              <span className="truncate max-w-[280px] font-medium" style={{ color: 'var(--text-primary)' }}>
-                {focusLabel}
-              </span>
+            <div className="flex items-center gap-1 min-w-0 flex-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <span className="opacity-40 shrink-0">·</span>
+              {isStreaming && <Loader2 size={11} className="animate-spin text-amber-400 shrink-0" />}
+              <HoverMarquee
+                text={focusLabel}
+                className="max-w-[320px] font-medium"
+                style={{ color: 'var(--text-primary)' }}
+              />
             </div>
           )}
         </div>
@@ -98,8 +117,8 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
           <div className="px-3 py-2.5 space-y-1.5 border-t border-[var(--border)] max-h-56 overflow-y-auto bg-[var(--content-bg)]">
             {latestTodos.map((todo, i) => {
               const isCompleted = todo.status === 'completed'
-              const isInProgress = todo.status === 'in_progress'
-              const isFocus = i === focusIndex
+              const isInProgress = todo.status === 'in_progress' && isStreaming
+              const isFocus = i === focusIndex && isStreaming
               const label = isInProgress && todo.activeForm ? todo.activeForm : todo.content
 
               return (

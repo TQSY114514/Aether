@@ -241,6 +241,11 @@ function sleep(ms) {
 
 /** Execute a tool with abort propagation and its configured timeout. */
 async function runToolWithTimeout(tool, args, ctx, signal) {
+  let configuredTimeout = TOOL_TIMEOUT_MS
+  try {
+    const raw = ctx && ctx.db && typeof ctx.db.getSetting === 'function' ? Number(ctx.db.getSetting('agent_tool_timeout_ms')) : 0
+    if (Number.isFinite(raw) && raw >= 5000 && raw <= 600000) configuredTimeout = raw
+  } catch {}
   let lastResult
   for (let attempt = 0; attempt <= TOOL_RETRY_MAX; attempt++) {
     if (signal?.aborted) return { error: 'aborted' }
@@ -263,8 +268,8 @@ async function runToolWithTimeout(tool, args, ctx, signal) {
       }
       const timer = setTimeout(() => {
         attemptCtrl.abort()
-        finish({ error: `tool timed out after ${TOOL_TIMEOUT_MS}ms` })
-      }, TOOL_TIMEOUT_MS)
+        finish({ error: `tool timed out after ${configuredTimeout}ms` })
+      }, configuredTimeout)
       const onAbort = () => {
         attemptCtrl.abort()
         finish({ error: 'aborted' })

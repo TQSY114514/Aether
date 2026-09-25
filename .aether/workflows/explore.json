@@ -1,0 +1,25 @@
+{
+  "id": "explore",
+  "name": "Codebase Exploration",
+  "description": "Quick codebase survey: overview, deep-dive, summary.",
+  "steps": [
+    {
+      "type": "survey",
+      "role": "explore",
+      "description": "Get a high-level overview of the codebase.",
+      "tools": ["codebase_graph", "list_dir", "glob_find"]
+    },
+    {
+      "type": "deepdive",
+      "role": "explore",
+      "description": "Deep-dive into relevant areas.",
+      "tools": ["read_file", "grep_search", "codebase_graph"]
+    },
+    {
+      "type": "summarize",
+      "role": "review",
+      "description": "Summarize findings.",
+      "tools": ["read_file", "grep_search"]
+    }
+  ]
+}

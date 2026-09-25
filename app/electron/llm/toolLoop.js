@@ -84,6 +84,7 @@ const trajectory = require('./trajectory')
 
 const checkpoints = require('./checkpoints')
 const lintTestRepair = require('./lintTestRepair')
+const toolCallRepair = require('./toolCallRepair')
 
 // System prompt: Plan→Act→Observe rhythm (coding-agent style).
 // References `plan_progress` when the model has an active plan.
@@ -176,7 +177,15 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
   steering.setRunning(sessionId, true)
-  const toolPayload = tools ? toolsPayload(agentMode) : []
+  const cachePrefixStable = (() => {
+    try { return require('../featureFlags').isEnabled(db, 'agent.cachePrefixStability') !== false } catch { return true }
+  })()
+  const rawToolPayload = Array.isArray(tools)
+    ? tools
+    : (tools ? toolsPayload(agentMode, { cacheStable: cachePrefixStable }) : [])
+  const toolPayload = (cachePrefixStable && rawToolPayload.length > 1)
+    ? (() => { try { return require('./toolRouter').sortToolsForCacheStability(rawToolPayload) } catch { return rawToolPayload } })()
+    : rawToolPayload
 
   // ── Tool Router（外部评审 P0-1）─────────────────────────────────────────
   // 默认全量注入既有行为; 当 feature flag 'agent.toolRouter' 开启时, 基于
@@ -186,7 +195,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // plan 模式: 路由在只读过滤之后应用（toolsPayload 已按 mode 过滤）。
   let routedPayload = toolPayload
   // 阶段感知路由状态（'agent.toolRouter.staged' 开启时每轮重估，只加不减）
-  const stageState = { enabled: false, seenCategories: [], allNames: [], safeNames: null, fullPayload: null }
+  const stageState = { enabled: false, seenCategories: [], allNames: [], safeNames: null, fullPayload: null, cachePrefixStable }
   const convo0 = messages || []
   const userText = convo0
     .filter(m => m.role === 'user' && typeof m.content === 'string')
@@ -631,7 +640,15 @@ Reply in this format:
             // want 涨满(覆盖全部工具)时也要重建 payload——否则基础路由先前
             // 砍掉的类别永远回不来（CodeRabbit #48 复审 R2）。
             if (want.size > 0) {
-              routedPayload = stageState.fullPayload.filter(p => want.has(p.function.name))
+              if (stageState.cachePrefixStable) {
+                const existingNames = new Set(routedPayload.map(p => p.function.name))
+                const newlyAdded = stageState.fullPayload.filter(p => want.has(p.function.name) && !existingNames.has(p.function.name))
+                if (newlyAdded.length > 0) {
+                  routedPayload = [...routedPayload, ...newlyAdded]
+                }
+              } else {
+                routedPayload = stageState.fullPayload.filter(p => want.has(p.function.name))
+              }
               try { onStatus?.({ kind: 'tool_router', text: `阶段路由[${stage}]: 注入 ${routedPayload.length}/${stageState.allNames.length} 个工具` }) } catch {}
             }
           }
@@ -641,6 +658,37 @@ Reply in this format:
     // Tool Router: 用路由后的 payload（未路由时 routedPayload === toolPayload）
     if (routedPayload.length) { opts.tools = routedPayload; opts.tool_choice = 'auto' }
     if (planToolsPayload.length) { opts.tools = [...routedPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
+
+    // ZCode-inspired Prompt Cache system block ordering + zero-LLM-cost local microcompact
+    try {
+      const { maybeLocalMicrocompactMessages, orderSystemMessagesForCache } = require('./microcompact')
+      if (cachePrefixStable) {
+        const ordered = orderSystemMessagesForCache(convo)
+        convo.splice(0, convo.length, ...ordered)
+      }
+      const mcEnabled = db && typeof db.getSetting === 'function' ? db.getSetting('agent_microcompact_enabled') !== '0' : true
+      const mcKeepRecent = db && typeof db.getSetting === 'function' ? Number(db.getSetting('agent_microcompact_keep_recent')) || 5 : 5
+      const mcCacheTtlMin = db && typeof db.getSetting === 'function' ? Number(db.getSetting('agent_cache_ttl_minutes')) || 60 : 60
+      const mcResult = maybeLocalMicrocompactMessages({
+        messages: convo,
+        lastAssistantCompletedAtMs: options.lastAssistantCompletedAtMs,
+        config: {
+          enabled: mcEnabled,
+          keepRecentToolResults: mcKeepRecent,
+          maxIdleMs: mcCacheTtlMin * 60 * 1000,
+          ...(options.microcompact || {}),
+        },
+      })
+      if (mcResult.decision.reason === 'applied' && mcResult.payload) {
+        convo.splice(0, convo.length, ...mcResult.messages)
+        try {
+          onStatus?.({
+            kind: 'microcompact',
+            text: `🧹 本地微压缩 (${mcResult.payload.trigger}): 清理 ${mcResult.payload.clearedMessageCount} 条旧工具输出，节省 ~${mcResult.payload.tokensSaved} tokens`,
+          })
+        } catch {}
+      }
+    } catch {}
 
     let msg
     let hasStreamedThinking = false
@@ -704,6 +752,37 @@ Reply in this format:
       return `[agent error: ${e && e.message ? e.message : String(e)}]`
     }
     if (!msg) msg = { content: '', tool_calls: undefined }
+
+    // P1-2a: Scavenge tool calls leaked into reasoning_content / reasoning when tool_calls is empty
+    const validToolNames = stageState ? stageState.allNames : []
+    if ((!msg.tool_calls || msg.tool_calls.length === 0) && (msg.reasoning_content || msg.reasoning)) {
+      try {
+        const scavenged = toolCallRepair.scavengeToolCallsFromReasoning(msg, validToolNames)
+        if (scavenged.scavengedCount > 0) {
+          msg.tool_calls = scavenged.tool_calls
+        }
+      } catch {}
+    }
+
+    // P1-2b: Truncated JSON continuation + structural/name/JSON repair
+    if (msg.tool_calls && msg.tool_calls.length) {
+      try {
+        await toolCallRepair.continueTruncatedToolCalls(msg, {
+          completeFn: ({ provider: p, model: m, messages: msgs, signal: sig, max_tokens }) =>
+            completeChatMessage({ provider: p, model: m, messages: msgs, signal: sig, options: { max_tokens } }),
+          provider,
+          model,
+          signal,
+        })
+      } catch {}
+      try {
+        const repaired = toolCallRepair.repairToolCalls(msg.tool_calls, validToolNames)
+        if (repaired && Array.isArray(repaired.toolCalls)) {
+          msg.tool_calls = repaired.toolCalls
+        }
+      } catch {}
+    }
+
     const hasToolCalls = !!(msg.tool_calls && msg.tool_calls.length)
     const kind = hasToolCalls ? 'act' : 'plan'
     // Only emit onPlanStep during intermediate tool calls — never emit the final conversational reply as a plan step
@@ -849,6 +928,22 @@ Reply in this format:
               entry.failure_kind = 'permission_denied'
             }
           }
+          // ── ZCode Same-Catalog Tool-Boundary Allowlist ─────────────────────
+          // Allows subagents / background memory agents to pass the full parent `tools`
+          // schema in the API request (preserving 100% of the parent Prompt Cache prefix)
+          // while enforcing restricted tool permissions at the execution boundary.
+          const boundaryAllowlist = options?.allowedTools || options?.toolBoundaryAllowlist
+          if (!entry.error && boundaryAllowlist) {
+            try {
+              const { evaluateToolBoundaryAllowlist } = require('./microcompact')
+              const bCheck = evaluateToolBoundaryAllowlist(fn.name, boundaryAllowlist)
+              if (!bCheck.allowed) {
+                entry.error = bCheck.reason
+                entry.failure_kind = 'permission_denied'
+              }
+            } catch {}
+          }
+
           // ── C1: effectiveMode（auto_confirm 拆分 + 信任引擎自适应）────────
           let effectiveMode = agentMode === 'auto_confirm'
             ? (tool.risk === 'safe' ? 'auto' : 'ask')
@@ -1248,6 +1343,16 @@ Reply ONLY with JSON:
       if (totalChars > MAX_TOTAL_CHARS) {
         return '（工具输出超出上下文预算，已停止）'
       }
+      if (planningMode && plan && typeof planning.advancePlanOnToolRound === 'function') {
+        try {
+          const advanced = planning.advancePlanOnToolRound(plan, results)
+          if (advanced) {
+            if (db && db.saveSessionPlan) db.saveSessionPlan(sessionId, plan)
+            onPlanSnapshot?.(plan)
+            onTodoUpdate?.(planToTodos(plan))
+          }
+        } catch {}
+      }
       if (planningMode && plan && plan.tasks.every(t => t.status === 'completed')) {
         const summary = planning.planSummary(plan)
         convo.push({ role: 'system', content: summary })
@@ -1287,7 +1392,7 @@ Reply ONLY with JSON:
         return summary
       }
       try {
-        const folded = compaction.foldStaleToolOutputs(convo)
+        const folded = compaction.foldStaleToolOutputs(convo, { preservePrefix: cachePrefixStable })
         if (Array.isArray(folded)) convo.splice(0, convo.length, ...folded)
       } catch {}
       loopStateMachine.transition(LoopStates.PLANNING, { step: depth + 1 })
@@ -1328,8 +1433,15 @@ Reply ONLY with JSON:
 
     const finalStatus = budget.used >= budget.maxTotal ? 'budget_exhausted' : 'success'
     loopStateMachine.transition(finalStatus === 'success' ? LoopStates.COMPLETED : LoopStates.FAILED, { finalStatus })
-    if (finalStatus === 'success' && planningMode && plan && plan.tasks.every(t => t.status === 'completed')) {
-      if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
+    if (finalStatus === 'success' && planningMode && plan) {
+      try {
+        if (typeof planning.finalizePlanOnComplete === 'function') {
+          planning.finalizePlanOnComplete(plan)
+        }
+        onPlanSnapshot?.(plan)
+        onTodoUpdate?.(planToTodos(plan))
+        if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
+      } catch {}
     }
     // Event stream: agent end
     eventStream.agentEnd({ sessionId, finalStatus, totalIterations: budget.used })

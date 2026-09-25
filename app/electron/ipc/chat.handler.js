@@ -167,7 +167,14 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('agent-checkpoint:list', (_e, { sessionId, messageId = null } = {}) => {
     return db.listAgentCheckpoints(sessionId, messageId)
   })
-  ipcMain.handle('agent-checkpoint:rollback', (_e, { id }) => checkpoints.rollbackCheckpoint(id))
+  ipcMain.handle('agent-checkpoint:rollback', (_e, { id, sessionId } = {}) => {
+    const res = checkpoints.rollbackCheckpoint(id)
+    try {
+      const targetSid = sessionId || res?.sessionId
+      if (targetSid) require('../llm/backgroundTasks').bumpBranchGeneration(targetSid)
+    } catch {}
+    return res
+  })
 
   // Trust badge: renderer queries trust score for current session
   ipcMain.handle('trust:badge', (_e, { sessionId }) => {

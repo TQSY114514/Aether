@@ -5,6 +5,7 @@ import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Searc
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import FileTree from './FileTree'
+import HoverMarquee from '@/components/ui/HoverMarquee'
 
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
@@ -247,51 +248,57 @@ export default function Sidebar() {
                     style={{ borderColor: 'var(--accent)' }} onClick={(e) => e.stopPropagation()} />
                 ) : (
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 leading-tight">
-                      <span className="truncate text-[13px]" style={{ color: 'var(--text-primary)' }}>
-                        {session.title || t('chat.new')}
-                      </span>
-                      <span className="text-[10px] shrink-0 ml-auto tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                    <div className="flex items-center justify-between gap-1.5 leading-tight">
+                      <HoverMarquee
+                        text={session.title || t('chat.new')}
+                        className="flex-1 min-w-0 text-[13px]"
+                        style={{ color: 'var(--text-primary)' }}
+                      />
+                      <span className="text-[10px] shrink-0 tabular-nums group-hover:hidden" style={{ color: 'var(--text-muted)' }}>
                         {relativeTime(session.updated_at || session.created_at)}
                       </span>
                     </div>
                     {session.last_message && (
-                      <div className="truncate text-[11px] leading-tight mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                        {previewOf(session.last_message)}
-                      </div>
+                      <HoverMarquee
+                        text={previewOf(session.last_message)}
+                        className="w-full text-[11px] leading-tight mt-0.5"
+                        style={{ color: 'var(--text-muted)' }}
+                      />
                     )}
                   </div>
                 )}
-                <button onClick={async (e) => {
-                  e.stopPropagation()
-                  const cmd = `aether tui --session ${session.id}`
-                  try {
-                    await window.electronAPI?.system?.clipboardWrite?.(cmd)
-                    await window.electronAPI?.system?.notify?.({ title: '已复制终端命令', body: cmd })
-                  } catch {}
-                }}
-                  className="opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 action-reveal-silky p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky"
-                  title="在终端继续此会话(复制命令)">
-                  <TerminalSquare size={12} className="text-[var(--text-muted)]" />
-                </button>
-                <button onClick={async (e) => {
-                  e.stopPropagation()
-                  const pinned = session.pinned ? 0 : 1
-                  await window.electronAPI?.session?.pin?.(session.id, pinned)
-                  loadSessions()
-                }}
-                  className={`opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 action-reveal-silky p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky ${session.pinned ? 'opacity-100 text-amber-500' : ''}`}
-                  title={session.pinned ? 'Unpin' : 'Pin'}>
-                  <Pin size={11} />
-                </button>
-                <button onClick={async (e) => {
-                  e.stopPropagation()
-                  const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
-                  if (ok) deleteSession(session.id)
-                }}
-                  className="opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 action-reveal-silky p-1 rounded hover:bg-[var(--border)] icon-btn-silky">
-                  <Trash2 size={12} className="text-gray-400" />
-                </button>
+                <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 -mr-1">
+                  <button onClick={async (e) => {
+                    e.stopPropagation()
+                    const cmd = `aether tui --session ${session.id}`
+                    try {
+                      await window.electronAPI?.system?.clipboardWrite?.(cmd)
+                      await window.electronAPI?.system?.notify?.({ title: '已复制终端命令', body: cmd })
+                    } catch {}
+                  }}
+                    className="p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky"
+                    title="在终端继续此会话(复制命令)">
+                    <TerminalSquare size={12} className="text-[var(--text-muted)]" />
+                  </button>
+                  <button onClick={async (e) => {
+                    e.stopPropagation()
+                    const pinned = session.pinned ? 0 : 1
+                    await window.electronAPI?.session?.pin?.(session.id, pinned)
+                    loadSessions()
+                  }}
+                    className={`p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky ${session.pinned ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}
+                    title={session.pinned ? 'Unpin' : 'Pin'}>
+                    <Pin size={11} />
+                  </button>
+                  <button onClick={async (e) => {
+                    e.stopPropagation()
+                    const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
+                    if (ok) deleteSession(session.id)
+                  }}
+                    className="p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky">
+                    <Trash2 size={12} className="text-gray-400" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

@@ -77,12 +77,21 @@ function getMergedTool(name) {
 
 // The OpenAI tools payload, filtered by permission mode. Mirrors the built-in
 // registry's toolsPayload but over the merged set.
-function getMergedToolsPayload(mode) {
+// Sorted via sortToolsForCacheStability (CORE -> UNCLASSIFIED/MCP -> CATEGORY)
+// unless opts.cacheStable === false so staged category additions are tail appends.
+function getMergedToolsPayload(mode, opts = {}) {
   ensureSeeded()
   const list = mode === 'plan'
     ? [...mergedTools.values()].filter(t => t.risk === 'safe')
     : [...mergedTools.values()]
-  return list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+  const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+  if (opts && opts.cacheStable === false) return raw
+  try {
+    const { sortToolsForCacheStability } = require('../llm/toolRouter')
+    return sortToolsForCacheStability(raw)
+  } catch {
+    return raw
+  }
 }
 
 // Which servers are currently connected (for the settings UI).

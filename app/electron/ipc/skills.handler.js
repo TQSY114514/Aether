@@ -109,6 +109,11 @@ function registerSkillsHandlers(ipcMain, db) {
     }
   })
 
+  // Import a skill from GitHub shorthand (owner/repo[/path]) or HTTPS URL (P0-3).
+  ipcMain.handle('skills:importUrl', async (_e, source) => {
+    return skills.importSkillFromUrl(source)
+  })
+
   ipcMain.handle('commands:list', () => {
     return skills.getCommands().map(c => ({ id: c.id, name: c.name, description: c.description, prompt: c.prompt }))
   })
