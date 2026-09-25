@@ -147,4 +147,4 @@ Aether は以下の革新的なオープンソースプロジェクトとアー�
 
 ## ライセンス
 
-[MIT](./LICENSE) © 2025-2026 Aether
+[Apache-2.0](./LICENSE) © 2025-2026 Aether
