@@ -710,5 +710,7 @@
   "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
   "arena.bench.summary_never": "{0} tasks · {1} models · never run",
   "arena.bench.running": "Running…",
-  "arena.bench.rerun": "Re-run"
+  "arena.bench.rerun": "Re-run",
+  "inject.send_hint": "Steer / Inject instruction",
+  "inject.steer_placeholder": "Type a steering instruction and press Enter…"
 }

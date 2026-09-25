@@ -727,7 +727,9 @@
       "arena.bench.summary_run": "{0} 个任务 · {1} 个模型 · 上次运行 {2}",
       "arena.bench.summary_never": "{0} 个任务 · {1} 个模型 · 尚未运行",
       "arena.bench.running": "运行中…",
-      "arena.bench.rerun": "重跑"
+      "arena.bench.rerun": "重跑",
+      "inject.send_hint": "插入纠偏 (Steer)",
+      "inject.steer_placeholder": "输入中途纠偏指令 (Steer) / 按回车插话…"
     }
   },
   {
@@ -890,7 +892,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -1053,7 +1057,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -1215,7 +1221,9 @@
       "arena.bench.summary_run": "{0} 个任务 · {1} 个模型 · 上次运行 {2}",
       "arena.bench.summary_never": "{0} 个任务 · {1} 个模型 · 尚未运行",
       "arena.bench.running": "运行中…",
-      "arena.bench.rerun": "重跑"
+      "arena.bench.rerun": "重跑",
+      "inject.send_hint": "插入纠偏 (Steer)",
+      "inject.steer_placeholder": "输入中途纠偏指令 (Steer) / 按回车插话…"
     }
   },
   {
@@ -1378,7 +1386,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -1541,7 +1551,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -1704,7 +1716,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -1867,7 +1881,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -2055,7 +2071,9 @@
       "arena.bench.summary_run": "{0} 個任務 · {1} 個模型 · 上次執行 {2}",
       "arena.bench.summary_never": "{0} 個任務 · {1} 個模型 · 尚未執行",
       "arena.bench.running": "執行中…",
-      "arena.bench.rerun": "重跑"
+      "arena.bench.rerun": "重跑",
+      "inject.send_hint": "插入糾偏 (Steer)",
+      "inject.steer_placeholder": "輸入中途糾偏指令 (Steer) / 按回車插話…"
     }
   },
   {
@@ -2218,7 +2236,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -2381,7 +2401,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -2544,7 +2566,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   },
   {
@@ -2707,7 +2731,9 @@
       "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
       "arena.bench.summary_never": "{0} tasks · {1} models · never run",
       "arena.bench.running": "Running…",
-      "arena.bench.rerun": "Re-run"
+      "arena.bench.rerun": "Re-run",
+      "inject.send_hint": "Steer / Inject instruction",
+      "inject.steer_placeholder": "Type a steering instruction and press Enter…"
     }
   }
 ]

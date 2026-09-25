@@ -809,7 +809,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "en-upside": {
     "agent.ask": "suoᴉʇɔɐ ʎʞsᴉɹ ǝɹoɟǝq ɯɹᴉɟuoɔ — ʞsɐ",
@@ -1523,7 +1525,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} · sʞsɐʇ {1} unɹ ʇsɐl · slǝpoɯ {2}",
     "arena.bench.summary_never": "{0} · sʞsɐʇ {1}unɹ ɹǝʌǝu · slǝpoɯ ",
     "arena.bench.running": "…ƃuᴉuunɹ",
-    "arena.bench.rerun": "unɹ-ǝɹ"
+    "arena.bench.rerun": "unɹ-ǝɹ",
+    "inject.send_hint": "uoᴉʇɔnɹʇsuᴉ ʇɔǝɾuᴉ / ɹǝǝʇs",
+    "inject.steer_placeholder": "…ɹǝʇuǝ ssǝɹd puɐ uoᴉʇɔnɹʇsuᴉ ƃuᴉɹǝǝʇs ɐ ǝdʎʇ"
   },
   "zh-CN": {
     "agent.ask": "询问 — 危险操作前确认",
@@ -2251,7 +2255,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} 个任务 · {1} 个模型 · 上次运行 {2}",
     "arena.bench.summary_never": "{0} 个任务 · {1} 个模型 · 尚未运行",
     "arena.bench.running": "运行中…",
-    "arena.bench.rerun": "重跑"
+    "arena.bench.rerun": "重跑",
+    "inject.send_hint": "插入纠偏 (Steer)",
+    "inject.steer_placeholder": "输入中途纠偏指令 (Steer) / 按回车插话…"
   },
   "es": {
     "app.name": "Aether",
@@ -2411,7 +2417,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "ja": {
     "app.name": "Aether",
@@ -2571,7 +2579,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -2730,7 +2740,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} 个任务 · {1} 个模型 · 上次运行 {2}",
     "arena.bench.summary_never": "{0} 个任务 · {1} 个模型 · 尚未运行",
     "arena.bench.running": "运行中…",
-    "arena.bench.rerun": "重跑"
+    "arena.bench.rerun": "重跑",
+    "inject.send_hint": "插入纠偏 (Steer)",
+    "inject.steer_placeholder": "输入中途纠偏指令 (Steer) / 按回车插话…"
   },
   "fr": {
     "app.name": "Aether",
@@ -2890,7 +2902,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "de": {
     "app.name": "Aether",
@@ -3050,7 +3064,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "pt": {
     "app.name": "Aether",
@@ -3210,7 +3226,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "ru": {
     "app.name": "Aether",
@@ -3370,7 +3388,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "zh-TW": {
     "app.name": "Aether",
@@ -3555,7 +3575,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} 個任務 · {1} 個模型 · 上次執行 {2}",
     "arena.bench.summary_never": "{0} 個任務 · {1} 個模型 · 尚未執行",
     "arena.bench.running": "執行中…",
-    "arena.bench.rerun": "重跑"
+    "arena.bench.rerun": "重跑",
+    "inject.send_hint": "插入糾偏 (Steer)",
+    "inject.steer_placeholder": "輸入中途糾偏指令 (Steer) / 按回車插話…"
   },
   "ar": {
     "app.name": "Aether",
@@ -3715,7 +3737,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "uk": {
     "app.name": "Aether",
@@ -3875,7 +3899,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "ko": {
     "app.name": "Aether",
@@ -4035,7 +4061,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   },
   "hi": {
     "app.name": "Aether",
@@ -4195,7 +4223,9 @@ const translations: Record<string, Record<string, string>> = {
     "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
     "arena.bench.summary_never": "{0} tasks · {1} models · never run",
     "arena.bench.running": "Running…",
-    "arena.bench.rerun": "Re-run"
+    "arena.bench.rerun": "Re-run",
+    "inject.send_hint": "Steer / Inject instruction",
+    "inject.steer_placeholder": "Type a steering instruction and press Enter…"
   }
 }
 

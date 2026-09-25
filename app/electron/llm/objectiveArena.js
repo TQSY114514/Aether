@@ -461,9 +461,9 @@ async function runObjectiveEvaluation({
     // every candidate model receives identical relative paths and source text for SEARCH blocks.
     let enrichedUserPrompt = prompt
     try {
-      const { redactSecrets } = require('./toolResultMiddleware')
+      const { redactMiddleware } = require('./toolResultMiddleware')
       const IGNORED_DIRS = new Set(['.git', 'dist', 'build', 'out', 'node_modules', '.next', 'coverage', 'vendor'])
-      const SENSITIVE_NAME_RE = /(?:secret|credential|token|password|apikey|auth|key|env|config|cert|private)/i
+      const SENSITIVE_FILE_RE = /^(?:\.env(?:\..+)?|credentials\.json|secrets?\.(?:json|ya?ml|js|ts)|service[-_]?account.*\.json|id_rsa.*|.*\.(?:pem|key|p12|pfx))$/i
       const candidates = []
       const walk = async (dir) => {
         if (candidates.length >= 500) return
@@ -473,8 +473,8 @@ async function runObjectiveEvaluation({
           const full = path.join(dir, ent.name)
           if (ent.isDirectory()) {
             if (!IGNORED_DIRS.has(ent.name) && !ent.name.startsWith('.')) await walk(full)
-          } else if (ent.isFile() && /\.(js|ts|jsx|tsx|mjs|cjs|py|css|html)$/i.test(ent.name)) {
-            if (SENSITIVE_NAME_RE.test(ent.name)) continue
+          } else if (ent.isFile() && /\.(js|ts|jsx|tsx|mjs|cjs|py|json|css|html)$/i.test(ent.name)) {
+            if (SENSITIVE_FILE_RE.test(ent.name)) continue
             const rel = path.relative(baseCwd, full).replace(/\\/g, '/')
             if (!isSafeSandboxTarget(baseCwd, full, protectedRelFiles)) continue
             candidates.push({ rel, full })
@@ -494,7 +494,7 @@ async function runObjectiveEvaluation({
         if (totalChars >= 24000) break
         const rawContent = await fs.promises.readFile(item.full, 'utf8').catch(() => '')
         if (!rawContent || rawContent.length > 16000) continue
-        const safeContent = typeof redactSecrets === 'function' ? redactSecrets(rawContent) : rawContent
+        const safeContent = typeof redactMiddleware === 'function' ? redactMiddleware(rawContent) : rawContent
         contextParts.push(`File: ${item.rel}\n\`\`\`\n${safeContent}\n\`\`\``)
         totalChars += safeContent.length
       }

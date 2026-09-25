@@ -176,8 +176,8 @@ export default function ChatInput() {
 
   const currentPlaceholder = useMemo(() => {
     if (chatMode === 'arena') return t('chat.arena.placeholder')
-    if (isStreaming) return t('inject.placeholder')
     if (isLooping) return t('inject.placeholder')
+    if (isStreaming) return t('inject.steer_placeholder')
     if (hintIndex === 1) return t('empty.hint.slash', '输入 / 唤起快捷指令与预设任务…')
     if (hintIndex === 2) return t('empty.hint.at', '输入 @ 关联项目文件、代码符号或知识库…')
     return t('chat.placeholder')
