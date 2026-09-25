@@ -1,19 +1,26 @@
 <div align="center">
 
-<img src="./assets/readme-hero.png" width="480" alt="Aether" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/readme-hero-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./assets/readme-hero-light.png" />
+  <img src="./assets/readme-hero.png" width="620" alt="Aether — Local-first Multi-Model AI Workbench" />
+</picture>
 
 # Aether
 
 ### ローカルファースト Agent ワークベンチ · 内蔵アリーナ · デフォルトで安全
 
-**どのモデルが最強か悩む必要はありません。Aether があなたの実際のタスクで実測し、最適なモデルを選定します。**
+実際のタスクで複数のモデルを並行比較し、実測データに基づいて最適なモデルを選定。デスクトップ GUI とターミナル TUI は同一のローカル SQLite データベース、長期記憶グラフ、権限サンドボックスを共有します。
 
-[![GitHub downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&label=downloads)](https://github.com/TQSY114514/Aether/releases)
-[![npm downloads](https://img.shields.io/npm/dm/aetherai?style=flat-square&label=npm%20downloads)](https://www.npmjs.com/package/aetherai)
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE)
-[![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-ダウンロード)
+[![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
+[![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
+[![npm downloads](https://img.shields.io/npm/dt/aetherai.svg?style=flat-square&color=3fb950&labelColor=161b22&logo=npm&logoColor=white&label=downloads)](https://www.npmjs.com/package/aetherai)
+[![npm](https://img.shields.io/npm/v/aetherai.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white)](https://www.npmjs.com/package/aetherai)
+[![ci](https://img.shields.io/github/actions/workflow/status/TQSY114514/Aether/ci.yml?branch=master&event=push&style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white)](https://github.com/TQSY114514/Aether/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
+[![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#デスクトップ版-windows--推奨)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · **[日本語](./README.ja.md)** · [ロードマップ](./docs/roadmap.md) · [競合分析](./docs/competitive-analysis.md)
 
 </div>
 
@@ -23,19 +30,17 @@
 
 市販の多くの AI コーディングツールは単一のモデルを選択して盲信することを求めます。Aether はモデルをプラグイン可能なコンピュートエンジンとして扱い、コントロール権を常にあなたへ提供します:
 
-1. **実際のタスクで実測。** 内蔵の**アリーナ (Arena)** を開き、1つのプロンプトを複数のモデルに並行して送信し、最良の回答に投票。タスク種別（コーディング、推論、翻訳）ごとにローカル ELO レーティングがリアルタイムに更新されます。
-2. **作業を安全に委託。** **Ask（問い合わせ）モード** で Aether をプロジェクトに向けます。Agent は自動で計画を立て、ファイルを検査し、コマンドを実行しますが、リスクのあるステップごとにあなたの承認を求めます。
-3. **適用前の全景確認。** 提案されたすべてのファイル変更はインライン差分（Diff）として描画されます。ターミナルコマンドは標準出力をリアルタイムでストリーミングし、いつでも中断可能です。
-4. **ローカルファーストのプライバシー。** API キー、チャット履歴、記憶はすべてローカルの SQLite データベース（`%APPDATA%/aetherai/`）に保持されます。テレメトリ収集なし、クラウド中継なし、中間サーバーなし。
+1. **実際のタスクで実測（Arena）。** 内蔵の**アリーナ (Arena)** を開き、1つのプロンプトを複数のモデルに並行して送信し、最良の回答に投票。タスク種別（コーディング、推論、翻訳）ごとにローカル ELO レーティングがリアルタイムに更新されます。
+2. **6軸権限ゲートによる安全な委託。** **Ask（問い合わせ）モード** で Aether をプロジェクトに向けます。提案されたファイル変更はインライン差分（Diff）として表示され、リスクのあるコマンドは実行前に承認を求めます。
+3. **構造化長期記憶（AutoMemory & Knowledge Graph）。** API キー、チャット履歴、知識グラフはすべてローカルの SQLite データベース（`%APPDATA%/aetherai/aetherai.db`）に保存され、ワークスペース単位で分離されます。
+4. **デスクトップ中心・ターミナル連携。** **開発の主軸は Windows デスクトップ版 (GUI)** に置かれており、ビジュアルなモデルアリーナ、記憶グラフ管理、Diff レビューの全機能を提供します。軽量なターミナル版（`aether tui`）は同じ SQLite ストアを共有する補助インターフェースとして機能します。
 
 ---
 
 ## 2 つのインターフェース、1 つの統合ランタイム
 
-Aether はまったく同じ Agent コア、ローカル SQLite ストレージ、記憶、セキュリティサンドボックスを共有する、2 つのファーストクラス・インターフェースを提供します:
-
-- 🖥️ **Aether Desktop (GUI)** — Electron + React によるワークベンチ。リッチな Markdown ストリーミング、ビジュアルなモデルアリーナ、リアルタイム推論トレース、設定センターを備えています。
-- ⌨️ **Aether Terminal (TUI / CLI / SDK)** — Node.js 22+ と Ink v5 による軽量なインタラクティブターミナル（`aether tui`）。完全キーボード操作、行番号付き Diff 承認、ヘッドレス CI モード（`--mode json|rpc`）、Electron-free SDK（`require('aetherai/sdk')`）を搭載。
+- 🖥️ **Aether Desktop (GUI · 主力エディション)** — Electron + React によるワークベンチ。リッチな Markdown ストリーミング、ビジュアルなモデルアリーナ、知識グラフ管理、リアルタイム推論トレース、設定センターをすべて搭載しています。
+- ⌨️ **Aether Terminal (TUI / CLI / SDK · 補助ツール)** — Node.js 22+ と Ink v5 によるインタラクティブターミナル（`aether tui`）。キーボード操作、行番号付き Diff 承認、ヘッドレス CI モード（`--mode json|rpc`）、Electron-free SDK（`require('aetherai/sdk')`）を搭載。
 
 > 💡 **シームレスな継続性**: デスクトップアプリで開始したセッションを、ターミナルで `aether tui --session <id>` を使ってそのまま再開できます（その逆も同様）。
 
@@ -46,7 +51,7 @@ Aether はまったく同じ Agent コア、ローカル SQLite ストレージ�
 公開ベンチマークと再現可能な評価スクリプト（`node app/scripts/gen-radar.cjs`）に基づき、20 の主要 Agent（Claude Code, Codex, Cursor, Windsurf, Trae, Devin, OpenHands など）に対する客観的自己評価スコア:
 
 <p align="center">
-  <img src="./assets/agent-radar-2026.ja.svg" width="720" alt="Aether 主要エージェント20種との誠実な自己評価レーダーチャート" />
+  <img src="./assets/agent-radar-2026.ja.svg" width="88%" alt="Aether 主要エージェント20種との誠実な自己評価レーダーチャート" />
 </p>
 
 Aether の強みは **ローカルファーストのプライバシー、複数モデルの柔軟性、多層サンドボックスの安全性** にあります。単一モデルによる純粋なコーディング支援において Cursor のような大規模な商用 IDE 環境の完全な代替を目指しているわけではないことを率直に認め、あらゆるモデルを安心・透明に扱える信頼性の高いワークベンチを提供することを目指しています。
@@ -55,7 +60,9 @@ Aether の強みは **ローカルファーストのプライバシー、複数�
 
 ## ダウンロードとクイックスタート
 
-### デスクトップ版 (Windows)
+> **推奨エディション**: Aether の開発重心およびすべての主要機能（ビジュアル Arena、知識グラフ管理、インライン Diff レビュー）は **Windows デスクトップ版** に集約されています。通常の利用では **Windows デスクトップ版のダウンロードを強く推奨します**。
+
+### デスクトップ版 (Windows · 推奨)
 
 [GitHub Releases](https://github.com/TQSY114514/Aether/releases) から最新リリースをダウンロードしてください:
 
