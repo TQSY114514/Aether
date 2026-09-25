@@ -218,7 +218,7 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 - **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** — 执行前层次化任务分解与规划思想（`planning.js`）。
 - **[Continue](https://github.com/continuedev/continue)** — 声明式配置即代码规范（`.aether/config.json`）。
 - **[Grok Build](https://x.ai) & [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — 专门化子 Agent 角色划分（`agentRoles.js`）、长程任务执行状态机（`longRunningTask.js`）与运行时间线抽屉灵感。
-- **DeepSeek Harness (DSH)** — 本地网关回环绑定与 HTTP Host 头安全校验实践（QVD-2026-57410 防御参考）及 README 徽章视觉规范。
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai)** — 本地网关回环绑定与 HTTP Host 头安全校验实践（QVD-2026-57410 防御参考）及 README 徽章视觉规范。
 
 ### 核心基础设施与 UI 生态
 - **运行时与存储底座**：[Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com)。
