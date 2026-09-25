@@ -121,7 +121,7 @@ function formatShellResult(stdout, stderr, exitCode, timedOut) {
   if (timedOut) return `[TIMED OUT] ${r}`
   if (exitCode === 127) return `[COMMAND NOT FOUND]\n${r}`
   if (exitCode === 137 || exitCode === 143) return `[KILLED BY SIGNAL]\n${r}`
-  if (exitCode !== 0 && exitCode !== '') return `[FAILED: exit ${exitCode}]\n${r}`
+  if (exitCode !== 0 && exitCode !== '') return `[FAILED: exit ${exitCode} (exit code: ${exitCode})]\n${r}`
   return r
 }
 
@@ -352,6 +352,9 @@ const TOOLS = [
     const r = applyAnyPatch(orig, pt)
     if (r.conflicts && r.conflicts.length) {
       throw new Error(`Patch conflicts in ${p}:\n${r.conflicts.join('\n')}\nHint: Verify lines with read_file before applying changes.`)
+    }
+    if (!r.applied || r.applied <= 0) {
+      throw new Error(`No valid patch hunks or SEARCH/REPLACE blocks were applied to ${p}. Verify the patch syntax and target lines.`)
     }
     await fs.promises.writeFile(p, r.content, 'utf-8')
     return `patched ${p} (${r.applied} changes applied via ${r.format})`

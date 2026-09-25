@@ -1150,7 +1150,7 @@ Reply ONLY with JSON:
         try {
           const evidenceEntry = { tool: (tc.function||{}).name, result: rawContent, error: entry.error, diff: entry.diff }
           if (evidenceEntry.tool === 'run_command' && entry.result !== undefined) {
-            const exitMatch = String(entry.result).match(/exit\s+code:\s*(\d+)/i)
+            const exitMatch = String(entry.result).match(/(?:exit\s+code:\s*|\[FAILED:\s*exit\s+)(-?\d+)/i)
             if (exitMatch) evidenceEntry.exitCode = parseInt(exitMatch[1], 10)
           }
           if (evidenceEntry.diff) verificationEvidence.push(evidenceEntry)
@@ -1286,7 +1286,10 @@ Reply ONLY with JSON:
         shadowSuccess = true
         return summary
       }
-      try { compaction.foldStaleToolOutputs(convo) } catch {}
+      try {
+        const folded = compaction.foldStaleToolOutputs(convo)
+        if (Array.isArray(folded)) convo.splice(0, convo.length, ...folded)
+      } catch {}
       loopStateMachine.transition(LoopStates.PLANNING, { step: depth + 1 })
       continue
     }

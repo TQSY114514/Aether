@@ -121,6 +121,7 @@ function checkToolPermission(toolName, policy) {
 }
 
 module.exports = {
+  ...permissions,
   resolveTool,
   agentModeToPermissionMode,
   requestPermissionWithTimeout,

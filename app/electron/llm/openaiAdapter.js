@@ -465,11 +465,19 @@ async function listModels({ provider, signal }) {
         if (name && typeof name === 'string') modelNames.push(name.trim())
       }
 
-      // Check for pagination
+      // Check for pagination (restrict to same origin to prevent credential leakage / SSRF)
+      const providerBase = baseUrl(provider)
+      const providerOrigin = new URL(providerBase).origin
       if (data.has_more && data.last_id) {
-        url = `${baseUrl(provider)}/models?after=${encodeURIComponent(data.last_id)}`
+        url = `${providerBase}/models?after=${encodeURIComponent(data.last_id)}`
       } else if (data.next_page) {
-        url = String(data.next_page).startsWith('http') ? data.next_page : `${baseUrl(provider)}${data.next_page}`
+        try {
+          const candidateUrl = new URL(String(data.next_page), providerBase)
+          if (candidateUrl.origin !== providerOrigin) break
+          url = candidateUrl.href
+        } catch {
+          break
+        }
       } else {
         break
       }

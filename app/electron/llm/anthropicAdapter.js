@@ -523,8 +523,8 @@ async function listModels({ provider, signal } = {}) {
       if (names.length > 0) return Array.from(new Set(names))
     }
     if (res.status === 404) {
-      // Fallback default list only if /models is not supported by endpoint
-      return ['claude-3-7-sonnet-20250219', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229']
+      // Return empty list when /models is unsupported so syncModels preserves manually configured models
+      return []
     }
     const errText = await res.text().catch(() => '')
     throw new Error(`Failed to list Anthropic models (HTTP ${res.status}): ${errText.slice(0, 100)}`)

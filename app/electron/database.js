@@ -715,7 +715,7 @@ function getModels(providerId) {
 function getAllModels() {
   return db
     .prepare(
-      "SELECT m.*, p.name as provider_name, p.api_url, p.api_key FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id",
+      "SELECT m.*, p.name as provider_name, p.api_url, p.api_key, p.api_format FROM model m JOIN provider p ON m.provider_id = p.id WHERE p.enabled = 1 ORDER BY m.provider_id, m.id",
     )
     .all()
     .map((r) => ({ ...r, api_key: decryptKey(r.api_key) }));

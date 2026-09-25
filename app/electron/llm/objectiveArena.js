@@ -27,6 +27,38 @@ const { computeCost } = require('../utils/cost')
 const { applyAnyPatch } = require('../tools/patchEngine')
 const log = require('../logger')
 
+const SAFE_VERIFY_ENV_KEYS = [
+  'PATH', 'Path', 'SYSTEMROOT', 'SystemRoot', 'COMSPEC', 'ComSpec', 'WINDIR',
+  'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+  'PROGRAMDATA', 'PROGRAMFILES', 'SYSTEMDRIVE', 'LANG', 'LC_ALL', 'TERM',
+]
+
+function buildSanitizedVerifyEnv(hostWorkspaceDir) {
+  const env = { CI: 'true', NODE_ENV: 'test' }
+  for (const key of SAFE_VERIFY_ENV_KEYS) {
+    if (process.env[key] !== undefined) env[key] = process.env[key]
+  }
+  if (hostWorkspaceDir) {
+    const hostNodeModules = path.join(hostWorkspaceDir, 'node_modules')
+    const hostBin = path.join(hostNodeModules, '.bin')
+    env.NODE_PATH = env.NODE_PATH
+      ? `${hostNodeModules}${path.delimiter}${env.NODE_PATH}`
+      : hostNodeModules
+    const pathKey = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') || 'PATH'
+    env[pathKey] = env[pathKey]
+      ? `${hostBin}${path.delimiter}${env[pathKey]}`
+      : hostBin
+    try {
+      const hostPkgUrl = require('url').pathToFileURL(path.join(hostWorkspaceDir, 'package.json')).href
+      const hooksSrc = `export async function resolve(s,c,n){try{return await n(s,c)}catch(e){if(e&&e.code==='ERR_MODULE_NOT_FOUND'&&!s.startsWith('.')&&!s.startsWith('/')&&!s.startsWith('file:')){return n(s,{...c,parentURL:${JSON.stringify(hostPkgUrl)}})}throw e}}`
+      const regSrc = `import{register}from'node:module';register(${JSON.stringify('data:text/javascript,' + encodeURIComponent(hooksSrc))});`
+      const importFlag = `--import=data:text/javascript,${encodeURIComponent(regSrc)}`
+      env.NODE_OPTIONS = env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ${importFlag}` : importFlag
+    } catch {}
+  }
+  return env
+}
+
 /**
  * Terminate a spawned child process and its process tree cleanly.
  * @param {import('child_process').ChildProcess} child
@@ -38,6 +70,8 @@ function killProcessTree(child) {
       spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
     } catch {}
   } else {
+    try { process.kill(-child.pid, 'SIGTERM') } catch {}
+    try { process.kill(-child.pid, 'SIGKILL') } catch {}
     try { child.kill('SIGTERM') } catch {}
     try { child.kill('SIGKILL') } catch {}
   }
@@ -50,7 +84,7 @@ function killProcessTree(child) {
  * @param {AbortSignal} [signal] - Optional abort signal
  * @param {number} [expectedExitCode=0] - Expected process exit code
  * @param {number} [timeoutMs=30000] - Timeout limit in milliseconds
- * @returns {Promise<{ ok: boolean, exitCode: number, stdout: string, stderr: string, durationMs: number }>}
+ * @returns {Promise<{ ok: boolean, exitCode: number, timedOut: boolean, stdout: string, stderr: string, durationMs: number }>}
  */
 function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode = 0, timeoutMs = 30000, hostWorkspaceDir = null) {
   return new Promise((resolve) => {
@@ -59,25 +93,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
       return resolve({ ok: false, exitCode: -1, timedOut: false, stdout: '', stderr: 'Aborted', durationMs: 0 })
     }
 
-    const env = { ...process.env }
-    if (hostWorkspaceDir) {
-      const hostNodeModules = path.join(hostWorkspaceDir, 'node_modules')
-      const hostBin = path.join(hostNodeModules, '.bin')
-      env.NODE_PATH = env.NODE_PATH
-        ? `${hostNodeModules}${path.delimiter}${env.NODE_PATH}`
-        : hostNodeModules
-      const pathKey = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') || 'PATH'
-      env[pathKey] = env[pathKey]
-        ? `${hostBin}${path.delimiter}${env[pathKey]}`
-        : hostBin
-      try {
-        const hostPkgUrl = require('url').pathToFileURL(path.join(hostWorkspaceDir, 'package.json')).href
-        const hooksSrc = `export async function resolve(s,c,n){try{return await n(s,c)}catch(e){if(e&&e.code==='ERR_MODULE_NOT_FOUND'&&!s.startsWith('.')&&!s.startsWith('/')&&!s.startsWith('file:')){return n(s,{...c,parentURL:${JSON.stringify(hostPkgUrl)}})}throw e}}`
-        const regSrc = `import{register}from'node:module';register(${JSON.stringify('data:text/javascript,' + encodeURIComponent(hooksSrc))});`
-        const importFlag = `--import=data:text/javascript,${encodeURIComponent(regSrc)}`
-        env.NODE_OPTIONS = env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ${importFlag}` : importFlag
-      } catch {}
-    }
+    const env = buildSanitizedVerifyEnv(hostWorkspaceDir)
 
     let child
     try {
@@ -85,6 +101,7 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
         cwd,
         env,
         shell: true,
+        detached: process.platform !== 'win32',
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -172,11 +189,25 @@ function isPathInside(parentDir, targetPath) {
   return Boolean(rel && !rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
-function isSafeSandboxTarget(baseDir, targetPath) {
+const PROTECTED_SANDBOX_FILES = new Set([
+  'package.json',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  '.npmrc',
+  '.yarnrc',
+  '.yarnrc.yml',
+])
+
+function isSafeSandboxTarget(baseDir, targetPath, extraProtected = null) {
   if (!isPathInside(baseDir, targetPath)) return false
   const rel = path.relative(baseDir, targetPath)
   const segments = rel.split(/[\\/]/)
-  if (segments.includes('node_modules') || segments.includes('.git')) return false
+  if (segments.includes('node_modules') || segments.some((s) => s.startsWith('.'))) return false
+  const baseName = path.basename(targetPath).toLowerCase()
+  if (PROTECTED_SANDBOX_FILES.has(baseName)) return false
+  if (/^(vite|vitest|jest)\.config\.[a-z]+$/i.test(baseName)) return false
+  if (extraProtected && extraProtected.has(rel.replace(/\\/g, '/'))) return false
   if (!fs.existsSync(targetPath)) return false
   try {
     const stat = fs.lstatSync(targetPath)
@@ -189,8 +220,24 @@ function isSafeSandboxTarget(baseDir, targetPath) {
   }
 }
 
+const UNTRUSTED_PATCH_PATTERNS = [
+  /\bchild_process\b/,
+  /\b(?:execSync|spawnSync|execFileSync|fork)\s*\(/,
+  /\bprocess\.binding\b/,
+  /\bprocess\.dlopen\b/,
+]
+
+function hasNewlyIntroducedUnsafeApi(origContent, newContent) {
+  for (const pat of UNTRUSTED_PATCH_PATTERNS) {
+    if (pat.test(newContent) && !pat.test(origContent)) {
+      return true
+    }
+  }
+  return false
+}
+
 /** Extract supported patch formats from a model response and apply them safely. */
-function extractAndApplyPatches(workspaceDir, responseText) {
+function extractAndApplyPatches(workspaceDir, responseText, protectedRelFiles = null) {
   const norm = String(responseText || '').replace(/\r\n/g, '\n')
   let appliedCount = 0
   const conflicts = []
@@ -204,14 +251,18 @@ function extractAndApplyPatches(workspaceDir, responseText) {
     const rawFile = (diffMatch[2] || diffMatch[1]).trim()
     const patchBlock = diffMatch[0].trim()
     const abs = path.resolve(baseDir, rawFile)
-    if (isSafeSandboxTarget(baseDir, abs)) {
+    if (isSafeSandboxTarget(baseDir, abs, protectedRelFiles)) {
       try {
         const orig = fs.readFileSync(abs, 'utf8')
         const res = applyAnyPatch(orig, patchBlock)
         if (res.applied > 0 && res.content !== orig) {
-          fs.writeFileSync(abs, res.content, 'utf8')
-          appliedCount += res.applied
-          filesModified.add(rawFile)
+          if (hasNewlyIntroducedUnsafeApi(orig, res.content)) {
+            conflicts.push(`Rejected unsafe process/execution API in patch for: ${rawFile}`)
+          } else {
+            fs.writeFileSync(abs, res.content, 'utf8')
+            appliedCount += res.applied
+            filesModified.add(rawFile)
+          }
         }
         if (res.conflicts && res.conflicts.length) conflicts.push(...res.conflicts)
       } catch (e) {
@@ -234,7 +285,7 @@ function extractAndApplyPatches(workspaceDir, responseText) {
         const cand = fileMatch[1].trim()
         const candAbs = path.resolve(baseDir, cand)
         currentFile = null
-        if (isSafeSandboxTarget(baseDir, candAbs)) {
+        if (isSafeSandboxTarget(baseDir, candAbs, protectedRelFiles)) {
           currentFile = cand
         } else {
           conflicts.push(`Rejected invalid or unsafe file target: ${cand}`)
@@ -259,15 +310,19 @@ function extractAndApplyPatches(workspaceDir, responseText) {
         if (j < lines.length && lines[j].trim() === '>>>>>>> REPLACE') {
           if (currentFile) {
             const abs = path.resolve(baseDir, currentFile)
-            if (isSafeSandboxTarget(baseDir, abs)) {
+            if (isSafeSandboxTarget(baseDir, abs, protectedRelFiles)) {
               try {
                 const orig = fs.readFileSync(abs, 'utf8')
                 const patchStr = `<<<<<<< SEARCH\n${searchLines.join('\n')}\n=======\n${replaceLines.join('\n')}\n>>>>>>> REPLACE`
                 const res = applyAnyPatch(orig, patchStr)
                 if (res.applied > 0 && res.content !== orig) {
-                  fs.writeFileSync(abs, res.content, 'utf8')
-                  appliedCount += res.applied
-                  filesModified.add(currentFile)
+                  if (hasNewlyIntroducedUnsafeApi(orig, res.content)) {
+                    conflicts.push(`Rejected unsafe process/execution API in patch for: ${currentFile}`)
+                  } else {
+                    fs.writeFileSync(abs, res.content, 'utf8')
+                    appliedCount += res.applied
+                    filesModified.add(currentFile)
+                  }
                 }
                 if (res.conflicts && res.conflicts.length) conflicts.push(...res.conflicts)
               } catch (e) {
@@ -393,7 +448,14 @@ async function runObjectiveEvaluation({
       timeoutMs,
       baseCwd,
     )
-    const baselineAlreadyPassed = Boolean(baselineRes.ok || baselineRes.timedOut)
+    const baselineAlreadyPassed = Boolean(baselineRes.ok)
+    const protectedRelFiles = new Set()
+    for (const token of String(verifyCommand || '').split(/\s+/)) {
+      const cleaned = token.replace(/^['"]|['"]$/g, '').replace(/\\/g, '/')
+      if (cleaned && /\.[a-z0-9]+$/i.test(cleaned) && !cleaned.startsWith('-')) {
+        protectedRelFiles.add(cleaned.replace(/^\.\//, ''))
+      }
+    }
 
     const roundResults = await Promise.all(
       selectedModels.map(async (m) => {
@@ -441,8 +503,14 @@ async function runObjectiveEvaluation({
         let usage = null
         try {
           const callFn = completeChatMessageFn || completeChatMessage
+          const prov = (db && typeof db.getProvider === 'function' ? db.getProvider(m.provider_id) : null) || {}
           const res = await callFn({
-            provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: m.api_format || 'openai' },
+            provider: {
+              id: m.provider_id,
+              api_url: m.api_url || prov.api_url,
+              api_key: m.api_key || prov.api_key,
+              api_format: m.api_format || prov.api_format || 'openai',
+            },
             model: m,
             messages: [
               { role: 'system', content: systemPrompt },
@@ -477,8 +545,8 @@ async function runObjectiveEvaluation({
 
         onProgress?.({ modelId: m.id, status: 'patching' })
 
-        // 2. Apply patch to the isolated sandbox
-        const patchRes = extractAndApplyPatches(modelTempDir, answer)
+        // 2. Apply patch to the isolated sandbox (protecting verifier scripts and configs)
+        const patchRes = extractAndApplyPatches(modelTempDir, answer, protectedRelFiles)
 
         onProgress?.({ modelId: m.id, status: 'verifying' })
 

@@ -167,7 +167,7 @@ async function runVisualVerification({
   }
 
   if (permissionPolicy && typeof permissionPolicy.authorizeWithContext === 'function') {
-    const permissions = require('./toolLoop/permission')
+    const permissions = require('./permissions')
     const prompter = {
       decide: () => userDecision
         ? permissions.PermissionPromptDecision.Allow
