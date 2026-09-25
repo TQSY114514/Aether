@@ -2,6 +2,20 @@
 
 All notable changes to AetherAI are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **License: MIT → Apache-2.0.** From this release onward the project is licensed under the
+  Apache License 2.0 — see `LICENSE` (full text) and `NOTICE` (attribution). The change adds an
+  explicit patent grant, a trademark clause, and a NOTICE mechanism. Versions released before
+  the change (**v0.9.1 and earlier**) remain available under the MIT License for everyone who
+  already obtained them; only future releases are Apache-2.0.
+- **Third-party notices now ship with the product.** `THIRD-PARTY-NOTICES.md` lists every
+  third-party component bundled with the desktop app (BSD-3-Clause / ISC / MPL-2.0 / Python-2.0 /
+  BlueOak-1.0.0 / MIT) together with its license text. It is included in the npm package and in
+  the packaged desktop app.
+
 ## [0.9.0] - 2026-09-13
 
 ### Added

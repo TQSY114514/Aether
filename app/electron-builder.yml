@@ -19,6 +19,9 @@ files:
   - electron/**/*
   - dist/**/*
   - package.json
+  - LICENSE
+  - NOTICE
+  - THIRD-PARTY-NOTICES.md
 asar: true
 
 # Publish provider: electron-updater reads latest.yml from the latest GitHub

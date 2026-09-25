@@ -21,7 +21,7 @@ PackageVersion: 0.8.0
 PackageLocale: en-US
 Publisher: TQSY114514
 PackageName: Aether
-License: MIT
+License: Apache-2.0
 ShortDescription: Local-first multi-model AI workbench - chat with any model, run a safe coding agent, compare models side-by-side
 InstallerType: exe
 Installers:

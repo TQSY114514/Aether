@@ -3,7 +3,7 @@
   "version": "0.9.1",
   "description": "Aether headless agent — CLI, TUI, and Electron-free SDK. Pairs with the Aether Desktop GUI (separate installer) sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/TQSY114514/Aether#readme",
   "repository": {
     "type": "git",
@@ -66,6 +66,8 @@
     "package.json",
     "README.md",
     "LICENSE",
+    "NOTICE",
+    "THIRD-PARTY-NOTICES.md",
     "CHANGELOG.md"
   ],
   "scripts": {

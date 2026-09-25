@@ -10,7 +10,7 @@
 
 [![GitHub downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&label=downloads)](https://github.com/TQSY114514/Aether/releases)
 [![npm downloads](https://img.shields.io/npm/dm/aetherai?style=flat-square&label=npm%20downloads)](https://www.npmjs.com/package/aetherai)
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)](./LICENSE)
 [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-ダウンロード)
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md)
@@ -140,4 +140,4 @@ Aether は以下の革新的なオープンソースプロジェクトとアー�
 
 ## ライセンス
 
-[MIT](./LICENSE) © 2025-2026 Aether
+[Apache-2.0](./LICENSE) © 2025-2026 Aether

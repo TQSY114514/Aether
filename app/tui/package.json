@@ -2,6 +2,7 @@
   "name": "aether-tui",
   "private": true,
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Aether interactive terminal UI (Ink v5, Electron-free). Local type:module — app root stays CJS.",
   "dependencies": {
