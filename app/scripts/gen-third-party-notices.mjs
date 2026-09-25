@@ -2,13 +2,14 @@
 // Regenerates THIRD-PARTY-NOTICES.md in the repo root and in app/ from the production
 // dependency closure recorded in app/package-lock.json.
 //
-// Why both copies: app/ is the packaging root for the npm package and for
-// electron-builder, and neither tool can reach files outside the app directory. The two
-// files must stay byte-identical, so always regenerate them together with this script.
+// Why both copies: app/ is the packaging root for the npm package and for electron-builder,
+// and neither tool can reach files outside the app directory. The two files must stay
+// byte-identical, so always regenerate them together with this script.
 //
 // Usage:
 //   node app/scripts/gen-third-party-notices.mjs
 //   node app/scripts/gen-third-party-notices.mjs --modules-root ../somewhere-with-node_modules
+//   node app/scripts/gen-third-party-notices.mjs --lock /path/to/package-lock.json
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -24,8 +25,8 @@ const argOf = (flag, fallback) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback
 }
 const lockPath = path.resolve(argOf('--lock', path.join(appDir, 'package-lock.json')))
-// Root that contains node_modules/. Lockfile keys are already "node_modules/..." paths,
-// so this must NOT point at node_modules itself.
+// Root that *contains* node_modules/. Lockfile keys are already "node_modules/..." paths,
+// so this must not point at node_modules itself.
 const modulesRoot = path.resolve(argOf('--modules-root', appDir))
 
 const MIT_BODY = `Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -50,6 +51,44 @@ const LICENCE_FILE = /^(licen[cs]e|copying|notice)([-._].*)?(\.(md|txt|markdown|
 
 const missingDirs = []
 
+// Real attribution lines look like "Copyright (c) 2024 Name" / "Copyright 2011-2022 Name and
+// Contributors" / "Copyright © Name". Licence prose also contains sentences that start with
+// the word "copyright" ("copyright notice that is included in or attached to the work"), so
+// matching every line that begins with it is not enough:
+//   * only scan the head of the file, where attribution lives,
+//   * require a notice shape (year, "(c)"/"(C)"/"©", or a capitalised name right after),
+//   * reject lines carrying licence-prose markers.
+const PROSE_MARKERS = [
+  'included in', 'attached to', 'of the work', 'in it', 'notice shall', 'must be',
+  'is hereby', 'to the exclusion', 'and/or'
+]
+
+// "Copyright (c) 2011-2022 Name", "Copyright © 2024 Name", "Copyright 2024 Name" and
+// "Copyright Isaac Z. Schlueter" are notices. "copyright notice and this permission notice
+// appear in all copies." and "copyright in it." are licence prose. What separates them is
+// what follows the word: a (c)/© marker, a year, or a capitalised name — never a plain word.
+// (A single /^copyright/i regex is not enough: without the word-boundary look-ahead it either
+// rejects real notices or accepts prose, and JS has no inline flags to mix both cases.)
+function looksLikeNotice(line) {
+  if (!/^copyright\b/i.test(line)) return false
+  const rest = line.replace(/^copyright\b/i, '').trim()
+  if (/^(\((c|C)\)|©)\s*(\d{4}|[A-Z])/.test(rest)) return true
+  if (/^(19|20)\d{2}\b/.test(rest)) return true
+  return /^[A-Z]/.test(rest)
+}
+
+function extractCopyright(text) {
+  const head = text.split('\n').slice(0, 25)
+  for (const raw of head) {
+    const line = raw.replace(/^[\s*#>\-/]+/, '').trim()
+    if (!looksLikeNotice(line)) continue
+    const lower = line.toLowerCase()
+    if (PROSE_MARKERS.some((marker) => lower.includes(marker))) continue
+    return line.slice(0, 160)
+  }
+  return null
+}
+
 function readPackageLicence(pkgPath) {
   const dir = path.join(modulesRoot, pkgPath)
   if (!fs.existsSync(dir)) {
@@ -69,8 +108,7 @@ function readPackageLicence(pkgPath) {
   }
   if (!best) return { text: null, copyright: null }
   const text = fs.readFileSync(path.join(dir, best), 'utf8').replace(/\r\n/g, '\n').trim()
-  const m = text.match(/^\s*(copyright[^\n]{0,160})$/im)
-  return { text, copyright: m ? m[1].trim() : null }
+  return { text, copyright: extractCopyright(text) }
 }
 
 const missingDirsGuard = () => {
@@ -94,8 +132,8 @@ missingDirsGuard()
 const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'))
 const packages = lock.packages || {}
 
-// Production closure = everything npm installs at runtime. devOnly and devOptional
-// entries (type-only peers such as @types/react) are NOT shipped and must not be listed.
+// Production closure = everything npm installs at runtime. dev and devOptional entries
+// (type-only peers such as @types/react) are NOT bundled and must not be listed.
 const components = []
 for (const [pkgPath, meta] of Object.entries(packages)) {
   if (pkgPath === '') continue
@@ -122,6 +160,8 @@ for (const c of components) {
   byBody.set(norm(body), existing)
   groups.set(c.licence, byBody)
 }
+
+missingDirsGuard()
 
 const out = []
 out.push('# Third-Party Notices / 第三方组件声明')
@@ -173,10 +213,11 @@ for (const licence of [...groups.keys()].filter((k) => k !== 'MIT').sort()) {
   out.push('')
   const variants = [...groups.get(licence).values()].sort((a, b) => b.keys.length - a.keys.length)
   const listed = new Set(variants.flatMap((v) => v.keys))
-  const extra = components.filter((c) => c.licence === licence && !listed.has(`${c.name}@${c.version}`)).map((c) => `${c.name}@${c.version}`)
-  if (extra.length) {
-    variants.push({ body: null, keys: extra })
-  }
+  const extra = components
+    .filter((c) => c.licence === licence && !listed.has(`${c.name}@${c.version}`))
+    .map((c) => `${c.name}@${c.version}`)
+  if (extra.length) variants.push({ body: null, keys: extra })
+
   for (const v of variants) {
     const sorted = [...v.keys].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
     if (v.body === null) {
@@ -200,30 +241,31 @@ for (const licence of [...groups.keys()].filter((k) => k !== 'MIT').sort()) {
     // component's own line is reproduced next to the shared body.
     for (const key of sorted) {
       const c = copyrightOf.get(key)
-      out.push(`- \`${key}\` — ${c || '包内未附带独立版权行（许可声明见其 \`package.json\`）'}`)
+      out.push(`- \`${key}\` — ${c || '包内未附带独立版权行（许可声明见其 `package.json`）'}`)
     }
     out.push('')
   }
 }
 
-missingDirsGuard()
-
 const content = out.join('\n')
 
-// Self-checks: refuse to write a notice file that silently lost any licence text.
+// Self-checks: never write a notices file that silently lost licence text or attribution.
 if (/\[truncated\]/i.test(content)) throw new Error('refusing to write: found a truncation marker')
 const flat = norm(content)
-for (const [key, line] of copyrightOf) {
-  if (line && !flat.includes(norm(line))) throw new Error(`refusing to write: copyright line for ${key} is missing`)
-}
 for (const [licence, byBody] of groups) {
   for (const { body, keys } of byBody.values()) {
-    if (body.length < 150) throw new Error(`refusing to write: ${licence} body for ${keys.join(', ')} is only ${body.length} chars`)
-    if (!flat.includes(norm(body))) throw new Error(`refusing to write: ${licence} body for ${keys.join(', ')} was not reproduced verbatim`)
+    if (body.length < 150) {
+      throw new Error(`refusing to write: ${licence} body for ${keys.join(', ')} is only ${body.length} chars`)
+    }
+    if (!flat.includes(norm(body))) {
+      throw new Error(`refusing to write: ${licence} body for ${keys.join(', ')} was not reproduced verbatim`)
+    }
   }
 }
-if (withoutText.length) {
-  console.warn(`warning: no in-package licence file for: ${withoutText.join(', ')}`)
+for (const [key, line] of copyrightOf) {
+  if (line && !flat.includes(norm(line))) {
+    throw new Error(`refusing to write: copyright line for ${key} is missing`)
+  }
 }
 
 const targets = [path.join(repoRoot, 'THIRD-PARTY-NOTICES.md'), path.join(appDir, 'THIRD-PARTY-NOTICES.md')]

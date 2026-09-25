@@ -83,7 +83,7 @@ SOFTWARE.
 - `js-yaml@4.3.2` — Copyright (C) 2011-2015 by Vitaly Puzrin
 - `jsonfile@6.2.1` — Copyright (c) 2012-2015, JP Richardson <jprichardson@gmail.com>
 - `lazy-val@1.0.5` — 包内未附带独立版权行（许可声明见其 `package.json`）
-- `lodash.escaperegexp@4.1.2` — Copyright jQuery Foundation and other contributors <https://jquery.org/>
+- `lodash.escaperegexp@4.1.2` — 包内未附带独立版权行（许可声明见其 `package.json`）
 - `lodash.isequal@4.5.0` — Copyright JS Foundation and other contributors <https://js.foundation/>
 - `ms@2.1.3` — Copyright (c) 2020 Vercel, Inc.
 - `node-addon-api@8.9.0` — Copyright (c) 2017 [Node.js API collaborators](https://github.com/nodejs/node-addon-api#collaborators)
@@ -302,7 +302,7 @@ Apache License
    limitations under the License.
 ```
 
-- `dompurify@3.4.15` — copyright notice that is included in or attached to the work
+- `dompurify@3.4.15` — 包内未附带独立版权行（许可声明见其 `package.json`）
 
 ## BSD-3-Clause
 
@@ -404,7 +404,7 @@ will be liable to anyone for any damages related to this
 software or this license, under any kind of legal claim.***
 ```
 
-- `sax@1.6.0` — copyright in it.
+- `sax@1.6.0` — 包内未附带独立版权行（许可声明见其 `package.json`）
 
 ## ISC
 
@@ -744,4 +744,4 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-- `argparse@2.0.1` — Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,
+- `argparse@2.0.1` — 包内未附带独立版权行（许可声明见其 `package.json`）
