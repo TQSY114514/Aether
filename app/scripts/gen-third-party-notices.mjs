@@ -59,31 +59,49 @@ const missingDirs = []
 //   * require a notice shape (year, "(c)"/"(C)"/"©", or a capitalised name right after),
 //   * reject lines carrying licence-prose markers.
 const PROSE_MARKERS = [
-  'included in', 'attached to', 'of the work', 'in it', 'notice shall', 'must be',
-  'is hereby', 'to the exclusion', 'and/or'
+  'notice', 'permission', 'appear', 'copies', 'terms', 'conditions', 'hereby', 'granted',
+  'license', 'licence', 'reproduce', 'derivative', 'rights', 'subject to', 'without limitation',
+  'liable', 'warranty', 'software', 'the work', 'in it', 'party', 'parties', 'holder',
+  'holders', 'damages', 'and/or'
 ]
+// Words that legitimately appear lower-case inside a holder name ("…and other contributors").
+const NAME_ALLOWLIST = new Set([
+  'and', 'of', 'the', 'other', 'contributors', 'authors', 'affiliates', 'inc.', 'llc',
+  'ltd.', 'gmbh', 'sa', 'as', 'co.', 'limited', 'team', 'project', 'community'
+])
+const MARKER = /[([{]c[)\]]|©/i
 
-// "Copyright (c) 2011-2022 Name", "Copyright © 2024 Name", "Copyright 2024 Name" and
-// "Copyright Isaac Z. Schlueter" are notices. "copyright notice and this permission notice
-// appear in all copies." and "copyright in it." are licence prose. What separates them is
-// what follows the word: a (c)/© marker, a year, or a capitalised name — never a plain word.
-// (A single /^copyright/i regex is not enough: without the word-boundary look-ahead it either
-// rejects real notices or accepts prose, and JS has no inline flags to mix both cases.)
+// A notice names a holder; licence prose merely mentions the word "copyright". Three tests,
+// in order:
+//   1. a (c)/©/(C) marker followed by more text — the canonical notice shape,
+//   2. a leading year with no prose vocabulary ("Copyright 2024 Name"),
+//   3. a short name-like string: 2-10 tokens, no prose vocabulary, every token either
+//      capitalised (or camelCase, e.g. "jQuery"), containing a digit/url/punctuation, or a
+//      linking word from NAME_ALLOWLIST.
+// Attribution is often not in the licence file's first lines (argparse's CWI/CNRI notices sit
+// further down), so the whole file is scanned — the prose filter is what keeps it honest.
 function looksLikeNotice(line) {
   if (!/^copyright\b/i.test(line)) return false
   const rest = line.replace(/^copyright\b/i, '').trim()
-  if (/^(\((c|C)\)|©)\s*(\d{4}|[A-Z])/.test(rest)) return true
-  if (/^(19|20)\d{2}\b/.test(rest)) return true
-  return /^[A-Z]/.test(rest)
+  const lower = line.toLowerCase()
+  if (MARKER.test(rest) && rest.replace(MARKER, '').trim().length > 1) return true
+  if (/^(19|20)\d{2}\b/.test(rest) && !PROSE_MARKERS.some((m) => lower.includes(m))) return true
+  if (PROSE_MARKERS.some((m) => lower.includes(m))) return false
+  if (!/^[A-Za-z]/.test(rest)) return false
+  const tokens = rest.split(/\s+/).filter(Boolean)
+  if (tokens.length < 2 || tokens.length > 10) return false
+  return tokens.every((token) =>
+    /^[a-z]+[A-Z]/.test(token) ||                 // camelCase: jQuery, iPhone
+    /[A-Z]/.test(token[0]) ||                     // Capitalised
+    /[\d.<>@()\[\]{}\-&,]/.test(token) ||      // year, url, punctuation
+    NAME_ALLOWLIST.has(token.toLowerCase())
+  )
 }
 
 function extractCopyright(text) {
-  const head = text.split('\n').slice(0, 25)
-  for (const raw of head) {
+  for (const raw of text.split('\n')) {
     const line = raw.replace(/^[\s*#>\-/]+/, '').trim()
     if (!looksLikeNotice(line)) continue
-    const lower = line.toLowerCase()
-    if (PROSE_MARKERS.some((marker) => lower.includes(marker))) continue
     return line.slice(0, 160)
   }
   return null
@@ -94,8 +112,7 @@ function readPackageLicence(pkgPath) {
   if (!fs.existsSync(dir)) {
     // The package is not installed: refuse to regenerate rather than silently writing a
     // notices file that lists components without their licence texts.
-    missingDirs.push(pkgPath)
-    return { text: null, copyright: null }
+    return { text: null, copyright: null, missing: true }
   }
   let best = null
   for (const entry of fs.readdirSync(dir)) {
@@ -140,17 +157,25 @@ for (const [pkgPath, meta] of Object.entries(packages)) {
   if (meta.dev === true || meta.devOptional === true) continue
   const name = meta.name || pkgPath.split('node_modules/').pop()
   const licence = typeof meta.license === 'string' ? meta.license : 'UNKNOWN'
-  components.push({ name, version: meta.version || '?', licence, pkgPath })
+  components.push({ name, version: meta.version || '?', licence, pkgPath, optional: meta.optional === true })
 }
 components.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 
 const groups = new Map()      // licence id -> Map(normalised body -> { body, keys: [] })
 const copyrightOf = new Map() // key -> copyright line
 const withoutText = []
+const skippedOptional = []
 
 for (const c of components) {
   const key = `${c.name}@${c.version}`
-  const { text, copyright } = readPackageLicence(c.pkgPath)
+  const { text, copyright, missing } = readPackageLicence(c.pkgPath)
+  if (missing) {
+    // Installed without optional dependencies (`npm ci --omit=optional`): an optional package
+    // simply is not part of this installation, so it is skipped instead of aborting the run.
+    if (c.optional) { skippedOptional.push(key); continue }
+    missingDirs.push(c.pkgPath)
+    continue
+  }
   copyrightOf.set(key, copyright)
   if (!text) { withoutText.push(key); continue }
   const body = c.licence === 'MIT' ? MIT_BODY : text
@@ -163,13 +188,16 @@ for (const c of components) {
 
 missingDirsGuard()
 
+// Packages skipped above are not installed, hence not distributed: keep them out of the index.
+const published = components.filter((c) => !skippedOptional.includes(`${c.name}@${c.version}`))
+
 const out = []
 out.push('# Third-Party Notices / 第三方组件声明')
 out.push('')
 out.push('本文件列出随 Aether 一同分发的第三方组件及其许可条款。')
 out.push('Aether 自身的许可见 [`LICENSE`](./LICENSE)，版权归属声明见 [`NOTICE`](./NOTICE)。')
 out.push('')
-out.push(`清单由 \`app/package-lock.json\` 的生产依赖闭包生成（共 **${components.length}** 个组件），按许可分组。`)
+out.push(`清单由 \`app/package-lock.json\` 的生产依赖闭包生成（共 **${published.length}** 个组件），按许可分组。`)
 out.push('')
 out.push('> **适用范围**：本清单描述仓库在生成时锁定的生产依赖闭包，也就是随桌面安装包一同打包的组件版本。')
 out.push('> 通过 npm 安装 `aetherai` 时依赖由你的包管理器就地解析安装（`dependencies` 使用 `^` 区间），实际安装的版本可能不同 ——')
@@ -181,7 +209,7 @@ out.push('## 组件清单 / Component Index')
 out.push('')
 out.push('| 组件 / Component | 版本 | 许可 / License |')
 out.push('| :--- | :--- | :--- |')
-for (const c of components) {
+for (const c of published) {
   out.push(`| \`${c.name}\` | ${c.version} | ${c.licence} |`)
 }
 out.push('')
@@ -198,7 +226,7 @@ if (mit) {
   out.push('')
   const keys = []
   for (const { keys: k } of mit.values()) keys.push(...k)
-  for (const c of components.filter((x) => x.licence === 'MIT' && !keys.includes(`${x.name}@${x.version}`))) {
+  for (const c of published.filter((x) => x.licence === 'MIT' && !keys.includes(`${x.name}@${x.version}`))) {
     keys.push(`${c.name}@${c.version}`)
   }
   for (const key of keys.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))) {
@@ -213,7 +241,7 @@ for (const licence of [...groups.keys()].filter((k) => k !== 'MIT').sort()) {
   out.push('')
   const variants = [...groups.get(licence).values()].sort((a, b) => b.keys.length - a.keys.length)
   const listed = new Set(variants.flatMap((v) => v.keys))
-  const extra = components
+  const extra = published
     .filter((c) => c.licence === licence && !listed.has(`${c.name}@${c.version}`))
     .map((c) => `${c.name}@${c.version}`)
   if (extra.length) variants.push({ body: null, keys: extra })
@@ -274,4 +302,5 @@ for (const target of targets) fs.writeFileSync(target, content, 'utf8')
 console.log(`components: ${components.length}`)
 console.log(`licence groups: ${[...groups.keys()].sort().join(', ')}`)
 console.log(`without an in-package licence file: ${withoutText.join(', ') || '(none)'}`)
+if (skippedOptional.length) console.log(`skipped (optional, not installed): ${skippedOptional.join(', ')}`)
 console.log(`wrote ${targets.map((t) => path.relative(repoRoot, t)).join(' + ')} (${content.length} chars)`)
