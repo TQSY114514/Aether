@@ -210,4 +210,4 @@ Aether 的架构与实现参考并借鉴了以下开源项目与设计思想：
 
 - **问题反馈与功能建议**：请提交至 [GitHub Issues](https://github.com/TQSY114514/Aether/issues/new)。
 - **开发规范**：提交代码前请查阅 [CONTRIBUTING.md](./CONTRIBUTING.md)、[AGENTS.md](./AGENTS.md) 与 [docs/roadmap.md](./docs/roadmap.md)。
-- **开源协议**：[Apache-2.0](./LICENSE)（第三方开源组件声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)） © 2025-2026 Aether
+- **开源协议**：[Apache-2.0](./LICENSE)（第三方开源组件声明见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)） © 2025-2026 Aether
