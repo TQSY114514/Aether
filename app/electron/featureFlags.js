@@ -65,6 +65,8 @@ const FLAG_DEFS = [
   { key: 'plugin.sdk',           default: false, category: 'ecosystem',   description: 'Third-party plugin SDK (registerTool/Skill/Agent/Provider)' },
   // Phase 6 — UX / onboarding
   { key: 'ux.firstRunWizard',   default: true,  category: 'ux',          description: 'First-run onboarding wizard (provider setup + permission recommendation)' },
+  // Phase 5 — Arena
+  { key: 'arena.objectiveArena', default: false, category: 'agent',      description: 'Objective Sandbox Arena: run candidate models against a verifiable task and rank by pass/fail + ELO' },
 ]
 
 const DEFS = Object.freeze(FLAG_DEFS.map(d => Object.freeze({ ...d })))

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
+import { useFeatureFlag } from '@/utils/featureFlags'
 import { Play, Plus, Trash2, FlaskConical, X, Check, Timer, DollarSign } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ interface Benchmark {
 export default function BenchmarkPanel() {
   const { toast } = useUI()
   const allModels = useStore((s) => s.allModels)
+  const objectiveArenaEnabled = useFeatureFlag('arena.objectiveArena')
   const [benches, setBenches] = useState<Benchmark[]>([])
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState('')
@@ -121,11 +123,13 @@ export default function BenchmarkPanel() {
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>个人基准测试(Benchmark)</h2>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setObjOpen((v) => !v)}
-            className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-            <Play size={11} />{t('arena.objective.button')}
-          </button>
+          {objectiveArenaEnabled && (
+            <button onClick={() => setObjOpen((v) => !v)}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <Play size={11} />{t('arena.objective.button')}
+            </button>
+          )}
           {!editing && (
             <button onClick={() => setEditing(true)}
               className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
@@ -139,7 +143,7 @@ export default function BenchmarkPanel() {
         保存你的常用任务, 一键对多个模型重跑 —— 得到"你的工作负载"的模型排行(胜率/延迟/成本)。
       </p>
 
-      {objOpen && (
+      {objectiveArenaEnabled && objOpen && (
         <div className="p-4 rounded-lg mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('arena.objective.title')}</span>

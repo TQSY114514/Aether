@@ -515,19 +515,36 @@ async function completeChatMessage({ provider, model, messages, signal, options 
 /** Fetch and deduplicate the model identifiers exposed by an Anthropic endpoint. */
 async function listModels({ provider, signal } = {}) {
   try {
-    const res = await fetch(`${baseUrl(provider)}/models`, { headers: headers(provider), signal })
-    if (res.ok) {
+    const allNames = []
+    let afterId = null
+    let hasMore = true
+
+    while (hasMore) {
+      const url = new URL(`${baseUrl(provider)}/models`)
+      url.searchParams.set('limit', '100')
+      if (afterId) url.searchParams.set('after_id', afterId)
+
+      const res = await fetch(url.toString(), { headers: headers(provider), signal })
+      if (res.status === 404) {
+        // /models endpoint unsupported — preserve manually configured models
+        return []
+      }
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        throw new Error(`Failed to list Anthropic models (HTTP ${res.status}): ${errText.slice(0, 100)}`)
+      }
       const data = await res.json()
       const list = Array.isArray(data) ? data : (data.data || data.models || [])
       const names = list.map(m => typeof m === 'string' ? m : (m.id || m.name)).filter(Boolean)
-      if (names.length > 0) return Array.from(new Set(names))
+      allNames.push(...names)
+
+      // Anthropic pagination fields
+      hasMore = Boolean(data.has_more)
+      afterId = data.last_id || (list.length > 0 && (list[list.length - 1]?.id)) || null
+      if (!afterId) hasMore = false
     }
-    if (res.status === 404) {
-      // Return empty list when /models is unsupported so syncModels preserves manually configured models
-      return []
-    }
-    const errText = await res.text().catch(() => '')
-    throw new Error(`Failed to list Anthropic models (HTTP ${res.status}): ${errText.slice(0, 100)}`)
+
+    return allNames.length > 0 ? Array.from(new Set(allNames)) : []
   } catch (err) {
     if (err.name === 'AbortError') throw err
     throw err

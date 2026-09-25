@@ -505,8 +505,12 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     const runKey = `objective:${runId}`
     const controller = abortControllers.get(runKey)
     if (controller) {
+      // Only signal abort — do NOT delete the key here.
+      // The finally block in arena:objective-run owns the lifecycle and will
+      // clean up once the underlying evaluation actually finishes, preventing a
+      // race where a second run with the same runId could be started before the
+      // first one has fully wound down.
       controller.abort()
-      abortControllers.delete(runKey)
       return { ok: true }
     }
     return { ok: false, error: 'Run not found or already completed' }
