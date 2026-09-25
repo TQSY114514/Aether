@@ -78,7 +78,6 @@ export default function BenchmarkPanel() {
       await window.electronAPI.arena.objectiveStop({ runId: objRunId })
       toast(t('arena.objective.aborted'), { type: 'info' })
     } catch {}
-    setObjRunId(null)
   }
 
   const save = async () => {

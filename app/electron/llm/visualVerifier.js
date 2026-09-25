@@ -188,6 +188,9 @@ async function runVisualVerification({
         res = processToolResult('web_visualize', rawRes)
       }
     } catch {}
+    if (typeof res === 'string' && /^\[(?:web_visualize unavailable|blocked)/i.test(res.trim())) {
+      return { performed: false, ok: true, hasErrors: false, errors: [], result: res, url }
+    }
     const errors = extractConsoleErrors(res)
     if (typeof res === 'string' && res.startsWith('[error:') && errors.length === 0) {
       errors.push(res)

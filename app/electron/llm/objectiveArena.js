@@ -665,15 +665,17 @@ async function runObjectiveEvaluation({
     let isTie = false
 
     if (sorted.length >= 2) {
-      const runnerUp = sorted[1]
-      if (top.passed && !runnerUp.passed) {
-        winner = top
-        losers.push(...sorted.slice(1))
-      } else if (top.passed && runnerUp.passed) {
-        // If both passed, margin of 20% end-to-end latency difference determines clean win
+      const passedModels = sorted.filter((r) => r.passed)
+      const failedModels = sorted.filter((r) => !r.passed)
+      if (passedModels.length >= 1 && failedModels.length >= 1) {
+        winner = passedModels[0]
+        losers.push(...failedModels)
+      } else if (passedModels.length >= 2) {
+        const runnerUp = passedModels[1]
+        // If all passed, margin of 20% end-to-end latency difference determines clean win
         if (top.latencyMs < runnerUp.latencyMs * 0.8) {
           winner = top
-          losers.push(...sorted.slice(1))
+          losers.push(runnerUp)
         } else {
           isTie = true
         }

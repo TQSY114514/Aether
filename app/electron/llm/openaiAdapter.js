@@ -493,9 +493,9 @@ async function listModels({ provider, signal }) {
     }
   }
 
-  // If loop exited while url still points to an unvisited next page (e.g., hit MAX_PAGES),
+  // If loop exited while url still points to an unvisited next page (e.g., hit the 10-page limit),
   // return [] to avoid destructive syncModels pruning on a truncated list.
-  if (url && pages >= MAX_PAGES) return []
+  if (url) return []
 
   return Array.from(new Set(modelNames.filter(Boolean)))
 }
