@@ -77,18 +77,25 @@ export default function ModelPage() {
 
   const handleTest = async (providerId: number) => {
     setTestingId(providerId)
+    const start = Date.now()
     const result = await window.electronAPI.provider.testConnection(providerId)
+    const latencyMs = typeof result?.latencyMs === 'number' ? result.latencyMs : (Date.now() - start)
     setTestResults((prev) => ({ ...prev, [providerId]: result }))
-    if (result && typeof result.latencyMs === 'number') {
-      setLatencyResults((prev) => ({ ...prev, [providerId]: { success: result.success, latencyMs: result.latencyMs, errorMessage: result.errorMessage } }))
-    }
+    setLatencyResults((prev) => ({
+      ...prev,
+      [providerId]: {
+        success: Boolean(result?.success),
+        latencyMs: result?.success ? latencyMs : -1,
+        errorMessage: result?.errorMessage,
+      },
+    }))
     setTestingId(null)
   }
 
-  const handleTestLatency = async (providerId: number) => {
+  const handleTestModelLatency = async (providerId: number, modelName: string) => {
     setTestingLatencyId(providerId)
     try {
-      const res = await window.electronAPI.provider.testLatency(providerId)
+      const res = await window.electronAPI.provider.testLatency(providerId, modelName)
       setLatencyResults((prev) => ({ ...prev, [providerId]: res }))
     } catch (e: any) {
       setLatencyResults((prev) => ({ ...prev, [providerId]: { success: false, latencyMs: -1, errorMessage: e?.message || t('models.test_failed') } }))
@@ -277,14 +284,6 @@ export default function ModelPage() {
                         {t('models.test')}
                       </button>
                     </Tooltip>
-                    <Tooltip text={t('models.test_latency_hint')}>
-                      <button onClick={() => handleTestLatency(provider.id)} disabled={testingLatencyId === provider.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
-                        style={{ borderColor: 'var(--border)' }}>
-                        {testingLatencyId === provider.id ? <RefreshCw size={12} className="animate-spin text-amber-500" /> : <Zap size={12} className="text-amber-500" />}
-                        <span>{t('models.test_latency')}</span>
-                      </button>
-                    </Tooltip>
                     <Tooltip text={t('tooltip.model_fetch')}>
                       <button onClick={() => handleFetchModels(provider.id)} disabled={testingId === provider.id}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] disabled:opacity-50 press-scale transition-all"
@@ -294,15 +293,15 @@ export default function ModelPage() {
                     </Tooltip>
                   </div>
 
-                  {testResult !== undefined && (
-                    <div className={`mt-2 flex items-center gap-1.5 text-xs ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
-                      {testResult.success ? <Check size={12} /> : <X size={12} />}
-                      {testResult.success ? t('models.success') : (testResult.errorMessage || t('models.fail'))}
-                    </div>
-                  )}
-                  {latencyResults[provider.id] !== undefined && (
-                    <div className="mt-2 flex items-center gap-2 text-xs">
-                      {latencyResults[provider.id].success ? (
+                  {(testResult !== undefined || latencyResults[provider.id] !== undefined) && (
+                    <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
+                      {testResult !== undefined && (
+                        <span className={`inline-flex items-center gap-1 ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
+                          {testResult.success ? <Check size={12} /> : <X size={12} />}
+                          {testResult.success ? t('models.success') : (testResult.errorMessage || t('models.fail'))}
+                        </span>
+                      )}
+                      {latencyResults[provider.id]?.success && latencyResults[provider.id].latencyMs >= 0 && (
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[11px] font-semibold border ${
                           latencyResults[provider.id].latencyMs < 400
                             ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
@@ -312,11 +311,6 @@ export default function ModelPage() {
                         }`}>
                           <Zap size={10} />
                           {latencyResults[provider.id].latencyMs} ms
-                        </span>
-                      ) : (
-                        <span className="text-rose-500 text-[11px] flex items-center gap-1">
-                          <X size={12} />
-                          {latencyResults[provider.id].errorMessage || t('models.latency_timeout')}
                         </span>
                       )}
                     </div>
@@ -346,10 +340,19 @@ export default function ModelPage() {
                           <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded shrink-0">{t('models.fallback')} #{model.fallback_order}</span>
                         )}
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); deleteModel(model.id); loadModels(provider.id); loadAllModels() }}
-                        className="p-1 rounded hover:bg-[var(--border)] transition-colors opacity-0 hover:opacity-100 shrink-0">
-                        <Trash2 size={12} className="text-gray-400" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Tooltip text={t('models.test_latency_hint')}>
+                          <button onClick={(e) => { e.stopPropagation(); handleTestModelLatency(provider.id, model.model_name) }}
+                            disabled={testingLatencyId === provider.id}
+                            className="p-1 rounded hover:bg-[var(--border)] transition-colors disabled:opacity-50">
+                            {testingLatencyId === provider.id ? <RefreshCw size={12} className="animate-spin text-amber-500" /> : <Zap size={12} className="text-amber-500" />}
+                          </button>
+                        </Tooltip>
+                        <button onClick={(e) => { e.stopPropagation(); deleteModel(model.id); loadModels(provider.id); loadAllModels() }}
+                          className="p-1 rounded hover:bg-[var(--border)] transition-colors opacity-0 hover:opacity-100">
+                          <Trash2 size={12} className="text-gray-400" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

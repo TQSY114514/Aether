@@ -170,6 +170,9 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
  */
 async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
   toolCache.clear()
+  const { ToolStateMachine, LoopStates } = require('./toolLoop/stateMachine')
+  const loopStateMachine = new ToolStateMachine({ sessionId })
+  loopStateMachine.transition(LoopStates.PLANNING, { model: model?.model_name || model })
   // Event stream: agent start
   eventStream.agentStart({ sessionId, model, provider: provider?.name || provider })
   steering.setRunning(sessionId, true)
@@ -707,6 +710,7 @@ Reply in this format:
     try { if (msg.content && hasToolCalls) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
 
     if (msg.tool_calls && msg.tool_calls.length) {
+      loopStateMachine.transition(LoopStates.EXECUTING_TOOLS, { step: depth, count: msg.tool_calls.length })
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
 
       // Per-round loop detection (exact-match — existing)
@@ -1282,6 +1286,7 @@ Reply ONLY with JSON:
         shadowSuccess = true
         return summary
       }
+      loopStateMachine.transition(LoopStates.PLANNING, { step: depth + 1 })
       continue
     }
     // No tool calls — final answer.
@@ -1292,6 +1297,7 @@ Reply ONLY with JSON:
       try {
         const visualVerifier = require('./visualVerifier')
         if (visualVerifier.hasFrontendChanges(auditTrail)) {
+          loopStateMachine.transition(LoopStates.VERIFYING, { phase: 'visual' })
           const vResult = await visualVerifier.runVisualVerification({
             db,
             sessionId,
@@ -1299,10 +1305,11 @@ Reply ONLY with JSON:
             signal,
             agentMode,
             permissionPolicy,
-            confirmPermission,
+            confirmPermission: requestPermission,
           })
           if (vResult.performed && vResult.hasErrors) {
             visualVerified = true
+            loopStateMachine.transition(LoopStates.PLANNING, { phase: 'visual_fix' })
             const fixMsg = visualVerifier.buildVisualFixPrompt(vResult)
             if (msg.content) convo.push({ role: 'assistant', content: msg.content })
             convo.push(fixMsg)
@@ -1316,6 +1323,7 @@ Reply ONLY with JSON:
     }
 
     const finalStatus = budget.used >= budget.maxTotal ? 'budget_exhausted' : 'success'
+    loopStateMachine.transition(finalStatus === 'success' ? LoopStates.COMPLETED : LoopStates.FAILED, { finalStatus })
     if (finalStatus === 'success' && planningMode && plan && plan.tasks.every(t => t.status === 'completed')) {
       if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
     }

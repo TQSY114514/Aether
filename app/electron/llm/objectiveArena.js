@@ -199,7 +199,7 @@ function extractAndApplyPatches(workspaceDir, responseText) {
       try {
         const orig = fs.readFileSync(abs, 'utf8')
         const res = applyAnyPatch(orig, patchBlock)
-        if (res.applied > 0) {
+        if (res.applied > 0 && res.content !== orig) {
           fs.writeFileSync(abs, res.content, 'utf8')
           appliedCount += res.applied
           filesModified.add(rawFile)
@@ -253,7 +253,7 @@ function extractAndApplyPatches(workspaceDir, responseText) {
                 const orig = fs.readFileSync(abs, 'utf8')
                 const patchStr = `<<<<<<< SEARCH\n${searchLines.join('\n')}\n=======\n${replaceLines.join('\n')}\n>>>>>>> REPLACE`
                 const res = applyAnyPatch(orig, patchStr)
-                if (res.applied > 0) {
+                if (res.applied > 0 && res.content !== orig) {
                   fs.writeFileSync(abs, res.content, 'utf8')
                   appliedCount += res.applied
                   filesModified.add(currentFile)
@@ -353,6 +353,7 @@ async function runObjectiveEvaluation({
   expectedExitCode = 0,
   timeoutMs = 30000,
   updateScores = true,
+  allowPassingBaseline = false,
   signal,
   onProgress,
   completeChatMessageFn,
@@ -368,8 +369,41 @@ async function runObjectiveEvaluation({
   await fs.promises.mkdir(baseTempDir, { recursive: true })
 
   try {
+    // 0. Run baseline verification on unmodified workspace clone so pre-passing
+    // commands cannot grant false-positive wins to arbitrary/unrelated edits.
+    const baselineTempDir = path.join(baseTempDir, 'baseline')
+    await fs.promises.mkdir(baselineTempDir, { recursive: true })
+    await copyDirectoryAsync(baseCwd, baselineTempDir)
+    const baselineRes = await runVerifyCommandDetailed(
+      verifyCommand,
+      baselineTempDir,
+      signal,
+      expectedExitCode,
+      Math.min(timeoutMs, 15000),
+      baseCwd,
+    )
+    const baselineAlreadyPassed = Boolean(baselineRes.ok)
+
     const roundResults = await Promise.all(
       selectedModels.map(async (m) => {
+        if (signal && signal.aborted) {
+          return {
+            modelId: m.id,
+            modelName: m.model_name,
+            providerName: m.provider_name,
+            passed: false,
+            aborted: true,
+            exitCode: -1,
+            stdout: '',
+            stderr: 'Aborted',
+            durationMs: 0,
+            latencyMs: 0,
+            cost: 0,
+            tokens: 0,
+            patchApplied: false,
+            filesModified: [],
+          }
+        }
         const modelTempDir = path.join(baseTempDir, `model-${m.id}`)
         await fs.promises.mkdir(modelTempDir, { recursive: true })
         // Clone project files asynchronously for isolated sandbox execution
@@ -413,6 +447,7 @@ async function runObjectiveEvaluation({
             modelName: m.model_name,
             providerName: m.provider_name,
             passed: false,
+            aborted: Boolean(signal && signal.aborted),
             exitCode: -1,
             stdout: '',
             stderr: `Generation failed: ${e.message}`,
@@ -421,6 +456,7 @@ async function runObjectiveEvaluation({
             cost: 0,
             tokens: 0,
             patchApplied: false,
+            filesModified: [],
           }
         }
 
@@ -445,11 +481,20 @@ async function runObjectiveEvaluation({
           baseCwd,
         )
 
+        const baselineValid = !baselineAlreadyPassed || allowPassingBaseline
         return {
           modelId: m.id,
           modelName: m.model_name,
           providerName: m.provider_name,
-          passed: Boolean(verifyRes.ok && patchRes.ok && patchRes.appliedCount > 0),
+          passed: Boolean(
+            !(signal && signal.aborted) &&
+            baselineValid &&
+            verifyRes.ok &&
+            patchRes.ok &&
+            patchRes.appliedCount > 0 &&
+            patchRes.filesModified.length > 0
+          ),
+          aborted: Boolean(signal && signal.aborted),
           exitCode: verifyRes.exitCode,
           stdout: verifyRes.stdout,
           stderr: verifyRes.stderr,
@@ -462,6 +507,21 @@ async function runObjectiveEvaluation({
         }
       })
     )
+
+    if (signal && signal.aborted) {
+      return {
+        prompt,
+        verifyCommand,
+        aborted: true,
+        baselineAlreadyPassed,
+        winnerId: null,
+        winnerName: null,
+        isTie: false,
+        models: roundResults,
+        eloUpdated: false,
+        timestamp: new Date().toISOString(),
+      }
+    }
 
     // 4. Objectively rank models
     // Sort criteria: passed > end-to-end latencyMs > cost
@@ -501,7 +561,7 @@ async function runObjectiveEvaluation({
 
     // 5. Automatically record Arena Vote in SQLite database if applicable
     let eloUpdated = false
-    if (updateScores && db && winner && losers.length > 0) {
+    if (updateScores && db && winner && losers.length > 0 && !(signal && signal.aborted)) {
       try {
         await db.recordArenaVote({
           prompt,
@@ -520,6 +580,8 @@ async function runObjectiveEvaluation({
     return {
       prompt,
       verifyCommand,
+      aborted: false,
+      baselineAlreadyPassed,
       winnerId: winner?.modelId || null,
       winnerName: winner?.modelName || null,
       isTie,
