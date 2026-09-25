@@ -694,5 +694,10 @@
   "shortcuts.title": "Keyboard Shortcuts",
   "shortcuts.group.global": "Global",
   "shortcuts.group.chat": "Chat",
-  "shortcuts.group.navigation": "Navigation"
+  "shortcuts.group.navigation": "Navigation",
+  "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+  "arena.bench.saved": "Benchmark suite saved",
+  "arena.bench.save_failed": "Save failed: {0}",
+  "arena.bench.done": "Benchmark complete",
+  "arena.bench.run_failed": "Run failed: {0}"
 }

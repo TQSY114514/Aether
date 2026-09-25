@@ -793,7 +793,12 @@ const translations: Record<string, Record<string, string>> = {
     "shortcuts.title": "Keyboard Shortcuts",
     "shortcuts.group.global": "Global",
     "shortcuts.group.chat": "Chat",
-    "shortcuts.group.navigation": "Navigation"
+    "shortcuts.group.navigation": "Navigation",
+    "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+    "arena.bench.saved": "Benchmark suite saved",
+    "arena.bench.save_failed": "Save failed: {0}",
+    "arena.bench.done": "Benchmark complete",
+    "arena.bench.run_failed": "Run failed: {0}"
   },
   "en-upside": {
     "agent.ask": "suoᴉʇɔɐ ʎʞsᴉɹ ǝɹoɟǝq ɯɹᴉɟuoɔ — ʞsɐ",
@@ -1491,7 +1496,12 @@ const translations: Record<string, Record<string, string>> = {
     "shortcuts.title": "sʇnɔʇɹoɥs pɹɐoqʎǝʞ",
     "shortcuts.group.global": "lɐqolƃ",
     "shortcuts.group.chat": "ʇɐɥɔ",
-    "shortcuts.group.navigation": "uoᴉʇɐƃᴉʌɐu"
+    "shortcuts.group.navigation": "uoᴉʇɐƃᴉʌɐu",
+    "arena.bench.missing_fields": "pǝɹᴉnbǝɹ lǝpoɯ 1 ʇsɐǝl ʇɐ + ʞsɐʇ 1 ʇsɐǝl ʇɐ + ǝɯɐu",
+    "arena.bench.saved": "pǝʌɐs ǝʇᴉns ʞɹɐɯɥɔuǝq",
+    "arena.bench.save_failed": " :pǝlᴉɐɟ ǝʌɐs{0}",
+    "arena.bench.done": "ǝʇǝldɯoɔ ʞɹɐɯɥɔuǝq",
+    "arena.bench.run_failed": " :pǝlᴉɐɟ unɹ{0}"
   },
   "zh-CN": {
     "agent.ask": "询问 — 危险操作前确认",

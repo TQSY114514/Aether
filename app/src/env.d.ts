@@ -136,7 +136,7 @@ interface Window {
       createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null }) => Promise<{ session: Session & { id: number }; config: { providerId: number | null; modelId: number | null; personaId: number | null }; messages: Message[] }>
       rename: (id: number, title: string) => Promise<void>
       pin: (id: number, pinned: number) => Promise<void>
-      fork: (params: { sessionId: number; title?: string }) => Promise<{ id: number }>
+      fork: (params: { sessionId: number; title?: string }) => Promise<{ id: number; title: string }>
       delete: (id: number) => Promise<void>
       touch: (id: number) => Promise<void>
       getConfig: (id: number) => Promise<{ providerId: number | null; modelId: number | null; personaId: number | null } | null>

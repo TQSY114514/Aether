@@ -547,6 +547,13 @@ async function listModels({ provider, signal } = {}) {
       afterId = nextId
     }
 
+    // If hasMore is still true we hit the page cap with pages remaining — the list
+    // is incomplete. Throw rather than returning a partial result, which would cause
+    // syncModels to treat remaining models as "deleted by the provider".
+    if (hasMore) {
+      throw new Error('Anthropic model list exceeded page limit; synchronization aborted to prevent data loss')
+    }
+
     return allNames.length > 0 ? Array.from(new Set(allNames)) : []
   } catch (err) {
     if (err.name === 'AbortError') throw err

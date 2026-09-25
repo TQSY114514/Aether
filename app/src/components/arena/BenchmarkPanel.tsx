@@ -84,7 +84,7 @@ export default function BenchmarkPanel() {
   const save = async () => {
     const tasks = tasksText.split('\n').map(s => s.trim()).filter(Boolean)
     if (!name.trim() || !tasks.length || !modelIds.length) {
-      toast('需要名称 + 至少 1 个任务 + 至少 1 个模型', { type: 'error' })
+      toast(t('arena.bench.missing_fields'), { type: 'error' })
       return
     }
     try {
@@ -92,8 +92,8 @@ export default function BenchmarkPanel() {
       if (r?.error) throw new Error(r.error)
       setEditing(false); setName(''); setTasksText(''); setModelIds([])
       await refresh()
-      toast('基准套件已保存', { type: 'success' })
-    } catch (e: any) { toast(`保存失败: ${e?.message || ''}`, { type: 'error' }) }
+      toast(t('arena.bench.saved'), { type: 'success' })
+    } catch (e: any) { toast(t('arena.bench.save_failed', e?.message || ''), { type: 'error' }) }
   }
 
   const del = async (id: number) => {
@@ -107,8 +107,8 @@ export default function BenchmarkPanel() {
       const r = await window.electronAPI?.arena?.benchmarkRun?.({ id: b.id, modelIds: b.model_ids })
       if (r?.error) throw new Error(r.error)
       if (r) { setLastModels(r.models || {}); await refresh() }
-      toast('基准测试完成', { type: 'success' })
-    } catch (e: any) { toast(`运行失败: ${e?.message || ''}`, { type: 'error' }) }
+      toast(t('arena.bench.done'), { type: 'success' })
+    } catch (e: any) { toast(t('arena.bench.run_failed', e?.message || ''), { type: 'error' }) }
     finally { setRunningId(null) }
   }
 
