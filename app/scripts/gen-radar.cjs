@@ -24,16 +24,19 @@
 const fs = require('fs');
 const path = require('path');
 
-// ─── 20 Competitor Benchmark Scores (2026-09 最新评估) ──────────────────────
+// ─── 20 Competitor Benchmark Scores (2026-09 严格去水分客观校准) ─────────────
 const SCORES = {
-  // Aether (2026-09 v0.9.0 客观校准: 守住本地隐私与多模型优势，如实呈现纯编程与通用任务客观差距，拒绝虚高)
-  'Aether':             [7.8, 8.0, 9.7, 8.8, 8.2, 9.3, 9.7, 8.8],
+  // Aether (2026-09 v0.9.1 严格客观自评：拒绝宣传虚高。
+  // 真实优势仅在「本地SQLite零遥测(9.4)」与「多模型+内置Arena评测(9.2)」；
+  // 安全(8.4)具备6轴权限门与可选Docker，但默认Windows本地执行无OS内核级沙箱，故低于Codex(9.8)/Claude Code(9.0)；
+  // 纯编程(6.8)、通用任务(7.0)、扩展与生态(6.5)、多Agent(7.2)坦然承认与商业大厂及成熟社区的客观代差)
+  'Aether':             [6.8, 7.0, 9.2, 6.5, 7.2, 8.4, 9.4, 8.2],
 
   // 终端与混合编程 Agent (Terminal & Hybrid Coding Agents)
   'Claude Code':        [9.8, 6.5, 7.0, 9.8, 9.5,  9.0, 7.5, 8.0],
   'Codex':              [9.7, 8.0, 8.0, 9.5, 9.5,  9.8, 7.0, 9.0],
   'Amp':                [9.4, 7.5, 7.8, 8.5, 8.6,  8.8, 5.5, 9.2],
-  'OpenCode':           [9.2, 6.8, 9.7, 9.0, 8.5,  8.5, 9.0, 8.3],
+  'OpenCode':           [9.2, 6.8, 9.2, 9.0, 8.5,  8.5, 9.0, 8.3],
   'Aider':              [9.2, 6.5, 9.0, 8.0, 7.5,  8.0, 8.8, 7.0],
   'Gemini CLI':         [8.5, 8.2, 6.0, 8.8, 7.8,  8.6, 8.0, 7.6],
   'Kimi CLI':           [8.6, 7.5, 5.5, 8.0, 7.5,  8.2, 7.5, 7.2],
@@ -44,8 +47,8 @@ const SCORES = {
   'Windsurf':           [9.5, 7.2, 7.0, 8.3, 8.0,  8.0, 6.5, 9.6],
   'Trae':               [9.3, 7.5, 7.5, 8.5, 8.2,  8.0, 6.5, 9.6],
   'Cline':              [9.1, 7.2, 8.8, 9.4, 7.8,  8.2, 8.5, 8.8],
-  'Roo Code':           [9.4, 7.8, 9.2, 9.5, 8.2,  8.5, 8.6, 8.8],
-  'Continue':           [9.0, 7.2, 9.5, 9.2, 7.5,  8.0, 8.8, 8.5],
+  'Roo Code':           [9.4, 7.8, 9.0, 9.5, 8.2,  8.5, 8.6, 8.8],
+  'Continue':           [9.0, 7.2, 9.1, 9.2, 7.5,  8.0, 8.8, 8.5],
   'GitHub Copilot':     [8.8, 7.0, 6.5, 8.0, 7.5,  8.2, 5.5, 9.5],
 
   // 全自主平台与开源框架 (Autonomous Platforms & Frameworks)
@@ -62,56 +65,56 @@ const PEERS = Object.keys(SCORES).filter((k) => k !== SELF);
 // ─── i18n Localization Dictionary ───────────────────────────────────────────
 const I18N = {
   'zh-CN': {
-    title: 'Aether · Agent 能力与架构自评雷达',
-    titleTag: '(2026-09 定性估计 · 非基准跑分)',
-    subtitle: '全面对比 20 款主流 Agent 工具 · 8 大核心维度能力画像',
-    legendAether: 'Aether 自评 (v0.9.0)',
+    title: 'Aether · Agent 能力与架构客观自评雷达',
+    titleTag: '(2026-09 去水分严苛校准 · 定性评估)',
+    subtitle: '对照 20 款主流 Agent 工具 · 真实反映优势与短板（拒绝宣传虚高）',
+    legendAether: 'Aether 客观自评 (v0.9.1)',
     legendPeerBest: '同类最佳包络 (20 款竞品峰值)',
     legendClaude: 'Claude Code (终端标杆)',
     legendCursor: 'Cursor (IDE 标杆)',
-    leadBadge: '★领先',
+    leadBadge: '★优势',
     peakLabel: 'Peak',
     axes: [
-      { primary: '编程 Agent', secondary: 'Coding' },
-      { primary: '通用任务', secondary: 'General' },
-      { primary: '多模型/供应商', secondary: 'Multi-provider' },
-      { primary: '扩展架构', secondary: 'MCP & Skills' },
-      { primary: '多 Agent 编排', secondary: 'Multi-agent' },
-      { primary: '安全/权限', secondary: 'Safety' },
-      { primary: '本地/隐私', secondary: 'Local & private' },
-      { primary: '桌面/终端双形态', secondary: 'Desktop & TUI UX' },
+      { primary: '编程 Agent', secondary: 'Coding (-3.0 差距)' },
+      { primary: '通用任务', secondary: 'General (-2.8 差距)' },
+      { primary: '多模型与竞技场', secondary: 'BYOK & ELO Arena' },
+      { primary: '扩展与社区生态', secondary: 'MCP / Skills / Eco' },
+      { primary: '多 Agent 编排', secondary: 'Sub-agents' },
+      { primary: '安全与权限门', secondary: '6-Axis (非OS内核沙箱)' },
+      { primary: '本地优先与隐私', secondary: 'SQLite & Zero-Telemetry' },
+      { primary: '桌面/终端双形态', secondary: 'GUI + TUI Shared DB' },
     ],
     matrixLabel: '对比竞品矩阵（20款）：',
     catTerminal: '终端/混合',
     catIde: 'IDE/评审',
     catAuto: '自主平台',
-    footnote: '客观自评 · 形状即定位：Aether 强在「本地隐私」、「三层沙箱安全」与「多模型自由切换」；在单一极端编程任务上坦然落后于 Claude Code/Cursor，绝不顶格美化。',
+    footnote: '严苛去水分自评：Aether 仅在「本地SQLite零遥测(9.4)」与「多模型+Arena盲测(9.2)」占优；安全(8.4)低于内核级沙箱 Codex/Claude Code；纯编程(6.8)与生态(6.5)如实画出凹陷代差。',
   },
   'en': {
-    title: 'Aether · Agent Capability & Architecture Radar',
-    titleTag: '(2026-09 Subjective Estimates · Not Benchmarks)',
-    subtitle: 'Comprehensive Benchmark vs 20 Leading Agent Tools · 8 Core Dimensions',
-    legendAether: 'Aether (v0.9.0)',
+    title: 'Aether · Candid Capability & Architecture Radar',
+    titleTag: '(2026-09 Uninflated Engineering Calibration)',
+    subtitle: 'Compared Against 20 Peer Agents · True Strengths & Honest Gaps',
+    legendAether: 'Aether Candid Score (v0.9.1)',
     legendPeerBest: 'Peer-Best Envelope (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal Benchmark)',
     legendCursor: 'Cursor (IDE Benchmark)',
-    leadBadge: '★Lead',
+    leadBadge: '★Edge',
     peakLabel: 'Peak',
     axes: [
-      { primary: 'Coding Agent', secondary: 'Specialized Task' },
-      { primary: 'General Tasks', secondary: 'Autonomous Scope' },
-      { primary: 'Multi-Provider', secondary: 'Zero-Lockin BYOK' },
-      { primary: 'Extensibility', secondary: 'MCP & Skills' },
-      { primary: 'Multi-Agent', secondary: 'Sub-Agent Routing' },
-      { primary: '3-Tier Safety', secondary: 'Diff & Taint Sandbox' },
+      { primary: 'Coding Agent', secondary: 'Trails IDEs (-3.0)' },
+      { primary: 'General Tasks', secondary: 'No Browser GUI Yet' },
+      { primary: 'Multi-Model & Arena', secondary: 'BYOK + ELO Benchmark' },
+      { primary: 'Extensibility & Eco', secondary: 'Early Community (-3.3)' },
+      { primary: 'Multi-Agent', secondary: 'Local Sub-Agents' },
+      { primary: 'Permission Safety', secondary: '6-Axis (User-Space)' },
       { primary: 'Local & Privacy', secondary: 'SQLite & Zero-Telemetry' },
-      { primary: 'Desktop & TUI Dual UX', secondary: 'GUI & Terminal Sync' },
+      { primary: 'Desktop & TUI Sync', secondary: 'Shared SQLite Runtime' },
     ],
     matrixLabel: 'Peer Benchmark Matrix (20 Tools):',
     catTerminal: 'Terminal / Hybrid',
     catIde: 'IDE / Review',
     catAuto: 'Autonomous',
-    footnote: 'Honest Self-Assessment · Shape as Positioning: Aether excels in local privacy, 3-tier sandbox safety, and multi-provider agility; raw coding trails Claude Code/Cursor without artificial inflating.',
+    footnote: 'Uninflated Self-Assessment: Aether leads only in Local SQLite Privacy (9.4) and Multi-Model Arena (9.2); Safety (8.4) trails kernel-sandboxed Codex/Claude Code; Coding (6.8) & Ecosystem (6.5) candidly show gaps.',
   },
   'zh-TW': {
     title: 'Aether · Agent 能力與架構自評雷達',
