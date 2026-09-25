@@ -3,7 +3,7 @@
   "version": "0.9.1",
   "description": "Aether headless agent — CLI, TUI, and Electron-free SDK. Pairs with the Aether Desktop GUI (separate installer) sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/TQSY114514/Aether#readme",
   "repository": {
     "type": "git",
@@ -64,12 +64,16 @@
     "electron/worktreeManager.js",
     "electron/skills/",
     "package.json",
+    "scripts/gen-third-party-notices.mjs",
     "README.md",
     "LICENSE",
+    "NOTICE",
+    "THIRD-PARTY-NOTICES.md",
     "CHANGELOG.md"
   ],
   "scripts": {
     "aether": "node cli.js",
+    "gen:notices": "node scripts/gen-third-party-notices.mjs",
     "dev:renderer": "vite",
     "dev:electron": "electron .",
     "dev": "concurrently -k \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",
