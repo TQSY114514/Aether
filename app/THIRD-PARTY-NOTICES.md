@@ -302,6 +302,8 @@ Apache License
    limitations under the License.
 ```
 
+- `dompurify@3.4.15` — copyright notice that is included in or attached to the work
+
 ## BSD-3-Clause
 
 适用组件：`highlight.js@11.12.0`
@@ -337,6 +339,8 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
+
+- `highlight.js@11.12.0` — Copyright (c) 2006, Ivan Sagalaev.
 
 ## BlueOak-1.0.0
 
@@ -400,6 +404,8 @@ will be liable to anyone for any damages related to this
 software or this license, under any kind of legal claim.***
 ```
 
+- `sax@1.6.0` — copyright in it.
+
 ## ISC
 
 适用组件：`graceful-fs@4.2.11`, `semver@7.7.4`
@@ -422,6 +428,9 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
+
+- `graceful-fs@4.2.11` — Copyright (c) 2011-2022 Isaac Z. Schlueter, Ben Noordhuis, and Contributors
+- `semver@7.7.4` — Copyright (c) Isaac Z. Schlueter and Contributors
 
 适用组件：`lucide-react@1.45.0`
 
@@ -471,6 +480,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+- `lucide-react@1.45.0` — Copyright (c) 2026 Lucide Icons and Contributors
 
 ## Python-2.0
 
@@ -732,3 +743,5 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
+
+- `argparse@2.0.1` — Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,

@@ -64,6 +64,7 @@
     "electron/worktreeManager.js",
     "electron/skills/",
     "package.json",
+    "scripts/gen-third-party-notices.mjs",
     "README.md",
     "LICENSE",
     "NOTICE",

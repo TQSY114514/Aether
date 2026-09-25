@@ -48,9 +48,16 @@ SOFTWARE.`
 
 const LICENCE_FILE = /^(licen[cs]e|copying|notice)([-._].*)?(\.(md|txt|markdown|rst))?$/i
 
+const missingDirs = []
+
 function readPackageLicence(pkgPath) {
   const dir = path.join(modulesRoot, pkgPath)
-  if (!fs.existsSync(dir)) return { text: null, copyright: null }
+  if (!fs.existsSync(dir)) {
+    // The package is not installed: refuse to regenerate rather than silently writing a
+    // notices file that lists components without their licence texts.
+    missingDirs.push(pkgPath)
+    return { text: null, copyright: null }
+  }
   let best = null
   for (const entry of fs.readdirSync(dir)) {
     if (!LICENCE_FILE.test(entry)) continue
@@ -66,11 +73,23 @@ function readPackageLicence(pkgPath) {
   return { text, copyright: m ? m[1].trim() : null }
 }
 
+const missingDirsGuard = () => {
+  if (missingDirs.length > 0) {
+    throw new Error(
+      `${missingDirs.length} package director${missingDirs.length === 1 ? 'y is' : 'ies are'} missing under ` +
+      `${modulesRoot} (run \`npm install\` first, or pass --modules-root): ` +
+      missingDirs.slice(0, 5).join(', ') + (missingDirs.length > 5 ? ', …' : '')
+    )
+  }
+}
+
 const norm = (t) => t
   .replace(/^\s*copyright.*$/gim, '')
   .replace(/\s+/g, ' ')
   .trim()
   .toLowerCase()
+
+missingDirsGuard()
 
 const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'))
 const packages = lock.packages || {}
@@ -159,8 +178,9 @@ for (const licence of [...groups.keys()].filter((k) => k !== 'MIT').sort()) {
     variants.push({ body: null, keys: extra })
   }
   for (const v of variants) {
+    const sorted = [...v.keys].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
     if (v.body === null) {
-      out.push(`适用组件：${v.keys.sort().map((k) => '`' + k + '`').join(', ')}`)
+      out.push(`适用组件：${sorted.map((k) => '`' + k + '`').join(', ')}`)
       out.push('')
       out.push('（这些组件包内未附带独立许可文件；许可声明见其 `package.json`。）')
       out.push('')
@@ -169,21 +189,33 @@ for (const licence of [...groups.keys()].filter((k) => k !== 'MIT').sort()) {
     if (v.body.length < 150) {
       throw new Error(`licence body for ${v.keys.join(', ')} looks truncated (${v.body.length} chars)`)
     }
-    out.push(`适用组件：${v.keys.sort().map((k) => '`' + k + '`').join(', ')}`)
+    out.push(`适用组件：${sorted.map((k) => '`' + k + '`').join(', ')}`)
     out.push('')
     if (variants.length > 1) out.push(`（本组正文，来自 \`${v.keys[0]}\`）`)
     out.push('```')
     out.push(v.body)
     out.push('```')
     out.push('')
+    // Copyright lines differ even when the licence body is identical (e.g. ISC), so each
+    // component's own line is reproduced next to the shared body.
+    for (const key of sorted) {
+      const c = copyrightOf.get(key)
+      out.push(`- \`${key}\` — ${c || '包内未附带独立版权行（许可声明见其 \`package.json\`）'}`)
+    }
+    out.push('')
   }
 }
+
+missingDirsGuard()
 
 const content = out.join('\n')
 
 // Self-checks: refuse to write a notice file that silently lost any licence text.
 if (/\[truncated\]/i.test(content)) throw new Error('refusing to write: found a truncation marker')
 const flat = norm(content)
+for (const [key, line] of copyrightOf) {
+  if (line && !flat.includes(norm(line))) throw new Error(`refusing to write: copyright line for ${key} is missing`)
+}
 for (const [licence, byBody] of groups) {
   for (const { body, keys } of byBody.values()) {
     if (body.length < 150) throw new Error(`refusing to write: ${licence} body for ${keys.join(', ')} is only ${body.length} chars`)
