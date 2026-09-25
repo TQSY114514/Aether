@@ -744,4 +744,4 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-- `argparse@2.0.1` — Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,
+- `argparse@2.0.1` — Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam, The Netherlands.  All rights reserved.

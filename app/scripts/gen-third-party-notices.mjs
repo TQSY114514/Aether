@@ -99,10 +99,23 @@ function looksLikeNotice(line) {
 }
 
 function extractCopyright(text) {
-  for (const raw of text.split('\n')) {
-    const line = raw.replace(/^[\s*#>\-/]+/, '').trim()
-    if (!looksLikeNotice(line)) continue
-    return line.slice(0, 160)
+  const lines = text.split('\n').map((raw) => raw.replace(/^[\s*#>\-/]+/, '').trim())
+  for (let i = 0; i < lines.length; i++) {
+    if (!looksLikeNotice(lines[i])) continue
+    let notice = lines[i]
+    // Notices are wrapped in some licence files, e.g. argparse's
+    // "Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam," +
+    // "The Netherlands.  All rights reserved." — pull the continuation back in, but never
+    // swallow the prose that follows the notice.
+    for (let j = i + 1; j < lines.length && j <= i + 2; j++) {
+      if (!/(,|&|\band)$/.test(notice.trimEnd())) break
+      const next = lines[j]
+      if (!next || next.length > 90) break
+      if (/(permission|granted|hereby|licen[cs]e|notice|warranty|liable)/i.test(next)) break
+      notice = `${notice.trimEnd()} ${next}`
+      if (notice.length > 180) break
+    }
+    return notice.slice(0, 160)
   }
   return null
 }
