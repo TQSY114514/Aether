@@ -290,8 +290,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     const beforeCompact = apiMsgs.length
     let compacted
     try {
-      const assistantTurns = apiMsgs.filter(m => m.role === 'assistant').length
-      const folded = foldStaleToolOutputs(apiMsgs, assistantTurns)
+      const folded = foldStaleToolOutputs(apiMsgs)
       compacted = await maybeCompact({ provider, model, messages: folded, budget: ctxBudget, sessionId })
     } catch (e) {
       compacted = apiMsgs

@@ -463,9 +463,18 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       const cleanVerifyCommand = sanitizeVerifyCommand(verifyCommand)
       if (!cleanVerifyCommand) return { error: 'Invalid verification command' }
 
+      const rawRunId = typeof data?.runId === 'string' ? data.runId.trim() : ''
+      if (!rawRunId) return { error: 'runId is required' }
+      const runKey = `objective:${rawRunId}`
+      if (abortControllers.has(runKey)) {
+        return { error: `Duplicate runId: ${rawRunId}` }
+      }
       const controller = new AbortController()
-      const runKey = data?.runId ? `objective:${data.runId}` : `objective:${Date.now()}`
       abortControllers.set(runKey, controller)
+
+      const safeTimeoutMs = (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs))
+        ? Math.min(Math.max(Math.floor(timeoutMs), 1000), 300000)
+        : 30000
 
       try {
         const objectiveArena = require('../llm/objectiveArena')
@@ -476,7 +485,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
           verifyCommand: cleanVerifyCommand,
           cwd: taskCwd,
           expectedExitCode: typeof expectedExitCode === 'number' ? expectedExitCode : 0,
-          timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : 30000,
+          timeoutMs: safeTimeoutMs,
           updateScores: updateScores !== false,
           signal: controller.signal,
         })

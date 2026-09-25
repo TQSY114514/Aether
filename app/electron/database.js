@@ -909,9 +909,12 @@ function createSession({
 function forkSession(parentSessionId, title) {
   return db.transaction(() => {
     const parent = db.prepare('SELECT * FROM session WHERE id = ?').get(parentSessionId);
-    const newTitle = title || (parent?.title ? `${parent.title} (Fork)` : '会话分支');
-    const personaId = parent?.persona_id || null;
-    const config = parent?.config || null;
+    if (!parent) {
+      throw new Error(`Session does not exist: ${parentSessionId}`);
+    }
+    const newTitle = title || (parent.title ? `${parent.title} (Fork)` : '会话分支');
+    const personaId = parent.persona_id || null;
+    const config = parent.config || null;
 
     const info = db.prepare(
       'INSERT INTO session (title, persona_id, parent_session_id, config, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, 0)'
@@ -923,12 +926,14 @@ function forkSession(parentSessionId, title) {
       const insertMsg = db.prepare(`
         INSERT INTO message (
           session_id, role, content, model_used, provider_used,
-          token_count, latency_ms, status, error_message,
-          created_at, tokens_in, tokens_out, cost, arena_model, attachment
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          token_count, latency_ms, status, error_message, arena_model, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
+      const insertFts = db.prepare(
+        'INSERT INTO messages_fts (content, session_id, message_id) VALUES (?, ?, ?)'
+      );
       for (const m of parentMsgs) {
-        insertMsg.run(
+        const msgInfo = insertMsg.run(
           newSessionId,
           m.role,
           m.content,
@@ -938,13 +943,12 @@ function forkSession(parentSessionId, title) {
           m.latency_ms,
           m.status,
           m.error_message,
-          m.created_at || localNow(),
-          m.tokens_in,
-          m.tokens_out,
-          m.cost,
           m.arena_model,
-          m.attachment
+          m.created_at || localNow()
         );
+        try {
+          insertFts.run(String(m.content || ''), newSessionId, Number(msgInfo.lastInsertRowid));
+        } catch {}
       }
     }
 

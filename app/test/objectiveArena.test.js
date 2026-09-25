@@ -50,24 +50,28 @@ describe('runVerifyCommandDetailed', () => {
 })
 
 describe('extractAndApplyPatches', () => {
+  const SEARCH_HEAD = `${'<'.repeat(7)} SEARCH`
+  const DIVIDER = '='.repeat(7)
+  const REPLACE_TAIL = `${'>'.repeat(7)} REPLACE`
+
   it('applies SEARCH/REPLACE blocks with file path header', () => {
     const mathFile = path.join(tmpDir, 'calc.js')
     fs.writeFileSync(mathFile, 'function add(a, b) {\n  return a - b // bug\n}\n', 'utf8')
 
-    const patchText = `
-Here is the fix for the bug in calc.js:
-
-File: calc.js
-<<<<<<< SEARCH
-function add(a, b) {
-  return a - b // bug
-}
-=======
-function add(a, b) {
-  return a + b
-}
->>>>>>> REPLACE
-`
+    const patchText = [
+      'Here is the fix for the bug in calc.js:',
+      '',
+      'File: calc.js',
+      SEARCH_HEAD,
+      'function add(a, b) {',
+      '  return a - b // bug',
+      '}',
+      DIVIDER,
+      'function add(a, b) {',
+      '  return a + b',
+      '}',
+      REPLACE_TAIL,
+    ].join('\n')
     const res = extractAndApplyPatches(tmpDir, patchText)
     expect(res.appliedCount).toBe(1)
     expect(res.filesModified).toContain('calc.js')
@@ -94,6 +98,10 @@ function add(a, b) {
 })
 
 describe('runObjectiveEvaluation', () => {
+  const SEARCH_HEAD = `${'<'.repeat(7)} SEARCH`
+  const DIVIDER = '='.repeat(7)
+  const REPLACE_TAIL = `${'>'.repeat(7)} REPLACE`
+
   it('evaluates candidate models and records winner ELO objectively', async () => {
     // Setup a tiny codebase with a broken file and a node test script
     const appFile = path.join(tmpDir, 'app.js')
@@ -119,14 +127,14 @@ describe('runObjectiveEvaluation', () => {
     completeChatMessage.mockImplementation(async ({ model }) => {
       if (model.id === 101) {
         return {
-          content: `
-File: app.js
-<<<<<<< SEARCH
-module.exports = { status: "broken" }
-=======
-module.exports = { status: "ok" }
->>>>>>> REPLACE
-          `,
+          content: [
+            'File: app.js',
+            SEARCH_HEAD,
+            'module.exports = { status: "broken" }',
+            DIVIDER,
+            'module.exports = { status: "ok" }',
+            REPLACE_TAIL,
+          ].join('\n'),
           usage: { prompt_tokens: 150, completion_tokens: 80, total_tokens: 230 },
         }
       }

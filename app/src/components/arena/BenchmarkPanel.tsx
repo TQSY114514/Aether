@@ -29,11 +29,53 @@ export default function BenchmarkPanel() {
   const [runningId, setRunningId] = useState<number | null>(null)
   const [lastModels, setLastModels] = useState<Record<number, BenchModel>>({})
 
+  // Objective Sandbox Arena state
+  const [objOpen, setObjOpen] = useState(false)
+  const [objPrompt, setObjPrompt] = useState('')
+  const [objVerifyCmd, setObjVerifyCmd] = useState('npm test')
+  const [objModelIds, setObjModelIds] = useState<number[]>([])
+  const [objRunId, setObjRunId] = useState<string | null>(null)
+  const [objResult, setObjResult] = useState<Awaited<ReturnType<typeof window.electronAPI.arena.objectiveRun>> | null>(null)
+
   const refresh = useCallback(async () => {
     try { setBenches(await window.electronAPI?.arena?.benchmarkList?.() || []) } catch {}
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
+
+  const runObjective = async () => {
+    if (!objPrompt.trim() || !objVerifyCmd.trim() || objModelIds.length === 0) {
+      toast('请填写评测任务、验证命令并选择至少 1 个模型', { type: 'error' })
+      return
+    }
+    const runId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    setObjRunId(runId)
+    setObjResult(null)
+    try {
+      const res = await window.electronAPI.arena.objectiveRun({
+        runId,
+        prompt: objPrompt.trim(),
+        verifyCommand: objVerifyCmd.trim(),
+        modelIds: objModelIds,
+      })
+      if (res?.error) throw new Error(res.error)
+      setObjResult(res)
+      toast(res.winnerName ? `客观评测完成 · 胜出: ${res.winnerName}` : '客观评测完成', { type: 'success' })
+    } catch (e: any) {
+      toast(`客观评测失败: ${e?.message || ''}`, { type: 'error' })
+    } finally {
+      setObjRunId(null)
+    }
+  }
+
+  const stopObjective = async () => {
+    if (!objRunId) return
+    try {
+      await window.electronAPI.arena.objectiveStop({ runId: objRunId })
+      toast('已中止客观评测', { type: 'info' })
+    } catch {}
+    setObjRunId(null)
+  }
 
   const save = async () => {
     const tasks = tasksText.split('\n').map(s => s.trim()).filter(Boolean)
@@ -76,17 +118,80 @@ export default function BenchmarkPanel() {
           <FlaskConical size={15} style={{ color: 'var(--accent)' }} />
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>个人基准测试(Benchmark)</h2>
         </div>
-        {!editing && (
-          <button onClick={() => setEditing(true)}
+        <div className="flex items-center gap-2">
+          <button onClick={() => setObjOpen((v) => !v)}
             className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-            <Plus size={12} />新建套件
+            <Play size={11} />客观沙箱验证
           </button>
-        )}
+          {!editing && (
+            <button onClick={() => setEditing(true)}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              <Plus size={12} />新建套件
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
         保存你的常用任务, 一键对多个模型重跑 —— 得到"你的工作负载"的模型排行(胜率/延迟/成本)。
       </p>
+
+      {objOpen && (
+        <div className="p-4 rounded-lg mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>客观验证竞技场 (Objective Sandbox Arena)</span>
+            <button onClick={() => setObjOpen(false)} className="p-1 rounded hover:bg-[var(--border)]"><X size={12} /></button>
+          </div>
+          <textarea value={objPrompt} onChange={(e) => setObjPrompt(e.target.value)} rows={3}
+            placeholder="输入编码修复任务描述 (模型将在隔离沙箱中生成补丁并执行验证命令)..."
+            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
+            style={{ borderColor: 'var(--border)' }} />
+          <input value={objVerifyCmd} onChange={(e) => setObjVerifyCmd(e.target.value)}
+            placeholder="验证命令 (如: npm test 或 node test.js)"
+            className="w-full px-3 py-2 text-xs rounded-lg border outline-none bg-[var(--bg-primary)] font-mono"
+            style={{ borderColor: 'var(--border)' }} />
+          <div>
+            <p className="text-[11px] mb-1.5" style={{ color: 'var(--text-muted)' }}>选择候选模型 ({objModelIds.length} 个)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {allModels.filter(m => m.provider_name).map((m) => (
+                <button key={m.id} onClick={() => setObjModelIds((p) => p.includes(m.id) ? p.filter(x => x !== m.id) : [...p, m.id])}
+                  className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${objModelIds.includes(m.id) ? 'text-white' : ''}`}
+                  style={objModelIds.includes(m.id) ? { backgroundColor: 'var(--accent)', borderColor: 'transparent' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                  {m.model_name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            {objRunId ? (
+              <button onClick={stopObjective}
+                className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg border text-rose-500"
+                style={{ borderColor: 'var(--border)' }}>
+                <X size={12} />停止验证
+              </button>
+            ) : (
+              <button onClick={runObjective}
+                className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg text-white"
+                style={{ backgroundColor: 'var(--accent)' }}>
+                <Play size={12} />运行客观验证
+              </button>
+            )}
+          </div>
+          {objResult && Array.isArray(objResult.models) && (
+            <div className="space-y-1 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+              {objResult.models.map((m) => (
+                <div key={m.modelId} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'var(--bg-primary)' }}>
+                  <span className="font-medium truncate flex-1" style={{ color: 'var(--text-primary)' }}>{m.modelName}</span>
+                  <span className={m.passed ? 'text-emerald-600' : 'text-rose-500'}>{m.passed ? 'PASS' : 'FAIL'}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{m.latencyMs}ms</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{fmtCost(m.cost)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {editing && (
         <div className="p-4 rounded-lg mb-4 space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>

@@ -52,17 +52,31 @@ function killProcessTree(child) {
  * @param {number} [timeoutMs=30000] - Timeout limit in milliseconds
  * @returns {Promise<{ ok: boolean, exitCode: number, stdout: string, stderr: string, durationMs: number }>}
  */
-function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode = 0, timeoutMs = 30000) {
+function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode = 0, timeoutMs = 30000, hostWorkspaceDir = null) {
   return new Promise((resolve) => {
     const start = Date.now()
     if (signal?.aborted) {
       return resolve({ ok: false, exitCode: -1, stdout: '', stderr: 'Aborted', durationMs: 0 })
     }
 
+    const env = { ...process.env }
+    if (hostWorkspaceDir) {
+      const hostNodeModules = path.join(hostWorkspaceDir, 'node_modules')
+      const hostBin = path.join(hostNodeModules, '.bin')
+      env.NODE_PATH = env.NODE_PATH
+        ? `${hostNodeModules}${path.delimiter}${env.NODE_PATH}`
+        : hostNodeModules
+      const pathKey = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') || 'PATH'
+      env[pathKey] = env[pathKey]
+        ? `${hostBin}${path.delimiter}${env[pathKey]}`
+        : hostBin
+    }
+
     let child
     try {
       child = spawn(verifyCommand, {
         cwd,
+        env,
         shell: true,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -71,10 +85,15 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
       return resolve({ ok: false, exitCode: -1, stdout: '', stderr: e.message, durationMs: Date.now() - start })
     }
 
+    const MAX_CAPTURE = 256 * 1024
     let stdout = ''
     let stderr = ''
-    child.stdout?.on('data', (d) => { stdout += d.toString() })
-    child.stderr?.on('data', (d) => { stderr += d.toString() })
+    const appendBounded = (buf, chunk) => {
+      const next = buf + chunk
+      return next.length > MAX_CAPTURE ? next.slice(next.length - MAX_CAPTURE) : next
+    }
+    child.stdout?.on('data', (d) => { stdout = appendBounded(stdout, d.toString()) })
+    child.stderr?.on('data', (d) => { stderr = appendBounded(stderr, d.toString()) })
 
     let finished = false
     let timer = null
@@ -141,7 +160,24 @@ function runVerifyCommandDetailed(verifyCommand, cwd, signal, expectedExitCode =
  */
 function isPathInside(parentDir, targetPath) {
   const rel = path.relative(parentDir, targetPath)
-  return rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+  return Boolean(rel && !rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+function isSafeSandboxTarget(baseDir, targetPath) {
+  if (!isPathInside(baseDir, targetPath)) return false
+  const rel = path.relative(baseDir, targetPath)
+  const segments = rel.split(/[\\/]/)
+  if (segments.includes('node_modules') || segments.includes('.git')) return false
+  if (!fs.existsSync(targetPath)) return false
+  try {
+    const stat = fs.lstatSync(targetPath)
+    if (stat.isSymbolicLink()) return false
+    const realBase = fs.realpathSync(baseDir)
+    const realTarget = fs.realpathSync(targetPath)
+    return isPathInside(realBase, realTarget)
+  } catch {
+    return false
+  }
 }
 
 /** Extract supported patch formats from a model response and apply them safely. */
@@ -159,7 +195,7 @@ function extractAndApplyPatches(workspaceDir, responseText) {
     const rawFile = (diffMatch[2] || diffMatch[1]).trim()
     const patchBlock = diffMatch[0].trim()
     const abs = path.resolve(baseDir, rawFile)
-    if (isPathInside(baseDir, abs) && fs.existsSync(abs)) {
+    if (isSafeSandboxTarget(baseDir, abs)) {
       try {
         const orig = fs.readFileSync(abs, 'utf8')
         const res = applyAnyPatch(orig, patchBlock)
@@ -186,7 +222,7 @@ function extractAndApplyPatches(workspaceDir, responseText) {
       if (fileMatch && !line.includes('<<<<<<<') && !line.includes('>>>>>>>') && !line.includes('=======')) {
         const cand = fileMatch[1].trim()
         const candAbs = path.resolve(baseDir, cand)
-        if (isPathInside(baseDir, candAbs) && fs.existsSync(candAbs)) {
+        if (isSafeSandboxTarget(baseDir, candAbs)) {
           currentFile = cand
         }
       }
@@ -209,18 +245,20 @@ function extractAndApplyPatches(workspaceDir, responseText) {
         if (j < lines.length && lines[j].trim() === '>>>>>>> REPLACE') {
           if (currentFile) {
             const abs = path.resolve(baseDir, currentFile)
-            try {
-              const orig = fs.readFileSync(abs, 'utf8')
-              const patchStr = `<<<<<<< SEARCH\n${searchLines.join('\n')}\n=======\n${replaceLines.join('\n')}\n>>>>>>> REPLACE`
-              const res = applyAnyPatch(orig, patchStr)
-              if (res.applied > 0) {
-                fs.writeFileSync(abs, res.content, 'utf8')
-                appliedCount += res.applied
-                filesModified.add(currentFile)
+            if (isSafeSandboxTarget(baseDir, abs)) {
+              try {
+                const orig = fs.readFileSync(abs, 'utf8')
+                const patchStr = `<<<<<<< SEARCH\n${searchLines.join('\n')}\n=======\n${replaceLines.join('\n')}\n>>>>>>> REPLACE`
+                const res = applyAnyPatch(orig, patchStr)
+                if (res.applied > 0) {
+                  fs.writeFileSync(abs, res.content, 'utf8')
+                  appliedCount += res.applied
+                  filesModified.add(currentFile)
+                }
+                if (res.conflicts && res.conflicts.length) conflicts.push(...res.conflicts)
+              } catch (e) {
+                conflicts.push(`Error patching ${currentFile}: ${e.message}`)
               }
-              if (res.conflicts && res.conflicts.length) conflicts.push(...res.conflicts)
-            } catch (e) {
-              conflicts.push(`Error patching ${currentFile}: ${e.message}`)
             }
           }
           i = j
@@ -250,20 +288,33 @@ function copyDirectorySync(src, dest) {
     if (entry.isSymbolicLink()) {
       continue
     }
-    if (entry.name === '.git' || entry.name === 'dist') {
-      continue
-    }
-    if (entry.name === 'node_modules') {
-      try {
-        const targetType = process.platform === 'win32' ? 'junction' : 'dir'
-        fs.symlinkSync(srcPath, destPath, targetType)
-      } catch {}
+    if (entry.name === '.git' || entry.name === 'dist' || entry.name === 'node_modules') {
       continue
     }
     if (entry.isDirectory()) {
       copyDirectorySync(srcPath, destPath)
     } else {
       try { fs.copyFileSync(srcPath, destPath) } catch {}
+    }
+  }
+}
+
+async function copyDirectoryAsync(src, dest) {
+  await fs.promises.mkdir(dest, { recursive: true })
+  const entries = await fs.promises.readdir(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+    if (entry.isSymbolicLink()) {
+      continue
+    }
+    if (entry.name === '.git' || entry.name === 'dist' || entry.name === 'node_modules') {
+      continue
+    }
+    if (entry.isDirectory()) {
+      await copyDirectoryAsync(srcPath, destPath)
+    } else {
+      try { await fs.promises.copyFile(srcPath, destPath) } catch {}
     }
   }
 }
@@ -307,15 +358,15 @@ async function runObjectiveEvaluation({
 
   const sessionHash = `arena-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const baseTempDir = path.join(os.tmpdir(), `aether-obj-arena-${sessionHash}`)
-  fs.mkdirSync(baseTempDir, { recursive: true })
+  await fs.promises.mkdir(baseTempDir, { recursive: true })
 
   try {
     const roundResults = await Promise.all(
       selectedModels.map(async (m) => {
         const modelTempDir = path.join(baseTempDir, `model-${m.id}`)
-        fs.mkdirSync(modelTempDir, { recursive: true })
-        // Clone project files for isolated sandbox execution
-        copyDirectorySync(baseCwd, modelTempDir)
+        await fs.promises.mkdir(modelTempDir, { recursive: true })
+        // Clone project files asynchronously for isolated sandbox execution
+        await copyDirectoryAsync(baseCwd, modelTempDir)
 
         const start = Date.now()
         onProgress?.({ modelId: m.id, status: 'generating' })
@@ -377,20 +428,21 @@ async function runObjectiveEvaluation({
 
         onProgress?.({ modelId: m.id, status: 'verifying' })
 
-        // 3. Run verification command inside sandbox
+        // 3. Run verification command inside sandbox with read-only NODE_PATH resolution
         const verifyRes = await runVerifyCommandDetailed(
           verifyCommand,
           modelTempDir,
           signal,
           expectedExitCode,
           timeoutMs,
+          baseCwd,
         )
 
         return {
           modelId: m.id,
           modelName: m.model_name,
           providerName: m.provider_name,
-          passed: Boolean(verifyRes.ok && patchRes.appliedCount > 0),
+          passed: Boolean(verifyRes.ok && patchRes.ok && patchRes.appliedCount > 0),
           exitCode: verifyRes.exitCode,
           stdout: verifyRes.stdout,
           stderr: verifyRes.stderr,
@@ -405,14 +457,14 @@ async function runObjectiveEvaluation({
     )
 
     // 4. Objectively rank models
-    // Sort criteria: passed > latency > cost
+    // Sort criteria: passed > end-to-end latencyMs > cost
     const sorted = [...roundResults].sort((a, b) => {
       if (a.passed !== b.passed) return a.passed ? -1 : 1
       if (a.passed && b.passed) {
-        if (a.durationMs !== b.durationMs) return a.durationMs - b.durationMs
+        if (a.latencyMs !== b.latencyMs) return a.latencyMs - b.latencyMs
         return a.cost - b.cost
       }
-      return a.durationMs - b.durationMs
+      return a.latencyMs - b.latencyMs
     })
 
     const top = sorted[0]
@@ -426,8 +478,8 @@ async function runObjectiveEvaluation({
         winner = top
         losers.push(...sorted.slice(1))
       } else if (top.passed && runnerUp.passed) {
-        // If both passed, margin of 20% latency difference determines clean win
-        if (top.durationMs < runnerUp.durationMs * 0.8) {
+        // If both passed, margin of 20% end-to-end latency difference determines clean win
+        if (top.latencyMs < runnerUp.latencyMs * 0.8) {
           winner = top
           losers.push(...sorted.slice(1))
         } else {

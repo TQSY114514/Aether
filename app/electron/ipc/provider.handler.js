@@ -1,4 +1,4 @@
-const { testConnection, listModels } = require('../llm/providerAdapter')
+const { testConnection, listModels, completeChat } = require('../llm/providerAdapter')
 
 /** Register provider CRUD, connectivity, latency, and model-sync IPC handlers. */
 function registerProviderHandlers(ipcMain, db) {
@@ -28,6 +28,17 @@ function registerProviderHandlers(ipcMain, db) {
     const provider = db.getProvider(id)
     if (!provider) return { success: false, latencyMs: -1, errorMessage: '供应商未找到' }
     try {
+      if (modelName) {
+        const start = Date.now()
+        const modelObj = typeof modelName === 'string' ? { model_name: modelName } : modelName
+        await completeChat({
+          provider,
+          model: modelObj,
+          messages: [{ role: 'user', content: 'ping' }],
+          options: { max_tokens: 1 },
+        })
+        return { success: true, latencyMs: Date.now() - start }
+      }
       return await testConnection({ provider, model: modelName })
     } catch (e) {
       return { success: false, latencyMs: -1, errorMessage: e?.message || String(e) }

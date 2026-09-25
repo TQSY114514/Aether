@@ -390,8 +390,8 @@ const FOLD_TOOLS = new Set([
 const FOLD_MIN_ROUNDS_AGO = 3
 const FOLD_MIN_LENGTH = 200 // don't bother folding tiny outputs
 
-function foldStaleToolOutputs(messages, currentRound) {
-  if (!Array.isArray(messages) || messages.length === 0 || !currentRound) return messages
+function foldStaleToolOutputs(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return messages
 
   // Build a map of tool_call_id → { round, toolName }
   const callMeta = new Map()

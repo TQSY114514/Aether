@@ -60,14 +60,14 @@ export default function ModelPage() {
         setOllamaState({
           ok: true,
           text: r.recommended
-            ? `已连接本地 Ollama — ${r.models?.length ?? 0} 个模型, 推荐: ${r.recommended}`
-            : '已连接本地 Ollama',
+            ? t('models.ollama_connected_rec', r.models?.length ?? 0, r.recommended)
+            : t('models.ollama_connected'),
         })
       } else {
-        setOllamaState({ ok: false, text: r.error || '未检测到 Ollama' })
+        setOllamaState({ ok: false, text: r.error || t('models.ollama_not_found') })
       }
     } catch {
-      setOllamaState({ ok: false, text: '检测失败' })
+      setOllamaState({ ok: false, text: t('models.ollama_detect_failed') })
     } finally {
       setOllamaBusy(false)
     }
