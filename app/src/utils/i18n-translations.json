@@ -711,7 +711,23 @@
       "arena.objective.done": "客观评测完成",
       "arena.objective.failed": "客观评测失败: {0}",
       "arena.objective.aborted": "已中止客观评测",
-      "arena.objective.baseline_passed_warn": "未修改前的基线验证命令已通过或超时，无法区分有效修复与无关修改，本轮不记胜出。"
+      "arena.objective.baseline_passed_warn": "未修改前的基线验证命令已通过或超时，无法区分有效修复与无关修改，本轮不记胜出。",
+      "arena.bench.missing_fields": "需要名称 + 至少 1 个任务 + 至少 1 个模型",
+      "arena.bench.saved": "基准套件已保存",
+      "arena.bench.save_failed": "保存失败: {0}",
+      "arena.bench.done": "基准测试完成",
+      "arena.bench.run_failed": "运行失败: {0}",
+      "arena.bench.title": "个人基准测试(Benchmark)",
+      "arena.bench.new_suite": "新建套件",
+      "arena.bench.subtitle": "保存你的常用任务, 一键对多个模型重跑 —— 得到你的工作负载的模型排行(胜率/延迟/成本)。",
+      "arena.bench.name_placeholder": "套件名称(如: 我的编码任务)",
+      "arena.bench.tasks_placeholder": "每行一个任务, 例如:\n修复这个 React 组件的 TypeScript 报错\n写一个二分查找并解释\n总结这段代码的架构",
+      "arena.bench.select_models": "选择参与评测的模型({0} 个)",
+      "arena.bench.empty": "还没有基准套件 — 点右上角新建套件开始",
+      "arena.bench.summary_run": "{0} 个任务 · {1} 个模型 · 上次运行 {2}",
+      "arena.bench.summary_never": "{0} 个任务 · {1} 个模型 · 尚未运行",
+      "arena.bench.running": "运行中…",
+      "arena.bench.rerun": "重跑"
     }
   },
   {
@@ -858,7 +874,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "Habilidades",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -1005,7 +1037,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "スキル",
-      "settings.theme.metalheart": "メタルハート"
+      "settings.theme.metalheart": "メタルハート",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -1151,7 +1199,23 @@
       "tool.rollback.running": "Rolling back...",
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
-      "settings.theme.metalheart": "月窟金心"
+      "settings.theme.metalheart": "月窟金心",
+      "arena.bench.missing_fields": "需要名称 + 至少 1 个任务 + 至少 1 个模型",
+      "arena.bench.saved": "基准套件已保存",
+      "arena.bench.save_failed": "保存失败: {0}",
+      "arena.bench.done": "基准测试完成",
+      "arena.bench.run_failed": "运行失败: {0}",
+      "arena.bench.title": "个人基准测试(Benchmark)",
+      "arena.bench.new_suite": "新建套件",
+      "arena.bench.subtitle": "保存你的常用任务, 一键对多个模型重跑 —— 得到你的工作负载的模型排行(胜率/延迟/成本)。",
+      "arena.bench.name_placeholder": "套件名称(如: 我的编码任务)",
+      "arena.bench.tasks_placeholder": "每行一个任务, 例如:\n修复这个 React 组件的 TypeScript 报错\n写一个二分查找并解释\n总结这段代码的架构",
+      "arena.bench.select_models": "选择参与评测的模型({0} 个)",
+      "arena.bench.empty": "还没有基准套件 — 点右上角新建套件开始",
+      "arena.bench.summary_run": "{0} 个任务 · {1} 个模型 · 上次运行 {2}",
+      "arena.bench.summary_never": "{0} 个任务 · {1} 个模型 · 尚未运行",
+      "arena.bench.running": "运行中…",
+      "arena.bench.rerun": "重跑"
     }
   },
   {
@@ -1298,7 +1362,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "Compétences",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -1445,7 +1525,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "Fähigkeiten",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -1592,7 +1688,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "Habilidades",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -1739,7 +1851,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "Навыки",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -1911,7 +2039,23 @@
       "shortcuts.group.global": "全域",
       "shortcuts.group.chat": "對話",
       "shortcuts.group.navigation": "導覽",
-      "settings.theme.metalheart": "Metalheart (月面/解構)"
+      "settings.theme.metalheart": "Metalheart (月面/解構)",
+      "arena.bench.missing_fields": "需要名稱 + 至少 1 個任務 + 至少 1 個模型",
+      "arena.bench.saved": "基準套件已儲存",
+      "arena.bench.save_failed": "儲存失敗: {0}",
+      "arena.bench.done": "基準測試完成",
+      "arena.bench.run_failed": "執行失敗: {0}",
+      "arena.bench.title": "個人基準測試(Benchmark)",
+      "arena.bench.new_suite": "新建套件",
+      "arena.bench.subtitle": "儲存你的常用任務, 一鍵對多個模型重跑 —— 得到你的工作負載的模型排行(勝率/延遲/成本)。",
+      "arena.bench.name_placeholder": "套件名稱(如: 我的編碼任務)",
+      "arena.bench.tasks_placeholder": "每行一個任務, 例如:\n修復這個 React 組件的 TypeScript 報錯\n寫一個二分查找並解釋\n總結這段程式碼的架構",
+      "arena.bench.select_models": "選擇參與評測的模型({0} 個)",
+      "arena.bench.empty": "還沒有基準套件 — 點右上角新建套件開始",
+      "arena.bench.summary_run": "{0} 個任務 · {1} 個模型 · 上次執行 {2}",
+      "arena.bench.summary_never": "{0} 個任務 · {1} 個模型 · 尚未執行",
+      "arena.bench.running": "執行中…",
+      "arena.bench.rerun": "重跑"
     }
   },
   {
@@ -2058,7 +2202,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "المهارات",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -2205,7 +2365,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "Навички",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -2352,7 +2528,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "스킬",
-      "settings.theme.metalheart": "메탈하트"
+      "settings.theme.metalheart": "메탈하트",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   },
   {
@@ -2499,7 +2691,23 @@
       "tool.rollback.done": "Rolled back",
       "tool.rollback.error": "Rollback failed",
       "sidebar.nav.skills": "स्किल्स",
-      "settings.theme.metalheart": "Metalheart"
+      "settings.theme.metalheart": "Metalheart",
+      "arena.bench.missing_fields": "Name + at least 1 task + at least 1 model required",
+      "arena.bench.saved": "Benchmark suite saved",
+      "arena.bench.save_failed": "Save failed: {0}",
+      "arena.bench.done": "Benchmark complete",
+      "arena.bench.run_failed": "Run failed: {0}",
+      "arena.bench.title": "Personal Benchmark",
+      "arena.bench.new_suite": "New Suite",
+      "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+      "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+      "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+      "arena.bench.select_models": "Select models to evaluate ({0})",
+      "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+      "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+      "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+      "arena.bench.running": "Running…",
+      "arena.bench.rerun": "Re-run"
     }
   }
 ]

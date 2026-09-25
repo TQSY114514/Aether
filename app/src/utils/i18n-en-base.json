@@ -699,5 +699,16 @@
   "arena.bench.saved": "Benchmark suite saved",
   "arena.bench.save_failed": "Save failed: {0}",
   "arena.bench.done": "Benchmark complete",
-  "arena.bench.run_failed": "Run failed: {0}"
+  "arena.bench.run_failed": "Run failed: {0}",
+  "arena.bench.title": "Personal Benchmark",
+  "arena.bench.new_suite": "New Suite",
+  "arena.bench.subtitle": "Save your frequent tasks and re-run them across multiple models in one click — your workload leaderboard (win rate / latency / cost).",
+  "arena.bench.name_placeholder": "Suite name (e.g., My coding tasks)",
+  "arena.bench.tasks_placeholder": "One task per line, e.g.:\nFix the TypeScript error in this React component\nWrite a binary search and explain it\nSummarize this architecture",
+  "arena.bench.select_models": "Select models to evaluate ({0})",
+  "arena.bench.empty": "No benchmark suites yet — click New Suite in the top right to start",
+  "arena.bench.summary_run": "{0} tasks · {1} models · last run {2}",
+  "arena.bench.summary_never": "{0} tasks · {1} models · never run",
+  "arena.bench.running": "Running…",
+  "arena.bench.rerun": "Re-run"
 }

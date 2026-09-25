@@ -57,13 +57,17 @@ function axisFor(toolName) {
 function analyzeCommandRisk(toolName, input) {
   if (toolName === 'run_command' || toolName === 'run_long_task') {
     let command = ''
-    try {
-      const parsed = JSON.parse(input)
-      command = parsed.command || parsed.code || ''
-    } catch {
-      command = input
+    if (input && typeof input === 'object') {
+      command = input.command || input.code || ''
+    } else if (typeof input === 'string') {
+      try {
+        const parsed = JSON.parse(input)
+        command = (parsed && typeof parsed === 'object') ? (parsed.command || parsed.code || '') : input
+      } catch {
+        command = input
+      }
     }
-    command = String(command).trim().toLowerCase()
+    command = String(command || '').trim().toLowerCase()
     
     // 高危命令强制 Always Ask
     if (command.includes('rm -rf') || command.includes('drop table') || command.includes('mkfs')) {
@@ -100,6 +104,11 @@ function analyzeCommandRisk(toolName, input) {
  * axisPolicies = { filesystem: 'allow'|'ask'|'deny', shell: ..., network: ... }
  */
 function decideAxisPolicy(toolName, input, axisPolicies) {
+  // Backward-compatibility: if called as decideAxisPolicy(toolName, axisPolicies)
+  if (arguments.length === 2 && input && typeof input === 'object' && !('command' in input) && !('code' in input)) {
+    axisPolicies = input
+    input = null
+  }
   const axis = axisFor(toolName)
   
   // 1. 动态风险拦截(强制升级策略)
