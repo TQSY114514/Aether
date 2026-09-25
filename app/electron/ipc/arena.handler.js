@@ -3,6 +3,7 @@ const { spawn } = require('child_process')
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
 const { computeCost } = require('../utils/cost')
 const { shouldWriteQuickTitle, quickTitleOf } = require('./chat-send.handler')
+const featureFlags = require('../featureFlags')
 const log = require('../logger')
 const abortControllers = new Map()
 
@@ -450,6 +451,9 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
   // Objective Arena: automated code execution + verify command benchmark with auto ELO recording
   ipcMain.handle('arena:objective-run', async (_e, data) => {
     try {
+      if (!featureFlags.isEnabled(db, 'arena.objectiveArena')) {
+        return { error: 'arena.objectiveArena feature flag is disabled' }
+      }
       const { prompt, verifyCommand, cwd, modelIds, expectedExitCode, timeoutMs, updateScores } = data || {}
       if (!prompt || !verifyCommand) {
         return { error: 'prompt and verifyCommand are required' }

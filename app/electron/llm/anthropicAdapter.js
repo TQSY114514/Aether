@@ -518,8 +518,9 @@ async function listModels({ provider, signal } = {}) {
     const allNames = []
     let afterId = null
     let hasMore = true
+    const MAX_PAGES = 20  // ~2000 models maximum; guards against infinite loops
 
-    while (hasMore) {
+    for (let page = 0; page < MAX_PAGES && hasMore; page++) {
       const url = new URL(`${baseUrl(provider)}/models`)
       url.searchParams.set('limit', '100')
       if (afterId) url.searchParams.set('after_id', afterId)
@@ -540,8 +541,10 @@ async function listModels({ provider, signal } = {}) {
 
       // Anthropic pagination fields
       hasMore = Boolean(data.has_more)
-      afterId = data.last_id || (list.length > 0 && (list[list.length - 1]?.id)) || null
-      if (!afterId) hasMore = false
+      const nextId = data.last_id || (list.length > 0 && (list[list.length - 1]?.id)) || null
+      // Stop if cursor didn't advance (broken endpoint returning same page repeatedly)
+      if (!nextId || nextId === afterId) hasMore = false
+      afterId = nextId
     }
 
     return allNames.length > 0 ? Array.from(new Set(allNames)) : []
