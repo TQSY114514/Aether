@@ -8,10 +8,10 @@
 
 **Stop wondering which model is best — Aether tests them on your own tasks and picks for you.**
 
-[![GitHub downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&label=downloads)](https://github.com/TQSY114514/Aether/releases)
-[![npm downloads](https://img.shields.io/npm/dm/aetherai?style=flat-square&label=npm%20downloads)](https://www.npmjs.com/package/aetherai)
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE)
-[![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download)
+[![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
+[![npm downloads](https://img.shields.io/npm/dt/aetherai.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white&label=npm%20downloads)](https://www.npmjs.com/package/aetherai)
+[![license](https://img.shields.io/badge/license-Apache--2.0-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
+[![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#-download)
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 
@@ -144,4 +144,4 @@ Contributions are welcome! If you encounter an issue or have an idea, please ope
 
 ## License
 
-[MIT](./LICENSE) © 2025-2026 Aether
+[Apache-2.0](./LICENSE) © 2025-2026 Aether
