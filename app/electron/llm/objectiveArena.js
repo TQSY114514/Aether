@@ -33,6 +33,12 @@ const SAFE_VERIFY_ENV_KEYS = [
   'PROGRAMDATA', 'PROGRAMFILES', 'SYSTEMDRIVE', 'LANG', 'LC_ALL', 'TERM',
 ]
 
+const STATIC_RESOLVE_HOOK_SRC =
+  "export async function resolve(s,c,n){try{return await n(s,c)}catch(e){const p=process.env.AETHER_VERIFY_PARENT_URL;if(p&&e&&e.code==='ERR_MODULE_NOT_FOUND'&&!s.startsWith('.')&&!s.startsWith('/')&&!s.startsWith('file:')){return n(s,{...c,parentURL:p})}throw e}}"
+const STATIC_REGISTER_HOOK_SRC =
+  `import{register}from'node:module';register(${JSON.stringify('data:text/javascript,' + encodeURIComponent(STATIC_RESOLVE_HOOK_SRC))});`
+const STATIC_IMPORT_FLAG = `--import=data:text/javascript,${encodeURIComponent(STATIC_REGISTER_HOOK_SRC)}`
+
 function buildSanitizedVerifyEnv(hostWorkspaceDir) {
   const env = { CI: 'true', NODE_ENV: 'test' }
   for (const key of SAFE_VERIFY_ENV_KEYS) {
@@ -49,11 +55,8 @@ function buildSanitizedVerifyEnv(hostWorkspaceDir) {
       ? `${hostBin}${path.delimiter}${env[pathKey]}`
       : hostBin
     try {
-      const hostPkgUrl = require('url').pathToFileURL(path.join(hostWorkspaceDir, 'package.json')).href
-      const hooksSrc = `export async function resolve(s,c,n){try{return await n(s,c)}catch(e){if(e&&e.code==='ERR_MODULE_NOT_FOUND'&&!s.startsWith('.')&&!s.startsWith('/')&&!s.startsWith('file:')){return n(s,{...c,parentURL:${JSON.stringify(hostPkgUrl)}})}throw e}}`
-      const regSrc = `import{register}from'node:module';register(${JSON.stringify('data:text/javascript,' + encodeURIComponent(hooksSrc))});`
-      const importFlag = `--import=data:text/javascript,${encodeURIComponent(regSrc)}`
-      env.NODE_OPTIONS = env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ${importFlag}` : importFlag
+      env.AETHER_VERIFY_PARENT_URL = require('url').pathToFileURL(path.join(hostWorkspaceDir, 'package.json')).href
+      env.NODE_OPTIONS = env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ${STATIC_IMPORT_FLAG}` : STATIC_IMPORT_FLAG
     } catch {}
   }
   return env

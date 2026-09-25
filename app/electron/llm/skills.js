@@ -245,8 +245,17 @@ function rescan() { scanSkills(); scanCommands() }
 //   - GitHub tree/blob URL: "https://github.com/owner/repo/tree/main/skills/security-audit"
 //   - Direct raw URL to SKILL.md: "https://.../SKILL.md"
 // ───────────────────────────────────────────────────────────────────────────
+function trimEdgeChar(str, ch) {
+  let start = 0
+  let end = str.length
+  while (start < end && str[start] === ch) start++
+  while (end > start && str[end - 1] === ch) end--
+  return str.slice(start, end)
+}
+
 function sanitizeImportedSkillName(raw) {
-  const s = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+  const dashed = String(raw || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
+  const s = trimEdgeChar(dashed, '-')
   if (!s || s.includes('..') || s.startsWith('.')) return null
   return s.slice(0, 64)
 }
@@ -261,7 +270,7 @@ function resolveSkillSourceUrl(source) {
       const u = new URL(raw)
       if (u.hostname === 'github.com') {
         // Convert github.com/<owner>/<repo>/(blob|tree)/<branch>/<path> -> raw.githubusercontent.com
-        const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/')
+        const parts = u.pathname.split('/').filter(Boolean)
         if (parts.length >= 2) {
           const owner = parts[0]
           const repo = parts[1].replace(/\.git$/i, '')
@@ -273,22 +282,24 @@ function resolveSkillSourceUrl(source) {
           } else if (parts.length > 2) {
             subPath = parts.slice(2).join('/')
           }
-          const skillMdPath = subPath.endsWith('SKILL.md')
-            ? subPath
-            : (subPath ? `${subPath.replace(/\/+$/, '')}/SKILL.md` : 'SKILL.md')
+          const cleanSub = trimEdgeChar(subPath, '/')
+          const skillMdPath = cleanSub.endsWith('SKILL.md')
+            ? cleanSub
+            : (cleanSub ? `${cleanSub}/SKILL.md` : 'SKILL.md')
           return {
             kind: 'github',
             owner,
             repo,
             branch,
-            subPath,
+            subPath: cleanSub,
             rawSkillUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skillMdPath}`,
           }
         }
       }
+      const trimmedRaw = trimEdgeChar(raw, '/')
       return {
         kind: 'url',
-        rawSkillUrl: raw.endsWith('.md') ? raw : `${raw.replace(/\/+$/, '')}/SKILL.md`,
+        rawSkillUrl: trimmedRaw.endsWith('.md') ? trimmedRaw : `${trimmedRaw}/SKILL.md`,
       }
     } catch {
       return null
@@ -298,7 +309,7 @@ function resolveSkillSourceUrl(source) {
   // GitHub shorthand: github:owner/repo#branch or owner/repo[/subpath][#branch]
   const cleaned = raw.replace(/^github:/i, '')
   const [pathPart, branchPart] = cleaned.split('#')
-  const segments = pathPart.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)
+  const segments = pathPart.split('/').filter(Boolean)
   if (segments.length >= 2 && /^[A-Za-z0-9_.-]+$/.test(segments[0]) && /^[A-Za-z0-9_.-]+$/.test(segments[1])) {
     const owner = segments[0]
     const repo = segments[1].replace(/\.git$/i, '')
