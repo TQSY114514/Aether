@@ -36,7 +36,8 @@ function parseFrontmatter(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)
   if (!m) return { meta: {}, body: text }
   const meta = {}
-  for (const line of m[1].split('\n')) {
+  for (const rawLine of m[1].split(/\r?\n/)) {
+    const line = rawLine.replace(/\r$/, '')
     const mm = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line)
     if (mm) meta[mm[1].trim().toLowerCase()] = mm[2].trim().replace(/^["']|["']$/g, '')
   }
