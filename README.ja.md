@@ -114,33 +114,27 @@ Aether の設計とコードベースは、以下のオープンソースプロ�
 
 ### Agent フレームワークとランタイム設計
 
-- [Claude Code](https://claude.ai/code) (Anthropic) — 検証デバッグループ（`debugAgent.js`）、10 点ライフサイクルフック（`hooks.js`）、6 軸権限ラダー（`trustEngine.js`）、ターミナルストリーミング実行、および Ask/Plan/Auto/Yolo モードパラダイム。
-- [pi](https://github.com/badlogic/pi-mono) (Mario Zechner) — `AgentMessage` 二重表現抽象化（`agentMessage.js`）、統合イベントストリームテレメトリ（`eventStream.js`）、実行中の動的割り込み（`agent.steer()`）、およびチェックポイント巻き戻し（`rollback.js`）。
-- [ZCode](https://github.com/Au-Zone/zcode) — ゼロ LLM コストのローカルマイクロ圧縮とプロンプトキャッシュ安定ブロック順序（`microcompact.js`）、バックグラウンドタスクのブランチ世代分離と通知集約（`backgroundTasks.js`）、および多段階編集フォールバックマッチャー（`editMatchers.js`）。
-- [OpenClaw](https://github.com/openclaw/openclaw) — コンテキスト圧縮アルゴリズム、ツール呼び出し無限ループ検知、イベントストリームオーケストレーション、およびツール結果サニタイズミドルウェア（`toolResultMiddleware.js`）。
-- [Hermes Agent](https://github.com/NousResearch/hermes-agent) — 反復バジェット制御（`iterationBudget.js`）、スキル自動合成ループ（`skillSynthesis.js`）、および `<untrusted_memory>` 注入ラッパーを備えた構造化 SQLite + FTS5 メモリ。
-- [Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code) — ツール出力のコンテキスト折りたたみ・トリミング戦略（`compaction.js`）および可視化サブステップ追跡。
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat) — トークン見積もりと承認モード切り替え（`contextBudget.js`）、および TUI の 50ms イベントストリームデバウンス集約（`runSession.js`）。
-- [DeepSeek Harness (DSH)](https://github.com/deepseek-ai) — QVD-2026-57410 ループバックバインドおよび HTTP Host ヘッダー検証による DNS Rebinding 防御（`gatewayServer.js`）。
-- [Evolver](https://github.com/EvoMap/evolver) — ゲノム進化プロトコル (GEP) 自己内省アーキテクチャ（`gep.js`）。
-- [Aider](https://github.com/Aider-AI/aider) — Search/Replace 編集ブロックフォールバックと Git ワークフロー統合。
-- [OpenCode](https://github.com/sst/opencode) — TUI キーボードナビゲーション、パーミッションゲート UX、プロンプトキャッシュポリシー。
-- [OpenAI Codex](https://github.com/openai/codex) — プロセスツリー分離と証拠ベースの自動検証コンセプト（`verifyLoop.js`）。
-- [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com) — `AgentRunTimeline` 実行タイムラインドロワーと実行中の動的ステアリング UX。
-- [DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo) — 実行前の階層的タスク分解と計画設計。
-- [Continue](https://github.com/continuedev/continue) — 宣言的設定スキーマ（"config is code"）。
-- [Grok Build](https://x.ai) — 特化型 Agent ロールと長時間実行パターン。
+- **[Claude Code](https://claude.ai/code) (Anthropic)** — 検証デバッグループ（`debugAgent.js`）、10 点ライフサイクルフック（`hooks.js`）、6 軸権限ラダー（`trustEngine.js`）、`Ctrl+T` タスクパネル、`ask_user` 構造化プロンプト、およびファイル変更のインライン Diff プレビュー（`toolImpact.js`）。
+- **[OpenClaw](https://github.com/openclaw/openclaw)** — コンテキスト圧縮アルゴリズム（`compaction.js`）、不正なツール呼び出し自動修復（`toolCallRepair.js`）、読み取り専用ツールキャッシュ（`toolCache.js`）、意味的無限ループハッシュ検知（`toolResultHash.js`）、およびツール結果サニタイズミドルウェア（`toolResultMiddleware.js`）。
+- **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — 反復バジェット制御とグレースフル終了（`iterationBudget.js`）、SQLite + FTS5 長期メモリ（`autoMemory.js`）、エンティティ関係知識グラフ（`knowledgeGraph.js`）、対話軌跡圧縮（`trajectory.js`）、および長期スキル習得（`habitLearner.js`）。
+- **[OpenCode](https://github.com/sst/opencode)** — ターミナル TUI キーボード状態マシンと Timed Leader Key（`keyHandlers.js`）、ウィンドウ化 `DialogSelect` リスト、コンパイル時プロンプトキャッシュポリシー（`cachePolicy.js`）、およびコンテキストバジェットマネージャー（`contextBudget.js`）。
+- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI・通信層分離抽象化（`agentMessage.js`）、統合イベントストリームテレメトリ（`agentEvents.js`）、および実行中の動的ステアリング（`steering.js`）。
+- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 段階カスケードファジー編集マッチャー（`editMatchers.js`）、書き込み前の読み取りタイムスタンプ鮮度ガード（`sessionContext.js` `readFileState`）、2 段階ゼロ LLM コストのローカルマイクロ圧縮（`microcompact.js`）、バックグラウンドタスクの `branchGeneration` 分離と通知集約（`backgroundTasks.js`）、組み込みマルチ Agent ロールとワークフローテンプレート（`.aether/agents`、`.aether/workflows`）、および GitHub URL / `owner/repo` スキルインストーラー（`skills.js`）。
+- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent ランタイム制御プレーンガバナンス（`AgentSettings.tsx`）、ロール分離されたマルチ Agent 交差検証（`securityAudit.js` における `Hunter != Verifier`、`agentRoles.js`）、および計画ステップの自動進行と完了時最終確定（`planning.js`）。
+- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — マルチ粒度ローカルリポジトリ検索とコンテキスト認識コード検索パイプラインの設計着想（`registry.js`、`repoMap.js`）。
+- **[OpenAI Codex CLI](https://github.com/openai/codex)** — テストと Git Diff の証拠に基づく検証ループ（`toolLoop.js`）、TUI コンパクト実行タイマー、単一キー権限ショートカット（`y/s/a/n`）、およびチェックポイント巻き戻し（`rewind`）UX。
+- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` 耐障害パッチパーサー（`patchEngine.js`）、Git ワークフロー統合、およびコンテキスト圧縮ハンドオフ設計。
+- **[Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code)** — ツール出力のコンテキスト折りたたみ・トリミング戦略（`compaction.js`）および可視化サブステップ追跡。
+- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — トークンバジェット見積もり（`contextBudget.js`）、承認モード切り替え、および `aichat` の 50ms イベントストリームデバウンス集約（`runSession.js`）。
+- **[Evolver](https://github.com/EvoMap/evolver)** — ゲノム進化プロトコル (GEP) 戦略内省アーキテクチャ。
+- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** — 実行前の階層的タスク分解と計画設計（`planning.js`）。
+- **[Continue](https://github.com/continuedev/continue)** — 宣言的設定スキーマ（`.aether/config.json`）。
+- **[Grok Build](https://x.ai) & [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — 特化型サブ Agent ロール定義（`agentRoles.js`）、長時間実行状態マシン（`longRunningTask.js`）、および実行タイムラインドロワーの設計着想。
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — ローカルゲートウェイのループバックバインドおよび HTTP Host ヘッダー検証による DNS Rebinding 防御（QVD-2026-57410 防御実践）とバッジ行の視覚規約。
 
-### コアインフラストラクチャ、UI およびプロトコル
-
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) — 単一ファイル WAL ストレージ、FTS5 全文検索、`kg_nodes`/`kg_edges` グラフメモリを支える高速同期 SQLite ドライバー。
-- [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) — `aether tui` ターミナルインターフェースの React レンダリングエンジン。
-- [Zustand](https://github.com/pmndrs/zustand) (Poimandres) — レンダラー状態管理とマルチモデル並行ストリーム調整。
-- [Electron](https://www.electronjs.org) · [React](https://react.dev) · [Tailwind CSS](https://tailwindcss.com) — デスクトップクロスプラットフォームランタイムと UI 基盤。
-- [shadcn/ui](https://github.com/shadcn-ui/ui) & [Magic UI](https://github.com/magicuidesign/magicui) — コンポーネント設計手法と軽量 CSS アニメーション。
-- [cc-switch](https://github.com/farion1231/cc-switch) — 利用統計・コストダッシュボードのレイアウトインスピレーション。
-- [Model Context Protocol (MCP)](https://modelcontextprotocol.io) — 標準化されたツール統合プロトコル。
-- [new-api](https://github.com/QuantumNous/new-api) — 推論エフォートパラメータマッピングとマルチプロバイダーリレー形式変換。
+### コアインフラストラクチャと UI エコシステム
+- **ランタイムとストレージ基盤**：[Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com)。
+- **コンポーネントとプロトコル設計**：[Model Context Protocol (MCP)](https://modelcontextprotocol.io) · [shadcn/ui](https://github.com/shadcn-ui/ui) · [Magic UI](https://github.com/magicuidesign/magicui) · [cc-switch](https://github.com/farion1231/cc-switch) · [new-api](https://github.com/QuantumNous/new-api)。
 
 ---
 
