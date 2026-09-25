@@ -162,13 +162,25 @@ async function _runSubagent({
 const MAX_PARALLEL_WRITERS = 3
 
 function normalizeWritePath(rawPath) {
-  const s = String(rawPath || '').trim().replace(/\\/g, '/')
-  const stripped = s.replace(/^(\.\/)+/, '').replace(/\/+$/, '')
-  const withoutGlob = stripped.replace(/\/\*\*?$/, '')
-  if (!withoutGlob || withoutGlob === '.' || withoutGlob === '*' || withoutGlob === '**') {
+  let s = String(rawPath || '').trim().replace(/\\/g, '/')
+  while (s.startsWith('./')) {
+    s = s.slice(2)
+  }
+  while (s.endsWith('/')) {
+    s = s.slice(0, -1)
+  }
+  if (s.endsWith('/**')) {
+    s = s.slice(0, -3)
+  } else if (s.endsWith('/*')) {
+    s = s.slice(0, -2)
+  }
+  while (s.endsWith('/')) {
+    s = s.slice(0, -1)
+  }
+  if (!s || s === '.' || s === '*' || s === '**') {
     return '' // whole workspace
   }
-  return withoutGlob
+  return s
 }
 
 function pathsOverlap(rawA, rawB) {
