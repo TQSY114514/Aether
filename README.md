@@ -218,7 +218,7 @@ Aether stands on the shoulders of these open-source projects and engineering pio
 - **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** — Pre-execution hierarchical task decomposition (`planning.js`).
 - **[Continue](https://github.com/continuedev/continue)** — Declarative configuration-as-code schema (`.aether/config.json`).
 - **[Grok Build](https://x.ai), [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — Specialized sub-agent role profiles (`agentRoles.js`), long-running execution state machine (`longRunningTask.js`), and run timeline drawer concepts.
-- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai)** — Loopback binding & HTTP Host header validation lessons (QVD-2026-57410 defense) and badge row visual conventions.
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — Loopback binding & HTTP Host header validation lessons (QVD-2026-57410 defense) and badge row visual conventions.
 
 ### Core Infrastructure & UI Ecosystem
 - **Runtime & Storage**: [Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com).
