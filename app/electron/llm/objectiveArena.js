@@ -461,16 +461,20 @@ async function runObjectiveEvaluation({
     // every candidate model receives identical relative paths and source text for SEARCH blocks.
     let enrichedUserPrompt = prompt
     try {
+      const { redactSecrets } = require('./toolResultMiddleware')
+      const IGNORED_DIRS = new Set(['.git', 'dist', 'build', 'out', 'node_modules', '.next', 'coverage', 'vendor'])
+      const SENSITIVE_NAME_RE = /(?:secret|credential|token|password|apikey|auth|key|env|config|cert|private)/i
       const candidates = []
       const walk = async (dir) => {
-        if (candidates.length >= 40) return
+        if (candidates.length >= 500) return
         const entries = await fs.promises.readdir(dir, { withFileTypes: true }).catch(() => [])
         for (const ent of entries) {
-          if (candidates.length >= 40) break
+          if (candidates.length >= 500) break
           const full = path.join(dir, ent.name)
           if (ent.isDirectory()) {
-            if (!SKIP_COPY_DIRS.has(ent.name) && !ent.name.startsWith('.')) await walk(full)
-          } else if (ent.isFile() && /\.(js|ts|jsx|tsx|mjs|cjs|py|json|css|html)$/i.test(ent.name)) {
+            if (!IGNORED_DIRS.has(ent.name) && !ent.name.startsWith('.')) await walk(full)
+          } else if (ent.isFile() && /\.(js|ts|jsx|tsx|mjs|cjs|py|css|html)$/i.test(ent.name)) {
+            if (SENSITIVE_NAME_RE.test(ent.name)) continue
             const rel = path.relative(baseCwd, full).replace(/\\/g, '/')
             if (!isSafeSandboxTarget(baseCwd, full, protectedRelFiles)) continue
             candidates.push({ rel, full })
@@ -478,20 +482,21 @@ async function runObjectiveEvaluation({
         }
       }
       await walk(baseCwd)
-      // Prioritize files mentioned in the prompt, then sort lexicographically
+      // Prioritize files mentioned in the prompt (by relative path or basename), then sort lexicographically
       candidates.sort((a, b) => {
-        const aHit = prompt.includes(path.basename(a.rel)) ? 0 : 1
-        const bHit = prompt.includes(path.basename(b.rel)) ? 0 : 1
+        const aHit = (prompt.includes(a.rel) || prompt.includes(path.basename(a.rel))) ? 0 : 1
+        const bHit = (prompt.includes(b.rel) || prompt.includes(path.basename(b.rel))) ? 0 : 1
         return aHit !== bHit ? aHit - bHit : a.rel.localeCompare(b.rel)
       })
       const contextParts = []
       let totalChars = 0
       for (const item of candidates.slice(0, 12)) {
         if (totalChars >= 24000) break
-        const content = await fs.promises.readFile(item.full, 'utf8').catch(() => '')
-        if (!content || content.length > 16000) continue
-        contextParts.push(`File: ${item.rel}\n\`\`\`\n${content}\n\`\`\``)
-        totalChars += content.length
+        const rawContent = await fs.promises.readFile(item.full, 'utf8').catch(() => '')
+        if (!rawContent || rawContent.length > 16000) continue
+        const safeContent = typeof redactSecrets === 'function' ? redactSecrets(rawContent) : rawContent
+        contextParts.push(`File: ${item.rel}\n\`\`\`\n${safeContent}\n\`\`\``)
+        totalChars += safeContent.length
       }
       if (contextParts.length > 0) {
         enrichedUserPrompt = `${prompt}\n\nWorkspace Source Context:\n${contextParts.join('\n\n')}`

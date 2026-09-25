@@ -364,7 +364,15 @@ function buildRepoMapText(map, optsOrMaxLines = 160) {
       }
     }
     if (!foundFit) {
-      bestText = renderWithFiles(scored.slice(0, 1).map(s => s.node), allFileNodes.length - 1)
+      const singleFileText = renderWithFiles(scored.slice(0, 1).map(s => s.node), allFileNodes.length - 1)
+      if (countTokens(singleFileText) <= maxTokens) {
+        bestText = singleFileText
+      } else {
+        const headerOnlyText = renderWithFiles([], allFileNodes.length)
+        bestText = countTokens(headerOnlyText) <= maxTokens
+          ? headerOnlyText
+          : headerOnlyText.slice(0, Math.max(0, maxTokens * 3))
+      }
     }
   }
 

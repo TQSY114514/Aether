@@ -5,7 +5,7 @@ import EmptyState from './EmptyState'
 import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import MessageNav from './MessageNav'
-import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert } from 'lucide-react'
+import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert, Star, Check } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
@@ -130,13 +130,13 @@ function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, pro
                 )}
                   disabled={!done}
                   title={done ? t('chat.arena.vote') : t('chat.arena.wait_all')}
-                  className="text-xs px-3 py-1 rounded-lg border bg-[var(--content-bg)] hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--content-bg)] disabled:hover:border-[var(--border)]" style={{ borderColor: 'var(--border)' }}>
-                  ⭐ {t('chat.arena.vote')}
+                  className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-lg border bg-[var(--content-bg)] hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--content-bg)] disabled:hover:border-[var(--border)]" style={{ borderColor: 'var(--border)' }}>
+                  <Star size={12} /> {t('chat.arena.vote')}
                 </button>
               </div>
             )}
             {isWinner && voted && (
-              <div className="px-3 py-2 border-t text-xs" style={{ borderColor: 'var(--success)', backgroundColor: 'rgba(34,197,94,0.08)', color: 'var(--success)' }}>✅ {t('chat.arena.voted')}</div>
+              <div className="px-3 py-2 border-t text-xs flex items-center gap-1" style={{ borderColor: 'var(--success)', backgroundColor: 'rgba(34,197,94,0.08)', color: 'var(--success)' }}><Check size={12} /> {t('chat.arena.voted')}</div>
             )}
           </div>
         )
