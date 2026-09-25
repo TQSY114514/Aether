@@ -137,3 +137,16 @@ export declare const codebase: {
 export declare const rpc: unknown
 /** sessionContext persona+记忆注入（todo 13 落地后存在；此前为 undefined）。 */
 export declare const sessionContext: unknown
+
+export declare const objectiveArena: {
+  runObjectiveEvaluation: (opts: any) => Promise<any>
+  extractAndApplyPatches: (workspaceDir: string, responseText: string) => { appliedCount: number; conflicts: string[]; filesModified: string[]; ok: boolean }
+}
+
+export declare const modelAdvisor: {
+  suggestModel: (opts: any) => any
+  suggestModelExplained: (opts: any) => any
+  routeWithExplanation: (opts: any) => any
+  classifyTask: (userMessage: string) => any
+  ModelRouter: any
+}

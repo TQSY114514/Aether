@@ -4,6 +4,7 @@ import ChatWindow from '@/components/chat/ChatWindow'
 import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
+import ChatBackgroundPattern from '@/components/chat/ChatBackgroundPattern'
 import Tooltip from '@/components/Tooltip'
 import { FlaskConical } from 'lucide-react'
 import { t } from '@/utils/i18n'
@@ -20,8 +21,12 @@ const TRUST_TIP: Record<string, string> = {
   red: 'cautious',
 }
 
+/** Compose the sidebar, conversation, and auxiliary chat panels. */
 export default function ChatPage() {
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const theme = useStore((s) => s.theme)
+  const backgroundImage = useStore((s) => s.backgroundImage)
+  const hasBg = !!backgroundImage
   const personas = useStore((s) => s.personas)
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
@@ -91,66 +96,88 @@ export default function ChatPage() {
   // it writes to store before a session exists.
   if (!currentSessionId) {
     return (
-      <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
+        {!hasBg && <ChatBackgroundPattern theme={theme} />}
+        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
           <div className="flex items-center gap-2">
-            {chatMode === 'arena' ? (
-              <div className="flex items-center gap-1.5">
-                <select value={localArenaIds[0] ?? ''} onChange={(e) => {
-                  const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
-                  syncLocalArena(ids)
-                }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
-                  <option value="">{t('chat.arena.model1')}</option>
-                  {allArenaModels.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-                  ))}
-                </select>
-                <select value={localArenaIds[1] ?? ''} onChange={(e) => {
-                  const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
-                  syncLocalArena(ids)
-                }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
-                  <option value="">{t('chat.arena.model2')}</option>
-                  {allArenaModels.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-            <Tooltip text={t('tooltip.mode_switch')}>
-            <div className="flex items-center border rounded-lg overflow-hidden text-xs" style={{ borderColor: 'var(--border)' }}>
-              <button onClick={() => setChatMode('normal')}
-                className={`px-2.5 py-1.5 transition-colors ${chatMode === 'normal' ? 'bg-[var(--accent)] text-white' : ''}`}
-                style={chatMode !== 'normal' ? { color: 'var(--text-secondary)' } : {}}>{t('chat.mode.normal')}</button>
-              <Tooltip text={t('tooltip.arena_mode')}>
-                <button onClick={() => setChatMode('arena')}
-                  className={`px-2.5 py-1.5 transition-colors ${chatMode === 'arena' ? 'bg-[var(--accent)] text-white' : ''}`}
-                  style={chatMode !== 'arena' ? { color: 'var(--text-secondary)' } : {}}>
-                  <FlaskConical size={12} className="inline mr-0.5" />{t('chat.mode.arena')}</button>
-              </Tooltip>
+            {/* Arena model selectors with smooth expand/collapse entrance & exit transition */}
+            <div
+              className={`flex items-center gap-1.5 flex-nowrap whitespace-nowrap shrink-0 overflow-hidden transition-[max-width,opacity] duration-200 ease-out ${
+                chatMode === 'arena'
+                  ? 'max-w-[480px] opacity-100 mr-1'
+                  : 'max-w-0 opacity-0 pointer-events-none mr-0'
+              }`}
+            >
+              <select value={localArenaIds[0] ?? ''} onChange={(e) => {
+                const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
+                syncLocalArena(ids)
+              }}
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
+                <option value="">{t('chat.arena.model1')}</option>
+                {allArenaModels.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
+                ))}
+              </select>
+              <select value={localArenaIds[1] ?? ''} onChange={(e) => {
+                const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
+                syncLocalArena(ids)
+              }}
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
+                <option value="">{t('chat.arena.model2')}</option>
+                {allArenaModels.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
+                ))}
+              </select>
             </div>
+            <Tooltip text={t('tooltip.mode_switch')}>
+              <div className="relative inline-grid grid-cols-2 p-0.5 rounded-lg border text-xs bg-[var(--bg-secondary)] shrink-0 w-[148px] select-none" style={{ borderColor: 'var(--border)' }}>
+                <div
+                  className="absolute inset-y-0.5 rounded-md bg-[var(--accent)] shadow-xs transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
+                  style={{
+                    left: '2px',
+                    width: 'calc(50% - 2px)',
+                    transform: chatMode === 'normal' ? 'translateX(0)' : 'translateX(calc(100%))',
+                  }}
+                />
+                <button
+                  onClick={() => setChatMode('normal')}
+                  className={`relative z-[1] py-1 text-center transition-colors duration-200 font-medium truncate ${chatMode === 'normal' ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                >
+                  {t('chat.mode.normal')}
+                </button>
+                <button
+                  onClick={() => setChatMode('arena')}
+                  title={t('tooltip.arena_mode')}
+                  className={`relative z-[1] py-1 flex items-center justify-center gap-1 transition-colors duration-200 font-medium truncate ${chatMode === 'arena' ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                >
+                  <FlaskConical size={12} className="shrink-0" />
+                  <span>{t('chat.mode.arena')}</span>
+                </button>
+              </div>
             </Tooltip>
           </div>
         </div>
         {/* 空态容器: 确保充足的顶部呼吸空间，彻底消除方块图标被标题栏边缘截断问题 */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto scroll-bounce px-4 pt-6 pb-4">
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto scroll-bounce px-4 pt-6 pb-4 relative z-[1]">
           <div className="my-auto w-full max-w-3xl mx-auto flex flex-col items-center">
             <EmptyState noSession={true} />
           </div>
         </div>
-        <ChatInput />
+        <div className="relative z-[2]">
+          <ChatInput />
+        </div>
       </div>
     )
   }
 
   // ── View 3: Active chat ──
   return (
-    <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--content-bg, var(--bg-primary))' }} {...arenaBgStyle}>
-      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
+    <div className="flex-1 flex flex-col min-h-0 bg-transparent relative overflow-hidden" {...arenaBgStyle}>
+      {!hasBg && <ChatBackgroundPattern theme={theme} />}
+      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2">
           {trustBadge && currentSessionId && (
             <Tooltip text={`Trust: ${trustBadge.trust}/100 · ${TRUST_TIP[trustBadge.color] || trustBadge.label}`}>
@@ -159,54 +186,71 @@ export default function ChatPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Arena model selectors — shown when in arena mode */}
-          {chatMode === 'arena' ? (
-            <div className="flex items-center gap-1.5">
-              <select value={localArenaIds[0] ?? ''} onChange={(e) => {
-                const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
-                syncLocalArena(ids)
-              }}
-                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
-                  <option value="">{t('chat.arena.model1')}</option>
-                  {allArenaModels.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-                  ))}
-                </select>
-                <select value={localArenaIds[1] ?? ''} onChange={(e) => {
-                  const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
-                  syncLocalArena(ids)
-                }}
-                  className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[200px]" style={{ borderColor: 'var(--border)' }}>
-                <option value="">{t('chat.arena.model2')}</option>
+          {/* Arena model selectors with smooth expand/collapse entrance & exit transition */}
+          <div
+            className={`flex items-center gap-1.5 flex-nowrap whitespace-nowrap shrink-0 overflow-hidden transition-[max-width,opacity] duration-200 ease-out ${
+              chatMode === 'arena'
+                ? 'max-w-[480px] opacity-100 mr-1'
+                : 'max-w-0 opacity-0 pointer-events-none mr-0'
+            }`}
+          >
+            <select value={localArenaIds[0] ?? ''} onChange={(e) => {
+              const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
+              syncLocalArena(ids)
+            }}
+              className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
+                <option value="">{t('chat.arena.model1')}</option>
                 {allArenaModels.map(m => (
                   <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                 ))}
-              </select>
-              {/* Arena 2.0: same-model multi-temperature comparison */}
-              <select value={arenaTemperatures ? arenaTemperatures.join(',') : ''} onChange={(e) => {
-                const v = e.target.value
-                setArenaTemperatures(v ? v.split(',').map(Number) : null)
-              }}
-                title={t('chat.arena.temp_title')}
-                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[140px]" style={{ borderColor: 'var(--border)' }}>
-                <option value="">{t('chat.arena.single')}</option>
-                <option value="0.2,0.8">{t('chat.arena.temp_pair')}</option>
-                <option value="0.2,0.5,0.8">{t('chat.arena.temp_triple')}</option>
-              </select>
-            </div>
-          ) : null}
-          <Tooltip text={t('tooltip.mode_switch')}>
-          <div className="flex items-center border rounded-lg overflow-hidden text-xs shrink-0" style={{ borderColor: 'var(--border)' }}>
-            <button onClick={() => setChatMode('normal')}
-              className={`px-2.5 py-1.5 transition-colors ${chatMode === 'normal' ? 'bg-[var(--accent)] text-white' : ''}`}
-              style={chatMode !== 'normal' ? { color: 'var(--text-secondary)' } : {}}>{t('chat.mode.normal')}</button>
-            <Tooltip text={t('tooltip.arena_mode')}>
-              <button onClick={() => setChatMode('arena')}
-                className={`px-2.5 py-1.5 transition-colors ${chatMode === 'arena' ? 'bg-[var(--accent)] text-white' : ''}`}
-                style={chatMode !== 'arena' ? { color: 'var(--text-secondary)' } : {}}>
-                <FlaskConical size={12} className="inline mr-0.5" />{t('chat.mode.arena')}</button>
-            </Tooltip>
+            </select>
+            <select value={localArenaIds[1] ?? ''} onChange={(e) => {
+              const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
+              syncLocalArena(ids)
+            }}
+              className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
+              <option value="">{t('chat.arena.model2')}</option>
+              {allArenaModels.map(m => (
+                <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
+              ))}
+            </select>
+            {/* Arena 2.0: same-model multi-temperature comparison */}
+            <select value={arenaTemperatures ? arenaTemperatures.join(',') : ''} onChange={(e) => {
+              const v = e.target.value
+              setArenaTemperatures(v ? v.split(',').map(Number) : null)
+            }}
+              title={t('chat.arena.temp_title')}
+              className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[120px] transition-all" style={{ borderColor: 'var(--border)' }}>
+              <option value="">{t('chat.arena.single')}</option>
+              <option value="0.2,0.8">{t('chat.arena.temp_pair')}</option>
+              <option value="0.2,0.5,0.8">{t('chat.arena.temp_triple')}</option>
+            </select>
           </div>
+          <Tooltip text={t('tooltip.mode_switch')}>
+            <div className="relative inline-grid grid-cols-2 p-0.5 rounded-lg border text-xs bg-[var(--bg-secondary)] shrink-0 w-[148px] select-none" style={{ borderColor: 'var(--border)' }}>
+              <div
+                className="absolute inset-y-0.5 rounded-md bg-[var(--accent)] shadow-xs transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
+                style={{
+                  left: '2px',
+                  width: 'calc(50% - 2px)',
+                  transform: chatMode === 'normal' ? 'translateX(0)' : 'translateX(calc(100%))',
+                }}
+              />
+              <button
+                onClick={() => setChatMode('normal')}
+                className={`relative z-[1] py-1 text-center transition-colors duration-200 font-medium truncate ${chatMode === 'normal' ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              >
+                {t('chat.mode.normal')}
+              </button>
+              <button
+                onClick={() => setChatMode('arena')}
+                title={t('tooltip.arena_mode')}
+                className={`relative z-[1] py-1 flex items-center justify-center gap-1 transition-colors duration-200 font-medium truncate ${chatMode === 'arena' ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              >
+                <FlaskConical size={12} className="shrink-0" />
+                <span>{t('chat.mode.arena')}</span>
+              </button>
+            </div>
           </Tooltip>
           <Tooltip text={t('tooltip.persona')}>
             <select value={currentPersonaId ?? ''} onChange={(e) => {

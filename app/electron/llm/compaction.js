@@ -377,4 +377,60 @@ function clearCompactionState(sessionId) {
   if (sessionId) compactionState.clear(sessionId)
 }
 
-module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, buildSummarizerSystemPrompt, buildSummarizeUserContent, buildSummarizeMessages, clearCompactionState, applyTieredTruncation }
+// ── Stale tool output folding ─────────────────────────────────────────────
+// Replaces old read-only tool results with single-line skeletons so they stop
+// burning context tokens. Only folds outputs from N+ rounds ago that came from
+// safe/read-only tools; writes, errors, and recent outputs are kept verbatim.
+// Inspired by Claude Code's output folding / Cline's context pruning.
+const FOLD_TOOLS = new Set([
+  'read_file', 'list_dir', 'glob_find', 'grep_search', 'web_search',
+  'web_fetch', 'find_symbol', 'codebase_graph', 'workspace_files',
+  'review_code', 'git_status', 'git_diff', 'git_log',
+])
+const FOLD_MIN_ROUNDS_AGO = 3
+const FOLD_MIN_LENGTH = 200 // don't bother folding tiny outputs
+
+function foldStaleToolOutputs(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return messages
+
+  // Build a map of tool_call_id → { round, toolName }
+  const callMeta = new Map()
+  let round = 0
+  for (const msg of messages) {
+    if (msg.role === 'assistant') round++
+    if (msg.role === 'assistant' && msg.tool_calls) {
+      for (const tc of msg.tool_calls) {
+        const id = tc.id || ''
+        const name = (tc.function && tc.function.name) || ''
+        callMeta.set(id, { round, name })
+      }
+    }
+  }
+
+  const totalRounds = round
+  const result = []
+  for (const msg of messages) {
+    if (msg.role === 'tool' && msg.tool_call_id) {
+      const meta = callMeta.get(msg.tool_call_id)
+      const content = typeof msg.content === 'string' ? msg.content : ''
+      const roundsAgo = totalRounds - (meta ? meta.round : totalRounds)
+      const isFoldable = meta
+        && FOLD_TOOLS.has(meta.name)
+        && roundsAgo >= FOLD_MIN_ROUNDS_AGO
+        && content.length >= FOLD_MIN_LENGTH
+        // Never fold error outputs — they may still be relevant
+        && !/\berror\b|\bfail\b|\bexception\b/i.test(content.slice(0, 200))
+
+      if (isFoldable) {
+        const lines = content.split('\n').length
+        const skeleton = `[${meta.name} → ${lines} lines, ${roundsAgo} rounds ago (folded for context savings)]`
+        result.push({ ...msg, content: skeleton })
+        continue
+      }
+    }
+    result.push(msg)
+  }
+  return result
+}
+
+module.exports = { maybeCompact, estimateMessagesTokens, estimateMessageTokens, estimateTextTokens, safeSplitIndex, findKeepPoint, buildSummarizerSystemPrompt, buildSummarizeUserContent, buildSummarizeMessages, clearCompactionState, applyTieredTruncation, foldStaleToolOutputs }

@@ -421,13 +421,83 @@ async function _completeChatMessage({ provider, model, messages, signal, options
 // normalizeUsage is imported from ../utils/llmShared
 
 
-// List model ids via GET /models. Returns [] on any failure (handlers treat
-// an empty list as "couldn't fetch" rather than crashing).
+/**
+ * List model IDs across OpenAI-compatible response and pagination formats.
+ * Falls back to Ollama's tags endpoint when the standard route is unavailable.
+ */
 async function listModels({ provider, signal }) {
-  const res = await fetch(`${baseUrl(provider)}/models`, { headers: headers(provider), signal })
-  if (!res.ok) return []
-  const data = await res.json()
-  return (data.data || []).map(m => m.id || m.name).filter(Boolean)
+  const modelNames = []
+  let url = `${baseUrl(provider)}/models`
+  let pages = 0
+
+  while (url && pages < 10) {
+    pages++
+    try {
+      const res = await fetch(url, { headers: headers(provider), signal })
+      if (!res.ok) {
+        // Fallback for local Ollama endpoints that only expose /api/tags
+        if (res.status === 404 && pages === 1) {
+          const rawBase = baseUrl(provider).replace(/\/v1\/?$/, '')
+          try {
+            const tagRes = await fetch(`${rawBase}/api/tags`, { signal })
+            if (tagRes.ok) {
+              const tagData = await tagRes.json()
+              const tagModels = (tagData.models || []).map(m => m.name || m.model).filter(Boolean)
+              if (tagModels.length > 0) return Array.from(new Set(tagModels))
+            }
+          } catch {}
+        }
+        if (pages > 1) return []
+        break
+      }
+
+      const data = await res.json()
+      const rawList = Array.isArray(data)
+        ? data
+        : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.models)
+            ? data.models
+            : []
+
+      for (const item of rawList) {
+        const name = typeof item === 'string' ? item : (item.id || item.name || item.model)
+        if (name && typeof name === 'string') modelNames.push(name.trim())
+      }
+
+      // Check for pagination (restrict to same origin to prevent credential leakage / SSRF)
+      const providerBase = baseUrl(provider)
+      const providerOrigin = new URL(providerBase).origin
+      let nextUrl = null
+      if (data.has_more) {
+        if (!data.last_id) return []
+        nextUrl = `${providerBase}/models?after=${encodeURIComponent(data.last_id)}`
+      } else if (data.next_page) {
+        try {
+          const candidateUrl = new URL(String(data.next_page), providerBase)
+          if (candidateUrl.origin !== providerOrigin) return []
+          nextUrl = candidateUrl.href
+        } catch {
+          return []
+        }
+      } else {
+        url = null
+        break
+      }
+
+      if (nextUrl === url) return []
+      url = nextUrl
+    } catch {
+      if (pages > 1) return []
+      break
+    }
+  }
+
+  // If loop exited while url still points to an unvisited next page (e.g., hit the 10-page limit),
+  // return [] to avoid destructive syncModels pruning on a truncated list.
+  if (url) return []
+
+  return Array.from(new Set(modelNames.filter(Boolean)))
 }
 
 // Connectivity probe: try /models first; if 404 (proxy without /models), fall
@@ -498,4 +568,3 @@ module.exports = {
   normalizeMessages, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }
-

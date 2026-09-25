@@ -5,7 +5,13 @@ import { useStore } from "@/store"
 // and loadSettings may call detectLang() which reads `navigator`. Both are
 // undefined in node, so stub them manually (no jsdom dependency).
 ;(globalThis as any).document = {
-  documentElement: { style: { setProperty: () => {} }, dir: "ltr" },
+  documentElement: {
+    style: { setProperty: () => {} },
+    dir: "ltr",
+    setAttribute: () => {},
+    removeAttribute: () => {},
+    getAttribute: () => null,
+  },
 }
 Object.defineProperty(globalThis, "navigator", { value: { language: "en" }, configurable: true })
 

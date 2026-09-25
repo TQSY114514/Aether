@@ -3,6 +3,7 @@ const { spawn } = require('child_process')
 const { completeChatMessage, normalizeUsage } = require('../llm/providerAdapter')
 const { computeCost } = require('../utils/cost')
 const { shouldWriteQuickTitle, quickTitleOf } = require('./chat-send.handler')
+const featureFlags = require('../featureFlags')
 const log = require('../logger')
 const abortControllers = new Map()
 
@@ -16,6 +17,8 @@ function sanitizeVerifyCommand(cmd) {
   if (typeof cmd !== 'string') return null
   const trimmed = cmd.trim()
   if (!trimmed || trimmed.includes('\0') || trimmed.length > 1000) return null
+  // Disallow shell chaining / redirection / injection metacharacters
+  if (/[;&|`$<>]|\r|\n/.test(trimmed)) return null
   return trimmed
 }
 
@@ -443,6 +446,78 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
         ],
       },
     ]
+  })
+
+  // Objective Arena: automated code execution + verify command benchmark with auto ELO recording
+  ipcMain.handle('arena:objective-run', async (_e, data) => {
+    try {
+      if (!featureFlags.isEnabled(db, 'arena.objectiveArena')) {
+        return { error: 'arena.objectiveArena feature flag is disabled' }
+      }
+      const { prompt, verifyCommand, cwd, modelIds, expectedExitCode, timeoutMs, updateScores } = data || {}
+      if (!prompt || !verifyCommand) {
+        return { error: 'prompt and verifyCommand are required' }
+      }
+      const allModels = db.getAllModels()
+      const selected = Array.isArray(modelIds) ? allModels.filter(m => modelIds.includes(m.id)) : []
+      if (!selected.length) return { error: 'No models selected' }
+
+      const fallbackRoot = require('../tools/sandbox').getWorkspaceRoot() || process.cwd()
+      const taskCwd = cwd ? resolveTaskCwd(cwd, fallbackRoot) : fallbackRoot
+      const cleanVerifyCommand = sanitizeVerifyCommand(verifyCommand)
+      if (!cleanVerifyCommand) return { error: 'Invalid verification command' }
+
+      const rawRunId = typeof data?.runId === 'string' ? data.runId.trim() : ''
+      if (!rawRunId) return { error: 'runId is required' }
+      const runKey = `objective:${rawRunId}`
+      if (abortControllers.has(runKey)) {
+        return { error: `Duplicate runId: ${rawRunId}` }
+      }
+      const controller = new AbortController()
+      abortControllers.set(runKey, controller)
+
+      const safeTimeoutMs = (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs))
+        ? Math.min(Math.max(Math.floor(timeoutMs), 1000), 300000)
+        : 30000
+
+      try {
+        const objectiveArena = require('../llm/objectiveArena')
+        const result = await objectiveArena.runObjectiveEvaluation({
+          db,
+          models: selected,
+          prompt,
+          verifyCommand: cleanVerifyCommand,
+          cwd: taskCwd,
+          expectedExitCode: typeof expectedExitCode === 'number' ? expectedExitCode : 0,
+          timeoutMs: safeTimeoutMs,
+          updateScores: updateScores !== false,
+          signal: controller.signal,
+        })
+        return result
+      } finally {
+        abortControllers.delete(runKey)
+      }
+    } catch (err) {
+      log.warn('arena:objective-run error:', err)
+      return { error: err.message }
+    }
+  })
+
+  ipcMain.handle('arena:objective-stop', (_e, data) => {
+    const runId = data?.runId
+    if (!runId) return { ok: false, error: 'runId required' }
+    const runKey = `objective:${runId}`
+    const controller = abortControllers.get(runKey)
+    if (controller) {
+      // Only signal abort — do NOT delete the key here.
+      // The finally block in arena:objective-run owns the lifecycle and will
+      // clean up once the underlying evaluation actually finishes, preventing a
+      // race where a second run with the same runId could be started before the
+      // first one has fully wound down.
+      controller.abort()
+      return { ok: true }
+    }
+    return { ok: false, error: 'Run not found or already completed' }
   })
 }
 

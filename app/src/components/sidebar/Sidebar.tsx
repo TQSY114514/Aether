@@ -172,52 +172,38 @@ export default function Sidebar() {
           </button>
           <div className="w-5 my-1.5 border-t border-[var(--border)]" />
           <div className="mt-auto flex flex-col items-center gap-1 w-full pb-2">
-            <button
-              onClick={() => setCurrentView('models')}
-              className={`p-2 rounded-md transition-colors ${currentView === 'models' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
-              title={t('sidebar.nav.models')}
-            >
-              <Server size={16} />
-            </button>
-            <button
-              onClick={() => setCurrentView('agents')}
-              className={`p-2 rounded-md transition-colors ${currentView === 'agents' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
-              title={t('sidebar.nav.personas')}
-            >
-              <User size={16} />
-            </button>
-            <button
-              onClick={() => setCurrentView('scores')}
-              className={`p-2 rounded-md transition-colors ${currentView === 'scores' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
-              title={t('sidebar.nav.arena')}
-            >
-              <Trophy size={16} />
-            </button>
-            <button
-              onClick={() => setCurrentView('memory')}
-              className={`p-2 rounded-md transition-colors ${currentView === 'memory' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
-              title={t('sidebar.nav.memory')}
-            >
-              <Brain size={16} />
-            </button>
-            <button
-              onClick={() => setCurrentView('settings')}
-              className={`p-2 rounded-md transition-colors ${currentView === 'settings' ? 'text-[var(--text-primary)] bg-[var(--content-bg)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60'}`}
-              title={t('sidebar.nav.settings')}
-            >
-              <Settings size={16} />
-            </button>
+            {([
+              { id: 'models', icon: Server, title: t('sidebar.nav.models') },
+              { id: 'agents', icon: User, title: t('sidebar.nav.personas') },
+              { id: 'scores', icon: Trophy, title: t('sidebar.nav.arena') },
+              { id: 'memory', icon: Brain, title: t('sidebar.nav.memory') },
+              { id: 'settings', icon: Settings, title: t('sidebar.nav.settings') },
+            ] as const).map(({ id, icon: ItemIcon, title }) => {
+              const active = currentView === id
+              return (
+                <button
+                  key={id}
+                  onClick={() => setCurrentView(id)}
+                  className={`relative p-2 rounded-md transition-all duration-200 hover:scale-110 active:scale-95 motion-reduce:transform-none motion-reduce:transition-none cursor-pointer ${active ? 'text-[var(--accent)] bg-[var(--content-bg)] shadow-xs' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/60 hover:text-[var(--text-primary)]'}`}
+                  title={title}
+                  aria-label={title}
+                >
+                  {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent)]" />}
+                  <ItemIcon size={16} />
+                </button>
+              )
+            })}
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col min-h-0 w-[250px] tab-fade-in">
+    <div className="flex-1 flex flex-col min-h-0 w-[250px] tab-fade-in">
       <div className="p-2 shrink-0">
-        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-colors hover:shadow-sm" style={{ borderColor: 'var(--border)' }}>
-          <Plus size={16} className="text-[var(--text-secondary)]" />{t('chat.new')}
+        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-all hover:shadow-sm press-scale hover-lift" style={{ borderColor: 'var(--border)' }}>
+          <Plus size={16} className="text-[var(--text-secondary)] transition-transform group-hover:rotate-90" />{t('chat.new')}
         </button>
       </div>
       <div className="px-2 pb-2 shrink-0">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[var(--content-bg)] text-sm transition-colors" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[var(--content-bg)] text-sm transition-colors input-ring" style={{ borderColor: 'var(--border)' }}>
           <Search size={14} className="text-[var(--text-muted)] shrink-0" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('sidebar.search')} className="w-full bg-transparent outline-none text-sm" />
@@ -246,7 +232,7 @@ export default function Sidebar() {
                 onClick={() => { selectSession(session.id); setCurrentView('chat') }}
                 onDoubleClick={() => handleDoubleClick(session)}
                 onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, session }) }}
-                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm transition-all mb-px ${currentSessionId === session.id ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
+                className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm mb-px session-item-interactive ${currentSessionId === session.id ? 'shadow-soft' : 'border border-transparent hover:bg-[var(--bg-secondary)]'}`}
                 style={currentSessionId === session.id ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
                   : <MessageSquare size={14} className="text-[var(--text-muted)] shrink-0" />}
@@ -278,14 +264,13 @@ export default function Sidebar() {
                 )}
                 <button onClick={async (e) => {
                   e.stopPropagation()
-                  // 双形态缝合: 复制 aether tui --session <id> 命令, 用户在终端粘贴即续会话
                   const cmd = `aether tui --session ${session.id}`
                   try {
                     await window.electronAPI?.system?.clipboardWrite?.(cmd)
                     await window.electronAPI?.system?.notify?.({ title: '已复制终端命令', body: cmd })
                   } catch {}
                 }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all shrink-0"
+                  className="opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 action-reveal-silky p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky"
                   title="在终端继续此会话(复制命令)">
                   <TerminalSquare size={12} className="text-[var(--text-muted)]" />
                 </button>
@@ -295,7 +280,7 @@ export default function Sidebar() {
                   await window.electronAPI?.session?.pin?.(session.id, pinned)
                   loadSessions()
                 }}
-                  className={`opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all shrink-0 ${session.pinned ? 'opacity-100 text-amber-500' : ''}`}
+                  className={`opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 action-reveal-silky p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky ${session.pinned ? 'opacity-100 text-amber-500' : ''}`}
                   title={session.pinned ? 'Unpin' : 'Pin'}>
                   <Pin size={11} />
                 </button>
@@ -304,7 +289,7 @@ export default function Sidebar() {
                   const ok = await confirm({ title: t('chat.delete_confirm_title'), description: t('chat.delete_confirm_desc'), confirmText: t('chat.delete'), danger: true })
                   if (ok) deleteSession(session.id)
                 }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--border)] transition-all">
+                  className="opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 action-reveal-silky p-1 rounded hover:bg-[var(--border)] icon-btn-silky">
                   <Trash2 size={12} className="text-gray-400" />
                 </button>
               </div>
@@ -312,7 +297,7 @@ export default function Sidebar() {
           </div>
         ))}
         {ctxMenu && (
-          <div className="fixed z-50 rounded-lg border shadow-lg py-1 min-w-[180px]"
+          <div className="fixed z-50 rounded-lg border shadow-lg py-1 min-w-[180px] animate-spring-up"
             style={{ left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 200), backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
             onClick={(e) => e.stopPropagation()}>
             <button onClick={() => { setCtxMenu(null); handleDoubleClick(ctxMenu.session) }}
@@ -355,8 +340,9 @@ export default function Sidebar() {
 
 function NavItem({ icon: Icon, label, active, onClick, badge }: { icon: any; label: string; active: boolean; onClick: () => void; badge?: number }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${active ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/40 hover:text-[var(--text-primary)]'}`}>
-      <Icon size={15} className={active ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'} />
+    <button onClick={onClick} className={`group relative w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all duration-200 motion-reduce:transform-none motion-reduce:transition-none press-scale cursor-pointer ${active ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-xs font-semibold' : 'text-[var(--text-secondary)] hover:bg-[var(--border)]/40 hover:text-[var(--text-primary)] hover:translate-x-0.5'}`}>
+      <span className={`absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-[var(--accent)] transition-all duration-200 motion-reduce:transform-none motion-reduce:transition-none ${active ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-50'}`} />
+      <Icon size={15} className={`transition-all duration-200 motion-reduce:transform-none motion-reduce:transition-none group-hover:scale-110 ${active ? 'text-[var(--accent)] scale-105' : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'}`} />
       <span className="truncate">{label}</span>
       {badge ? (
         <span className="ms-auto flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded-full tabular-nums bg-[var(--accent)] text-white">

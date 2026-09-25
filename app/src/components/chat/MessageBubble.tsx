@@ -9,9 +9,11 @@ import ToolCallBlock from './ToolCallBlock'
 import AgentPlanTrace from './AgentPlanTrace'
 import TaskCard from './TaskCard'
 import ThinkingBlock from './ThinkingBlock'
+import AgentTimeline from './AgentTimeline'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
+/** Render one conversation message with its rich content and status metadata. */
 function MessageBubble({ message, searchHighlight, active }: { message: Message; searchHighlight?: string; active?: boolean }) {
   const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -168,17 +170,17 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
             <button
               onClick={handleCopy}
-              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors"
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
               title={t('chat.copy')}
               aria-label={t('chat.copy')}
             >
-              {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
+              {copied ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
             </button>
             {!isStreaming && !editing && (
               <button
                 onClick={startEdit}
                 disabled={sending}
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors disabled:opacity-30"
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30"
                 title={t('chat.edit')}
                 aria-label={t('chat.edit')}
               >
@@ -223,11 +225,12 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               isError ? 'p-3 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400' : ''
             }`}
           >
-            {thinkingBlocks && <ThinkingBlock text={thinkingBlocks} />}
-            {toolCalls && toolCalls.length > 0 && (
-              <div className="mb-2 space-y-1">
-                {toolCalls.map((tc, i) => <ToolCallBlock key={i} tool={tc} />)}
-              </div>
+            {(thinkingBlocks || (toolCalls && toolCalls.length > 0) || (planSteps && planSteps.length > 0)) && (
+              <AgentTimeline
+                thinkingText={thinkingBlocks || undefined}
+                toolCalls={toolCalls && toolCalls.length > 0 ? toolCalls : undefined}
+                planSteps={planSteps || undefined}
+              />
             )}
             {message.attachment && message.attachment.kind === 'image' && (
               <div className="mb-2 rounded-md overflow-hidden border max-w-sm" style={{ borderColor: 'var(--border)' }}>
@@ -254,18 +257,18 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
           </div>
 
-          <div className="flex items-center gap-1 px-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 px-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <button
               onClick={handleCopy}
-              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors"
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
               title={t('chat.copy')}
               aria-label={t('chat.copy')}
             >
-              {copied ? <Check size={12} style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
+              {copied ? <Check size={12} className="animate-scale-pop" style={{ color: 'var(--success)' }} /> : <Copy size={12} />}
             </button>
             {!isStreaming && !isError && (
               <button
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 transition-colors"
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
                 title={t('chat.regenerate')}
                 aria-label={t('chat.regenerate')}
                 onClick={() => regenerate()}
@@ -275,7 +278,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
             {isAborted && !isStreaming && (
               <button
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-colors"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-all press-scale hover:opacity-90"
                 style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
                 title={t('chat.continue_tooltip')}
                 aria-label={t('chat.continue')}
@@ -288,7 +291,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
             {isError && !isStreaming && (
               <button
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-colors"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-all press-scale hover:opacity-90 shadow-sm"
                 style={{ backgroundColor: 'var(--error)', color: '#fff' }}
                 title={t('chat.retry')}
                 aria-label={t('chat.retry')}

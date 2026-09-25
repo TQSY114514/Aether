@@ -107,53 +107,21 @@ function extractDdgSnippets(html, q) {
   return snippets.join('\n')
 }
 
-// 鈹€鈹€ Unified diff parser 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-function parseUnifiedDiff(text) {
-  const lines = text.split('\n'); const hunks = []; let current = null; let i = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    if (line.startsWith('@@')) {
-      const m = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
-      if (m) { if (current && current.lines.length > 0) hunks.push(current); current = { oldStart: parseInt(m[1]), oldCount: parseInt(m[2] || 1), newStart: parseInt(m[3]), newCount: parseInt(m[4] || 1), lines: [] } }
-    } else if (current) {
-      if (line.startsWith(' ')) current.lines.push({ type: 'context', content: line.slice(1) })
-      else if (line.startsWith('+')) current.lines.push({ type: 'add', content: line.slice(1) })
-      else if (line.startsWith('-')) current.lines.push({ type: 'remove', content: line.slice(1) })
-    }
-    i++
-  }
-  if (current && current.lines.length > 0) hunks.push(current)
-  return hunks
-}
-
-function applyHunks(fileLines, hunks) {
-  const conflicts = []; let result = [...fileLines]; let applied = 0; let lineDelta = 0
-  for (const hunk of hunks) {
-    const idx = hunk.oldStart - 1 + lineDelta
-    const ctxLines = hunk.lines.filter(l => l.type === 'context')
-    let matchOffset = -1; const searchStart = Math.max(0, idx - 2)
-    for (let start = searchStart; start <= Math.max(searchStart, result.length - ctxLines.length); start++) {
-      let ok = true
-      for (let ci = 0; ci < ctxLines.length; ci++) { if (start + ci >= result.length || result[start + ci] !== ctxLines[ci].content) { ok = false; break } }
-      if (ok) { matchOffset = start; break }
-    }
-    if (matchOffset < 0) { conflicts.push(`hunk at line ${hunk.oldStart}: context did not match`); continue }
-    const adds = hunk.lines.filter(l => l.type === 'add'); const oldSpan = hunk.oldCount
-    const replacement = adds.map(l => l.content)
-    result = [...result.slice(0, matchOffset), ...replacement, ...result.slice(matchOffset + oldSpan)]
-    lineDelta += replacement.length - oldSpan; applied++
-  }
-  return { content: result.join('\n'), applied, conflicts }
-}
+// ── Unified diff and SEARCH/REPLACE patch engine ────────────────────────
+const { parseUnifiedDiff, applyHunks, applyAnyPatch } = require('./patchEngine')
 
 // 鈹€鈹€ Shell result formatting + optional Docker sandbox for run_command 鈹€鈹€鈹€
 
 function formatShellResult(stdout, stderr, exitCode, timedOut) {
-  const out = stdout?.trim() || ''; const err = stderr?.trim() || ''; const parts = []
+  let stripAnsi
+  try { stripAnsi = require('./stripAnsi').stripAnsi } catch { stripAnsi = (s) => s }
+  const out = stripAnsi(stdout?.trim() || ''); const err = stripAnsi(stderr?.trim() || ''); const parts = []
   if (out) parts.push('[stdout]\n' + out.slice(0, 4096)); if (err) parts.push('[stderr]\n' + err.slice(0, 4096))
   const r = parts.join('\n\n') || '(no output)'
-  if (timedOut) return `[timed out] ${r}`
-  if (exitCode !== 0) return `[exit code: ${exitCode}]\n${r}`
+  if (timedOut) return `[TIMED OUT] ${r}`
+  if (exitCode === 127) return `[COMMAND NOT FOUND]\n${r}`
+  if (exitCode === 137 || exitCode === 143) return `[KILLED BY SIGNAL]\n${r}`
+  if (exitCode !== 0 && exitCode !== '') return `[FAILED: exit ${exitCode} (exit code: ${exitCode})]\n${r}`
   return r
 }
 
@@ -172,7 +140,15 @@ function runCommandStreaming(cmd, { cwd, timeoutMs, onChunk }) {
     const child = spawn(command, args, { cwd, shell: needsShell, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
     child.stdout.on('data', (d) => { const s = d.toString(); stdout += s; try { onChunk?.(s) } catch {} })
     child.stderr.on('data', (d) => { const s = d.toString(); stderr += s; try { onChunk?.(s) } catch {} })
-    const timer = setTimeout(() => { timedOut = true; try { child.kill() } catch {} }, timeoutMs)
+    const timer = setTimeout(() => {
+      timedOut = true
+      try {
+        const { spawnSync } = require('child_process')
+        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 })
+      } catch {
+        try { child.kill() } catch {}
+      }
+    }, timeoutMs)
     child.on('error', (e) => { clearTimeout(timer); reject(e) })
     child.on('close', (code) => { clearTimeout(timer); resolve({ stdout, stderr, exitCode: code || 0, timedOut }) })
   })
@@ -346,17 +322,45 @@ const TOOLS = [
     const p = String(args.path || ''); const o = String(args.old_string ?? ''); const n = String(args.new_string ?? '')
     if (!p || !o) throw new Error('path and old_string are required')
     if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
-    const orig = await fs.promises.readFile(p, 'utf-8'); const idx = orig.indexOf(o)
-    if (idx === -1) throw new Error('old_string not found'); if (orig.indexOf(o, idx + 1) !== -1) throw new Error('old_string is not unique')
-    await fs.promises.writeFile(p, orig.slice(0, idx) + n + orig.slice(idx + o.length), 'utf-8')
+    const orig = await fs.promises.readFile(p, 'utf-8')
+    let idx = orig.indexOf(o)
+    let matchLen = o.length
+    if (idx === -1) {
+      // Fall back to fuzzy matching
+      const { fuzzyFind } = require('./fuzzyMatch')
+      const result = fuzzyFind(orig, o)
+      if (!result.found) {
+        if (result.ambiguous) {
+          throw new Error(`old_string is ambiguous in ${p} (multiple matching or similar regions found). Please include more surrounding context lines to make it unique.`)
+        }
+        // Build actionable error message with closest match
+        let errMsg = `old_string not found in ${p}`
+        if (result.closestLines) {
+          errMsg += `\nClosest match (similarity: ${(result.similarity * 100).toFixed(0)}%):\n---\n${result.closestLines}\n---\nPlease verify the exact content and retry with 2-3 lines of surrounding context.`
+        }
+        throw new Error(errMsg)
+      }
+      idx = result.index
+      matchLen = result.matchedText.length
+    } else if (orig.indexOf(o, idx + 1) !== -1) {
+      throw new Error('old_string is not unique')
+    }
+    await fs.promises.writeFile(p, orig.slice(0, idx) + n + orig.slice(idx + matchLen), 'utf-8')
     return `edited ${p}`
   }},
-  { name: 'apply_patch', description: 'Apply a unified diff patch. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, patch: { type: 'string' } }, required: ['path', 'patch'] }, run: async (args, ctx) => {
+  { name: 'apply_patch', description: 'Apply a unified diff patch or Aider-style SEARCH/REPLACE blocks. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, patch: { type: 'string' } }, required: ['path', 'patch'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const pt = String(args.patch || ''); if (!p || !pt) throw new Error('path and patch required')
     if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
-    const orig = await fs.promises.readFile(p, 'utf-8'); const r = applyHunks(orig.split('\n'), parseUnifiedDiff(pt))
-    if (r.conflicts.length) return `conflicts: ${r.conflicts.join('; ')}`
-    await fs.promises.writeFile(p, r.content, 'utf-8'); return `patched ${p} (${r.applied} hunks)`
+    const orig = await fs.promises.readFile(p, 'utf-8')
+    const r = applyAnyPatch(orig, pt)
+    if (r.conflicts && r.conflicts.length) {
+      throw new Error(`Patch conflicts in ${p}:\n${r.conflicts.join('\n')}\nHint: Verify lines with read_file before applying changes.`)
+    }
+    if (!r.applied || r.applied <= 0) {
+      throw new Error(`No valid patch hunks or SEARCH/REPLACE blocks were applied to ${p}. Verify the patch syntax and target lines.`)
+    }
+    await fs.promises.writeFile(p, r.content, 'utf-8')
+    return `patched ${p} (${r.applied} changes applied via ${r.format})`
   }},
 
   // 鈹€鈹€ Execution tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -738,14 +742,14 @@ TOOLS.push(
     }
     return `Sandbox changes successfully applied to ${cwd}`
   }},
-  { name: 'generate_repo_map', description: 'Generates a condensed structural map of the repository (Repo Map) to help understand the project topology and key function/class signatures. Best used before planning large changes.', risk: 'safe', parameters: { type: 'object', properties: {} }, run: async (args, ctx) => {
+  { name: 'generate_repo_map', description: 'Generates a condensed structural map of the repository (Repo Map) with PageRank ranking and token-budget pruning. Best used before planning large changes.', risk: 'safe', parameters: { type: 'object', properties: { maxTokens: { type: 'number', description: 'Token budget for the repo map (default 1024)' }, query: { type: 'string', description: 'Optional task or symbol keyword to prioritize in the map' } } }, run: async (args, ctx) => {
     const cwd = ctx.cwd
     if (!cwd) throw new Error('No cwd provided')
     try {
       const { buildRepoMap } = require('../llm/repoMap')
-      const lines = buildRepoMap(cwd)
+      const lines = await buildRepoMap(cwd, { maxTokens: args.maxTokens || 1024, query: args.query })
       if (!lines || lines.length === 0) return 'Repo map is empty or failed to generate.'
-      return `Repo Map (${lines.length} lines):\n\n` + lines.join('\n')
+      return lines.join('\n')
     } catch (e) {
       return `Error generating repo map: ${e.message}`
     }

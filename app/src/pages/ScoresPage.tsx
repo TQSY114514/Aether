@@ -4,6 +4,7 @@ import { t } from '@/utils/i18n'
 import { scoresToCsv, scoresToMarkdown, downloadText } from '@/utils/arenaExport'
 import BenchmarkPanel from '@/components/arena/BenchmarkPanel'
 import type { ArenaModelMetrics } from '@/types'
+import { Trophy } from 'lucide-react'
 
 // Real-traffic metrics per model (usage_log aggregates via arena:metrics).
 // Shape comes from the shared IPC contract — see ArenaModelMetrics in @/types.
@@ -21,6 +22,7 @@ function fmtRate(v: number | null): string {
   return v == null ? '—' : `${Math.round(v * 100)}%`
 }
 
+/** Render arena ratings and per-model benchmark metrics. */
 export default function ScoresPage() {
   const scores = useStore((s) => s.scores)
   const [metrics, setMetrics] = useState<ArenaModelMetrics[]>([])
@@ -68,11 +70,14 @@ export default function ScoresPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="flex-1 overflow-y-auto bg-transparent page-fade-in">
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-start justify-between gap-4 mb-2">
           <div>
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>🏟 {t('scores.title')}</h1>
+            <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <Trophy size={18} style={{ color: 'var(--accent)' }} />
+              <span>{t('scores.title')}</span>
+            </h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('scores.subtitle')}</p>
           </div>
           {hasScores && (

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { t } from '@/utils/i18n'
+import { BarChart3 } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Usage statistics page. Backed by the usage_log table (one row per real API
@@ -77,7 +78,10 @@ export default function TokenPage() {
       ) : (
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>📊 {t('tokens.title')}</h1>
+          <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+            <BarChart3 size={18} style={{ color: 'var(--accent)' }} />
+            <span>{t('tokens.title')}</span>
+          </h1>
           <div className="flex gap-1 p-0.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             {RANGES.map(r => (
               <button key={r.key} onClick={() => setRange(r.key)}

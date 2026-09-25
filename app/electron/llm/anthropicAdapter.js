@@ -512,7 +512,54 @@ async function completeChatMessage({ provider, model, messages, signal, options 
   }
 }
 
-async function listModels() { return [] }
+/** Fetch and deduplicate the model identifiers exposed by an Anthropic endpoint. */
+async function listModels({ provider, signal } = {}) {
+  try {
+    const allNames = []
+    let afterId = null
+    let hasMore = true
+    const MAX_PAGES = 20  // ~2000 models maximum; guards against infinite loops
+
+    for (let page = 0; page < MAX_PAGES && hasMore; page++) {
+      const url = new URL(`${baseUrl(provider)}/models`)
+      url.searchParams.set('limit', '100')
+      if (afterId) url.searchParams.set('after_id', afterId)
+
+      const res = await fetch(url.toString(), { headers: headers(provider), signal })
+      if (res.status === 404) {
+        // /models endpoint unsupported — preserve manually configured models
+        return []
+      }
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        throw new Error(`Failed to list Anthropic models (HTTP ${res.status}): ${errText.slice(0, 100)}`)
+      }
+      const data = await res.json()
+      const list = Array.isArray(data) ? data : (data.data || data.models || [])
+      const names = list.map(m => typeof m === 'string' ? m : (m.id || m.name)).filter(Boolean)
+      allNames.push(...names)
+
+      // Anthropic pagination fields
+      hasMore = Boolean(data.has_more)
+      const nextId = data.last_id || (list.length > 0 && (list[list.length - 1]?.id)) || null
+      // Stop if cursor didn't advance (broken endpoint returning same page repeatedly)
+      if (!nextId || nextId === afterId) hasMore = false
+      afterId = nextId
+    }
+
+    // If hasMore is still true we hit the page cap with pages remaining — the list
+    // is incomplete. Throw rather than returning a partial result, which would cause
+    // syncModels to treat remaining models as "deleted by the provider".
+    if (hasMore) {
+      throw new Error('Anthropic model list exceeded page limit; synchronization aborted to prevent data loss')
+    }
+
+    return allNames.length > 0 ? Array.from(new Set(allNames)) : []
+  } catch (err) {
+    if (err.name === 'AbortError') throw err
+    throw err
+  }
+}
 
 // Connectivity probe: a minimal /messages request with max_tokens:1.
 async function testConnection({ provider }) {
@@ -569,6 +616,5 @@ module.exports = {
   toAnthropicMessages, parseToolUses, parseSSELine,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }
-
 
 

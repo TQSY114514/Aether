@@ -1,5 +1,6 @@
-const { testConnection, listModels } = require('../llm/providerAdapter')
+const { testConnection, listModels, completeChat } = require('../llm/providerAdapter')
 
+/** Register provider CRUD, connectivity, latency, and model-sync IPC handlers. */
 function registerProviderHandlers(ipcMain, db) {
   // H2: renderer-facing list/get return a MASKED api_key (sk-1***efgh).
   // Decrypted keys never cross the IPC boundary; internal request paths
@@ -20,6 +21,35 @@ function registerProviderHandlers(ipcMain, db) {
     if (!provider) return { success: false, errorMessage: '供应商未找到' }
     try { return await testConnection({ provider }) }
     catch (e) { return { success: false, errorMessage: e?.message || String(e) } }
+  })
+
+  // Measure latency (RTT in ms) to the provider endpoint or specific model
+  ipcMain.handle('provider:test-latency', async (_e, id, modelName) => {
+    const provider = db.getProvider(id)
+    if (!provider) return { success: false, latencyMs: -1, errorMessage: '供应商未找到' }
+    try {
+      if (modelName) {
+        const start = Date.now()
+        const modelObj = typeof modelName === 'string' ? { model_name: modelName } : modelName
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 10000)
+        try {
+          await completeChat({
+            provider,
+            model: modelObj,
+            messages: [{ role: 'user', content: 'ping' }],
+            options: { max_tokens: 1 },
+            signal: controller.signal,
+          })
+          return { success: true, latencyMs: Date.now() - start }
+        } finally {
+          clearTimeout(timer)
+        }
+      }
+      return await testConnection({ provider, model: modelName })
+    } catch (e) {
+      return { success: false, latencyMs: -1, errorMessage: e?.message || String(e) }
+    }
   })
 
   // Fetch the provider's model list and sync it into the DB: add newly
@@ -67,19 +97,21 @@ function registerProviderHandlers(ipcMain, db) {
       try {
         fetched = await listModels({ provider: { id: prov.id, api_url: URL, api_key: '', api_format: 'openai' } })
       } catch {}
+      // Normalize both listModels (string[]) and /api/tags fallback into string[]
+      const toName = (x) => typeof x === 'string' ? x.trim() : (x && x.model_name ? String(x.model_name).trim() : '')
+      const allNames = Array.from(new Set((fetched.length ? fetched : models).map(toName).filter(Boolean)))
       // Smallest model heuristic: prefer qwen/tiny/phi/llama3.2:1b-style small tags.
-      const all = fetched.length ? fetched : models.map(n => ({ model_name: n }))
-      const sorted = [...all].sort((a, b) => String(a.model_name).length - String(b.model_name).length)
-      const recommended = sorted[0]
+      const sorted = [...allNames].sort((a, b) => a.length - b.length)
+      const recommended = sorted[0] || null
       // Sync model rows into the DB (add missing, remove stale).
       try {
-        db.syncModels(prov.id, all.map(m => m.model_name))
+        db.syncModels(prov.id, allNames)
       } catch {}
       return {
         ok: true,
         providerId: prov.id,
-        models: all.map(m => m.model_name),
-        recommended: recommended ? recommended.model_name : null,
+        models: allNames,
+        recommended,
       }
     } catch (e) {
       return { ok: false, error: e && e.name === 'AbortError' ? 'Ollama 检测超时(5s)' : (e && e.message ? e.message : String(e)) }

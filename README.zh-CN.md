@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE)
 [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-下载)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md)
 
 </div>
 
@@ -41,30 +41,19 @@ Aether 提供双端第一公民体验，底层 100% 共享相同的 Agent 运行
 
 ---
 
-## 诚实自评雷达图
+## 诚实定位与架构考量
 
-依据公开基准与可复现评估脚本（`node app/scripts/gen-radar.cjs`），Aether 对标 20 款主流 Agent（Claude Code、Codex、Cursor、Windsurf、Trae、Devin、OpenHands 等）：
+Aether 强在**本地优先隐私、多模型真实评测与三层权限沙箱**。我们客观承认单模型代码补全并不追求复刻 Cursor 庞大的专有 IDE 编辑生态，而是为你提供一个透明、可信、多模型协同的自主开发工作台。
 
-<p align="center">
-  <img src="./assets/agent-radar-2026.zh-CN.svg" width="720" alt="Aether 诚实自评雷达图" />
-</p>
-
-Aether 强在**本地优先隐私、多模型自由测评切换与三层权限沙箱**。我们客观承认单模型代码补全并不追求复刻 Cursor 庞大的专有 IDE 编辑生态，而是为你提供一个透明、可信、多模型协同的自主开发工作台。
+> 📊 **详细 20 款主流 Agent 竞品矩阵分析**：关于 Aether 与 Claude Code、Codex、Cursor、OpenHands 等 20 款工具在 8 大维度的全面客观自评与能力画像，详见 [docs/competitive-analysis.md](./docs/competitive-analysis.md)（以及[全景雷达图](./assets/agent-radar-2026.zh-CN.svg)）。
 
 ---
 
 ## 下载与快速上手
 
-### 桌面版（Windows）
+### 1. 终端版与 CLI（跨平台：macOS、Linux、Windows 通用）
 
-从 [GitHub Releases](https://github.com/TQSY114514/Aether/releases) 获取最新安装包：
-
-- **`aetherai-setup-x.y.z.exe`**（安装包，推荐，支持自动更新）
-- **`aetherai-x.y.z.exe`**（绿色便携版，免安装即开即用）
-
-> **关于 Windows SmartScreen 提示**：Aether 属于独立开发者维护的开源项目，未购买昂贵商业签名证书。若 Windows 11 / Defender 提示「已保护你的电脑」，请点击 **更多信息 → 仍要运行** 即可。代码完全透明开源。
-
-### 终端版与 CLI（Node.js ≥ 22）
+无头 Agent 运行时与交互终端具备 100% 跨平台能力（需要 Node.js ≥ 22）：
 
 ```bash
 # 全局安装
@@ -73,19 +62,34 @@ npm install -g aetherai
 # 启动交互式终端 TUI
 aether tui
 
-# 单次命令任务
+# 单次命令编码或调试任务
 aether "运行测试并修复挂掉的用例" --model deepseek
 
-# 无头 JSONL RPC 供脚本集成
+# 无头 JSONL RPC 供脚本与子 Agent 集成
 aether --mode rpc
 ```
 
-### 源码运行
+### 2. 桌面版工作台（Windows）
+
+从 [GitHub Releases](https://github.com/TQSY114514/Aether/releases) 获取最新安装包：
+
+- **`aetherai-setup-x.y.z.exe`**（安装包，推荐，支持自动更新）
+- **`aetherai-x.y.z.exe`**（绿色便携版，免安装即开即用）
+
+> **关于 Windows SmartScreen 提示**：Aether 属于独立开发者维护的开源项目，未购买昂贵商业签名证书。若 Windows 11 / Defender 提示「已保护你的电脑」，请点击 **更多信息 → 仍要运行** 即可。代码完全透明开源。
+
+### 3. 源码运行
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
 cd Aether
-start.bat        # 自动安装依赖、编译前端并启动 Electron
+
+# Windows（自动安装依赖、编译前端并启动 Electron）
+start.bat
+
+# Linux / macOS（默认极速进入终端 TUI；加 --desktop 启动桌面工作台）
+./start.sh              # 终端交互 TUI
+./start.sh --desktop    # Electron 桌面工作台
 ```
 
 ---

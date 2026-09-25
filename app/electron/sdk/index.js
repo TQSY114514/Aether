@@ -92,6 +92,21 @@ const sdk = {
     TOOL_TRUNCATION: contextBudget.TOOL_TRUNCATION,
   },
 
+  // Objective Arena (Automated Benchmarking)
+  objectiveArena: {
+    runObjectiveEvaluation: require('../llm/objectiveArena').runObjectiveEvaluation,
+    extractAndApplyPatches: require('../llm/objectiveArena').extractAndApplyPatches,
+  },
+
+  // Model Advisor (Personal Router with Cold Start Prior & Dynamic ELO)
+  modelAdvisor: {
+    suggestModel: require('../llm/modelAdvisor').suggestModel,
+    suggestModelExplained: require('../llm/modelAdvisor').suggestModelExplained,
+    routeWithExplanation: require('../llm/modelAdvisor').routeWithExplanation,
+    classifyTask: require('../llm/modelAdvisor').classifyTask,
+    ModelRouter: require('../llm/modelAdvisor').ModelRouter,
+  },
+
   classifyAgentMode,
 }
 

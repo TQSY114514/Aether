@@ -151,8 +151,8 @@ async function listModels({ provider, signal }) {
   return adapterFor(provider).listModels({ provider, signal })
 }
 
-async function testConnection({ provider }) {
-  return adapterFor(provider).testConnection({ provider })
+async function testConnection({ provider, model }) {
+  return adapterFor(provider).testConnection({ provider, model })
 }
 
 module.exports = { streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage: openaiAdapter.normalizeUsage }

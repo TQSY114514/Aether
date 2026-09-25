@@ -7,6 +7,7 @@ type AgentTaskDeckProps = {
   sessionId: number | null
 }
 
+/** Render background agent tasks associated with the current session. */
 export default function AgentTaskDeck({ sessionId }: { sessionId: number | null }) {
   const [expanded, setExpanded] = useState(false)
   const todosByMessage = useStore((s) => s.todosByMessage)
@@ -87,41 +88,47 @@ export default function AgentTaskDeck({ sessionId }: { sessionId: number | null 
         <div className="h-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: accent }} />
       </div>
 
-      {/* ── Expanded Drawer ── */}
-      {expanded && (
-        <div className="px-3 py-2.5 space-y-1.5 border-t border-[var(--border)] max-h-56 overflow-y-auto bg-[var(--content-bg)]">
-          {latestTodos.map((todo, i) => {
-            const isCompleted = todo.status === 'completed'
-            const isInProgress = todo.status === 'in_progress'
-            const isFocus = i === focusIndex
-            const label = isInProgress && todo.activeForm ? todo.activeForm : todo.content
+      {/* ── Expanded Drawer with Smooth Accordion Transition ── */}
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="px-3 py-2.5 space-y-1.5 border-t border-[var(--border)] max-h-56 overflow-y-auto bg-[var(--content-bg)]">
+            {latestTodos.map((todo, i) => {
+              const isCompleted = todo.status === 'completed'
+              const isInProgress = todo.status === 'in_progress'
+              const isFocus = i === focusIndex
+              const label = isInProgress && todo.activeForm ? todo.activeForm : todo.content
 
-            return (
-              <div key={i} className="flex items-start gap-2 text-xs rounded-lg px-2 py-1.5 transition-all"
-                style={isInProgress
-                  ? { backgroundColor: 'var(--bg-secondary)', borderLeft: '3px solid var(--accent)' }
-                  : { borderLeft: '3px solid transparent' }}>
-                {isCompleted ? (
-                  <Check size={13} className="shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />
-                ) : isInProgress ? (
-                  <Loader2 size={13} className="shrink-0 mt-0.5 animate-spin text-amber-400" />
-                ) : isFocus ? (
-                  <Play size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
-                ) : (
-                  <Circle size={12} className="shrink-0 mt-0.5 opacity-40 text-gray-400" />
-                )}
-                <span className={isInProgress ? 'font-medium' : ''}
-                  style={{
-                    color: isCompleted ? 'var(--text-muted)' : isInProgress ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    textDecoration: isCompleted ? 'line-through' : 'none',
-                  }}>
-                  {label}
-                </span>
-              </div>
-            )
-          })}
+              return (
+                <div key={i} className="flex items-start gap-2 text-xs rounded-lg px-2 py-1.5 transition-all"
+                  style={isInProgress
+                    ? { backgroundColor: 'var(--bg-secondary)', borderLeft: '3px solid var(--accent)' }
+                    : { borderLeft: '3px solid transparent' }}>
+                  {isCompleted ? (
+                    <Check size={13} className="shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />
+                  ) : isInProgress ? (
+                    <Loader2 size={13} className="shrink-0 mt-0.5 animate-spin text-amber-400" />
+                  ) : isFocus ? (
+                    <Play size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+                  ) : (
+                    <Circle size={12} className="shrink-0 mt-0.5 opacity-40 text-gray-400" />
+                  )}
+                  <span className={isInProgress ? 'font-medium' : ''}
+                    style={{
+                      color: isCompleted ? 'var(--text-muted)' : isInProgress ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      textDecoration: isCompleted ? 'line-through' : 'none',
+                    }}>
+                    {label}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

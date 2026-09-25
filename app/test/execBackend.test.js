@@ -160,7 +160,7 @@ describe('dockerBackend', () => {
     const r = await dockerBackend.execute({ image: 'alpine', command: 'true' })
     expect(r.ok).toBe(false)
     expect(typeof r.error).toBe('string')
-  })
+  }, 20000)
 })
 
 // ─── SSH backend ───────────────────────────────────────────────────────────

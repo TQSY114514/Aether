@@ -4,6 +4,7 @@ import { useUI } from '@/components/ui/feedback'
 import { Plus, Trash2, Download, Upload } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
+/** Render persona creation, editing, and selection controls. */
 export default function PersonaPage() {
   const personas = useStore((s) => s.personas)
   const addPersona = useStore((s) => s.addPersona)
@@ -53,7 +54,7 @@ export default function PersonaPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="flex-1 overflow-y-auto bg-transparent page-fade-in">
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>

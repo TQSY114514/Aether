@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](./LICENSE)
 [![Platform - Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square&logo=windows)](#-download)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md)
 
 </div>
 
@@ -43,49 +43,53 @@ Aether provides two first-class interfaces sharing the exact same agent core, lo
 
 ## Honest Positioning
 
-Self-scored against 20 leading agents (Claude Code, Codex, Cursor, Windsurf, Trae, Devin, OpenHands, etc.) using our open reproducible benchmark script (`node app/scripts/gen-radar.cjs`):
+Aether's strength lies in **local-first privacy, multi-model evaluation, and multi-tier sandbox safety**. We honestly acknowledge that our raw single-model coding assistance does not aim to replace full-blown proprietary IDEs like Cursor — our goal is to give you a reliable, transparent workbench where you benchmark models on your own workload.
 
-<p align="center">
-  <img src="./assets/agent-radar-2026.en.svg" width="720" alt="Aether honest self-assessment radar vs 20 peer agents" />
-</p>
-
-Aether's strength lies in **local-first privacy, multi-model flexibility, and multi-tier sandbox safety**. We honestly acknowledge that our raw single-model coding assistance does not aim to replace full-blown proprietary IDEs like Cursor — our goal is to give you a reliable, transparent workbench for any model you choose.
+> 📊 **Detailed 20-Peer Competitive Analysis**: For our open, reproducible evaluation matrix comparing Aether across 8 dimensions against Claude Code, Codex, Cursor, OpenHands, and 16 others, see [docs/competitive-analysis.md](./docs/competitive-analysis.md) (and [architecture radar](./assets/agent-radar-2026.en.svg)).
 
 ---
 
 ## Download & Getting Started
 
-### Desktop (Windows)
+### 1. Terminal & CLI (Cross-Platform: macOS, Linux, Windows)
 
-Download the latest release from [GitHub Releases](https://github.com/TQSY114514/Aether/releases):
+The headless agent runtime and interactive terminal are 100% cross-platform (Node.js ≥ 22):
+
+```bash
+# Install globally
+npm install -g aetherai
+
+# Launch interactive terminal UI (TUI)
+aether tui
+
+# One-shot coding or debugging task
+aether "run test suite and fix failing tests" --model deepseek
+
+# Headless JSONL RPC for scripts and subagents
+aether --mode rpc
+```
+
+### 2. Desktop Workbench (Windows)
+
+Download the latest desktop release from [GitHub Releases](https://github.com/TQSY114514/Aether/releases):
 
 - **`aetherai-setup-x.y.z.exe`** (Installer, recommended)
 - **`aetherai-x.y.z.exe`** (Portable, zero install)
 
 > **Note on Windows SmartScreen**: Aether is built by an independent developer without a commercial code-signing certificate. If Windows 11 / Defender displays "Windows protected your PC", click **More info → Run anyway**. The project is 100% open source.
 
-### Terminal & CLI (Node.js ≥ 22)
-
-```bash
-# Install globally
-npm install -g aetherai
-
-# Launch interactive terminal UI
-aether tui
-
-# One-shot task
-aether "run test suite and fix failing tests" --model deepseek
-
-# Headless JSONL RPC for automations
-aether --mode rpc
-```
-
-### Run from Source
+### 3. Run from Source
 
 ```bash
 git clone https://github.com/TQSY114514/Aether.git
 cd Aether
-start.bat        # installs dependencies, builds frontend, launches Electron
+
+# Windows (installs deps, builds frontend, launches Electron)
+start.bat
+
+# Linux / macOS (defaults to terminal TUI; add --desktop for GUI workbench)
+./start.sh              # Terminal TUI
+./start.sh --desktop    # Electron GUI workbench
 ```
 
 ---

@@ -117,17 +117,17 @@ function ConfirmHost({ state, onConfirm, onCancel }: { state: ConfirmState; onCo
   return (
     <div className="fixed inset-0 z-[101] flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 animate-blur-fade" onClick={onCancel} />
+      <div className="absolute inset-0 bg-black/40 modal-backdrop-fade" onClick={onCancel} />
       {/* Dialog */}
-      <div className="relative w-full max-w-sm rounded-lg border shadow-xl p-5 animate-blur-fade"
+      <div className="relative w-full max-w-sm rounded-lg border shadow-xl p-5 animate-spring-up"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
         <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>{state.title || '确认'}</h3>
         {state.description && <p className="text-xs leading-relaxed mb-4" style={{ color: 'var(--text-secondary)' }}>{state.description}</p>}
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
+          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-all press-scale"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>{state.cancelText || '取消'}</button>
           <button onClick={onConfirm}
-            className="px-3.5 py-1.5 text-xs rounded-md text-white transition-opacity hover:opacity-90"
+            className="px-3.5 py-1.5 text-xs rounded-md text-white transition-all press-scale hover:opacity-90 shadow-sm"
             style={{ backgroundColor: danger ? 'var(--error)' : 'var(--accent)' }}>{state.confirmText || '确定'}</button>
         </div>
       </div>
