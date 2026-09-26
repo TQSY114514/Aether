@@ -358,6 +358,10 @@ function scanSensitiveAssets(gitRoot, details) {
           currentFile = line.slice(6).trim()
           continue
         }
+        // Skip scanning test suites and fixture mock files for synthetic pattern strings
+        if (/(?:^|[\\/])(?:test|tests|__tests__|fixtures)[\\/]|\.(?:test|spec)\.[a-z0-9]+$/i.test(currentFile)) {
+          continue
+        }
         if (line.startsWith('+') && !line.startsWith('+++')) {
           const addedText = line.slice(1)
           for (const pat of SECRET_DIFF_PATTERNS) {
