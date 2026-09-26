@@ -43,7 +43,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     if (!commitMsg) {
       setCrafting(true)
       try {
-        const res = await window.electronAPI.git.craftCommitMessage()
+        const res = await window.electronAPI.git.craftCommitMessage({ sessionId: sessionId || undefined })
         if (res.success && res.suggestedMessage) {
           setCommitMsg(res.suggestedMessage)
         } else {
@@ -55,7 +55,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
         setCrafting(false)
       }
     }
-  }, [commitOpen, commitMsg, summary.files.length])
+  }, [commitOpen, commitMsg, summary.files.length, sessionId])
 
   const handleExecuteCommit = useCallback(async () => {
     const trimmed = commitMsg.trim()
@@ -63,7 +63,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     setCommitting(true)
     try {
       const filePaths = summary.files.map((f) => f.path)
-      const res = await window.electronAPI.git.commit({ message: trimmed, files: filePaths })
+      const res = await window.electronAPI.git.commit({ message: trimmed, files: filePaths, sessionId: sessionId || undefined })
       if (res.success) {
         setCommitted(true)
         setCommitHash(res.commitHash || null)
@@ -86,7 +86,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     } finally {
       setCommitting(false)
     }
-  }, [commitMsg, committing, summary.files])
+  }, [commitMsg, committing, summary.files, sessionId])
 
   const handleRollback = useCallback(async () => {
     if (!window.confirm(t('filesummary.undo_confirm', '确定要撤销本轮对话对文件所做的修改吗？'))) {
@@ -96,27 +96,41 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     setRollingBack(true)
     try {
       let rolledBack = false
+      const failedPaths: string[] = []
       if (messageId && sessionId && window.electronAPI?.agentCheckpoint) {
         const checkpoints = await window.electronAPI.agentCheckpoint.list({ sessionId, messageId })
         if (checkpoints && checkpoints.length > 0) {
           for (const cp of checkpoints) {
             if (!cp.rolled_back_at) {
-              await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId })
-              rolledBack = true
+              const res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId })
+              if (res && !res.success) {
+                if (Array.isArray(res.failed) && res.failed.length > 0) {
+                  failedPaths.push(...res.failed.map((f: any) => typeof f === 'string' ? f : f.path))
+                } else if (res.error) {
+                  failedPaths.push(res.error)
+                }
+              } else {
+                rolledBack = true
+              }
             }
           }
         }
       }
 
+      if (failedPaths.length > 0) {
+        useStore.getState().triggerToast(
+          t('filesummary.undo_partial', `部分文件回滚失败: ${failedPaths.join(', ')}`),
+          'error'
+        )
+        return
+      }
+
       if (!rolledBack) {
-        const res = await useStore.getState().undoLastAction()
-        if (!res.ok) {
-          useStore.getState().triggerToast(
-            t('filesummary.undo_failed', res.error || 'Failed'),
-            'error'
-          )
-          return
-        }
+        useStore.getState().triggerToast(
+          t('filesummary.no_checkpoints', '未找到本轮对话关联的文件检查点记录，请在 Git 中手动撤销'),
+          'warning'
+        )
+        return
       }
 
       setUndone(true)
@@ -139,14 +153,14 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     setTesting(true)
     setTestStatus('idle')
     try {
-      useStore.getState().triggerToast('🧪 正在运行项目测试套件...', 'info')
-      const res = await window.electronAPI.chat.test()
+      useStore.getState().triggerToast('正在运行项目测试套件...', 'info')
+      const res = await window.electronAPI.chat.test({ sessionId: sessionId || undefined })
       if (res.ok || res.passed) {
         setTestStatus('passed')
-        useStore.getState().triggerToast(`✅ 测试通过 (${res.command}, ${res.durationMs}ms)`, 'success')
+        useStore.getState().triggerToast(`测试通过 (${res.command}, ${res.durationMs}ms)`, 'success')
       } else {
         setTestStatus('failed')
-        useStore.getState().triggerToast(`❌ 测试未通过 (${res.command})`, 'error')
+        useStore.getState().triggerToast(`测试未通过 (${res.command})`, 'error')
         if (sessionId && res.suggestedRepairPrompt) {
           if (window.confirm('项目测试未通过，是否让 Agent 自动分析并修复报错？')) {
             useStore.getState().sendMessage(res.suggestedRepairPrompt)
@@ -155,7 +169,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
       }
     } catch (err: any) {
       setTestStatus('failed')
-      useStore.getState().triggerToast(`❌ 测试执行异常: ${err?.message || 'Error'}`, 'error')
+      useStore.getState().triggerToast(`测试执行异常: ${err?.message || 'Error'}`, 'error')
     } finally {
       setTesting(false)
     }
@@ -216,27 +230,27 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
               backgroundColor: testStatus === 'passed' ? 'rgba(34,197,94,0.1)' : testStatus === 'failed' ? 'rgba(239,68,68,0.1)' : 'transparent',
               color: testStatus === 'passed' ? 'var(--success)' : testStatus === 'failed' ? 'var(--error)' : 'var(--text-primary)',
             }}
-            title="运行项目测试并验证代码更改"
+            title={t('filesummary.run_tests_title', '运行项目测试并验证代码更改')}
           >
             {testing ? (
               <>
                 <RotateCcw size={11} className="animate-spin text-[var(--accent)]" />
-                <span>运行中...</span>
+                <span>{t('filesummary.testing', '运行中...')}</span>
               </>
             ) : testStatus === 'passed' ? (
               <>
                 <Check size={11} style={{ color: 'var(--success)' }} />
-                <span>测试通过</span>
+                <span>{t('filesummary.test_passed', '测试通过')}</span>
               </>
             ) : testStatus === 'failed' ? (
               <>
                 <AlertCircle size={11} style={{ color: 'var(--error)' }} />
-                <span>测试未过</span>
+                <span>{t('filesummary.test_failed', '测试未过')}</span>
               </>
             ) : (
               <>
                 <Play size={11} style={{ color: 'var(--accent)' }} />
-                <span>运行测试</span>
+                <span>{t('filesummary.run_tests', '运行测试')}</span>
               </>
             )}
           </button>

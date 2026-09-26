@@ -131,4 +131,23 @@ describe('createAllowRulesStore (Cline & Claude Code style granular auto-approva
     expect(listAfter.persisted.some(p => p.ruleKey === 'pytest')).toBe(false)
     expect(store.match(10, 'run_command', { command: 'pytest' })).toBe(false)
   })
+
+  it('blocks command chaining and substitutions from bypassing allow rules', () => {
+    const store = createAllowRulesStore(mockDb)
+    store.applyPreset(mockDb, 'safe_git')
+
+    // Single allowed command matches
+    expect(store.match(1, 'run_command', { command: 'git status' })).toBe(true)
+
+    // Chaining with unauthorized command fails match
+    expect(store.match(1, 'run_command', { command: 'git status && npm install malicious-pkg' })).toBe(false)
+    expect(store.match(1, 'run_command', { command: 'git status; rm -rf /' })).toBe(false)
+
+    // Chaining two authorized commands passes
+    expect(store.match(1, 'run_command', { command: 'git status && git diff' })).toBe(true)
+
+    // Command substitution is blocked from auto-allow
+    expect(store.match(1, 'run_command', { command: 'git status $(whoami)' })).toBe(false)
+    expect(store.match(1, 'run_command', { command: 'git status `id`' })).toBe(false)
+  })
 })

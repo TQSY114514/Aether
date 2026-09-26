@@ -231,23 +231,38 @@ async function diagnoseSystem(db, { cwd, sessionId } = {}) {
 
   if (db) {
     try {
-      if (db.name && fs.existsSync(db.name)) {
-        dbHealth.size = formatBytes(fs.statSync(db.name).size)
+      const dbFile = (typeof db.getDatabasePath === 'function' ? db.getDatabasePath() : null) || db.name
+      if (dbFile && fs.existsSync(dbFile)) {
+        dbHealth.size = formatBytes(fs.statSync(dbFile).size)
       }
-      dbHealth.journalMode = String(db.pragma('journal_mode', { simple: true })).toLowerCase()
-      dbHealth.integrityCheck = String(db.pragma('integrity_check', { simple: true })).toLowerCase()
+      const getPragma = (param) => {
+        try {
+          if (typeof db.pragma === 'function') {
+            const v = db.pragma(param, { simple: true })
+            if (v != null) return String(v).toLowerCase()
+          }
+          const row = db.prepare ? db.prepare(`PRAGMA ${param}`).get() : null
+          return row ? String(Object.values(row)[0] || '').toLowerCase() : 'unknown'
+        } catch {
+          return 'unknown'
+        }
+      }
+      dbHealth.journalMode = getPragma('journal_mode')
+      dbHealth.integrityCheck = getPragma('integrity_check')
 
-      dbHealth.sessionsCount = db.prepare('SELECT count(*) as c FROM session').get()?.c || 0
-      dbHealth.messagesCount = db.prepare('SELECT count(*) as c FROM message').get()?.c || 0
-      dbHealth.providersCount = db.prepare('SELECT count(*) as c FROM provider WHERE enabled = 1').get()?.c || 0
-      dbHealth.modelsCount = db.prepare('SELECT count(*) as c FROM model').get()?.c || 0
+      if (typeof db.prepare === 'function') {
+        dbHealth.sessionsCount = db.prepare('SELECT count(*) as c FROM session').get()?.c || 0
+        dbHealth.messagesCount = db.prepare('SELECT count(*) as c FROM message').get()?.c || 0
+        dbHealth.providersCount = db.prepare('SELECT count(*) as c FROM provider WHERE enabled = 1').get()?.c || 0
+        dbHealth.modelsCount = db.prepare('SELECT count(*) as c FROM model').get()?.c || 0
 
-      try {
-        dbHealth.tasksCount = db.prepare('SELECT count(*) as c FROM agent_task').get()?.c || 0
-      } catch {}
-      try {
-        dbHealth.memoriesCount = db.prepare('SELECT count(*) as c FROM memory').get()?.c || 0
-      } catch {}
+        try {
+          dbHealth.tasksCount = db.prepare('SELECT count(*) as c FROM agent_task').get()?.c || 0
+        } catch {}
+        try {
+          dbHealth.memoriesCount = db.prepare('SELECT count(*) as c FROM memory').get()?.c || 0
+        } catch {}
+      }
     } catch (e) {
       dbHealth.error = e.message
     }

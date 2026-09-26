@@ -91,4 +91,14 @@ describe('Lint & Test Auto-Repair Runner (Claude Code / Aider alignment)', () =>
     expect(res.ok).toBe(false)
     expect(res.error).toBeDefined()
   })
+
+  it('rejects shell metacharacters and command substitutions in args to prevent command injection', async () => {
+    const resTest = await runProjectTest(null, { cwd: workspaceRoot, args: '$(npm install malicious)' })
+    expect(resTest.ok).toBe(false)
+    expect(resTest.error).toContain('shell metacharacters and substitutions are not allowed')
+
+    const resLint = await runProjectLint(null, { cwd: workspaceRoot, args: 'src/main.ts; rm -rf /' })
+    expect(resLint.ok).toBe(false)
+    expect(resLint.error).toContain('shell metacharacters and substitutions are not allowed')
+  })
 })

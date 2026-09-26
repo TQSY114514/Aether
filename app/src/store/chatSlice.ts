@@ -453,11 +453,21 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     if (hasRecentOptimistic) return
     try {
       const allMessages = await window.electronAPI.message.list(sessionId)
+      const nextSummaries = { ...get().fileSummariesByMessage }
+      for (const m of allMessages) {
+        if ((m as any).file_summary && !nextSummaries[m.id]) {
+          try {
+            nextSummaries[m.id] = typeof (m as any).file_summary === 'string'
+              ? JSON.parse((m as any).file_summary)
+              : (m as any).file_summary
+          } catch {}
+        }
+      }
       if (get().chatMode === "arena") {
         const filtered = allMessages.filter(m => !m.arena_model || m.arena_model === "")
-        set({ messages: filtered })
+        set({ messages: filtered, fileSummariesByMessage: nextSummaries })
       } else {
-        set({ messages: allMessages })
+        set({ messages: allMessages, fileSummariesByMessage: nextSummaries })
       }
     } catch (err) {
       log.error("[Aether] loadMessages error:", err)

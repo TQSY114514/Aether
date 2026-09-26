@@ -112,16 +112,16 @@ export default function CheckpointTimelineDrawer() {
         if (res.success) {
           useStore
             .getState()
-            .triggerToast(`✅ 已回滚至检查点 #${cp.id}`, 'success')
+            .triggerToast(`已回滚至检查点 #${cp.id}`, 'success')
           await loadCheckpoints()
           await useStore.getState().loadMessages(currentSessionId)
         } else {
           useStore
             .getState()
-            .triggerToast(`❌ 回滚失败：${res.error || '未知错误'}`, 'error')
+            .triggerToast(`回滚失败：${res.error || '未知错误'}`, 'error')
         }
       } catch (e: any) {
-        useStore.getState().triggerToast(`❌ 回滚异常：${e.message || e}`, 'error')
+        useStore.getState().triggerToast(`回滚异常：${e.message || e}`, 'error')
       } finally {
         setRollingId(null)
       }

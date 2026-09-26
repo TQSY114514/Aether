@@ -361,13 +361,13 @@ interface Window {
       getAuditLog: (sessionId: number, limit?: number) => Promise<{ id: number; session_id: number; turn_id: number; payload: any; created_at: string }[]>
     }
     git: {
-      undo: (cwd?: string) => Promise<{ success: boolean; message?: string; undoneCommit?: string | null; error?: string }>
-      status: (cwd?: string) => Promise<{ success: boolean; root?: string | null; status?: string; recent?: string; error?: string }>
+      undo: (opts?: string | { cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; message?: string; undoneCommit?: string | null; error?: string }>
+      status: (opts?: string | { cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; root?: string | null; status?: string; recent?: string; error?: string }>
       setAutoCommit: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean }>
       getAutoCommit: () => Promise<{ enabled: boolean }>
-      craftCommitMessage: (cwd?: string) => Promise<{ success: boolean; suggestedMessage?: string; files?: string[]; error?: string }>
-      commit: (opts: { message: string; files?: string[]; cwd?: string }) => Promise<{ success: boolean; commitHash?: string | null; message?: string; error?: string }>
-      getDiffForReview: (opts?: { cwd?: string; targetRef?: string; maxDiffLines?: number; focus?: string }) => Promise<{
+      craftCommitMessage: (opts?: string | { cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; suggestedMessage?: string; files?: string[]; error?: string }>
+      commit: (opts: { message: string; files?: string[]; cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; commitHash?: string | null; message?: string; error?: string }>
+      getDiffForReview: (opts?: { cwd?: string; sessionId?: string | number; targetRef?: string; maxDiffLines?: number; focus?: string }) => Promise<{
         success: boolean
         branch?: string
         commitHash?: string
@@ -441,7 +441,7 @@ interface Window {
     }
     agentCheckpoint: {
       list: (params: { sessionId: number; messageId?: number | null }) => Promise<any[]>
-      rollback: (params: { id: number; sessionId?: number }) => Promise<{ success: boolean; restored?: string[]; error?: string }>
+      rollback: (params: { id: number; sessionId?: number }) => Promise<{ success: boolean; restored?: string[]; failed?: { path: string; error: string }[]; error?: string }>
     }
     trust: {
       badge: (params: { sessionId?: number; modelId?: number }) => Promise<{ level: string; score: number; reason: string } | null>

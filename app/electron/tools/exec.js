@@ -134,7 +134,7 @@ function runCommandSync(command, args, opts = {}) {
     shell,
     windowsHide,
     stdio: ['pipe', 'pipe', 'pipe'],
-    maxBuffer: 32 * 1024,
+    maxBuffer: opts.maxBuffer || 1024 * 1024,
   })
 
   return {
