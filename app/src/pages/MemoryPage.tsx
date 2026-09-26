@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
-import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X, Brain } from 'lucide-react'
+import { Plus, Trash2, Download, Upload, Search, Tag, AlertTriangle, Check, X, Brain, FileText, RefreshCw } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { useUI } from '@/components/ui/feedback'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -42,6 +42,21 @@ export default function MemoryPage() {
   // the source so rows from *other* workspaces never reach this page —
   // the all/global/project pills only shape what is already scoped.
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null)
+  const [fileStatus, setFileStatus] = useState<{ exists: boolean; path: string; mtime: number | null; lineCount: number } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+
+  const loadFileStatus = async (workspace: string | null) => {
+    if (!workspace) {
+      setFileStatus(null)
+      return
+    }
+    try {
+      const status = await window.electronAPI.memory.fileStatus(workspace)
+      setFileStatus(status)
+    } catch {
+      setFileStatus(null)
+    }
+  }
 
   const loadEntries = async () => {
     let workspace: string | null = null
@@ -50,6 +65,7 @@ export default function MemoryPage() {
       if (sessionId) workspace = (await window.electronAPI.agent.getWorkspace(sessionId)) || null
     } catch { /* no workspace context — fall back to global list */ }
     setActiveWorkspace(workspace)
+    loadFileStatus(workspace)
     const memories = await window.electronAPI.memory.list(workspace ? { workspace } : undefined)
     setEntries(memories || [])
     const conf = await window.electronAPI.memory.conflicts()
@@ -57,12 +73,53 @@ export default function MemoryPage() {
     setLoading(false)
   }
 
+  const handleProjectWorkspace = async () => {
+    if (!activeWorkspace) return
+    setSyncing(true)
+    try {
+      const res = await window.electronAPI.memory.projectWorkspace(activeWorkspace)
+      if (res.success) {
+        toast(t('memory.project_success', res.count), { type: 'success' })
+        await loadFileStatus(activeWorkspace)
+      } else {
+        toast(res.error || t('memory.export_failed'), { type: 'error' })
+      }
+    } catch (err: any) {
+      toast(err?.message || t('memory.export_failed'), { type: 'error' })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const handleSyncFromFile = async () => {
+    if (!activeWorkspace) return
+    setSyncing(true)
+    try {
+      const res = await window.electronAPI.memory.syncFromFile(activeWorkspace)
+      if (res.success) {
+        toast(t('memory.sync_success', res.added, res.removed), { type: 'success' })
+        await loadEntries()
+      } else {
+        toast(res.error || t('memory.sync_failed'), { type: 'error' })
+      }
+    } catch (err: any) {
+      toast(err?.message || t('memory.sync_failed'), { type: 'error' })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   useEffect(() => { loadEntries() }, [])
 
   const handleAdd = async () => {
     if (!newContent.trim()) return
     const currentSessionId = useStore.getState().currentSessionId
-    await window.electronAPI.memory.create({ content: newContent.trim(), type: newType, source_session_id: currentSessionId || null })
+    await window.electronAPI.memory.create({
+      content: newContent.trim(),
+      type: newType,
+      source_session_id: currentSessionId || null,
+      workspace: activeWorkspace || null,
+    })
     setNewContent('')
     setNewType('fact')
     loadEntries()
@@ -187,6 +244,56 @@ export default function MemoryPage() {
             </button>
           </div>
         </div>
+
+        {/* Workspace MEMORY.md Banner */}
+        {activeWorkspace && (
+          <div className="mb-4 p-3 rounded-lg border flex items-center justify-between gap-3 text-xs"
+            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <FileText size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {t('memory.file_sync_title')}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono border"
+                    style={{
+                      borderColor: fileStatus?.exists ? 'var(--accent)' : 'var(--border)',
+                      color: fileStatus?.exists ? 'var(--accent)' : 'var(--text-muted)',
+                      backgroundColor: 'var(--content-bg)'
+                    }}>
+                    MEMORY.md {fileStatus?.exists ? `(${t('memory.file_items', fileStatus.lineCount)})` : `(${t('memory.file_not_found')})`}
+                  </span>
+                </div>
+                <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-muted)' }} title={activeWorkspace}>
+                  {activeWorkspace}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleSyncFromFile}
+                disabled={syncing}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded border hover:bg-[var(--content-bg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                title={t('memory.sync_from_file_tip')}
+              >
+                <RefreshCw size={11} className={syncing ? 'animate-spin motion-reduce:animate-none' : ''} />
+                <span>{t('memory.sync_from_file')}</span>
+              </button>
+              <button
+                onClick={handleProjectWorkspace}
+                disabled={syncing}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded border hover:bg-[var(--content-bg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                title={t('memory.project_to_file_tip')}
+              >
+                <Download size={11} />
+                <span>{t('memory.project_to_file')}</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Undo-delete banner */}
         {deleted && (
