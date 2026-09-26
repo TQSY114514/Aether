@@ -82,10 +82,10 @@ export default function MemoryPage() {
         toast(t('memory.project_success', res.count), { type: 'success' })
         await loadFileStatus(activeWorkspace)
       } else {
-        toast(res.error || 'Export failed', { type: 'error' })
+        toast(res.error || t('memory.export_failed'), { type: 'error' })
       }
     } catch (err: any) {
-      toast(err?.message || 'Export failed', { type: 'error' })
+      toast(err?.message || t('memory.export_failed'), { type: 'error' })
     } finally {
       setSyncing(false)
     }
@@ -100,10 +100,10 @@ export default function MemoryPage() {
         toast(t('memory.sync_success', res.added, res.removed), { type: 'success' })
         await loadEntries()
       } else {
-        toast(res.error || 'Sync failed', { type: 'error' })
+        toast(res.error || t('memory.sync_failed'), { type: 'error' })
       }
     } catch (err: any) {
-      toast(err?.message || 'Sync failed', { type: 'error' })
+      toast(err?.message || t('memory.sync_failed'), { type: 'error' })
     } finally {
       setSyncing(false)
     }
@@ -114,7 +114,12 @@ export default function MemoryPage() {
   const handleAdd = async () => {
     if (!newContent.trim()) return
     const currentSessionId = useStore.getState().currentSessionId
-    await window.electronAPI.memory.create({ content: newContent.trim(), type: newType, source_session_id: currentSessionId || null })
+    await window.electronAPI.memory.create({
+      content: newContent.trim(),
+      type: newType,
+      source_session_id: currentSessionId || null,
+      workspace: activeWorkspace || null,
+    })
     setNewContent('')
     setNewType('fact')
     loadEntries()

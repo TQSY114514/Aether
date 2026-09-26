@@ -129,7 +129,7 @@ interface Window {
       delete: (id: number) => Promise<void>
       import: (data: any) => Promise<{ success: boolean; personId?: number; name?: string; error?: string }>
       export: (id: number) => Promise<any>
-      getWorkspaceSoul: (workspaceRoot?: string) => Promise<{ path: string; fileName: string; name: string; prompt: string; avatar?: string; description?: string; isWorkspace: boolean } | null>
+      getWorkspaceSoul: (workspaceRoot?: string | null) => Promise<{ path: string; fileName: string; name: string; prompt: string; avatar?: string; description?: string; isWorkspace: boolean } | null>
       writeWorkspaceSoul: (workspaceRoot: string, data: { name?: string; prompt?: string; avatar?: string | null; description?: string }) => Promise<{ success: boolean; path?: string; error?: string }>
       exportSoulMd: (id: number) => Promise<{ name: string; fileName: string; content: string } | null>
     }

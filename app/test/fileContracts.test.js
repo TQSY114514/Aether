@@ -224,7 +224,7 @@ describe('MEMORY.md & memoryProjector', () => {
     expect(contents).not.toContain('Deprecated guideline to remove')
   })
 
-  it('safely ignores Git merge conflict markers and caps line length', () => {
+  it('safely ignores Git merge conflict markers and preserves full memory content without artificial truncation', () => {
     const raw = `# Project Memory
 ## Architecture & Decisions
 <<<<<<< HEAD
@@ -238,7 +238,39 @@ describe('MEMORY.md & memoryProjector', () => {
     expect(parsed.length).toBe(3)
     expect(parsed[0].content).toBe('Valid Rule Alpha')
     expect(parsed[1].content).toBe('Valid Rule Beta')
-    expect(parsed[2].content.length).toBe(500) // capped at 500
+    expect(parsed[2].content.length).toBe(600)
+  })
+
+  it('rejects writing to symlinks for both SOUL.md and MEMORY.md', () => {
+    const ws = makeTmp('symlink-ws-')
+    const externalTarget = makeTmp('external-target-')
+    const soulTarget = join(externalTarget, 'outside-soul.txt')
+    const memTarget = join(externalTarget, 'outside-mem.txt')
+    const { symlinkSync } = require('node:fs')
+
+    writeFileSync(soulTarget, 'original soul', 'utf-8')
+    writeFileSync(memTarget, 'original mem', 'utf-8')
+
+    try {
+      symlinkSync(soulTarget, join(ws, 'SOUL.md'))
+      const soulRes = soulManager.writeWorkspaceSoul(ws, { name: 'Exploit' })
+      expect(soulRes.success).toBe(false)
+      expect(soulRes.error).toContain('symbolic link')
+      expect(readFileSync(soulTarget, 'utf-8')).toBe('original soul')
+    } catch (e) {
+      // Symlinks may require elevated privileges on some Windows configurations; skip if not permitted
+      if (e.code !== 'EPERM') throw e
+    }
+
+    try {
+      symlinkSync(memTarget, join(ws, 'MEMORY.md'))
+      const memRes = memoryProjector.projectWorkspaceMemory(db, ws)
+      expect(memRes.success).toBe(false)
+      expect(memRes.error).toContain('symbolic link')
+      expect(readFileSync(memTarget, 'utf-8')).toBe('original mem')
+    } catch (e) {
+      if (e.code !== 'EPERM') throw e
+    }
   })
 
   it('discovers SOUL.md from a subdirectory by walking up to project root', () => {

@@ -11,9 +11,15 @@ export const createPersonaSlice: StateCreator<AppState, [], [], Partial<AppState
     await get().loadWorkspaceSoul()
   },
 
-  loadWorkspaceSoul: async (workspaceRoot) => {
+  loadWorkspaceSoul: async (workspaceRoot?: string | null) => {
     try {
-      const soul = await window.electronAPI.persona.getWorkspaceSoul(workspaceRoot)
+      let ws = workspaceRoot
+      if (ws === undefined) {
+        const { sessionConfigs, currentSessionId } = get()
+        const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
+        ws = cfg?.workspace ?? null
+      }
+      const soul = await window.electronAPI.persona.getWorkspaceSoul(ws)
       set({ workspaceSoul: soul })
     } catch {
       set({ workspaceSoul: null })
