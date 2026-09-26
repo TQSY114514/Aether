@@ -173,6 +173,20 @@ describe('prePushGuard', () => {
       expect(parse('git push origin HEAD:refs/heads/main').branch).toBe('main')
     })
 
+    it('reports the source side of a refspec', () => {
+      // The source is what travels, so it — not HEAD — is what a push of some
+      // other branch has to be scanned against.
+      const d = parse('git push origin feat/x:refs/heads/other')
+      expect(d.branches).toEqual(['other'])
+      expect(d.sources).toEqual(['feat/x'])
+      expect(parse('git push origin feat/x').sources).toEqual(['feat/x'])
+    })
+
+    it('treats an all-deletion refspec as a deletion', () => {
+      // `git push origin :feat/x` removes a ref and sends no content.
+      expect(parse('git push origin :feat/x').isDelete).toBe(true)
+    })
+
     it('does not let a push option swallow the remote', () => {
       const d = parse('git push -o ci.skip origin feat/x')
       expect(d.remote).toBe('origin')
@@ -230,6 +244,46 @@ describe('prePushGuard', () => {
       const resolved = guard.resolveScanRange(clone, guard.parsePushDetails('git push -u origin feat/new', clone))
       expect(resolved.wholeTree).toBe(false)
       expect(resolved.base).toBe('origin/master')
+    })
+  })
+
+  // ─── resolveScanTargets ────────────────────────────────────────────────────
+  describe('resolveScanTargets', () => {
+    it('reports the pushed ref, not HEAD, when another branch is named', () => {
+      // `git push origin feat/other` sends feat/other. Answering with HEAD's
+      // range describes commits that are not being pushed.
+      const { clone } = upstreamAndClone('targets-other')
+      git(clone, 'checkout', '-q', '-b', 'feat/other')
+      write(clone, 'x.js', 'x\n')
+      commit(clone, 'work')
+      git(clone, 'checkout', '-q', 'master')
+
+      const targets = guard.resolveScanTargets(clone, guard.parsePushDetails('git push origin feat/other', clone))
+      expect(targets).toHaveLength(1)
+      expect(targets[0].tip).toBe('feat/other')
+      expect(targets[0].range).toBe('origin/master..feat/other')
+    })
+
+    it('covers every local branch for --all, and tags for --tags', () => {
+      const { clone } = upstreamAndClone('targets-all')
+      git(clone, 'checkout', '-q', '-b', 'feat/two')
+      write(clone, 'x.js', 'x\n')
+      commit(clone, 'work')
+      git(clone, 'checkout', '-q', 'master')
+      git(clone, 'tag', 'v9')
+
+      const all = guard.resolveScanTargets(clone, guard.parsePushDetails('git push --all origin', clone))
+      expect(all.map(t => t.ref).sort()).toEqual(['feat/two', 'master'])
+
+      const tagged = guard.resolveScanTargets(clone, guard.parsePushDetails('git push --tags origin', clone))
+      expect(tagged.map(t => t.ref)).toContain('v9')
+    })
+
+    it('keeps a single target for an ordinary push', () => {
+      const { clone } = upstreamAndClone('targets-one')
+      const targets = guard.resolveScanTargets(clone, guard.parsePushDetails('git push origin master', clone))
+      expect(targets).toHaveLength(1)
+      expect(targets[0].range).toBe('origin/master..HEAD')
     })
   })
 
@@ -395,6 +449,59 @@ describe('prePushGuard', () => {
       expect(scan.ok).toBe(true)
       expect(scan.findings.map(f => f.file)).toContain('docs/credential notes.txt')
       expect(scan.findings.find(f => f.file === 'docs/credential notes.txt').severity).toBe('review')
+    })
+
+    it('blocks a push of another branch made while HEAD is clean', () => {
+      // `git push origin feat/dirty` sends feat/dirty, not HEAD. Judged against
+      // HEAD's increment it scanned an unrelated (here empty) range, and the key
+      // went through.
+      const { clone } = upstreamAndClone('otherbranch')
+      git(clone, 'checkout', '-q', '-b', 'feat/dirty')
+      write(clone, 'k.js', 'const k = "' + FAKE.anthropic() + '"\n')
+      commit(clone, 'secret on feat/dirty')
+      git(clone, 'checkout', '-q', 'master')
+
+      const scan = guard.scanForSecrets(clone, guard.parsePushDetails('git push origin feat/dirty', clone))
+      expect(scan.ok).toBe(false)
+      expect(scan.blocking.map(f => f.file)).toContain('k.js')
+      expect(scan.ranges).toContain('origin/master..feat/dirty')
+    })
+
+    it('covers every branch when --all is pushed', () => {
+      // Scanning the current branch only let a different branch carrying a key
+      // ride along unexamined.
+      const { clone } = upstreamAndClone('allrefs')
+      git(clone, 'checkout', '-q', '-b', 'feat/dirty')
+      write(clone, 'k.js', 'const k = "' + FAKE.github() + '"\n')
+      commit(clone, 'secret on feat/dirty')
+      git(clone, 'checkout', '-q', 'master')
+
+      const scan = guard.scanForSecrets(clone, guard.parsePushDetails('git push --all origin', clone))
+      expect(scan.ok).toBe(false)
+      expect(scan.ranges.some(r => r.endsWith('..feat/dirty'))).toBe(true)
+    })
+
+    it('covers tags, which carry commits no branch range reaches', () => {
+      const { clone } = upstreamAndClone('tags')
+      git(clone, 'checkout', '-q', '-b', 'feat/dirty')
+      write(clone, 'k.js', 'const k = "' + FAKE.aws() + '"\n')
+      commit(clone, 'secret on feat/dirty')
+      git(clone, 'checkout', '-q', 'master')
+      git(clone, 'tag', 'v1', 'feat/dirty')
+
+      const scan = guard.scanForSecrets(clone, guard.parsePushDetails('git push --tags origin', clone))
+      expect(scan.ok).toBe(false)
+      expect(scan.ranges).toContain('origin/master..v1')
+    })
+
+    it('reports a non-ASCII path as the path, not as an escape sequence', () => {
+      // git escapes such a path inside the `+++` header unless quotePath is off,
+      // which used to report the finding against `docs/\346\215\256...`.
+      const repo = freshRepo('unicode', { 'docs/凭据 credential 说明.md': 'k = "' + FAKE.anthropic() + '"\n' })
+      const scan = guard.scanForSecrets(repo, guard.parsePushDetails('git push -u origin master', repo))
+
+      expect(scan.ok).toBe(false)
+      expect(scan.findings.find(f => f.type === 'secret_pattern').file).toBe('docs/凭据 credential 说明.md')
     })
 
     it('does not block when a sensitive file is only being removed', () => {
