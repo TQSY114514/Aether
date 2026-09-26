@@ -27,11 +27,20 @@ const SENSITIVE_FILENAME_PATTERNS = [
   /\.(sqlite|sqlite3|db)$/i,
 ]
 
-// Sensitive file basename heuristics (excluding safe template files)
+const CODE_OR_DOC_EXTENSIONS = new Set([
+  '.js', '.ts', '.tsx', '.jsx', '.mjs', '.cjs',
+  '.py', '.rs', '.go', '.java', '.c', '.cpp', '.h', '.hpp',
+  '.md', '.markdown', '.rst', '.html', '.css', '.scss',
+])
+
+// Sensitive file basename heuristics (excluding safe template and code/doc files)
 function isSensitiveFilename(filePath) {
   const base = path.basename(String(filePath || '')).toLowerCase()
   if (!base) return false
   if (base.endsWith('.example') || base.endsWith('.template') || base.endsWith('.sample')) {
+    return false
+  }
+  if (CODE_OR_DOC_EXTENSIONS.has(path.extname(base).toLowerCase())) {
     return false
   }
   for (const re of SENSITIVE_FILENAME_PATTERNS) {
@@ -296,7 +305,7 @@ function getUnpushedRange(gitRoot, remote, branch) {
     } catch {}
   }
 
-  // 4. Fallback: check HEAD~1 or empty tree hash if HEAD is the initial root commit
+  // 4. Fallback: check HEAD~1
   try {
     const parentCheck = spawnSync('git', ['rev-parse', '--verify', 'HEAD~1'], {
       cwd: gitRoot,
@@ -309,8 +318,8 @@ function getUnpushedRange(gitRoot, remote, branch) {
     }
   } catch {}
 
-  // 4b825dc642cb6eb9a060e54bf8d69288fbee4904 is Git's universal empty tree hash
-  return '4b825dc642cb6eb9a060e54bf8d69288fbee4904..HEAD'
+  // 5. Shallow clone or initial commit with no parent: inspect HEAD directly
+  return 'HEAD'
 }
 
 /**
@@ -322,10 +331,14 @@ function getUnpushedRange(gitRoot, remote, branch) {
 function scanSensitiveAssets(gitRoot, details) {
   const range = getUnpushedRange(gitRoot, details?.remote, details?.branch)
   const findings = []
+  const isSingleHead = range === 'HEAD'
 
   // Check modified files in unpushed commits
   try {
-    const filesRes = spawnSync('git', ['diff', '--name-status', range], {
+    const filesCmd = isSingleHead
+      ? ['diff-tree', '--name-status', '-r', '--no-commit-id', 'HEAD']
+      : ['diff', '--name-status', range]
+    const filesRes = spawnSync('git', filesCmd, {
       cwd: gitRoot,
       encoding: 'utf-8',
       timeout: 10000,
@@ -353,7 +366,10 @@ function scanSensitiveAssets(gitRoot, details) {
 
   // Check diff contents for high-entropy secrets and keys
   try {
-    const diffRes = spawnSync('git', ['diff', '-U0', range], {
+    const diffCmd = isSingleHead
+      ? ['diff-tree', '-p', '-r', '--no-commit-id', 'HEAD']
+      : ['diff', '-U0', range]
+    const diffRes = spawnSync('git', diffCmd, {
       cwd: gitRoot,
       encoding: 'utf-8',
       maxBuffer: 4 * 1024 * 1024,
@@ -469,11 +485,15 @@ function runPreFlightCheck(gitRoot, opts = {}) {
  */
 function getPushSummary(gitRoot, details) {
   const range = getUnpushedRange(gitRoot, details?.remote, details?.branch)
+  const isSingleHead = range === 'HEAD'
   const commits = []
   const files = []
 
   try {
-    const logRes = spawnSync('git', ['log', range, '--oneline', '-n', '15'], {
+    const logArgs = isSingleHead
+      ? ['log', '-n', '1', '--oneline']
+      : ['log', range, '--oneline', '-n', '15']
+    const logRes = spawnSync('git', logArgs, {
       cwd: gitRoot,
       encoding: 'utf-8',
       timeout: 5000,
@@ -485,7 +505,10 @@ function getPushSummary(gitRoot, details) {
   } catch {}
 
   try {
-    const diffRes = spawnSync('git', ['diff', '--name-only', range], {
+    const diffArgs = isSingleHead
+      ? ['diff-tree', '--name-only', '-r', '--no-commit-id', 'HEAD']
+      : ['diff', '--name-only', range]
+    const diffRes = spawnSync('git', diffArgs, {
       cwd: gitRoot,
       encoding: 'utf-8',
       timeout: 5000,
