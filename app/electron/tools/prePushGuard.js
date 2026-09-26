@@ -296,9 +296,21 @@ function getUnpushedRange(gitRoot, remote, branch) {
     } catch {}
   }
 
-  // A new branch may contain the entire history; avoid silently dropping its
-  // root commit (the scanner handles this as a root diff).
-  return '--root HEAD'
+  // 4. Fallback: check HEAD~1 or empty tree hash if HEAD is the initial root commit
+  try {
+    const parentCheck = spawnSync('git', ['rev-parse', '--verify', 'HEAD~1'], {
+      cwd: gitRoot,
+      encoding: 'utf-8',
+      timeout: 5000,
+      windowsHide: true,
+    })
+    if (parentCheck.status === 0 && parentCheck.stdout && parentCheck.stdout.trim()) {
+      return 'HEAD~1..HEAD'
+    }
+  } catch {}
+
+  // 4b825dc642cb6eb9a060e54bf8d69288fbee4904 is Git's universal empty tree hash
+  return '4b825dc642cb6eb9a060e54bf8d69288fbee4904..HEAD'
 }
 
 /**
