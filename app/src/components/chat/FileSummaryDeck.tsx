@@ -43,7 +43,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     if (!commitMsg) {
       setCrafting(true)
       try {
-        const res = await window.electronAPI.git.craftCommitMessage()
+        const res = await window.electronAPI.git.craftCommitMessage({ sessionId })
         if (res.success && res.suggestedMessage) {
           setCommitMsg(res.suggestedMessage)
         } else {
@@ -63,7 +63,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     setCommitting(true)
     try {
       const filePaths = summary.files.map((f) => f.path)
-      const res = await window.electronAPI.git.commit({ message: trimmed, files: filePaths })
+      const res = await window.electronAPI.git.commit({ message: trimmed, files: filePaths, sessionId })
       if (res.success) {
         setCommitted(true)
         setCommitHash(res.commitHash || null)
