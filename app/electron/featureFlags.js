@@ -68,10 +68,10 @@ const FLAG_DEFS = [
   { key: 'ux.firstRunWizard',   default: true,  category: 'ux',          description: 'First-run onboarding wizard (provider setup + permission recommendation)' },
   // Phase 5 — Arena
   { key: 'arena.objectiveArena', default: false, category: 'agent',      description: 'Objective Sandbox Arena: run candidate models against a verifiable task and rank by pass/fail + ELO' },
-  // Phase 1 — Pre-push review & defense pipeline
-  { key: 'git.prePushGuard',             default: true,  category: 'agent', description: 'Pre-push inspection gate: sensitive file scan, branch protection (master/main), and pre-flight build checks before git push' },
-  { key: 'git.allowProtectedBranchPush', default: false, category: 'agent', description: 'Allow direct git push to protected branches (master/main) without PrePushGuard blocking' },
-  { key: 'git.prePushBuildCheck',        default: true,  category: 'agent', description: 'Run local project build/pre-push checks during PrePushGuard before git push' },
+  // Pre-push gate — blocks a push that would carry credentials to a remote.
+  // Branch policy is GitHub's job and build verification is CI's; neither is
+  // done here (see docs/superpowers/specs/2026-09-26-prepush-guard-redesign-design.md).
+  { key: 'git.prePushGuard',             default: true,  category: 'agent', description: 'Pre-push secret gate: scans what is about to be pushed for credentials and sensitive files, and blocks the push if any are found' },
 ]
 
 const DEFS = Object.freeze(FLAG_DEFS.map(d => Object.freeze({ ...d })))
