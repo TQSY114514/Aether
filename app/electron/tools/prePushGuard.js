@@ -1,13 +1,26 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// prePushGuard.js — Multi-Stage Pre-Push Inspection & Defense Pipeline
+// prePushGuard.js — Pre-push secret-leak gate
 //
-// Stage 1: Branch Protection (blocks direct push to master/main/release)
-// Stage 2: Sensitive & Secret Leak Defense (scans unpushed commits for keys,
-//          tokens, .env, DBs, and certificates)
-// Stage 3: Pre-Flight Verification Gate (auto-detects and runs npm run build
-//          or project pre-push checks before code is sent to remote)
-// Stage 4: Blast Radius & Diff Summary (structured inspection report for
-//          human-in-the-loop permission dialog and LLM self-reflection)
+// One job: stop a push that would carry credentials to a remote. A remote push
+// is irreversible — once a key is on the far side it must be treated as burned —
+// so this gate fails closed.
+//
+// Deliberately NOT here (both were attempted and removed; see
+// docs/superpowers/specs/2026-09-26-prepush-guard-redesign-design.md):
+//   • Branch policy — that is what GitHub branch protection is for. Doing it
+//     in-process produced a rule that neither blocked nor was ever read.
+//   • Build verification — that is what CI is for, and it cannot be done
+//     synchronously at push time without freezing the app for minutes.
+//
+// Scan base: what a push is judged against is what the remote does not already
+// have, so content that is already public is not re-flagged — re-flagging it
+// blocks every push of a new branch while protecting nothing. With no remote
+// ref at all (a brand-new repository) the whole tree is scanned. See
+// resolveScanRange for why both halves of that rule matter.
+//
+// Known limit: this inspects a command string and a diff. `bash push.sh`,
+// `sh -c`, or `npm run deploy` all slip past it. It is a guardrail against a
+// naive push, not a sandbox, and should not be described as one.
 //
 // Electron-free module: safe for Main process, SDK, CLI, and TUI.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,85 +28,137 @@
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { sanitizeProcessEnv } = require('./envSanitizer')
 
-const PROTECTED_BRANCHES = new Set(['master', 'main', 'production', 'release', 'prod'])
+// Git's well-known empty tree. Diffing against it yields "every file in HEAD",
+// which is exactly what a first push sends.
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
-// Sensitive file patterns
-const SENSITIVE_FILENAME_PATTERNS = [
+// Escape hatch for the fail-closed paths. Named in every scan-error message so
+// a stuck push is always recoverable.
+const SKIP_ENV_VAR = 'AETHER_SKIP_PREPUSH_GUARD'
+
+const GIT_TIMEOUT_MS = 5000
+const DIFF_TIMEOUT_MS = 15000
+const MAX_BUFFER = 64 * 1024 * 1024
+
+// ─── git helpers ─────────────────────────────────────────────────────────────
+
+function git(gitRoot, args, opts = {}) {
+  try {
+    return spawnSync('git', args, {
+      cwd: gitRoot,
+      encoding: 'utf-8',
+      timeout: opts.timeout || GIT_TIMEOUT_MS,
+      maxBuffer: opts.maxBuffer || MAX_BUFFER,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (e) {
+    return { status: null, error: e, stdout: '', stderr: '' }
+  }
+}
+
+/** Run git and return stdout, or null if the command did not complete. */
+function gitText(gitRoot, args, opts) {
+  const res = git(gitRoot, args, opts)
+  if (res.status !== 0 || res.error || res.signal) return null
+  return res.stdout || ''
+}
+
+/** True when the ref resolves to a commit. Silent on failure. */
+function refExists(gitRoot, ref) {
+  const res = git(gitRoot, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
+  return res.status === 0 && !res.error && !res.signal
+}
+
+/** Resolve nearest git repository root. */
+function nearestGitRoot(startPath) {
+  if (!startPath) return null
+  try {
+    const cwd = fs.existsSync(startPath) && fs.statSync(startPath).isDirectory()
+      ? startPath
+      : path.dirname(startPath)
+    const res = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      encoding: 'utf-8',
+      timeout: GIT_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    })
+    if (res.status === 0 && res.stdout && res.stdout.trim()) {
+      return path.resolve(res.stdout.trim())
+    }
+  } catch {}
+  return null
+}
+
+// ─── filename heuristics ─────────────────────────────────────────────────────
+
+// A secret by definition. Pushing one of these is blocked.
+const BLOCKING_FILENAME_PATTERNS = [
   /^\.env(\..+)?$/i,
   /\.(pem|key|p12|pfx|keystore|jks)$/i,
-  /^id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$/i,
+  // Private keys only. `id_rsa.pub` is a public key — it is not a credential,
+  // and blocking it would be a false positive on a file that is safe to share.
+  /^id_(rsa|ed25519|ecdsa|dsa)$/i,
   /\.(sqlite|sqlite3|db)$/i,
 ]
 
-const CODE_OR_DOC_EXTENSIONS = new Set([
-  '.js', '.ts', '.tsx', '.jsx', '.mjs', '.cjs',
-  '.py', '.rs', '.go', '.java', '.c', '.cpp', '.h', '.hpp',
-  '.md', '.markdown', '.rst', '.html', '.css', '.scss',
-])
+// A name that merely *announces* a secret. Reported, never blocking: this repo
+// legitimately contains electron/llm/credentialPool.js and
+// skills/security-audit/references/10-secrets-and-credentials.md, so blocking
+// on the substring would block ordinary work on them.
+const REVIEW_FILENAME_PATTERNS = [/credential/i, /secret/i]
 
-// Extensions considered pure docs / config: pushing these directly to a
-// protected branch is allowed (with a warning) because they carry no code risk.
-const DOC_ONLY_EXTENSIONS = new Set([
-  '.md', '.markdown', '.txt', '.rst', '.adoc',
-  '.yml', '.yaml', '.toml', '.ini', '.cfg',
-  '.json', // package-lock.json, renovate.json, etc. — no executable code
-  '.gitignore', '.gitattributes', '.editorconfig', '.prettierrc', '.eslintrc',
-  '.npmrc', '.nvmrc',
-  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
-  '.pdf', '.docx',
-  '.lock', // yarn.lock, package-lock.json
-])
+const PLACEHOLDER_SUFFIXES = ['.example', '.template', '.sample', '.dist']
+
+function baseName(filePath) {
+  return path.basename(String(filePath || '')).toLowerCase()
+}
+
+function isPlaceholderName(base) {
+  return PLACEHOLDER_SUFFIXES.some(s => base.endsWith(s))
+}
 
 /**
- * Returns true if every file in the list is a pure doc/config change.
- * Empty lists (no changed files detected) are treated as NOT doc-only.
- * @param {string[]} files
+ * True for filenames that are a secret by definition.
+ * @param {string} filePath
  * @returns {boolean}
  */
-function isDocOnlyChangeset(files) {
-  if (!files || files.length === 0) return false
-  return files.every(f => {
-    const base = path.basename(String(f || '')).toLowerCase()
-    const ext = path.extname(base).toLowerCase()
-    // Basenames without extension (e.g. "Makefile") — not doc-only
-    if (!ext && !DOC_ONLY_EXTENSIONS.has(base)) return false
-    // Special basenames without extension that are clearly docs/config
-    if (!ext) return DOC_ONLY_EXTENSIONS.has(base)
-    return DOC_ONLY_EXTENSIONS.has(ext)
-  })
-}
-
-// Sensitive file basename heuristics (excluding safe template and code/doc files)
 function isSensitiveFilename(filePath) {
-  const base = path.basename(String(filePath || '')).toLowerCase()
-  if (!base) return false
-  if (base.endsWith('.example') || base.endsWith('.template') || base.endsWith('.sample')) {
-    return false
-  }
-  if (CODE_OR_DOC_EXTENSIONS.has(path.extname(base).toLowerCase())) {
-    return false
-  }
-  for (const re of SENSITIVE_FILENAME_PATTERNS) {
-    if (re.test(base)) return true
-  }
-  if (base.includes('credential') || base.includes('secret')) {
-    return true
-  }
-  return false
+  const base = baseName(filePath)
+  if (!base || isPlaceholderName(base)) return false
+  return BLOCKING_FILENAME_PATTERNS.some(re => re.test(base))
 }
 
-// Regex patterns for high-entropy tokens and private keys
+/**
+ * True for names worth a human look but not worth blocking on.
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+function looksSecretNamed(filePath) {
+  const base = baseName(filePath)
+  if (!base || isPlaceholderName(base)) return false
+  if (isSensitiveFilename(base)) return false
+  return REVIEW_FILENAME_PATTERNS.some(re => re.test(base))
+}
+
+// ─── content patterns ────────────────────────────────────────────────────────
+
+// Anthropic's key is matched before OpenAI's, and OpenAI's excludes the
+// `sk-ant-` prefix, so the reported provider name is accurate. (The previous
+// ordering made the Anthropic entry unreachable and mislabelled its keys.)
 const SECRET_DIFF_PATTERNS = [
-  { name: 'OpenAI API Key', re: /\bsk-[a-zA-Z0-9_\-]{20,}\b/ },
   { name: 'Anthropic API Key', re: /\bsk-ant-[a-zA-Z0-9_\-]{20,}\b/ },
+  { name: 'OpenAI API Key', re: /\bsk-(?!ant-)[a-zA-Z0-9_\-]{20,}\b/ },
   { name: 'GitHub Token', re: /\b(?:ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{50,})\b/ },
   { name: 'Google API Key', re: /\bAIza[0-9A-Za-z\-_]{35}\b/ },
   { name: 'Slack Token', re: /\bxox[baprs]-[0-9a-zA-Z]{10,48}\b/ },
   { name: 'AWS Access Key ID', re: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: 'Private Key Block', re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/ },
 ]
+
+// ─── command parsing ─────────────────────────────────────────────────────────
 
 /**
  * Split command line into segments respecting quotes and separators (&, &&, |, ||, ;).
@@ -121,6 +186,44 @@ function splitCommandSegments(cmd) {
 }
 
 /**
+ * Split a segment into tokens, respecting quotes (which are stripped), so
+ * `-C "/path with space"` survives as one token.
+ * @param {string} segment
+ * @returns {string[]}
+ */
+function tokenizeCommand(segment) {
+  const tokens = []
+  let current = '', quote = ''
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i]
+    if (quote) {
+      if (ch === quote) quote = ''
+      else current += ch
+    } else if (ch === '"' || ch === "'") {
+      quote = ch
+    } else if (/\s/.test(ch)) {
+      if (current) { tokens.push(current); current = '' }
+    } else {
+      current += ch
+    }
+  }
+  if (current) tokens.push(current)
+  return tokens
+}
+
+// git global options that consume the following token.
+const GIT_GLOBAL_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'])
+
+// `git push` options that consume the following token. Everything else that
+// starts with `-` is boolean — notably `-u`/`--set-upstream`, which the previous
+// implementation treated as value-taking and so swallowed the remote name.
+const PUSH_OPTIONS_WITH_VALUE = new Set(['-o', '--push-option', '--receive-pack', '--exec'])
+
+function executableName(token) {
+  return path.basename(String(token || '')).toLowerCase().replace(/\.(exe|cmd|bat)$/i, '')
+}
+
+/**
  * Detect if a shell command string contains an invocation of `git push`.
  * @param {string} command
  * @returns {{ isPush: boolean, segment?: string }}
@@ -129,456 +232,342 @@ function isPushCommand(command) {
   const c = String(command || '').trim()
   if (!c) return { isPush: false }
 
-  const segments = splitCommandSegments(c)
-  for (const seg of segments) {
-    const tokens = seg.split(/\s+/).filter(Boolean)
+  for (const seg of splitCommandSegments(c)) {
+    let tokens = tokenizeCommand(seg)
+    // Drop leading `NAME=value` env assignments: `GIT_SSH_COMMAND=x git push`
+    // is still a push.
+    while (tokens.length > 1 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) tokens = tokens.slice(1)
     if (tokens.length === 0) continue
+    if (executableName(tokens[0]) !== 'git') continue
 
-    const first = path.basename(tokens[0]).toLowerCase().replace(/\.(exe|cmd|bat)$/i, '')
-    if (first === 'git') {
-      let subIdx = 1
-      while (subIdx < tokens.length && tokens[subIdx].startsWith('-')) {
-        if (tokens[subIdx] === '-C' && subIdx + 1 < tokens.length) {
-          subIdx += 2
-        } else {
-          subIdx++
-        }
-      }
-      if (subIdx < tokens.length && tokens[subIdx].toLowerCase() === 'push') {
-        const rest = tokens.slice(subIdx + 1)
-        if (rest.includes('--help') || rest.includes('-h')) {
-          continue
-        }
-        return { isPush: true, segment: seg }
-      }
+    let i = 1
+    while (i < tokens.length && tokens[i].startsWith('-')) {
+      const t = tokens[i]
+      if (GIT_GLOBAL_WITH_VALUE.has(t) && !t.includes('=') && i + 1 < tokens.length) i += 2
+      else i++
+    }
+    if (i < tokens.length && tokens[i].toLowerCase() === 'push') {
+      const rest = tokens.slice(i + 1)
+      if (rest.includes('--help') || rest.includes('-h')) continue
+      return { isPush: true, segment: seg }
     }
   }
   return { isPush: false }
 }
 
-/**
- * Resolve nearest git repository root.
- * @param {string} startPath
- * @returns {string|null}
- */
-function nearestGitRoot(startPath) {
-  if (!startPath) return null
-  try {
-    const cwd = fs.existsSync(startPath) && fs.statSync(startPath).isDirectory()
-      ? startPath
-      : path.dirname(startPath)
-    const res = spawnSync('git', ['rev-parse', '--show-toplevel'], {
-      cwd,
-      encoding: 'utf-8',
-      timeout: 5000,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      windowsHide: true,
-    })
-    if (res.status === 0 && res.stdout && res.stdout.trim()) {
-      return path.resolve(res.stdout.trim())
-    }
-  } catch {}
-  return null
+function looksLikeRemoteUrl(token) {
+  const t = String(token || '')
+  return /^(?:https?|git|ssh|file):\/\//i.test(t)
+    || /^[^/@\s]+@[^/\s]+:/.test(t)          // scp-style host:path
+    || /^[A-Za-z]:[\\/]/.test(t)             // Windows path
+    || /^[.~/\\]/.test(t)                    // relative / home / UNC-ish
+    || t.endsWith('.git')
 }
 
 /**
- * Parse git push arguments to identify target remote and branch.
+ * Parse git push arguments to identify target remote and branches.
+ *
+ * The remote is resolved by asking git which names are real remotes, rather
+ * than by hand-maintaining an option table — the previous table listed `-u` as
+ * value-taking, so `git push -u origin feat/x` parsed the remote as `feat/x`.
+ *
  * @param {string} segment - The command segment containing `git push ...`
  * @param {string} gitRoot - Absolute path to git root
- * @returns {{ remote: string, branch: string, isDryRun: boolean, isTags: boolean }}
+ * @returns {{ remote: string, branch: string, branches: string[], isDryRun: boolean, isTags: boolean, isAll: boolean, isDelete: boolean }}
  */
 function parsePushDetails(segment, gitRoot) {
-  const tokens = String(segment || '').split(/\s+/).filter(Boolean)
+  const tokens = tokenizeCommand(segment)
   const args = []
-  let isDryRun = false
-  let isTags = false
-  let skipNext = false
+  let isDryRun = false, isTags = false, isAll = false, isDelete = false
+  let explicitRemote = ''
   let pushSeen = false
+
   for (let i = 0; i < tokens.length; i++) {
-    if (skipNext) { skipNext = false; continue }
     const t = tokens[i]
-    if (!pushSeen && path.basename(t).toLowerCase().replace(/\.(exe|cmd|bat)$/i, '') === 'git') continue
-    if (!pushSeen && t === '-C') { i++; continue }
-    if (!pushSeen && t.startsWith('-')) { if (!t.includes('=') && ['--git-dir','--work-tree'].includes(t)) skipNext = true; continue }
-    if (t === 'push') { pushSeen = true; continue }
-    if (!pushSeen) continue
-    if (t === '--dry-run' || t === '-n') { isDryRun = true; continue }
-    if (t === '--tags') { isTags = true; continue }
-    if (t === '-u' || t === '--set-upstream' || t === '--repo' || t === '--receive-pack') {
-      if (!t.includes('=')) skipNext = true
+    if (!pushSeen) {
+      if (t === 'push') { pushSeen = true; continue }
+      if (GIT_GLOBAL_WITH_VALUE.has(t) && !t.includes('=')) i++
       continue
     }
-    if (t.startsWith('-')) continue
+    if (t === '--dry-run' || t === '-n') { isDryRun = true; continue }
+    if (t === '--tags') { isTags = true; continue }
+    if (t === '--all' || t === '--mirror') { isAll = true; continue }
+    if (t === '-d' || t === '--delete') { isDelete = true; continue }
+    if (t === '--repo') { if (tokens[i + 1]) { explicitRemote = tokens[i + 1]; i++ } continue }
+    if (PUSH_OPTIONS_WITH_VALUE.has(t)) { i++; continue }
+    if (t.startsWith('-')) continue          // every other push option is boolean
     args.push(t)
   }
 
-  let remote = args[0] || 'origin'
-  const refspecs = args.slice(1)
-  let refspec = refspecs[0] || ''
+  const remoteNames = new Set(
+    (gitText(gitRoot, ['remote']) || '').split('\n').map(s => s.trim()).filter(Boolean)
+  )
 
-  // If no refspec was specified on the command line, determine the current branch
-  let targetBranch = ''
-  if (refspec) {
-    if (refspec.includes(':')) {
-      const parts = refspec.split(':')
-      targetBranch = parts[1] || parts[0]
-    } else {
-      targetBranch = refspec
-    }
-  } else {
-    try {
-      const res = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-        cwd: gitRoot,
-        encoding: 'utf-8',
-        timeout: 5000,
-        windowsHide: true,
-      })
-      if (res.status === 0 && res.stdout.trim()) {
-        targetBranch = res.stdout.trim()
-      }
-    } catch {}
+  let remoteIndex = -1
+  for (let i = 0; i < args.length; i++) {
+    if (remoteNames.has(args[i]) || looksLikeRemoteUrl(args[i])) { remoteIndex = i; break }
   }
 
-  return {
-    remote,
-    branch: targetBranch || 'HEAD',
-    branches: refspecs.map(r => {
-      const value = r.replace(/^\+/, '')
-      if (value === ':') return ''
-      return (value.includes(':') ? value.split(':')[1] || value.split(':')[0] : value).replace(/^refs\/heads\//, '')
-    }).filter(Boolean),
-    all: refspecs.length === 0 && !refspec && (isTags || tokens.includes('--all') || tokens.includes('--mirror')),
-    isDryRun,
-    isTags,
+  // Without `--repo`, tokens before the remote are not refspecs we can trust;
+  // with it, everything positional is a refspec.
+  const remote = explicitRemote || (remoteIndex >= 0 ? args[remoteIndex] : 'origin')
+  const refspecSource = remoteIndex >= 0 ? args.slice(remoteIndex + 1) : (explicitRemote ? args : [])
+
+  const refspecs = refspecSource.map(s => String(s).replace(/^\+/, '')).filter(s => s && s !== ':')
+
+  const branches = refspecs.map(r => {
+    const target = r.includes(':') ? (r.split(':')[1] || '') : r
+    return target.replace(/^refs\/heads\//, '')
+  }).filter(Boolean)
+
+  let branch = branches[0] || ''
+  if (!branch) {
+    const head = (gitText(gitRoot, ['rev-parse', '--abbrev-ref', 'HEAD']) || '').trim()
+    branch = head && head !== 'HEAD' ? head : 'HEAD'
   }
+
+  return { remote, branch, branches, isDryRun, isTags, isAll, isDelete }
 }
 
 /**
- * Stage 1: Check branch protection rules.
- * @param {string} branch
- * @param {object} [opts]
- * @param {boolean} [opts.allowProtectedOverride]
- * @param {boolean} [opts.docOnly] - When true, downgrade hard-block to a warning (doc/config-only changeset)
- * @param {object} [opts.db]
- * @returns {{ ok: boolean, warn?: boolean, rule?: string, branch?: string, reason?: string }}
+ * Resolve the directory to inspect, honouring a `-C <dir>` in the command.
+ * @param {string} segment
+ * @param {string} [fallbackCwd]
+ * @returns {string}
  */
-function checkBranchProtection(branch, opts = {}) {
-  const norm = String(branch || '').trim().toLowerCase().replace(/^refs\/heads\//, '')
-  if (PROTECTED_BRANCHES.has(norm)) {
-    // Check overrides
-    if (opts.allowProtectedOverride === true || process.env.AETHER_ALLOW_PROTECTED_PUSH === '1') {
-      return { ok: true, protected: true, overridden: true, branch: norm }
-    }
-    if (opts.db) {
-      try {
-        const ff = require('../featureFlags')
-        if (ff.isEnabled(opts.db, 'git.allowProtectedBranchPush')) {
-          return { ok: true, protected: true, overridden: true, branch: norm }
-        }
-      } catch {}
-    }
-    // Doc/config-only changesets (README, YAML, images …) are allowed with a warning.
-    // Code changes must still go through a PR.
-    if (opts.docOnly === true) {
-      return {
-        ok: true,
-        warn: true,
-        protected: true,
-        branch: norm,
-        rule: 'protected_branch_doc_only',
-        reason: `[PrePushGuard] ⚠ Pushing doc/config-only changes directly to '${norm}'. CI will still run — verify it passes.`,
-      }
-    }
-    return {
-      ok: false,
-      rule: 'protected_branch',
-      branch: norm,
-      reason: `[PrePushGuard] Push to protected branch '${norm}' is BLOCKED.\nDirect push to production/mainline branches risks bypassing CI, code review, and destabilizing the mainline codebase.\n\nRecommended recovery steps for Agent:\n1. Create a feature branch: git checkout -b feat/<topic-name>\n2. Push the feature branch: git push -u origin feat/<topic-name>\n3. Open a Pull Request on GitHub to merge changes safely.`,
-    }
+function resolveInspectionCwd(segment, fallbackCwd) {
+  const base = fallbackCwd || process.cwd()
+  const tokens = tokenizeCommand(segment)
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === '-C' && tokens[i + 1]) return path.resolve(base, tokens[i + 1])
   }
-  return { ok: true, protected: false, branch: norm }
+  return base
 }
 
+// ─── scan range ──────────────────────────────────────────────────────────────
+
 /**
- * Determine the unpushed commit range (e.g. `@{u}..HEAD`).
+ * Remote-tracking refs for a remote, best base first.
+ *
+ * The remote's default branch is the natural base for a branch it does not have
+ * yet, so `origin/HEAD` leads; `master`/`main` follow as a fallback for clones
+ * that never set it. The order is made deterministic so a scan base is
+ * reproducible rather than dependent on ref iteration order.
+ *
  * @param {string} gitRoot
  * @param {string} remote
- * @param {string} branch
- * @returns {string|null}
+ * @returns {string[]}
  */
-function getUnpushedRange(gitRoot, remote, branch) {
-  // 1. Try tracking branch @{u}
-  try {
-    const res = spawnSync('git', ['rev-parse', '--verify', '@{u}'], {
-      cwd: gitRoot,
-      encoding: 'utf-8',
-      timeout: 5000,
-      windowsHide: true,
-    })
-    if (res.status === 0 && res.stdout.trim()) {
-      return '@{u}..HEAD'
-    }
-  } catch {}
-
-  // 2. Try remote/branch
-  if (remote && branch && branch !== 'HEAD') {
-    try {
-      const res = spawnSync('git', ['rev-parse', '--verify', `${remote}/${branch}`], {
-        cwd: gitRoot,
-        encoding: 'utf-8',
-        timeout: 5000,
-        windowsHide: true,
-      })
-      if (res.status === 0 && res.stdout.trim()) {
-        return `${remote}/${branch}..HEAD`
-      }
-    } catch {}
+function remoteRefCandidates(gitRoot, remote) {
+  const out = gitText(gitRoot, ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remote}/`])
+  if (out === null) return []
+  const rank = (ref) => {
+    const short = ref.slice(remote.length + 1)
+    if (short === 'master' || short === 'main') return 0
+    return 1
   }
-
-  // 3. Fallback: check against origin/master or origin/main
-  for (const fallback of ['origin/master', 'origin/main', 'master', 'main']) {
-    try {
-      const res = spawnSync('git', ['rev-parse', '--verify', fallback], {
-        cwd: gitRoot,
-        encoding: 'utf-8',
-        timeout: 5000,
-        windowsHide: true,
-      })
-      if (res.status === 0 && res.stdout.trim()) {
-        return `${fallback}..HEAD`
-      }
-    } catch {}
-  }
-
-  // 4. Fallback: check HEAD~1
-  try {
-    const parentCheck = spawnSync('git', ['rev-parse', '--verify', 'HEAD~1'], {
-      cwd: gitRoot,
-      encoding: 'utf-8',
-      timeout: 5000,
-      windowsHide: true,
-    })
-    if (parentCheck.status === 0 && parentCheck.stdout && parentCheck.stdout.trim()) {
-      return 'HEAD~1..HEAD'
-    }
-  } catch {}
-
-  // 5. Shallow clone or initial commit with no parent: inspect HEAD directly
-  return 'HEAD'
+  return out.split('\n')
+    .map(s => s.trim())
+    .filter(ref => ref && !ref.endsWith('/HEAD'))
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
 }
 
 /**
- * Stage 2: Scan unpushed commits for sensitive files and exposed credentials.
+ * Determine what content is about to reach the remote.
+ *
+ * Two mistakes are possible here and they are not symmetric. A range that scans
+ * nothing lets a key through silently; a range that scans too much blocks work
+ * that leaks nothing. The first is the one that shipped, so the rule is: scan
+ * everything this push newly introduces, and when that cannot be determined,
+ * scan everything it would send.
+ *
+ * "Newly introduces" is measured against refs the remote already has, not
+ * against the empty tree. Content already reachable from a remote-tracking ref
+ * is already public — re-flagging it protects nothing and blocks every push of
+ * a new branch, which is how a gate gets switched off. Two cases that look
+ * alike need different answers:
+ *
+ *   - a brand-new repository, with no remote-tracking ref at all → nothing is
+ *     known to be public, so the whole tree is scanned;
+ *   - a new branch in an existing clone → `origin/master..HEAD` is exactly
+ *     what the push adds, and already-public files stay unscanned.
+ *
+ * The previous implementation fell back to a *local* branch name, so the first
+ * push of a fresh repo resolved to `<currentBranch>..HEAD` — HEAD was that
+ * branch — and the scan cleared a push that was carrying `.env`.
+ *
+ * @returns {{ range: string, base: string, wholeTree: boolean }}
+ */
+function resolveScanRange(gitRoot, details) {
+  const remote = details && details.remote ? details.remote : 'origin'
+  const branch = details && details.branch ? details.branch : ''
+  const candidates = []
+
+  if (branch && branch !== 'HEAD') {
+    candidates.push(`${remote}/${branch}`)
+  }
+  candidates.push('@{u}')
+  candidates.push(...remoteRefCandidates(gitRoot, remote))
+
+  for (const ref of candidates) {
+    if (refExists(gitRoot, ref)) {
+      return { range: `${ref}..HEAD`, base: ref, wholeTree: false }
+    }
+  }
+  return { range: `${EMPTY_TREE}..HEAD`, base: EMPTY_TREE, wholeTree: true }
+}
+
+// ─── scanning ────────────────────────────────────────────────────────────────
+
+function scanError(what, detail) {
+  return {
+    ok: false,
+    rule: 'secret_scan_error',
+    findings: [],
+    blocking: [],
+    reason: `[PrePushGuard] Push BLOCKED: unable to complete ${what}.\n`
+      + `${detail ? `${detail}\n` : ''}`
+      + `The gate fails closed because an unscanned push cannot be verified.\n`
+      + `If you have confirmed the content is safe, re-run with ${SKIP_ENV_VAR}=1.`,
+  }
+}
+
+/**
+ * Scan the changeset for sensitive filenames and exposed credentials.
+ *
  * @param {string} gitRoot
  * @param {{ remote: string, branch: string }} details
- * @returns {{ ok: boolean, rule?: string, findings?: Array<{file: string, type: string, detail: string}>, reason?: string }}
+ * @returns {{ ok: boolean, rule?: string, findings: Array, blocking: Array, reason?: string, range?: string, wholeTree?: boolean }}
  */
-function scanSensitiveAssets(gitRoot, details) {
-  const range = getUnpushedRange(gitRoot, details?.remote, details?.branch)
+function scanForSecrets(gitRoot, details) {
+  if (process.env[SKIP_ENV_VAR] === '1') {
+    return { ok: true, skipped: true, findings: [], blocking: [] }
+  }
+
+  const { range, wholeTree } = resolveScanRange(gitRoot, details)
   const findings = []
-  const isSingleHead = range === 'HEAD'
 
-  // Check modified files in unpushed commits
-  try {
-    const filesCmd = isSingleHead
-      ? ['diff-tree', '--name-status', '-r', '--no-commit-id', 'HEAD']
-      : ['diff', '--name-status', range]
-    const filesRes = spawnSync('git', filesCmd, {
-      cwd: gitRoot,
-      encoding: 'utf-8',
-      timeout: 10000,
-      windowsHide: true,
-    })
-    if (filesRes.status !== 0 || filesRes.error || filesRes.signal) {
-      return { ok: false, rule: 'secret_scan_error', reason: '[PrePushGuard] Push BLOCKED: unable to complete sensitive-file scan.' }
+  // 1. Filenames in the changeset. `-z` keeps paths containing spaces intact;
+  //    `--no-renames` keeps the record stride at two NUL-separated fields, so a
+  //    rename cannot be mistaken for a delimited path.
+  const namesRaw = gitText(
+    gitRoot,
+    ['diff', '--name-status', '-z', '--no-renames', '--diff-filter=d', range],
+    { timeout: DIFF_TIMEOUT_MS }
+  )
+  if (namesRaw === null) return scanError('sensitive-file scan', `git diff ${range} did not complete.`)
+
+  const fields = namesRaw.split('\0')
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const status = fields[i]
+    const file = fields[i + 1]
+    if (!status || !file || status.startsWith('D')) continue
+    if (isSensitiveFilename(file)) {
+      findings.push({
+        file,
+        type: 'sensitive_filename',
+        severity: 'block',
+        detail: `File is a credential container by name (${path.basename(file)})`,
+      })
+    } else if (looksSecretNamed(file)) {
+      findings.push({
+        file,
+        type: 'secret_named_file',
+        severity: 'review',
+        detail: `Filename mentions credentials or secrets — worth a look (${path.basename(file)})`,
+      })
     }
-    if (filesRes.stdout) {
-      const files = filesRes.stdout.split('\n').map(s => s.trim()).filter(Boolean)
-      for (const entry of files) {
-        const parts = entry.split(/\s+/)
-        if (parts[0] === 'D') continue
-        const f = parts[parts.length - 1]
-        if (isSensitiveFilename(f)) {
-          findings.push({
-            file: f,
-            type: 'sensitive_filename',
-            detail: `File matches sensitive asset pattern (${path.basename(f)})`,
-          })
-        }
+  }
+
+  // 2. Added lines for high-confidence token shapes. Only additions matter: a
+  //    key being removed is a fix, not a leak.
+  const patch = gitText(gitRoot, ['diff', '-U0', '--diff-filter=d', range], { timeout: DIFF_TIMEOUT_MS })
+  if (patch === null) return scanError('secret scan', `git diff -U0 ${range} did not complete.`)
+
+  let currentFile = ''
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.slice(6).trim()
+      continue
+    }
+    if (!line.startsWith('+') || line.startsWith('+++')) continue
+    const addedText = line.slice(1)
+    for (const pat of SECRET_DIFF_PATTERNS) {
+      if (pat.re.test(addedText)) {
+        findings.push({
+          file: currentFile || '(unknown file)',
+          type: 'secret_pattern',
+          severity: 'block',
+          detail: `Detected pattern for ${pat.name}`,
+        })
+        break
       }
     }
-  } catch {}
+  }
 
-  // Check diff contents for high-entropy secrets and keys
-  try {
-    const diffCmd = isSingleHead
-      ? ['diff-tree', '-p', '-r', '--no-commit-id', 'HEAD']
-      : ['diff', '-U0', range]
-    const diffRes = spawnSync('git', diffCmd, {
-      cwd: gitRoot,
-      encoding: 'utf-8',
-      maxBuffer: 4 * 1024 * 1024,
-      timeout: 15000,
-      windowsHide: true,
-    })
-    if (diffRes.status !== 0 || diffRes.error || diffRes.signal) {
-      return { ok: false, rule: 'secret_scan_error', reason: '[PrePushGuard] Push BLOCKED: unable to complete secret scan.' }
-    }
-    if (diffRes.stdout) {
-      let currentFile = ''
-      for (const line of diffRes.stdout.split('\n')) {
-        if (line.startsWith('+++ b/')) {
-          currentFile = line.slice(6).trim()
-          continue
-        }
-        // Skip scanning test suites and fixture mock files for synthetic pattern strings
-        if (/(?:^|[\\/])(?:test|tests|__tests__|fixtures)[\\/]|\.(?:test|spec)\.[a-z0-9]+$/i.test(currentFile)) {
-          continue
-        }
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-          const addedText = line.slice(1)
-          for (const pat of SECRET_DIFF_PATTERNS) {
-            if (pat.re.test(addedText)) {
-              findings.push({
-                file: currentFile || '(unknown file)',
-                type: 'secret_pattern',
-                detail: `Detected pattern for ${pat.name}`,
-              })
-              break
-            }
-          }
-        }
-      }
-    }
-  } catch {}
-
-  if (findings.length > 0) {
-    const list = findings.map(f => `  • ${f.file}: ${f.detail} [${f.type}]`).join('\n')
+  const blocking = findings.filter(f => f.severity === 'block')
+  if (blocking.length > 0) {
+    const list = blocking.map(f => `  • ${f.file}: ${f.detail} [${f.type}]`).join('\n')
+    const scope = wholeTree
+      ? `No remote-tracking branch exists for '${details && details.branch ? details.branch : 'HEAD'}', so the entire tree it would send was scanned.`
+      : `Unpushed commits in ${range}.`
     return {
       ok: false,
       rule: 'secret_leak',
       findings,
-      reason: `[PrePushGuard] Push BLOCKED: Detected potential secret or sensitive asset in unpushed commits:\n${list}\n\nPushing credentials to remote is irreversible and leaks keys to remote hosts.\nPlease remove or redact these files/keys from Git history (e.g. via git reset HEAD~1) before pushing.`,
+      blocking,
+      range,
+      wholeTree,
+      reason: `[PrePushGuard] Push BLOCKED: potential secret or credential in what is about to be pushed.\n${scope}\n${list}\n\n`
+        + `Pushing credentials to a remote is irreversible — treat any key listed above as burned.\n`
+        + `Remove or redact it from the commits (e.g. git reset HEAD~1), rotate the key, then push again.\n`
+        + `To push anyway, re-run with ${SKIP_ENV_VAR}=1.`,
     }
   }
 
-  return { ok: true, findings: [] }
+  return { ok: true, findings, blocking: [], range, wholeTree }
 }
 
-/**
- * Stage 3: Run local pre-flight build check.
- * @param {string} gitRoot
- * @param {object} [opts]
- * @returns {{ ok: boolean, rule?: string, exitCode?: number, output?: string, reason?: string, skipped?: boolean }}
- */
-function runPreFlightCheck(gitRoot, opts = {}) {
-  // Skip if disabled via setting or env
-  if (opts.skipBuildCheck === true || process.env.AETHER_SKIP_PREPUSH_BUILD === '1') {
-    return { ok: true, skipped: true }
-  }
-  if (opts.db) {
-    try {
-      const ff = require('../featureFlags')
-      if (!ff.isEnabled(opts.db, 'git.prePushBuildCheck')) {
-        return { ok: true, skipped: true }
-      }
-    } catch {}
-  }
-
-  const pkgPath = path.join(gitRoot, 'package.json')
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-      const hasPrePush = pkg.scripts && pkg.scripts['pre-push']
-      const hasBuild = pkg.scripts && pkg.scripts.build
-
-      const scriptToRun = hasPrePush ? 'pre-push' : (hasBuild ? 'build' : null)
-      if (scriptToRun) {
-        const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-        const res = spawnSync(npmCmd, ['run', scriptToRun], {
-          cwd: gitRoot,
-          encoding: 'utf-8',
-          timeout: 90000,
-          windowsHide: true,
-          env: sanitizeProcessEnv(process.env, { CI: 'true' }),
-        })
-        if (res.status !== 0) {
-          const errOutput = (res.stderr || res.stdout || '').trim().slice(-1000)
-          return {
-            ok: false,
-            rule: 'pre_flight_failed',
-            exitCode: res.status,
-            output: errOutput,
-            reason: `[PrePushGuard] Push BLOCKED: Local pre-flight check ('npm run ${scriptToRun}') failed with exit code ${res.status}.\n\nError snippet:\n${errOutput}\n\nDo NOT push broken code to remote repository. Please fix the build error locally and verify before pushing.`,
-          }
-        }
-        return { ok: true, command: `npm run ${scriptToRun}`, exitCode: 0 }
-      }
-    } catch (e) {
-      if (e.message && e.message.includes('BLOCKED')) throw e
-    }
-  }
-
-  return { ok: true, skipped: true }
-}
+// ─── summary ─────────────────────────────────────────────────────────────────
 
 /**
- * Gather unpushed commits and file changes summary for UI / review.
+ * Gather unpushed commits and changed files for the permission dialog.
  * @param {string} gitRoot
  * @param {{ remote: string, branch: string }} details
- * @returns {{ commits: string[], files: string[], range: string }}
+ * @param {object} [scan] - result of scanForSecrets, reused so the range matches
+ * @returns {{ commits: string[], files: string[], range: string, wholeTree: boolean }}
  */
-function getPushSummary(gitRoot, details) {
-  const range = getUnpushedRange(gitRoot, details?.remote, details?.branch)
-  const isSingleHead = range === 'HEAD'
+function getPushSummary(gitRoot, details, scan) {
+  const resolved = scan && scan.range ? scan : resolveScanRange(gitRoot, details)
+  const { range, wholeTree } = resolved
   const commits = []
   const files = []
 
-  try {
-    const logArgs = isSingleHead
-      ? ['log', '-n', '1', '--oneline']
-      : ['log', range, '--oneline', '-n', '15']
-    const logRes = spawnSync('git', logArgs, {
-      cwd: gitRoot,
-      encoding: 'utf-8',
-      timeout: 5000,
-      windowsHide: true,
-    })
-    if (logRes.status === 0 && logRes.stdout) {
-      commits.push(...logRes.stdout.split('\n').map(s => s.trim()).filter(Boolean))
-    }
-  } catch {}
+  const logRaw = gitText(gitRoot, ['log', range, '--oneline', '-n', '15'])
+  if (logRaw) commits.push(...logRaw.split('\n').map(s => s.trim()).filter(Boolean))
 
-  try {
-    const diffArgs = isSingleHead
-      ? ['diff-tree', '--name-only', '-r', '--no-commit-id', 'HEAD']
-      : ['diff', '--name-only', range]
-    const diffRes = spawnSync('git', diffArgs, {
-      cwd: gitRoot,
-      encoding: 'utf-8',
-      timeout: 5000,
-      windowsHide: true,
-    })
-    if (diffRes.status === 0 && diffRes.stdout) {
-      files.push(...diffRes.stdout.split('\n').map(s => s.trim()).filter(Boolean))
-    }
-  } catch {}
+  const filesRaw = gitText(
+    gitRoot,
+    ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=d', range],
+    { timeout: DIFF_TIMEOUT_MS }
+  )
+  if (filesRaw) files.push(...filesRaw.split('\0').map(s => s.trim()).filter(Boolean))
 
-  return { commits, files, range }
+  return { commits, files, range, wholeTree }
 }
 
+// ─── pipeline ────────────────────────────────────────────────────────────────
+
 /**
- * Master inspection pipeline for any shell command before execution.
- * @param {string} command - Shell command to inspect
+ * Inspect a shell command before execution.
+ *
+ * @param {string} command
  * @param {object} [context]
  * @param {string} [context.cwd]
  * @param {object} [context.db]
- * @param {boolean} [context.skipBuildCheck]
- * @param {boolean} [context.allowProtectedOverride]
- * @returns {Promise<{ ok: boolean, reason?: string, summary?: object, isPush: boolean }>}
+ * @returns {Promise<{ ok: boolean, isPush: boolean, reason?: string, summary?: object }>}
  */
 async function inspectPushCommand(command, context = {}) {
-  // Check feature flag first
   if (context.db) {
     try {
       const ff = require('../featureFlags')
@@ -589,71 +578,37 @@ async function inspectPushCommand(command, context = {}) {
   }
 
   const pushCheck = isPushCommand(command)
-  if (!pushCheck.isPush) {
-    return { ok: true, isPush: false }
-  }
+  if (!pushCheck.isPush) return { ok: true, isPush: false }
 
-  const commandTokens = String(pushCheck.segment || '').split(/\s+/)
-  let inspectionCwd = context.cwd || process.cwd()
-  const cIndex = commandTokens.indexOf('-C')
-  if (cIndex >= 0 && commandTokens[cIndex + 1]) inspectionCwd = path.resolve(inspectionCwd, commandTokens[cIndex + 1])
+  const inspectionCwd = resolveInspectionCwd(pushCheck.segment, context.cwd)
   const gitRoot = nearestGitRoot(inspectionCwd)
-  if (!gitRoot) {
-    // If not inside a git repository, allow command so git outputs its own error
-    return { ok: true, isPush: true, notGitRepo: true }
-  }
+  if (!gitRoot) return { ok: true, isPush: true, notGitRepo: true }
 
   const details = parsePushDetails(pushCheck.segment, gitRoot)
+  // A dry run sends nothing, and a deletion sends no content.
+  if (details.isDryRun) return { ok: true, isPush: true, dryRun: true }
+  if (details.isDelete) return { ok: true, isPush: true, deletion: true }
 
-  // Stage 1: Branch advisory (warning only — never blocks).
-  // checkBranchProtection() is kept for external callers; within the pipeline
-  // it only contributes warnings surfaced in the summary so the caller can log
-  // or display them. The user/agent decides what to do with protected-branch
-  // pushes; the real gates are Stage 2 (secrets) and Stage 3 (build).
-  const branches = details.branches && details.branches.length ? details.branches : [details.branch]
-  const branchWarnings = []
-  for (const branch of branches) {
-    const branchCheck = checkBranchProtection(branch, {
-      db: context.db,
-      allowProtectedOverride: context.allowProtectedOverride,
-      docOnly: true, // always advisory — never hard-block in the pipeline
-    })
-    if (branchCheck.warn || (!branchCheck.ok)) {
-      branchWarnings.push(branchCheck.reason || `Pushing to protected branch '${branch}'.`)
-    }
-  }
+  const scan = scanForSecrets(gitRoot, details)
+  if (!scan.ok) return { ok: false, isPush: true, ...scan }
 
-  // Stage 2: Secret & Sensitive Asset Scan
-  const secretCheck = scanSensitiveAssets(gitRoot, details)
-  if (!secretCheck.ok) {
-    return { ok: false, isPush: true, ...secretCheck }
-  }
-
-  // Stage 3: Local Pre-flight Verification Gate
-  const preFlightCheck = runPreFlightCheck(gitRoot, {
-    db: context.db,
-    skipBuildCheck: context.skipBuildCheck,
-  })
-  if (!preFlightCheck.ok) {
-    return { ok: false, isPush: true, ...preFlightCheck }
-  }
-
-  // Stage 4: Blast-radius review summary
-  const summary = getPushSummary(gitRoot, details)
-
+  const summary = getPushSummary(gitRoot, details, scan)
   return {
     ok: true,
     isPush: true,
-    warnings: branchWarnings.length ? branchWarnings : undefined,
     summary: {
       remote: details.remote,
       branch: details.branch,
+      isTags: details.isTags,
+      isAll: details.isAll,
+      range: summary.range,
+      wholeTree: summary.wholeTree,
       commitsCount: summary.commits.length,
       commits: summary.commits,
       filesCount: summary.files.length,
       files: summary.files,
-      range: summary.range,
-      preFlight: preFlightCheck,
+      // Non-blocking observations, e.g. a file named `…credential…`.
+      notes: scan.findings.filter(f => f.severity === 'review').map(f => `${f.file}: ${f.detail}`),
     },
   }
 }
@@ -662,14 +617,13 @@ module.exports = {
   isPushCommand,
   nearestGitRoot,
   parsePushDetails,
-  checkBranchProtection,
-  scanSensitiveAssets,
-  runPreFlightCheck,
+  resolveScanRange,
+  scanForSecrets,
   getPushSummary,
   inspectPushCommand,
   isSensitiveFilename,
-  isDocOnlyChangeset,
-  PROTECTED_BRANCHES,
+  looksSecretNamed,
   SECRET_DIFF_PATTERNS,
-  DOC_ONLY_EXTENSIONS,
+  EMPTY_TREE,
+  SKIP_ENV_VAR,
 }

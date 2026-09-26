@@ -424,22 +424,22 @@ const TOOLS = [
     if (ctx?.agentMode !== 'yolo') { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
 
-    // Pre-push inspection gate (P0: Sensitive scan, Branch protection, Pre-flight build check)
+    // Pre-push gate: blocks a push that would carry credentials to a remote.
+    // Nothing else — branch policy belongs to GitHub, build verification to CI.
     const { inspectPushCommand } = require('./prePushGuard')
-    const effectiveCwd = cwd || getWorkspaceRoot(ctx?.sessionId)
-    const pushGuard = await inspectPushCommand(cmd, {
-      cwd: effectiveCwd,
-      db: ctx?.db,
-      allowProtectedOverride: ctx?.agentMode === 'yolo',
-    })
+    const effectiveCwd = cwd || (() => { try { return getWorkspaceRoot(ctx?.sessionId) } catch { return undefined } })()
+    const pushGuard = await inspectPushCommand(cmd, { cwd: effectiveCwd, db: ctx?.db })
     if (!pushGuard.ok) {
       throw new Error(pushGuard.reason)
     }
     if (pushGuard.isPush && pushGuard.summary) {
       try {
+        const s = pushGuard.summary
+        const target = s.wholeTree ? `${s.branch} (无远端引用,已扫整棵树)` : s.branch
+        const notes = s.notes && s.notes.length ? `;留意 ${s.notes.join(';')}` : ''
         ctx?.onStatus?.({
           kind: 'info',
-          text: `🛡️ PrePushGuard: 远端推送门禁已通过 (分支: ${pushGuard.summary.branch}, ${pushGuard.summary.commitsCount} 个提交, 预检合格)`,
+          text: `🛡️ PrePushGuard: 密钥扫描通过 (${s.remote}/${target}, ${s.commitsCount} 个提交)${notes}`,
         })
       } catch {}
     }
