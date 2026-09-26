@@ -69,6 +69,116 @@ function getOriginalWorkspaceRoot(sessionId) {
   return getWorkspaceRoot(sessionId)
 }
 
+/**
+ * Check if a workspace path is authorized (matches global root, setting root,
+ * or any active/persisted session workspace, and does not point to sensitive directories).
+ *
+ * @param {Object} [db]
+ * @param {string} workspaceRoot
+ * @returns {boolean}
+ */
+function isAuthorizedWorkspace(db, workspaceRoot) {
+  if (!workspaceRoot) return true
+  const targetWs = path.resolve(workspaceRoot)
+  if (hasUnsafeWindowsPrefix(targetWs) || isSensitivePath(targetWs)) return false
+  let realTarget = targetWs
+  try { if (fs.existsSync(targetWs)) realTarget = fs.realpathSync(targetWs) } catch {}
+  if (hasUnsafeWindowsPrefix(realTarget) || isSensitivePath(realTarget)) return false
+
+  const allowed = new Set()
+  const globalWs = getWorkspaceRoot()
+  if (globalWs) allowed.add(path.resolve(globalWs))
+  for (const sw of _sessionWorkspaces.values()) {
+    if (sw) allowed.add(path.resolve(sw))
+  }
+  const settingWs = db && typeof db.getSetting === 'function' ? db.getSetting('agent_workspace_root') : null
+  if (settingWs) allowed.add(path.resolve(settingWs))
+  try {
+    if (db && typeof db.prepare === 'function') {
+      const rows = db.prepare('SELECT config FROM session WHERE config IS NOT NULL').all()
+      for (const r of rows) {
+        try {
+          const cfg = JSON.parse(r.config)
+          if (cfg && cfg.workspace) allowed.add(path.resolve(cfg.workspace))
+        } catch {}
+      }
+    }
+  } catch {}
+
+  if (allowed.has(targetWs)) return true
+  for (const a of allowed) {
+    let realA = a
+    try { if (fs.existsSync(a)) realA = fs.realpathSync(a) } catch {}
+    if (realTarget.toLowerCase() === realA.toLowerCase()) return true
+    const rel = path.relative(realA, realTarget)
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Check if a workspace is trusted for automatic file contract execution
+ * (e.g. SOUL.md system prompt injection and MEMORY.md automatic synchronization).
+ *
+ * @param {Object} [db]
+ * @param {string} workspaceRoot
+ * @param {number|string} [sessionId]
+ * @returns {boolean}
+ */
+function isWorkspaceTrusted(db, workspaceRoot, sessionId) {
+  if (!workspaceRoot) return true
+  const targetWs = path.resolve(workspaceRoot)
+  const defWs = defaultWorkspace()
+  if (defWs && path.resolve(defWs).toLowerCase() === targetWs.toLowerCase()) return true
+
+  // Session-level explicit trust
+  if (sessionId && db && typeof db.getSessionConfig === 'function') {
+    try {
+      const cfg = db.getSessionConfig(sessionId)
+      if (cfg && (cfg.trusted === true || cfg.workspace_trusted === true)) return true
+    } catch {}
+  }
+
+  // Check trusted_workspaces setting (JSON array of directory paths)
+  if (db && typeof db.getSetting === 'function') {
+    try {
+      const trustedRaw = db.getSetting('trusted_workspaces')
+      if (trustedRaw) {
+        const list = JSON.parse(trustedRaw)
+        if (Array.isArray(list)) {
+          let realTarget = targetWs
+          try { if (fs.existsSync(targetWs)) realTarget = fs.realpathSync(targetWs) } catch {}
+          for (const item of list) {
+            if (!item) continue
+            if (item === '*') return true
+            const itemPath = path.resolve(item)
+            if (itemPath.toLowerCase() === targetWs.toLowerCase()) return true
+            let realItem = itemPath
+            try { if (fs.existsSync(itemPath)) realItem = fs.realpathSync(itemPath) } catch {}
+            if (realItem.toLowerCase() === realTarget.toLowerCase()) return true
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Permissive mode fallback
+  if (db && typeof db.getSetting === 'function') {
+    try {
+      if (db.getSetting('workspace_trust_mode') === 'permissive') return true
+    } catch {}
+  }
+
+  // Unit tests or headless environments without settings table
+  if (!db || typeof db.getSetting !== 'function') {
+    return true
+  }
+
+  return false
+}
+
 function defaultWorkspace() {
   // Headless fallback: cwd-relative .aether-workspace when no Electron userData.
   const base = app && typeof app.getPath === 'function'
@@ -457,4 +567,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

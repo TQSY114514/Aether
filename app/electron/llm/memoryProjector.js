@@ -231,10 +231,10 @@ function projectWorkspaceMemory(db, workspaceRoot) {
  *
  * @param {Object} db - database instance
  * @param {string} [workspaceRoot]
- * @param {{ deleteMissing?: boolean, baselineContent?: string|null }} [options]
+ * @param {{ deleteMissing?: boolean, baselineContent?: string|null, origin?: string }} [options]
  * @returns {{ success: boolean, added: number, removed: number, total: number, error?: string }}
  */
-function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineContent = null } = {}) {
+function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineContent = null, origin = 'user' } = {}) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, added: 0, removed: 0, total: 0, error: 'No workspace root' }
 
@@ -304,7 +304,8 @@ function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineC
     // Add items that exist in file but not in DB
     for (const [norm, entry] of fileNormMap) {
       if (!dbNormMap.has(norm)) {
-        const result = db.addMemoryWithProvenance(entry.content, entry.type, null, 'user', null, ws)
+        const itemOrigin = entry.origin || origin || 'user'
+        const result = db.addMemoryWithProvenance(entry.content, entry.type, null, itemOrigin, null, ws)
         if (result && !result.duplicate && result.lastInsertRowid != null) added++
       }
     }
@@ -315,7 +316,7 @@ function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineC
       const baseNormSet = new Set(baseEntries.map(e => normalizeContent(e.content)).filter(Boolean))
       for (const [norm, row] of dbNormMap) {
         if (baseNormSet.has(norm) && !fileNormMap.has(norm)) {
-          if (row.origin === 'user' || row.origin === 'assistant') {
+          if (row.origin === 'user' || row.origin === 'assistant' || row.origin === 'external') {
             db.deleteMemory(row.id)
             removed++
           }
@@ -329,7 +330,7 @@ function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineC
       }
       for (const [norm, row] of dbNormMap) {
         if (!fileNormMap.has(norm)) {
-          if (row.origin === 'user' || row.origin === 'assistant') {
+          if (row.origin === 'user' || row.origin === 'assistant' || row.origin === 'external') {
             db.deleteMemory(row.id)
             removed++
           }
