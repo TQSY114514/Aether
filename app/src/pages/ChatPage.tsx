@@ -34,6 +34,7 @@ export default function ChatPage() {
   const backgroundImage = useStore((s) => s.backgroundImage)
   const hasBg = !!backgroundImage
   const personas = useStore((s) => s.personas)
+  const workspaceSoul = useStore((s) => s.workspaceSoul)
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
   const chatMode = useStore((s) => s.chatMode)
@@ -276,11 +277,24 @@ export default function ChatPage() {
             </div>
           </Tooltip>
           <Tooltip text={t('tooltip.persona')}>
-            <select value={currentPersonaId ?? ''} onChange={(e) => {
-              const v = e.target.value ? Number(e.target.value) : null
-              if (currentSessionId) saveSessionConfig(currentSessionId, { personaId: v })
-            }} className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-[var(--content-bg)] shrink-0 max-w-[180px]" style={{ borderColor: 'var(--border)' }}>
-              <option value="">{t('chat.no_persona')}</option>
+            <select
+              value={currentPersonaId !== null && currentPersonaId !== undefined ? String(currentPersonaId) : (workspaceSoul ? '-1' : '')}
+              onChange={(e) => {
+                const raw = e.target.value
+                const v = raw === '' ? null : Number(raw)
+                if (currentSessionId) saveSessionConfig(currentSessionId, { personaId: v })
+              }}
+              className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-[var(--content-bg)] shrink-0 max-w-[190px]"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              {workspaceSoul ? (
+                <>
+                  <option value="-1">✨ SOUL.md: {workspaceSoul.name}</option>
+                  <option value="0">{t('chat.no_persona')}</option>
+                </>
+              ) : (
+                <option value="">{t('chat.no_persona')}</option>
+              )}
               {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Tooltip>

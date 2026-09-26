@@ -127,8 +127,11 @@ interface Window {
       create: (data: Omit<Persona, 'id' | 'created_at'>) => Promise<{ lastInsertRowid: number }>
       update: (id: number, data: Partial<Persona>) => Promise<void>
       delete: (id: number) => Promise<void>
-      import: (data: any) => Promise<{ success: boolean; error?: string }>
+      import: (data: any) => Promise<{ success: boolean; personId?: number; name?: string; error?: string }>
       export: (id: number) => Promise<any>
+      getWorkspaceSoul: (workspaceRoot?: string) => Promise<{ path: string; fileName: string; name: string; prompt: string; avatar?: string; description?: string; isWorkspace: boolean } | null>
+      writeWorkspaceSoul: (workspaceRoot: string, data: { name?: string; prompt?: string; avatar?: string | null; description?: string }) => Promise<{ success: boolean; path?: string; error?: string }>
+      exportSoulMd: (id: number) => Promise<{ name: string; fileName: string; content: string } | null>
     }
     session: {
       list: () => Promise<Session[]>
@@ -238,6 +241,9 @@ interface Window {
       conflictResolve: (keepId: number, removeId: number) => Promise<{ ok: boolean }>
       access: (id: number) => Promise<void>
       dedupe: () => Promise<{ removed: number }>
+      projectWorkspace: (workspace?: string | null) => Promise<{ success: boolean; path?: string; count: number; updated: boolean; error?: string }>
+      syncFromFile: (workspace?: string | null) => Promise<{ success: boolean; added: number; removed: number; total: number; error?: string }>
+      fileStatus: (workspace?: string | null) => Promise<{ exists: boolean; path: string; mtime: number | null; lineCount: number }>
     }
     learning: {
       overview: () => Promise<{

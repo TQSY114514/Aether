@@ -178,9 +178,11 @@ export interface AppState {
   deleteModel: (id: number) => Promise<void>
   loadAllModels: () => Promise<void>
 
-  // Personas
+  // Personas & SOUL.md
   personas: Persona[]
+  workspaceSoul: { path: string; fileName: string; name: string; prompt: string; avatar?: string; description?: string; isWorkspace: boolean } | null
   loadPersonas: () => Promise<void>
+  loadWorkspaceSoul: (workspaceRoot?: string) => Promise<void>
   addPersona: (data: Omit<Persona, 'id' | 'created_at'>) => Promise<void>
   updatePersona: (id: number, data: Partial<Persona>) => Promise<void>
   deletePersona: (id: number) => Promise<void>
