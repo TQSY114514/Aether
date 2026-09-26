@@ -42,25 +42,31 @@ function toolImpact(name, args) {
       const desc = String(a.description || '')
       const cwd = a.cwd ? String(a.cwd) : ''
       const riskTags = []
+      const isPush = /\bgit\b[^\n]*\bpush\b/i.test(cmd)
+      if (isPush) riskTags.push('git_push')
       if (/write|>|\/c\s+echo\s|tee\b|cat\s*>/i.test(cmd)) riskTags.push('writes_files')
       if (/curl\b|wget\b|http|https|fetch\b|npm\s+install|pip\s+install|go\s+get|cargo\s+add/i.test(cmd)) riskTags.push('network_or_install')
       if (/npm\s+install|pip\s+install|pnpm\s+add|yarn\s+add|go\s+get|cargo\s+add|apt\s+install|brew\s+install/i.test(cmd)) riskTags.push('installs_deps')
       if (/rm\s+-rf|del\s+\/f|drop\s+table|truncate\b|>\/dev\/null|format/i.test(cmd)) riskTags.push('deletes_files')
       if (/server\b|watch\b|dev\b|start\b|nodemon|vite\b|next\b|react-scripts|python\s+\w+|node\s+\w+/i.test(cmd)) riskTags.push('long_process')
       if (riskTags.length === 0) riskTags.push('read_only')
-      const dangerous = /rm\s+-rf|del\s+\/|format\s|c:|shutdown|reboot|curl.*\||wget.*\|/i.test(cmd)
+      const dangerous = /rm\s+-rf|del\s+\/|format\s|c:|shutdown|reboot|curl.*\||wget.*\|/i.test(cmd) || isPush
       const severity = dangerous ? 'high' : riskTags.some(t => t === 'deletes_files' || t === 'installs_deps') ? 'medium' : 'low'
       return {
-        summary: desc || cmd.slice(0, 120),
+        summary: desc || (isPush ? `Git 推送: 准备向远端推送提交 (${cmd.slice(0, 100)})` : cmd.slice(0, 120)),
         severity,
         affectedFiles: cwd ? [cwd] : [],
         riskTags,
-        rollback: riskTags.includes('writes_files') || riskTags.includes('deletes_files')
+        rollback: isPush
+          ? '推送到远端仓库后无法自动撤回，需在远端创建 revert 提交'
+          : riskTags.includes('writes_files') || riskTags.includes('deletes_files')
           ? '可通过 git checkout 恢复（工作区已纳入版本控制）'
           : riskTags.includes('installs_deps')
           ? '可以通过删除 node_modules / .venv 恢复'
           : '命令执行后通常不可直接回滚',
-        alternatives: riskTags.includes('writes_files')
+        alternatives: isPush
+          ? '可先在本地使用 git log 和 git diff 验证即将推送的提交'
+          : riskTags.includes('writes_files')
           ? '可先使用 write_file 以 dry-run 模式预览'
           : '',
       }
@@ -205,6 +211,31 @@ function generateDiff(name, args) {
     const patch = String(args?.patch ?? '')
     if (!filePath || !patch) return null
     return { diff: truncate(patch, MAX_DIFF_CHARS), oldPath: filePath, newPath: filePath }
+  }
+  if (name === 'run_command') {
+    const cmd = String(args?.command || '')
+    try {
+      const { isPushCommand, nearestGitRoot, parsePushDetails, getPushSummary } = require('./prePushGuard')
+      const pushInfo = isPushCommand(cmd)
+      if (pushInfo.isPush) {
+        const gitRoot = nearestGitRoot(args?.cwd || process.cwd())
+        if (gitRoot) {
+          const details = parsePushDetails(pushInfo.segment, gitRoot)
+          const summary = getPushSummary(gitRoot, details)
+          const lines = [
+            `=== PrePushGuard: 推送审查摘要 ===`,
+            `目标分支: ${details.remote}/${details.branch}`,
+            `待推送提交 (${summary.commits.length} 个):`,
+            ...(summary.commits.length ? summary.commits.map(c => `  • ${c}`) : ['  (无本地未推送提交)']),
+            '',
+            `涉及文件 (${summary.files.length} 个):`,
+            ...(summary.files.length ? summary.files.map(f => `  • ${f}`) : ['  (无文件变更)']),
+          ]
+          return { diff: truncate(lines.join('\n'), MAX_DIFF_CHARS), oldPath: 'local', newPath: `${details.remote}/${details.branch}` }
+        }
+      }
+    } catch {}
+    return null
   }
   return null
 }

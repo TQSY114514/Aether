@@ -419,12 +419,33 @@ const TOOLS = [
   }},
 
   // 鈹€鈹€ Execution tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-  { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: (args, ctx) => {
+  { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: async (args, ctx) => {
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
+
+    // Pre-push inspection gate (P0: Sensitive scan, Branch protection, Pre-flight build check)
+    const { inspectPushCommand } = require('./prePushGuard')
+    const effectiveCwd = cwd || getWorkspaceRoot(ctx?.sessionId)
+    const pushGuard = await inspectPushCommand(cmd, {
+      cwd: effectiveCwd,
+      db: ctx?.db,
+      allowProtectedOverride: ctx?.agentMode === 'yolo',
+    })
+    if (!pushGuard.ok) {
+      throw new Error(pushGuard.reason)
+    }
+    if (pushGuard.isPush && pushGuard.summary) {
+      try {
+        ctx?.onStatus?.({
+          kind: 'info',
+          text: `🛡️ PrePushGuard: 远端推送门禁已通过 (分支: ${pushGuard.summary.branch}, ${pushGuard.summary.commitsCount} 个提交, 预检合格)`,
+        })
+      } catch {}
+    }
+
     // Explicit backend selection: ctx.executionBackend (future wiring) or the
-    // exec.backend setting 鈥?makes the resolver's configured branch reachable
+    // exec.backend setting — makes the resolver's configured branch reachable
     // from this tool instead of dead code.
     let configured = ctx?.executionBackend || ''
     if (!configured && ctx?.db) { try { configured = String(ctx.db.getSetting('exec.backend') || '') } catch { /* fall through to mode-based resolution */ } }
@@ -439,7 +460,7 @@ const TOOLS = [
         const onStream = ctx?.onStream
         if (onStream) {
           return runCommandStreaming(cmd, {
-            cwd,
+            cwd: effectiveCwd,
             timeoutMs,
             onChunk: (text) => { try { onStream({ text, type: 'chunk' }) } catch {} },
           }).then(({ stdout, stderr, exitCode, timedOut }) => {
@@ -447,7 +468,7 @@ const TOOLS = [
             return formatShellResult(stdout, stderr, exitCode, timedOut)
           })
         }
-        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
+        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
           .then(({ stdout, stderr, exitCode, timedOut }) => formatShellResult(stdout, stderr, exitCode, timedOut))
       }
       return runInDocker(cmd, timeoutMs, ctx?.db)
