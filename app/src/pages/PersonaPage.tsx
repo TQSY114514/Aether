@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { Plus, Trash2, Download, Upload } from 'lucide-react'
+import { Plus, Trash2, Download, Upload, FileText, Sparkles } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 /** Render persona creation, editing, and selection controls. */
 export default function PersonaPage() {
   const personas = useStore((s) => s.personas)
+  const workspaceSoul = useStore((s) => s.workspaceSoul)
   const addPersona = useStore((s) => s.addPersona)
   const updatePersona = useStore((s) => s.updatePersona)
   const deletePersona = useStore((s) => s.deletePersona)
@@ -31,24 +32,60 @@ export default function PersonaPage() {
     setEditingId(null)
   }
 
-  const handleExport = (persona: { name: string; prompt: string }) => {
+  const handleExportJson = (persona: { name: string; prompt: string }) => {
     const blob = new Blob([JSON.stringify({ version: '1.0', type: 'aetherai-persona', name: persona.name, prompt: persona.prompt }, null, 2)], { type: 'application/json' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${persona.name}.json`
     a.click(); URL.revokeObjectURL(a.href)
   }
 
+  const handleExportSoulMd = async (persona: { id: number; name: string }) => {
+    try {
+      const res = await window.electronAPI.persona.exportSoulMd(persona.id)
+      if (!res) return
+      const blob = new Blob([res.content], { type: 'text/markdown;charset=utf-8' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'SOUL.md'
+      a.click(); URL.revokeObjectURL(a.href)
+      toast(t('persona.export_soul') + ' OK', { type: 'success' })
+    } catch (err: any) {
+      toast(err?.message || '导出失败', { type: 'error' })
+    }
+  }
+
+  const handleApplyToWorkspace = async (persona: { name: string; prompt: string; avatar?: string | null }) => {
+    try {
+      const res = await window.electronAPI.persona.writeWorkspaceSoul('', {
+        name: persona.name,
+        prompt: persona.prompt,
+        avatar: persona.avatar ?? undefined,
+      })
+      if (res.success) {
+        await useStore.getState().loadWorkspaceSoul()
+        toast(t('persona.apply_workspace') + ' OK', { type: 'success' })
+      } else {
+        toast(res.error || '写入工作区失败', { type: 'error' })
+      }
+    } catch (err: any) {
+      toast(err?.message || '写入工作区失败', { type: 'error' })
+    }
+  }
+
   const handleImport = async () => {
-    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json'
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.md'
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return
       const text = await file.text()
       try {
-        const data = JSON.parse(text)
-        const result = await window.electronAPI.persona.import(data)
+        let result
+        if (file.name.toLowerCase().endsWith('.md')) {
+          result = await window.electronAPI.persona.import({ type: 'soul-md', text })
+        } else {
+          const data = JSON.parse(text)
+          result = await window.electronAPI.persona.import(data)
+        }
         if (!result.success) { toast(result.error || '导入失败', { type: 'error' }); return }
         await useStore.getState().loadPersonas()
-        toast('人设已导入', { type: 'success' })
-      } catch { toast('无效的 JSON 文件', { type: 'error' }) }
+        toast(t('persona.imported_success', result.name || file.name), { type: 'success' })
+      } catch { toast('无效的文件格式', { type: 'error' }) }
     }
     input.click()
   }
@@ -70,6 +107,39 @@ export default function PersonaPage() {
             </button>
           </div>
         </div>
+
+        {/* Workspace Active SOUL.md Card */}
+        {workspaceSoul && (
+          <div className="mb-6 p-4 rounded-lg border" style={{ borderColor: 'var(--accent)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} style={{ color: 'var(--accent)' }} />
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {t('persona.workspace_soul_title')}: {workspaceSoul.name}
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider font-mono font-medium border"
+                  style={{ borderColor: 'var(--accent)', color: 'var(--accent)', backgroundColor: 'transparent' }}>
+                  {workspaceSoul.fileName}
+                </span>
+              </div>
+              <button
+                onClick={() => addPersona({ name: workspaceSoul.name, prompt: workspaceSoul.prompt, avatar: workspaceSoul.avatar || null })}
+                className="text-xs px-2.5 py-1 rounded border hover:bg-[var(--content-bg)] transition-colors flex items-center gap-1"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                title="Save into personal personas"
+              >
+                <Plus size={12} /> {t('persona.add')}
+              </button>
+            </div>
+            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>
+              {workspaceSoul.description || t('persona.workspace_soul_desc')}
+            </p>
+            <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed max-h-24 overflow-y-auto p-2 rounded bg-[var(--content-bg)] border"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+              {workspaceSoul.prompt}
+            </pre>
+          </div>
+        )}
 
         {showAdd && (
           <div className="mb-6 p-4 rounded-lg space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -105,15 +175,30 @@ export default function PersonaPage() {
                 <>
                   <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
                     <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{persona.name}</span>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1">
                       <button onClick={() => { setEditingId(persona.id); setEditName(persona.name); setEditPrompt(persona.prompt) }}
+                        title="Edit"
                         className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
-                      <button onClick={() => handleExport(persona)} className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
+                      <button onClick={() => handleApplyToWorkspace(persona)}
+                        title={t('persona.apply_workspace')}
+                        className="p-1.5 rounded hover:bg-[var(--border)] transition-colors text-gray-400 hover:text-[var(--accent)]">
+                        <Sparkles size={14} />
+                      </button>
+                      <button onClick={() => handleExportSoulMd(persona)}
+                        title={t('persona.export_soul')}
+                        className="p-1.5 rounded hover:bg-[var(--border)] transition-colors text-gray-400 hover:text-[var(--accent)]">
+                        <FileText size={14} />
+                      </button>
+                      <button onClick={() => handleExportJson(persona)}
+                        title={t('persona.export_json')}
+                        className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
                         <Download size={14} className="text-gray-400" />
                       </button>
-                      <button onClick={() => deletePersona(persona.id)} className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
+                      <button onClick={() => deletePersona(persona.id)}
+                        title="Delete"
+                        className="p-1.5 rounded hover:bg-[var(--border)] transition-colors">
                         <Trash2 size={14} className="text-gray-400" />
                       </button>
                     </div>
