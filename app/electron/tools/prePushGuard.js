@@ -151,14 +151,16 @@ function parsePushDetails(segment, gitRoot) {
   const args = []
   let isDryRun = false
   let isTags = false
-
   let skipNext = false
+  let pushSeen = false
   for (let i = 0; i < tokens.length; i++) {
     if (skipNext) { skipNext = false; continue }
     const t = tokens[i]
-    if (i === 0 && path.basename(t).toLowerCase().replace(/\.(exe|cmd|bat)$/i, '') === 'git') continue
-    if (t === 'push') continue
-
+    if (!pushSeen && path.basename(t).toLowerCase().replace(/\.(exe|cmd|bat)$/i, '') === 'git') continue
+    if (!pushSeen && t === '-C') { i++; continue }
+    if (!pushSeen && t.startsWith('-')) { if (!t.includes('=') && ['--git-dir','--work-tree'].includes(t)) skipNext = true; continue }
+    if (t === 'push') { pushSeen = true; continue }
+    if (!pushSeen) continue
     if (t === '--dry-run' || t === '-n') { isDryRun = true; continue }
     if (t === '--tags') { isTags = true; continue }
     if (t === '-u' || t === '--set-upstream' || t === '--repo' || t === '--receive-pack') {
@@ -170,7 +172,8 @@ function parsePushDetails(segment, gitRoot) {
   }
 
   let remote = args[0] || 'origin'
-  let refspec = args[1] || ''
+  const refspecs = args.slice(1)
+  let refspec = refspecs[0] || ''
 
   // If no refspec was specified on the command line, determine the current branch
   let targetBranch = ''
@@ -198,6 +201,12 @@ function parsePushDetails(segment, gitRoot) {
   return {
     remote,
     branch: targetBranch || 'HEAD',
+    branches: refspecs.map(r => {
+      const value = r.replace(/^\+/, '')
+      if (value === ':') return ''
+      return (value.includes(':') ? value.split(':')[1] || value.split(':')[0] : value).replace(/^refs\/heads\//, '')
+    }).filter(Boolean),
+    all: refspecs.length === 0 && !refspec && (isTags || tokens.includes('--all') || tokens.includes('--mirror')),
     isDryRun,
     isTags,
   }
@@ -287,7 +296,9 @@ function getUnpushedRange(gitRoot, remote, branch) {
     } catch {}
   }
 
-  return 'HEAD~1..HEAD'
+  // A new branch may contain the entire history; avoid silently dropping its
+  // root commit (the scanner handles this as a root diff).
+  return '--root HEAD'
 }
 
 /**
@@ -302,15 +313,21 @@ function scanSensitiveAssets(gitRoot, details) {
 
   // Check modified files in unpushed commits
   try {
-    const filesRes = spawnSync('git', ['diff', '--name-only', range], {
+    const filesRes = spawnSync('git', ['diff', '--name-status', range], {
       cwd: gitRoot,
       encoding: 'utf-8',
       timeout: 10000,
       windowsHide: true,
     })
-    if (filesRes.status === 0 && filesRes.stdout) {
+    if (filesRes.status !== 0 || filesRes.error || filesRes.signal) {
+      return { ok: false, rule: 'secret_scan_error', reason: '[PrePushGuard] Push BLOCKED: unable to complete sensitive-file scan.' }
+    }
+    if (filesRes.stdout) {
       const files = filesRes.stdout.split('\n').map(s => s.trim()).filter(Boolean)
-      for (const f of files) {
+      for (const entry of files) {
+        const parts = entry.split(/\s+/)
+        if (parts[0] === 'D') continue
+        const f = parts[parts.length - 1]
         if (isSensitiveFilename(f)) {
           findings.push({
             file: f,
@@ -331,7 +348,10 @@ function scanSensitiveAssets(gitRoot, details) {
       timeout: 15000,
       windowsHide: true,
     })
-    if (diffRes.status === 0 && diffRes.stdout) {
+    if (diffRes.status !== 0 || diffRes.error || diffRes.signal) {
+      return { ok: false, rule: 'secret_scan_error', reason: '[PrePushGuard] Push BLOCKED: unable to complete secret scan.' }
+    }
+    if (diffRes.stdout) {
       let currentFile = ''
       for (const line of diffRes.stdout.split('\n')) {
         if (line.startsWith('+++ b/')) {
@@ -489,7 +509,11 @@ async function inspectPushCommand(command, context = {}) {
     return { ok: true, isPush: false }
   }
 
-  const gitRoot = nearestGitRoot(context.cwd || process.cwd())
+  const commandTokens = String(pushCheck.segment || '').split(/\s+/)
+  let inspectionCwd = context.cwd || process.cwd()
+  const cIndex = commandTokens.indexOf('-C')
+  if (cIndex >= 0 && commandTokens[cIndex + 1]) inspectionCwd = path.resolve(inspectionCwd, commandTokens[cIndex + 1])
+  const gitRoot = nearestGitRoot(inspectionCwd)
   if (!gitRoot) {
     // If not inside a git repository, allow command so git outputs its own error
     return { ok: true, isPush: true, notGitRepo: true }
@@ -498,12 +522,13 @@ async function inspectPushCommand(command, context = {}) {
   const details = parsePushDetails(pushCheck.segment, gitRoot)
 
   // Stage 1: Branch Protection
-  const branchCheck = checkBranchProtection(details.branch, {
-    db: context.db,
-    allowProtectedOverride: context.allowProtectedOverride,
-  })
-  if (!branchCheck.ok) {
-    return { ok: false, isPush: true, ...branchCheck }
+  const branches = details.branches && details.branches.length ? details.branches : [details.branch]
+  for (const branch of branches) {
+    const branchCheck = checkBranchProtection(branch, {
+      db: context.db,
+      allowProtectedOverride: context.allowProtectedOverride,
+    })
+    if (!branchCheck.ok) return { ok: false, isPush: true, ...branchCheck }
   }
 
   // Stage 2: Secret & Sensitive Asset Scan
