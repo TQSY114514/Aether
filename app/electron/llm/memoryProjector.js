@@ -157,12 +157,19 @@ function projectWorkspaceMemory(db, workspaceRoot) {
 
     // Preserve external edits / Git updates: if MEMORY.md exists on disk and either
     // this is our first projection or the file differs from our last projection,
-    // import new entries from the file first (without deleting SQLite rows).
+    // reconcile changes using 3-way merge against the baseline.
     if (fs.existsSync(targetFile)) {
+      const stat = fs.statSync(targetFile)
+      if (stat.size > MAX_MEMORY_FILE_BYTES) {
+        return { success: false, count: 0, updated: false, error: `MEMORY.md exceeds ${MAX_MEMORY_FILE_BYTES} byte limit` }
+      }
       const prevHash = _lastProjectedHash.get(ws)
       const current = fs.readFileSync(targetFile, 'utf-8')
       if (prevHash !== current) {
-        syncMemoryFileToDb(db, ws, { deleteMissing: false })
+        syncMemoryFileToDb(db, ws, {
+          deleteMissing: false,
+          baselineContent: prevHash || null,
+        })
       }
     }
 
@@ -178,14 +185,18 @@ function projectWorkspaceMemory(db, workspaceRoot) {
       return { success: true, path: targetFile, count: rows.length, updated: false }
     }
 
+    let tempFile = null
     _isWritingFile.add(ws)
     try {
       fs.mkdirSync(ws, { recursive: true })
-      const tempFile = `${targetFile}.aether-${process.pid}-${Date.now()}.tmp`
+      tempFile = `${targetFile}.aether-${process.pid}-${Date.now()}.tmp`
       fs.writeFileSync(tempFile, content, 'utf-8')
       fs.renameSync(tempFile, targetFile)
       _lastProjectedHash.set(ws, content)
     } finally {
+      if (tempFile && fs.existsSync(tempFile)) {
+        try { fs.rmSync(tempFile, { force: true }) } catch {}
+      }
       _isWritingFile.delete(ws)
     }
 
@@ -201,10 +212,10 @@ function projectWorkspaceMemory(db, workspaceRoot) {
  *
  * @param {Object} db - database instance
  * @param {string} [workspaceRoot]
- * @param {{ deleteMissing?: boolean }} [options]
+ * @param {{ deleteMissing?: boolean, baselineContent?: string|null }} [options]
  * @returns {{ success: boolean, added: number, removed: number, total: number, error?: string }}
  */
-function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true } = {}) {
+function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineContent = null } = {}) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, added: 0, removed: 0, total: 0, error: 'No workspace root' }
 
@@ -262,8 +273,24 @@ function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true } = {}) {
       }
     }
 
-    // Remove items that were deleted from file (only user or assistant memories)
-    if (deleteMissing) {
+    if (baselineContent != null) {
+      // 3-way reconciliation: Only delete memories that existed in baseline but were removed by user from file
+      const baseEntries = parseMarkdownToMemories(baselineContent)
+      const baseNormSet = new Set(baseEntries.map(e => normalizeContent(e.content)).filter(Boolean))
+      for (const [norm, row] of dbNormMap) {
+        if (baseNormSet.has(norm) && !fileNormMap.has(norm)) {
+          if (row.origin === 'user' || row.origin === 'assistant') {
+            db.deleteMemory(row.id)
+            removed++
+          }
+        }
+      }
+    } else if (deleteMissing) {
+      // Explicit file sync: delete any user/assistant memories missing from file
+      // Safety guard: if file is completely empty and existing > 2, refuse bulk delete
+      if (fileEntries.length === 0 && existing.length > 2) {
+        return { success: false, added, removed: 0, total: 0, error: 'Refusing to wipe memories from empty file' }
+      }
       for (const [norm, row] of dbNormMap) {
         if (!fileNormMap.has(norm)) {
           if (row.origin === 'user' || row.origin === 'assistant') {
@@ -326,10 +353,16 @@ function debounceProjectWorkspaceMemory(db, workspaceRoot, delayMs = 2500) {
   _debounceTimers.set(ws, timer)
 }
 
+function getLastProjectedContent(workspaceRoot) {
+  const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
+  return ws ? _lastProjectedHash.get(ws) || null : null
+}
+
 module.exports = {
   projectWorkspaceMemory,
   syncMemoryFileToDb,
   getMemoryFileStatus,
+  getLastProjectedContent,
   debounceProjectWorkspaceMemory,
   formatMemoriesToMarkdown,
   parseMarkdownToMemories,

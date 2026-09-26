@@ -53,13 +53,15 @@ export default function PersonaPage() {
 
   const handleApplyToWorkspace = async (persona: { name: string; prompt: string; avatar?: string | null }) => {
     try {
-      const res = await window.electronAPI.persona.writeWorkspaceSoul('', {
+      const { sessionConfigs, currentSessionId } = useStore.getState()
+      const ws = currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null
+      const res = await window.electronAPI.persona.writeWorkspaceSoul(ws || '', {
         name: persona.name,
         prompt: persona.prompt,
         avatar: persona.avatar ?? undefined,
       })
       if (res.success) {
-        await useStore.getState().loadWorkspaceSoul()
+        await useStore.getState().loadWorkspaceSoul(ws || null)
         toast(t('persona.apply_workspace') + ' OK', { type: 'success' })
       } else {
         toast(res.error || '写入工作区失败', { type: 'error' })

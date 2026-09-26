@@ -332,7 +332,13 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     // 查找用的完整内容不一致，>50 字符的重复永远拦不住）；窗口从 50 扩到
     // 500，避免重复积累后被挤出窗口；并拦截同一批 sync 内的重复条目。
     let recent
-    try { recent = db.getMemories(500) } catch { recent = [] }
+    try {
+      if (workspace && db.prepare) {
+        recent = db.prepare('SELECT id, content, type, origin, workspace FROM memory WHERE workspace = ? ORDER BY id DESC LIMIT 500').all(workspace)
+      } else {
+        recent = db.getMemories(500)
+      }
+    } catch { recent = [] }
     // recentKeyIds 与下方同批键用同一套 rel:/txt: 命名空间 —— 此前这里还用
     // `${m.type}:` 前缀，跨同步的精确重复永远撞不上（CI 用例抓到的回归）。
     // 值存已有行 id：命中后按 id 加固。此前 UPDATE 按 type+原始空白匹配，
@@ -541,12 +547,11 @@ async function recall({ db, provider, model, userMessage, signal, workspace }) {
   try {
     if (!db || !provider || !model) return ''
     let memories
-    try { memories = workspace ? db.getMemoriesScoped(workspace) : db.getMemories(RECALL_POOL) } catch { return '' }
-    if (workspace) memories = memories.slice(0, RECALL_POOL)
+    try { memories = workspace ? db.getMemoriesScoped(workspace) : db.getMemories(RECALL_POOL * 2) } catch { return '' }
     if (!memories || memories.length === 0) return ''
     // H5: external 来源记忆不走免包装的 recall 注入（否则绕过 <untrusted_memory>
     // 降权）；它们只经 prefetch 的 _untrustedBlock 路径注入。
-    memories = memories.filter(m => m.origin !== 'external')
+    memories = memories.filter(m => m.origin !== 'external').slice(0, RECALL_POOL)
     if (memories.length === 0) return ''
     const q = String(userMessage || '').slice(0, 500)
     const list = memories.map((m, i) => `${i + 1}. [${m.type || 'fact'}] ${String(m.content).slice(0, CHUNK_CHARS).replace(/\s+/g, ' ').trim()}`).join('\n')

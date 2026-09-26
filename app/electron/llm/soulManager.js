@@ -18,9 +18,7 @@ const electron = (() => { try { return require('electron') } catch { return null
 const app = (electron && typeof electron === 'object' && electron.app) ? electron.app : null
 
 const CACHE_TTL_MS = 15_000
-let _cached = null
-let _cacheTime = 0
-let _cachedTarget = null
+const _cachedMap = new Map() // targetKey -> { data, time }
 
 /**
  * Parse Markdown with optional YAML Frontmatter into persona fields.
@@ -116,9 +114,7 @@ function getGlobalSoulPath() {
  * Invalidate the cached soul data.
  */
 function invalidateSoulCache() {
-  _cached = null
-  _cacheTime = 0
-  _cachedTarget = null
+  _cachedMap.clear()
 }
 
 /**
@@ -132,8 +128,9 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot(sessionId)
   const targetKey = `${ws || ''}`
 
-  if (_cached && _cachedTarget === targetKey && Date.now() - _cacheTime < CACHE_TTL_MS) {
-    return _cached
+  const cached = _cachedMap.get(targetKey)
+  if (cached && Date.now() - cached.time < CACHE_TTL_MS) {
+    return cached.data
   }
 
   const candidates = []
@@ -157,23 +154,20 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
         const raw = fs.readFileSync(cand.path, 'utf-8')
         const parsed = parseSoulContent(raw)
         if (parsed && parsed.prompt.length > 0) {
-          _cached = {
+          const result = {
             path: cand.path,
             fileName: path.basename(cand.path),
             ...parsed,
             isWorkspace: cand.isWorkspace,
           }
-          _cachedTarget = targetKey
-          _cacheTime = Date.now()
-          return _cached
+          _cachedMap.set(targetKey, { data: result, time: Date.now() })
+          return result
         }
       }
     } catch {}
   }
 
-  _cached = null
-  _cacheTime = 0
-  _cachedTarget = targetKey
+  _cachedMap.set(targetKey, { data: null, time: Date.now() })
   return null
 }
 
@@ -188,6 +182,7 @@ function writeWorkspaceSoul(workspaceRoot, data) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, error: 'No workspace root found' }
 
+  let tempFile = null
   try {
     const targetFile = path.resolve(ws, 'SOUL.md')
     const rel = path.relative(ws, targetFile)
@@ -200,11 +195,17 @@ function writeWorkspaceSoul(workspaceRoot, data) {
 
     fs.mkdirSync(ws, { recursive: true })
     const content = formatSoulContent(data)
-    fs.writeFileSync(targetFile, content, 'utf-8')
+    tempFile = `${targetFile}.aether-${process.pid}-${Date.now()}.tmp`
+    fs.writeFileSync(tempFile, content, 'utf-8')
+    fs.renameSync(tempFile, targetFile)
     invalidateSoulCache()
     return { success: true, path: targetFile }
   } catch (err) {
     return { success: false, error: err?.message || String(err) }
+  } finally {
+    if (tempFile && fs.existsSync(tempFile)) {
+      try { fs.rmSync(tempFile, { force: true }) } catch {}
+    }
   }
 }
 

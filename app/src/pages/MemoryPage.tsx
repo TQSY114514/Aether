@@ -273,18 +273,18 @@ export default function MemoryPage() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={handleSyncFromFile}
-                disabled={syncing || !fileStatus?.exists}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded border hover:bg-[var(--content-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={syncing}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded border hover:bg-[var(--content-bg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                 title={t('memory.sync_from_file_tip')}
               >
-                <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
+                <RefreshCw size={11} className={syncing ? 'animate-spin motion-reduce:animate-none' : ''} />
                 <span>{t('memory.sync_from_file')}</span>
               </button>
               <button
                 onClick={handleProjectWorkspace}
                 disabled={syncing}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded border hover:bg-[var(--content-bg)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs rounded border hover:bg-[var(--content-bg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                 title={t('memory.project_to_file_tip')}
               >

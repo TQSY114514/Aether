@@ -125,7 +125,7 @@ describe('MEMORY.md & memoryProjector', () => {
         rawDb.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(id)
       },
       addMemoryWithProvenance: (content, type, sourceSessionId, origin, relationMeta, workspace) => {
-        const norm = String(content || '').toLowerCase().replace(/\\s+/g, ' ').trim()
+        const norm = String(content || '').toLowerCase().replace(/\s+/g, ' ').trim()
         const info = rawDb.prepare(`
           INSERT INTO memory (content, content_norm, type, origin, source_session_id, workspace)
           VALUES (?, ?, ?, ?, ?, ?)
@@ -289,6 +289,87 @@ Root prompt.
     const soul = soulManager.getWorkspaceSoul(subWs)
     expect(soul).not.toBeNull()
     expect(soul.name).toBe('Monorepo Root Soul')
+  })
+
+  it('performs 3-way reconciliation: deletes removed baseline items but preserves newly added DB items', () => {
+    const ws = makeTmp('3way-reconcile-')
+    const memFile = join(ws, 'MEMORY.md')
+
+    // Initial projection baseline: contains M1 and M2
+    db.addMemoryWithProvenance('Memory Alpha', 'project', null, 'user', null, ws)
+    db.addMemoryWithProvenance('Memory Beta', 'preference', null, 'assistant', null, ws)
+    memoryProjector.projectWorkspaceMemory(db, ws)
+
+    const baselineContent = readFileSync(memFile, 'utf-8')
+
+    // Mid-turn action: LLM tool creates M3 in DB (not present in baseline or file)
+    db.addMemoryWithProvenance('Memory Gamma (mid-turn)', 'fact', null, 'assistant', null, ws)
+
+    // User edited MEMORY.md: removed Alpha, kept Beta, added Delta
+    const editedContent = `# Project Memory
+## User Preferences
+- Memory Beta
+## Development Patterns
+- Memory Delta (user added)
+`
+    writeFileSync(memFile, editedContent, 'utf-8')
+
+    // Run syncMemoryFileToDb with baselineContent
+    const res = memoryProjector.syncMemoryFileToDb(db, ws, {
+      deleteMissing: false,
+      baselineContent,
+    })
+
+    expect(res.success).toBe(true)
+    expect(res.added).toBe(1) // Memory Delta added
+    expect(res.removed).toBe(1) // Memory Alpha removed because it was in baseline but not in file
+
+    // Check final SQLite rows
+    const rows = db.allRows('SELECT content FROM memory WHERE workspace = ?', [ws]).map(r => r.content)
+    expect(rows).not.toContain('Memory Alpha') // deleted
+    expect(rows).toContain('Memory Beta') // kept
+    expect(rows).toContain('Memory Delta (user added)') // added from file
+    expect(rows).toContain('Memory Gamma (mid-turn)') // preserved! (not wiped out)
+  })
+
+  it('supports multi-workspace caching for SOUL.md without cross-contamination', () => {
+    const ws1 = makeTmp('ws1-soul-')
+    const ws2 = makeTmp('ws2-soul-')
+
+    writeFileSync(join(ws1, 'SOUL.md'), `---
+name: Soul Project One
+---
+Prompt One.
+`, 'utf-8')
+
+    writeFileSync(join(ws2, 'SOUL.md'), `---
+name: Soul Project Two
+---
+Prompt Two.
+`, 'utf-8')
+
+    const soul1 = soulManager.getWorkspaceSoul(ws1)
+    const soul2 = soulManager.getWorkspaceSoul(ws2)
+
+    expect(soul1?.name).toBe('Soul Project One')
+    expect(soul2?.name).toBe('Soul Project Two')
+
+    // Cache hit verification
+    const cached1 = soulManager.getWorkspaceSoul(ws1)
+    const cached2 = soulManager.getWorkspaceSoul(ws2)
+    expect(cached1?.name).toBe('Soul Project One')
+    expect(cached2?.name).toBe('Soul Project Two')
+  })
+
+  it('rejects projection if existing MEMORY.md exceeds 1MB limit', () => {
+    const ws = makeTmp('large-mem-ws-')
+    const memFile = join(ws, 'MEMORY.md')
+    // Write 1.1MB dummy content
+    writeFileSync(memFile, 'X'.repeat(1024 * 1024 + 100), 'utf-8')
+
+    const res = memoryProjector.projectWorkspaceMemory(db, ws)
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('byte limit')
   })
 })
 

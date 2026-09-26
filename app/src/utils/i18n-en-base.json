@@ -339,7 +339,7 @@
   "persona.subtitle": "Create and manage AI personas",
   "persona.title": "Persona Management",
   "persona.use": "Use",
-  "persona.workspace_soul_desc": "Loaded from workspace root; automatically applies to all sessions in this project.",
+  "persona.workspace_soul_desc": "Loaded from workspace root; automatically applies to project sessions when no specific persona is selected.",
   "persona.workspace_soul_title": "Project Soul (SOUL.md)",
   "risk.deletes_files": "Deletes files",
   "risk.installs_deps": "Installs dependencies",
