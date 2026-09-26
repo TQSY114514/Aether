@@ -166,8 +166,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     return allowRulesStore.listAll(sessionId)
   })
   ipcMain.handle('chat:permissions:save', (_e, { name, ruleKey, decision }) => {
-    allowRulesStore.persist(db, name, ruleKey, decision || 'allow')
-    return { ok: true }
+    const ok = allowRulesStore.persist(db, name, ruleKey, decision || 'allow')
+    return ok ? { ok: true } : { ok: false, error: 'Failed to persist permission rule' }
   })
   ipcMain.handle('chat:permissions:remove', (_e, { name, ruleKey }) => {
     allowRulesStore.removePersisted(db, name, ruleKey)
