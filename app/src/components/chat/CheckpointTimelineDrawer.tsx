@@ -6,7 +6,7 @@
 // and roll back any change to a precise point in time.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import {
@@ -71,57 +71,93 @@ export default function CheckpointTimelineDrawer() {
   const [search, setSearch] = useState('')
   const [rollingId, setRollingId] = useState<number | null>(null)
 
+  const currentSessionRef = useRef(currentSessionId)
+  currentSessionRef.current = currentSessionId
+
   const loadCheckpoints = useCallback(async () => {
-    if (!currentSessionId) {
+    const sid = currentSessionId
+    if (!sid) {
       setCheckpoints([])
       return
     }
     setLoading(true)
     try {
-      const list = await window.electronAPI.agentCheckpoint.list({ sessionId: currentSessionId })
+      const list = await window.electronAPI.agentCheckpoint.list({ sessionId: sid })
+      if (currentSessionRef.current !== sid) return
       // Sort newest first
       const sorted = (list || []).slice().sort((a: any, b: any) => b.id - a.id)
       setCheckpoints(sorted)
     } catch {
-      setCheckpoints([])
+      if (currentSessionRef.current === sid) {
+        setCheckpoints([])
+      }
     } finally {
-      setLoading(false)
+      if (currentSessionRef.current === sid) {
+        setLoading(false)
+      }
     }
   }, [currentSessionId])
 
   useEffect(() => {
     if (open) {
       loadCheckpoints()
+    } else {
+      setCheckpoints([])
     }
-  }, [open, loadCheckpoints])
+  }, [open, currentSessionId, loadCheckpoints])
+
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, setOpen])
 
   const handleRollback = useCallback(
     async (cp: CheckpointRecord) => {
       if (rollingId !== null || cp.rolled_back_at || !currentSessionId) return
       const ok = window.confirm(
-        `确定要回滚到检查点 #${cp.id} 吗？\n将撤销本次工具调用 (${cp.tool_name}) 写入的文件更改。`
+        t('checkpoints.confirm_rollback_msg', `#${cp.id}`, cp.tool_name || '')
       )
       if (!ok) return
 
       setRollingId(cp.id)
       try {
-        const res = await window.electronAPI.agentCheckpoint.rollback({
+        let res = await window.electronAPI.agentCheckpoint.rollback({
           id: cp.id,
           sessionId: currentSessionId,
         })
-        if (res.success) {
+        if (res && res.conflict) {
+          const forceConfirm = window.confirm(
+            `${res.error}\n\n${t('checkpoints.confirm_force_rollback', '是否强制覆盖回滚？')}`
+          )
+          if (forceConfirm) {
+            res = await window.electronAPI.agentCheckpoint.rollback({
+              id: cp.id,
+              sessionId: currentSessionId,
+              force: true,
+            })
+          } else {
+            return
+          }
+        }
+        if (res && res.success) {
           useStore
             .getState()
-            .triggerToast(`已回滚至检查点 #${cp.id}`, 'success')
+            .triggerToast(t('checkpoints.rollback_success', `#${cp.id}`), 'success')
           await loadCheckpoints()
           await useStore.getState().loadMessages(currentSessionId)
         } else {
           useStore
             .getState()
-            .triggerToast(`回滚失败：${res.error || '未知错误'}`, 'error')
+            .triggerToast(t('checkpoints.rollback_failed', res?.error || 'unknown'), 'error')
         }
       } catch (e: any) {
-        useStore.getState().triggerToast(`回滚异常：${e.message || e}`, 'error')
+        useStore.getState().triggerToast(t('checkpoints.rollback_failed', e.message || String(e)), 'error')
       } finally {
         setRollingId(null)
       }
@@ -145,6 +181,9 @@ export default function CheckpointTimelineDrawer() {
 
   return (
     <aside
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('checkpoints.title', '检查点时光机')}
       className="fixed top-0 bottom-0 end-0 w-[380px] z-[110] flex flex-col animate-blur-fade shadow-2xl"
       style={{
         backgroundColor: 'var(--bg-primary)',

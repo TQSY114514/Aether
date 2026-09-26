@@ -112,11 +112,30 @@ function findLatestCheckpointForRoot(gitRoot) {
   return null
 }
 
-function rollbackCheckpoint(id) {
+function rollbackCheckpoint(id, opts = {}) {
   if (!db) return { success: false, error: 'database unavailable' }
   const cp = db.getAgentCheckpoint(id)
   if (!cp) return { success: false, error: 'checkpoint not found' }
   if (cp.rolled_back_at) return { success: false, error: 'checkpoint already rolled back' }
+
+  // Check if any newer, un-rolled-back checkpoints exist in the same session
+  if (!opts.force && db.prepare && cp.session_id) {
+    try {
+      const newer = db.prepare(`
+        SELECT id, tool_name, created_at FROM agent_checkpoint
+        WHERE session_id = ? AND id > ? AND rolled_back_at IS NULL
+      `).all(cp.session_id, id)
+      if (newer && newer.length > 0) {
+        return {
+          success: false,
+          conflict: true,
+          error: `检测到存在更新的未回滚检查点 (#${newer.map(n => n.id).join(', #')})。回滚当前快照将覆盖后续修改。`,
+          newerIds: newer.map(n => n.id),
+        }
+      }
+    } catch {}
+  }
+
   const snapshot = cp.snapshot || {}
   const restored = []
   const failed = []

@@ -441,7 +441,7 @@ interface Window {
     }
     agentCheckpoint: {
       list: (params: { sessionId: number; messageId?: number | null }) => Promise<any[]>
-      rollback: (params: { id: number; sessionId?: number }) => Promise<{ success: boolean; restored?: string[]; failed?: { path: string; error: string }[]; error?: string }>
+      rollback: (params: { id: number; sessionId?: number; force?: boolean }) => Promise<{ success: boolean; conflict?: boolean; newerIds?: number[]; restored?: string[]; failed?: { path: string; error: string }[]; error?: string }>
     }
     trust: {
       badge: (params: { sessionId?: number; modelId?: number }) => Promise<{ level: string; score: number; reason: string } | null>

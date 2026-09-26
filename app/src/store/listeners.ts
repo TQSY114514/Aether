@@ -2,6 +2,7 @@ import type { StoreApi } from "zustand"
 import type { AppState } from "./types"
 import type { TaskInfo } from "./types"
 import { taskProgressText, taskApi } from "./types"
+import { t } from "../utils/i18n"
 
 // Lazy store reference - set by initStoreListeners() after store creation.
 let _store: StoreApi<AppState> | null = null
@@ -495,7 +496,7 @@ export function ensureMemorySavedListener() {
   _memorySavedListenerInstalled = true
   window.electronAPI.chat.onMemorySaved?.((payload) => {
     const count = payload.total || payload.added || 1
-    const msg = payload.text || `已保存到记忆 ${count} entries`
+    const msg = payload.text || t('memory.saved_toast', String(count))
     getStore().getState().triggerToast(msg, 'success')
   })
 }
@@ -504,7 +505,7 @@ export function ensureSkillPatchedListener() {
   if (_skillPatchedListenerInstalled) return
   _skillPatchedListenerInstalled = true
   window.electronAPI.chat.onSkillPatched?.((payload) => {
-    const msg = payload.text || `Self-improvement review: Skill '${payload.skillName}' patched`
+    const msg = payload.text || t('skill.patched_toast', payload.skillName || '')
     getStore().getState().triggerToast(msg, 'info')
   })
 }

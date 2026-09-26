@@ -404,8 +404,10 @@ async function diagnoseSystem(db, { cwd, sessionId } = {}) {
   if (db) {
     try {
       const rows = db.prepare('SELECT id, name, api_url, api_format FROM provider WHERE enabled = 1').all()
-      for (const row of rows) {
-        const probe = await probeEndpoint(row.api_url)
+      const probeResults = await Promise.all(rows.map(r => probeEndpoint(r.api_url)))
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const probe = probeResults[i]
         providers.push({
           id: row.id,
           name: row.name,

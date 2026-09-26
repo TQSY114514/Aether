@@ -194,8 +194,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('agent-checkpoint:list', (_e, { sessionId, messageId = null } = {}) => {
     return db.listAgentCheckpoints(sessionId, messageId)
   })
-  ipcMain.handle('agent-checkpoint:rollback', (_e, { id, sessionId } = {}) => {
-    const res = checkpoints.rollbackCheckpoint(id)
+  ipcMain.handle('agent-checkpoint:rollback', (_e, { id, sessionId, force } = {}) => {
+    const res = checkpoints.rollbackCheckpoint(id, { force: !!force })
     try {
       const targetSid = sessionId || res?.sessionId
       if (targetSid) require('../llm/backgroundTasks').bumpBranchGeneration(targetSid)
