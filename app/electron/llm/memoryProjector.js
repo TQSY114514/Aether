@@ -11,6 +11,8 @@ const { getWorkspaceRoot } = require('../tools/sandbox')
 const { normalizeContent, keywords } = require('../memoryText')
 const log = require('../logger')
 
+const MAX_MEMORY_FILE_BYTES = 1024 * 1024
+
 let _lastProjectedHash = new Map() // workspace -> md5/content
 let _isWritingFile = new Set()     // lock to prevent self-trigger loop
 
@@ -127,7 +129,6 @@ function parseMarkdownToMemories(text) {
       }
       if (content.length > 0) {
         result.push({ content, type })
-        if (result.length >= 200) break // Guard: cap at 200 memories per workspace file
       }
     }
   }
@@ -161,10 +162,19 @@ function projectWorkspaceMemory(db, workspaceRoot) {
       return { success: true, path: targetFile, count: rows.length, updated: false }
     }
 
+    // Never overwrite a file changed since our last projection.
+    if (fs.existsSync(targetFile) && _lastProjectedHash.has(ws)) {
+      const current = fs.readFileSync(targetFile, 'utf-8')
+      if (current !== _lastProjectedHash.get(ws)) {
+        return { success: false, path: targetFile, count: rows.length, updated: false, error: 'MEMORY.md changed externally; refusing to overwrite' }
+      }
+    }
     _isWritingFile.add(ws)
     try {
       fs.mkdirSync(ws, { recursive: true })
-      fs.writeFileSync(targetFile, content, 'utf-8')
+      const tempFile = `${targetFile}.aether-${process.pid}-${Date.now()}.tmp`
+      fs.writeFileSync(tempFile, content, 'utf-8')
+      fs.renameSync(tempFile, targetFile)
       _lastProjectedHash.set(ws, content)
     } finally {
       _isWritingFile.delete(ws)
@@ -198,6 +208,10 @@ function syncMemoryFileToDb(db, workspaceRoot) {
   }
 
   try {
+    const stat = fs.statSync(targetFile)
+    if (stat.size > MAX_MEMORY_FILE_BYTES) {
+      return { success: false, added: 0, removed: 0, total: 0, error: `MEMORY.md exceeds ${MAX_MEMORY_FILE_BYTES} byte limit` }
+    }
     const raw = fs.readFileSync(targetFile, 'utf-8')
     if (_lastProjectedHash.get(ws) === raw) {
       return { success: true, added: 0, removed: 0, total: 0 }
@@ -227,8 +241,8 @@ function syncMemoryFileToDb(db, workspaceRoot) {
     // Add items that exist in file but not in DB
     for (const [norm, entry] of fileNormMap) {
       if (!dbNormMap.has(norm)) {
-        db.addMemoryWithProvenance(entry.content, entry.type, null, 'user', null, ws)
-        added++
+        const result = db.addMemoryWithProvenance(entry.content, entry.type, null, 'user', null, ws)
+        if (result && !result.duplicate && result.lastInsertRowid != null) added++
       }
     }
 

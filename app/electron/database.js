@@ -1618,24 +1618,26 @@ function addMemory({ content, type, source_session_id, workspace }) {
 // 写入层查重：返回应 solidify 的已有行 id，无重复返回 null。
 // 精确匹配不限类型 —— 同一句话换个类型标签（fact/context）仍是同一条记忆；
 // 改写级 Jaccard 扫描仅限同类型近 500 条；relation 是结构化三元组，只做精确。
-function findSolidifyTarget(content, type) {
+function findSolidifyTarget(content, type, workspace) {
   try {
     const t = String(type || "fact").toLowerCase();
+    const wsClause = workspace == null ? "workspace IS NULL" : "workspace = ?";
+    const wsArgs = workspace == null ? [] : [workspace];
     // content_norm 列（迁移回填 + 写入维护）带索引，精确匹配 O(log n)。
     const exact = db
       .prepare(
-        "SELECT id FROM memory WHERE content_norm = ? ORDER BY id ASC LIMIT 1",
+        `SELECT id FROM memory WHERE content_norm = ? AND ${wsClause} ORDER BY id ASC LIMIT 1`,
       )
-      .get(memNormalize(String(content)));
+      .get(memNormalize(String(content)), ...wsArgs);
     if (exact) return exact.id;
     if (t === "relation") return null;
     const kw = memKeywords(content);
     if (kw.size === 0) return null;
     const rows = db
       .prepare(
-        "SELECT id, content FROM memory WHERE LOWER(TRIM(type)) = ? ORDER BY created_at DESC, id DESC LIMIT 500",
+        `SELECT id, content FROM memory WHERE LOWER(TRIM(type)) = ? AND ${wsClause} ORDER BY created_at DESC, id DESC LIMIT 500`,
       )
-      .all(t);
+      .all(t, ...wsArgs);
     const nTarget = memNormalize(content);
     for (const r of rows) {
       if (memNormalize(r.content) === nTarget) return r.id; // 大小写/空白变体
@@ -1663,7 +1665,7 @@ function addMemoryWithProvenance(
   // 备份导入四条路径全部经此处。命中已有记忆时 solidify（confidence +0.1
   // 封顶 1.0）而不是插入副本。duplicate 标记供调用方跳过后续的 origin
   // 改写与冲突标记（重新观察到同一事实不是冲突，也不能覆盖原始来源）。
-  const dupId = findSolidifyTarget(c, t);
+  const dupId = findSolidifyTarget(c, t, workspace);
   if (dupId != null) {
     try {
       db.prepare(
