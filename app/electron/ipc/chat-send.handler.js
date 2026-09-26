@@ -465,6 +465,41 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
         let turnFileSummary = null
+        const mergeFileSummary = (incoming) => {
+          if (!incoming || !Array.isArray(incoming.files)) return
+          if (!turnFileSummary) {
+            turnFileSummary = {
+              totalAdded: incoming.totalAdded || 0,
+              totalRemoved: incoming.totalRemoved || 0,
+              fileCount: incoming.files.length,
+              files: [...incoming.files],
+            }
+            return
+          }
+          const fileMap = new Map()
+          for (const f of (turnFileSummary.files || [])) {
+            if (f && f.path) fileMap.set(f.path, { ...f })
+          }
+          for (const f of incoming.files) {
+            if (!f || !f.path) continue
+            if (fileMap.has(f.path)) {
+              const existing = fileMap.get(f.path)
+              existing.added = (existing.added || 0) + (f.added || 0)
+              existing.removed = (existing.removed || 0) + (f.removed || 0)
+              if (f.status === 'deleted') existing.status = 'deleted'
+            } else {
+              fileMap.set(f.path, { ...f })
+            }
+          }
+          const mergedFiles = Array.from(fileMap.values())
+          turnFileSummary = {
+            totalAdded: mergedFiles.reduce((acc, f) => acc + (f.added || 0), 0),
+            totalRemoved: mergedFiles.reduce((acc, f) => acc + (f.removed || 0), 0),
+            fileCount: mergedFiles.length,
+            files: mergedFiles,
+          }
+        }
+
         const runSingleLoop = () => runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
@@ -472,7 +507,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
           sessionId, messageId: msgId, db,
           autoCommit: true,
-          onFileSummary: (summary) => { turnFileSummary = summary },
+          onFileSummary: (summary) => { mergeFileSummary(summary) },
           ...cb,
           getPendingInjections: () => pendingInjections.get(sessionId) || [],
           clearPendingInjections: () => pendingInjections.delete(sessionId),
@@ -522,7 +557,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           try {
             const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: {
               ...cb,
-              onFileSummary: (summary) => { turnFileSummary = summary },
+              onFileSummary: (summary) => { mergeFileSummary(summary) },
             } })
             const returned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
             finalContent = streamedContent || returned || ''
@@ -613,9 +648,20 @@ ipcMain.handle('chat:complete', handleChatComplete)
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
-        // Preserve accumulated content on abort (tool-loop path)
+        // Preserve accumulated content and file summary on abort (tool-loop path)
         const preserved = streamedContent || finalContent || ''
-        db.updateMessage(msgId, { content: preserved, status: 'aborted', error_message: errMsg })
+        const updatePayload = { content: preserved, status: 'aborted', error_message: errMsg }
+        if (turnFileSummary?.fileCount > 0) {
+          updatePayload.file_summary = JSON.stringify(turnFileSummary)
+          try {
+            wc?.send('chat:turn-summary', {
+              messageId: msgId,
+              sessionId,
+              fileSummary: turnFileSummary,
+            })
+          } catch {}
+        }
+        db.updateMessage(msgId, updatePayload)
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         return { messageId: msgId, modelSuggestion }
       } finally {
