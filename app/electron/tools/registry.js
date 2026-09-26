@@ -435,11 +435,14 @@ const TOOLS = [
     if (pushGuard.isPush && pushGuard.summary) {
       try {
         const s = pushGuard.summary
-        const target = s.wholeTree ? `${s.branch} (无远端引用,已扫整棵树)` : s.branch
+        // A push can cover several refs (`--all`, `--tags`), so report the
+        // count rather than pretending there is one branch.
+        const where = s.ranges && s.ranges.length > 1 ? `${s.ranges.length} 个引用` : `${s.remote}/${s.branch}`
+        const target = s.wholeTree ? `${where} (无远端引用,已扫整棵树)` : where
         const notes = s.notes && s.notes.length ? `;留意 ${s.notes.join(';')}` : ''
         ctx?.onStatus?.({
           kind: 'info',
-          text: `🛡️ PrePushGuard: 密钥扫描通过 (${s.remote}/${target}, ${s.commitsCount} 个提交)${notes}`,
+          text: `🛡️ PrePushGuard: 密钥扫描通过 (${target}, ${s.commitsCount} 个提交)${notes}`,
         })
       } catch {}
     }

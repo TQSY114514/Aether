@@ -16,7 +16,11 @@
 // have, so content that is already public is not re-flagged — re-flagging it
 // blocks every push of a new branch while protecting nothing. With no remote
 // ref at all (a brand-new repository) the whole tree is scanned. See
-// resolveScanRange for why both halves of that rule matter.
+// resolveScanTargets for why both halves of that rule matter.
+//
+// Scope is what the push actually sends, not what HEAD happens to point at: a
+// push can name another local branch, send every branch (`--all`), or carry
+// tags (`--tags`). Each of those refs is judged on its own range.
 //
 // Known limit: this inspects a command string and a diff. `bash push.sh`,
 // `sh -c`, or `npm run deploy` all slip past it. It is a guardrail against a
@@ -273,7 +277,7 @@ function looksLikeRemoteUrl(token) {
  *
  * @param {string} segment - The command segment containing `git push ...`
  * @param {string} gitRoot - Absolute path to git root
- * @returns {{ remote: string, branch: string, branches: string[], isDryRun: boolean, isTags: boolean, isAll: boolean, isDelete: boolean }}
+ * @returns {{ remote: string, branch: string, branches: string[], sources: string[], isDryRun: boolean, isTags: boolean, isAll: boolean, isDelete: boolean }}
  */
 function parsePushDetails(segment, gitRoot) {
   const tokens = tokenizeCommand(segment)
@@ -313,20 +317,41 @@ function parsePushDetails(segment, gitRoot) {
   const remote = explicitRemote || (remoteIndex >= 0 ? args[remoteIndex] : 'origin')
   const refspecSource = remoteIndex >= 0 ? args.slice(remoteIndex + 1) : (explicitRemote ? args : [])
 
-  const refspecs = refspecSource.map(s => String(s).replace(/^\+/, '')).filter(s => s && s !== ':')
+  // Each refspec is split into source and destination. The source is what
+  // actually travels, so it — not HEAD — decides what a push of some *other*
+  // branch has to be scanned against.
+  const refspecs = refspecSource
+    .map(raw => String(raw).replace(/^\+/, ''))
+    .filter(s => s && s !== ':')
+    .map(s => {
+      const bare = s.replace(/^refs\/heads\//, '')
+      const colon = bare.indexOf(':')
+      const src = colon >= 0 ? bare.slice(0, colon) : bare
+      const dst = colon >= 0 ? bare.slice(colon + 1) : bare
+      return { src, dst: dst.replace(/^refs\/heads\//, '') }
+    })
 
-  const branches = refspecs.map(r => {
-    const target = r.includes(':') ? (r.split(':')[1] || '') : r
-    return target.replace(/^refs\/heads\//, '')
-  }).filter(Boolean)
+  const branches = refspecs.map(r => r.dst).filter(Boolean)
+  const sources = refspecs.map(r => r.src).filter(Boolean)
+  // `git push origin :feat/x` sends no content — every refspec is a deletion.
+  const deletesOnly = refspecs.length > 0 && sources.length === 0
 
   let branch = branches[0] || ''
   if (!branch) {
-    const head = (gitText(gitRoot, ['rev-parse', '--abbrev-ref', 'HEAD']) || '').trim()
+    const head = currentBranchOf(gitRoot)
     branch = head && head !== 'HEAD' ? head : 'HEAD'
   }
 
-  return { remote, branch, branches, isDryRun, isTags, isAll, isDelete }
+  return {
+    remote,
+    branch,
+    branches,
+    sources,
+    isDryRun,
+    isTags,
+    isAll,
+    isDelete: isDelete || deletesOnly,
+  }
 }
 
 /**
@@ -372,52 +397,144 @@ function remoteRefCandidates(gitRoot, remote) {
     .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
 }
 
+/** The branch currently checked out, or '' when HEAD is detached. */
+function currentBranchOf(gitRoot) {
+  const head = (gitText(gitRoot, ['rev-parse', '--abbrev-ref', 'HEAD']) || '').trim()
+  return head === 'HEAD' ? '' : head
+}
+
+/** Short names of the refs under a prefix — every local branch, or every tag. */
+function localRefs(gitRoot, prefix) {
+  const out = gitText(gitRoot, ['for-each-ref', '--format=%(refname:short)', prefix])
+  if (out === null) return []
+  return out.split('\n').map(s => s.trim()).filter(Boolean)
+}
+
 /**
- * Determine what content is about to reach the remote.
+ * Base and range for one ref that is about to be pushed.
  *
  * Two mistakes are possible here and they are not symmetric. A range that scans
  * nothing lets a key through silently; a range that scans too much blocks work
  * that leaks nothing. The first is the one that shipped, so the rule is: scan
- * everything this push newly introduces, and when that cannot be determined,
- * scan everything it would send.
+ * what this push newly introduces, and when that cannot be determined, scan
+ * everything it would send.
  *
- * "Newly introduces" is measured against refs the remote already has, not
- * against the empty tree. Content already reachable from a remote-tracking ref
- * is already public — re-flagging it protects nothing and blocks every push of
- * a new branch, which is how a gate gets switched off. Two cases that look
- * alike need different answers:
+ * "Newly introduces" is measured against refs the remote already has, not the
+ * empty tree: content already reachable from a remote-tracking ref is already
+ * public, and re-flagging it blocks every push of a new branch — which is how a
+ * gate gets switched off. A brand-new repository, with no remote-tracking ref
+ * at all, has nothing known to be public, so its whole tree is scanned.
  *
- *   - a brand-new repository, with no remote-tracking ref at all → nothing is
- *     known to be public, so the whole tree is scanned;
- *   - a new branch in an existing clone → `origin/master..HEAD` is exactly
- *     what the push adds, and already-public files stay unscanned.
+ * `@{u}` describes whatever branch is checked out, so it is a valid base only
+ * when that is the ref being pushed. Applied to any other ref it points at a
+ * commit unrelated to the push — which is how pushing `feat/dirty` from a clean
+ * `master` scanned `master`'s empty increment and let the key through. The tip
+ * is the pushed ref rather than HEAD for the same reason.
  *
- * The previous implementation fell back to a *local* branch name, so the first
- * push of a fresh repo resolved to `<currentBranch>..HEAD` — HEAD was that
- * branch — and the scan cleared a push that was carrying `.env`.
- *
- * @returns {{ range: string, base: string, wholeTree: boolean }}
+ * @param {string} gitRoot
+ * @param {string} remote
+ * @param {string} src - ref being pushed; 'HEAD' or '' means the current branch
+ * @param {string} currentBranch
+ * @returns {{ ref: string, tip: string, base: string, range: string, wholeTree: boolean }}
  */
-function resolveScanRange(gitRoot, details) {
-  const remote = details && details.remote ? details.remote : 'origin'
-  const branch = details && details.branch ? details.branch : ''
+function scanTargetFor(gitRoot, remote, src, currentBranch) {
+  const named = src && src !== 'HEAD' ? src : currentBranch
+  // Only a ref that resolves can be pushed. A name git cannot resolve is git's
+  // own error to report, so fall back to HEAD rather than failing the scan on
+  // a ref that is not there.
+  const pushed = named && named !== currentBranch && refExists(gitRoot, named) ? named : ''
+  const tip = pushed || 'HEAD'
   const candidates = []
 
-  if (branch && branch !== 'HEAD') {
-    candidates.push(`${remote}/${branch}`)
-  }
-  candidates.push('@{u}')
+  if (named) candidates.push(`${remote}/${named}`)
+  if (tip === 'HEAD') candidates.push('@{u}')
   candidates.push(...remoteRefCandidates(gitRoot, remote))
 
   for (const ref of candidates) {
     if (refExists(gitRoot, ref)) {
-      return { range: `${ref}..HEAD`, base: ref, wholeTree: false }
+      return { ref: named || 'HEAD', tip, base: ref, range: `${ref}..${tip}`, wholeTree: false }
     }
   }
-  return { range: `${EMPTY_TREE}..HEAD`, base: EMPTY_TREE, wholeTree: true }
+  return { ref: named || 'HEAD', tip, base: EMPTY_TREE, range: `${EMPTY_TREE}..${tip}`, wholeTree: true }
+}
+
+/**
+ * Every ref this push will send, each with the range covering what it adds.
+ *
+ * A push is not always "the current branch to the remote". It can name another
+ * local branch (`git push origin feat/x` from a clean `master`), send every
+ * branch (`--all`, `--mirror`), or carry tags (`--tags`) pointing at commits no
+ * branch range covers. Judging all of those against a single HEAD range answers
+ * a question nobody asked, and answering it wrongly lets the key through.
+ *
+ * @param {string} gitRoot
+ * @param {object} details - result of parsePushDetails
+ * @returns {Array<{ ref: string, tip: string, base: string, range: string, wholeTree: boolean }>}
+ */
+function resolveScanTargets(gitRoot, details) {
+  const remote = details && details.remote ? details.remote : 'origin'
+  const currentBranch = currentBranchOf(gitRoot)
+  let srcs
+
+  if (details && details.isAll) {
+    srcs = localRefs(gitRoot, 'refs/heads/')
+  } else if (details && details.sources && details.sources.length) {
+    srcs = details.sources.slice()
+  } else {
+    srcs = [currentBranch || 'HEAD']
+  }
+  if (details && details.isTags) srcs.push(...localRefs(gitRoot, 'refs/tags/'))
+
+  const seen = new Set()
+  const targets = []
+  for (const src of srcs) {
+    if (!src || seen.has(src)) continue
+    seen.add(src)
+    targets.push(scanTargetFor(gitRoot, remote, src, currentBranch))
+  }
+  // `--all` in a repository with no branch yet: still judge what HEAD would send.
+  if (targets.length === 0) {
+    targets.push(scanTargetFor(gitRoot, remote, currentBranch || 'HEAD', currentBranch))
+  }
+  return targets
+}
+
+/**
+ * The primary range for a push, for callers that want exactly one. See
+ * resolveScanTargets — a single push can cover several refs.
+ *
+ * @returns {{ range: string, base: string, wholeTree: boolean }}
+ */
+function resolveScanRange(gitRoot, details) {
+  return resolveScanTargets(gitRoot, details)[0]
 }
 
 // ─── scanning ────────────────────────────────────────────────────────────────
+
+/**
+ * Strip the quoting git puts around a path holding spaces or non-ASCII bytes,
+ * so a reported filename is the filename.
+ * @param {string} raw
+ * @returns {string}
+ */
+function unquotePath(raw) {
+  const s = String(raw || '')
+  if (s.length > 1 && s.startsWith('"') && s.endsWith('"')) {
+    return s.slice(1, -1).replace(/\\(["\\])/g, '$1')
+  }
+  return s
+}
+
+/** What the scan actually covered, for the block message. */
+function describeScope(targets) {
+  if (targets.length === 1) {
+    const t = targets[0]
+    return t.wholeTree
+      ? `No remote-tracking branch exists for '${t.ref}', so the entire tree it would send was scanned.`
+      : `Unpushed commits in ${t.range}.`
+  }
+  return `Scanned what this push sends on ${targets.length} refs: ${targets.map(t => t.range).join('; ')}.`
+}
 
 function scanError(what, detail) {
   return {
@@ -435,125 +552,170 @@ function scanError(what, detail) {
 /**
  * Scan the changeset for sensitive filenames and exposed credentials.
  *
+ * Covers every ref the push sends, so a push that names another branch, or
+ * carries `--all`/`--tags`, is judged on what it actually sends.
+ *
  * @param {string} gitRoot
  * @param {{ remote: string, branch: string }} details
- * @returns {{ ok: boolean, rule?: string, findings: Array, blocking: Array, reason?: string, range?: string, wholeTree?: boolean }}
+ * @returns {{ ok: boolean, rule?: string, findings: Array, blocking: Array, reason?: string, range?: string, ranges?: string[], targets?: Array, wholeTree?: boolean }}
  */
 function scanForSecrets(gitRoot, details) {
   if (process.env[SKIP_ENV_VAR] === '1') {
-    return { ok: true, skipped: true, findings: [], blocking: [] }
+    return { ok: true, skipped: true, findings: [], blocking: [], targets: [], ranges: [] }
   }
 
-  const { range, wholeTree } = resolveScanRange(gitRoot, details)
+  const targets = resolveScanTargets(gitRoot, details)
   const findings = []
-
-  // 1. Filenames in the changeset. `-z` keeps paths containing spaces intact;
-  //    `--no-renames` keeps the record stride at two NUL-separated fields, so a
-  //    rename cannot be mistaken for a delimited path.
-  const namesRaw = gitText(
-    gitRoot,
-    ['diff', '--name-status', '-z', '--no-renames', '--diff-filter=d', range],
-    { timeout: DIFF_TIMEOUT_MS }
-  )
-  if (namesRaw === null) return scanError('sensitive-file scan', `git diff ${range} did not complete.`)
-
-  const fields = namesRaw.split('\0')
-  for (let i = 0; i + 1 < fields.length; i += 2) {
-    const status = fields[i]
-    const file = fields[i + 1]
-    if (!status || !file || status.startsWith('D')) continue
-    if (isSensitiveFilename(file)) {
-      findings.push({
-        file,
-        type: 'sensitive_filename',
-        severity: 'block',
-        detail: `File is a credential container by name (${path.basename(file)})`,
-      })
-    } else if (looksSecretNamed(file)) {
-      findings.push({
-        file,
-        type: 'secret_named_file',
-        severity: 'review',
-        detail: `Filename mentions credentials or secrets — worth a look (${path.basename(file)})`,
-      })
-    }
+  const seen = new Set()
+  // The same file can appear in several ranges; report each finding once.
+  const add = (finding) => {
+    const key = `${finding.file}\u0000${finding.type}\u0000${finding.detail}`
+    if (seen.has(key)) return
+    seen.add(key)
+    findings.push(finding)
   }
 
-  // 2. Added lines for high-confidence token shapes. Only additions matter: a
-  //    key being removed is a fix, not a leak.
-  const patch = gitText(gitRoot, ['diff', '-U0', '--diff-filter=d', range], { timeout: DIFF_TIMEOUT_MS })
-  if (patch === null) return scanError('secret scan', `git diff -U0 ${range} did not complete.`)
+  for (const { range } of targets) {
+    // 1. Filenames in the changeset. `-z` keeps paths containing spaces intact;
+    //    `--no-renames` keeps the record stride at two NUL-separated fields, so a
+    //    rename cannot be mistaken for a delimited path.
+    const namesRaw = gitText(
+      gitRoot,
+      ['diff', '--name-status', '-z', '--no-renames', '--diff-filter=d', range],
+      { timeout: DIFF_TIMEOUT_MS }
+    )
+    if (namesRaw === null) return scanError('sensitive-file scan', `git diff ${range} did not complete.`)
 
-  let currentFile = ''
-  for (const line of patch.split('\n')) {
-    if (line.startsWith('+++ b/')) {
-      currentFile = line.slice(6).trim()
-      continue
-    }
-    if (!line.startsWith('+') || line.startsWith('+++')) continue
-    const addedText = line.slice(1)
-    for (const pat of SECRET_DIFF_PATTERNS) {
-      if (pat.re.test(addedText)) {
-        findings.push({
-          file: currentFile || '(unknown file)',
-          type: 'secret_pattern',
+    const fields = namesRaw.split('\0')
+    for (let i = 0; i + 1 < fields.length; i += 2) {
+      const status = fields[i]
+      const file = fields[i + 1]
+      if (!status || !file || status.startsWith('D')) continue
+      if (isSensitiveFilename(file)) {
+        add({
+          file,
+          type: 'sensitive_filename',
           severity: 'block',
-          detail: `Detected pattern for ${pat.name}`,
+          detail: `File is a credential container by name (${path.basename(file)})`,
         })
-        break
+      } else if (looksSecretNamed(file)) {
+        add({
+          file,
+          type: 'secret_named_file',
+          severity: 'review',
+          detail: `Filename mentions credentials or secrets — worth a look (${path.basename(file)})`,
+        })
+      }
+    }
+
+    // 2. Added lines for high-confidence token shapes. Only additions matter: a
+    //    key being removed is a fix, not a leak. `core.quotePath=false` keeps a
+    //    non-ASCII path from arriving escaped inside the `+++` header.
+    const patch = gitText(
+      gitRoot,
+      ['-c', 'core.quotePath=false', 'diff', '-U0', '--diff-filter=d', range],
+      { timeout: DIFF_TIMEOUT_MS }
+    )
+    if (patch === null) return scanError('secret scan', `git diff -U0 ${range} did not complete.`)
+
+    let currentFile = ''
+    for (const line of patch.split('\n')) {
+      if (line.startsWith('+++ b/')) {
+        currentFile = unquotePath(line.slice(6).trim())
+        continue
+      }
+      if (!line.startsWith('+') || line.startsWith('+++')) continue
+      const addedText = line.slice(1)
+      for (const pat of SECRET_DIFF_PATTERNS) {
+        if (pat.re.test(addedText)) {
+          add({
+            file: currentFile || '(unknown file)',
+            type: 'secret_pattern',
+            severity: 'block',
+            detail: `Detected pattern for ${pat.name}`,
+          })
+          break
+        }
       }
     }
   }
 
+  const ranges = targets.map(t => t.range)
+  const wholeTree = targets.some(t => t.wholeTree)
   const blocking = findings.filter(f => f.severity === 'block')
+
   if (blocking.length > 0) {
     const list = blocking.map(f => `  • ${f.file}: ${f.detail} [${f.type}]`).join('\n')
-    const scope = wholeTree
-      ? `No remote-tracking branch exists for '${details && details.branch ? details.branch : 'HEAD'}', so the entire tree it would send was scanned.`
-      : `Unpushed commits in ${range}.`
     return {
       ok: false,
       rule: 'secret_leak',
       findings,
       blocking,
-      range,
+      targets,
+      ranges,
+      range: ranges.join(', '),
       wholeTree,
-      reason: `[PrePushGuard] Push BLOCKED: potential secret or credential in what is about to be pushed.\n${scope}\n${list}\n\n`
+      reason: `[PrePushGuard] Push BLOCKED: potential secret or credential in what is about to be pushed.\n${describeScope(targets)}\n${list}\n\n`
         + `Pushing credentials to a remote is irreversible — treat any key listed above as burned.\n`
         + `Remove or redact it from the commits (e.g. git reset HEAD~1), rotate the key, then push again.\n`
         + `To push anyway, re-run with ${SKIP_ENV_VAR}=1.`,
     }
   }
 
-  return { ok: true, findings, blocking: [], range, wholeTree }
+  return { ok: true, findings, blocking: [], targets, ranges, range: ranges.join(', '), wholeTree }
 }
 
 // ─── summary ─────────────────────────────────────────────────────────────────
 
 /**
- * Gather unpushed commits and changed files for the permission dialog.
+ * Gather the commits and changed files a push sends, for the permission dialog.
  * @param {string} gitRoot
  * @param {{ remote: string, branch: string }} details
- * @param {object} [scan] - result of scanForSecrets, reused so the range matches
- * @returns {{ commits: string[], files: string[], range: string, wholeTree: boolean }}
+ * @param {object} [scan] - result of scanForSecrets, reused so the ranges match
+ * @returns {{ commits: string[], files: string[], range: string, ranges: string[], wholeTree: boolean }}
  */
 function getPushSummary(gitRoot, details, scan) {
-  const resolved = scan && scan.range ? scan : resolveScanRange(gitRoot, details)
-  const { range, wholeTree } = resolved
+  const targets = scan && scan.targets && scan.targets.length
+    ? scan.targets
+    : resolveScanTargets(gitRoot, details)
   const commits = []
   const files = []
+  const seenCommits = new Set()
+  const seenFiles = new Set()
 
-  const logRaw = gitText(gitRoot, ['log', range, '--oneline', '-n', '15'])
-  if (logRaw) commits.push(...logRaw.split('\n').map(s => s.trim()).filter(Boolean))
+  for (const { range } of targets) {
+    const logRaw = gitText(gitRoot, ['log', range, '--oneline', '-n', '15'])
+    if (logRaw) {
+      for (const line of logRaw.split('\n').map(s => s.trim()).filter(Boolean)) {
+        if (seenCommits.has(line)) continue
+        seenCommits.add(line)
+        commits.push(line)
+      }
+    }
 
-  const filesRaw = gitText(
-    gitRoot,
-    ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=d', range],
-    { timeout: DIFF_TIMEOUT_MS }
-  )
-  if (filesRaw) files.push(...filesRaw.split('\0').map(s => s.trim()).filter(Boolean))
+    const filesRaw = gitText(
+      gitRoot,
+      ['diff', '--name-only', '-z', '--no-renames', '--diff-filter=d', range],
+      { timeout: DIFF_TIMEOUT_MS }
+    )
+    if (filesRaw) {
+      // No trim here: a path may legitimately begin or end with a space.
+      for (const file of filesRaw.split('\0').filter(Boolean)) {
+        if (seenFiles.has(file)) continue
+        seenFiles.add(file)
+        files.push(file)
+      }
+    }
+  }
 
-  return { commits, files, range, wholeTree }
+  const ranges = targets.map(t => t.range)
+  return {
+    commits,
+    files,
+    range: ranges.join(', '),
+    ranges,
+    wholeTree: targets.some(t => t.wholeTree),
+  }
 }
 
 // ─── pipeline ────────────────────────────────────────────────────────────────
@@ -602,6 +764,7 @@ async function inspectPushCommand(command, context = {}) {
       isTags: details.isTags,
       isAll: details.isAll,
       range: summary.range,
+      ranges: summary.ranges,
       wholeTree: summary.wholeTree,
       commitsCount: summary.commits.length,
       commits: summary.commits,
@@ -618,6 +781,7 @@ module.exports = {
   nearestGitRoot,
   parsePushDetails,
   resolveScanRange,
+  resolveScanTargets,
   scanForSecrets,
   getPushSummary,
   inspectPushCommand,

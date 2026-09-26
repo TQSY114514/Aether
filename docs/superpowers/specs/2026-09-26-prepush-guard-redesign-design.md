@@ -33,9 +33,10 @@
 
 ```js
 isPushCommand(command)              // -> { isPush, segment? }
-parsePushDetails(segment, gitRoot)  // -> { remote, branch, branches, isDryRun, isTags, isAll, isDelete }
-resolveScanRange(gitRoot, details)  // -> { range, base, wholeTree }
-scanForSecrets(gitRoot, details)    // -> { ok, rule?, findings, blocking, range, wholeTree, reason?, skipped? }
+parsePushDetails(segment, gitRoot)  // -> { remote, branch, branches, sources, isDryRun, isTags, isAll, isDelete }
+resolveScanRange(gitRoot, details)  // -> { range, base, wholeTree }（单 ref，等价于 targets[0]）
+resolveScanTargets(gitRoot, details)// -> [{ ref, tip, base, range, wholeTree }]（本次推送会送出的每个 ref）
+scanForSecrets(gitRoot, details)    // -> { ok, rule?, findings, blocking, targets, ranges, range, wholeTree, reason?, skipped? }
 inspectPushCommand(command, ctx)    // -> { ok, isPush, reason?, summary?, dryRun?, deletion?, notGitRepo?, skipped? }
 getPushSummary(gitRoot, details, scan)
 isSensitiveFilename(filePath)       // 拦截层
@@ -57,11 +58,16 @@ SECRET_DIFF_PATTERNS / EMPTY_TREE / SKIP_ENV_VAR
 「新引入」以**远端已有的引用**为基准,而非空树:
 
 ```
-base := <remote>/<branch> | @{u} | <remote>/master | <remote>/main | 其他远端跟踪引用
-range := base..HEAD            // 增量
+base := <remote>/<src> | @{u} | <remote>/master | <remote>/main | 其他远端跟踪引用
+tip  := <src> 解析出的 ref(src 就是当前分支时记作 HEAD)
+range := base..tip             // 增量
 若一个远端跟踪引用都不存在:
-range := <empty-tree>..HEAD    // 整树:全新仓库
+range := <empty-tree>..tip     // 整树:全新仓库
 ```
+
+`<src>` 是**这次推送真正要送出的 ref**,逐 ref 计算:普通推送取 refspec 的源端(无冒号 refspec 源=目标),`--all`/`--mirror` 取全部分支,`--tags` 追加每个 tag。`@{u}` 只在被推送的 ref 就是当前 checkout 分支时才作为候选——它描述的是「当前分支的 upstream」,用在别的 ref 上会指向一个与该次推送无关的提交。
+
+**tip 为什么不能恒取 HEAD(实测):** 在干净的 `master` 上执行 `git push origin feat/dirty`,`feat/dirty` 才是会送出的东西。旧实现同时犯两处:tip 恒为 HEAD,且 `${remote}/feat/dirty`(远端尚无)不存在时回退到 `@{u}`(master 的 upstream)。两者叠加得到 `origin/master..HEAD` —— 空范围,含密钥的分支照推。同一根源还波及 `--all`(只扫当前分支)与 `--tags`(tag 指向的提交不在任何分支范围内),这些现在都由 `resolveScanTargets` 逐 ref 覆盖。
 
 两种看似相同的情形答案不同:
 
@@ -82,7 +88,10 @@ range := <empty-tree>..HEAD    // 整树:全新仓库
 | --- | --- | --- |
 | 全新仓库、无远端引用 | 空树 | 整树,最严 |
 | 既有 clone 推新分支 | `origin/master` | 扫新分支相对远端新增的部分 |
-| 常规推送 | `<remote>/<branch>` 或 `@{u}` | 只扫未推送提交 |
+| 常规推送 | `<remote>/<src>` 或 `@{u}` | 只扫未推送提交 |
+| 推另一个本地分支(HEAD 干净) | `origin/master` | 扫该分支相对远端新增的部分,不再是 HEAD 的范围 |
+| `--all` / `--mirror` / `--tags` | 逐 ref | 每个 ref 各自算范围,findings 合并去重 |
+| 推一个名字解析不出的 ref | — | 回退 HEAD(该 ref 推不出去是 git 自己的报错,不该报成扫描失败) |
 | git diff 失败 | — | fail-closed,拦下 |
 
 ### 2. 参数解析不手工维护选项表
@@ -122,6 +131,15 @@ app/test/credentialPool.test.js
 
 `--name-status` 改为 `-z`。原实现按空白切分、只取最后一个 token,导致 `docs/credential notes.txt` 被切成 `notes.txt`,敏感词丢失。`-z` 输出为 `STATUS\0path\0`,无歧义。
 
+内容扫描读 `+++ b/<path>` 头部时另加 `-c core.quotePath=false`。默认 git 会把非 ASCII 路径写成八进制转义:
+
+```
++++ "b/docs/\345\207\255\346\215\256\350\257\264\346\230\216.md"   // quotePath 默认
++++ b/docs/凭据说明.md                                            // core.quotePath=false
+```
+
+旧实现只 `.trim()`,于是 finding 的 `file` 记在转义串上。带空格的路径即便关掉 quotePath 仍会被引号包裹,故解析时再剥一层引号(`unquotePath`)。
+
 ### 5. 出错时 fail-closed,但要有逃生口
 
 读不到 diff 就不放行(方向不松),但报错信息中明确给出 `AETHER_SKIP_PREPUSH_GUARD=1`。`--name-status` 的 `maxBuffer` 显式调大(原为默认 1MB)。
@@ -140,7 +158,7 @@ app/test/credentialPool.test.js
 
 ## 测试
 
-22 → **45 条**,全量替换为**真临时仓库集成测试**(`mkdtempSync` + 真 `git init` / `git clone` + 真 bare 远端),全部 hermetic,不读开发者工作区。原测试有两处结构缺陷:一是只测纯函数(`SECRET_DIFF_PATTERNS` 对字面量),而唯一能拦人的 `scanSensitiveAssets`/`runPreFlightCheck` 零覆盖;二是 `inspectPushCommand` 未传 `cwd`,落到 `process.cwd()` 即开发者活仓库,断言实际在断言「本地恰好没有未推送的敏感文件」。
+22 → **45 条**(重构本身)→ **54 条**(含本轮补的扫描范围回归),全量替换为**真临时仓库集成测试**(`mkdtempSync` + 真 `git init` / `git clone` + 真 bare 远端),全部 hermetic,不读开发者工作区。原测试有两处结构缺陷:一是只测纯函数(`SECRET_DIFF_PATTERNS` 对字面量),而唯一能拦人的 `scanSensitiveAssets`/`runPreFlightCheck` 零覆盖;二是 `inspectPushCommand` 未传 `cwd`,落到 `process.cwd()` 即开发者活仓库,断言实际在断言「本地恰好没有未推送的敏感文件」。
 
 覆盖的回归场景(每条都在真仓库上断言拦/放):
 
@@ -158,6 +176,11 @@ app/test/credentialPool.test.js
 12. 逃生口 `AETHER_SKIP_PREPUSH_GUARD=1` → skipped
 13. **同一条命令在「带密钥」与「干净」两个仓库上分别判 `false` / `true`** → 证明判定由传入 cwd 驱动,而非进程工作目录
 14. `toolImpact` 推送预览含目标分支与文件清单
+15. **推另一个本地分支(HEAD 停在干净的 master)且该分支带密钥** → 拦,`ranges` 含 `origin/master..feat/dirty`(旧实现放行)
+16. **`--all` 时非当前分支带密钥** → 拦,`ranges` 里出现 `..feat/dirty`
+17. **`--tags` 时 tag 指向含密钥的提交** → 拦,`ranges` 含 `origin/master..v1`
+18. refspec 源端: `feat/x:refs/heads/other` → `sources === ['feat/x']`、`branches === ['other']`;`git push origin :feat/x` → `isDelete === true`
+19. **非 ASCII 路径**(`docs/凭据 credential 说明.md`)→ finding 记录原路径,而不是 `docs/\346\215\256...` 转义串
 
 测试文件内的模式串改为运行时拼接(`'sk-ant-' + 'api03-' + 'a1B2c3D4e5'.repeat(3) + 'a1B2c3'`),源码行本身不匹配正则,故无需任何路径豁免。已实测:新测试文件逐行过 `SECRET_DIFF_PATTERNS` 零命中。
 
@@ -165,3 +188,4 @@ app/test/credentialPool.test.js
 
 - 字符串检测天然可绕过:写脚本再执行、`npm run deploy` 间接推送、`sh -c`、推到另一个 remote。本模块是**防呆护栏,不是沙箱**,不按沙箱宣传。(`git -c` 与 `GIT_SSH_COMMAND=x` 前缀这两种**已被识别并拦下**;上面列的是原理上无解的。)
 - 基准相对远端的取舍:若某密钥在本次推送之前就已进入远端默认分支,推新分支时不会重复报它。这是有意的——它已经公开了,重复报只会拦下所有新分支推送,把门禁推向被关掉。首次进入远端的那一刻(全新仓库整树扫描、或 `origin/master..HEAD` 增量)仍然拦得住。
+- 覆盖范围按**被推送 ref 的集合**计算(普通推送的 refspec 源端、`--all`/`--mirror` 的分支、`--tags` 的 tag)。不在这次推送里的 ref 不扫——这不是遗漏,是定义。`--mirror` 按 `--all` 处理,不枚举 `refs/notes`、`refs/replace` 这类冷门 ref;要推它们得写显式 refspec,那时按源端正常扫。
