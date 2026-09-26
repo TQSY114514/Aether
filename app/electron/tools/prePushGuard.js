@@ -33,6 +33,38 @@ const CODE_OR_DOC_EXTENSIONS = new Set([
   '.md', '.markdown', '.rst', '.html', '.css', '.scss',
 ])
 
+// Extensions considered pure docs / config: pushing these directly to a
+// protected branch is allowed (with a warning) because they carry no code risk.
+const DOC_ONLY_EXTENSIONS = new Set([
+  '.md', '.markdown', '.txt', '.rst', '.adoc',
+  '.yml', '.yaml', '.toml', '.ini', '.cfg',
+  '.json', // package-lock.json, renovate.json, etc. — no executable code
+  '.gitignore', '.gitattributes', '.editorconfig', '.prettierrc', '.eslintrc',
+  '.npmrc', '.nvmrc',
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
+  '.pdf', '.docx',
+  '.lock', // yarn.lock, package-lock.json
+])
+
+/**
+ * Returns true if every file in the list is a pure doc/config change.
+ * Empty lists (no changed files detected) are treated as NOT doc-only.
+ * @param {string[]} files
+ * @returns {boolean}
+ */
+function isDocOnlyChangeset(files) {
+  if (!files || files.length === 0) return false
+  return files.every(f => {
+    const base = path.basename(String(f || '')).toLowerCase()
+    const ext = path.extname(base).toLowerCase()
+    // Basenames without extension (e.g. "Makefile") — not doc-only
+    if (!ext && !DOC_ONLY_EXTENSIONS.has(base)) return false
+    // Special basenames without extension that are clearly docs/config
+    if (!ext) return DOC_ONLY_EXTENSIONS.has(base)
+    return DOC_ONLY_EXTENSIONS.has(ext)
+  })
+}
+
 // Sensitive file basename heuristics (excluding safe template and code/doc files)
 function isSensitiveFilename(filePath) {
   const base = path.basename(String(filePath || '')).toLowerCase()
@@ -226,8 +258,9 @@ function parsePushDetails(segment, gitRoot) {
  * @param {string} branch
  * @param {object} [opts]
  * @param {boolean} [opts.allowProtectedOverride]
+ * @param {boolean} [opts.docOnly] - When true, downgrade hard-block to a warning (doc/config-only changeset)
  * @param {object} [opts.db]
- * @returns {{ ok: boolean, rule?: string, branch?: string, reason?: string }}
+ * @returns {{ ok: boolean, warn?: boolean, rule?: string, branch?: string, reason?: string }}
  */
 function checkBranchProtection(branch, opts = {}) {
   const norm = String(branch || '').trim().toLowerCase().replace(/^refs\/heads\//, '')
@@ -243,6 +276,18 @@ function checkBranchProtection(branch, opts = {}) {
           return { ok: true, protected: true, overridden: true, branch: norm }
         }
       } catch {}
+    }
+    // Doc/config-only changesets (README, YAML, images …) are allowed with a warning.
+    // Code changes must still go through a PR.
+    if (opts.docOnly === true) {
+      return {
+        ok: true,
+        warn: true,
+        protected: true,
+        branch: norm,
+        rule: 'protected_branch_doc_only',
+        reason: `[PrePushGuard] ⚠ Pushing doc/config-only changes directly to '${norm}'. CI will still run — verify it passes.`,
+      }
     }
     return {
       ok: false,
@@ -560,14 +605,40 @@ async function inspectPushCommand(command, context = {}) {
 
   const details = parsePushDetails(pushCheck.segment, gitRoot)
 
+  // Pre-detect file changeset to determine if this is a doc/config-only push.
+  // This is a lightweight name-only scan used only for Stage 1 routing —
+  // Stage 2 always does a full content scan regardless.
+  let preDetectedFiles = []
+  try {
+    const range = getUnpushedRange(gitRoot, details.remote, details.branch)
+    const isSingleHead = range === 'HEAD'
+    const nameArgs = isSingleHead
+      ? ['diff-tree', '--name-only', '-r', '--no-commit-id', 'HEAD']
+      : ['diff', '--name-only', range]
+    const nameRes = spawnSync('git', nameArgs, {
+      cwd: gitRoot,
+      encoding: 'utf-8',
+      timeout: 5000,
+      windowsHide: true,
+    })
+    if (nameRes.status === 0 && nameRes.stdout) {
+      preDetectedFiles = nameRes.stdout.split('\n').map(s => s.trim()).filter(Boolean)
+    }
+  } catch {}
+
+  const docOnly = isDocOnlyChangeset(preDetectedFiles)
+
   // Stage 1: Branch Protection
   const branches = details.branches && details.branches.length ? details.branches : [details.branch]
+  const branchWarnings = []
   for (const branch of branches) {
     const branchCheck = checkBranchProtection(branch, {
       db: context.db,
       allowProtectedOverride: context.allowProtectedOverride,
+      docOnly,
     })
     if (!branchCheck.ok) return { ok: false, isPush: true, ...branchCheck }
+    if (branchCheck.warn) branchWarnings.push(branchCheck.reason)
   }
 
   // Stage 2: Secret & Sensitive Asset Scan
@@ -591,6 +662,8 @@ async function inspectPushCommand(command, context = {}) {
   return {
     ok: true,
     isPush: true,
+    docOnly,
+    warnings: branchWarnings.length ? branchWarnings : undefined,
     summary: {
       remote: details.remote,
       branch: details.branch,
@@ -600,6 +673,7 @@ async function inspectPushCommand(command, context = {}) {
       files: summary.files,
       range: summary.range,
       preFlight: preFlightCheck,
+      docOnly,
     },
   }
 }
@@ -614,6 +688,8 @@ module.exports = {
   getPushSummary,
   inspectPushCommand,
   isSensitiveFilename,
+  isDocOnlyChangeset,
   PROTECTED_BRANCHES,
   SECRET_DIFF_PATTERNS,
+  DOC_ONLY_EXTENSIONS,
 }

@@ -221,4 +221,62 @@ describe('prePushGuard', () => {
       expect(diff.diff).toContain('目标分支: origin/feat/test')
     })
   })
+
+  // ─── 7. isDocOnlyChangeset ───────────────────────────────────────────────────
+  describe('isDocOnlyChangeset', () => {
+    it.each([
+      [['README.md'], true],
+      [['docs/CHANGELOG.md', '.github/workflows/ci.yml'], true],
+      [['assets/logo.png', 'assets/icon.svg'], true],
+      [['package-lock.json'], true],
+      [['.gitignore', '.npmrc'], true],
+      [['renovate.json'], true],
+    ])('treats %s as doc-only', (files, expected) => {
+      expect(prePushGuard.isDocOnlyChangeset(files)).toBe(expected)
+    })
+
+    it.each([
+      [['README.md', 'src/index.js'], false],
+      [['app/electron/tools/prePushGuard.js'], false],
+      [['Makefile'], false],
+      [[], false],
+    ])('treats %s as NOT doc-only', (files, expected) => {
+      expect(prePushGuard.isDocOnlyChangeset(files)).toBe(expected)
+    })
+  })
+
+  // ─── 8. checkBranchProtection docOnly bypass ─────────────────────────────────
+  describe('checkBranchProtection docOnly bypass', () => {
+    it('returns warn:true (not hard-blocked) for doc-only push to master', () => {
+      const res = prePushGuard.checkBranchProtection('master', { docOnly: true })
+      expect(res.ok).toBe(true)
+      expect(res.warn).toBe(true)
+      expect(res.protected).toBe(true)
+      expect(res.rule).toBe('protected_branch_doc_only')
+      expect(res.reason).toContain('⚠')
+    })
+
+    it('still hard-blocks when docOnly is false on protected branch', () => {
+      const res = prePushGuard.checkBranchProtection('main', { docOnly: false })
+      expect(res.ok).toBe(false)
+      expect(res.rule).toBe('protected_branch')
+    })
+
+    it('still hard-blocks when docOnly is omitted (default)', () => {
+      const res = prePushGuard.checkBranchProtection('production')
+      expect(res.ok).toBe(false)
+      expect(res.rule).toBe('protected_branch')
+    })
+
+    it('allowProtectedOverride takes precedence over docOnly', () => {
+      const res = prePushGuard.checkBranchProtection('master', {
+        docOnly: true,
+        allowProtectedOverride: true,
+      })
+      expect(res.ok).toBe(true)
+      expect(res.overridden).toBe(true)
+      // overridden path returns before docOnly — no warn flag
+      expect(res.warn).toBeUndefined()
+    })
+  })
 })
