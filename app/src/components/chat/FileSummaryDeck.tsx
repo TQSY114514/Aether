@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import type { TurnFileSummary, FileChangeEntry } from '@/store/types'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
-import { FileCode, RotateCcw, ChevronDown, ChevronRight, Check, GitCommit, Play, AlertCircle } from 'lucide-react'
+import { FileCode, RotateCcw, ChevronDown, ChevronRight, Check, GitCommit, Play, AlertCircle, Maximize2, X } from 'lucide-react'
 
 interface FileSummaryDeckProps {
   summary: TurnFileSummary
@@ -19,6 +19,7 @@ function formatPath(fullPath: string) {
 
 export default function FileSummaryDeck({ summary, sessionId, messageId }: FileSummaryDeckProps) {
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({})
+  const [modalDiffFile, setModalDiffFile] = useState<FileChangeEntry | null>(null)
   const [rollingBack, setRollingBack] = useState(false)
   const [undone, setUndone] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
@@ -96,21 +97,25 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     setRollingBack(true)
     try {
       let rolledBack = false
+      let totalFilesRestored = 0
       const failedPaths: string[] = []
       if (messageId && sessionId && window.electronAPI?.agentCheckpoint) {
         const checkpoints = await window.electronAPI.agentCheckpoint.list({ sessionId, messageId })
         if (checkpoints && checkpoints.length > 0) {
           for (const cp of checkpoints) {
             if (!cp.rolled_back_at) {
-              const res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId })
+              const res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId, force: true })
               if (res && !res.success) {
                 if (Array.isArray(res.failed) && res.failed.length > 0) {
                   failedPaths.push(...res.failed.map((f: any) => typeof f === 'string' ? f : f.path))
                 } else if (res.error) {
                   failedPaths.push(res.error)
                 }
-              } else {
+              } else if (res && res.success) {
                 rolledBack = true
+                if (Array.isArray(res.restored)) {
+                  totalFilesRestored += res.restored.length
+                }
               }
             }
           }
@@ -125,9 +130,9 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
         return
       }
 
-      if (!rolledBack) {
+      if (!rolledBack || (files.length > 0 && totalFilesRestored === 0)) {
         useStore.getState().triggerToast(
-          t('filesummary.no_checkpoints', '未找到本轮对话关联的文件检查点记录，请在 Git 中手动撤销'),
+          t('filesummary.no_files_restored', '本轮修改包含终端命令生成的文件，快照中无可还原的文件条目，请在 Git 中撤销。'),
           'warning'
         )
         return
@@ -416,6 +421,20 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
                   {file.removed > 0 && (
                     <span style={{ color: 'var(--error)' }}>-{file.removed}</span>
                   )}
+                  {file.diff && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setModalDiffFile(file)
+                      }}
+                      className="ms-1.5 p-0.5 rounded hover:bg-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                      title={t('filesummary.view_full_diff', '查看完整差异')}
+                      aria-label={t('filesummary.view_full_diff', '查看完整差异')}
+                    >
+                      <Maximize2 size={11} />
+                    </button>
+                  )}
                 </div>
               </button>
 
@@ -458,6 +477,65 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
           )
         })}
       </div>
+
+      {/* Full Diff Modal */}
+      {modalDiffFile && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('filesummary.diff_modal_title', modalDiffFile.path)}
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setModalDiffFile(null)}
+        >
+          <div
+            className="w-full max-w-4xl max-h-[85vh] rounded-lg border shadow-2xl flex flex-col overflow-hidden"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <FileCode size={14} className="text-[var(--accent)] shrink-0" />
+                <span className="font-mono text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                  {modalDiffFile.path}
+                </span>
+                <span className="text-[10px] font-mono text-[var(--text-muted)] shrink-0">
+                  (+{modalDiffFile.added} -{modalDiffFile.removed})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalDiffFile(null)}
+                className="p-1 rounded hover:bg-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                aria-label={t('common.close', '关闭')}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 font-mono text-[11px] leading-relaxed" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+              <pre className="whitespace-pre">
+                {(modalDiffFile.diff || '').split('\n').map((line, idx) => {
+                  let color = 'var(--text-secondary)'
+                  let bg = 'transparent'
+                  if (line.startsWith('+') && !line.startsWith('+++')) {
+                    color = 'var(--success)'
+                    bg = 'rgba(34, 197, 94, 0.08)'
+                  } else if (line.startsWith('-') && !line.startsWith('---')) {
+                    color = 'var(--error)'
+                    bg = 'rgba(239, 68, 68, 0.08)'
+                  } else if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')) {
+                    color = 'var(--accent)'
+                  }
+                  return (
+                    <div key={idx} className="px-1 rounded-sm" style={{ color, backgroundColor: bg }}>
+                      {line || ' '}
+                    </div>
+                  )
+                })}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

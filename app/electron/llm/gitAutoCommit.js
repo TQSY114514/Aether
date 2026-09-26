@@ -450,21 +450,25 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     }
   } else {
     // Working tree is completely clean: review latest commit
+    // Using -m and --first-parent so merge commits (e.g. GitHub Actions PR merge ref) show diff against base
     scopeDesc = `最新提交 (${commitHash})`
-    const statRes = runCommandSync('git', ['show', '--stat', '--oneline', 'HEAD'], { cwd: gitRoot })
-    if (statRes.exitCode !== 0) {
-      return { success: false, error: statRes.stderr || 'failed to get commit stat for HEAD' }
+    const statRes = runCommandSync('git', ['show', '--stat', '--oneline', '-m', '--first-parent', 'HEAD'], { cwd: gitRoot })
+    if (statRes.exitCode !== 0 && !statRes.stdout) {
+      return { success: false, error: statRes.error || statRes.stderr || 'failed to get commit stat for HEAD' }
     }
     statSummary = (statRes.stdout || '').trim()
-    const diffRes = runCommandSync('git', ['show', '--unified=3', 'HEAD'], { cwd: gitRoot })
-    if (diffRes.exitCode !== 0) {
-      return { success: false, error: diffRes.stderr || 'failed to get git diff for HEAD' }
+    const diffRes = runCommandSync('git', ['show', '-m', '--first-parent', '--unified=3', 'HEAD'], { cwd: gitRoot })
+    if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+      return { success: false, error: diffRes.error || diffRes.stderr || 'failed to get git diff for HEAD' }
     }
     diffRaw = diffRes.stdout || ''
+    if (diffRes.truncated) {
+      statSummary = (statSummary ? statSummary + '\n' : '') + '[Warning: Git diff exceeded buffer limit]'
+    }
   }
 
   if (!diffRaw.trim()) {
-    return { success: false, error: 'no diff content found to review (working tree is clean and latest commit has no changes)' }
+    diffRaw = '(当前基准与上一个版本之间未发现代码文件内容变更)'
   }
 
   // Truncate diff if excessive

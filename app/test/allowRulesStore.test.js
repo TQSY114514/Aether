@@ -106,8 +106,13 @@ describe('createAllowRulesStore (Cline & Claude Code style granular auto-approva
     expect(store.match(1, 'run_command', { command: 'git diff HEAD~1' })).toBe(true)
     expect(store.match(1, 'run_command', { command: 'git branch -a' })).toBe(true)
 
-    // Non-safe git commands are not in safe_git preset
+    // Non-safe or destructive git commands are never auto-allowed
     expect(store.match(1, 'run_command', { command: 'git push' })).toBe(false)
+    expect(store.match(1, 'run_command', { command: 'git branch -D feature' })).toBe(false)
+    expect(store.match(1, 'run_command', { command: 'git branch -d old-branch' })).toBe(false)
+    expect(store.match(1, 'run_command', { command: 'git branch -m old new' })).toBe(false)
+    expect(store.match(1, 'run_command', { command: 'git clean -f' })).toBe(false)
+    expect(store.match(1, 'run_command', { command: 'git reset --hard' })).toBe(false)
 
     // Test runner preset
     const resTest = store.applyPreset(mockDb, 'test_runners')

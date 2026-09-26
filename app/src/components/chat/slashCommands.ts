@@ -75,6 +75,10 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
             await useStore.getState().loadMessages(sid)
           }
         } else {
+          if (rep.error && !rep.command) {
+            useStore.getState().triggerToast(rep.error, 'info')
+            return
+          }
           useStore.getState().triggerToast(`测试失败 (${rep.command})，准备调用 Agent 修复...`, 'error')
           if (sid && rep.suggestedRepairPrompt) {
             useStore.getState().sendMessage(rep.suggestedRepairPrompt)
@@ -106,6 +110,10 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
             await useStore.getState().loadMessages(sid)
           }
         } else {
+          if (rep.error && !rep.command) {
+            useStore.getState().triggerToast(rep.error, 'info')
+            return
+          }
           useStore.getState().triggerToast('发现代码规范或类型告警，准备调用 Agent 修复...', 'warning')
           if (sid && rep.suggestedRepairPrompt) {
             useStore.getState().sendMessage(rep.suggestedRepairPrompt)

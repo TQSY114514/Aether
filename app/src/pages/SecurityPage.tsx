@@ -85,12 +85,16 @@ export default function SecurityPage() {
     const k = newRuleKey.trim()
     if (!k) return
     try {
-      await window.electronAPI.chat.savePermissionRule(newTool, k, 'allow')
+      const res = await window.electronAPI.chat.savePermissionRule(newTool, k, 'allow')
+      if (res && (res as any).ok === false) {
+        toast((res as any).error || '添加规则失败', { type: 'error' })
+        return
+      }
       setNewRuleKey('')
       toast(`已添加自动允许规则: ${newTool} (${k})`, { type: 'success' })
       await loadRules()
-    } catch {
-      toast('添加规则失败', { type: 'error' })
+    } catch (e: any) {
+      toast(`添加规则失败: ${e?.message || e}`, { type: 'error' })
     }
   }
 

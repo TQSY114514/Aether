@@ -24,9 +24,22 @@ export default function ContextMeterBadge() {
   const contextBudgetText = useStore((s) => s.contextBudgetText)
 
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
-  const models = cfg?.providerId ? (modelsByProvider[cfg.providerId] || []) : []
-  const currentModel = models.find((m) => m.id === cfg?.modelId)
-  const contextWindow = currentModel?.context_window || DEFAULT_CONTEXT_WINDOW
+  const allModels = useMemo(() => Object.values(modelsByProvider).flat(), [modelsByProvider])
+  const activeModel = useMemo(() => {
+    if (cfg?.providerId && cfg?.modelId) {
+      const found = (modelsByProvider[cfg.providerId] || []).find((m) => m.id === cfg.modelId)
+      if (found) return found
+    }
+    if (cfg?.modelId) {
+      const found = allModels.find((m) => m.id === cfg.modelId)
+      if (found) return found
+    }
+    const primary = allModels.find((m) => m.is_primary)
+    if (primary) return primary
+    return allModels[0] || null
+  }, [cfg, modelsByProvider, allModels])
+
+  const contextWindow = activeModel?.context_window || DEFAULT_CONTEXT_WINDOW
 
   const { used, breakdown } = useMemo(() => {
     const bk: Record<string, { tokens: number; count: number }> = {}
@@ -127,15 +140,20 @@ export default function ContextMeterBadge() {
         <span className="tabular-nums">
           {formatTokens(used)}/{formatTokens(contextWindow)} ({pct}%)
         </span>
-        {isCritical && (
-          <span
-            onClick={handleCompact}
-            className="ml-1 px-1.5 py-0.2 rounded bg-red-600 text-white text-[9px] hover:bg-red-500 transition-colors"
-          >
-            {compacting ? '...' : compactedSuccess ? 'OK' : t('context_meter.compact', '压缩')}
-          </span>
-        )}
       </button>
+
+      {isCritical && (
+        <button
+          type="button"
+          onClick={handleCompact}
+          disabled={compacting}
+          className="ml-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-mono hover:bg-red-500 transition-colors disabled:opacity-50 cursor-pointer"
+          aria-label={t('context_meter.compact', '压缩')}
+          title={t('context_meter.compact', '压缩')}
+        >
+          {compacting ? '...' : compactedSuccess ? 'OK' : t('context_meter.compact', '压缩')}
+        </button>
+      )}
 
       {/* Popover Breakdown Deck */}
       {open && (

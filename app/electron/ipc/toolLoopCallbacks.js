@@ -60,10 +60,16 @@ function createAllowRulesStore(initialDb = null) {
     }
   }
 
+const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|restore|revert|cherry-pick)(?:\s|$)|(?:^|\s)(?:-[a-zA-Z]*[dDmMfF][a-zA-Z]*|--delete|--force|--hard|--amend|--prune)(?:\s|$)/i
+
   function ruleKey(name, args) {
     if (name === 'run_command') {
       const cmd = String(args?.command || '').trim()
       if (/(?:&&|\|\||[;&|\n])/.test(cmd) || cmd.includes('$(') || cmd.includes('`')) {
+        return cmd
+      }
+      // Destructive git commands must never collapse to benign prefix rules
+      if ((cmd.startsWith('git ') || cmd === 'git') && DESTRUCTIVE_GIT_PATTERN.test(cmd)) {
         return cmd
       }
       const parts = cmd.split(/\s+/)
@@ -127,8 +133,16 @@ function createAllowRulesStore(initialDb = null) {
         if (pattern === '*') return dec
         if (pattern.endsWith(':*')) {
           const prefix = pattern.slice(0, -2)
-          if (cmd === prefix || cmd.startsWith(prefix + ' ') || cmd.startsWith(prefix + '\t')) return dec
+          if (cmd === prefix || cmd.startsWith(prefix + ' ') || cmd.startsWith(prefix + '\t')) {
+            if (dec === 'allow' && (pattern.startsWith('git ') || pattern === 'git') && DESTRUCTIVE_GIT_PATTERN.test(cmd)) {
+              continue
+            }
+            return dec
+          }
         } else if (cmd === pattern || cmd.startsWith(pattern + ' ') || cmd.startsWith(pattern + '\t')) {
+          if (dec === 'allow' && (pattern.startsWith('git ') || pattern === 'git') && DESTRUCTIVE_GIT_PATTERN.test(cmd)) {
+            continue
+          }
           return dec
         }
       }
