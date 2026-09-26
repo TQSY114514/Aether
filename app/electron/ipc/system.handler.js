@@ -118,13 +118,26 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
   // 系统与工作区全面体检 (Claude Code / OpenHands 对齐)
   ipcMain.handle('system:doctor', async (_e, { cwd, sessionId } = {}) => {
     try {
+      const path = require('path')
+      const { isAuthorizedWorkspace, getWorkspaceRoot } = require('../tools/sandbox')
+      const rawRoot = cwd ? String(cwd) : getWorkspaceRoot(sessionId)
+      const targetRoot = rawRoot ? path.resolve(rawRoot) : null
+      if (targetRoot && !isAuthorizedWorkspace(db, targetRoot)) {
+        return {
+          overallStatus: 'degraded',
+          error: 'Unauthorized workspace path',
+          markdownReport: '### Aether 系统体检\n> 拒绝访问：未经授权的工作区路径',
+          checks: [],
+          summary: { total: 0, passes: 0, warnings: 0, failures: 1 },
+        }
+      }
       const { runDoctorDiagnostics } = require('../system/doctor')
-      return await runDoctorDiagnostics(db, { cwd, sessionId })
+      return await runDoctorDiagnostics(db, { cwd: targetRoot, sessionId })
     } catch (e) {
       return {
         overallStatus: 'degraded',
         error: e && e.message ? e.message : String(e),
-        markdownReport: `### 🩺 Aether 系统体检执行异常\n> ❌ 错误原因: ${e && e.message ? e.message : String(e)}`,
+        markdownReport: `### Aether 系统体检执行异常\n> 错误原因: ${e && e.message ? e.message : String(e)}`,
         checks: [],
         summary: { total: 0, passes: 0, warnings: 0, failures: 1 },
       }

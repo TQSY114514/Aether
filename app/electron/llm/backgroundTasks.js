@@ -138,9 +138,16 @@ let _getWebContents = () => null
 // the real toolLoop (same shape as the ExecutionBackend plugin contract).
 let _runToolLoop = defaultRunToolLoop
 
+function setDatabase(db) {
+  _db = db
+  if (db && taskAllowRules && typeof taskAllowRules.setDb === 'function') {
+    taskAllowRules.setDb(db)
+  }
+}
+
 function initBackgroundTasks({ getWebContents, db, runToolLoop }) {
   _getWebContents = getWebContents
-  if (db) _db = db
+  if (db) setDatabase(db)
   if (typeof runToolLoop === 'function') _runToolLoop = runToolLoop
 }
 
@@ -475,7 +482,7 @@ async function runTask(record) {
  * @returns {Promise<{ taskId: number, sessionId: number }>}
  */
 async function startTask({ db, parentSessionId, content, modelId, agentMode = 'ask', priority = 0, maxRetry = 2, emit }) {
-  _db = db
+  setDatabase(db)
 
   const queueOn = queueModeEnabled()
 
@@ -689,7 +696,7 @@ function rowToRecord(r) {
  */
 function restorePendingTasks(db) {
   if (!db || typeof db.listAgentTasks !== 'function') return
-  _db = db
+  setDatabase(db)
   let resumed = 0
   for (const r of (db.listAgentTasks(200) || [])) {
     const st = normalizeTaskStatus(r.status)

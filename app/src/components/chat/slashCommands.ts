@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useStore } from '@/store'
+import { t } from '@/utils/i18n'
 
 export type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
 
@@ -22,19 +23,19 @@ export interface SlashCommand {
  * Commands with `action` execute directly without inserting a static prompt.
  */
 export const DEFAULT_COMMANDS: SlashCommand[] = [
-  { id: 'summarize', name: '总结对话', description: '详细总结以上对话的要点', prompt: '请详细总结以上对话的要点，用中文回复。' },
-  { id: 'translate', name: '翻译', description: '将以上内容翻译成中文', prompt: '请将以上内容翻译成中文。' },
-  { id: 'polish', name: '润色', description: '润色文字，使其更流畅专业', prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
-  { id: 'explain', name: '解释', description: '用简单语言解释内容', prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
-  { id: 'continue', name: '续写', description: '基于内容自然续写', prompt: '请基于以上内容自然地继续写作。' },
-  { id: 'code', name: '生成代码', description: '根据需求生成实现代码', prompt: '请生成实现以上需求的代码。' },
+  { id: 'summarize', name: t('slash.summarize', '总结对话'), description: '详细总结以上对话的要点', prompt: '请详细总结以上对话的要点，用中文回复。' },
+  { id: 'translate', name: t('slash.translate', '翻译'), description: '将以上内容翻译成中文', prompt: '请将以上内容翻译成中文。' },
+  { id: 'polish', name: t('slash.polish', '润色'), description: '润色文字，使其更流畅专业', prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
+  { id: 'explain', name: t('slash.explain', '解释'), description: '用简单语言解释内容', prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
+  { id: 'continue', name: t('slash.continue', '续写'), description: '基于内容自然续写', prompt: '请基于以上内容自然地继续写作。' },
+  { id: 'code', name: t('slash.code', '生成代码'), description: '根据需求生成实现代码', prompt: '请生成实现以上需求的代码。' },
   {
     id: 'doctor',
-    name: '系统自检',
-    description: '全面诊断系统运行环境、数据库、开发工具链与网络健康',
+    name: t('slash.doctor', '系统自检'),
+    description: t('slash.doctor_desc', '全面诊断系统运行环境、数据库、开发工具链与网络健康'),
     action: async () => {
       const sid = useStore.getState().currentSessionId
-      useStore.getState().triggerToast('正在执行系统与工作区自检...', 'info')
+      useStore.getState().triggerToast(t('slash.doctor_running', '正在执行系统与工作区自检...'), 'info')
       try {
         const rep = await window.electronAPI.system.doctor({ sessionId: sid || undefined })
         if (sid) {
@@ -45,26 +46,26 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
             model_used: 'system:doctor',
           })
           await useStore.getState().loadMessages(sid)
-          useStore.getState().triggerToast(`自检完成：${rep.summary.passes} 通过 / ${rep.summary.warnings} 警告 / ${rep.summary.failures} 失败`, rep.overallStatus === 'healthy' ? 'success' : 'info')
+          useStore.getState().triggerToast(t('slash.doctor_done', rep.summary.passes, rep.summary.warnings, rep.summary.failures), rep.overallStatus === 'healthy' ? 'success' : 'info')
         } else {
           window.alert(rep.markdownReport)
         }
       } catch (e: any) {
-        useStore.getState().triggerToast(`自检执行失败: ${e.message || e}`, 'error')
+        useStore.getState().triggerToast(t('slash.doctor_failed', e.message || e), 'error')
       }
     },
   },
   {
     id: 'test',
-    name: '运行测试',
-    description: '自动检测并执行项目测试套件，失败时可一键智能修复',
+    name: t('slash.test', '运行测试'),
+    description: t('slash.test_desc', '自动检测并执行项目测试套件，失败时可一键智能修复'),
     action: async (arg?: string) => {
       const sid = useStore.getState().currentSessionId
-      useStore.getState().triggerToast('正在执行项目测试套件...', 'info')
+      useStore.getState().triggerToast(t('slash.test_running', '正在执行项目测试套件...'), 'info')
       try {
         const rep = await window.electronAPI.chat.test({ args: arg, sessionId: sid || undefined })
         if (rep.ok || rep.passed) {
-          useStore.getState().triggerToast(`测试全部通过 (${rep.command}, ${rep.durationMs}ms)`, 'success')
+          useStore.getState().triggerToast(t('slash.test_passed', rep.command || '', rep.durationMs ?? 0), 'success')
           if (sid) {
             await window.electronAPI.message.addNormal({
               session_id: sid,
@@ -79,27 +80,27 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
             useStore.getState().triggerToast(rep.error, 'info')
             return
           }
-          useStore.getState().triggerToast(`测试失败 (${rep.command})，准备调用 Agent 修复...`, 'error')
+          useStore.getState().triggerToast(t('slash.test_failed', rep.command || ''), 'error')
           if (sid && rep.suggestedRepairPrompt) {
             useStore.getState().sendMessage(rep.suggestedRepairPrompt)
           }
         }
       } catch (e: any) {
-        useStore.getState().triggerToast(`测试执行异常: ${e.message || e}`, 'error')
+        useStore.getState().triggerToast(t('slash.test_error', e?.message || String(e)), 'error')
       }
     },
   },
   {
     id: 'lint',
-    name: '代码检查',
-    description: '运行代码规范与类型检查器，失败时构建自动修复任务',
+    name: t('slash.lint', '代码检查'),
+    description: t('slash.lint_desc', '运行代码规范与类型检查器，失败时构建自动修复任务'),
     action: async (arg?: string) => {
       const sid = useStore.getState().currentSessionId
-      useStore.getState().triggerToast('正在运行项目代码与类型检查...', 'info')
+      useStore.getState().triggerToast(t('slash.lint_running', '正在运行项目代码与类型检查...'), 'info')
       try {
         const rep = await window.electronAPI.chat.lint({ args: arg, sessionId: sid || undefined })
         if (rep.ok || rep.clean) {
-          useStore.getState().triggerToast(`代码规范与类型检查通过 (${rep.command}, ${rep.durationMs}ms)`, 'success')
+          useStore.getState().triggerToast(t('slash.lint_passed', rep.command || '', rep.durationMs ?? 0), 'success')
           if (sid) {
             await window.electronAPI.message.addNormal({
               session_id: sid,
@@ -114,98 +115,97 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
             useStore.getState().triggerToast(rep.error, 'info')
             return
           }
-          useStore.getState().triggerToast('发现代码规范或类型告警，准备调用 Agent 修复...', 'warning')
+          useStore.getState().triggerToast(t('slash.lint_failed', '发现代码规范或类型告警，准备调用 Agent 修复...'), 'warning')
           if (sid && rep.suggestedRepairPrompt) {
             useStore.getState().sendMessage(rep.suggestedRepairPrompt)
           }
         }
       } catch (e: any) {
-        useStore.getState().triggerToast(`检查执行异常: ${e.message || e}`, 'error')
+        useStore.getState().triggerToast(t('slash.lint_error', e.message || e), 'error')
       }
     },
   },
   {
     id: 'checkpoints',
-    name: '时间旅行检查点',
-    description: '打开时间旅行抽屉，查看并回滚文件修改历史快照',
+    name: t('slash.checkpoints', '时间旅行检查点'),
+    description: t('slash.checkpoints_desc', '打开时间旅行抽屉，查看并回滚文件修改历史快照'),
     action: () => {
       useStore.getState().setCheckpointsOpen(true)
     },
   },
   {
     id: 'review',
-    name: '代码审查',
-    description: '对工作区改动或指定提交进行资深工程架构与安全审查',
+    name: t('slash.review', '代码审查'),
+    description: t('slash.review_desc', '对工作区改动或指定提交进行资深工程架构与安全审查'),
     action: async (arg?: string) => {
       const sid = useStore.getState().currentSessionId
       try {
-        useStore.getState().triggerToast('正在提取 Git 差异并构建审查提示词...', 'info')
+        useStore.getState().triggerToast(t('slash.review_extracting', '正在提取 Git 差异并构建审查提示词...'), 'info')
         const res = await window.electronAPI.git.getDiffForReview({ focus: arg, sessionId: sid || undefined })
         if (!res.success) {
           useStore.getState().triggerToast(`提示：${res.error || '无法获取 Git 审查差异'}`, 'info')
           return
         }
         if (sid && res.suggestedReviewPrompt) {
-          // Send structured review turn directly to the model
           useStore.getState().sendMessage(res.suggestedReviewPrompt)
         } else {
-          window.alert('请先选择或新建一个会话以发起代码审查')
+          window.alert(t('slash.review_no_session', '请先选择或新建一个会话以发起代码审查'))
         }
       } catch (e: any) {
-        useStore.getState().triggerToast(`审查发起失败: ${e.message || e}`, 'error')
+        useStore.getState().triggerToast(t('slash.review_failed', e.message || e), 'error')
       }
     },
   },
   {
     id: 'commit',
-    name: '提交改动',
-    description: '基于当前修改生成语义化信息并提交 Git',
+    name: t('slash.commit', '提交改动'),
+    description: t('slash.commit_desc', '基于当前修改生成语义化信息并提交 Git'),
     action: async () => {
       const sid = useStore.getState().currentSessionId
       try {
         const res = await window.electronAPI.git.craftCommitMessage({ sessionId: sid || undefined })
         if (!res.success) {
-          window.alert(`提示：${res.error || '工作区没有待提交的改动'}`)
+          window.alert(t('slash.commit_no_changes', '工作区没有待提交的改动'))
           return
         }
-        const msg = window.prompt('确认提交信息 (可修改)：', res.suggestedMessage)
+        const msg = window.prompt(t('slash.commit_prompt', '确认提交信息 (可修改)：'), res.suggestedMessage)
         if (msg && msg.trim()) {
           const commitRes = await window.electronAPI.git.commit({ message: msg.trim(), sessionId: sid || undefined })
           if (commitRes.success) {
-            useStore.getState().triggerToast(`已提交至 Git: ${commitRes.commitHash || ''} ${commitRes.message || ''}`, 'success')
+            useStore.getState().triggerToast(t('slash.commit_success', commitRes.commitHash || '', commitRes.message || ''), 'success')
           } else {
-            useStore.getState().triggerToast(`提交失败：${commitRes.error || '未知错误'}`, 'error')
+            useStore.getState().triggerToast(t('slash.commit_failed', commitRes.error || '未知错误'), 'error')
           }
         }
       } catch (e: any) {
-        useStore.getState().triggerToast(`提交失败：${e.message || e}`, 'error')
+        useStore.getState().triggerToast(t('slash.commit_failed', e.message || e), 'error')
       }
     },
   },
   {
     id: 'compact',
-    name: '压缩上下文',
-    description: '智能压缩对话历史节省 token',
+    name: t('slash.compact_cmd', '压缩上下文'),
+    description: t('slash.compact_cmd_desc', '智能压缩对话历史节省 token'),
     action: async () => {
       const sid = useStore.getState().currentSessionId
       if (!sid) return
       try {
         const res = await window.electronAPI.chat.compact(sid)
         if (res.ok) {
-          window.alert(`已成功压缩上下文！\n消息数：${res.beforeCount} → ${res.afterCount}\n估算 Token：${res.beforeTokens} → ${res.afterTokens}`)
-          useStore.getState().loadMessages(sid)
+          await useStore.getState().loadMessages(sid)
+          useStore.getState().triggerToast(t('chat.compact_success', res.beforeCount ?? 0, res.afterCount ?? 0), 'success')
         } else {
-          window.alert(`提示：${res.error || '无需压缩'}`)
+          useStore.getState().triggerToast(res.error || t('chat.compact_unnecessary', '无需压缩或压缩失败'), 'info')
         }
       } catch (e: any) {
-        window.alert(`压缩失败：${e.message || e}`)
+        useStore.getState().triggerToast(`压缩失败：${e.message || e}`, 'error')
       }
     },
   },
   {
     id: 'undo',
-    name: '撤销修改',
-    description: '按最近一次检查点恢复文件并生成撤销提交',
+    name: t('slash.undo', '撤销修改'),
+    description: t('slash.undo_desc', '按最近一次检查点恢复文件并生成撤销提交'),
     action: async () => {
       try {
         const res = await useStore.getState().undoLastAction()

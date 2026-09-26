@@ -1,3 +1,4 @@
+const path = require('path')
 const { createAllowRulesStore } = require('./toolLoopCallbacks')
 const { registerChatSendHandler } = require('./chat-send.handler')
 const auditLog = require('../llm/auditLog')
@@ -179,12 +180,22 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 
   // ─── Test & Lint On-Demand (Claude Code / Aider alignment) ────────────────
   ipcMain.handle('chat:test', async (_e, { cwd, sessionId, args } = {}) => {
+    const { isAuthorizedWorkspace, getWorkspaceRoot } = require('../tools/sandbox')
+    const targetRoot = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
+    if (targetRoot && !isAuthorizedWorkspace(db, targetRoot)) {
+      return { ok: false, error: 'Unauthorized workspace path', durationMs: 0 }
+    }
     const { runProjectTest } = require('../llm/lintTestRepair')
-    return await runProjectTest(db, { cwd, sessionId, args })
+    return await runProjectTest(db, { cwd: targetRoot, sessionId, args })
   })
   ipcMain.handle('chat:lint', async (_e, { cwd, sessionId, args } = {}) => {
+    const { isAuthorizedWorkspace, getWorkspaceRoot } = require('../tools/sandbox')
+    const targetRoot = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
+    if (targetRoot && !isAuthorizedWorkspace(db, targetRoot)) {
+      return { ok: false, error: 'Unauthorized workspace path', durationMs: 0 }
+    }
     const { runProjectLint } = require('../llm/lintTestRepair')
-    return await runProjectLint(db, { cwd, sessionId, args })
+    return await runProjectLint(db, { cwd: targetRoot, sessionId, args })
   })
 
   // ─── Audit log ───────────────────────────────────────────────────────────

@@ -65,7 +65,7 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
   function ruleKey(name, args) {
     if (name === 'run_command') {
       const cmd = String(args?.command || '').trim()
-      if (/(?:&&|\|\||[;&|\n])/.test(cmd) || cmd.includes('$(') || cmd.includes('`')) {
+      if (/(?:&&|\|\||[;&|\n])/.test(cmd) || cmd.includes('$(') || cmd.includes('`') || /(^|[^&])&([^&]|$)/.test(cmd) || /[<>]/.test(cmd)) {
         return cmd
       }
       // Destructive git commands must never collapse to benign prefix rules
@@ -94,27 +94,26 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
     let cmd = ''
     if (name === 'run_command') {
       cmd = String(args?.command || '').trim()
-      // Command substitutions (e.g. $(...), `...`) must never be auto-approved
-      if (cmd.includes('$(') || cmd.includes('`')) {
+      // Command substitutions (e.g. $(...), `...`), background operators, and redirects must never be auto-approved
+      if (cmd.includes('$(') || cmd.includes('`') || /(^|[^&])&([^&]|$)/.test(cmd) || /[<>]/.test(cmd)) {
         return null
       }
 
       // Check for compound command chaining (&&, ||, ;, |, newline)
       if (/(?:&&|\|\||[;&|\n])/.test(cmd)) {
         const subcmds = cmd.split(/(?:&&|\|\||[;&|\n])/).map(s => s.trim()).filter(Boolean)
-        if (subcmds.length > 1) {
-          let allAllowed = true
-          for (const sub of subcmds) {
-            const subDec = checkDecision(layer, name, { command: sub })
-            if (subDec === 'deny') return 'deny'
-            if (subDec !== 'allow') {
-              allAllowed = false
-              break
-            }
+        if (subcmds.length === 0) return null
+        let allAllowed = true
+        for (const sub of subcmds) {
+          const subDec = checkDecision(layer, name, { command: sub })
+          if (subDec === 'deny') return 'deny'
+          if (subDec !== 'allow') {
+            allAllowed = false
+            break
           }
-          if (allAllowed) return 'allow'
-          return null // Compound command not fully covered by allow rules: require explicit confirmation
         }
+        if (allAllowed) return 'allow'
+        return null // Compound command not fully covered by allow rules: require explicit confirmation
       }
     }
 
@@ -181,29 +180,35 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
     },
     persist(db, name, rKey, dec = 'allow') {
       const targetDb = db || dbRef
+      if (!targetDb || typeof targetDb.prepare !== 'function') {
+        console.error('[allowRules] Cannot persist rule: no valid db instance available')
+        return false
+      }
       if (!RULE_DECISIONS.includes(dec)) dec = 'allow'
-      if (targetDb && typeof targetDb.prepare === 'function') {
-        try {
-          targetDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
-            .run(`${SETTINGS_PREFIX}${name}.${rKey}`, dec)
-        } catch (e) {
-          console.error('[allowRules] failed to persist rule:', e)
-          return false
-        }
+      try {
+        targetDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+          .run(`${SETTINGS_PREFIX}${name}.${rKey}`, dec)
+      } catch (e) {
+        console.error('[allowRules] failed to persist rule:', e)
+        return false
       }
       persistedRules.set(`${name}:${rKey}`, dec)
       return true
     },
     removePersisted(db, name, rKey) {
       const targetDb = db || dbRef
-      if (targetDb && typeof targetDb.prepare === 'function') {
-        try {
-          targetDb.prepare('DELETE FROM settings WHERE key = ?').run(`${SETTINGS_PREFIX}${name}.${rKey}`)
-        } catch (e) {
-          console.error('[allowRules] failed to delete persisted rule:', e)
-        }
+      if (!targetDb || typeof targetDb.prepare !== 'function') {
+        console.error('[allowRules] Cannot remove persisted rule: no valid db instance available')
+        return false
+      }
+      try {
+        targetDb.prepare('DELETE FROM settings WHERE key = ?').run(`${SETTINGS_PREFIX}${name}.${rKey}`)
+      } catch (e) {
+        console.error('[allowRules] failed to delete persisted rule:', e)
+        return false
       }
       persistedRules.delete(`${name}:${rKey}`)
+      return true
     },
     listAll(sessionId) {
       const session = []
@@ -435,16 +440,16 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       const onReply = (_e, r) => {
         if (!r || r.reqId !== reqId) return
         if (r.allowed && r.remember && !isTainted) {
+          allowRules.add(sessionId, name, args)
           const isPermanent = r.remember === 'remember' || r.remember === 'permanent' || r.remember === true
           const rKey = allowRules.ruleKey(name, args)
           if (isPermanent && typeof allowRules.persist === 'function') {
             try {
               allowRules.persist(db, name, rKey, 'allow')
-            } finally {
-              finish('allow')
+            } catch (e) {
+              console.error('[permission-reply] failed to persist rule:', e)
             }
           }
-          allowRules.add(sessionId, name, args)
         }
         finish(!!r.allowed)
       }

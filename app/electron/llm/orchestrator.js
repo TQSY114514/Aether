@@ -113,6 +113,44 @@ async function orchestrate(opts = {}) {
   const planProvider = opts.generatePlan || ((provider, model, text, signal, o) => planning.generatePlan(provider, model, text, signal, o))
   const runner = opts.runParallel || ((tasks, shared) => subAgent.runParallel(tasks, shared))
   const sharedCallbacks = opts.callbacks || {}
+  const aggregatedFiles = new Map()
+  let totalAdded = 0
+  let totalRemoved = 0
+
+  const handleChildFileSummary = (childSummary) => {
+    if (!childSummary || !Array.isArray(childSummary.files)) return
+    for (const f of childSummary.files) {
+      if (aggregatedFiles.has(f.path)) {
+        const existing = aggregatedFiles.get(f.path)
+        existing.additions = (existing.additions || 0) + (f.additions || 0)
+        existing.deletions = (existing.deletions || 0) + (f.deletions || 0)
+        if (f.deleted) existing.deleted = true
+        if (f.created) existing.created = true
+      } else {
+        aggregatedFiles.set(f.path, { ...f })
+      }
+    }
+    totalAdded += childSummary.totalAdded || 0
+    totalRemoved += childSummary.totalRemoved || 0
+  }
+
+  const childCallbacks = {
+    ...sharedCallbacks,
+    onFileSummary: handleChildFileSummary,
+  }
+
+  const emitAggregatedSummary = () => {
+    if (aggregatedFiles.size > 0 && typeof sharedCallbacks.onFileSummary === 'function') {
+      try {
+        sharedCallbacks.onFileSummary({
+          fileCount: aggregatedFiles.size,
+          totalAdded,
+          totalRemoved,
+          files: Array.from(aggregatedFiles.values()),
+        })
+      } catch {}
+    }
+  }
 
   // Decide whether to invest in a plan.
   const planEnabled = opts.isPlanRequested != null ? opts.isPlanRequested : (enabled && planning.isComplexRequest(request, 0))
@@ -121,9 +159,11 @@ async function orchestrate(opts = {}) {
     // No orchestration — single runner pass, still wrapped so the caller
     // sees the same result shape.
     try {
-      const single = await runner([request], { db, provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: sharedCallbacks })
+      const single = await runner([request], { db, provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: childCallbacks })
+      emitAggregatedSummary()
       return { ok: true, plan: null, results: single, summary: single[0] ? (single[0].output || single[0].error) : '' }
     } catch (e) {
+      emitAggregatedSummary()
       return { ok: false, error: String((e && e.message) || e) }
     }
   }
@@ -133,13 +173,14 @@ async function orchestrate(opts = {}) {
     const plan = await planProvider(opts.provider, opts.model, request, opts.signal, { max_tokens: 1024, temperature: 0.1 })
     if (!plan || !plan.tasks || plan.tasks.length === 0) {
       // planning failed — degrade to a single run.
-      const single = await runner([request], { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: sharedCallbacks })
+      const single = await runner([request], { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: childCallbacks })
+      emitAggregatedSummary()
       return { ok: true, plan: null, results: single, summary: single[0] ? (single[0].output || single[0].error) : '' }
     }
 
     const batches = batchTasks(plan.tasks)
     const results = []
-    const shared = { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: sharedCallbacks }
+    const shared = { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: childCallbacks }
 
     for (const batch of batches) {
       const prompts = batch.map(id => {
@@ -150,9 +191,11 @@ async function orchestrate(opts = {}) {
       results.push(...batchResults)
     }
 
+    emitAggregatedSummary()
     const summary = summarizeResults(results, plan)
     return { ok: true, plan, results, summary }
   } catch (e) {
+    emitAggregatedSummary()
     return { ok: false, error: String((e && e.message) || e) }
   }
 }

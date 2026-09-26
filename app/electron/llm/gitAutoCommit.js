@@ -426,7 +426,7 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     // Look for untracked files and append their content (safely, excluding secret-like files)
     const untrackedLines = rawStatus.split('\n')
       .filter(l => l.startsWith('??'))
-      .map(l => l.slice(3).trim())
+      .map(l => l.slice(3).trim().replace(/^"(.*)"$/, '$1'))
       .filter(f => !isSecretLike(f))
 
     if (untrackedLines.length > 0) {

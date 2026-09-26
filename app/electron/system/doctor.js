@@ -15,9 +15,31 @@
 const os = require('os')
 const fs = require('fs')
 const path = require('path')
-const { runCommandSync } = require('../tools/exec')
+const { runCommand, runCommandSync } = require('../tools/exec')
 const { nearestGitRoot } = require('../llm/checkpoints')
 const { getWorkspaceRoot } = require('../tools/sandbox')
+
+/**
+ * Sanitize a URL to strip or mask credentials (usernames, passwords, sensitive query tokens).
+ * @param {string} rawUrl
+ * @returns {string}
+ */
+function sanitizeUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return ''
+  try {
+    const u = new URL(rawUrl)
+    if (u.password) u.password = '***'
+    if (u.username) u.username = '***'
+    for (const k of Array.from(u.searchParams.keys())) {
+      if (/key|token|auth|secret|pass/i.test(k)) {
+        u.searchParams.set(k, '***')
+      }
+    }
+    return u.toString()
+  } catch {
+    return rawUrl.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@')
+  }
+}
 
 /**
  * Probe a command-line tool with a short timeout.
@@ -157,20 +179,18 @@ async function diagnoseSystem(db, { cwd, sessionId } = {}) {
   }
 
   // 2. Developer Toolchain
-  const tools = {
-    git: probeCliTool('git', ['--version']),
-    node: probeCliTool('node', ['--version']),
-    npm: probeCliTool('npm', ['--version']),
-    pnpm: probeCliTool('pnpm', ['--version']),
-    python: probeCliTool('python', ['--version']),
-    docker: probeCliTool('docker', ['--version']),
-    cargo: probeCliTool('cargo', ['--version']),
-  }
-
-  if (!tools.python.found) {
+  const git = probeCliTool('git', ['--version'])
+  const node = probeCliTool('node', ['--version'])
+  const npm = probeCliTool('npm', ['--version'])
+  const pnpm = probeCliTool('pnpm', ['--version'])
+  let python = probeCliTool('python', ['--version'])
+  if (!python.found) {
     const py3 = probeCliTool('python3', ['--version'])
-    if (py3.found) tools.python = py3
+    if (py3.found) python = py3
   }
+  const docker = probeCliTool('docker', ['--version'])
+  const cargo = probeCliTool('cargo', ['--version'])
+  const tools = { git, node, npm, pnpm, python, docker, cargo }
 
   if (tools.git.found) {
     checks.push({
@@ -411,7 +431,7 @@ async function diagnoseSystem(db, { cwd, sessionId } = {}) {
         providers.push({
           id: row.id,
           name: row.name,
-          apiUrl: row.api_url,
+          apiUrl: sanitizeUrl(row.api_url),
           apiFormat: row.api_format,
           reachable: probe.reachable,
           latencyMs: probe.latencyMs,
