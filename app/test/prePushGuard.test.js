@@ -157,14 +157,15 @@ describe('prePushGuard', () => {
       expect(res.isPush).toBe(false)
     })
 
-    it('blocks git push origin master by default', async () => {
+    it('passes git push origin master through (advisory warning only)', async () => {
       const res = await prePushGuard.inspectPushCommand('git push origin master', {
         skipBuildCheck: true,
       })
-      expect(res.ok).toBe(false)
+      expect(res.ok).toBe(true)
       expect(res.isPush).toBe(true)
-      expect(res.rule).toBe('protected_branch')
-      expect(res.reason).toContain('protected branch')
+      // Should carry an advisory warning about the protected branch
+      expect(res.warnings).toBeDefined()
+      expect(res.warnings[0]).toContain('master')
     })
 
     it('allows git push to feature branch with build check skipped', async () => {
@@ -188,13 +189,13 @@ describe('prePushGuard', () => {
       expect(res.skipped).toBe(true)
     })
 
-    it('blocks multi-ref push if any target branch is protected', async () => {
+    it('passes multi-ref push with advisory warnings for protected branches', async () => {
       const res = await prePushGuard.inspectPushCommand('git push origin feat/safe-branch master', {
         skipBuildCheck: true,
       })
-      expect(res.ok).toBe(false)
-      expect(res.rule).toBe('protected_branch')
-      expect(res.branch).toBe('master')
+      expect(res.ok).toBe(true)
+      expect(res.warnings).toBeDefined()
+      expect(res.warnings.some(w => w.includes('master'))).toBe(true)
     })
 
     it('handles git -C option when parsing push details', () => {

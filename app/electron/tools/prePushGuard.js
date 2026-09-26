@@ -605,40 +605,22 @@ async function inspectPushCommand(command, context = {}) {
 
   const details = parsePushDetails(pushCheck.segment, gitRoot)
 
-  // Pre-detect file changeset to determine if this is a doc/config-only push.
-  // This is a lightweight name-only scan used only for Stage 1 routing —
-  // Stage 2 always does a full content scan regardless.
-  let preDetectedFiles = []
-  try {
-    const range = getUnpushedRange(gitRoot, details.remote, details.branch)
-    const isSingleHead = range === 'HEAD'
-    const nameArgs = isSingleHead
-      ? ['diff-tree', '--name-only', '-r', '--no-commit-id', 'HEAD']
-      : ['diff', '--name-only', range]
-    const nameRes = spawnSync('git', nameArgs, {
-      cwd: gitRoot,
-      encoding: 'utf-8',
-      timeout: 5000,
-      windowsHide: true,
-    })
-    if (nameRes.status === 0 && nameRes.stdout) {
-      preDetectedFiles = nameRes.stdout.split('\n').map(s => s.trim()).filter(Boolean)
-    }
-  } catch {}
-
-  const docOnly = isDocOnlyChangeset(preDetectedFiles)
-
-  // Stage 1: Branch Protection
+  // Stage 1: Branch advisory (warning only — never blocks).
+  // checkBranchProtection() is kept for external callers; within the pipeline
+  // it only contributes warnings surfaced in the summary so the caller can log
+  // or display them. The user/agent decides what to do with protected-branch
+  // pushes; the real gates are Stage 2 (secrets) and Stage 3 (build).
   const branches = details.branches && details.branches.length ? details.branches : [details.branch]
   const branchWarnings = []
   for (const branch of branches) {
     const branchCheck = checkBranchProtection(branch, {
       db: context.db,
       allowProtectedOverride: context.allowProtectedOverride,
-      docOnly,
+      docOnly: true, // always advisory — never hard-block in the pipeline
     })
-    if (!branchCheck.ok) return { ok: false, isPush: true, ...branchCheck }
-    if (branchCheck.warn) branchWarnings.push(branchCheck.reason)
+    if (branchCheck.warn || (!branchCheck.ok)) {
+      branchWarnings.push(branchCheck.reason || `Pushing to protected branch '${branch}'.`)
+    }
   }
 
   // Stage 2: Secret & Sensitive Asset Scan
@@ -656,13 +638,12 @@ async function inspectPushCommand(command, context = {}) {
     return { ok: false, isPush: true, ...preFlightCheck }
   }
 
-  // Stage 4: Build review summary
+  // Stage 4: Blast-radius review summary
   const summary = getPushSummary(gitRoot, details)
 
   return {
     ok: true,
     isPush: true,
-    docOnly,
     warnings: branchWarnings.length ? branchWarnings : undefined,
     summary: {
       remote: details.remote,
@@ -673,7 +654,6 @@ async function inspectPushCommand(command, context = {}) {
       files: summary.files,
       range: summary.range,
       preFlight: preFlightCheck,
-      docOnly,
     },
   }
 }
