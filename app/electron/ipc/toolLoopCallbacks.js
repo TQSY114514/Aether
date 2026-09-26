@@ -144,9 +144,11 @@ function createAllowRulesStore(initialDb = null) {
             .run(`${SETTINGS_PREFIX}${name}.${rKey}`, dec)
         } catch (e) {
           console.error('[allowRules] failed to persist rule:', e)
+          return false
         }
       }
       persistedRules.set(`${name}:${rKey}`, dec)
+      return true
     },
     removePersisted(db, name, rKey) {
       const targetDb = db || dbRef
@@ -392,7 +394,11 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
           const isPermanent = r.remember === 'remember' || r.remember === 'permanent' || r.remember === true
           const rKey = allowRules.ruleKey(name, args)
           if (isPermanent && typeof allowRules.persist === 'function') {
-            allowRules.persist(opts.db, name, rKey, 'allow')
+            try {
+              allowRules.persist(db, name, rKey, 'allow')
+            } finally {
+              finish('allow')
+            }
           }
           allowRules.add(sessionId, name, args)
         }
