@@ -7,7 +7,7 @@
 
 const fs = require('fs')
 const path = require('path')
-const { getWorkspaceRoot } = require('../tools/sandbox')
+const { getWorkspaceRoot, hasUnsafeWindowsPrefix, isSensitivePath } = require('../tools/sandbox')
 const { normalizeContent, keywords } = require('../memoryText')
 const log = require('../logger')
 
@@ -144,6 +144,9 @@ function parseMarkdownToMemories(text) {
 function projectWorkspaceMemory(db, workspaceRoot) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, count: 0, updated: false, error: 'No workspace root' }
+  if (hasUnsafeWindowsPrefix(ws) || isSensitivePath(ws)) {
+    return { success: false, count: 0, updated: false, error: 'Access to sensitive or unsafe path is forbidden' }
+  }
 
   try {
     const targetFile = path.resolve(ws, 'MEMORY.md')
@@ -151,8 +154,17 @@ function projectWorkspaceMemory(db, workspaceRoot) {
     if (rel.startsWith('..') || path.isAbsolute(rel) || rel !== 'MEMORY.md') {
       return { success: false, count: 0, updated: false, error: 'Path traversal detected' }
     }
-    if (fs.existsSync(targetFile) && fs.lstatSync(targetFile).isSymbolicLink()) {
-      return { success: false, count: 0, updated: false, error: 'Target file is a symbolic link' }
+    if (fs.existsSync(targetFile)) {
+      if (fs.lstatSync(targetFile).isSymbolicLink()) {
+        return { success: false, count: 0, updated: false, error: 'Target file is a symbolic link' }
+      }
+      try {
+        const realTarget = fs.realpathSync(targetFile)
+        const realWs = fs.realpathSync(ws)
+        if (path.relative(realWs, realTarget) !== 'MEMORY.md') {
+          return { success: false, count: 0, updated: false, error: 'Path traversal or symlink detected' }
+        }
+      } catch {}
     }
 
     // Preserve external edits / Git updates: if MEMORY.md exists on disk and either
@@ -218,6 +230,9 @@ function projectWorkspaceMemory(db, workspaceRoot) {
 function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineContent = null } = {}) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, added: 0, removed: 0, total: 0, error: 'No workspace root' }
+  if (hasUnsafeWindowsPrefix(ws) || isSensitivePath(ws)) {
+    return { success: false, added: 0, removed: 0, total: 0, error: 'Access to sensitive or unsafe path is forbidden' }
+  }
 
   if (_isWritingFile.has(ws)) {
     return { success: true, added: 0, removed: 0, total: 0 } // skip self-write echo
@@ -234,6 +249,13 @@ function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineC
   if (fs.lstatSync(targetFile).isSymbolicLink()) {
     return { success: false, added: 0, removed: 0, total: 0, error: 'Target file is a symbolic link' }
   }
+  try {
+    const realTarget = fs.realpathSync(targetFile)
+    const realWs = fs.realpathSync(ws)
+    if (path.relative(realWs, realTarget) !== 'MEMORY.md') {
+      return { success: false, added: 0, removed: 0, total: 0, error: 'Path traversal or symlink detected' }
+    }
+  } catch {}
 
   try {
     const stat = fs.statSync(targetFile)
@@ -318,7 +340,7 @@ function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineC
 function getMemoryFileStatus(workspaceRoot) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   const targetFile = ws ? path.resolve(ws, 'MEMORY.md') : ''
-  if (!ws || !fs.existsSync(targetFile)) {
+  if (!ws || hasUnsafeWindowsPrefix(ws) || isSensitivePath(ws) || !fs.existsSync(targetFile)) {
     return { exists: false, path: targetFile, mtime: null, lineCount: 0 }
   }
 
