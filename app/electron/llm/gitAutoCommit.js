@@ -234,6 +234,246 @@ function setAutoCommitEnabled(db, enabled) {
   db.setSetting(SETTING_KEY, enabled ? '1' : '0')
 }
 
+/**
+ * Craft a conventional commit message based on uncommitted changes in gitRoot.
+ * Inspired by Aider's smart commit message crafting.
+ * @param {string} gitRoot
+ * @returns {{ success: boolean, suggestedMessage?: string, files?: string[], error?: string }}
+ */
+function craftCommitMessage(gitRoot) {
+  if (!gitRoot || !isGitRepo(gitRoot)) {
+    return { success: false, error: 'not a git repository' }
+  }
+  const statusRes = runCommandSync('git', ['status', '--porcelain'], { cwd: gitRoot })
+  if (statusRes.exitCode !== 0) {
+    return { success: false, error: statusRes.stderr || 'git status failed' }
+  }
+  const rawStatus = (statusRes.stdout || '').trim()
+  if (!rawStatus) {
+    return { success: false, error: 'nothing to commit (working tree clean)' }
+  }
+
+  const lines = rawStatus.split('\n').filter(Boolean)
+  const files = []
+  for (const line of lines) {
+    const m = line.match(/^.{2}\s+(.+)$/)
+    if (m) {
+      const p = m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()
+      files.push(p)
+    }
+  }
+
+  let type = 'feat'
+  let scope = ''
+
+  const allTest = files.length > 0 && files.every(f => /test|\.spec\./i.test(f))
+  const allDocs = files.length > 0 && files.every(f => /\.md$/i.test(f) || f.startsWith('docs/'))
+  const allConfig = files.length > 0 && files.every(f => /(package\.json|tsconfig|\.config\.|pnpm|yarn)/i.test(f))
+
+  if (allTest) {
+    type = 'test'
+  } else if (allDocs) {
+    type = 'docs'
+  } else if (allConfig) {
+    type = 'chore'
+  } else {
+    const diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=1'], { cwd: gitRoot })
+    const diffText = (diffRes.stdout || '').slice(0, 3000).toLowerCase()
+    if (diffText.includes('fix') || diffText.includes('bug') || diffText.includes('error')) {
+      type = 'fix'
+    } else {
+      type = 'feat'
+    }
+  }
+
+  if (files.length > 0) {
+    const f0 = files[0].replace(/\\/g, '/')
+    if (f0.includes('components/chat') || f0.includes('chat.')) scope = 'chat'
+    else if (f0.includes('ipc/')) scope = 'ipc'
+    else if (f0.includes('llm/')) scope = 'llm'
+    else if (f0.includes('tools/')) scope = 'tools'
+    else if (f0.includes('store/')) scope = 'store'
+    else if (f0.includes('utils/')) scope = 'utils'
+    else if (f0.includes('tui/')) scope = 'tui'
+  }
+
+  let summary = ''
+  if (files.length === 1) {
+    const base = path.basename(files[0], path.extname(files[0]))
+    summary = `update ${base}`
+  } else if (files.length <= 3) {
+    const bases = files.map(f => path.basename(f, path.extname(f))).join(', ')
+    summary = `update ${bases}`
+  } else {
+    summary = `update ${files.length} files`
+  }
+
+  const prefix = scope ? `${type}(${scope}): ` : `${type}: `
+  const suggestedMessage = `${prefix}${summary}`
+
+  return {
+    success: true,
+    suggestedMessage,
+    files,
+  }
+}
+
+/**
+ * Commit changes to git working tree.
+ * @param {string} gitRoot
+ * @param {{ message: string, files?: string[] }} options
+ */
+function commitWorkingTree(gitRoot, { message, files }) {
+  if (!gitRoot || !isGitRepo(gitRoot)) {
+    return { success: false, error: 'not a git repository' }
+  }
+  const msg = String(message || '').trim()
+  if (!msg) {
+    return { success: false, error: 'commit message is required' }
+  }
+
+  if (files && files.length > 0) {
+    const res = gitCommitMultiple(files, gitRoot, msg)
+    if (!res.success) {
+      return { success: false, error: res.message || 'git commit failed' }
+    }
+  } else {
+    const addRes = runCommandSync('git', ['add', '-A'], { cwd: gitRoot })
+    if (addRes.exitCode !== 0) {
+      return { success: false, error: addRes.stderr || 'git add failed' }
+    }
+    const commitRes = runCommandSync('git', ['commit', '-m', msg], { cwd: gitRoot })
+    if (commitRes.exitCode !== 0) {
+      return { success: false, error: commitRes.stderr || 'git commit failed' }
+    }
+  }
+
+  const hashRes = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot })
+  const commitHash = (hashRes.stdout || '').trim() || null
+
+  return {
+    success: true,
+    commitHash,
+    message: msg,
+  }
+}
+
+/**
+ * Extract diff and structured prompt for workspace code review (Aider / Claude Code / Codex).
+ * @param {string} gitRoot
+ * @param {object} [options]
+ * @param {string} [options.targetRef] Optional commit/branch or 'HEAD'
+ * @param {number} [options.maxDiffLines=500] Maximum diff lines before truncation
+ * @param {string} [options.focus] Optional user focus (e.g. 'security', 'performance')
+ * @returns {object}
+ */
+function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}) {
+  if (!gitRoot || !isGitRepo(gitRoot)) {
+    return { success: false, error: 'not a git repository' }
+  }
+
+  // Branch and commit info
+  let branch = 'unknown'
+  let commitHash = 'unknown'
+  try {
+    const b = runCommandSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: gitRoot })
+    branch = (b.stdout || '').trim() || 'HEAD'
+    const h = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot })
+    commitHash = (h.stdout || '').trim() || 'HEAD'
+  } catch {}
+
+  // Check working tree status
+  const statusRes = runCommandSync('git', ['status', '--porcelain'], { cwd: gitRoot })
+  const rawStatus = (statusRes.stdout || '').trim()
+  const isClean = !rawStatus
+
+  let statSummary = ''
+  let diffRaw = ''
+  let scopeDesc = ''
+
+  if (targetRef && String(targetRef).trim()) {
+    // Review specific target reference or branch (e.g. HEAD~1, main)
+    const ref = String(targetRef).trim()
+    scopeDesc = `对比引用: ${ref}`
+    const statRes = runCommandSync('git', ['diff', ref, '--stat'], { cwd: gitRoot })
+    statSummary = (statRes.stdout || '').trim()
+    const diffRes = runCommandSync('git', ['diff', ref, '--unified=3'], { cwd: gitRoot })
+    diffRaw = diffRes.stdout || ''
+  } else if (!isClean) {
+    // Review uncommitted working tree changes
+    scopeDesc = '工作区待提交改动 (Working Tree Changes)'
+    const statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: gitRoot })
+    statSummary = (statRes.stdout || '').trim()
+    const diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: gitRoot })
+    diffRaw = diffRes.stdout || ''
+
+    // If diffRaw is empty, might only have untracked files
+    if (!diffRaw.trim()) {
+      const untracked = rawStatus.split('\n').filter(l => l.startsWith('??')).map(l => l.slice(3).trim())
+      if (untracked.length > 0) {
+        statSummary = `Untracked new files (${untracked.length}):\n${untracked.slice(0, 15).join('\n')}`
+      }
+    }
+  } else {
+    // Working tree is completely clean: review latest commit
+    scopeDesc = `最新提交 (${commitHash})`
+    const statRes = runCommandSync('git', ['show', '--stat', '--oneline', 'HEAD'], { cwd: gitRoot })
+    statSummary = (statRes.stdout || '').trim()
+    const diffRes = runCommandSync('git', ['show', '--unified=3', 'HEAD'], { cwd: gitRoot })
+    diffRaw = diffRes.stdout || ''
+  }
+
+  // Truncate diff if excessive
+  const lines = diffRaw.split('\n')
+  let isTruncated = false
+  let truncatedDiff = diffRaw
+  if (lines.length > maxDiffLines) {
+    isTruncated = true
+    truncatedDiff = lines.slice(0, maxDiffLines).join('\n') + `\n\n... [Diff 截断：已展示前 ${maxDiffLines} 行，总行数: ${lines.length}]`
+  }
+
+  const focusNotice = focus ? `\n> 🎯 **用户特别关注维度**：${focus}\n` : ''
+
+  const suggestedReviewPrompt = `请作为资深代码评审专家 (Senior Staff Code Reviewer) 对以下代码改动进行多维度深度审查：
+
+${focusNotice}
+### 审查重点与标准
+1. **正确性与缺陷 (Bugs & Regressions)**：逻辑漏洞、边界条件遗漏、空指针/未定义引用、并发/竞态、资源泄露。
+2. **安全性 (Security)**：密钥/敏感凭证泄露风险、未清洗的输入、SQL注入/命令注入隐患。
+3. **架构与工程规范 (Design & Architecture)**：职责分离、异常处理与优雅降级、是否违反现有约定 (如 CommonJS/ESM 规范、IPC 三件套契约)。
+4. **性能与健壮性 (Performance & Reliability)**：无谓的高频重渲染、阻塞操作、缺少重试或超时机制。
+5. **具体修改建议 (Actionable Suggestions)**：提供精准的行号定位与精简的 drop-in 修复代码补丁。
+
+---
+
+### 改动概览
+- **分支/基准**: \`${branch}\` (\`${commitHash}\`)
+- **审查范围**: ${scopeDesc}
+- **统计摘要**:
+\`\`\`
+${statSummary || '无统计差异'}
+\`\`\`
+
+### 详细 Diff
+\`\`\`diff
+${truncatedDiff || '(未检测到代码 Diff 内容)'}
+\`\`\`
+`
+
+  return {
+    success: true,
+    branch,
+    commitHash,
+    isClean,
+    scopeDesc,
+    statSummary,
+    diffText: truncatedDiff,
+    isTruncated,
+    totalDiffLines: lines.length,
+    suggestedReviewPrompt,
+  }
+}
+
 module.exports = {
   isGitRepo,
   isSecretLike,
@@ -244,6 +484,9 @@ module.exports = {
   gitCommitMultiple,
   getAutoCommitEnabled,
   setAutoCommitEnabled,
+  craftCommitMessage,
+  commitWorkingTree,
+  getDiffForReview,
   SETTING_KEY,
   DEFAULT_ENABLED,
 }

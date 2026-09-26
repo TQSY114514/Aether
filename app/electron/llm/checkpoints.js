@@ -146,4 +146,4 @@ function rollbackCheckpoint(id) {
   return { success: false, error: 'some files failed to restore', restored, failed }
 }
 
-module.exports = { setDb, createCheckpoint, rollbackCheckpoint, extractAffectedPaths, findLatestCheckpointForRoot, isInsideGitRoot }
+module.exports = { setDb, createCheckpoint, rollbackCheckpoint, extractAffectedPaths, findLatestCheckpointForRoot, isInsideGitRoot, nearestGitRoot }

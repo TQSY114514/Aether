@@ -40,6 +40,9 @@ let _loopStateListenerInstalled = false
 let _planStepListenerInstalled = false
 let _usageListenerInstalled = false
 let _toolStreamListenerInstalled = false
+let _turnSummaryListenerInstalled = false
+let _memorySavedListenerInstalled = false
+let _skillPatchedListenerInstalled = false
 
 // Chunk listener
 
@@ -476,6 +479,36 @@ export function ensureTaskListeners() {
   })
 }
 
+// Turn summary & feedback listeners
+
+export function ensureTurnSummaryListener() {
+  if (_turnSummaryListenerInstalled) return
+  _turnSummaryListenerInstalled = true
+  window.electronAPI.chat.onTurnSummary?.(({ messageId, fileSummary }) => {
+    if (!messageId || !fileSummary) return
+    getStore().getState().setFileSummaryForMessage(messageId, fileSummary)
+  })
+}
+
+export function ensureMemorySavedListener() {
+  if (_memorySavedListenerInstalled) return
+  _memorySavedListenerInstalled = true
+  window.electronAPI.chat.onMemorySaved?.((payload) => {
+    const count = payload.total || payload.added || 1
+    const msg = payload.text || `已保存到记忆 ${count} entries`
+    getStore().getState().triggerToast(msg, 'success')
+  })
+}
+
+export function ensureSkillPatchedListener() {
+  if (_skillPatchedListenerInstalled) return
+  _skillPatchedListenerInstalled = true
+  window.electronAPI.chat.onSkillPatched?.((payload) => {
+    const msg = payload.text || `Self-improvement review: Skill '${payload.skillName}' patched`
+    getStore().getState().triggerToast(msg, 'info')
+  })
+}
+
 // All listeners
 
 export function ensureAllListeners() {
@@ -491,5 +524,8 @@ export function ensureAllListeners() {
   ensureToolStreamListener()
   ensureLoopStateListener()
   ensureUsageListener()
+  ensureTurnSummaryListener()
+  ensureMemorySavedListener()
+  ensureSkillPatchedListener()
   ensureTaskListeners()
 }

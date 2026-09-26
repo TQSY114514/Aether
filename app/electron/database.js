@@ -1968,11 +1968,12 @@ function listAgentCheckpoints(sessionId, messageId = null) {
   const where = messageId
     ? "session_id = ? AND message_id = ?"
     : "session_id = ?";
+  const params = messageId ? [sessionId, messageId] : [sessionId];
   const rows = db
     .prepare(
       `SELECT id, session_id, message_id, tool_name, args, affected_paths, rolled_back_at, created_at FROM agent_checkpoint WHERE ${where} ORDER BY id DESC`,
     )
-    .all(messageId ? sessionId : messageId, sessionId);
+    .all(...params);
   for (const row of rows) {
     try {
       row.args = JSON.parse(row.args || "{}");

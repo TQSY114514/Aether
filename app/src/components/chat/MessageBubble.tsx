@@ -10,6 +10,7 @@ import AgentPlanTrace from './AgentPlanTrace'
 import TaskCard from './TaskCard'
 import ThinkingBlock from './ThinkingBlock'
 import AgentTimeline from './AgentTimeline'
+import FileSummaryDeck from './FileSummaryDeck'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
@@ -26,6 +27,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const todos = useStore(s => s.todosByMessage[message.id])
   const thinkingBlocks = useStore(s => s.thinkingBlocksByMessage[message.id])
   const statusLines = useStore(s => s.statusLinesByMessage[message.id])
+  const fileSummary = useStore(s => s.fileSummariesByMessage[message.id])
 
   const regenerate = useStore(s => s.regenerate)
   const editMessage = useStore(s => s.editMessage)
@@ -242,6 +244,13 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               </div>
             )}
             {renderContent(message.content)}
+            {fileSummary && (
+              <FileSummaryDeck
+                summary={fileSummary}
+                sessionId={message.session_id}
+                messageId={message.id}
+              />
+            )}
             {isStreaming && (
               <span className="inline-flex items-center gap-0.5 ml-1 mt-1">
                 <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
@@ -257,9 +266,31 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
           </div>
 
-          <div className="flex items-center gap-1 px-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            <button
-              onClick={handleCopy}
+          <div className="flex items-center justify-between gap-2 px-0.5 mt-1.5 min-w-0">
+            {/* Claude Code & Cursor-style Turn Telemetry Footer */}
+            {!isStreaming && (message.model_used || message.latency_ms || message.token_count) ? (
+              <div className="flex items-center gap-2 text-[10px] font-mono select-none" style={{ color: 'var(--text-muted)' }}>
+                {message.model_used && (
+                  <span className="truncate max-w-[140px] opacity-75" title={message.model_used}>
+                    {message.model_used}
+                  </span>
+                )}
+                {message.latency_ms != null && message.latency_ms > 0 && (
+                  <span className="tabular-nums opacity-75">
+                    {(message.latency_ms / 1000).toFixed(1)}s
+                  </span>
+                )}
+                {message.token_count != null && message.token_count > 0 && (
+                  <span className="tabular-nums opacity-75">
+                    {message.token_count.toLocaleString()} toks
+                  </span>
+                )}
+              </div>
+            ) : <div />}
+
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ml-auto">
+              <button
+                onClick={handleCopy}
               className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
               title={t('chat.copy')}
               aria-label={t('chat.copy')}
@@ -302,6 +333,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               </button>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>

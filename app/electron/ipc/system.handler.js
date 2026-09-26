@@ -6,7 +6,7 @@
 // 全部 best-effort，失败不打扰。
 // ─────────────────────────────────────────────────────────────────────────────
 
-function registerSystemHandlers(ipcMain, app, getWebContents) {
+function registerSystemHandlers(ipcMain, app, getWebContents, db) {
   // 开机自启: 查询/设置（Settings 页开关）
   ipcMain.handle('system:get-auto-launch', () => {
     try { return { enabled: app.getLoginItemSettings().openAtLogin } } catch { return { enabled: false } }
@@ -112,6 +112,22 @@ function registerSystemHandlers(ipcMain, app, getWebContents) {
       return { ok: false, error: 'not supported or window unavailable' }
     } catch (e) {
       return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
+
+  // 系统与工作区全面体检 (Claude Code / OpenHands 对齐)
+  ipcMain.handle('system:doctor', async (_e, { cwd, sessionId } = {}) => {
+    try {
+      const { runDoctorDiagnostics } = require('../system/doctor')
+      return await runDoctorDiagnostics(db, { cwd, sessionId })
+    } catch (e) {
+      return {
+        overallStatus: 'degraded',
+        error: e && e.message ? e.message : String(e),
+        markdownReport: `### 🩺 Aether 系统体检执行异常\n> ❌ 错误原因: ${e && e.message ? e.message : String(e)}`,
+        checks: [],
+        summary: { total: 0, passes: 0, warnings: 0, failures: 1 },
+      }
     }
   })
 }

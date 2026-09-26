@@ -27,4 +27,4 @@ initStoreListeners(useStore)
 // Re-export types and helpers for consumers that import from "@/store".
 export type { AppState, SessionConfig, TaskStatus, TaskInfo, TaskProgressType } from "./types"
 export { taskApi, applyFontScale, applyLangDir, decodeDataUrlText, mergeTask, newTask, taskProgressText, LANGS_CODES } from "./types"
-export { ensureAllListeners, ensureTaskListeners, ensureChunkListener } from "./listeners"
+export { ensureAllListeners, ensureTaskListeners, ensureChunkListener, ensureTurnSummaryListener, ensureMemorySavedListener, ensureSkillPatchedListener } from "./listeners"

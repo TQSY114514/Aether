@@ -46,6 +46,7 @@ function clearAllowRules(sessionId) { allowRulesStore.clear(sessionId) }
 function registerChatHandlers(ipcMain, db, getWebContents) {
   auditLog.setDb(db)
   checkpoints.setDb(db)
+  if (typeof allowRulesStore.setDb === 'function') allowRulesStore.setDb(db)
 
   // Pass the shared live state to the extracted chat:send handler
   const ctx = {
@@ -158,6 +159,32 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('chat:question-reply', (event, payload) => {
     event.sender.send('chat:question-reply', payload)
     return true
+  })
+
+  // ─── Permission Rules (Cline / Claude Code style auto-approval) ─────────
+  ipcMain.handle('chat:permissions:list', (_e, { sessionId } = {}) => {
+    return allowRulesStore.listAll(sessionId)
+  })
+  ipcMain.handle('chat:permissions:save', (_e, { name, ruleKey, decision }) => {
+    allowRulesStore.persist(db, name, ruleKey, decision || 'allow')
+    return { ok: true }
+  })
+  ipcMain.handle('chat:permissions:remove', (_e, { name, ruleKey }) => {
+    allowRulesStore.removePersisted(db, name, ruleKey)
+    return { ok: true }
+  })
+  ipcMain.handle('chat:permissions:applyPreset', (_e, { preset }) => {
+    return allowRulesStore.applyPreset(db, preset)
+  })
+
+  // ─── Test & Lint On-Demand (Claude Code / Aider alignment) ────────────────
+  ipcMain.handle('chat:test', async (_e, { cwd, sessionId, args } = {}) => {
+    const { runProjectTest } = require('../llm/lintTestRepair')
+    return await runProjectTest(db, { cwd, sessionId, args })
+  })
+  ipcMain.handle('chat:lint', async (_e, { cwd, sessionId, args } = {}) => {
+    const { runProjectLint } = require('../llm/lintTestRepair')
+    return await runProjectLint(db, { cwd, sessionId, args })
   })
 
   // ─── Audit log ───────────────────────────────────────────────────────────

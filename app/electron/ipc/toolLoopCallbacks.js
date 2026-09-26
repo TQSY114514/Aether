@@ -13,36 +13,204 @@
  *   write/edit   → directory of the path
  *   others       → '*' (exact tool name match)
  */
-function createAllowRulesStore() {
-  const allowRules = new Map() // sessionId -> Set<string>
+const RULE_DECISIONS = ['allow', 'deny', 'ask']
+const SETTINGS_PREFIX = 'permission_rule.'
+
+function loadPersistedRules(db) {
+  const out = new Map()
+  if (!db || typeof db.prepare !== 'function') return out
+  try {
+    const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'permission_rule.%'").all()
+    for (const r of rows) {
+      const rest = String(r.key).slice(SETTINGS_PREFIX.length)
+      const idx = rest.indexOf('.')
+      if (idx <= 0) continue
+      const tool = rest.slice(0, idx)
+      const rKey = rest.slice(idx + 1)
+      if (rKey && RULE_DECISIONS.includes(r.value)) {
+        out.set(`${tool}:${rKey}`, r.value)
+      }
+    }
+  } catch {}
+  return out
+}
+
+/**
+ * Create a session-scoped & persisted allow-rules store.
+ * Multi-layer lookup: Session rules (in-memory) > Persisted rules (settings table).
+ * Granularity:
+ *   run_command  → multi-token subcommand prefix (e.g. 'git status', 'npm test')
+ *                  or first binary token, or wildcard '*'
+ *   write/edit   → directory of path, or exact path, or wildcard '*'
+ *   others       → exact tool name, or wildcard '*'
+ */
+function createAllowRulesStore(initialDb = null) {
+  let dbRef = initialDb
+  const sessionRules = new Map()   // sessionId -> Map<string, string>
+  const persistedRules = new Map() // `${tool}:${ruleKey}` -> decision
+  if (dbRef) {
+    for (const [k, d] of loadPersistedRules(dbRef)) persistedRules.set(k, d)
+  }
+
+  function setDb(db) {
+    dbRef = db
+    if (dbRef) {
+      persistedRules.clear()
+      for (const [k, d] of loadPersistedRules(dbRef)) persistedRules.set(k, d)
+    }
+  }
 
   function ruleKey(name, args) {
     if (name === 'run_command') {
       const cmd = String(args?.command || '').trim()
-      const firstTok = cmd.split(/\s+/)[0] || cmd
-      return firstTok
+      const parts = cmd.split(/\s+/)
+      const first = parts[0] || ''
+      const second = parts[1] || ''
+      if (['git', 'npm', 'pnpm', 'yarn', 'cargo', 'go', 'docker', 'python', 'pytest', 'npx', 'vitest'].includes(first.toLowerCase()) && second && !second.startsWith('-')) {
+        return `${first} ${second}`
+      }
+      return first || '*'
     }
     if (name === 'write_file' || name === 'edit_file') {
       const p = String(args?.path || '')
       const dir = p.includes('/') || p.includes('\\') ? p.replace(/[\\/][^\\/]*$/, '') : p
-      return dir || p
+      return dir || p || '*'
     }
     return '*'
   }
 
+  function checkDecision(layer, name, args) {
+    if (!layer || layer.size === 0) return null
+    const rk = ruleKey(name, args)
+    const exactKey = `${name}:${rk}`
+    if (layer.has(exactKey)) return layer.get(exactKey)
+
+    if (name === 'run_command') {
+      const cmd = String(args?.command || '').trim()
+      const firstTok = cmd.split(/\s+/)[0] || cmd
+      if (layer.has(`${name}:${firstTok}`)) return layer.get(`${name}:${firstTok}`)
+      if (layer.has(`${name}:${firstTok}:*`)) return layer.get(`${name}:${firstTok}:*`)
+
+      for (const [storedKey, dec] of layer.entries()) {
+        if (!storedKey.startsWith(`${name}:`)) continue
+        const pattern = storedKey.slice(name.length + 1)
+        if (pattern === '*') return dec
+        if (pattern.endsWith(':*')) {
+          const prefix = pattern.slice(0, -2)
+          if (cmd === prefix || cmd.startsWith(prefix + ' ') || cmd.startsWith(prefix + '\t')) return dec
+        } else if (cmd === pattern || cmd.startsWith(pattern + ' ') || cmd.startsWith(pattern + '\t')) {
+          return dec
+        }
+      }
+    }
+
+    if (layer.has(`${name}:*`)) return layer.get(`${name}:*`)
+    if (layer.has(`${name}:`)) return layer.get(`${name}:`)
+
+    return null
+  }
+
+  function decision(sessionId, name, args) {
+    const sLayer = sessionRules.get(sessionId)
+    const sDec = checkDecision(sLayer, name, args)
+    if (sDec != null) return sDec
+
+    const pDec = checkDecision(persistedRules, name, args)
+    if (pDec != null) return pDec
+
+    return null
+  }
+
   return {
+    setDb,
+    ruleKey,
+    decision,
     match(sessionId, name, args) {
-      const set = allowRules.get(sessionId)
-      if (!set) return false
-      return set.has(`${name}:${ruleKey(name, args)}`) || set.has(`${name}:*`)
+      return decision(sessionId, name, args) === 'allow'
     },
-    add(sessionId, name, args) {
-      if (!allowRules.has(sessionId)) allowRules.set(sessionId, new Set())
-      allowRules.get(sessionId).add(`${name}:${ruleKey(name, args)}`)
+    add(sessionId, name, args, dec = 'allow') {
+      if (!sessionRules.has(sessionId)) sessionRules.set(sessionId, new Map())
+      sessionRules.get(sessionId).set(`${name}:${ruleKey(name, args)}`, dec)
     },
     clear(sessionId) {
-      allowRules.delete(sessionId)
+      sessionRules.delete(sessionId)
     },
+    persist(db, name, rKey, dec = 'allow') {
+      const targetDb = db || dbRef
+      if (!RULE_DECISIONS.includes(dec)) dec = 'allow'
+      if (targetDb && typeof targetDb.prepare === 'function') {
+        try {
+          targetDb.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+            .run(`${SETTINGS_PREFIX}${name}.${rKey}`, dec)
+        } catch (e) {
+          console.error('[allowRules] failed to persist rule:', e)
+        }
+      }
+      persistedRules.set(`${name}:${rKey}`, dec)
+    },
+    removePersisted(db, name, rKey) {
+      const targetDb = db || dbRef
+      if (targetDb && typeof targetDb.prepare === 'function') {
+        try {
+          targetDb.prepare('DELETE FROM settings WHERE key = ?').run(`${SETTINGS_PREFIX}${name}.${rKey}`)
+        } catch (e) {
+          console.error('[allowRules] failed to delete persisted rule:', e)
+        }
+      }
+      persistedRules.delete(`${name}:${rKey}`)
+    },
+    listAll(sessionId) {
+      const session = []
+      const sMap = sessionRules.get(sessionId)
+      if (sMap) {
+        for (const [k, d] of sMap.entries()) session.push({ key: k, decision: d })
+      }
+      const persisted = []
+      for (const [k, d] of persistedRules.entries()) {
+        const idx = k.indexOf(':')
+        const tool = idx > -1 ? k.slice(0, idx) : k
+        const rk = idx > -1 ? k.slice(idx + 1) : '*'
+        persisted.push({ tool, ruleKey: rk, decision: d, key: k })
+      }
+      return { session, persisted }
+    },
+    applyPreset(db, preset) {
+      const targetDb = db || dbRef
+      let rules = []
+      if (preset === 'safe_git') {
+        rules = [
+          { name: 'run_command', ruleKey: 'git status' },
+          { name: 'run_command', ruleKey: 'git diff' },
+          { name: 'run_command', ruleKey: 'git log' },
+          { name: 'run_command', ruleKey: 'git branch' },
+          { name: 'run_command', ruleKey: 'git show' },
+          { name: 'run_command', ruleKey: 'git rev-parse' },
+        ]
+      } else if (preset === 'test_runners') {
+        rules = [
+          { name: 'run_command', ruleKey: 'npm test' },
+          { name: 'run_command', ruleKey: 'npm run test' },
+          { name: 'run_command', ruleKey: 'pnpm test' },
+          { name: 'run_command', ruleKey: 'yarn test' },
+          { name: 'run_command', ruleKey: 'cargo test' },
+          { name: 'run_command', ruleKey: 'pytest' },
+          { name: 'run_command', ruleKey: 'vitest' },
+        ]
+      } else if (preset === 'read_tools') {
+        rules = [
+          { name: 'read_file', ruleKey: '*' },
+          { name: 'list_dir', ruleKey: '*' },
+          { name: 'glob_find', ruleKey: '*' },
+          { name: 'grep_search', ruleKey: '*' },
+        ]
+      }
+      let added = 0
+      for (const r of rules) {
+        this.persist(targetDb, r.name, r.ruleKey, 'allow')
+        added++
+      }
+      return { ok: true, added }
+    }
   }
 }
 
@@ -220,7 +388,14 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       }
       const onReply = (_e, r) => {
         if (!r || r.reqId !== reqId) return
-        if (r.allowed && r.remember && !isTainted) allowRules.add(sessionId, name, args)
+        if (r.allowed && r.remember && !isTainted) {
+          const isPermanent = r.remember === 'remember' || r.remember === 'permanent' || r.remember === true
+          const rKey = allowRules.ruleKey(name, args)
+          if (isPermanent && typeof allowRules.persist === 'function') {
+            allowRules.persist(opts.db, name, rKey, 'allow')
+          }
+          allowRules.add(sessionId, name, args)
+        }
         finish(!!r.allowed)
       }
       const onAbort   = () => finish(false)
