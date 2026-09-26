@@ -1,4 +1,6 @@
+const path = require('path')
 const soulManager = require('../llm/soulManager')
+const { isAuthorizedWorkspace, getWorkspaceRoot } = require('../tools/sandbox')
 
 function registerPersonaHandlers(ipcMain, db) {
   ipcMain.handle('persona:list', () => db.getPersonas())
@@ -29,11 +31,17 @@ function registerPersonaHandlers(ipcMain, db) {
   })
 
   ipcMain.handle('persona:get-workspace-soul', (_e, workspaceRoot) => {
-    return soulManager.getWorkspaceSoul(workspaceRoot)
+    const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
+    if (ws && !isAuthorizedWorkspace(db, ws)) return null
+    return soulManager.getWorkspaceSoul(ws)
   })
 
   ipcMain.handle('persona:write-workspace-soul', (_e, workspaceRoot, data) => {
-    return soulManager.writeWorkspaceSoul(workspaceRoot, data)
+    const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
+    if (!ws || !isAuthorizedWorkspace(db, ws)) {
+      return { success: false, error: 'Unauthorized workspace: path does not match any configured session workspace' }
+    }
+    return soulManager.writeWorkspaceSoul(ws, data)
   })
 
   ipcMain.handle('persona:export-soul-md', (_e, id) => {

@@ -421,5 +421,57 @@ Prompt Two.
       if (e.code !== 'EPERM') throw e
     }
   })
+
+  it('validates workspace authorization and containment via isAuthorizedWorkspace', () => {
+    const { isAuthorizedWorkspace, setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
+    clearSessionWorkspaces()
+
+    const allowedDir = makeTmp('auth-ws-')
+    const rogueDir = makeTmp('rogue-ws-')
+
+    // Mock db with session config
+    const mockDb = {
+      prepare: (sql) => ({
+        all: () => [{ config: JSON.stringify({ workspace: allowedDir }) }]
+      }),
+      getSetting: () => null
+    }
+
+    expect(isAuthorizedWorkspace(mockDb, allowedDir)).toBe(true)
+    expect(isAuthorizedWorkspace(mockDb, join(allowedDir, 'subfolder'))).toBe(true)
+    expect(isAuthorizedWorkspace(mockDb, rogueDir)).toBe(false)
+  })
+
+  it('validates workspace trust and sets external provenance origin for untrusted workspaces', () => {
+    const { isWorkspaceTrusted } = require('../electron/tools/sandbox')
+    const untrustedWs = makeTmp('untrusted-ws-')
+    const trustedWs = makeTmp('trusted-ws-')
+
+    const mockDbWithSettings = {
+      getSetting: (k) => {
+        if (k === 'trusted_workspaces') return JSON.stringify([trustedWs])
+        return null
+      },
+      getSessionConfig: (sessionId) => {
+        if (sessionId === 42) return { trusted: true }
+        return null
+      }
+    }
+
+    expect(isWorkspaceTrusted(mockDbWithSettings, trustedWs)).toBe(true)
+    expect(isWorkspaceTrusted(mockDbWithSettings, untrustedWs)).toBe(false)
+    expect(isWorkspaceTrusted(mockDbWithSettings, untrustedWs, 42)).toBe(true)
+
+    // Verify syncMemoryFileToDb accepts origin and stores it
+    writeFileSync(join(untrustedWs, 'MEMORY.md'), '# Project Memory\n## Facts\n- Remote Repo Guideline\n', 'utf-8')
+    const syncRes = memoryProjector.syncMemoryFileToDb(db, untrustedWs, { origin: 'external' })
+    expect(syncRes.success).toBe(true)
+    expect(syncRes.added).toBe(1)
+
+    const mem = db.prepare('SELECT content, origin FROM memory WHERE workspace = ?').all(untrustedWs)
+    expect(mem.length).toBe(1)
+    expect(mem[0].content).toBe('Remote Repo Guideline')
+    expect(mem[0].origin).toBe('external')
+  })
 })
 

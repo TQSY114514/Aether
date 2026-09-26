@@ -1,8 +1,10 @@
 // H5: memory:create 的 type 白名单 —— 越界 type 拒绝。type 会被 prefetch
 // 用来分流（project 恒注入等），放行任意字符串会让渲染层/注入内容操纵
 // 记忆行为。
+const path = require('path')
 const MEMORY_TYPES = new Set(['fact', 'context', 'project', 'preference', 'review'])
 const memoryProjector = require('../llm/memoryProjector')
+const { isAuthorizedWorkspace, isWorkspaceTrusted, getWorkspaceRoot } = require('../tools/sandbox')
 
 function registerMemoryHandlers(ipcMain, db) {
   // Project Brain: memory:list 接受可选 {workspace} 过滤 —— 传入时返回全局行
@@ -53,9 +55,28 @@ function registerMemoryHandlers(ipcMain, db) {
   ipcMain.handle('memory:dedupe', () => db.mergeDuplicateMemories())
 
   // MEMORY.md 双轨文件投射与同步
-  ipcMain.handle('memory:project-workspace', (_e, ws) => memoryProjector.projectWorkspaceMemory(db, ws))
-  ipcMain.handle('memory:sync-from-file', (_e, ws) => memoryProjector.syncMemoryFileToDb(db, ws))
-  ipcMain.handle('memory:file-status', (_e, ws) => memoryProjector.getMemoryFileStatus(ws))
+  ipcMain.handle('memory:project-workspace', (_e, ws) => {
+    const targetWs = ws ? path.resolve(ws) : getWorkspaceRoot()
+    if (!targetWs || !isAuthorizedWorkspace(db, targetWs)) {
+      return { success: false, count: 0, updated: false, error: 'Unauthorized workspace: path does not match any configured session workspace' }
+    }
+    return memoryProjector.projectWorkspaceMemory(db, targetWs)
+  })
+  ipcMain.handle('memory:sync-from-file', (_e, ws) => {
+    const targetWs = ws ? path.resolve(ws) : getWorkspaceRoot()
+    if (!targetWs || !isAuthorizedWorkspace(db, targetWs)) {
+      return { success: false, added: 0, removed: 0, total: 0, error: 'Unauthorized workspace: path does not match any configured session workspace' }
+    }
+    const isTrusted = isWorkspaceTrusted(db, targetWs)
+    return memoryProjector.syncMemoryFileToDb(db, targetWs, { origin: isTrusted ? 'user' : 'external' })
+  })
+  ipcMain.handle('memory:file-status', (_e, ws) => {
+    const targetWs = ws ? path.resolve(ws) : getWorkspaceRoot()
+    if (!targetWs || !isAuthorizedWorkspace(db, targetWs)) {
+      return { exists: false, path: null, mtime: null, lineCount: 0 }
+    }
+    return memoryProjector.getMemoryFileStatus(targetWs)
+  })
 }
 
 module.exports = { registerMemoryHandlers }
