@@ -392,5 +392,34 @@ Prompt Two.
     const soulGet = soulManager.getWorkspaceSoul(sensitiveWs)
     expect(soulGet).toBeNull()
   })
+
+  it('blocks alias bypass where a harmless symlink directory points to a sensitive path', () => {
+    const { mkdirSync, symlinkSync } = require('node:fs')
+    const parent = makeTmp('alias-test-')
+    const sensitiveTarget = join(parent, '.ssh')
+    mkdirSync(sensitiveTarget, { recursive: true })
+    const innocentAlias = join(parent, 'harmless-project')
+
+    try {
+      symlinkSync(sensitiveTarget, innocentAlias, 'junction')
+
+      const soulWrite = soulManager.writeWorkspaceSoul(innocentAlias, { name: 'Exploit' })
+      expect(soulWrite.success).toBe(false)
+      expect(soulWrite.error).toContain('forbidden')
+
+      const memProject = memoryProjector.projectWorkspaceMemory(db, innocentAlias)
+      expect(memProject.success).toBe(false)
+      expect(memProject.error).toContain('forbidden')
+
+      const memSync = memoryProjector.syncMemoryFileToDb(db, innocentAlias)
+      expect(memSync.success).toBe(false)
+      expect(memSync.error).toContain('forbidden')
+
+      const soulGet = soulManager.getWorkspaceSoul(innocentAlias)
+      expect(soulGet).toBeNull()
+    } catch (e) {
+      if (e.code !== 'EPERM') throw e
+    }
+  })
 })
 

@@ -126,8 +126,12 @@ function invalidateSoulCache() {
  */
 function getWorkspaceSoul(workspaceRoot, sessionId) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot(sessionId)
-  if (ws && (hasUnsafeWindowsPrefix(ws) || isSensitivePath(ws))) {
-    return null
+  if (ws) {
+    let realWs = ws
+    try { if (fs.existsSync(ws)) realWs = fs.realpathSync(ws) } catch { return null }
+    if (hasUnsafeWindowsPrefix(ws) || hasUnsafeWindowsPrefix(realWs) || isSensitivePath(ws) || isSensitivePath(realWs)) {
+      return null
+    }
   }
   const targetKey = `${ws || ''}`
 
@@ -154,6 +158,9 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
     try {
       if (fs.existsSync(cand.path)) {
         if (fs.lstatSync(cand.path).isSymbolicLink()) continue
+        let realCand = cand.path
+        try { realCand = fs.realpathSync(cand.path) } catch { continue }
+        if (hasUnsafeWindowsPrefix(realCand) || isSensitivePath(realCand)) continue
         const raw = fs.readFileSync(cand.path, 'utf-8')
         const parsed = parseSoulContent(raw)
         if (parsed && parsed.prompt.length > 0) {
@@ -184,7 +191,10 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
 function writeWorkspaceSoul(workspaceRoot, data) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, error: 'No workspace root found' }
-  if (hasUnsafeWindowsPrefix(ws) || isSensitivePath(ws)) {
+
+  let realWs = ws
+  try { if (fs.existsSync(ws)) realWs = fs.realpathSync(ws) } catch {}
+  if (hasUnsafeWindowsPrefix(ws) || hasUnsafeWindowsPrefix(realWs) || isSensitivePath(ws) || isSensitivePath(realWs)) {
     return { success: false, error: 'Access to sensitive or unsafe path is forbidden' }
   }
 
@@ -201,11 +211,15 @@ function writeWorkspaceSoul(workspaceRoot, data) {
       }
       try {
         const realTarget = fs.realpathSync(targetFile)
-        const realWs = fs.realpathSync(ws)
+        if (hasUnsafeWindowsPrefix(realTarget) || isSensitivePath(realTarget)) {
+          return { success: false, error: 'Access to sensitive or unsafe path is forbidden' }
+        }
         if (path.relative(realWs, realTarget) !== 'SOUL.md') {
           return { success: false, error: 'Path traversal or symlink detected' }
         }
-      } catch {}
+      } catch (err) {
+        if (err && err.message && err.message.includes('forbidden')) throw err
+      }
     }
 
     fs.mkdirSync(ws, { recursive: true })
