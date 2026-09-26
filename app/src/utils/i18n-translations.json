@@ -342,7 +342,7 @@
       "persona.subtitle": "创建与管理 AI 人设",
       "persona.title": "人设管理",
       "persona.use": "使用",
-      "persona.workspace_soul_desc": "读取自工作区根目录；自动应用于本项目的所有对话。",
+      "persona.workspace_soul_desc": "读取自工作区根目录；未指定特定人设时自动应用于本项目对话。",
       "persona.workspace_soul_title": "当前项目灵魂 (SOUL.md)",
       "risk.deletes_files": "删除文件",
       "risk.installs_deps": "安装依赖",

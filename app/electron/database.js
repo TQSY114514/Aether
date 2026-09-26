@@ -1742,17 +1742,17 @@ function deleteMemory(id) {
     db.prepare("DELETE FROM memories_fts WHERE memory_id = ?").run(Number(id));
   } catch {}
 }
-// 合并完全重复的记忆：按 content_norm 分组（不分类型 —— 与 findSolidifyTarget
-// 的精确层语义一致，同一句话换个类型标签仍是同一条记忆），保留最早一条
-// (id 最小)，删除其余并同步清理 FTS、把 conflicts_with 引用改指保留行。
-// NULL content_norm 的行不参与合并（防御异常数据被整组误删）。
+// 合并完全重复的记忆：按 content_norm 与 workspace 联合分组（不分类型 —— 与 findSolidifyTarget
+// 的精确层语义一致，同一句话换个类型标签仍是同一条记忆），保留同工作区最早一条
+// (id 最小)，删除同工作区其余并同步清理 FTS、把 conflicts_with 引用改指保留行。
+// NULL content_norm 的行不参与合并；工作区隔离确保存量项目记忆在启动时不被误跨项目合并。
 function mergeDuplicateMemories() {
   let removed = 0;
   try {
     const groups = db
       .prepare(
-        `SELECT content_norm AS cn, MIN(id) AS keep_id
-       FROM memory GROUP BY content_norm HAVING COUNT(*) > 1 AND content_norm IS NOT NULL`,
+        `SELECT content_norm AS cn, workspace AS ws, MIN(id) AS keep_id
+       FROM memory GROUP BY content_norm, workspace HAVING COUNT(*) > 1 AND content_norm IS NOT NULL`,
       )
       .all();
     // 原子合并：conflicts_with 改指、删行、清 FTS 三步同生共死。此前各自
@@ -1762,8 +1762,8 @@ function mergeDuplicateMemories() {
     const mergeTx = db.transaction(() => {
       for (const g of groups) {
         const toDelete = db
-          .prepare("SELECT id FROM memory WHERE content_norm = ? AND id <> ?")
-          .all(g.cn, g.keep_id);
+          .prepare("SELECT id FROM memory WHERE content_norm = ? AND workspace IS ? AND id <> ?")
+          .all(g.cn, g.ws, g.keep_id);
         for (const row of toDelete) {
           db.prepare(
             "UPDATE memory SET conflicts_with = ? WHERE conflicts_with = ?",
