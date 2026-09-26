@@ -61,6 +61,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
       messages: result.messages || [],
     }))
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
+    await get().loadWorkspaceSoul((sessionCfg as any)?.workspace || null)
     return sid
   },
 
@@ -149,6 +150,9 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         ...(currentSessionId === id ? { currentSessionId: null, messages: [] } : {}),
       }
     })
+    if (currentSessionId === id) {
+      await get().loadWorkspaceSoul(null)
+    }
     await get().loadSessions()
   },
 
