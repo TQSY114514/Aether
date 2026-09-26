@@ -93,6 +93,9 @@ describe('MEMORY.md & memoryProjector', () => {
   beforeEach(() => {
     dbDir = makeTmp('memdb-')
     wsDir = makeTmp('memws-')
+    const { setWorkspaceRoot, clearSessionWorkspaces } = require('../electron/tools/sandbox')
+    clearSessionWorkspaces()
+    setWorkspaceRoot(wsDir)
     const dbPath = join(dbDir, 'test.db')
     const rawDb = new Database(dbPath)
     rawDb.exec(`
@@ -278,6 +281,7 @@ describe('MEMORY.md & memoryProjector', () => {
     const subWs = join(rootWs, 'packages', 'web')
     const { mkdirSync } = require('node:fs')
     mkdirSync(subWs, { recursive: true })
+    mkdirSync(join(rootWs, '.git'), { recursive: true })
 
     writeFileSync(join(rootWs, 'SOUL.md'), `---
 name: Monorepo Root Soul
@@ -289,6 +293,14 @@ Root prompt.
     const soul = soulManager.getWorkspaceSoul(subWs)
     expect(soul).not.toBeNull()
     expect(soul.name).toBe('Monorepo Root Soul')
+
+    // Non-git folder must NOT search above workspace root into parent directories
+    const nonGitRoot = makeTmp('nongit-root-')
+    const nonGitSub = join(nonGitRoot, 'sub')
+    mkdirSync(nonGitSub, { recursive: true })
+    writeFileSync(join(nonGitRoot, 'SOUL.md'), 'Parent Soul', 'utf-8')
+    const isolatedSoul = soulManager.getWorkspaceSoul(nonGitSub)
+    expect(isolatedSoul).toBeNull()
   })
 
   it('performs 3-way reconciliation: deletes removed baseline items but preserves newly added DB items', () => {
@@ -438,7 +450,7 @@ Prompt Two.
     }
 
     expect(isAuthorizedWorkspace(mockDb, allowedDir)).toBe(true)
-    expect(isAuthorizedWorkspace(mockDb, join(allowedDir, 'subfolder'))).toBe(true)
+    expect(isAuthorizedWorkspace(mockDb, join(allowedDir, 'subfolder'))).toBe(false)
     expect(isAuthorizedWorkspace(mockDb, rogueDir)).toBe(false)
   })
 
@@ -472,6 +484,61 @@ Prompt Two.
     expect(mem.length).toBe(1)
     expect(mem[0].content).toBe('Remote Repo Guideline')
     expect(mem[0].origin).toBe('external')
+  })
+
+  it('rejects projection, sync and soul writes targeting unauthorized workspaces', () => {
+    const { isAuthorizedWorkspace } = require('../electron/tools/sandbox')
+    const rogueDir = makeTmp('rogue-ws-')
+    expect(isAuthorizedWorkspace(db, rogueDir)).toBe(false)
+
+    // Simulate IPC handler guards
+    const writeSoulHandler = (ws, data) => {
+      if (ws && !isAuthorizedWorkspace(db, ws)) {
+        return { success: false, error: 'Unauthorized workspace: path does not match any configured session workspace' }
+      }
+      return soulManager.writeWorkspaceSoul(ws, data)
+    }
+    const projectMemHandler = (ws) => {
+      if (ws && !isAuthorizedWorkspace(db, ws)) {
+        return { success: false, count: 0, updated: false, error: 'Unauthorized workspace: path does not match any configured session workspace' }
+      }
+      return memoryProjector.projectWorkspaceMemory(db, ws)
+    }
+    const syncMemHandler = (ws) => {
+      if (ws && !isAuthorizedWorkspace(db, ws)) {
+        return { success: false, added: 0, removed: 0, total: 0, error: 'Unauthorized workspace: path does not match any configured session workspace' }
+      }
+      return memoryProjector.syncMemoryFileToDb(db, ws)
+    }
+
+    expect(writeSoulHandler(rogueDir, { name: 'Exploit' }).error).toContain('Unauthorized workspace')
+    expect(projectMemHandler(rogueDir).error).toContain('Unauthorized workspace')
+    expect(syncMemHandler(rogueDir).error).toContain('Unauthorized workspace')
+  })
+
+  it('losslessly roundtrips context, review, and entity memory types through MEMORY.md', () => {
+    const ws = makeTmp('types-roundtrip-')
+    db.addMemoryWithProvenance('Core release plan', 'context', null, 'user', null, ws)
+    db.addMemoryWithProvenance('PR review checklist', 'review', null, 'assistant', null, ws)
+    db.addMemoryWithProvenance('User Profile entity schema', 'entity', null, 'user', null, ws)
+
+    const projectRes = memoryProjector.projectWorkspaceMemory(db, ws)
+    expect(projectRes.success).toBe(true)
+
+    const fileText = readFileSync(join(ws, 'MEMORY.md'), 'utf-8')
+    expect(fileText).toContain('## Additional Context')
+    expect(fileText).toContain('- Core release plan')
+    expect(fileText).toContain('- [review] PR review checklist')
+    expect(fileText).toContain('- [entity] User Profile entity schema')
+
+    const parsed = memoryProjector.parseMarkdownToMemories(fileText)
+    const contextItem = parsed.find(p => p.content === 'Core release plan')
+    const reviewItem = parsed.find(p => p.content === 'PR review checklist')
+    const entityItem = parsed.find(p => p.content === 'User Profile entity schema')
+
+    expect(contextItem?.type).toBe('context')
+    expect(reviewItem?.type).toBe('review')
+    expect(entityItem?.type).toBe('entity')
   })
 })
 

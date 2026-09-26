@@ -55,13 +55,17 @@ export default function PersonaPage() {
     try {
       const { sessionConfigs, currentSessionId } = useStore.getState()
       const ws = currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null
-      const res = await window.electronAPI.persona.writeWorkspaceSoul(ws || '', {
+      if (!ws) {
+        toast(t('filetree.no_workspace'), { type: 'error' })
+        return
+      }
+      const res = await window.electronAPI.persona.writeWorkspaceSoul(ws, {
         name: persona.name,
         prompt: persona.prompt,
         avatar: persona.avatar ?? undefined,
       })
       if (res.success) {
-        await useStore.getState().loadWorkspaceSoul(ws || null)
+        await useStore.getState().loadWorkspaceSoul(ws)
         toast(t('persona.apply_workspace') + ' OK', { type: 'success' })
       } else {
         toast(res.error || '写入工作区失败', { type: 'error' })

@@ -20,7 +20,7 @@ function registerMemoryHandlers(ipcMain, db) {
     // 手动创建的记忆 origin='user'（与自动提取的 'assistant'、外部来源的
     // 'external' 区分）。addMemory 未消费该字段时自动忽略，无害。
     const res = db.addMemory({ ...data, type, origin: 'user' })
-    if (data && data.workspace) {
+    if (data && data.workspace && isAuthorizedWorkspace(db, data.workspace)) {
       memoryProjector.debounceProjectWorkspaceMemory(db, data.workspace)
     }
     return res
@@ -34,7 +34,7 @@ function registerMemoryHandlers(ipcMain, db) {
         ws = row?.workspace || null
       } catch {}
     }
-    if (ws) memoryProjector.debounceProjectWorkspaceMemory(db, ws)
+    if (ws && isAuthorizedWorkspace(db, ws)) memoryProjector.debounceProjectWorkspaceMemory(db, ws)
     return res
   })
   ipcMain.handle('memory:delete', (_e, id) => {
@@ -44,7 +44,7 @@ function registerMemoryHandlers(ipcMain, db) {
       ws = row?.workspace || null
     } catch {}
     const res = db.deleteMemory(id)
-    if (ws) memoryProjector.debounceProjectWorkspaceMemory(db, ws)
+    if (ws && isAuthorizedWorkspace(db, ws)) memoryProjector.debounceProjectWorkspaceMemory(db, ws)
     return res
   })
   ipcMain.handle('memory:conflicts', () => db.getMemoryConflicts())

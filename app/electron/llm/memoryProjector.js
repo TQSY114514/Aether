@@ -27,6 +27,7 @@ function formatMemoriesToMarkdown(rows) {
     project: [],
     preference: [],
     fact: [],
+    context: [],
     other: [],
   }
 
@@ -39,7 +40,8 @@ function formatMemoriesToMarkdown(rows) {
     if (t === 'project') groups.project.push(text)
     else if (t === 'preference') groups.preference.push(text)
     else if (t === 'fact') groups.fact.push(text)
-    else groups.other.push(text)
+    else if (t === 'context') groups.context.push(text)
+    else groups.other.push({ type: t, text })
   }
 
   const lines = [
@@ -68,9 +70,15 @@ function formatMemoriesToMarkdown(rows) {
     lines.push('')
   }
 
-  if (groups.other.length > 0) {
+  if (groups.context.length > 0) {
     lines.push('## Additional Context')
-    for (const item of groups.other) lines.push(`- ${item}`)
+    for (const item of groups.context) lines.push(`- ${item}`)
+    lines.push('')
+  }
+
+  if (groups.other.length > 0) {
+    lines.push('## Additional Information')
+    for (const item of groups.other) lines.push(`- [${item.type}] ${item.text}`)
     lines.push('')
   }
 
@@ -104,6 +112,8 @@ function parseMarkdownToMemories(text) {
         currentType = 'preference'
       } else if (/fact|domain|事实|知识|业务/.test(heading)) {
         currentType = 'fact'
+      } else if (/context|environ|additional|上下文|环境|背景/.test(heading)) {
+        currentType = 'context'
       } else {
         currentType = 'fact'
       }
@@ -115,12 +125,12 @@ function parseMarkdownToMemories(text) {
     if (bulletMatch) {
       let content = bulletMatch[1].trim()
 
-      // Optional type prefix in bullet: [project] Content
-      const prefixMatch = content.match(/^\[([a-zA-Z]+)\]\s*(.+)$/)
+      // Optional type prefix in bullet: [project] Content, [review] Content, [entity] Content
+      const prefixMatch = content.match(/^\[([a-zA-Z0-9_-]+)\]\s*(.+)$/)
       let type = currentType
       if (prefixMatch) {
         const pt = prefixMatch[1].toLowerCase()
-        if (['project', 'fact', 'preference', 'context'].includes(pt)) {
+        if (['project', 'fact', 'preference', 'context', 'review', 'entity'].includes(pt)) {
           type = pt
           content = prefixMatch[2].trim()
         }
@@ -185,10 +195,13 @@ function projectWorkspaceMemory(db, workspaceRoot) {
       const prevHash = _lastProjectedHash.get(ws)
       const current = fs.readFileSync(targetFile, 'utf-8')
       if (prevHash !== current) {
-        syncMemoryFileToDb(db, ws, {
+        const syncRes = syncMemoryFileToDb(db, ws, {
           deleteMissing: false,
           baselineContent: prevHash || null,
         })
+        if (syncRes && syncRes.success === false) {
+          return { success: false, count: 0, updated: false, error: syncRes.error || 'Failed to sync memory file changes before projecting' }
+        }
       }
     }
 
@@ -237,6 +250,7 @@ function projectWorkspaceMemory(db, workspaceRoot) {
 function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true, baselineContent = null, origin = 'user' } = {}) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, added: 0, removed: 0, total: 0, error: 'No workspace root' }
+
 
   let realWs = ws
   try { if (fs.existsSync(ws)) realWs = fs.realpathSync(ws) } catch {}
@@ -386,6 +400,7 @@ const _debounceTimers = new Map()
 function debounceProjectWorkspaceMemory(db, workspaceRoot, delayMs = 2500) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return
+
 
   if (_debounceTimers.has(ws)) {
     clearTimeout(_debounceTimers.get(ws))

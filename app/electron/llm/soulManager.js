@@ -142,13 +142,32 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
 
   const candidates = []
   if (ws) {
+    // Only search within the workspace root, unless the workspace is part of a
+    // Git repository monorepo. In that case, traverse upwards stopping strictly
+    // at the Git repository root (never beyond it into arbitrary parent paths).
+    let gitRoot = null
+    let probe = ws
+    for (let depth = 0; depth < 5; depth++) {
+      if (fs.existsSync(path.join(probe, '.git'))) {
+        gitRoot = probe
+        break
+      }
+      const parent = path.dirname(probe)
+      if (!parent || parent === probe) break
+      probe = parent
+    }
+
     let curr = ws
     for (let depth = 0; depth < 5; depth++) {
       candidates.push({ path: path.join(curr, 'SOUL.md'), isWorkspace: true })
       candidates.push({ path: path.join(curr, '.aether', 'SOUL.md'), isWorkspace: true })
+
+      if (!gitRoot || curr === gitRoot) break
       if (fs.existsSync(path.join(curr, '.git'))) break
+
       const parent = path.dirname(curr)
       if (!parent || parent === curr) break
+      if (hasUnsafeWindowsPrefix(parent) || isSensitivePath(parent)) break
       curr = parent
     }
   }
@@ -191,6 +210,7 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
 function writeWorkspaceSoul(workspaceRoot, data) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, error: 'No workspace root found' }
+
 
   let realWs = ws
   try { if (fs.existsSync(ws)) realWs = fs.realpathSync(ws) } catch {}

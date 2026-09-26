@@ -110,10 +110,6 @@ function isAuthorizedWorkspace(db, workspaceRoot) {
     let realA = a
     try { if (fs.existsSync(a)) realA = fs.realpathSync(a) } catch {}
     if (realTarget.toLowerCase() === realA.toLowerCase()) return true
-    const rel = path.relative(realA, realTarget)
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
-      return true
-    }
   }
   return false
 }
