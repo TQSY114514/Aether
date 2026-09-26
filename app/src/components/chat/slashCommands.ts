@@ -62,7 +62,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
       const sid = useStore.getState().currentSessionId
       useStore.getState().triggerToast('🧪 正在执行项目测试套件...', 'info')
       try {
-        const rep = await window.electronAPI.chat.test({ args: arg, sessionId: sid })
+        const rep = await window.electronAPI.chat.test({ args: arg, sessionId: sid || undefined })
         if (rep.ok || rep.passed) {
           useStore.getState().triggerToast(`✅ 测试全部通过 (${rep.command}, ${rep.durationMs}ms)`, 'success')
           if (sid) {
@@ -93,7 +93,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
       const sid = useStore.getState().currentSessionId
       useStore.getState().triggerToast('🔍 正在运行项目代码与类型检查...', 'info')
       try {
-        const rep = await window.electronAPI.chat.lint({ args: arg, sessionId: sid })
+        const rep = await window.electronAPI.chat.lint({ args: arg, sessionId: sid || undefined })
         if (rep.ok || rep.clean) {
           useStore.getState().triggerToast(`✅ 代码规范与类型检查通过 (${rep.command}, ${rep.durationMs}ms)`, 'success')
           if (sid) {
@@ -132,7 +132,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
       const sid = useStore.getState().currentSessionId
       try {
         useStore.getState().triggerToast('🔍 正在提取 Git 差异并构建审查提示词...', 'info')
-        const res = await window.electronAPI.git.getDiffForReview({ focus: arg, sessionId: sid })
+        const res = await window.electronAPI.git.getDiffForReview({ focus: arg })
         if (!res.success) {
           useStore.getState().triggerToast(`提示：${res.error || '无法获取 Git 审查差异'}`, 'info')
           return
@@ -154,14 +154,14 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     description: '基于当前修改生成语义化信息并提交 Git',
     action: async () => {
       try {
-        const res = await window.electronAPI.git.craftCommitMessage({ sessionId: sid })
+        const res = await window.electronAPI.git.craftCommitMessage()
         if (!res.success) {
           window.alert(`提示：${res.error || '工作区没有待提交的改动'}`)
           return
         }
         const msg = window.prompt('确认提交信息 (可修改)：', res.suggestedMessage)
         if (msg && msg.trim()) {
-          const commitRes = await window.electronAPI.git.commit({ message: msg.trim(), sessionId: sid })
+          const commitRes = await window.electronAPI.git.commit({ message: msg.trim() })
           if (commitRes.success) {
             useStore.getState().triggerToast(`✅ 已提交至 Git: ${commitRes.commitHash || ''} ${commitRes.message || ''}`, 'success')
           } else {
