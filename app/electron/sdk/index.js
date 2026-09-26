@@ -107,6 +107,9 @@ const sdk = {
     ModelRouter: require('../llm/modelAdvisor').ModelRouter,
   },
 
+  // Pre-Push Review & Defense Pipeline
+  prePushGuard: require('../tools/prePushGuard'),
+
   classifyAgentMode,
 }
 
