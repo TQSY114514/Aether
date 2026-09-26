@@ -64,15 +64,17 @@ async function probeEndpoint(urlStr) {
   try {
     const parsed = new URL(urlStr)
     const probeUrl = `${parsed.protocol}//${parsed.host}`
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 3500)
-
+    const probe = async (method) => {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 3500)
+      try {
+        return await fetch(probeUrl, { method, signal: controller.signal })
+      } finally {
+        clearTimeout(timer)
+      }
+    }
     try {
-      const res = await fetch(probeUrl, {
-        method: 'HEAD',
-        signal: controller.signal,
-      })
-      clearTimeout(timer)
+      const res = await probe('HEAD')
       return {
         reachable: true,
         latencyMs: Date.now() - start,
@@ -80,11 +82,7 @@ async function probeEndpoint(urlStr) {
       }
     } catch (headErr) {
       // Some servers reject HEAD with 405/403 or socket hangup, retry with GET
-      const getRes = await fetch(probeUrl, {
-        method: 'GET',
-        signal: controller.signal,
-      })
-      clearTimeout(timer)
+      const getRes = await probe('GET')
       return {
         reachable: true,
         latencyMs: Date.now() - start,
