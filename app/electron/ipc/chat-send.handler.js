@@ -441,6 +441,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       try { wc?.send('chat:tool-loop-start', { sessionId }) } catch {}
       let finalContent = ''
       let streamedContent = ''
+      let turnFileSummary = null
       try {
         // Build shared callback bag (onToolCall, onAskUser, requestPermission, etc.)
         // using the extracted factory. Feature B's injection options stay inline below.
@@ -464,7 +465,6 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
-        let turnFileSummary = null
         const mergeFileSummary = (incoming) => {
           if (!incoming || !Array.isArray(incoming.files)) return
           if (!turnFileSummary) {
