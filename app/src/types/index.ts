@@ -68,6 +68,7 @@ export interface Message {
   error_message: string | null
   arena_model?: string | null
   attachment?: { name: string; mime: string; kind: 'text' | 'image'; preview?: string } | null
+  file_summary?: string | null
 }
 
 export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning' | 'skills' | 'evolution' | 'learningStatus' | 'security'

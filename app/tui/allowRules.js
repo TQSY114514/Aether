@@ -123,7 +123,33 @@ export function createAllowRulesStore({ db = null } = {}) {
     return layer.get(`${name}:*`) || null
   }
 
+const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|restore|revert|cherry-pick)(?:\s|$)|(?:^|\s)(?:-[a-zA-Z]*[dDmMfF][a-zA-Z]*|--delete|--force|--hard|--amend|--prune)(?:\s|$)/i
+
   function decision(sessionId, name, args) {
+    if (name === 'run_command') {
+      const cmd = String(args?.command || '').trim()
+      if (cmd.includes('$(') || cmd.includes('`')) return null
+      // Destructive git operations must never be auto-approved by generic rules
+      if ((cmd.startsWith('git ') || cmd === 'git') && DESTRUCTIVE_GIT_PATTERN.test(cmd)) {
+        return null
+      }
+      if (/(?:&&|\|\||[;&|\n])/.test(cmd)) {
+        const subcmds = cmd.split(/(?:&&|\|\||[;&|\n])/).map(s => s.trim()).filter(Boolean)
+        if (subcmds.length > 1) {
+          let allAllowed = true
+          for (const sub of subcmds) {
+            const subDec = decision(sessionId, name, { command: sub })
+            if (subDec === 'deny') return 'deny'
+            if (subDec !== 'allow') {
+              allAllowed = false
+              break
+            }
+          }
+          if (allAllowed) return 'allow'
+          return null
+        }
+      }
+    }
     const key = keyOf(name, args)
     // 会话级 > 持久化（W4-t24 文档语义; 会话规则目前仅 'a' 键产生, 均为 allow）
     const s = layerLookup(sessionRules.get(sessionId), name, key)

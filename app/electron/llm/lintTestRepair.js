@@ -16,6 +16,7 @@
 // through a shell unless shell metacharacters require it.
 // ───────────────────────────────────────────────────────────────────────────
 
+const path = require('path')
 const { getWorkspaceRoot, checkCommand } = require('../tools/sandbox')
 const { runCommand } = require('../tools/exec')
 
@@ -83,11 +84,18 @@ async function runOne(cmd, cwd, timeoutMs) {
   const guard = checkCommand(cmd)
   if (!guard.ok) return { ok: false, output: `[blocked by sandbox] ${guard.reason}`, exitCode: null, timedOut: false }
 
-  const needsShell = /[|&;`$(){}!\\]/.test(cmd)
+  const isWin = process.platform === 'win32'
+  const needsShell = /[|&><;]/.test(cmd)
   const [prog, args] = splitCmd(cmd)
-  const result = needsShell
-    ? await runCommand('cmd.exe', ['/c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024, shell: true })
-    : await runCommand(prog, args, { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
+
+  let result
+  if (needsShell) {
+    result = await runCommand(isWin ? 'cmd.exe' : '/bin/sh', [isWin ? '/c' : '-c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
+  } else if (isWin && (prog === 'npm' || prog === 'pnpm' || prog === 'yarn' || prog === 'npx')) {
+    result = await runCommand('cmd.exe', ['/c', `${prog} ${args.join(' ')}`], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
+  } else {
+    result = await runCommand(prog, args, { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
+  }
 
   const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim().slice(0, MAX_ERROR_OUTPUT)
   const exitCode = result.exitCode ?? -1
@@ -230,6 +238,122 @@ async function runLintAndRepair({ db, sessionId, round = 1, onStatus } = {}) {
   return { repaired: false, context, errors: result.errors, round }
 }
 
+/**
+ * Run test suite on demand (/test command, Claude Code / Aider alignment).
+ * @param {any} db
+ * @param {object} [options]
+ * @param {string} [options.cwd]
+ * @param {string|number} [options.sessionId]
+ * @param {string} [options.args] Optional subfilter/arguments e.g. "test/auth.test.js"
+ * @param {number} [options.timeoutMs]
+ */
+async function runProjectTest(db, { cwd, sessionId, args = '', timeoutMs = RUN_TIMEOUT_MS } = {}) {
+  const start = Date.now()
+  const root = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
+  if (!root) return { ok: false, error: 'no workspace configured', durationMs: 0 }
+
+  const projectType = detectProjectType(root)
+  let baseCmd = resolveTestCommand(db, root, projectType)
+  if (!baseCmd) {
+    return { ok: false, error: 'no test command configured or detected for project type', projectType, durationMs: Date.now() - start }
+  }
+
+  let cleanArgs = ''
+  if (args && String(args).trim()) {
+    cleanArgs = String(args).trim()
+    if (/[;&|`$(){}<>!\\%^"'\r\n]/.test(cleanArgs)) {
+      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
+    }
+  }
+
+  const effectiveCmd = cleanArgs ? `${baseCmd} ${cleanArgs}` : baseCmd
+  const res = await runOne(effectiveCmd, root, timeoutMs)
+
+  let suggestedRepairPrompt = null
+  if (!res.ok) {
+    suggestedRepairPrompt = `请修复以下测试中失败的用例：
+
+【执行命令】：\`${effectiveCmd}\`
+【退出状态】：${res.timedOut ? '超时' : `exit code ${res.exitCode}`}
+【错误日志】：
+\`\`\`
+${res.output || '(无标准输出与错误日志)'}
+\`\`\`
+
+请直接定位导致测试失败的源码与测试用例，并使用 edit_file / write_file 修复。修复完成后请总结修复方案。`
+  }
+
+  return {
+    ok: res.ok,
+    passed: res.ok,
+    command: effectiveCmd,
+    output: res.output,
+    exitCode: res.exitCode,
+    timedOut: res.timedOut,
+    durationMs: Date.now() - start,
+    projectType,
+    suggestedRepairPrompt,
+  }
+}
+
+/**
+ * Run linter / static analysis on demand (/lint command, Claude Code / Aider alignment).
+ * @param {any} db
+ * @param {object} [options]
+ * @param {string} [options.cwd]
+ * @param {string|number} [options.sessionId]
+ * @param {string} [options.args]
+ * @param {number} [options.timeoutMs]
+ */
+async function runProjectLint(db, { cwd, sessionId, args = '', timeoutMs = RUN_TIMEOUT_MS } = {}) {
+  const start = Date.now()
+  const root = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
+  if (!root) return { ok: false, error: 'no workspace configured', durationMs: 0 }
+
+  const projectType = detectProjectType(root)
+  let baseCmd = resolveLintCommand(db, root, projectType)
+  if (!baseCmd) {
+    return { ok: false, error: 'no lint command configured or detected for project type', projectType, durationMs: Date.now() - start }
+  }
+
+  let cleanArgs = ''
+  if (args && String(args).trim()) {
+    cleanArgs = String(args).trim()
+    if (/[;&|`$(){}<>!\\%^"'\r\n]/.test(cleanArgs)) {
+      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
+    }
+  }
+
+  const effectiveCmd = cleanArgs ? `${baseCmd} ${cleanArgs}` : baseCmd
+  const res = await runOne(effectiveCmd, root, timeoutMs)
+
+  let suggestedRepairPrompt = null
+  if (!res.ok) {
+    suggestedRepairPrompt = `请修复以下代码风格或静态分析检查错误 (Lint / Static Analysis Errors)：
+
+【执行命令】：\`${effectiveCmd}\`
+【退出状态】：${res.timedOut ? '超时' : `exit code ${res.exitCode}`}
+【错误输出】：
+\`\`\`
+${res.output || '(无标准输出与错误日志)'}
+\`\`\`
+
+请直接定位引发 Lint / 静态分析报警的文件，并使用 edit_file / write_file 修复。`
+  }
+
+  return {
+    ok: res.ok,
+    clean: res.ok,
+    command: effectiveCmd,
+    output: res.output,
+    exitCode: res.exitCode,
+    timedOut: res.timedOut,
+    durationMs: Date.now() - start,
+    projectType,
+    suggestedRepairPrompt,
+  }
+}
+
 module.exports = {
   MAX_REPAIR_ROUNDS,
   FILE_TOOLS,
@@ -238,6 +362,8 @@ module.exports = {
   runOne,
   buildRepairContext,
   runLintAndRepair,
+  runProjectTest,
+  runProjectLint,
   detectProjectType,
   resolveLintCommand,
   resolveTestCommand,

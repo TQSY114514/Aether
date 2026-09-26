@@ -21,6 +21,7 @@ const mocks = {
   findLatestCheckpointForRoot: vi.fn(),
   rollbackCheckpoint: vi.fn(),
   getWorkspaceRoot: vi.fn(),
+  isAuthorizedWorkspace: vi.fn().mockReturnValue(true),
 }
 
 // Shared CJS instances, patched before the modules under test are loaded.
@@ -34,6 +35,7 @@ checkpoints.nearestGitRoot = mocks.nearestGitRoot
 checkpoints.findLatestCheckpointForRoot = mocks.findLatestCheckpointForRoot
 checkpoints.rollbackCheckpoint = mocks.rollbackCheckpoint
 sandbox.getWorkspaceRoot = mocks.getWorkspaceRoot
+sandbox.isAuthorizedWorkspace = mocks.isAuthorizedWorkspace
 
 const gitAutoCommit = req('../electron/llm/gitAutoCommit')
 const { registerGitHandlers } = req('../electron/ipc/git.handler')
@@ -63,6 +65,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   stubRun()
   mocks.nearestGitRoot.mockReturnValue(REPO)
+  mocks.isAuthorizedWorkspace.mockReturnValue(true)
 })
 
 // ─── Secret-like filename patterns ─────────────────────────────────────────

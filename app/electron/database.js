@@ -174,7 +174,7 @@ function createEmptyDatabase(dbPath) {
     "CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, parent_session_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)",
   );
   target.exec(
-    "CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+    "CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, file_summary TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   );
 
   target.exec(
@@ -557,6 +557,7 @@ function initDatabase() {
   addCol("message", "status", "TEXT NOT NULL DEFAULT 'success'");
   addCol("message", "error_message", "TEXT");
   addCol("message", "arena_model", "TEXT");
+  addCol("message", "file_summary", "TEXT");
   addCol("user_habit", "proposed", "INTEGER NOT NULL DEFAULT 0");
   addCol("agent_checkpoint", "rolled_back_at", "DATETIME");
   addCol("skill_patterns", "params_json", "TEXT");
@@ -1968,11 +1969,12 @@ function listAgentCheckpoints(sessionId, messageId = null) {
   const where = messageId
     ? "session_id = ? AND message_id = ?"
     : "session_id = ?";
+  const params = messageId ? [sessionId, messageId] : [sessionId];
   const rows = db
     .prepare(
       `SELECT id, session_id, message_id, tool_name, args, affected_paths, rolled_back_at, created_at FROM agent_checkpoint WHERE ${where} ORDER BY id DESC`,
     )
-    .all(messageId ? sessionId : messageId, sessionId);
+    .all(...params);
   for (const row of rows) {
     try {
       row.args = JSON.parse(row.args || "{}");
@@ -2591,6 +2593,17 @@ module.exports = {
     if (!db) return [];
     return db.prepare(sql).all(...params);
   },
+  pragma: (str, opts) => {
+    if (!db) return null;
+    if (typeof db.pragma === 'function') return db.pragma(str, opts);
+    try {
+      const row = db.prepare(`PRAGMA ${str}`).get();
+      return row ? Object.values(row)[0] : null;
+    } catch {
+      return null;
+    }
+  },
+  getDatabasePath: () => dbPath,
   encryptKey,
   decryptKey,
   isPlaintextKey,

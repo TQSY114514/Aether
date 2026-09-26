@@ -1,3 +1,4 @@
+const path = require('path')
 const { createAllowRulesStore } = require('./toolLoopCallbacks')
 const { registerChatSendHandler } = require('./chat-send.handler')
 const auditLog = require('../llm/auditLog')
@@ -46,6 +47,7 @@ function clearAllowRules(sessionId) { allowRulesStore.clear(sessionId) }
 function registerChatHandlers(ipcMain, db, getWebContents) {
   auditLog.setDb(db)
   checkpoints.setDb(db)
+  if (typeof allowRulesStore.setDb === 'function') allowRulesStore.setDb(db)
 
   // Pass the shared live state to the extracted chat:send handler
   const ctx = {
@@ -160,6 +162,42 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     return true
   })
 
+  // ─── Permission Rules (Cline / Claude Code style auto-approval) ─────────
+  ipcMain.handle('chat:permissions:list', (_e, { sessionId } = {}) => {
+    return allowRulesStore.listAll(sessionId)
+  })
+  ipcMain.handle('chat:permissions:save', (_e, { name, ruleKey, decision }) => {
+    const ok = allowRulesStore.persist(db, name, ruleKey, decision || 'allow')
+    return ok ? { ok: true } : { ok: false, error: 'Failed to persist permission rule' }
+  })
+  ipcMain.handle('chat:permissions:remove', (_e, { name, ruleKey }) => {
+    allowRulesStore.removePersisted(db, name, ruleKey)
+    return { ok: true }
+  })
+  ipcMain.handle('chat:permissions:applyPreset', (_e, { preset }) => {
+    return allowRulesStore.applyPreset(db, preset)
+  })
+
+  // ─── Test & Lint On-Demand (Claude Code / Aider alignment) ────────────────
+  ipcMain.handle('chat:test', async (_e, { cwd, sessionId, args } = {}) => {
+    const { isAuthorizedWorkspace, getWorkspaceRoot } = require('../tools/sandbox')
+    const targetRoot = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
+    if (targetRoot && !isAuthorizedWorkspace(db, targetRoot)) {
+      return { ok: false, error: 'Unauthorized workspace path', durationMs: 0 }
+    }
+    const { runProjectTest } = require('../llm/lintTestRepair')
+    return await runProjectTest(db, { cwd: targetRoot, sessionId, args })
+  })
+  ipcMain.handle('chat:lint', async (_e, { cwd, sessionId, args } = {}) => {
+    const { isAuthorizedWorkspace, getWorkspaceRoot } = require('../tools/sandbox')
+    const targetRoot = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
+    if (targetRoot && !isAuthorizedWorkspace(db, targetRoot)) {
+      return { ok: false, error: 'Unauthorized workspace path', durationMs: 0 }
+    }
+    const { runProjectLint } = require('../llm/lintTestRepair')
+    return await runProjectLint(db, { cwd: targetRoot, sessionId, args })
+  })
+
   // ─── Audit log ───────────────────────────────────────────────────────────
   ipcMain.handle('audit:log', (_e, { sessionId, limit = 50 }) => {
     return db.getAuditLog(sessionId, limit)
@@ -167,8 +205,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('agent-checkpoint:list', (_e, { sessionId, messageId = null } = {}) => {
     return db.listAgentCheckpoints(sessionId, messageId)
   })
-  ipcMain.handle('agent-checkpoint:rollback', (_e, { id, sessionId } = {}) => {
-    const res = checkpoints.rollbackCheckpoint(id)
+  ipcMain.handle('agent-checkpoint:rollback', (_e, { id, sessionId, force } = {}) => {
+    const res = checkpoints.rollbackCheckpoint(id, { force: !!force })
     try {
       const targetSid = sessionId || res?.sessionId
       if (targetSid) require('../llm/backgroundTasks').bumpBranchGeneration(targetSid)

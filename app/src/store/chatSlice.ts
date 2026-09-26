@@ -29,6 +29,7 @@ interface ChatUndoSnapshot {
   subagentsByMessage: Record<number, any>
   thinkingBlocksByMessage: Record<number, any>
   statusLinesByMessage: Record<number, any>
+  fileSummariesByMessage: Record<number, any>
 }
 
 const _injectedMsgIds = new Set<number>()
@@ -47,6 +48,7 @@ function pushUndo(sessionId: number, messages: Message[], clearRedo = true, extr
     subagentsByMessage: { ...(extra?.subagentsByMessage || {}) },
     thinkingBlocksByMessage: { ...(extra?.thinkingBlocksByMessage || {}) },
     statusLinesByMessage: { ...(extra?.statusLinesByMessage || {}) },
+    fileSummariesByMessage: { ...(extra?.fileSummariesByMessage || {}) },
   })
   if (_undoStack.length > UNDO_STACK_LIMIT) _undoStack.shift()
   if (clearRedo) _redoStack.length = 0
@@ -70,6 +72,17 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   subagentsByMessage: {},
   thinkingBlocksByMessage: {},
   statusLinesByMessage: {},
+  fileSummariesByMessage: {},
+  setFileSummaryForMessage: (messageId, summary) => {
+    set((s) => ({
+      fileSummariesByMessage: summary
+        ? { ...s.fileSummariesByMessage, [messageId]: summary }
+        : (() => {
+            const { [messageId]: _, ...rest } = s.fileSummariesByMessage
+            return rest
+          })(),
+    }))
+  },
   contextBudgetText: null,
   pendingQuestions: [],
   permissionRequests: [],
@@ -286,6 +299,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
         const { [regeneratedMsgId]: ______, ...restSNAP } = s.planSnapshotsByMessage
         const { [regeneratedMsgId]: _______, ...restSA } = s.subagentsByMessage
+        const { [regeneratedMsgId]: ________, ...restFS } = s.fileSummariesByMessage
         next.toolCallsByMessage = restTC
         next.planStepsByMessage = restPS
         next.todosByMessage = restTB
@@ -293,6 +307,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         next.statusLinesByMessage = restSIB
         next.planSnapshotsByMessage = restSNAP
         next.subagentsByMessage = restSA
+        next.fileSummariesByMessage = restFS
       }
       return next
     })
@@ -346,6 +361,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           subagentsByMessage: { ...get().subagentsByMessage },
           thinkingBlocksByMessage: { ...get().thinkingBlocksByMessage },
           statusLinesByMessage: { ...get().statusLinesByMessage },
+          fileSummariesByMessage: { ...get().fileSummariesByMessage },
         })
         if (_redoStack.length > UNDO_STACK_LIMIT) _redoStack.shift()
         set({
@@ -357,6 +373,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           subagentsByMessage: entry.subagentsByMessage,
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
           statusLinesByMessage: entry.statusLinesByMessage,
+          fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })
         return
       }
@@ -380,6 +397,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           subagentsByMessage: entry.subagentsByMessage,
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
           statusLinesByMessage: entry.statusLinesByMessage,
+          fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })
         return
       }
@@ -435,11 +453,21 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     if (hasRecentOptimistic) return
     try {
       const allMessages = await window.electronAPI.message.list(sessionId)
+      const nextSummaries = { ...get().fileSummariesByMessage }
+      for (const m of allMessages) {
+        if ((m as any).file_summary && !nextSummaries[m.id]) {
+          try {
+            nextSummaries[m.id] = typeof (m as any).file_summary === 'string'
+              ? JSON.parse((m as any).file_summary)
+              : (m as any).file_summary
+          } catch {}
+        }
+      }
       if (get().chatMode === "arena") {
         const filtered = allMessages.filter(m => !m.arena_model || m.arena_model === "")
-        set({ messages: filtered })
+        set({ messages: filtered, fileSummariesByMessage: nextSummaries })
       } else {
-        set({ messages: allMessages })
+        set({ messages: allMessages, fileSummariesByMessage: nextSummaries })
       }
     } catch (err) {
       log.error("[Aether] loadMessages error:", err)
@@ -518,10 +546,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   },
 
   resolvePermission: (reqId, allowed, remember: boolean | 'session' | 'remember' = false) => {
-    // P0: 'session'（本会话内总是允许）与 'remember' 都进主进程的会话级
-    // allow-rules 库（该库本就随会话消亡）；此前 'session' 被吞成 false，
-    // 按钮形同仅本次。
-    window.electronAPI.chat.replyPermission({ reqId, allowed, remember: remember === 'remember' || remember === true || remember === 'session' })
+    const remPayload = remember === 'remember' || remember === true ? 'remember' : (remember === 'session' ? 'session' : false)
+    window.electronAPI.chat.replyPermission({ reqId, allowed, remember: remPayload })
     set((s) => ({ permissionRequests: s.permissionRequests.filter((r) => r.reqId !== reqId) }))
   },
 

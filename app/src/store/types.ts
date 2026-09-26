@@ -25,6 +25,21 @@ export interface SessionUsage {
   costUsd: number
 }
 
+export interface FileChangeEntry {
+  path: string
+  added: number
+  removed: number
+  status: 'created' | 'modified' | 'deleted'
+  diff?: string
+}
+
+export interface TurnFileSummary {
+  files: FileChangeEntry[]
+  totalAdded: number
+  totalRemoved: number
+  fileCount: number
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Feature A — background tasks (docs/p0-agent-workbench.md 功能 A).
 // A task runs `runToolLoop` in its own child session in the main process; the
@@ -220,6 +235,9 @@ export interface AppState {
   thinkingBlocksByMessage: Record<number, string>
   // Inline status lines per message (compaction notice, budget-exhausted, etc.).
   statusLinesByMessage: Record<number, string[]>
+  // Per-message file modification summary for Git-like change deck.
+  fileSummariesByMessage: Record<number, TurnFileSummary>
+  setFileSummaryForMessage: (messageId: number, summary: TurnFileSummary | null) => void
   // Context budget indicator text (shown in status bar).
   contextBudgetText: string | null
   // Pending AskUserQuestion dialogs awaiting a user answer.
@@ -294,6 +312,8 @@ export interface AppState {
   // page switch lives in App.tsx, which this feature must not touch.
   tasksOpen: boolean
   setTasksOpen: (v: boolean) => void
+  checkpointsOpen: boolean
+  setCheckpointsOpen: (v: boolean) => void
   stopGeneration: () => Promise<void>
   continueMessage: () => Promise<void>
 

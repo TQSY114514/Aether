@@ -441,6 +441,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       try { wc?.send('chat:tool-loop-start', { sessionId }) } catch {}
       let finalContent = ''
       let streamedContent = ''
+      let turnFileSummary = null
       try {
         // Build shared callback bag (onToolCall, onAskUser, requestPermission, etc.)
         // using the extracted factory. Feature B's injection options stay inline below.
@@ -464,6 +465,41 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
+        const mergeFileSummary = (incoming) => {
+          if (!incoming || !Array.isArray(incoming.files)) return
+          if (!turnFileSummary) {
+            turnFileSummary = {
+              totalAdded: incoming.totalAdded || 0,
+              totalRemoved: incoming.totalRemoved || 0,
+              fileCount: incoming.files.length,
+              files: [...incoming.files],
+            }
+            return
+          }
+          const fileMap = new Map()
+          for (const f of (turnFileSummary.files || [])) {
+            if (f && f.path) fileMap.set(f.path, { ...f })
+          }
+          for (const f of incoming.files) {
+            if (!f || !f.path) continue
+            if (fileMap.has(f.path)) {
+              const existing = fileMap.get(f.path)
+              existing.added = (existing.added || 0) + (f.added || 0)
+              existing.removed = (existing.removed || 0) + (f.removed || 0)
+              if (f.status === 'deleted') existing.status = 'deleted'
+            } else {
+              fileMap.set(f.path, { ...f })
+            }
+          }
+          const mergedFiles = Array.from(fileMap.values())
+          turnFileSummary = {
+            totalAdded: mergedFiles.reduce((acc, f) => acc + (f.added || 0), 0),
+            totalRemoved: mergedFiles.reduce((acc, f) => acc + (f.removed || 0), 0),
+            fileCount: mergedFiles.length,
+            files: mergedFiles,
+          }
+        }
+
         const runSingleLoop = () => runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
@@ -471,6 +507,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
           sessionId, messageId: msgId, db,
           autoCommit: true,
+          onFileSummary: (summary) => { mergeFileSummary(summary) },
           ...cb,
           getPendingInjections: () => pendingInjections.get(sessionId) || [],
           clearPendingInjections: () => pendingInjections.delete(sessionId),
@@ -518,7 +555,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
-            const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: cb })
+            const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: {
+              ...cb,
+              onFileSummary: (summary) => { mergeFileSummary(summary) },
+            } })
             const returned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
             finalContent = streamedContent || returned || ''
           } catch {
@@ -542,7 +582,12 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
         if (autoMemoryOn) {
-          autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot })
+          autoMemory.sync({
+            db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot,
+            onMemorySaved: (payload) => {
+              try { wc?.send('chat:memory-saved', payload) } catch {}
+            },
+          })
           if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
         }
         // 回写本次使用的 provider/model：定时反思（strategy-reflect）等
@@ -565,9 +610,31 @@ ipcMain.handle('chat:complete', handleChatComplete)
                 ? path.join(app.getPath('userData'), 'skills')
                 : path.join(process.cwd(), '.aetherai', 'skills')
               bridge.runMemoryAudit({ db, provider, model, signal: controller?.signal, skillsDir })
-                .then(r => { if (r.drafts > 0) log.info(`memorySkillBridge: ${r.drafts} draft skills created`) })
+                .then(r => {
+                  if (r.drafts > 0) {
+                    log.info(`memorySkillBridge: ${r.drafts} draft skills created`)
+                    try {
+                      wc?.send('chat:skill-patched', {
+                        skillName: 'auto-drafted',
+                        action: 'created',
+                        text: `Self-improvement review: ${r.drafts} skill(s) drafted from memories`
+                      })
+                    } catch {}
+                  }
+                })
                 .catch(() => {})
             }
+          } catch {}
+        }
+        // Report and persist turn file summary if any files were created/modified/deleted
+        if (turnFileSummary?.fileCount > 0) {
+          try {
+            db.updateMessage(msgId, { file_summary: JSON.stringify(turnFileSummary) })
+            wc?.send('chat:turn-summary', {
+              messageId: msgId,
+              sessionId,
+              fileSummary: turnFileSummary,
+            })
           } catch {}
         }
         // End of tool loop streaming: all live deltas were already forwarded via onStreamDelta.
@@ -581,9 +648,20 @@ ipcMain.handle('chat:complete', handleChatComplete)
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         abortControllers.delete(msgId)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
-        // Preserve accumulated content on abort (tool-loop path)
+        // Preserve accumulated content and file summary on abort (tool-loop path)
         const preserved = streamedContent || finalContent || ''
-        db.updateMessage(msgId, { content: preserved, status: 'aborted', error_message: errMsg })
+        const updatePayload = { content: preserved, status: 'aborted', error_message: errMsg }
+        if (turnFileSummary?.fileCount > 0) {
+          updatePayload.file_summary = JSON.stringify(turnFileSummary)
+          try {
+            wc?.send('chat:turn-summary', {
+              messageId: msgId,
+              sessionId,
+              fileSummary: turnFileSummary,
+            })
+          } catch {}
+        }
+        db.updateMessage(msgId, updatePayload)
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
         return { messageId: msgId, modelSuggestion }
       } finally {
