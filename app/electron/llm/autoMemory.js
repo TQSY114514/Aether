@@ -531,11 +531,12 @@ User message: {query}
 Memories:
 {list}`
 
-async function recall({ db, provider, model, userMessage, signal }) {
+async function recall({ db, provider, model, userMessage, signal, workspace }) {
   try {
     if (!db || !provider || !model) return ''
     let memories
-    try { memories = db.getMemories(RECALL_POOL) } catch { return '' }
+    try { memories = workspace ? db.getMemoriesScoped(workspace) : db.getMemories(RECALL_POOL) } catch { return '' }
+    if (workspace) memories = memories.slice(0, RECALL_POOL)
     if (!memories || memories.length === 0) return ''
     // H5: external 来源记忆不走免包装的 recall 注入（否则绕过 <untrusted_memory>
     // 降权）；它们只经 prefetch 的 _untrustedBlock 路径注入。
