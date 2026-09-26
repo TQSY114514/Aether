@@ -340,7 +340,7 @@ function updateTrayMenu() {
 
 function setupIpcHandlers() {
   registerProviderHandlers(ipcMain, db)
-  registerSystemHandlers(ipcMain, app, () => mainWindow?.webContents)
+  registerSystemHandlers(ipcMain, app, () => mainWindow?.webContents, db)
   registerModelHandlers(ipcMain, db)
   registerPersonaHandlers(ipcMain, db)
   registerSessionHandlers(ipcMain, db)

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
-import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2, FolderOpen, SquareTerminal, Wifi } from 'lucide-react'
+import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2, FolderOpen, SquareTerminal, Wifi, CheckCircle2, X } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 「安全面板」——让 Aether 的「默认安全」看得见：
@@ -64,6 +64,56 @@ export default function SecurityPage() {
   const [capabilities, setCapabilities] = useState<Record<string, CapabilityValue>>({})
   const [capLoading, setCapLoading] = useState(true)
 
+  const [rules, setRules] = useState<{ tool: string; ruleKey: string; decision: string; key: string }[]>([])
+  const [newTool, setNewTool] = useState('run_command')
+  const [newRuleKey, setNewRuleKey] = useState('')
+  const [rulesLoading, setRulesLoading] = useState(false)
+
+  const loadRules = async () => {
+    setRulesLoading(true)
+    try {
+      const res = await window.electronAPI.chat.listPermissionRules()
+      setRules(res?.persisted || [])
+    } catch {
+      setRules([])
+    } finally {
+      setRulesLoading(false)
+    }
+  }
+
+  const handleAddRule = async () => {
+    const k = newRuleKey.trim()
+    if (!k) return
+    try {
+      await window.electronAPI.chat.savePermissionRule(newTool, k, 'allow')
+      setNewRuleKey('')
+      toast(`已添加自动允许规则: ${newTool} (${k})`, { type: 'success' })
+      await loadRules()
+    } catch {
+      toast('添加规则失败', { type: 'error' })
+    }
+  }
+
+  const handleRemoveRule = async (tool: string, rKey: string) => {
+    try {
+      await window.electronAPI.chat.removePermissionRule(tool, rKey)
+      toast(`已移除规则: ${tool} (${rKey})`, { type: 'info' })
+      await loadRules()
+    } catch {
+      toast('移除规则失败', { type: 'error' })
+    }
+  }
+
+  const handleApplyPreset = async (preset: 'safe_git' | 'test_runners' | 'read_tools') => {
+    try {
+      const res = await window.electronAPI.chat.applyPermissionPreset(preset)
+      toast(`已启用预设，添加了 ${res?.added ?? 0} 条安全规则`, { type: 'success' })
+      await loadRules()
+    } catch {
+      toast('启用预设失败', { type: 'error' })
+    }
+  }
+
   const load = async () => {
     try {
       const [rows, fl] = await Promise.all([
@@ -90,7 +140,7 @@ export default function SecurityPage() {
     setCapLoading(false)
   }
 
-  useEffect(() => { load(); loadCapabilities() }, [])
+  useEffect(() => { load(); loadCapabilities(); loadRules() }, [])
 
   const setCapability = async (key: string, value: CapabilityValue) => {
     setCapabilities((prev) => ({ ...prev, [key]: value }))
@@ -201,7 +251,101 @@ export default function SecurityPage() {
           )}
         </div>
 
-        {/* 3. 安全 flag */}
+        {/* 3. 自动审批白名单规则 (Cline & Claude Code 对齐) */}
+        <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 size={15} style={{ color: 'var(--accent)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>自动审批规则 (Auto-Approval Whitelist)</span>
+            </div>
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">{rules.length} 条已保存规则</span>
+          </div>
+          <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
+            命中白名单的命令或操作将自动执行，无需反复弹窗确认（对齐 Cline / Claude Code）。受污染或高危操作除外。
+          </p>
+
+          {/* Quick preset buttons */}
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            <span className="text-[10px] text-[var(--text-muted)] mr-1">快捷预设:</span>
+            <button
+              onClick={() => handleApplyPreset('safe_git')}
+              className="text-[10px] px-2 py-1 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors press-scale"
+            >
+              + Git 安全只读 (status/diff/log)
+            </button>
+            <button
+              onClick={() => handleApplyPreset('test_runners')}
+              className="text-[10px] px-2 py-1 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors press-scale"
+            >
+              + 测试运行器 (npm/cargo/pytest)
+            </button>
+            <button
+              onClick={() => handleApplyPreset('read_tools')}
+              className="text-[10px] px-2 py-1 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors press-scale"
+            >
+              + 文件探索只读
+            </button>
+          </div>
+
+          {/* Active Rules List */}
+          {rulesLoading ? (
+            <div className="text-center py-4 text-xs text-[var(--text-muted)]">加载规则中…</div>
+          ) : rules.length === 0 ? (
+            <div className="rounded-md border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--text-muted)] mb-3">
+              暂无已保存的自动审批规则。在对话中点击“记住此规则”或点击上方快捷预设开启。
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 mb-3 max-h-48 overflow-y-auto p-1">
+              {rules.map((r) => (
+                <div
+                  key={r.key}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded border border-[var(--border)] bg-[var(--content-bg)] text-[11px] font-mono"
+                >
+                  <span className="text-[var(--accent)] font-medium">{r.tool}:</span>
+                  <span className="text-[var(--text-primary)]">{r.ruleKey}</span>
+                  <button
+                    onClick={() => handleRemoveRule(r.tool, r.ruleKey)}
+                    className="ml-1 text-[var(--text-muted)] hover:text-red-500 transition-colors p-0.5"
+                    title="移除此规则"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add custom rule form */}
+          <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)]">
+            <select
+              value={newTool}
+              onChange={(e) => setNewTool(e.target.value)}
+              className="text-[11px] rounded border border-[var(--border)] px-2 py-1 bg-[var(--content-bg)] text-[var(--text-primary)] outline-none"
+            >
+              <option value="run_command">run_command</option>
+              <option value="write_file">write_file</option>
+              <option value="edit_file">edit_file</option>
+              <option value="read_file">read_file</option>
+            </select>
+            <input
+              type="text"
+              placeholder={newTool === 'run_command' ? '命令前缀，例如: git log 或 npm test' : '路径前缀或 *'}
+              value={newRuleKey}
+              onChange={(e) => setNewRuleKey(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddRule() }}
+              className="flex-1 text-[11px] font-mono rounded border border-[var(--border)] px-2.5 py-1 bg-[var(--content-bg)] text-[var(--text-primary)] outline-none"
+            />
+            <button
+              onClick={handleAddRule}
+              disabled={!newRuleKey.trim()}
+              className="px-3 py-1 rounded text-[11px] bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity press-scale shrink-0"
+            >
+              添加规则
+            </button>
+          </div>
+        </div>
+
+        {/* 4. 安全 flag */}
         {flags.length > 0 && (
           <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <div className="flex items-center gap-1.5 mb-3">

@@ -1,8 +1,27 @@
 import { useState, useEffect } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal, Sparkles } from 'lucide-react'
+import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 
-type ToolCall = { name: string; args: unknown; result: string | null; error: string | null; failureKind?: string | null; recoveryHint?: { action?: string; hint?: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; afterSnapshot?: { path: string; content: string; truncated: boolean } | null; liveOutput?: string; liveOutputDone?: boolean }
+type ToolCall = {
+  name: string
+  args: unknown
+  result: string | null
+  error: string | null
+  failureKind?: string | null
+  recoveryHint?: { action?: string; hint?: string } | null
+  risk?: string | null
+  latencyMs?: number | null
+  startedAt?: number | null
+  checkpointId?: number | null
+  diff?: string | null
+  afterSnapshot?: { path: string; content: string; truncated: boolean } | null
+  liveOutput?: string
+  liveOutputDone?: boolean
+  exitCode?: number | null
+  commandFailed?: boolean
+  timedOut?: boolean
+}
 
 const FAILURE_LABELS: Record<string, string> = {
   timeout: 'tool.failure.timeout',
@@ -10,7 +29,33 @@ const FAILURE_LABELS: Record<string, string> = {
   env_missing_dependency: 'tool.failure.env_missing_dependency',
   test_failure: 'tool.failure.test_failure',
   model_invalid_args: 'tool.failure.model_invalid_args',
+  command_failed: 'tool.failure.command_failed',
   unknown: 'tool.failure.unknown',
+}
+
+function detectCommandFailure(tool: ToolCall): { failed: boolean; exitCode?: number; reason: string } {
+  if (tool.name !== 'run_command' && !tool.name.includes('exec') && !tool.name.includes('terminal')) {
+    return { failed: false, reason: '' }
+  }
+  if (tool.exitCode != null && tool.exitCode !== 0) {
+    return { failed: true, exitCode: tool.exitCode, reason: `exit ${tool.exitCode}` }
+  }
+  const text = (tool.error || tool.result || '') + ''
+  const exitMatch = text.match(/(?:\[FAILED:\s*exit\s+|exit\s+code:\s*)(-?\d+)/i)
+  if (exitMatch) {
+    const code = parseInt(exitMatch[1], 10)
+    if (code !== 0) return { failed: true, exitCode: code, reason: `exit ${code}` }
+  }
+  if (text.includes('[TIMED OUT]') || tool.timedOut) {
+    return { failed: true, reason: 'timeout' }
+  }
+  if (text.includes('[COMMAND NOT FOUND]')) {
+    return { failed: true, exitCode: 127, reason: 'command not found' }
+  }
+  if (tool.commandFailed) {
+    return { failed: true, reason: 'failed' }
+  }
+  return { failed: false, reason: '' }
 }
 
 // Human-phrased status label for a tool call: "Reading api.md", "Searching the
@@ -71,16 +116,20 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const [collapsed, setCollapsed] = useState(true)
   const resultText = tool.result ?? ''
   const isLongResult = resultText.length > 300 || resultText.split('\n').length > 6
+  const cmdFailure = detectCommandFailure(tool)
+  const isFailed = !!tool.error || cmdFailure.failed
   const status = tool.error
     ? { icon: AlertCircle, color: 'var(--error)', label: t('tool.status.failed') }
+    : cmdFailure.failed
+    ? { icon: AlertCircle, color: 'var(--error)', label: cmdFailure.reason || t('tool.status.failed') }
     : tool.result != null
     ? { icon: Check, color: 'var(--success)', label: t('tool.status.done') }
     : { icon: Wrench, color: 'var(--text-muted)', label: t('tool.status.running') }
   const StatusIcon = status.icon
   const dangerous = tool.risk === 'dangerous'
   const label = toolLabel(tool)
-  // Auto-expand when there's an error so the user can see what went wrong.
-  useEffect(() => { if (tool.error) setOpen(true) }, [tool.error])
+  // Auto-expand when there's an error or command failure so the user can see what went wrong.
+  useEffect(() => { if (tool.error || cmdFailure.failed) setOpen(true) }, [tool.error, cmdFailure.failed])
   const rollback = async () => {
     if (!tool.checkpointId || rollbackState === 'running') return
     setRollbackState('running')
@@ -88,11 +137,22 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
     setRollbackState(res.success ? 'done' : 'error')
     if (!res.success) setOpen(true)
   }
+  const handleQuickFix = () => {
+    const a = (tool.args && typeof tool.args === 'object' ? tool.args : {}) as any
+    const cmd = a.command ? String(a.command) : tool.name
+    const fullText = (tool.error || tool.result || tool.liveOutput || '').trim()
+    const lines = fullText.split('\n')
+    const snippet = lines.length > 25 ? lines.slice(-25).join('\n') : fullText
+    const exitReason = cmdFailure.reason ? `(${cmdFailure.reason})` : ''
+
+    const fixPrompt = `${t('tool.quick_fix.prompt_prefix')}: \`${cmd}\` ${exitReason}\n\`\`\`\n${snippet}\n\`\`\`\n${t('tool.quick_fix.prompt_suffix')}`
+    useStore.getState().sendMessage(fixPrompt)
+  }
   const hasArgs = argsCount(tool.args) > 0
   const failureKey = tool.failureKind && FAILURE_LABELS[tool.failureKind] ? FAILURE_LABELS[tool.failureKind] : null
 
   return (
-    <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+    <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
       <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors" title={tool.name}>
         {open ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />}
         {dangerous ? <ShieldAlert size={12} className="text-amber-500 shrink-0" /> : <ShieldCheck size={12} className="text-[var(--text-muted)] shrink-0" />}
@@ -102,6 +162,9 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
         )}
         {failureKey && tool.error && (
           <span className="text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium shrink-0 border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">{t(failureKey)}</span>
+        )}
+        {cmdFailure.failed && !tool.error && (
+          <span className="text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium shrink-0 border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">{cmdFailure.reason || t('tool.failure.command_failed')}</span>
         )}
         <span className="ml-auto flex items-center gap-2 shrink-0">
           {tool.result != null && tool.latencyMs != null && (
@@ -183,17 +246,33 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             {tool.afterSnapshot && !tool.error && (
               <AfterSnapshotView snapshot={tool.afterSnapshot} />
             )}
-            {tool.checkpointId && (
-              <button
-                type="button"
-                onClick={rollback}
-                disabled={rollbackState === 'running' || rollbackState === 'done'}
-                className="inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] disabled:opacity-60"
-                style={{ borderColor: 'var(--border)', color: rollbackState === 'error' ? 'var(--error)' : 'var(--text-secondary)' }}
-              >
-                <RotateCcw size={12} />
-                {rollbackState === 'running' ? t('tool.rollback.running') : rollbackState === 'done' ? t('tool.rollback.done') : rollbackState === 'error' ? t('tool.rollback.error') : t('tool.rollback')}
-              </button>
+            {/* Actions: Rollback and One-Click Fix */}
+            {(tool.checkpointId || tool.error || cmdFailure.failed) && (
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                {tool.checkpointId && (
+                  <button
+                    type="button"
+                    onClick={rollback}
+                    disabled={rollbackState === 'running' || rollbackState === 'done'}
+                    className="inline-flex items-center gap-1 rounded-[2px] border px-2 py-1 text-[11px] disabled:opacity-60 transition-colors"
+                    style={{ borderColor: 'var(--border)', color: rollbackState === 'error' ? 'var(--error)' : 'var(--text-secondary)' }}
+                  >
+                    <RotateCcw size={12} />
+                    {rollbackState === 'running' ? t('tool.rollback.running') : rollbackState === 'done' ? t('tool.rollback.done') : rollbackState === 'error' ? t('tool.rollback.error') : t('tool.rollback')}
+                  </button>
+                )}
+                {(tool.error || cmdFailure.failed) && (
+                  <button
+                    type="button"
+                    onClick={handleQuickFix}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-[2px] border transition-colors bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/20 active:scale-[0.98]"
+                    title={t('tool.quick_fix.tooltip')}
+                  >
+                    <Sparkles size={11} />
+                    <span>{t('tool.quick_fix')}</span>
+                  </button>
+                )}
+              </div>
             )}
             {tool.error && (
               <div>

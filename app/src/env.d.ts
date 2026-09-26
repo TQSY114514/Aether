@@ -99,6 +99,21 @@ interface ProjectConfig {
   customConfigPath: string | null
 }
 
+interface FileChangeEntry {
+  path: string
+  added: number
+  removed: number
+  status: 'created' | 'modified' | 'deleted'
+  diff?: string
+}
+
+interface TurnFileSummary {
+  files: FileChangeEntry[]
+  totalAdded: number
+  totalRemoved: number
+  fileCount: number
+}
+
 interface Window {
   electronAPI: {
     provider: {
@@ -156,7 +171,7 @@ interface Window {
       send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'; effortLevel?: 'low' | 'medium' | 'high'; thinkingEnabled?: boolean; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: ModelSuggestion | null; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number; model_name: string; provider_name: string } }>
       complete: (params: { content: string; modelId?: number | null; sessionId?: number | null; context?: string; systemPrefix?: string }) => Promise<{ content?: string; sessionId?: number; messageId?: number; error?: string }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
-      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; after_snapshot?: { path: string; content: string; truncated: boolean } | null } }) => void) => () => void
+      onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; after_snapshot?: { path: string; content: string; truncated: boolean } | null; exitCode?: number | null; commandFailed?: boolean; timedOut?: boolean } }) => void) => () => void
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string; kind?: 'plan' | 'act' | 'observe' } }) => void) => () => void
       onPlanSnapshot: (callback: (payload: { messageId: number; sessionId: number; plan: { id: string; description: string; tasks: { id: string; description: string; status: string; result?: string | null }[] } }) => void) => () => void
       onTodoUpdate: (callback: (payload: { messageId: number; sessionId: number; todos: { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[] }) => void) => () => void
@@ -167,7 +182,11 @@ interface Window {
       replyQuestion: (payload: { reqId: string; answers: { question: string; answer: string }[] }) => Promise<boolean>
       onPermissionRequest: (callback: (payload: { reqId: string; messageId: number; sessionId: number; name: string; args: any; risk: 'safe' | 'dangerous'; reason?: string; impact?: { summary?: string; severity?: string; affectedFiles?: string[]; command?: string; riskTags?: string[]; rollback?: string; alternatives?: string } | null }) => void) => () => void
       onPermissionExpired: (callback: (payload: { reqId: string }) => void) => () => void
-      replyPermission: (payload: { reqId: string; allowed: boolean; remember?: boolean }) => Promise<boolean>
+      replyPermission: (payload: { reqId: string; allowed: boolean; remember?: boolean | string }) => Promise<boolean>
+      listPermissionRules: (sessionId?: number | string) => Promise<{ session: { key: string; decision: string }[]; persisted: { tool: string; ruleKey: string; decision: string; key: string }[] }>
+      savePermissionRule: (name: string, ruleKey: string, decision?: string) => Promise<{ ok: boolean }>
+      removePermissionRule: (name: string, ruleKey: string) => Promise<{ ok: boolean }>
+      applyPermissionPreset: (preset: 'safe_git' | 'test_runners' | 'read_tools') => Promise<{ ok: boolean; added: number }>
       onToolStream: (callback: (payload: { messageId: number; sessionId: number; text: string; done: boolean }) => void) => () => void
       onHabitProposed: (callback: (payload: { key: string; imperative: string; reason: string }) => void) => () => void
       confirmHabit: (key: string) => Promise<{ ok: boolean }>
@@ -184,6 +203,33 @@ interface Window {
       onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean; sessionId?: number }) => void) => () => void
+      onTurnSummary: (callback: (payload: { messageId: number; sessionId: number; fileSummary: TurnFileSummary | null }) => void) => () => void
+      onMemorySaved: (callback: (payload: { sessionId: number; added: number; solidified: number; total: number; text: string; previews: string[] }) => void) => () => void
+      onSkillPatched: (callback: (payload: { skillName: string; action: string; text: string }) => void) => () => void
+      test: (opts?: { cwd?: string; sessionId?: number | string; args?: string }) => Promise<{
+        ok: boolean
+        passed?: boolean
+        command?: string
+        output?: string
+        exitCode?: number | null
+        timedOut?: boolean
+        durationMs?: number
+        projectType?: string
+        suggestedRepairPrompt?: string | null
+        error?: string
+      }>
+      lint: (opts?: { cwd?: string; sessionId?: number | string; args?: string }) => Promise<{
+        ok: boolean
+        clean?: boolean
+        command?: string
+        output?: string
+        exitCode?: number | null
+        timedOut?: boolean
+        durationMs?: number
+        projectType?: string
+        suggestedRepairPrompt?: string | null
+        error?: string
+      }>
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>
@@ -276,6 +322,19 @@ interface Window {
       clipboardRead: () => Promise<{ ok: boolean; text?: string; error?: string }>
       registerFileAssociations: () => Promise<{ ok: boolean; error?: string }>
       setTitleBarOverlay: (opts?: { color?: string; symbolColor?: string; height?: number }) => Promise<{ ok: boolean; error?: string }>
+      doctor: (opts?: { cwd?: string; sessionId?: number | string }) => Promise<{
+        timestamp: string
+        overallStatus: 'healthy' | 'warning' | 'degraded'
+        summary: { total: number; passes: number; warnings: number; failures: number }
+        runtime: any
+        tools: any
+        database: any
+        workspace: any
+        providers: any[]
+        checks: Array<{ category: string; name: string; status: 'pass' | 'warn' | 'fail'; message: string }>
+        markdownReport: string
+        error?: string
+      }>
     }
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
@@ -306,6 +365,21 @@ interface Window {
       status: (cwd?: string) => Promise<{ success: boolean; root?: string | null; status?: string; recent?: string; error?: string }>
       setAutoCommit: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean }>
       getAutoCommit: () => Promise<{ enabled: boolean }>
+      craftCommitMessage: (cwd?: string) => Promise<{ success: boolean; suggestedMessage?: string; files?: string[]; error?: string }>
+      commit: (opts: { message: string; files?: string[]; cwd?: string }) => Promise<{ success: boolean; commitHash?: string | null; message?: string; error?: string }>
+      getDiffForReview: (opts?: { cwd?: string; targetRef?: string; maxDiffLines?: number; focus?: string }) => Promise<{
+        success: boolean
+        branch?: string
+        commitHash?: string
+        isClean?: boolean
+        scopeDesc?: string
+        statSummary?: string
+        diffText?: string
+        isTruncated?: boolean
+        totalDiffLines?: number
+        suggestedReviewPrompt?: string
+        error?: string
+      }>
     }
     model: {
       routeTier: (params: { taskType: string; userMessage: string }) => Promise<{ tier: string; modelName: string | null; modelId: number | null; rationale: string; eloScore: number | null; autoMode: boolean }>
@@ -367,7 +441,7 @@ interface Window {
     }
     agentCheckpoint: {
       list: (params: { sessionId: number; messageId?: number | null }) => Promise<any[]>
-      rollback: (params: { id: number }) => Promise<{ success: boolean; restored?: string[]; error?: string }>
+      rollback: (params: { id: number; sessionId?: number }) => Promise<{ success: boolean; restored?: string[]; error?: string }>
     }
     trust: {
       badge: (params: { sessionId?: number; modelId?: number }) => Promise<{ level: string; score: number; reason: string } | null>

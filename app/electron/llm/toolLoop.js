@@ -30,6 +30,7 @@ const { buildRepoMapMessage } = require('../context/repoMap')
 const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox')
 const modelRouter = require('./modelRouter')
 const path = require('path')
+const fs = require('fs')
 const log = require('../logger')
 
 // Phase 4: Permission model and multi-dimensional iteration budget.
@@ -85,6 +86,116 @@ const trajectory = require('./trajectory')
 const checkpoints = require('./checkpoints')
 const lintTestRepair = require('./lintTestRepair')
 const toolCallRepair = require('./toolCallRepair')
+
+// Track files modified during a turn for Git-like change summary (Claude Code / Cursor style)
+function createTurnFileTracker(wsRoot) {
+  const files = new Map() // absPath -> { absPath, path: relPath, initialExisted: boolean, initialContent: string|null, finalContent: string|null }
+
+  function resolvePath(args) {
+    const raw = args?.path || args?.targetPath || args?.filePath || args?.file
+    if (!raw || typeof raw !== 'string') return null
+    return path.isAbsolute(raw) ? path.resolve(raw) : (wsRoot ? path.resolve(wsRoot, raw) : path.resolve(raw))
+  }
+
+  return {
+    beforeTool(name, args) {
+      if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return
+      const absPath = resolvePath(args)
+      if (!absPath) return
+      if (!files.has(absPath)) {
+        let existed = false
+        let content = null
+        try {
+          if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+            existed = true
+            content = fs.readFileSync(absPath, 'utf-8')
+          }
+        } catch {}
+        const rel = wsRoot ? path.relative(wsRoot, absPath).replace(/\\/g, '/') : path.basename(absPath)
+        files.set(absPath, {
+          absPath,
+          path: rel,
+          initialExisted: existed,
+          initialContent: content,
+          finalContent: null,
+        })
+      }
+    },
+
+    afterTool(name, args) {
+      if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return
+      const absPath = resolvePath(args)
+      if (!absPath || !files.has(absPath)) return
+      const record = files.get(absPath)
+      try {
+        if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+          record.finalContent = fs.readFileSync(absPath, 'utf-8')
+        } else {
+          record.finalContent = null
+        }
+      } catch {}
+    },
+
+    getSummary() {
+      const summary = []
+      const { buildUnifiedDiff } = require('../tools/toolImpact')
+      for (const [absPath, record] of files.entries()) {
+        const { path: relPath, initialExisted, initialContent, finalContent } = record
+        if (initialContent === finalContent) continue
+
+        let added = 0
+        let removed = 0
+        let status = 'modified'
+
+        let diff = ''
+
+        if (!initialExisted && finalContent !== null) {
+          status = 'created'
+          const lines = finalContent.split('\n')
+          added = lines.length
+          diff = lines.map(l => '+' + l).join('\n')
+        } else if (initialExisted && finalContent === null) {
+          status = 'deleted'
+          const lines = (initialContent || '').split('\n')
+          removed = lines.length
+          diff = lines.map(l => '-' + l).join('\n')
+        } else if (initialContent !== null && finalContent !== null) {
+          status = 'modified'
+          diff = buildUnifiedDiff(initialContent.split('\n'), finalContent.split('\n'))
+          for (const line of diff.split('\n')) {
+            if (line.startsWith('+') && !line.startsWith('+++')) added++
+            else if (line.startsWith('-') && !line.startsWith('---')) removed++
+          }
+        }
+
+        summary.push({
+          path: relPath,
+          absPath,
+          added,
+          removed,
+          status,
+          diff,
+        })
+      }
+
+      if (summary.length === 0) return null
+
+      let totalAdded = 0
+      let totalRemoved = 0
+      for (const item of summary) {
+        totalAdded += item.added
+        totalRemoved += item.removed
+      }
+
+      return {
+        files: summary,
+        fileCount: summary.length,
+        totalAdded,
+        totalRemoved,
+      }
+    }
+  }
+}
 
 // System prompt: Plan→Act→Observe rhythm (coding-agent style).
 // References `plan_progress` when the model has an active plan.
@@ -169,7 +280,9 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
  * @param {Function} [args.waitIfPaused] - Async function that suspends execution if the loop is paused.
  * @returns {Promise<Object>} The final LLM response message and metrics.
  */
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary }) {
+  const wsRoot = getWorkspaceRoot(sessionId) || process.cwd()
+  const turnFileTracker = createTurnFileTracker(wsRoot)
   toolCache.clear()
   const { ToolStateMachine, LoopStates } = require('./toolLoop/stateMachine')
   const loopStateMachine = new ToolStateMachine({ sessionId })
@@ -1092,6 +1205,7 @@ Reply ONLY with JSON:
             }
           }
           if (!entry.error) {
+            turnFileTracker.beforeTool(fn.name, args)
             if (tool.risk === 'dangerous') {
               try { entry.checkpointId = checkpoints.createCheckpoint({ sessionId, messageId: messageId || tc.id, toolName: fn.name, args }) } catch {}
             }
@@ -1130,6 +1244,20 @@ Reply ONLY with JSON:
               }
             } else {
               entry.result = r.result
+              if (fn.name === 'run_command' && typeof entry.result === 'string') {
+                const exitMatch = entry.result.match(/(?:exit\s+code:\s*|\[FAILED:\s*exit\s+)(-?\d+)/i)
+                if (exitMatch) {
+                  entry.exitCode = parseInt(exitMatch[1], 10)
+                  if (entry.exitCode !== 0) entry.commandFailed = true
+                } else if (entry.result.includes('[TIMED OUT]')) {
+                  entry.timedOut = true
+                  entry.commandFailed = true
+                } else if (entry.result.includes('[COMMAND NOT FOUND]')) {
+                  entry.exitCode = 127
+                  entry.commandFailed = true
+                }
+              }
+              turnFileTracker.afterTool(fn.name, args)
               // Tool lifecycle: afterToolCall can modify the result (OpenClaw pattern).
               try {
                 if (typeof tool.afterToolCall === 'function') {
@@ -1458,6 +1586,10 @@ Reply ONLY with JSON:
     // 推理模型可能全部输出为思考过程(reasoning)而无正文 —— 给出可见说明而非空回复
     if (!msg.content && msg.reasoning) {
       shadowSuccess = true
+      try {
+        const summary = turnFileTracker.getSummary()
+        if (summary.length > 0) onFileSummary?.(summary)
+      } catch {}
       return `[模型仅生成了思考过程, 未输出正文回复。可尝试换非推理模型(如 /model 选择), 或重试。]`
     }
     // Experience replay: 成功完成且动了工具 → 把本次轨迹(signature+工具序列)入池,
@@ -1472,6 +1604,10 @@ Reply ONLY with JSON:
     // as the reply. Verification is fire-and-forget: it runs in the background
     // and its results are logged, not surfaced to the user as the answer.
     shadowSuccess = finalStatus === 'success'
+    try {
+      const summary = turnFileTracker.getSummary()
+      if (summary.length > 0) onFileSummary?.(summary)
+    } catch {}
     return msg.content || ''
   }
   eventStream.agentEnd({ sessionId, finalStatus: 'budget_exhausted', totalIterations: budget.used })
@@ -1511,6 +1647,10 @@ Reply ONLY with JSON:
     if (g && g.content && String(g.content).trim()) {
       graceNote = `\n\n---\n📋 收尾总结：\n${String(g.content).trim()}`
     }
+  } catch {}
+  try {
+    const summary = turnFileTracker.getSummary()
+    if (summary.length > 0) onFileSummary?.(summary)
   } catch {}
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${graceNote}${planNote}`
   } finally {
@@ -1560,4 +1700,5 @@ module.exports = {
   getMaxConcurrent,
   agentModeToPermissionMode,
   requestPermissionWithTimeout,
+  createTurnFileTracker,
 }

@@ -9,13 +9,13 @@ import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
+import ContextMeterBadge from './ContextMeterBadge'
 import { useShallow } from 'zustand/react/shallow'
+
+import { DEFAULT_COMMANDS, executeTypedSlashCommand, type SlashCommand, type AgentMode } from './slashCommands'
 
 type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
 type Snippet = { id: number; content: string; preview: string }
-type SlashCommand = { id: string; name: string; description: string; prompt?: string; action?: () => void }
-type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
-
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
@@ -26,42 +26,6 @@ function classifyFile(file: File): 'text' | 'image' {
 
 // Sensitive credential/secret file regex (P1-11 Credential Guard)
 const SENSITIVE_FILE_PATTERN = /(\.env(\..+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.pkcs12|credentials\.json|service-account.*\.json)$/i
-
-// Default commands — used when no custom CMD.md files are discovered.
-// Commands with `action` execute directly (no prompt insertion).
-const DEFAULT_COMMANDS: SlashCommand[] = [
-  { id: 'summarize', name: '总结对话', description: '详细总结以上对话的要点', prompt: '请详细总结以上对话的要点，用中文回复。' },
-  { id: 'translate', name: '翻译', description: '将以上内容翻译成中文', prompt: '请将以上内容翻译成中文。' },
-  { id: 'polish', name: '润色', description: '润色文字，使其更流畅专业', prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
-  { id: 'explain', name: '解释', description: '用简单语言解释内容', prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
-  { id: 'continue', name: '续写', description: '基于内容自然续写', prompt: '请基于以上内容自然地继续写作。' },
-  { id: 'code', name: '生成代码', description: '根据需求生成实现代码', prompt: '请生成实现以上需求的代码。' },
-  { id: 'clear', name: '清空对话', description: '清空当前对话历史', action: () => { const sid = useStore.getState().currentSessionId; if (sid) useStore.getState().loadMessages(sid) } },
-  { id: 'regenerate', name: '重新生成', description: '撤销最后一条回复并重新生成', action: () => { useStore.getState().regenerate() } },
-  { id: 'compact', name: '压缩上下文', description: '智能压缩对话历史节省 token', action: async () => {
-    const sid = useStore.getState().currentSessionId
-    if (!sid) return
-    try {
-      const res = await window.electronAPI.chat.compact(sid)
-      if (res.ok) {
-        window.alert(`✅ 已成功压缩上下文！\n消息数：${res.beforeCount} → ${res.afterCount}\n估算 Token：${res.beforeTokens} → ${res.afterTokens}`)
-        useStore.getState().loadMessages(sid)
-      } else {
-        window.alert(`提示：${res.error || '无需压缩'}`)
-      }
-    } catch (e: any) {
-      window.alert(`压缩失败：${e.message || e}`)
-    }
-  } },
-  { id: 'undo', name: '撤销修改', description: '按最近一次检查点恢复文件并生成撤销提交', action: async () => {
-    try {
-      const res = await useStore.getState().undoLastAction()
-      if (!res.ok) {
-        window.alert(`❌ 撤销失败：${res.error || '未知错误'}`)
-      }
-    } catch { window.alert('❌ 撤销失败') }
-  } },
-]
 
 
 /** Render the chat composer, quick commands, and model controls. */
@@ -312,49 +276,8 @@ export default function ChatInput() {
 
     // Intercept slash commands for TUI/GUI shortcut alignment
     if (content.startsWith('/')) {
-      const parts = content.split(/\s+/)
-      const cmd = parts[0]
-      const arg = parts.slice(1).join(' ').trim()
-      
-      if (cmd === '/undo') {
-        setInput('')
-        try { localStorage.removeItem(`draft:${currentSessionId ?? 'new'}`) } catch {}
-        await useStore.getState().undoLastAction()
-        return
-      }
-      if (cmd === '/clear') {
-        setInput('')
-        if (currentSessionId) {
-          window.electronAPI.message.deleteAfter(currentSessionId, 0).then(() => {
-            useStore.getState().loadMessages(currentSessionId)
-          }).catch(() => {})
-        }
-        return
-      }
-      if (cmd === '/mode' && arg) {
-        if (['ask', 'auto', 'yolo', 'custom'].includes(arg)) {
-          setAgentMode(arg as AgentMode)
-          setInput('')
-          return
-        }
-      }
-      if (cmd === '/effort' && arg) {
-        if (['low', 'medium', 'high'].includes(arg)) {
-          setThinkingEnabled(true)
-          setEffortLevel(arg as any)
-          setInput('')
-          return
-        }
-      }
-      if (cmd === '/model' && arg) {
-        const lowerArg = arg.toLowerCase()
-        const match = allModels.find(m => m.model_name.toLowerCase().includes(lowerArg) || m.display_name?.toLowerCase().includes(lowerArg))
-        if (match && currentSessionId) {
-          saveSessionConfig(currentSessionId, { providerId: match.provider_id, modelId: match.id })
-          setInput('')
-          return
-        }
-      }
+      const handled = await executeTypedSlashCommand(content, setInput)
+      if (handled) return
     }
 
     if (!overrides || overrides.agentMode !== 'plan') {
@@ -735,6 +658,7 @@ export default function ChatInput() {
               <StreamingStatusBar sessionId={currentSessionId} />
             ) : (
               <>
+                <ContextMeterBadge />
                 {totalInputTokens > 0 && (
                   <span className="text-[10px] tabular-nums shrink-0 font-mono" style={{ color: 'var(--text-muted)' }}>
                     {t('chat.tokens_estimate', String(totalInputTokens))}

@@ -464,6 +464,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
+        let turnFileSummary = []
         const runSingleLoop = () => runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
@@ -471,6 +472,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
           sessionId, messageId: msgId, db,
           autoCommit: true,
+          onFileSummary: (summary) => { turnFileSummary = summary },
           ...cb,
           getPendingInjections: () => pendingInjections.get(sessionId) || [],
           clearPendingInjections: () => pendingInjections.delete(sessionId),
@@ -542,7 +544,12 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
         if (autoMemoryOn) {
-          autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot })
+          autoMemory.sync({
+            db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot,
+            onMemorySaved: (payload) => {
+              try { wc?.send('chat:memory-saved', payload) } catch {}
+            },
+          })
           if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
         }
         // 回写本次使用的 provider/model：定时反思（strategy-reflect）等
@@ -565,9 +572,30 @@ ipcMain.handle('chat:complete', handleChatComplete)
                 ? path.join(app.getPath('userData'), 'skills')
                 : path.join(process.cwd(), '.aetherai', 'skills')
               bridge.runMemoryAudit({ db, provider, model, signal: controller?.signal, skillsDir })
-                .then(r => { if (r.drafts > 0) log.info(`memorySkillBridge: ${r.drafts} draft skills created`) })
+                .then(r => {
+                  if (r.drafts > 0) {
+                    log.info(`memorySkillBridge: ${r.drafts} draft skills created`)
+                    try {
+                      wc?.send('chat:skill-patched', {
+                        skillName: 'auto-drafted',
+                        action: 'created',
+                        text: `Self-improvement review: ${r.drafts} skill(s) drafted from memories`
+                      })
+                    } catch {}
+                  }
+                })
                 .catch(() => {})
             }
+          } catch {}
+        }
+        // Report turn file summary if any files were created/modified/deleted
+        if (turnFileSummary && turnFileSummary.length > 0) {
+          try {
+            wc?.send('chat:turn-summary', {
+              messageId: msgId,
+              sessionId,
+              fileSummary: turnFileSummary,
+            })
           } catch {}
         }
         // End of tool loop streaming: all live deltas were already forwarded via onStreamDelta.

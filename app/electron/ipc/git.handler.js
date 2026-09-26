@@ -76,6 +76,30 @@ function registerGitHandlers(ipcMain, db) {
   ipcMain.handle('git:getAutoCommit', () => {
     return { enabled: gitAutoCommit.getAutoCommitEnabled(db) }
   })
+
+  // Craft a conventional commit message for current uncommitted changes (Aider-style).
+  ipcMain.handle('git:craftCommitMessage', (_e, cwd) => {
+    const root = cwd ? String(cwd) : getWorkspaceRoot()
+    const gitRoot = root ? gitAutoCommit.isGitRepo(root) : null
+    if (!gitRoot) return { success: false, error: 'not a git repository' }
+    return gitAutoCommit.craftCommitMessage(gitRoot)
+  })
+
+  // Commit changes to git working tree.
+  ipcMain.handle('git:commit', (_e, { message, files, cwd } = {}) => {
+    const root = cwd ? String(cwd) : getWorkspaceRoot()
+    const gitRoot = root ? gitAutoCommit.isGitRepo(root) : null
+    if (!gitRoot) return { success: false, error: 'not a git repository' }
+    return gitAutoCommit.commitWorkingTree(gitRoot, { message, files })
+  })
+
+  // Get structured diff and review prompt for code review (/review command, Aider/Claude Code alignment).
+  ipcMain.handle('git:getDiffForReview', (_e, { cwd, targetRef, maxDiffLines, focus } = {}) => {
+    const root = cwd ? String(cwd) : getWorkspaceRoot()
+    const gitRoot = root ? gitAutoCommit.isGitRepo(root) : null
+    if (!gitRoot) return { success: false, error: 'not a git repository' }
+    return gitAutoCommit.getDiffForReview(gitRoot, { targetRef, maxDiffLines, focus })
+  })
 }
 
 module.exports = { registerGitHandlers }
