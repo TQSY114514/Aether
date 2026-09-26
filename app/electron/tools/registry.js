@@ -460,7 +460,7 @@ const TOOLS = [
         const onStream = ctx?.onStream
         if (onStream) {
           return runCommandStreaming(cmd, {
-            cwd,
+            cwd: effectiveCwd,
             timeoutMs,
             onChunk: (text) => { try { onStream({ text, type: 'chunk' }) } catch {} },
           }).then(({ stdout, stderr, exitCode, timedOut }) => {
@@ -468,7 +468,7 @@ const TOOLS = [
             return formatShellResult(stdout, stderr, exitCode, timedOut)
           })
         }
-        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
+        return (/[|&;`$(){}!\\]/.test(cmd) ? runCommand('cmd.exe', ['/c', cmd], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024, shell: true }) : runCommand(cmd, [], { cwd: effectiveCwd, timeout: timeoutMs, maxBuffer: 32 * 1024 }))
           .then(({ stdout, stderr, exitCode, timedOut }) => formatShellResult(stdout, stderr, exitCode, timedOut))
       }
       return runInDocker(cmd, timeoutMs, ctx?.db)
