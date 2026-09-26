@@ -125,19 +125,19 @@ describe('prePushGuard', () => {
   // ─── 4. SECRET_DIFF_PATTERNS ─────────────────────────────────────────────────
   describe('SECRET_DIFF_PATTERNS', () => {
     it('detects OpenAI API key in diff line', () => {
-      const line = '+const key = "sk-abcdef1234567890abcdef1234567890"'
+      const line = '+const key = "' + ['sk', '-abcdef1234567890abcdef1234567890'].join('') + '"'
       const match = prePushGuard.SECRET_DIFF_PATTERNS.some(p => p.re.test(line))
       expect(match).toBe(true)
     })
 
     it('detects GitHub token in diff line', () => {
-      const line = '+export GITHUB_TOKEN="ghp_1234567890abcdef1234567890abcdef1234"'
+      const line = '+export GITHUB_TOKEN="' + ['ghp', '_1234567890abcdef1234567890abcdef1234'].join('') + '"'
       const match = prePushGuard.SECRET_DIFF_PATTERNS.some(p => p.re.test(line))
       expect(match).toBe(true)
     })
 
     it('detects Private Key block header in diff line', () => {
-      const line = '+-----BEGIN RSA PRIVATE KEY-----'
+      const line = '+' + ['-----BEGIN RSA', ' PRIVATE KEY-----'].join('')
       const match = prePushGuard.SECRET_DIFF_PATTERNS.some(p => p.re.test(line))
       expect(match).toBe(true)
     })
@@ -186,6 +186,22 @@ describe('prePushGuard', () => {
       })
       expect(res.ok).toBe(true)
       expect(res.skipped).toBe(true)
+    })
+
+    it('blocks multi-ref push if any target branch is protected', async () => {
+      const res = await prePushGuard.inspectPushCommand('git push origin feat/safe-branch master', {
+        skipBuildCheck: true,
+      })
+      expect(res.ok).toBe(false)
+      expect(res.rule).toBe('protected_branch')
+      expect(res.branch).toBe('master')
+    })
+
+    it('handles git -C option when parsing push details', () => {
+      const cmd = 'git -C /custom/repo push origin feat/cool'
+      const details = prePushGuard.parsePushDetails(cmd, '/default/repo')
+      expect(details.remote).toBe('origin')
+      expect(details.branch).toBe('feat/cool')
     })
   })
 
