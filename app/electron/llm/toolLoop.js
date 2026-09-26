@@ -1588,7 +1588,7 @@ Reply ONLY with JSON:
       shadowSuccess = true
       try {
         const summary = turnFileTracker.getSummary()
-        if (summary.length > 0) onFileSummary?.(summary)
+        if (summary?.fileCount > 0) onFileSummary?.(summary)
       } catch {}
       return `[模型仅生成了思考过程, 未输出正文回复。可尝试换非推理模型(如 /model 选择), 或重试。]`
     }
@@ -1606,7 +1606,7 @@ Reply ONLY with JSON:
     shadowSuccess = finalStatus === 'success'
     try {
       const summary = turnFileTracker.getSummary()
-      if (summary.length > 0) onFileSummary?.(summary)
+      if (summary?.fileCount > 0) onFileSummary?.(summary)
     } catch {}
     return msg.content || ''
   }
@@ -1650,7 +1650,7 @@ Reply ONLY with JSON:
   } catch {}
   try {
     const summary = turnFileTracker.getSummary()
-    if (summary.length > 0) onFileSummary?.(summary)
+    if (summary?.fileCount > 0) onFileSummary?.(summary)
   } catch {}
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${graceNote}${planNote}`
   } finally {
