@@ -135,15 +135,18 @@ function runCommandSync(command, args, opts = {}) {
     windowsHide,
     stdio: ['pipe', 'pipe', 'pipe'],
     maxBuffer: opts.maxBuffer || 1024 * 1024,
+    timeout: opts.timeout,
   })
 
   const isTruncated = child.error?.code === 'ENOBUFS' || false
+  const isTimedOut = child.error?.code === 'ETIMEDOUT' || false
   return {
     stdout: (child.stdout || Buffer.from('')).toString('utf-8'),
     stderr: (child.stderr || Buffer.from('')).toString('utf-8'),
     exitCode: child.status != null ? child.status : (child.error ? 1 : 0),
     error: child.error ? child.error.message : null,
     truncated: isTruncated,
+    timedOut: isTimedOut,
   }
 }
 

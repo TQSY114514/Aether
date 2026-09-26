@@ -124,7 +124,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
 
       if (failedPaths.length > 0) {
         useStore.getState().triggerToast(
-          t('filesummary.undo_partial', `部分文件回滚失败: ${failedPaths.join(', ')}`),
+          t('filesummary.undo_partial', failedPaths.join(', ')),
           'error'
         )
         return

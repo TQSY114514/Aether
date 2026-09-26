@@ -340,6 +340,12 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary }) {
   const wsRoot = getWorkspaceRoot(sessionId) || process.cwd()
   const turnFileTracker = createTurnFileTracker(wsRoot)
+  const emitFileSummary = () => {
+    try {
+      const summary = turnFileTracker.getSummary()
+      if (summary?.fileCount > 0) onFileSummary?.(summary)
+    } catch {}
+  }
   toolCache.clear()
   const { ToolStateMachine, LoopStates } = require('./toolLoop/stateMachine')
   const loopStateMachine = new ToolStateMachine({ sessionId })
@@ -973,6 +979,7 @@ Reply in this format:
         if (!tryShrinkRetry('重复工具调用循环')) {
           if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected', planId: plan?.id }) } catch {}
           try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
+          emitFileSummary()
           return '（检测到工具调用循环，已停止）'
         }
         continue
@@ -993,6 +1000,7 @@ Reply in this format:
         convo.pop()
         if (!tryShrinkRetry('语义循环')) {
           if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'semantic_loop', planId: plan?.id }) } catch {}
+          emitFileSummary()
           return '（检测到语义循环，已停止）'
         }
         continue
@@ -1481,6 +1489,7 @@ Reply ONLY with JSON:
             })
           } catch {}
           if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected_no_progress', planId: plan?.id }) } catch {}
+          emitFileSummary()
           return '（检测到工具调用无进展循环，已停止）'
         }
         continue
@@ -1526,6 +1535,7 @@ Reply ONLY with JSON:
         } catch {}
       }
       if (totalChars > MAX_TOTAL_CHARS) {
+        emitFileSummary()
         return '（工具输出超出上下文预算，已停止）'
       }
       if (planningMode && plan && typeof planning.advancePlanOnToolRound === 'function') {
@@ -1569,11 +1579,13 @@ Reply ONLY with JSON:
           if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
           if (finalMsg?.content) {
             shadowSuccess = true
+            emitFileSummary()
             return finalMsg.content
           }
         } catch {}
         if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
         shadowSuccess = true
+        emitFileSummary()
         return summary
       }
       try {
@@ -1643,10 +1655,7 @@ Reply ONLY with JSON:
     // 推理模型可能全部输出为思考过程(reasoning)而无正文 —— 给出可见说明而非空回复
     if (!msg.content && msg.reasoning) {
       shadowSuccess = true
-      try {
-        const summary = turnFileTracker.getSummary()
-        if (summary?.fileCount > 0) onFileSummary?.(summary)
-      } catch {}
+      emitFileSummary()
       return `[模型仅生成了思考过程, 未输出正文回复。可尝试换非推理模型(如 /model 选择), 或重试。]`
     }
     // Experience replay: 成功完成且动了工具 → 把本次轨迹(signature+工具序列)入池,
@@ -1661,10 +1670,7 @@ Reply ONLY with JSON:
     // as the reply. Verification is fire-and-forget: it runs in the background
     // and its results are logged, not surfaced to the user as the answer.
     shadowSuccess = finalStatus === 'success'
-    try {
-      const summary = turnFileTracker.getSummary()
-      if (summary?.fileCount > 0) onFileSummary?.(summary)
-    } catch {}
+    emitFileSummary()
     return msg.content || ''
   }
   eventStream.agentEnd({ sessionId, finalStatus: 'budget_exhausted', totalIterations: budget.used })
@@ -1705,10 +1711,7 @@ Reply ONLY with JSON:
       graceNote = `\n\n---\n📋 收尾总结：\n${String(g.content).trim()}`
     }
   } catch {}
-  try {
-    const summary = turnFileTracker.getSummary()
-    if (summary?.fileCount > 0) onFileSummary?.(summary)
-  } catch {}
+  emitFileSummary()
   return `（已达到最大迭代次数 ${budget.maxTotal}，已停止。可在设置中调高「Agent 最大迭代次数」）${graceNote}${planNote}`
   } finally {
     if (shadowWorktree && origRoot) {

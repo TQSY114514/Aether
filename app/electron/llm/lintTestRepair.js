@@ -261,7 +261,7 @@ async function runProjectTest(db, { cwd, sessionId, args = '', timeoutMs = RUN_T
   let cleanArgs = ''
   if (args && String(args).trim()) {
     cleanArgs = String(args).trim()
-    if (/[;&|`$(){}<>!\\]/.test(cleanArgs)) {
+    if (/[;&|`$(){}<>!\\%^"'\r\n]/.test(cleanArgs)) {
       return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
     }
   }
@@ -319,7 +319,7 @@ async function runProjectLint(db, { cwd, sessionId, args = '', timeoutMs = RUN_T
   let cleanArgs = ''
   if (args && String(args).trim()) {
     cleanArgs = String(args).trim()
-    if (/[;&|`$(){}<>!\\]/.test(cleanArgs)) {
+    if (/[;&|`$(){}<>!\\%^"'\r\n]/.test(cleanArgs)) {
       return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
     }
   }
