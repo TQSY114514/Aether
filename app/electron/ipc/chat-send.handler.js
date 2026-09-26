@@ -591,9 +591,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           } catch {}
         }
-        // Report turn file summary if any files were created/modified/deleted
+        // Report and persist turn file summary if any files were created/modified/deleted
         if (turnFileSummary?.fileCount > 0) {
           try {
+            db.updateMessage(msgId, { file_summary: JSON.stringify(turnFileSummary) })
             wc?.send('chat:turn-summary', {
               messageId: msgId,
               sessionId,

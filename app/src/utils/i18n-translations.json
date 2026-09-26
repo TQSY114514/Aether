@@ -776,7 +776,26 @@
       "tool.quick_fix.tooltip": "提取报错上下文并由 Agent 自动排查与修复",
       "tool.quick_fix.prompt_prefix": "修复命令执行报错",
       "tool.quick_fix.prompt_suffix": "请分析上述报错原因并修改代码或命令解决问题。",
-      "tool.failure.command_failed": "命令执行失败"
+      "tool.failure.command_failed": "命令执行失败",
+      "filesummary.run_tests_title": "运行项目测试并验证代码更改",
+      "filesummary.run_tests": "运行测试",
+      "filesummary.testing": "运行中...",
+      "filesummary.test_passed": "测试通过",
+      "filesummary.test_failed": "测试未过",
+      "filesummary.undo_partial": "部分文件回滚失败: {0}",
+      "filesummary.no_checkpoints": "未找到本轮对话关联的文件检查点记录，请在 Git 中手动撤销",
+      "context_meter.overview": "上下文预算概览",
+      "context_meter.estimate_title": "估算上下文使用量：{0} / {1} ({2}%)",
+      "context_meter.warning_title": "上下文使用率较高 ({0}%)，建议压缩",
+      "context_meter.critical_title": "上下文即将溢出 ({0}%)，请及时压缩",
+      "context_meter.recommended_threshold": "压缩推荐阈值 (80%)",
+      "context_meter.safety_margin": "剩余安全余量",
+      "context_meter.compact": "执行压缩",
+      "context_meter.compacting": "压缩中...",
+      "context_meter.compacted": "已压缩",
+      "context_meter.fork_session": "分叉新会话",
+      "context_meter.fork_success": "已分叉新会话",
+      "context_meter.fork_failed": "会话分叉失败"
     }
   },
   {

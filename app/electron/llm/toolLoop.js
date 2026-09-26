@@ -90,6 +90,7 @@ const toolCallRepair = require('./toolCallRepair')
 // Track files modified during a turn for Git-like change summary (Claude Code / Cursor style)
 function createTurnFileTracker(wsRoot) {
   const files = new Map() // absPath -> { absPath, path: relPath, initialExisted: boolean, initialContent: string|null, finalContent: string|null }
+  let commandRan = false
 
   function resolvePath(args) {
     const raw = args?.path || args?.targetPath || args?.filePath || args?.file
@@ -99,6 +100,10 @@ function createTurnFileTracker(wsRoot) {
 
   return {
     beforeTool(name, args) {
+      if (name === 'run_command') {
+        commandRan = true
+        return
+      }
       if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return
       const absPath = resolvePath(args)
       if (!absPath) return
@@ -176,6 +181,58 @@ function createTurnFileTracker(wsRoot) {
           status,
           diff,
         })
+      }
+
+      // If CLI commands ran during the turn, check git status to discover command-driven file changes
+      if (commandRan && wsRoot) {
+        try {
+          const { runCommandSync } = require('../tools/exec')
+          const st = runCommandSync('git', ['status', '--porcelain', '-uall'], { cwd: wsRoot })
+          if (st.exitCode === 0 && st.stdout) {
+            const lines = st.stdout.split('\n').filter(Boolean)
+            for (const line of lines) {
+              const m = line.match(/^.{2}\s+(.+)$/)
+              if (!m) continue
+              const relRaw = m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()
+              const absPath = path.resolve(wsRoot, relRaw)
+              if (!files.has(absPath)) {
+                const code = line.slice(0, 2).trim()
+                let status = 'modified'
+                if (code === '??' || code === 'A') status = 'created'
+                else if (code === 'D') status = 'deleted'
+
+                let diff = ''
+                let added = 0
+                let removed = 0
+                const diffRes = runCommandSync('git', ['diff', 'HEAD', '--', relRaw], { cwd: wsRoot })
+                if (diffRes.exitCode === 0 && diffRes.stdout) {
+                  diff = diffRes.stdout
+                  for (const dl of diff.split('\n')) {
+                    if (dl.startsWith('+') && !dl.startsWith('+++')) added++
+                    else if (dl.startsWith('-') && !dl.startsWith('---')) removed++
+                  }
+                } else if (status === 'created') {
+                  try {
+                    if (fs.existsSync(absPath)) {
+                      const c = fs.readFileSync(absPath, 'utf8')
+                      const clines = c.split('\n')
+                      added = clines.length
+                      diff = clines.map(l => '+' + l).join('\n')
+                    }
+                  } catch {}
+                }
+                summary.push({
+                  path: relRaw.replace(/\\/g, '/'),
+                  absPath,
+                  status,
+                  added,
+                  removed,
+                  diff,
+                })
+              }
+            }
+          }
+        } catch {}
       }
 
       if (summary.length === 0) return null

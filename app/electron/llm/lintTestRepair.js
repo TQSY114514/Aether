@@ -258,7 +258,15 @@ async function runProjectTest(db, { cwd, sessionId, args = '', timeoutMs = RUN_T
     return { ok: false, error: 'no test command configured or detected for project type', projectType, durationMs: Date.now() - start }
   }
 
-  const effectiveCmd = args && String(args).trim() ? `${baseCmd} ${String(args).trim()}` : baseCmd
+  let cleanArgs = ''
+  if (args && String(args).trim()) {
+    cleanArgs = String(args).trim()
+    if (/[;&|`$(){}<>!\\]/.test(cleanArgs)) {
+      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
+    }
+  }
+
+  const effectiveCmd = cleanArgs ? `${baseCmd} ${cleanArgs}` : baseCmd
   const res = await runOne(effectiveCmd, root, timeoutMs)
 
   let suggestedRepairPrompt = null
@@ -308,7 +316,15 @@ async function runProjectLint(db, { cwd, sessionId, args = '', timeoutMs = RUN_T
     return { ok: false, error: 'no lint command configured or detected for project type', projectType, durationMs: Date.now() - start }
   }
 
-  const effectiveCmd = args && String(args).trim() ? `${baseCmd} ${String(args).trim()}` : baseCmd
+  let cleanArgs = ''
+  if (args && String(args).trim()) {
+    cleanArgs = String(args).trim()
+    if (/[;&|`$(){}<>!\\]/.test(cleanArgs)) {
+      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
+    }
+  }
+
+  const effectiveCmd = cleanArgs ? `${baseCmd} ${cleanArgs}` : baseCmd
   const res = await runOne(effectiveCmd, root, timeoutMs)
 
   let suggestedRepairPrompt = null

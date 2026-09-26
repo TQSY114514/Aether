@@ -1,5 +1,5 @@
 import { useStore } from '@/store'
-import { ShieldAlert, FileText, Globe, FileEdit, Terminal, ShieldCheck, RotateCcw, FileDiff } from 'lucide-react'
+import { ShieldAlert, FileText, Globe, FileEdit, Terminal, ShieldCheck, RotateCcw, FileDiff, Check } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -151,7 +151,17 @@ export default function PermissionDialog() {
                 {t('agent.permission.receipt_security', '安全上下文')}
               </span>
               <span className={`inline-flex items-center gap-1 font-medium ${isTainted ? 'text-red-500' : 'text-emerald-600'}`}>
-                {isTainted ? '⚠️ 受污染 (Tainted)' : '✓ 洁净执行上下文'}
+                {isTainted ? (
+                  <>
+                    <ShieldAlert size={12} className="shrink-0 text-red-500" />
+                    <span>受污染 (Tainted)</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={12} className="shrink-0 text-emerald-600" />
+                    <span>洁净执行上下文</span>
+                  </>
+                )}
               </span>
             </div>
             <div>

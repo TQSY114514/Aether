@@ -13,6 +13,7 @@ const { runCommandSync } = require('../tools/exec')
 const { nearestGitRoot } = require('./checkpoints')
 const log = require('../logger')
 const path = require('path')
+const fs = require('fs')
 
 // Configuration setting key stored in DB
 const SETTING_KEY = 'agent_auto_commit_after_file_change'
@@ -332,20 +333,26 @@ function commitWorkingTree(gitRoot, { message, files }) {
     return { success: false, error: 'commit message is required' }
   }
 
-  if (files && files.length > 0) {
-    const res = gitCommitMultiple(files, gitRoot, msg)
-    if (!res.success) {
-      return { success: false, error: res.message || 'git commit failed' }
+  let targetFiles = files
+  if (!targetFiles || targetFiles.length === 0) {
+    const statusRes = runCommandSync('git', ['status', '--porcelain', '-uall'], { cwd: gitRoot })
+    const candidateFiles = (statusRes.stdout || '').split('\n').filter(Boolean).map(line => {
+      const m = line.match(/^.{2}\s+(.+)$/)
+      return m ? (m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()) : null
+    }).filter(Boolean)
+    const dangerous = candidateFiles.filter(f => isSecretLike(f))
+    if (dangerous.length > 0) {
+      log.warn(`[gitAutoCommit] skipped committing secret-like file(s): ${dangerous.join(', ')}`)
     }
-  } else {
-    const addRes = runCommandSync('git', ['add', '-A'], { cwd: gitRoot })
-    if (addRes.exitCode !== 0) {
-      return { success: false, error: addRes.stderr || 'git add failed' }
+    targetFiles = candidateFiles.filter(f => !isSecretLike(f))
+    if (targetFiles.length === 0) {
+      return { success: false, error: 'nothing safe to commit (all modified files are secret-like or clean)' }
     }
-    const commitRes = runCommandSync('git', ['commit', '-m', msg], { cwd: gitRoot })
-    if (commitRes.exitCode !== 0) {
-      return { success: false, error: commitRes.stderr || 'git commit failed' }
-    }
+  }
+
+  const res = gitCommitMultiple(targetFiles, gitRoot, msg)
+  if (!res.success) {
+    return { success: false, error: res.message || 'git commit failed' }
   }
 
   const hashRes = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot })
@@ -396,8 +403,14 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     const ref = String(targetRef).trim()
     scopeDesc = `对比引用: ${ref}`
     const statRes = runCommandSync('git', ['diff', ref, '--stat'], { cwd: gitRoot })
+    if (statRes.exitCode !== 0) {
+      return { success: false, error: statRes.stderr || `failed to get diff stat for ref: ${ref}` }
+    }
     statSummary = (statRes.stdout || '').trim()
     const diffRes = runCommandSync('git', ['diff', ref, '--unified=3'], { cwd: gitRoot })
+    if (diffRes.exitCode !== 0) {
+      return { success: false, error: diffRes.stderr || `failed to get diff for ref: ${ref}` }
+    }
     diffRaw = diffRes.stdout || ''
   } else if (!isClean) {
     // Review uncommitted working tree changes
@@ -405,22 +418,53 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     const statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: gitRoot })
     statSummary = (statRes.stdout || '').trim()
     const diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: gitRoot })
+    if (diffRes.exitCode !== 0) {
+      return { success: false, error: diffRes.stderr || 'failed to get git diff for working tree' }
+    }
     diffRaw = diffRes.stdout || ''
 
-    // If diffRaw is empty, might only have untracked files
-    if (!diffRaw.trim()) {
-      const untracked = rawStatus.split('\n').filter(l => l.startsWith('??')).map(l => l.slice(3).trim())
-      if (untracked.length > 0) {
-        statSummary = `Untracked new files (${untracked.length}):\n${untracked.slice(0, 15).join('\n')}`
+    // Look for untracked files and append their content (safely, excluding secret-like files)
+    const untrackedLines = rawStatus.split('\n')
+      .filter(l => l.startsWith('??'))
+      .map(l => l.slice(3).trim())
+      .filter(f => !isSecretLike(f))
+
+    if (untrackedLines.length > 0) {
+      statSummary = (statSummary ? statSummary + '\n' : '') + `Untracked new files (${untrackedLines.length}):\n${untrackedLines.slice(0, 10).map(f => ' ' + f).join('\n')}`
+      const untrackedDiffs = []
+      for (const relPath of untrackedLines.slice(0, 10)) {
+        const absPath = path.resolve(gitRoot, relPath)
+        try {
+          if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+            const size = fs.statSync(absPath).size
+            if (size <= 50 * 1024) { // Only embed reasonable text files (<50KB)
+              const content = fs.readFileSync(absPath, 'utf8')
+              untrackedDiffs.push(`diff --git a/${relPath} b/${relPath} (new file)\n--- /dev/null\n+++ b/${relPath}\n${content.split('\n').map(l => '+' + l).join('\n')}`)
+            }
+          }
+        } catch {}
+      }
+      if (untrackedDiffs.length > 0) {
+        diffRaw = (diffRaw ? diffRaw + '\n\n' : '') + untrackedDiffs.join('\n\n')
       }
     }
   } else {
     // Working tree is completely clean: review latest commit
     scopeDesc = `最新提交 (${commitHash})`
     const statRes = runCommandSync('git', ['show', '--stat', '--oneline', 'HEAD'], { cwd: gitRoot })
+    if (statRes.exitCode !== 0) {
+      return { success: false, error: statRes.stderr || 'failed to get commit stat for HEAD' }
+    }
     statSummary = (statRes.stdout || '').trim()
     const diffRes = runCommandSync('git', ['show', '--unified=3', 'HEAD'], { cwd: gitRoot })
+    if (diffRes.exitCode !== 0) {
+      return { success: false, error: diffRes.stderr || 'failed to get git diff for HEAD' }
+    }
     diffRaw = diffRes.stdout || ''
+  }
+
+  if (!diffRaw.trim()) {
+    return { success: false, error: 'no diff content found to review (working tree is clean and latest commit has no changes)' }
   }
 
   // Truncate diff if excessive

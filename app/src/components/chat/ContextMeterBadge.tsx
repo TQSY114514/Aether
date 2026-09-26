@@ -66,6 +66,7 @@ export default function ContextMeterBadge() {
       const res = await window.electronAPI.chat.compact(currentSessionId)
       if (res.ok) {
         setCompactedSuccess(true)
+        await useStore.getState().selectSession(currentSessionId)
         useStore.getState().triggerToast(
           t('chat.compact_success', `上下文已压缩：从 ${res.beforeCount} 条优化为 ${res.afterCount} 条`),
           'success'
@@ -89,9 +90,9 @@ export default function ContextMeterBadge() {
       await useStore.getState().loadSessions()
       await useStore.getState().selectSession(res.id)
       setOpen(false)
-      useStore.getState().triggerToast('已分叉新会话', 'success')
+      useStore.getState().triggerToast(t('context_meter.fork_success', '已分叉新会话'), 'success')
     } catch {
-      useStore.getState().triggerToast('会话分叉失败', 'warning')
+      useStore.getState().triggerToast(t('context_meter.fork_failed', '会话分叉失败'), 'warning')
     }
   }
 
@@ -110,10 +111,10 @@ export default function ContextMeterBadge() {
         }`}
         title={
           isCritical
-            ? `上下文即将溢出 (${pct}%)，请及时压缩`
+            ? t('context_meter.critical_title', pct)
             : isWarning
-            ? `上下文使用率较高 (${pct}%)，建议压缩`
-            : `上下文预算：${formatTokens(used)} / ${formatTokens(contextWindow)} (${pct}%)`
+            ? t('context_meter.warning_title', pct)
+            : t('context_meter.estimate_title', formatTokens(used), formatTokens(contextWindow), pct)
         }
       >
         {isCritical ? (
@@ -131,7 +132,7 @@ export default function ContextMeterBadge() {
             onClick={handleCompact}
             className="ml-1 px-1.5 py-0.2 rounded bg-red-600 text-white text-[9px] hover:bg-red-500 transition-colors"
           >
-            {compacting ? '...' : compactedSuccess ? '✓' : '压缩'}
+            {compacting ? '...' : compactedSuccess ? 'OK' : t('context_meter.compact', '压缩')}
           </span>
         )}
       </button>
@@ -145,7 +146,7 @@ export default function ContextMeterBadge() {
           <div className="flex items-center justify-between pb-2 border-b border-[var(--border)] mb-2.5">
             <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
               <Layers size={13} className="text-[var(--accent)]" />
-              <span>上下文预算概览</span>
+              <span>{t('context_meter.overview', '上下文预算概览')}</span>
             </span>
             <span className="text-[10px] font-mono tabular-nums text-[var(--text-muted)]">
               {pct}% ({formatTokens(used)} / {formatTokens(contextWindow)})
@@ -170,7 +171,7 @@ export default function ContextMeterBadge() {
                 <div key={role} className="flex items-center justify-between text-[10px]">
                   <span className="capitalize text-[var(--text-secondary)]">{role}</span>
                   <span className="font-mono text-[var(--text-muted)] tabular-nums">
-                    {formatTokens(data.tokens)} ({rolePct}%) · {data.count} 条
+                    {formatTokens(data.tokens)} ({rolePct}%) · {data.count}
                   </span>
                 </div>
               )
@@ -180,11 +181,11 @@ export default function ContextMeterBadge() {
           {/* Threshold hints */}
           <div className="border-t border-[var(--border)] pt-2 space-y-1 text-[10px] text-[var(--text-muted)] mb-3">
             <div className="flex justify-between">
-              <span>压缩推荐阈值 (80%)</span>
+              <span>{t('context_meter.recommended_threshold', '压缩推荐阈值 (80%)')}</span>
               <span className="font-mono tabular-nums">{formatTokens(Math.floor(contextWindow * 0.8))}</span>
             </div>
             <div className="flex justify-between">
-              <span>剩余安全余量</span>
+              <span>{t('context_meter.safety_margin', '剩余安全余量')}</span>
               <span className="font-mono tabular-nums">
                 {contextWindow > used ? formatTokens(contextWindow - used) : '0'}
               </span>
@@ -199,14 +200,14 @@ export default function ContextMeterBadge() {
               className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded text-[11px] border border-[var(--border)] hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-primary)] disabled:opacity-50"
             >
               <Minimize2 size={11} />
-              <span>{compacting ? '压缩中...' : compactedSuccess ? '已压缩' : '执行压缩'}</span>
+              <span>{compacting ? t('context_meter.compacting', '压缩中...') : compactedSuccess ? t('context_meter.compacted', '已压缩') : t('context_meter.compact', '执行压缩')}</span>
             </button>
             <button
               onClick={handleFork}
               className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded text-[11px] border border-[var(--border)] hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-primary)]"
             >
               <GitFork size={11} />
-              <span>分叉新会话</span>
+              <span>{t('context_meter.fork_session', '分叉新会话')}</span>
             </button>
           </div>
         </div>

@@ -63,6 +63,9 @@ function createAllowRulesStore(initialDb = null) {
   function ruleKey(name, args) {
     if (name === 'run_command') {
       const cmd = String(args?.command || '').trim()
+      if (/(?:&&|\|\||[;&|\n])/.test(cmd) || cmd.includes('$(') || cmd.includes('`')) {
+        return cmd
+      }
       const parts = cmd.split(/\s+/)
       const first = parts[0] || ''
       const second = parts[1] || ''
@@ -81,12 +84,39 @@ function createAllowRulesStore(initialDb = null) {
 
   function checkDecision(layer, name, args) {
     if (!layer || layer.size === 0) return null
+
+    let cmd = ''
+    if (name === 'run_command') {
+      cmd = String(args?.command || '').trim()
+      // Command substitutions (e.g. $(...), `...`) must never be auto-approved
+      if (cmd.includes('$(') || cmd.includes('`')) {
+        return null
+      }
+
+      // Check for compound command chaining (&&, ||, ;, |, newline)
+      if (/(?:&&|\|\||[;&|\n])/.test(cmd)) {
+        const subcmds = cmd.split(/(?:&&|\|\||[;&|\n])/).map(s => s.trim()).filter(Boolean)
+        if (subcmds.length > 1) {
+          let allAllowed = true
+          for (const sub of subcmds) {
+            const subDec = checkDecision(layer, name, { command: sub })
+            if (subDec === 'deny') return 'deny'
+            if (subDec !== 'allow') {
+              allAllowed = false
+              break
+            }
+          }
+          if (allAllowed) return 'allow'
+          return null // Compound command not fully covered by allow rules: require explicit confirmation
+        }
+      }
+    }
+
     const rk = ruleKey(name, args)
     const exactKey = `${name}:${rk}`
     if (layer.has(exactKey)) return layer.get(exactKey)
 
     if (name === 'run_command') {
-      const cmd = String(args?.command || '').trim()
       const firstTok = cmd.split(/\s+/)[0] || cmd
       if (layer.has(`${name}:${firstTok}`)) return layer.get(`${name}:${firstTok}`)
       if (layer.has(`${name}:${firstTok}:*`)) return layer.get(`${name}:${firstTok}:*`)
