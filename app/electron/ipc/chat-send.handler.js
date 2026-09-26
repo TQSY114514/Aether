@@ -464,7 +464,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
-        let turnFileSummary = []
+        let turnFileSummary = null
         const runSingleLoop = () => runToolLoop({
           provider, model, messages: toolMessages, signal: controller.signal,
           options: mergedOpts,
@@ -520,7 +520,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
-            const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: cb })
+            const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: {
+              ...cb,
+              onFileSummary: (summary) => { turnFileSummary = summary },
+            } })
             const returned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
             finalContent = streamedContent || returned || ''
           } catch {
@@ -589,7 +592,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           } catch {}
         }
         // Report turn file summary if any files were created/modified/deleted
-        if (turnFileSummary && turnFileSummary.length > 0) {
+        if (turnFileSummary?.fileCount > 0) {
           try {
             wc?.send('chat:turn-summary', {
               messageId: msgId,
