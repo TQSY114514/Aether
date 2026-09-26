@@ -371,5 +371,26 @@ Prompt Two.
     expect(res.success).toBe(false)
     expect(res.error).toContain('byte limit')
   })
+
+  it('blocks reading and writing to sensitive or unsafe paths', () => {
+    const { mkdirSync } = require('node:fs')
+    const sensitiveWs = join(makeTmp('sensitive-parent-'), '.ssh')
+    mkdirSync(sensitiveWs, { recursive: true })
+
+    const soulWrite = soulManager.writeWorkspaceSoul(sensitiveWs, { name: 'Exploit' })
+    expect(soulWrite.success).toBe(false)
+    expect(soulWrite.error).toContain('forbidden')
+
+    const memProject = memoryProjector.projectWorkspaceMemory(db, sensitiveWs)
+    expect(memProject.success).toBe(false)
+    expect(memProject.error).toContain('forbidden')
+
+    const memSync = memoryProjector.syncMemoryFileToDb(db, sensitiveWs)
+    expect(memSync.success).toBe(false)
+    expect(memSync.error).toContain('forbidden')
+
+    const soulGet = soulManager.getWorkspaceSoul(sensitiveWs)
+    expect(soulGet).toBeNull()
+  })
 })
 

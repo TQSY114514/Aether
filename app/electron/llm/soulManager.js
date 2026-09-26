@@ -12,7 +12,7 @@
 
 const fs = require('fs')
 const path = require('path')
-const { getWorkspaceRoot } = require('../tools/sandbox')
+const { getWorkspaceRoot, hasUnsafeWindowsPrefix, isSensitivePath } = require('../tools/sandbox')
 
 const electron = (() => { try { return require('electron') } catch { return null } })()
 const app = (electron && typeof electron === 'object' && electron.app) ? electron.app : null
@@ -126,6 +126,9 @@ function invalidateSoulCache() {
  */
 function getWorkspaceSoul(workspaceRoot, sessionId) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot(sessionId)
+  if (ws && (hasUnsafeWindowsPrefix(ws) || isSensitivePath(ws))) {
+    return null
+  }
   const targetKey = `${ws || ''}`
 
   const cached = _cachedMap.get(targetKey)
@@ -181,6 +184,9 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
 function writeWorkspaceSoul(workspaceRoot, data) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, error: 'No workspace root found' }
+  if (hasUnsafeWindowsPrefix(ws) || isSensitivePath(ws)) {
+    return { success: false, error: 'Access to sensitive or unsafe path is forbidden' }
+  }
 
   let tempFile = null
   try {
@@ -189,8 +195,17 @@ function writeWorkspaceSoul(workspaceRoot, data) {
     if (rel.startsWith('..') || path.isAbsolute(rel) || rel !== 'SOUL.md') {
       return { success: false, error: 'Path traversal detected' }
     }
-    if (fs.existsSync(targetFile) && fs.lstatSync(targetFile).isSymbolicLink()) {
-      return { success: false, error: 'Target file is a symbolic link' }
+    if (fs.existsSync(targetFile)) {
+      if (fs.lstatSync(targetFile).isSymbolicLink()) {
+        return { success: false, error: 'Target file is a symbolic link' }
+      }
+      try {
+        const realTarget = fs.realpathSync(targetFile)
+        const realWs = fs.realpathSync(ws)
+        if (path.relative(realWs, realTarget) !== 'SOUL.md') {
+          return { success: false, error: 'Path traversal or symlink detected' }
+        }
+      } catch {}
     }
 
     fs.mkdirSync(ws, { recursive: true })
