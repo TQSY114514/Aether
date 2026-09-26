@@ -69,6 +69,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (id) => ipcRenderer.invoke('persona:delete', id),
     import: (data) => ipcRenderer.invoke('persona:import', data),
     export: (id) => ipcRenderer.invoke('persona:export', id),
+    getWorkspaceSoul: (workspaceRoot) => ipcRenderer.invoke('persona:get-workspace-soul', workspaceRoot),
+    writeWorkspaceSoul: (workspaceRoot, data) => ipcRenderer.invoke('persona:write-workspace-soul', workspaceRoot, data),
+    exportSoulMd: (id) => ipcRenderer.invoke('persona:export-soul-md', id),
   },
   session: {
     list: () => ipcRenderer.invoke('session:list'),
@@ -178,6 +181,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     conflictResolve: (keepId, removeId) => ipcRenderer.invoke('memory:conflict:resolve', keepId, removeId),
     access: (id) => ipcRenderer.invoke('memory:access', id),
     dedupe: () => ipcRenderer.invoke('memory:dedupe'),
+    projectWorkspace: (workspace) => ipcRenderer.invoke('memory:project-workspace', workspace),
+    syncFromFile: (workspace) => ipcRenderer.invoke('memory:sync-from-file', workspace),
+    fileStatus: (workspace) => ipcRenderer.invoke('memory:file-status', workspace),
   },
   kg: {
     graph: (opts) => ipcRenderer.invoke('kg:graph', opts),

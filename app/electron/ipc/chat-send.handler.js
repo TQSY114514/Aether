@@ -13,6 +13,9 @@ const { maybeCompact, estimateMessagesTokens, estimateTextTokens, foldStaleToolO
 const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
 const habitLearner = require('../llm/habitLearner')
+const soulManager = require('../llm/soulManager')
+const memoryProjector = require('../llm/memoryProjector')
+const { isAuthorizedWorkspace, isWorkspaceTrusted } = require('../tools/sandbox')
 const path = require('path')
 const skills = require('../llm/skills')
 const { computeCost } = require('../utils/cost')
@@ -270,15 +273,40 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (parts.length > 0) apiMsgs[lastUserIdx].content = parts
       }
     }
-    // If persona is set, prepend system message (read from session config stored in db)
-    // Reuse the session0 fetched above (avoids a second getSessions() scan).
+    // Persona & SOUL.md injection:
+    // - personaId > 0: explicit SQLite persona
+    // - personaId === -1: explicit SOUL.md
+    // - personaId === 0: explicit "No persona" (clean slate)
+    // - personaId == null: check session.persona_id, else auto-inject workspace SOUL.md if present
     const session = session0
-    if (personaId) {
-      const p2 = db.getPersona(personaId)
-      if (p2) apiMsgs.unshift({ role: 'system', content: p2.prompt })
-    } else if (session && session.persona_id) {
-      const p = db.getPersona(session.persona_id)
+    let wsRoot = null
+    try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+
+    const targetPersonaId = (personaId !== undefined && personaId !== null)
+      ? Number(personaId)
+      : (session && session.persona_id != null ? Number(session.persona_id) : null)
+
+    const isSoulAuthorized = wsRoot && isAuthorizedWorkspace(db, wsRoot)
+    const isSoulTrusted = isSoulAuthorized && isWorkspaceTrusted(db, wsRoot, sessionId)
+
+    if (targetPersonaId === -1) {
+      if (isSoulAuthorized && isSoulTrusted) {
+        const soul = soulManager.getWorkspaceSoul(wsRoot, sessionId)
+        if (soul) apiMsgs.unshift({ role: 'system', content: soul.prompt })
+      } else {
+        const soul = soulManager.getWorkspaceSoul(null, sessionId)
+        if (soul) apiMsgs.unshift({ role: 'system', content: soul.prompt })
+      }
+    } else if (typeof targetPersonaId === 'number' && targetPersonaId > 0) {
+      const p = db.getPersona(targetPersonaId)
       if (p) apiMsgs.unshift({ role: 'system', content: p.prompt })
+    } else if (targetPersonaId === null) {
+      if (isSoulAuthorized && isSoulTrusted) {
+        const soul = soulManager.getWorkspaceSoul(wsRoot, sessionId)
+        if (soul && soul.isWorkspace) {
+          apiMsgs.unshift({ role: 'system', content: soul.prompt })
+        }
+      }
     }
 
     // Context compaction: if the estimated token count of the conversation is
@@ -322,13 +350,25 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // Done once here so BOTH the tool path and the plain streaming path inherit it.
     // Gateable via the auto_memory_enabled setting (default on).
     const autoMemoryOn = _s['auto_memory_enabled'] !== '0'
-    let memBlock = autoMemoryOn ? autoMemory.prefetch(db, content) : ''
+    const isMemoryAuthorized = wsRoot && isAuthorizedWorkspace(db, wsRoot)
+    const isMemoryTrusted = isMemoryAuthorized && isWorkspaceTrusted(db, wsRoot, sessionId)
+    if (autoMemoryOn && isMemoryAuthorized && isMemoryTrusted) {
+      try {
+        const prev = memoryProjector.getLastProjectedContent?.(wsRoot)
+        memoryProjector.syncMemoryFileToDb(db, wsRoot, {
+          deleteMissing: false,
+          baselineContent: prev || null,
+        })
+      } catch {}
+    }
+    const recallWs = isMemoryAuthorized ? wsRoot : null
+    let memBlock = autoMemoryOn ? autoMemory.prefetch(db, content, recallWs) : ''
     if (!memBlock && autoMemoryOn && provider && model) {
       // LLM second-pass recall (P1-5): keyword+graph recall found nothing —
       // ask the model to pick relevant memories from the recent pool. Gated
       // by the auto-memory setting; one cheap completion, never throws.
       try {
-        memBlock = (await autoMemory.recall({ db, provider, model, userMessage: content, signal: controller?.signal })) || ''
+        memBlock = (await autoMemory.recall({ db, provider, model, userMessage: content, signal: controller?.signal, workspace: recallWs })) || ''
       } catch {}
     }
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
@@ -501,7 +541,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
-        if (autoMemoryOn) autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent, sessionId })
+        if (autoMemoryOn) {
+          autoMemory.sync({ db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot })
+          if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
+        }
         // 回写本次使用的 provider/model：定时反思（strategy-reflect）等
         // 后台 LLM 任务的数据源。fire-and-forget，失败不影响回复。
         try { db.setSetting('llm.lastProvider', String(provider?.id || provider || '')); db.setSetting('llm.lastModel', String(model?.model_name || model?.id || model || '')) } catch {}
@@ -642,7 +685,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
           await generateSummaryTitle({ sessionId, content, fullContent, model: m, provider: p, titleLanguage, db })
         }
         // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
-        if (autoMemoryOn) autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, sessionId })
+        if (autoMemoryOn) {
+          autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, sessionId, workspace: wsRoot })
+          if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
+        }
         try { db.setSetting('llm.lastProvider', String(p?.id || p || '')); db.setSetting('llm.lastModel', String(m || '')) } catch {}
         if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
         log.info('DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
