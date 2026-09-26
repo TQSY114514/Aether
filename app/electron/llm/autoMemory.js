@@ -425,6 +425,12 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     _memV++ // invalidate prefetch cache
     // Phase 3: build knowledge graph from recent memories after sync.
     try { knowledgeGraph.buildGraph(db) } catch {}
+    if (workspace) {
+      try {
+        const memoryProjector = require('./memoryProjector')
+        memoryProjector.debounceProjectWorkspaceMemory(db, workspace)
+      } catch {}
+    }
   } catch (e) {
     log.warn('sync failed:', e && e.message)
   }

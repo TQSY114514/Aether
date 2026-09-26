@@ -340,7 +340,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // Gateable via the auto_memory_enabled setting (default on).
     const autoMemoryOn = _s['auto_memory_enabled'] !== '0'
     if (autoMemoryOn && wsRoot) {
-      try { memoryProjector.syncMemoryFileToDb(db, wsRoot) } catch {}
+      try { memoryProjector.syncMemoryFileToDb(db, wsRoot, { deleteMissing: false }) } catch {}
     }
     let memBlock = autoMemoryOn ? autoMemory.prefetch(db, content, wsRoot) : ''
     if (!memBlock && autoMemoryOn && provider && model) {

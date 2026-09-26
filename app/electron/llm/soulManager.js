@@ -153,6 +153,7 @@ function getWorkspaceSoul(workspaceRoot, sessionId) {
   for (const cand of candidates) {
     try {
       if (fs.existsSync(cand.path)) {
+        if (fs.lstatSync(cand.path).isSymbolicLink()) continue
         const raw = fs.readFileSync(cand.path, 'utf-8')
         const parsed = parseSoulContent(raw)
         if (parsed && parsed.prompt.length > 0) {
@@ -188,8 +189,16 @@ function writeWorkspaceSoul(workspaceRoot, data) {
   if (!ws) return { success: false, error: 'No workspace root found' }
 
   try {
+    const targetFile = path.resolve(ws, 'SOUL.md')
+    const rel = path.relative(ws, targetFile)
+    if (rel.startsWith('..') || path.isAbsolute(rel) || rel !== 'SOUL.md') {
+      return { success: false, error: 'Path traversal detected' }
+    }
+    if (fs.existsSync(targetFile) && fs.lstatSync(targetFile).isSymbolicLink()) {
+      return { success: false, error: 'Target file is a symbolic link' }
+    }
+
     fs.mkdirSync(ws, { recursive: true })
-    const targetFile = path.join(ws, 'SOUL.md')
     const content = formatSoulContent(data)
     fs.writeFileSync(targetFile, content, 'utf-8')
     invalidateSoulCache()

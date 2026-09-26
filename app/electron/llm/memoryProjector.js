@@ -114,8 +114,6 @@ function parseMarkdownToMemories(text) {
     const bulletMatch = line.match(/^[-*]\s+(.+)$/) || line.match(/^\d+\.\s+(.+)$/)
     if (bulletMatch) {
       let content = bulletMatch[1].trim()
-      // Guard: truncate runaway lines to 500 characters
-      if (content.length > 500) content = content.slice(0, 500).trim()
 
       // Optional type prefix in bullet: [project] Content
       const prefixMatch = content.match(/^\[([a-zA-Z]+)\]\s*(.+)$/)
@@ -148,13 +146,31 @@ function projectWorkspaceMemory(db, workspaceRoot) {
   if (!ws) return { success: false, count: 0, updated: false, error: 'No workspace root' }
 
   try {
-    const rows = db.allRows(
-      'SELECT id, content, type, origin FROM memory WHERE workspace = ? ORDER BY type ASC, created_at ASC',
-      [ws]
-    ) || []
+    const targetFile = path.resolve(ws, 'MEMORY.md')
+    const rel = path.relative(ws, targetFile)
+    if (rel.startsWith('..') || path.isAbsolute(rel) || rel !== 'MEMORY.md') {
+      return { success: false, count: 0, updated: false, error: 'Path traversal detected' }
+    }
+    if (fs.existsSync(targetFile) && fs.lstatSync(targetFile).isSymbolicLink()) {
+      return { success: false, count: 0, updated: false, error: 'Target file is a symbolic link' }
+    }
+
+    // Preserve external edits / Git updates: if MEMORY.md exists on disk and either
+    // this is our first projection or the file differs from our last projection,
+    // import new entries from the file first (without deleting SQLite rows).
+    if (fs.existsSync(targetFile)) {
+      const prevHash = _lastProjectedHash.get(ws)
+      const current = fs.readFileSync(targetFile, 'utf-8')
+      if (prevHash !== current) {
+        syncMemoryFileToDb(db, ws, { deleteMissing: false })
+      }
+    }
+
+    const rows = db.prepare(
+      'SELECT id, content, type, origin FROM memory WHERE workspace = ? ORDER BY type ASC, created_at ASC'
+    ).all(ws) || []
 
     const content = formatMemoriesToMarkdown(rows)
-    const targetFile = path.join(ws, 'MEMORY.md')
 
     // Avoid unnecessary disk writes if content is unchanged
     const prevHash = _lastProjectedHash.get(ws)
@@ -162,13 +178,6 @@ function projectWorkspaceMemory(db, workspaceRoot) {
       return { success: true, path: targetFile, count: rows.length, updated: false }
     }
 
-    // Never overwrite a file changed since our last projection.
-    if (fs.existsSync(targetFile) && _lastProjectedHash.has(ws)) {
-      const current = fs.readFileSync(targetFile, 'utf-8')
-      if (current !== _lastProjectedHash.get(ws)) {
-        return { success: false, path: targetFile, count: rows.length, updated: false, error: 'MEMORY.md changed externally; refusing to overwrite' }
-      }
-    }
     _isWritingFile.add(ws)
     try {
       fs.mkdirSync(ws, { recursive: true })
@@ -192,9 +201,10 @@ function projectWorkspaceMemory(db, workspaceRoot) {
  *
  * @param {Object} db - database instance
  * @param {string} [workspaceRoot]
+ * @param {{ deleteMissing?: boolean }} [options]
  * @returns {{ success: boolean, added: number, removed: number, total: number, error?: string }}
  */
-function syncMemoryFileToDb(db, workspaceRoot) {
+function syncMemoryFileToDb(db, workspaceRoot, { deleteMissing = true } = {}) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
   if (!ws) return { success: false, added: 0, removed: 0, total: 0, error: 'No workspace root' }
 
@@ -202,9 +212,16 @@ function syncMemoryFileToDb(db, workspaceRoot) {
     return { success: true, added: 0, removed: 0, total: 0 } // skip self-write echo
   }
 
-  const targetFile = path.join(ws, 'MEMORY.md')
+  const targetFile = path.resolve(ws, 'MEMORY.md')
+  const rel = path.relative(ws, targetFile)
+  if (rel.startsWith('..') || path.isAbsolute(rel) || rel !== 'MEMORY.md') {
+    return { success: false, added: 0, removed: 0, total: 0, error: 'Path traversal detected' }
+  }
   if (!fs.existsSync(targetFile)) {
     return { success: true, added: 0, removed: 0, total: 0 }
+  }
+  if (fs.lstatSync(targetFile).isSymbolicLink()) {
+    return { success: false, added: 0, removed: 0, total: 0, error: 'Target file is a symbolic link' }
   }
 
   try {
@@ -224,10 +241,9 @@ function syncMemoryFileToDb(db, workspaceRoot) {
     }
 
     // Existing memories for this workspace
-    const existing = db.allRows(
-      'SELECT id, content, content_norm, type, origin FROM memory WHERE workspace = ?',
-      [ws]
-    ) || []
+    const existing = db.prepare(
+      'SELECT id, content, content_norm, type, origin FROM memory WHERE workspace = ?'
+    ).all(ws) || []
 
     const dbNormMap = new Map()
     for (const row of existing) {
@@ -247,11 +263,13 @@ function syncMemoryFileToDb(db, workspaceRoot) {
     }
 
     // Remove items that were deleted from file (only user or assistant memories)
-    for (const [norm, row] of dbNormMap) {
-      if (!fileNormMap.has(norm)) {
-        if (row.origin === 'user' || row.origin === 'assistant') {
-          db.deleteMemory(row.id)
-          removed++
+    if (deleteMissing) {
+      for (const [norm, row] of dbNormMap) {
+        if (!fileNormMap.has(norm)) {
+          if (row.origin === 'user' || row.origin === 'assistant') {
+            db.deleteMemory(row.id)
+            removed++
+          }
         }
       }
     }
@@ -272,12 +290,15 @@ function syncMemoryFileToDb(db, workspaceRoot) {
  */
 function getMemoryFileStatus(workspaceRoot) {
   const ws = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot()
-  const targetFile = ws ? path.join(ws, 'MEMORY.md') : ''
+  const targetFile = ws ? path.resolve(ws, 'MEMORY.md') : ''
   if (!ws || !fs.existsSync(targetFile)) {
     return { exists: false, path: targetFile, mtime: null, lineCount: 0 }
   }
 
   try {
+    if (fs.lstatSync(targetFile).isSymbolicLink()) {
+      return { exists: false, path: targetFile, mtime: null, lineCount: 0 }
+    }
     const stat = fs.statSync(targetFile)
     const text = fs.readFileSync(targetFile, 'utf-8')
     const count = text.split(/\r?\n/).filter(l => /^[-*]\s+/.test(l.trim())).length

@@ -278,10 +278,10 @@ export default function ChatPage() {
           </Tooltip>
           <Tooltip text={t('tooltip.persona')}>
             <select
-              value={currentPersonaId !== null && currentPersonaId !== undefined ? String(currentPersonaId) : (workspaceSoul ? '-1' : '')}
+              value={currentPersonaId !== null && currentPersonaId !== undefined ? String(currentPersonaId) : (workspaceSoul ? '-1' : '0')}
               onChange={(e) => {
                 const raw = e.target.value
-                const v = raw === '' ? null : Number(raw)
+                const v = raw === '' ? 0 : Number(raw)
                 if (currentSessionId) saveSessionConfig(currentSessionId, { personaId: v })
               }}
               className="text-xs border rounded-lg px-2 py-1.5 outline-none bg-[var(--content-bg)] shrink-0 max-w-[190px]"
@@ -289,11 +289,11 @@ export default function ChatPage() {
             >
               {workspaceSoul ? (
                 <>
-                  <option value="-1">✨ SOUL.md: {workspaceSoul.name}</option>
+                  <option value="-1">SOUL.md: {workspaceSoul.name}</option>
                   <option value="0">{t('chat.no_persona')}</option>
                 </>
               ) : (
-                <option value="">{t('chat.no_persona')}</option>
+                <option value="0">{t('chat.no_persona')}</option>
               )}
               {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
