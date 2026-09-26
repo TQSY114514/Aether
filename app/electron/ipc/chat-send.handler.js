@@ -348,7 +348,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       // ask the model to pick relevant memories from the recent pool. Gated
       // by the auto-memory setting; one cheap completion, never throws.
       try {
-        memBlock = (await autoMemory.recall({ db, provider, model, userMessage: content, signal: controller?.signal })) || ''
+        memBlock = (await autoMemory.recall({ db, provider, model, userMessage: content, signal: controller?.signal, workspace: wsRoot })) || ''
       } catch {}
     }
     if (memBlock) compacted.unshift({ role: 'system', content: memBlock })
