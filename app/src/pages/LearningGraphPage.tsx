@@ -119,7 +119,7 @@ export default function LearningGraphPage() {
     try {
       const data = await window.electronAPI?.kg?.graph?.({ nodeLimit: 200 })
       const adapted = adaptKgData(data)
-      if (adapted.nodes.length > 0) setGraph(adapted)
+      setGraph(adapted)
     } catch {}
   }
 
