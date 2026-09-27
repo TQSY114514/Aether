@@ -167,12 +167,13 @@ function rollbackCheckpoint(id, opts = {}) {
       const { getWorkspaceRoot } = require('../tools/sandbox')
       const wsRoot = getWorkspaceRoot(cp.session_id)
       if (wsRoot && shadowGit.isAvailable()) {
-        let affected = []
-        try { affected = JSON.parse(cp.affected_paths || '[]') } catch {}
-        const sRes = shadowGit.rollbackCheckpoint(cp.session_id, wsRoot, snapshot.shadowGit.commitHash, affected)
-        if (sRes.ok) {
-          db.markAgentCheckpointRolledBack(id)
-          return { success: true, restored: sRes.restored || affected, method: 'shadow_git' }
+        const affected = Array.isArray(cp.affected_paths) ? cp.affected_paths : []
+        if (affected.length > 0) {
+          const sRes = shadowGit.rollbackCheckpoint(cp.session_id, wsRoot, snapshot.shadowGit.commitHash, affected)
+          if (sRes.ok) {
+            db.markAgentCheckpointRolledBack(id)
+            return { success: true, restored: sRes.restored || affected, method: 'shadow_git' }
+          }
         }
       }
     } catch {}
