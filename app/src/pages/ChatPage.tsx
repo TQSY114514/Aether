@@ -303,7 +303,9 @@ export default function ChatPage() {
 
       <ContextBar />
       <ChatWindow />
-      <ChatInput />
+      <div className="relative z-20">
+        <ChatInput />
+      </div>
     </div>
   )
 }
