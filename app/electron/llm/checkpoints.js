@@ -167,12 +167,25 @@ function rollbackCheckpoint(id, opts = {}) {
       const { getWorkspaceRoot } = require('../tools/sandbox')
       const wsRoot = getWorkspaceRoot(cp.session_id)
       if (wsRoot && shadowGit.isAvailable()) {
-        const affected = Array.isArray(cp.affected_paths) ? cp.affected_paths : []
-        if (affected.length > 0) {
-          const sRes = shadowGit.rollbackCheckpoint(cp.session_id, wsRoot, snapshot.shadowGit.commitHash, affected)
+        let affected = []
+        if (Array.isArray(cp.affected_paths)) {
+          affected = cp.affected_paths
+        } else if (typeof cp.affected_paths === 'string') {
+          try { affected = JSON.parse(cp.affected_paths) } catch {}
+        }
+        const fs = require('fs')
+        const path = require('path')
+        const fileOnlyAffected = (Array.isArray(affected) ? affected : []).filter(p => {
+          try {
+            const abs = path.resolve(wsRoot, p)
+            return fs.existsSync(abs) ? !fs.statSync(abs).isDirectory() : true
+          } catch { return true }
+        })
+        if (fileOnlyAffected.length > 0) {
+          const sRes = shadowGit.rollbackCheckpoint(cp.session_id, wsRoot, snapshot.shadowGit.commitHash, fileOnlyAffected)
           if (sRes.ok) {
             db.markAgentCheckpointRolledBack(id)
-            return { success: true, restored: sRes.restored || affected, method: 'shadow_git' }
+            return { success: true, restored: sRes.restored || fileOnlyAffected, method: 'shadow_git' }
           }
         }
       }

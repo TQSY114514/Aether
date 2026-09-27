@@ -26,19 +26,32 @@ const CAPABILITY_AXES = Object.freeze(['READ', 'WRITE', 'EXECUTE', 'NETWORK', 'G
  */
 function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailable = null } = {}) {
   let hasDocker = false
+  let featureFlags
+  try {
+    featureFlags = require('../featureFlags')
+  } catch {}
+
   if (typeof dockerAvailable === 'boolean') {
     hasDocker = dockerAvailable
   } else {
     try {
-      const featureFlags = require('../featureFlags')
       const { dockerBackend } = require('../exec/dockerBackend')
-      const flagOn = featureFlags.isEnabled(db, 'exec.docker') || featureFlags.isEnabled(db, 'exec.docker.defaultForAuto')
+      const flagOn = featureFlags ? (featureFlags.isEnabled(db, 'exec.docker') || featureFlags.isEnabled(db, 'exec.docker.defaultForAuto')) : false
       hasDocker = Boolean(flagOn && dockerBackend && typeof dockerBackend.isAvailable === 'function' && dockerBackend.isAvailable())
     } catch {
       hasDocker = false
     }
   }
-  const hasWinJob = process.platform === 'win32'
+  let hasWinJob = false
+  if (process.platform === 'win32') {
+    try {
+      const winJobObject = require('../exec/winJobObject')
+      const flagOn = featureFlags ? featureFlags.isEnabled(db, 'exec.windowsSandbox') : true
+      hasWinJob = Boolean(flagOn && winJobObject && typeof winJobObject.isSupported === 'function' && winJobObject.isSupported())
+    } catch {
+      hasWinJob = false
+    }
+  }
   const sandboxAvailable = hasDocker || hasWinJob
 
   const capabilities = {

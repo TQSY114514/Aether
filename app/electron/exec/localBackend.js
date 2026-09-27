@@ -79,10 +79,16 @@ const localBackend = {
     // Assign process to Windows Job Object sandbox (kill-on-close + 2GB limit)
     if (process.platform === 'win32' && child.pid) {
       try {
-        const winJobObject = require('./winJobObject')
-        winJobObject.assignProcess(child.pid).then((res) => {
-          if (res && res.ok) entry.sandboxed = true
-        }).catch(() => {})
+        const featureFlags = require('../featureFlags')
+        const database = require('../database')
+        const db = database.getDatabase ? database.getDatabase() : null
+        const enabled = featureFlags.isEnabled(db, 'exec.windowsSandbox')
+        if (enabled) {
+          const winJobObject = require('./winJobObject')
+          winJobObject.assignProcess(child.pid).then((res) => {
+            if (res && res.ok) entry.sandboxed = true
+          }).catch(() => {})
+        }
       } catch {}
     }
 

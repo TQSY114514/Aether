@@ -122,19 +122,14 @@ function commitCheckpoint(sessionId, workspaceRoot, opts = {}) {
 
       if (relPaths.length > 0) {
         addArgs.push('--', ...relPaths)
-      } else {
-        addArgs.push('-A')
+        execFileSync('git', addArgs, {
+          cwd: workspaceRoot,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 5000,
+          windowsHide: true,
+        })
       }
-    } else {
-      addArgs.push('-A')
     }
-
-    execFileSync('git', addArgs, {
-      cwd: workspaceRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 5000,
-      windowsHide: true,
-    })
 
     execFileSync(
       'git',

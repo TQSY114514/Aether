@@ -85,9 +85,10 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
 
       if (sessionId) {
         try {
+          const stepId = (latestTodos[idx] as any)?.id || String(idx + 1)
           await window.electronAPI.planControl?.skipStep({
             sessionId,
-            stepId: String(idx + 1),
+            stepId,
           })
           await window.electronAPI.planControl?.updateStep({
             sessionId,
@@ -111,9 +112,10 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
 
       if (sessionId) {
         try {
+          const stepId = (latestTodos[idx] as any)?.id || String(idx + 1)
           await window.electronAPI.planControl?.retryStep({
             sessionId,
-            stepId: String(idx + 1),
+            stepId,
           })
           await window.electronAPI.planControl?.updateStep({
             sessionId,
@@ -131,7 +133,7 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
       e.stopPropagation()
       const item = latestTodos[idx]
       if (!item) return
-      const prompt = `请立即执行该步骤：${item.content}`
+      const prompt = `${t('chat.task_execute_prompt', '请立即执行该步骤：')}${item.content}`
       await sendMessage(prompt)
     },
     [latestTodos, sendMessage]
@@ -169,7 +171,7 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <HeaderIcon size={14} style={{ color: accent }} className="shrink-0" />
           <span className="font-semibold text-xs shrink-0" style={{ color: 'var(--text-primary)' }}>
-            {allDone ? '任务全部完成' : '任务执行计划'}
+            {allDone ? t('chat.tasks_all_completed', '任务全部完成') : t('chat.task_execution_plan', '任务执行计划')}
           </span>
           <span
             className="text-[10px] font-mono px-1.5 py-0.5 rounded-full font-bold tabular-nums shrink-0"
@@ -190,7 +192,7 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
           <span className="text-[11px] font-mono tabular-nums font-medium" style={{ color: 'var(--text-muted)' }}>
             {pct}%
           </span>
-          <button type="button" aria-label="Toggle task drawer" className="p-1 rounded hover:bg-[var(--bg-primary)] text-[var(--text-muted)]">
+          <button type="button" aria-label={t('chat.task_toggle_drawer', '折叠/展开任务抽屉')} className="p-1 rounded hover:bg-[var(--bg-primary)] text-[var(--text-muted)]">
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
@@ -228,12 +230,12 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
                   <div
                     className="flex items-start gap-2.5 min-w-0 flex-1 cursor-pointer"
                     onClick={() => handleToggleStep(i)}
-                    title="点击切换完成状态"
+                    title={t('chat.task_toggle_status', '点击切换完成状态')}
                   >
                     <button
                       type="button"
                       className="shrink-0 mt-0.5 focus:outline-none"
-                      aria-label={isCompleted ? 'Mark incomplete' : 'Mark completed'}
+                      aria-label={isCompleted ? t('chat.task_mark_incomplete', '标记未完成') : t('chat.task_mark_complete', '标记已完成')}
                     >
                       {isCompleted ? (
                         <Check size={13} style={{ color: 'var(--success)' }} />
@@ -263,10 +265,10 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
                         type="button"
                         onClick={(e) => handleExecuteNow(i, e)}
                         className="px-1.5 py-0.5 text-[10px] rounded flex items-center gap-0.5 border border-[var(--border)] hover:bg-[var(--bg-primary)] hover:border-[var(--accent)] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors"
-                        title="立即优先执行该步骤"
+                        title={t('chat.task_execute_now', '立即优先执行该步骤')}
                       >
                         <CornerDownLeft size={10} />
-                        <span>执行</span>
+                        <span>{t('chat.task_execute', '执行')}</span>
                       </button>
                     )}
                     {!isCompleted ? (
@@ -274,20 +276,20 @@ export default function AgentTaskDeck({ sessionId }: AgentTaskDeckProps) {
                         type="button"
                         onClick={(e) => handleSkipStep(i, e)}
                         className="px-1.5 py-0.5 text-[10px] rounded flex items-center gap-0.5 border border-[var(--border)] hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-                        title="跳过此步"
+                        title={t('chat.task_skip_step', '跳过此步')}
                       >
                         <FastForward size={10} />
-                        <span>跳过</span>
+                        <span>{t('chat.task_skip', '跳过')}</span>
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={(e) => handleRetryStep(i, e)}
                         className="px-1.5 py-0.5 text-[10px] rounded flex items-center gap-0.5 border border-[var(--border)] hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-                        title="重试此步"
+                        title={t('chat.task_retry_step', '重试此步')}
                       >
                         <RotateCcw size={10} />
-                        <span>重试</span>
+                        <span>{t('chat.task_retry', '重试')}</span>
                       </button>
                     )}
                   </div>

@@ -82,6 +82,7 @@ const { stream: eventStream } = require('./agentEvents')
 const skillSelfCreate = require('./skillSelfCreate')
 const steering = require('./steering')
 const trajectory = require('./trajectory')
+const planControl = require('./planControl')
 
 const checkpoints = require('./checkpoints')
 const lintTestRepair = require('./lintTestRepair')
@@ -354,6 +355,9 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     } catch {}
   }
   toolCache.clear()
+  // Task Journal replay buffer: frozen snapshot of pre-crash journal entries to replay strictly in order
+  const replayJournal = Array.isArray(toolJournal) ? toolJournal.map(j => ({ ...j, _consumed: false })) : []
+  let journalReplayPtr = 0
   const { ToolStateMachine, LoopStates } = require('./toolLoop/stateMachine')
   const loopStateMachine = new ToolStateMachine({ sessionId })
   loopStateMachine.transition(LoopStates.PLANNING, { model: model?.model_name || model })
@@ -831,6 +835,45 @@ Reply in this format:
       convo.push({ role: 'system', content: '[用户打断:优先回应这条新消息,再决定是否继续原任务]' })
       // injections already cleared by getPendingInjections
       try { onStatus?.({ text: '📥 已插入你的新消息', kind: 'injection' }) } catch {}
+    }
+    // Consume pending skip/retry operations from plan step control (interactive checklist)
+    if (sessionId) {
+      try {
+        const pendingPlan = planControl.consumePending(sessionId)
+        if (pendingPlan && (pendingPlan.skip?.length || pendingPlan.retry?.length)) {
+          const parts = []
+          if (pendingPlan.skip.length) {
+            parts.push(`跳过步骤 ${pendingPlan.skip.join(', ')}`)
+            if (plan && plan.tasks) {
+              for (const sId of pendingPlan.skip) {
+                const t = plan.tasks.find(tk => String(tk.id) === String(sId))
+                if (t) t.status = 'completed'
+              }
+            }
+          }
+          if (pendingPlan.retry.length) {
+            parts.push(`重试步骤 ${pendingPlan.retry.join(', ')}`)
+            if (plan && plan.tasks) {
+              for (const rId of pendingPlan.retry) {
+                const t = plan.tasks.find(tk => String(tk.id) === String(rId))
+                if (t) t.status = 'pending'
+              }
+            }
+          }
+          if (plan && plan.tasks) {
+            try {
+              onPlanSnapshot?.(plan)
+              onTodoUpdate?.(planToTodos(plan))
+              if (db && db.saveSessionPlan) db.saveSessionPlan(sessionId, plan)
+            } catch {}
+          }
+          convo.push({
+            role: 'system',
+            content: `[用户更新了执行计划: ${parts.join('; ')}。请调整后续步骤，跳过已标记跳过的步骤，重新执行标记重试的步骤。]`,
+          })
+          try { onStatus?.({ text: `📋 计划已更新: ${parts.join('; ')}`, kind: 'plan' }) } catch {}
+        }
+      } catch {}
     }
     const opts = { ...options }
     // 阶段感知路由（'agent.toolRouter.staged'）：每轮按最近 8 条审计记录重估
@@ -1332,11 +1375,12 @@ Reply ONLY with JSON:
             let r
             const currentArgsHash = hashToolArgs(fn.name, args)
             let journalHit = null
-            if (Array.isArray(toolJournal) && toolJournal.length > 0) {
-              const hitIdx = toolJournal.findIndex(j => !j._replayed && j.tool === fn.name && j.argsHash === currentArgsHash && j.success)
-              if (hitIdx !== -1) {
-                journalHit = toolJournal[hitIdx]
-                journalHit._replayed = true
+            if (journalReplayPtr < replayJournal.length) {
+              const candidate = replayJournal[journalReplayPtr]
+              if (candidate && !candidate._consumed && candidate.tool === fn.name && candidate.argsHash === currentArgsHash && candidate.success) {
+                journalHit = candidate
+                candidate._consumed = true
+                journalReplayPtr++
               }
             }
 
@@ -1672,16 +1716,25 @@ Reply ONLY with JSON:
       loopStateMachine.transition(LoopStates.PLANNING, { step: depth + 1 })
       continue
     }
-    // No tool calls — final answer.
+    // No tool calls — check if visual verification is needed before closing loop.
+    let needsVisualCheck = false
+    if (!visualVerified && budget.remaining > 1) {
+      try {
+        const visualVerifier = require('./visualVerifier')
+        needsVisualCheck = visualVerifier.hasFrontendChanges(auditTrail)
+      } catch {}
+    }
+    if (needsVisualCheck) {
+      loopStateMachine.state.verificationNeeded = true
+    }
     loopStateMachine.step({ type: 'LLM_RESPONSE', payload: msg })
     // Visual Verification Loop (Grok P0 / Slice 5):
     // If frontend UI files were changed during this run, run offscreen visual check.
     // If console errors or page breakdown occurred, feed error back into convo for auto-repair.
-    if (!visualVerified && budget.remaining > 1) {
+    if (needsVisualCheck) {
       try {
         const visualVerifier = require('./visualVerifier')
-        if (visualVerifier.hasFrontendChanges(auditTrail)) {
-          loopStateMachine.transition(LoopStates.VERIFYING, { phase: 'visual' })
+        loopStateMachine.transition(LoopStates.VERIFYING, { phase: 'visual' })
           const vResult = await visualVerifier.runVisualVerification({
             db,
             sessionId,
@@ -1703,7 +1756,6 @@ Reply ONLY with JSON:
           } else if (vResult.performed) {
             loopStateMachine.step({ type: 'VERIFICATION_PASSED', payload: vResult })
           }
-        }
       } catch (err) {
         log.warn('Visual verification loop caught error:', err?.message)
       }
@@ -1839,6 +1891,9 @@ Reply ONLY with JSON:
       } finally {
         shadowWorktree = null
       }
+    }
+    if (sessionId) {
+      try { planControl.clearSession(sessionId) } catch {}
     }
   }
 }

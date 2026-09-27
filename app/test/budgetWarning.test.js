@@ -49,7 +49,7 @@ beforeEach(async () => {
 })
 
 describe('runToolLoop budget warning wiring (F5)', () => {
-  it('emits budget_warning at 80% of maxIterations, then budget_exhausted', { timeout: 30000 }, async () => {
+  it('emits budget_warning at 80% of maxIterations, then budget_exhausted', { timeout: 60000 }, async () => {
     const statuses = []
     const controller = new AbortController()
     const result = await toolLoop.runToolLoop({

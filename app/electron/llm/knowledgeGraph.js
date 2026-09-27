@@ -352,13 +352,20 @@ function prune(db, maxAgeDays = 90) {
 // ── Desktop polish #7: manual KG node editing ──────────────────────────────
 // Delete a node by entity, along with all edges touching it.
 function deleteNode(db, entity) {
-  const name = String(entity || '').trim().toLowerCase()
+  const name = String(entity || '').trim()
   if (!name) return { ok: false, error: 'empty entity' }
   try {
-    const node = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(name)
+    let node = db.prepare('SELECT id, entity FROM kg_nodes WHERE entity = ?').get(name)
+    if (!node) {
+      node = db.prepare('SELECT id, entity FROM kg_nodes WHERE entity = ?').get(name.toLowerCase())
+    }
     if (!node) return { ok: false, error: 'node not found' }
-    db.prepare('DELETE FROM kg_edges WHERE "from" = ? OR "to" = ?').run(name, name)
-    const info = db.prepare('DELETE FROM kg_nodes WHERE entity = ?').run(name)
+    const actualName = node.entity || name
+    db.prepare('DELETE FROM kg_edges WHERE "from" = ? OR "to" = ?').run(actualName, actualName)
+    if (actualName !== name) {
+      db.prepare('DELETE FROM kg_edges WHERE "from" = ? OR "to" = ?').run(name, name)
+    }
+    const info = db.prepare('DELETE FROM kg_nodes WHERE entity = ?').run(actualName)
     return { ok: true, removed: Number(info.changes), entity: name }
   } catch (e) {
     return { ok: false, error: e && e.message ? e.message : String(e) }
@@ -367,17 +374,30 @@ function deleteNode(db, entity) {
 
 // Rename a node's entity, updating edges that reference the old name.
 function renameNode(db, entity, newEntity) {
-  const oldName = String(entity || '').trim().toLowerCase()
-  const name = String(newEntity || '').trim().toLowerCase()
+  const oldName = String(entity || '').trim()
+  const name = String(newEntity || '').trim()
   if (!oldName || !name) return { ok: false, error: 'empty entity' }
   try {
-    const node = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(oldName)
+    let node = db.prepare('SELECT id, entity FROM kg_nodes WHERE entity = ?').get(oldName)
+    if (!node) {
+      node = db.prepare('SELECT id, entity FROM kg_nodes WHERE entity = ?').get(oldName.toLowerCase())
+    }
     if (!node) return { ok: false, error: 'node not found' }
-    const dup = db.prepare('SELECT id FROM kg_nodes WHERE entity = ? AND id != ?').get(name, node.id)
-    if (dup) return { ok: false, error: `entity already exists: ${name}` }
-    db.prepare('UPDATE kg_nodes SET entity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(name, node.id)
-    db.prepare('UPDATE kg_edges SET "from" = ? WHERE "from" = ?').run(name, oldName)
-    db.prepare('UPDATE kg_edges SET "to" = ? WHERE "to" = ?').run(name, oldName)
+
+    // If stored entity is lowercase and query entity was mixed-case, normalize target to lowercase
+    const isStoredLower = (node.entity === node.entity.toLowerCase()) && (oldName !== oldName.toLowerCase())
+    const targetEntity = isStoredLower ? name.toLowerCase() : name
+
+    const dup = db.prepare('SELECT id FROM kg_nodes WHERE entity = ? AND id != ?').get(targetEntity, node.id)
+    if (dup) return { ok: false, error: `entity already exists: ${targetEntity}` }
+
+    db.prepare('UPDATE kg_nodes SET entity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(targetEntity, node.id)
+    db.prepare('UPDATE kg_edges SET "from" = ? WHERE "from" = ?').run(targetEntity, node.entity)
+    db.prepare('UPDATE kg_edges SET "to" = ? WHERE "to" = ?').run(targetEntity, node.entity)
+    if (oldName !== node.entity) {
+      db.prepare('UPDATE kg_edges SET "from" = ? WHERE "from" = ?').run(targetEntity, oldName)
+      db.prepare('UPDATE kg_edges SET "to" = ? WHERE "to" = ?').run(targetEntity, oldName)
+    }
     return { ok: true, entity: name }
   } catch (e) {
     return { ok: false, error: e && e.message ? e.message : String(e) }

@@ -337,12 +337,14 @@ textarea, input {
 .slash-menu {
   position: absolute;
   bottom: 100%; left: 0; margin-bottom: 8px;
-  width: 240px;
+  width: 280px;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 50;
   background: var(--content-bg, var(--bg-primary));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  overflow: hidden;
   animation: scaleIn 0.12s ease-out;
   transform-origin: bottom left;
 }

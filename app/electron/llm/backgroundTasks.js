@@ -431,7 +431,7 @@ async function runTask(record) {
       try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted' }) } catch {}
       record.status = 'cancelled'
       persist(record)
-      emit(id, { type: 'cancelled', payload: { taskId: id } })
+      emit(id, { type: 'cancelled', payload: { taskId: id, sessionId } })
     } else {
       // ── Error — retryable while the budget remains ────────────────────
       const errMsg = err.message || String(err)
@@ -464,7 +464,7 @@ async function runTask(record) {
           title: record.title,
           error: errMsg,
         })
-        emit(id, { type: 'error', payload: { taskId: id, error: errMsg } })
+        emit(id, { type: 'error', payload: { taskId: id, sessionId, error: errMsg } })
       }
     }
   }

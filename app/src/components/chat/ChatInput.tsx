@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Shield, RotateCcw, Zap, Sparkles, ShieldAlert, Trophy } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Shield, RotateCcw, Zap, Sparkles, ShieldAlert, Trophy, Leaf } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
@@ -11,6 +11,7 @@ import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_C
 import { estimateTextTokens } from '@/utils/tokenEstimate'
 import ContextMeterBadge from './ContextMeterBadge'
 import { useShallow } from 'zustand/react/shallow'
+import { useFeatureFlag } from '@/utils/featureFlags'
 
 import { DEFAULT_COMMANDS, executeTypedSlashCommand, type SlashCommand, type AgentMode } from './slashCommands'
 
@@ -77,6 +78,7 @@ export default function ChatInput() {
   const prevSessionRef = useRef<number | null>(null)
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
+  const poorMode = useFeatureFlag('agent.poorMode')
   const [slashIndex, setSlashIndex] = useState(0)
   const [pending, setPending] = useState<PendingAttachment[]>([])
   const [snippets, setSnippets] = useState<Snippet[]>([])
@@ -572,7 +574,7 @@ export default function ChatInput() {
         <div className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
           style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
           {showSlash && slashResults.length > 0 && (
-            <div className="slash-menu" role="listbox" aria-label="Slash commands">
+            <div className="slash-menu z-50 max-h-60 overflow-y-auto" role="listbox" aria-label="Slash commands">
               {slashResults.map((cmd, idx) => {
                 const active = idx === slashIndex
                 return (
@@ -625,17 +627,6 @@ export default function ChatInput() {
 
         <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-wrap min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            {!isStreaming && !isArenaRunning && (
-              <div className="flex items-center gap-1 shrink-0">
-                {slashCommands.slice(0, 2).map((cmd) => (
-                  <button key={cmd.id} onClick={() => {
-                    const prompt = cmd.prompt
-                    if (prompt) setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
-                    textareaRef.current?.focus()
-                  }} className="qaction">{cmd.name}</button>
-                ))}
-              </div>
-            )}
             <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
             <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
             <ModelSelector providers={providers} allModels={allModels}
@@ -658,6 +649,15 @@ export default function ChatInput() {
               <StreamingStatusBar sessionId={currentSessionId} />
             ) : (
               <>
+                {poorMode && (
+                  <span
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono text-emerald-500 border-emerald-500/30 bg-emerald-500/10 cursor-help"
+                    title={t('slash.poor_enabled', '穷鬼省流模式：最大循环限制为 8 轮，激进压缩 Token')}
+                  >
+                    <Leaf size={10} className="shrink-0" />
+                    <span className="hidden sm:inline">{t('slash.poor', '省流')}</span>
+                  </span>
+                )}
                 <ContextMeterBadge />
                 {totalInputTokens > 0 && (
                   <span className="text-[10px] tabular-nums shrink-0 font-mono" style={{ color: 'var(--text-muted)' }}>

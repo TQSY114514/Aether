@@ -71,8 +71,9 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
                       win.show()
                       win.focus()
                     }
-                    if (evt.payload?.sessionId && !wc.isDestroyed()) {
-                      wc.send('session:switch-requested', { sessionId: Number(evt.payload.sessionId), taskId: String(taskId) })
+                    const targetSessionId = evt.payload?.sessionId || getTask(taskId, db)?.session_id
+                    if (targetSessionId && !wc.isDestroyed()) {
+                      wc.send('session:switch-requested', { sessionId: Number(targetSessionId), taskId: String(taskId) })
                     }
                   } catch {}
                 })
@@ -100,8 +101,9 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
                       win.show()
                       win.focus()
                     }
-                    if (evt.payload?.sessionId && !wc.isDestroyed()) {
-                      wc.send('session:switch-requested', { sessionId: Number(evt.payload.sessionId), taskId: String(taskId) })
+                    const targetSessionId = evt.payload?.sessionId || getTask(taskId, db)?.session_id
+                    if (targetSessionId && !wc.isDestroyed()) {
+                      wc.send('session:switch-requested', { sessionId: Number(targetSessionId), taskId: String(taskId) })
                     }
                   } catch {}
                 })

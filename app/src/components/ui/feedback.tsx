@@ -202,7 +202,11 @@ function ConfirmHost({ state, onConfirm, onCancel }: { state: ConfirmState; onCo
         onCancel()
       } else if (e.key === 'Enter') {
         e.preventDefault()
-        onConfirm()
+        if (document.activeElement === cancelBtnRef.current) {
+          onCancel()
+        } else {
+          onConfirm()
+        }
       } else if (e.key === 'Tab') {
         if (e.shiftKey) {
           if (document.activeElement === cancelBtnRef.current) {

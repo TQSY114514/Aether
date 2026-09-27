@@ -130,13 +130,27 @@ function createAcpServer({ db, deps = {} }) {
         _activeControllers.set(sessionId, controller)
       }
 
-      const workspace = params.workspace || (params.workspaceUri ? params.workspaceUri.replace(/^file:\/\//, '') : process.cwd())
+      let workspace = params.workspace
+      if (!workspace && params.workspaceUri) {
+        try {
+          const { fileURLToPath } = require('url')
+          workspace = fileURLToPath(params.workspaceUri)
+        } catch {
+          workspace = params.workspaceUri.replace(/^file:\/\/\/?/, '')
+          if (process.platform === 'win32' && /^\/[a-zA-Z]:/.test(workspace)) {
+            workspace = workspace.slice(1)
+          }
+        }
+      }
+      if (!workspace) workspace = process.cwd()
 
       try {
         const result = await runAgentImpl({
           prompt,
           provider,
           model,
+          db,
+          sessionId: sessionId && !isNaN(Number(sessionId)) ? Number(sessionId) : undefined,
           messages: params.messages,
           agentMode: ['auto', 'plan', 'ask', 'yolo'].includes(params.agentMode) ? params.agentMode : 'auto',
           maxIterations: params.maxIterations || 25,

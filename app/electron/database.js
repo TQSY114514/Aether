@@ -619,6 +619,7 @@ function initDatabase() {
       agentTaskSql.sql &&
       !/'(queued|plan|paused)'/.test(agentTaskSql.sql)
     ) {
+      const hasJournal = /tool_journal/.test(agentTaskSql.sql);
       db.exec(`
         CREATE TABLE agent_task_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -633,14 +634,16 @@ function initDatabase() {
           max_retry INTEGER NOT NULL DEFAULT 2,
           error TEXT,
           result TEXT,
+          tool_journal TEXT,
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME
         );
-        INSERT INTO agent_task_new (id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, created_at, updated_at)
-          SELECT id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, created_at, updated_at FROM agent_task;
+        INSERT INTO agent_task_new (id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, tool_journal, created_at, updated_at)
+          SELECT id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, ${hasJournal ? 'tool_journal' : 'NULL'}, created_at, updated_at FROM agent_task;
         DROP TABLE agent_task;
         ALTER TABLE agent_task_new RENAME TO agent_task;
       `);
+      addCol("agent_task", "tool_journal", "TEXT");
     }
   } catch {}
 
@@ -2639,6 +2642,7 @@ module.exports = {
       return null;
     }
   },
+  getDatabase: () => db,
   getDatabasePath: () => dbPath,
   encryptKey,
   decryptKey,

@@ -111,8 +111,6 @@ export default function ContextMeterBadge() {
     }
   }
 
-  if (messages.length === 0 && !contextBudgetText) return null
-
   return (
     <div className="relative inline-flex items-center" ref={popoverRef}>
       <button

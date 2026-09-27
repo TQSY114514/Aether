@@ -20,6 +20,7 @@ function registerSessionHandlers(ipcMain, db) {
     try { db.deleteSession(id) } catch (e) { log.warn('session:delete db error:', e) }
     try { clearAllowRules(id) } catch {}
     try { cleanupSessionControllers(id) } catch {}
+    try { require('../llm/shadowGit').cleanSessionRepo(id) } catch {}
   })
   ipcMain.handle('session:touch', (_e, id) => db.touchSession(id))
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))

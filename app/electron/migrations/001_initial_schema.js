@@ -74,15 +74,8 @@ module.exports = {
     `)
   },
   down: (db) => {
-    // Reversible rollback drops the auxiliary tables if rolled back
-    db.exec(`
-      DROP TABLE IF EXISTS memory;
-      DROP TABLE IF EXISTS settings;
-      DROP TABLE IF EXISTS message;
-      DROP TABLE IF EXISTS session;
-      DROP TABLE IF EXISTS persona;
-      DROP TABLE IF EXISTS model;
-      DROP TABLE IF EXISTS provider;
-    `)
+    // Migration 001 establishes the baseline application schema.
+    // Rolling back migration 001 must not drop core user tables
+    // (session, message, settings, provider, model) to protect user data.
   }
 }
