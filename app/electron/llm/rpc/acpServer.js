@@ -97,7 +97,16 @@ function createAcpServer({ db, deps = {} }) {
 
     async 'session/prompt'(params, notify) {
       const sessionId = String(params.sessionId || '')
-      const prompt = String(params.prompt || '').trim()
+      let prompt
+      if (Array.isArray(params.prompt)) {
+        const blocks = params.prompt
+        if (blocks.some(b => !b || b.type !== 'text' || typeof b.text !== 'string')) {
+          throw { code: -32602, message: 'prompt contains unsupported content block' }
+        }
+        prompt = blocks.map(b => b.text).join(' ').trim()
+      } else {
+        prompt = String(params.prompt || '').trim()
+      }
       if (!prompt) {
         throw { code: -32602, message: 'prompt is required in session/prompt params' }
       }
@@ -270,7 +279,11 @@ async function main({ db: dbPath, deps = {} } = {}) {
     for await (const line of rl) {
       const trimmed = line.trim()
       if (!trimmed) continue
-      await server.handleMessage(trimmed, emit)
+      // Do not block stdin dispatch while a prompt is running; cancellation
+      // requests must reach the active controller immediately.
+      server.handleMessage(trimmed, emit).catch((e) => {
+        emit(jsonRpcError(null, -32603, `ACP request error: ${e && e.message ? e.message : String(e)}`))
+      })
     }
   } catch (e) {
     emit(jsonRpcError(null, -32603, `ACP server error: ${e && e.message ? e.message : String(e)}`))
