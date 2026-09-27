@@ -59,8 +59,17 @@ class PipeServer extends EventEmitter {
         this.emit('client_connected', socket)
 
         let buffer = ''
+        const MAX_FRAME_SIZE = 1024 * 1024
         socket.on('data', async (chunk) => {
+          if (buffer.length + chunk.length > MAX_FRAME_SIZE) {
+            socket.destroy()
+            return
+          }
           buffer += chunk.toString('utf8')
+          if (buffer.length > MAX_FRAME_SIZE) {
+            socket.destroy()
+            return
+          }
           let idx
           while ((idx = buffer.indexOf('\n')) !== -1) {
             const line = buffer.slice(0, idx).trim()
