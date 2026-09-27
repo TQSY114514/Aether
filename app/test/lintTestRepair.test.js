@@ -5,7 +5,7 @@
 // 无 changedFiles → 全量输出(向后兼容)。
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from 'vitest'
-import { buildRepairContext, MAX_REPAIR_ROUNDS } from '../electron/llm/lintTestRepair'
+import { buildRepairContext, MAX_REPAIR_ROUNDS, runProjectTest, runProjectLint } from '../electron/llm/lintTestRepair'
 
 const err = (kind = 'test', output = 'FAIL src/app.ts:12:34 error TS2322 type mismatch\nPASS src/other.ts\nsome unrelated line') => ({
   kind, command: 'npm test', output, exitCode: 1, timedOut: false,
@@ -63,3 +63,28 @@ describe('buildRepairContext', () => {
     expect(ctx).toContain(`第 2/${MAX_REPAIR_ROUNDS} 轮修复`)
   })
 })
+
+describe('runProjectTest & runProjectLint argument validation', () => {
+  it('blocks shell metacharacters and injections', async () => {
+    const res1 = await runProjectTest(null, { cwd: __dirname, args: 'test; rm -rf /' })
+    expect(res1.ok).toBe(false)
+    expect(res1.error).toContain('shell metacharacters')
+
+    const res2 = await runProjectTest(null, { cwd: __dirname, args: 'test && echo pwned' })
+    expect(res2.ok).toBe(false)
+    expect(res2.error).toContain('shell metacharacters')
+
+    const res3 = await runProjectTest(null, { cwd: __dirname, args: 'test | cat' })
+    expect(res3.ok).toBe(false)
+    expect(res3.error).toContain('shell metacharacters')
+  })
+
+  it('allows quoted arguments such as --grep "test pattern"', async () => {
+    // Should NOT be rejected with 'shell metacharacters'
+    const res = await runProjectTest(null, { cwd: __dirname, args: '--grep "some test group"' })
+    if (!res.ok) {
+      expect(res.error).not.toContain('shell metacharacters')
+    }
+  })
+})
+

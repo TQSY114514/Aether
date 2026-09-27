@@ -131,7 +131,7 @@ function gitCommit(filePath, operation = 'edit') {
   }
 
   // Commit
-  const commitResult = runCommandSync('git', ['commit', '-m', commitMessage], { cwd: gitRoot })
+  const commitResult = runCommandSync('git', ['commit', '-m', commitMessage, '--', filePath], { cwd: gitRoot })
   if (commitResult.exitCode !== 0) {
     return {
       success: false,
@@ -197,8 +197,12 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
     return { success: false, message: 'nothing to commit', nothingToCommit: true, skipped }
   }
 
-  // Commit
-  const commitResult = runCommandSync('git', ['commit', '-m', message], { cwd: gitRoot })
+  // Commit with isolated pathspec: pass target files to prevent sweeping pre-staged user changes
+  const commitArgs = ['commit', '-m', message]
+  if (toAdd.length > 0) {
+    commitArgs.push('--', ...toAdd)
+  }
+  const commitResult = runCommandSync('git', commitArgs, { cwd: gitRoot })
   if (commitResult.exitCode !== 0) {
     return {
       success: false,
@@ -382,11 +386,19 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
   // Branch and commit info
   let branch = 'unknown'
   let commitHash = 'unknown'
+  let hasHead = false
   try {
-    const b = runCommandSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: gitRoot })
-    branch = (b.stdout || '').trim() || 'HEAD'
-    const h = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot })
-    commitHash = (h.stdout || '').trim() || 'HEAD'
+    const headCheck = runCommandSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: gitRoot })
+    hasHead = headCheck.exitCode === 0
+    if (hasHead) {
+      const b = runCommandSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: gitRoot })
+      branch = (b.stdout || '').trim() || 'HEAD'
+      const h = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot })
+      commitHash = (h.stdout || '').trim() || 'HEAD'
+    } else {
+      branch = 'main'
+      commitHash = '(no commits yet)'
+    }
   } catch {}
 
   // Check working tree status
@@ -415,10 +427,31 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
   } else if (!isClean) {
     // Review uncommitted working tree changes
     scopeDesc = '工作区待提交改动 (Working Tree Changes)'
-    const statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: gitRoot })
+    let statRes, diffRes
+    if (hasHead) {
+      statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: gitRoot })
+      diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: gitRoot })
+    } else {
+      // In a repository without any commits yet, HEAD does not exist.
+      // Gather staged and unstaged diffs directly without referencing HEAD.
+      const stagedStat = runCommandSync('git', ['diff', '--cached', '--stat'], { cwd: gitRoot })
+      const unstagedStat = runCommandSync('git', ['diff', '--stat'], { cwd: gitRoot })
+      statRes = {
+        exitCode: 0,
+        stdout: [stagedStat.stdout, unstagedStat.stdout].filter(Boolean).join('\n'),
+      }
+      const stagedDiff = runCommandSync('git', ['diff', '--cached', '--unified=3'], { cwd: gitRoot })
+      const unstagedDiff = runCommandSync('git', ['diff', '--unified=3'], { cwd: gitRoot })
+      diffRes = {
+        exitCode: 0,
+        stdout: [stagedDiff.stdout, unstagedDiff.stdout].filter(Boolean).join('\n\n'),
+      }
+    }
+    if (statRes.exitCode !== 0 && !statRes.stdout) {
+      return { success: false, error: statRes.stderr || 'failed to get git diff for working tree' }
+    }
     statSummary = (statRes.stdout || '').trim()
-    const diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: gitRoot })
-    if (diffRes.exitCode !== 0) {
+    if (diffRes.exitCode !== 0 && !diffRes.stdout) {
       return { success: false, error: diffRes.stderr || 'failed to get git diff for working tree' }
     }
     diffRaw = diffRes.stdout || ''
@@ -450,20 +483,26 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     }
   } else {
     // Working tree is completely clean: review latest commit
-    // Using -m and --first-parent so merge commits (e.g. GitHub Actions PR merge ref) show diff against base
-    scopeDesc = `最新提交 (${commitHash})`
-    const statRes = runCommandSync('git', ['show', '--stat', '--oneline', '-m', '--first-parent', 'HEAD'], { cwd: gitRoot })
-    if (statRes.exitCode !== 0 && !statRes.stdout) {
-      return { success: false, error: statRes.error || statRes.stderr || 'failed to get commit stat for HEAD' }
-    }
-    statSummary = (statRes.stdout || '').trim()
-    const diffRes = runCommandSync('git', ['show', '-m', '--first-parent', '--unified=3', 'HEAD'], { cwd: gitRoot })
-    if (diffRes.exitCode !== 0 && !diffRes.stdout) {
-      return { success: false, error: diffRes.error || diffRes.stderr || 'failed to get git diff for HEAD' }
-    }
-    diffRaw = diffRes.stdout || ''
-    if (diffRes.truncated) {
-      statSummary = (statSummary ? statSummary + '\n' : '') + '[Warning: Git diff exceeded buffer limit]'
+    if (!hasHead) {
+      scopeDesc = '空仓库 (尚未创建任何提交)'
+      statSummary = '(无提交记录)'
+      diffRaw = '(仓库暂无提交且工作区完全干净)'
+    } else {
+      // Using -m and --first-parent so merge commits (e.g. GitHub Actions PR merge ref) show diff against base
+      scopeDesc = `最新提交 (${commitHash})`
+      const statRes = runCommandSync('git', ['show', '--stat', '--oneline', '-m', '--first-parent', 'HEAD'], { cwd: gitRoot })
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
+        return { success: false, error: statRes.error || statRes.stderr || 'failed to get commit stat for HEAD' }
+      }
+      statSummary = (statRes.stdout || '').trim()
+      const diffRes = runCommandSync('git', ['show', '-m', '--first-parent', '--unified=3', 'HEAD'], { cwd: gitRoot })
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+        return { success: false, error: diffRes.error || diffRes.stderr || 'failed to get git diff for HEAD' }
+      }
+      diffRaw = diffRes.stdout || ''
+      if (diffRes.truncated) {
+        statSummary = (statSummary ? statSummary + '\n' : '') + '[Warning: Git diff exceeded buffer limit]'
+      }
     }
   }
 

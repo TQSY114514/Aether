@@ -92,7 +92,7 @@ async function runOne(cmd, cwd, timeoutMs) {
   if (needsShell) {
     result = await runCommand(isWin ? 'cmd.exe' : '/bin/sh', [isWin ? '/c' : '-c', cmd], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
   } else if (isWin && (prog === 'npm' || prog === 'pnpm' || prog === 'yarn' || prog === 'npx')) {
-    result = await runCommand('cmd.exe', ['/c', `${prog} ${args.join(' ')}`], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
+    result = await runCommand('cmd.exe', ['/c', prog, ...args], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
   } else {
     result = await runCommand(prog, args, { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 })
   }
@@ -252,18 +252,18 @@ async function runProjectTest(db, { cwd, sessionId, args = '', timeoutMs = RUN_T
   const root = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
   if (!root) return { ok: false, error: 'no workspace configured', durationMs: 0 }
 
+  let cleanArgs = ''
+  if (args && String(args).trim()) {
+    cleanArgs = String(args).trim()
+    if (/[;&|`$(){}<>!\\%^\r\n]/.test(cleanArgs)) {
+      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
+    }
+  }
+
   const projectType = detectProjectType(root)
   let baseCmd = resolveTestCommand(db, root, projectType)
   if (!baseCmd) {
     return { ok: false, error: 'no test command configured or detected for project type', projectType, durationMs: Date.now() - start }
-  }
-
-  let cleanArgs = ''
-  if (args && String(args).trim()) {
-    cleanArgs = String(args).trim()
-    if (/[;&|`$(){}<>!\\%^"'\r\n]/.test(cleanArgs)) {
-      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
-    }
   }
 
   const effectiveCmd = cleanArgs ? `${baseCmd} ${cleanArgs}` : baseCmd
@@ -310,18 +310,18 @@ async function runProjectLint(db, { cwd, sessionId, args = '', timeoutMs = RUN_T
   const root = cwd ? path.resolve(String(cwd)) : getWorkspaceRoot(sessionId)
   if (!root) return { ok: false, error: 'no workspace configured', durationMs: 0 }
 
+  let cleanArgs = ''
+  if (args && String(args).trim()) {
+    cleanArgs = String(args).trim()
+    if (/[;&|`$(){}<>!\\%^\r\n]/.test(cleanArgs)) {
+      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
+    }
+  }
+
   const projectType = detectProjectType(root)
   let baseCmd = resolveLintCommand(db, root, projectType)
   if (!baseCmd) {
     return { ok: false, error: 'no lint command configured or detected for project type', projectType, durationMs: Date.now() - start }
-  }
-
-  let cleanArgs = ''
-  if (args && String(args).trim()) {
-    cleanArgs = String(args).trim()
-    if (/[;&|`$(){}<>!\\%^"'\r\n]/.test(cleanArgs)) {
-      return { ok: false, error: 'invalid arguments: shell metacharacters and substitutions are not allowed', durationMs: 0 }
-    }
   }
 
   const effectiveCmd = cleanArgs ? `${baseCmd} ${cleanArgs}` : baseCmd

@@ -55,8 +55,11 @@ function registerGitHandlers(ipcMain, db) {
 
   // Get the current git status of the git repo containing the given path.
   ipcMain.handle('git:status', (_e, cwdOrOpts) => {
-    const root = (typeof cwdOrOpts === 'string' ? cwdOrOpts : cwdOrOpts?.cwd) || getWorkspaceRoot(cwdOrOpts?.sessionId)
-    const gitRoot = root ? gitAutoCommit.isGitRepo(root) : null
+    const rawRoot = (typeof cwdOrOpts === 'string' ? cwdOrOpts : cwdOrOpts?.cwd) || getWorkspaceRoot(cwdOrOpts?.sessionId)
+    const root = rawRoot ? path.resolve(String(rawRoot)) : null
+    if (!root) return { success: false, error: 'no workspace configured', root: null }
+    if (!isAuthorizedWorkspace(db, root)) return { success: false, error: 'unauthorized workspace path', root: null }
+    const gitRoot = gitAutoCommit.isGitRepo(root)
     if (!gitRoot) return { success: false, error: 'not a git repository', root: null }
     const { runCommandSync } = require('../tools/exec')
     const status = runCommandSync('git', ['status', '--short'], { cwd: gitRoot })

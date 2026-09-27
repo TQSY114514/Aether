@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
+import { t } from '@/utils/i18n'
 import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2, FolderOpen, SquareTerminal, Wifi, CheckCircle2, X } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -177,23 +178,23 @@ export default function SecurityPage() {
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="flex items-baseline justify-between mb-1">
-          <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>安全</h1>
+          <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{t('security.title', '安全')}</h1>
           <button onClick={applySafeMode} disabled={busy}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border transition-colors hover:bg-[var(--bg-secondary)] disabled:opacity-50"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             {busy ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
-            一键安全默认 (safe mode)
+            {t('security.safe_mode_btn', '一键安全默认 (safe mode)')}
           </button>
         </div>
         <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
-          Aether 默认安全——以下加固始终开启，不需要配置。最近 agent 活动与安全开关在下方。
+          {t('security.subtitle', 'Aether 默认安全——以下加固始终开启，不需要配置。最近 agent 活动与安全开关在下方。')}
         </p>
 
         {/* 1. 安全能力清单 */}
         <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center gap-1.5 mb-3">
             <ShieldCheck size={15} style={{ color: 'var(--success)' }} />
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>默认安全能力</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('security.default_caps', '默认安全能力')}</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {SECURITY_CAPABILITIES.map((c) => (
@@ -212,13 +213,13 @@ export default function SecurityPage() {
         <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="flex items-center gap-1.5 mb-3">
             <ShieldAlert size={15} style={{ color: 'var(--warning)' }} />
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>能力轴</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('security.capability_axes', '能力轴')}</span>
           </div>
           <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
-            控制 agent 在文件、Shell、网络三类能力上的默认行为。允许 = 自动执行，询问 = 每次确认，拒绝 = 直接拒绝。
+            {t('security.capability_axes_desc', '控制 agent 在文件、Shell、网络三类能力上的默认行为。允许 = 自动执行，询问 = 每次确认，拒绝 = 直接拒绝。')}
           </p>
           {capLoading ? (
-            <div className="text-center py-4 text-xs" style={{ color: 'var(--text-muted)' }}>加载中…</div>
+            <div className="text-center py-4 text-xs" style={{ color: 'var(--text-muted)' }}>{t('common.loading', '加载中…')}</div>
           ) : (
             <div className="space-y-2">
               {CAPABILITY_AXES.map((ax) => {
@@ -260,43 +261,43 @@ export default function SecurityPage() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 size={15} style={{ color: 'var(--accent)' }} />
-              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>自动审批规则 (Auto-Approval Whitelist)</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('security.auto_approval_title', '自动审批规则 (Auto-Approval Whitelist)')}</span>
             </div>
-            <span className="text-[10px] text-[var(--text-muted)] font-mono">{rules.length} 条已保存规则</span>
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">{t('security.saved_rules_count', rules.length)}</span>
           </div>
           <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
-            命中白名单的命令或操作将自动执行，无需反复弹窗确认（对齐 Cline / Claude Code）。受污染或高危操作除外。
+            {t('security.auto_approval_desc', '命中白名单的命令或操作将自动执行，无需反复弹窗确认（对齐 Cline / Claude Code）。受污染或高危操作除外。')}
           </p>
 
           {/* Quick preset buttons */}
           <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-            <span className="text-[10px] text-[var(--text-muted)] mr-1">快捷预设:</span>
+            <span className="text-[10px] text-[var(--text-muted)] mr-1">{t('security.quick_presets', '快捷预设:')}</span>
             <button
               onClick={() => handleApplyPreset('safe_git')}
               className="text-[10px] px-2 py-1 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors press-scale"
             >
-              + Git 安全只读 (status/diff/log)
+              {t('security.preset_safe_git', '+ Git 安全只读 (status/diff/log)')}
             </button>
             <button
               onClick={() => handleApplyPreset('test_runners')}
               className="text-[10px] px-2 py-1 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors press-scale"
             >
-              + 测试运行器 (npm/cargo/pytest)
+              {t('security.preset_test_runners', '+ 测试运行器 (npm/cargo/pytest)')}
             </button>
             <button
               onClick={() => handleApplyPreset('read_tools')}
               className="text-[10px] px-2 py-1 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors press-scale"
             >
-              + 文件探索只读
+              {t('security.preset_read_tools', '+ 文件探索只读')}
             </button>
           </div>
 
           {/* Active Rules List */}
           {rulesLoading ? (
-            <div className="text-center py-4 text-xs text-[var(--text-muted)]">加载规则中…</div>
+            <div className="text-center py-4 text-xs text-[var(--text-muted)]">{t('security.rules_loading', '加载规则中…')}</div>
           ) : rules.length === 0 ? (
             <div className="rounded-md border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--text-muted)] mb-3">
-              暂无已保存的自动审批规则。在对话中点击“记住此规则”或点击上方快捷预设开启。
+              {t('security.rules_empty', '暂无已保存的自动审批规则。在对话中点击“记住此规则”或点击上方快捷预设开启。')}
             </div>
           ) : (
             <div className="flex flex-wrap gap-1.5 mb-3 max-h-48 overflow-y-auto p-1">
@@ -310,7 +311,7 @@ export default function SecurityPage() {
                   <button
                     onClick={() => handleRemoveRule(r.tool, r.ruleKey)}
                     className="ml-1 text-[var(--text-muted)] hover:text-red-500 transition-colors p-0.5"
-                    title="移除此规则"
+                    title={t('security.remove_rule', '移除此规则')}
                   >
                     <X size={10} />
                   </button>
@@ -333,7 +334,7 @@ export default function SecurityPage() {
             </select>
             <input
               type="text"
-              placeholder={newTool === 'run_command' ? '命令前缀，例如: git log 或 npm test' : '路径前缀或 *'}
+              placeholder={newTool === 'run_command' ? t('security.input_prefix_cmd', '命令前缀，例如: git log 或 npm test') : t('security.input_prefix_path', '路径前缀或 *')}
               value={newRuleKey}
               onChange={(e) => setNewRuleKey(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAddRule() }}
@@ -344,7 +345,7 @@ export default function SecurityPage() {
               disabled={!newRuleKey.trim()}
               className="px-3 py-1 rounded text-[11px] bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity press-scale shrink-0"
             >
-              添加规则
+              {t('security.add_rule_btn', '添加规则')}
             </button>
           </div>
         </div>

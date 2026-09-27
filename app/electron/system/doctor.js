@@ -76,6 +76,21 @@ function formatBytes(bytes) {
 }
 
 /**
+ * Check if a host targets cloud instance metadata endpoints (SSRF guard).
+ * @param {string} host
+ * @returns {boolean}
+ */
+function isCloudMetadataHost(host) {
+  const bare = host ? host.replace(/^\[|\]$/g, '').toLowerCase() : ''
+  if (!bare) return false
+  if (bare === 'metadata.google.internal' || bare.endsWith('.internal')) return true
+  if (bare === '169.254.169.254' || bare.startsWith('169.254.') || bare.startsWith('fe80:')) return true
+  if (bare.startsWith('::ffff:169.254.')) return true
+  if (bare === '100.100.100.200') return true
+  return false
+}
+
+/**
  * Probe an HTTP endpoint reachability and latency.
  * Treats any HTTP status (200, 401, 403, 404, 405) as reachable network connection.
  * @param {string} urlStr
@@ -85,6 +100,22 @@ async function probeEndpoint(urlStr) {
   const start = Date.now()
   try {
     const parsed = new URL(urlStr)
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return {
+        reachable: false,
+        latencyMs: 0,
+        status: 'error',
+        error: `unsupported protocol: ${parsed.protocol}`,
+      }
+    }
+    if (isCloudMetadataHost(parsed.hostname)) {
+      return {
+        reachable: false,
+        latencyMs: 0,
+        status: 'error',
+        error: 'cloud metadata endpoint prohibited',
+      }
+    }
     const probeUrl = `${parsed.protocol}//${parsed.host}`
     const probe = async (method) => {
       const controller = new AbortController()

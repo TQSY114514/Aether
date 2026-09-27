@@ -487,6 +487,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
               existing.added = (existing.added || 0) + (f.added || 0)
               existing.removed = (existing.removed || 0) + (f.removed || 0)
               if (f.status === 'deleted') existing.status = 'deleted'
+              else if (f.status) existing.status = f.status
+              if (f.diff) existing.diff = f.diff
             } else {
               fileMap.set(f.path, { ...f })
             }

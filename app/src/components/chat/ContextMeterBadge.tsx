@@ -79,17 +79,19 @@ export default function ContextMeterBadge() {
       const res = await window.electronAPI.chat.compact(currentSessionId)
       if (res.ok) {
         setCompactedSuccess(true)
-        await useStore.getState().selectSession(currentSessionId)
+        if (useStore.getState().currentSessionId === currentSessionId) {
+          await useStore.getState().selectSession(currentSessionId)
+        }
         useStore.getState().triggerToast(
-          t('chat.compact_success', `上下文已压缩：从 ${res.beforeCount} 条优化为 ${res.afterCount} 条`),
+          t('chat.compact_success', res.beforeCount ?? 0, res.afterCount ?? 0),
           'success'
         )
         setTimeout(() => setCompactedSuccess(false), 3000)
       } else {
-        useStore.getState().triggerToast(res.error || '无需压缩或压缩失败', 'info')
+        useStore.getState().triggerToast(res.error || t('chat.compact_unnecessary', '无需压缩或压缩失败'), 'info')
       }
     } catch (err: any) {
-      useStore.getState().triggerToast(err.message || '压缩失败', 'warning')
+      useStore.getState().triggerToast(err?.message || t('chat.compact_error', '压缩失败'), 'warning')
     } finally {
       setCompacting(false)
     }
