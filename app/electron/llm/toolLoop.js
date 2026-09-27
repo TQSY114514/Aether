@@ -122,7 +122,7 @@ function createTurnFileTracker(wsRoot) {
           path: rel,
           initialExisted: existed,
           initialContent: content,
-          finalContent: null,
+          finalContent: content,
         })
       }
     },
@@ -145,6 +145,13 @@ function createTurnFileTracker(wsRoot) {
       const summary = []
       const { buildUnifiedDiff } = require('../tools/toolImpact')
       for (const [absPath, record] of files.entries()) {
+        try {
+          if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+            record.finalContent = fs.readFileSync(absPath, 'utf-8')
+          } else {
+            record.finalContent = null
+          }
+        } catch {}
         const { path: relPath, initialExisted, initialContent, finalContent } = record
         if (initialContent === finalContent) continue
 

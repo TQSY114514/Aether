@@ -455,7 +455,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       const allMessages = await window.electronAPI.message.list(sessionId)
       const nextSummaries = { ...get().fileSummariesByMessage }
       for (const m of allMessages) {
-        if ((m as any).file_summary && !nextSummaries[m.id]) {
+        if ((m as any).file_summary) {
           try {
             nextSummaries[m.id] = typeof (m as any).file_summary === 'string'
               ? JSON.parse((m as any).file_summary)

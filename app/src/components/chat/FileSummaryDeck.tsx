@@ -102,9 +102,24 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
       if (messageId && sessionId && window.electronAPI?.agentCheckpoint) {
         const checkpoints = await window.electronAPI.agentCheckpoint.list({ sessionId, messageId })
         if (checkpoints && checkpoints.length > 0) {
+          let userConfirmedConflict = false
           for (const cp of checkpoints) {
             if (!cp.rolled_back_at) {
-              const res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId, force: true })
+              let res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId, force: userConfirmedConflict })
+              if (res && !res.success && res.conflict) {
+                if (!userConfirmedConflict) {
+                  const confirmed = window.confirm(
+                    t('filesummary.undo_conflict_confirm', '检测到在此之后的对话轮次中存在更新的文件修改。强制撤销将覆盖后续修改，是否仍要继续？')
+                  )
+                  if (confirmed) {
+                    userConfirmedConflict = true
+                    res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId, force: true })
+                  } else {
+                    failedPaths.push(t('filesummary.undo_conflict_aborted', '检测到后续轮次修改，已取消撤销'))
+                    break
+                  }
+                }
+              }
               if (res && !res.success) {
                 if (Array.isArray(res.failed) && res.failed.length > 0) {
                   failedPaths.push(...res.failed.map((f: any) => typeof f === 'string' ? f : f.path))
@@ -245,12 +260,12 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
             ) : testStatus === 'passed' ? (
               <>
                 <Check size={11} style={{ color: 'var(--success)' }} />
-                <span>{t('filesummary.test_passed', '测试通过')}</span>
+                <span>{t('filesummary.test_status_passed', '测试通过')}</span>
               </>
             ) : testStatus === 'failed' ? (
               <>
                 <AlertCircle size={11} style={{ color: 'var(--error)' }} />
-                <span>{t('filesummary.test_failed', '测试未过')}</span>
+                <span>{t('filesummary.test_status_failed', '测试未过')}</span>
               </>
             ) : (
               <>

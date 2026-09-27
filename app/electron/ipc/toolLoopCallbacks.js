@@ -226,6 +226,10 @@ const DESTRUCTIVE_GIT_PATTERN = /(?:^|\s)(?:clean|push|rebase|merge|reset|rm|res
       return { session, persisted }
     },
     applyPreset(db, preset) {
+      const validPresets = ['safe_git', 'test_runners', 'read_tools']
+      if (!validPresets.includes(preset)) {
+        return { ok: false, error: `unsupported preset: ${preset}`, added: 0 }
+      }
       const targetDb = db || dbRef
       let rules = []
       if (preset === 'safe_git') {

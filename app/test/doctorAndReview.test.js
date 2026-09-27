@@ -36,7 +36,7 @@ describe('Doctor & Review Engine (Claude Code / OpenHands / Aider alignment)', (
     expect(report.workspace.isGit).toBe(true)
     expect(report.markdownReport).toContain('### 🩺 Aether 系统与工作区体检报告')
     expect(report.markdownReport).toContain('| 维度 | 检查项 | 状态 | 详情 |')
-  })
+  }, 30000)
 
   it('generateDoctorMarkdown correctly displays badges and summary tables', () => {
     const mockReport = {

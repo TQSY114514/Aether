@@ -94,6 +94,7 @@ function generateCommitMessage(operation, filePath) {
 
 /**
  * Stage and commit a single file.
+ * Commits the staged index state without a working-tree override, preserving partially staged hunks.
  * @param {string} filePath - Absolute path to file
  * @param {'write'|'edit'|'apply'} operation - Operation type
  * @returns {{success: boolean, message: string, commitMessage: string|null}} Result
@@ -130,8 +131,8 @@ function gitCommit(filePath, operation = 'edit') {
     return { success: false, message: 'nothing to commit', commitMessage: null }
   }
 
-  // Commit
-  const commitResult = runCommandSync('git', ['commit', '-m', commitMessage, '--', filePath], { cwd: gitRoot })
+  // Commit index state directly without working-tree override
+  const commitResult = runCommandSync('git', ['commit', '-m', commitMessage], { cwd: gitRoot })
   if (commitResult.exitCode !== 0) {
     return {
       success: false,
@@ -148,7 +149,7 @@ function gitCommit(filePath, operation = 'edit') {
  * @param {string[]} filePaths - Array of absolute file paths
  * @param {string} cwd - Working directory (usually git root)
  * @param {string} message - Custom commit message (optional)
- * @returns {{success: boolean, message: string}} Result
+ * @returns {{success: boolean, message: string, skipped?: Array, nothingToCommit?: boolean}} Result
  */
 function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes') {
   // Find git root from first file if cwd not a repo
@@ -197,12 +198,8 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
     return { success: false, message: 'nothing to commit', nothingToCommit: true, skipped }
   }
 
-  // Commit with isolated pathspec: pass target files to prevent sweeping pre-staged user changes
-  const commitArgs = ['commit', '-m', message]
-  if (toAdd.length > 0) {
-    commitArgs.push('--', ...toAdd)
-  }
-  const commitResult = runCommandSync('git', commitArgs, { cwd: gitRoot })
+  // Commit index state directly without working-tree override
+  const commitResult = runCommandSync('git', ['commit', '-m', message], { cwd: gitRoot })
   if (commitResult.exitCode !== 0) {
     return {
       success: false,
@@ -213,6 +210,7 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
 
   return { success: true, message: `committed: ${message}`, skipped }
 }
+
 
 /**
  * Get the auto-commit enabled setting from database.
@@ -430,30 +428,42 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     let statRes, diffRes
     if (hasHead) {
       statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: gitRoot })
+      if (statRes.exitCode !== 0) {
+        return { success: false, error: statRes.stderr || 'failed to get git diff stat for working tree' }
+      }
       diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: gitRoot })
+      if (diffRes.exitCode !== 0) {
+        return { success: false, error: diffRes.stderr || 'failed to get git diff for working tree' }
+      }
     } else {
       // In a repository without any commits yet, HEAD does not exist.
       // Gather staged and unstaged diffs directly without referencing HEAD.
       const stagedStat = runCommandSync('git', ['diff', '--cached', '--stat'], { cwd: gitRoot })
+      if (stagedStat.exitCode !== 0) {
+        return { success: false, error: stagedStat.stderr || 'failed to get staged stat' }
+      }
       const unstagedStat = runCommandSync('git', ['diff', '--stat'], { cwd: gitRoot })
+      if (unstagedStat.exitCode !== 0) {
+        return { success: false, error: unstagedStat.stderr || 'failed to get unstaged stat' }
+      }
       statRes = {
         exitCode: 0,
         stdout: [stagedStat.stdout, unstagedStat.stdout].filter(Boolean).join('\n'),
       }
       const stagedDiff = runCommandSync('git', ['diff', '--cached', '--unified=3'], { cwd: gitRoot })
+      if (stagedDiff.exitCode !== 0) {
+        return { success: false, error: stagedDiff.stderr || 'failed to get staged diff' }
+      }
       const unstagedDiff = runCommandSync('git', ['diff', '--unified=3'], { cwd: gitRoot })
+      if (unstagedDiff.exitCode !== 0) {
+        return { success: false, error: unstagedDiff.stderr || 'failed to get unstaged diff' }
+      }
       diffRes = {
         exitCode: 0,
         stdout: [stagedDiff.stdout, unstagedDiff.stdout].filter(Boolean).join('\n\n'),
       }
     }
-    if (statRes.exitCode !== 0 && !statRes.stdout) {
-      return { success: false, error: statRes.stderr || 'failed to get git diff for working tree' }
-    }
     statSummary = (statRes.stdout || '').trim()
-    if (diffRes.exitCode !== 0 && !diffRes.stdout) {
-      return { success: false, error: diffRes.stderr || 'failed to get git diff for working tree' }
-    }
     diffRaw = diffRes.stdout || ''
 
     // Look for untracked files and append their content (safely, excluding secret-like files)
@@ -491,12 +501,12 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
       // Using -m and --first-parent so merge commits (e.g. GitHub Actions PR merge ref) show diff against base
       scopeDesc = `最新提交 (${commitHash})`
       const statRes = runCommandSync('git', ['show', '--stat', '--oneline', '-m', '--first-parent', 'HEAD'], { cwd: gitRoot })
-      if (statRes.exitCode !== 0 && !statRes.stdout) {
+      if (statRes.exitCode !== 0) {
         return { success: false, error: statRes.error || statRes.stderr || 'failed to get commit stat for HEAD' }
       }
       statSummary = (statRes.stdout || '').trim()
       const diffRes = runCommandSync('git', ['show', '-m', '--first-parent', '--unified=3', 'HEAD'], { cwd: gitRoot })
-      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+      if (diffRes.exitCode !== 0) {
         return { success: false, error: diffRes.error || diffRes.stderr || 'failed to get git diff for HEAD' }
       }
       diffRaw = diffRes.stdout || ''
