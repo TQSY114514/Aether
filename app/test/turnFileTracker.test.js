@@ -82,4 +82,17 @@ describe('createTurnFileTracker', () => {
     tracker.afterTool('read_file', { path: 'any.txt' })
     expect(tracker.getSummary()).toBeNull()
   })
+
+  it('does not falsely report existing files as deleted when an edit fails without modifying file', () => {
+    const tracker = createTurnFileTracker(tmpDir)
+    const file = path.join(tmpDir, 'intact.txt')
+    fs.writeFileSync(file, 'original content\nline 2', 'utf-8')
+
+    // beforeTool is invoked before tool execution
+    tracker.beforeTool('edit_file', { path: file })
+    // Tool execution fails: afterTool is NOT called and file is untouched
+    const summary = tracker.getSummary()
+    expect(summary).toBeNull()
+  })
 })
+

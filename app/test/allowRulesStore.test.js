@@ -155,4 +155,17 @@ describe('createAllowRulesStore (Cline & Claude Code style granular auto-approva
     expect(store.match(1, 'run_command', { command: 'git status $(whoami)' })).toBe(false)
     expect(store.match(1, 'run_command', { command: 'git status `id`' })).toBe(false)
   })
+
+  it('applies known presets and rejects unsupported presets with error', () => {
+    const store = createAllowRulesStore(mockDb)
+    const resSafe = store.applyPreset(mockDb, 'safe_git')
+    expect(resSafe.ok).toBe(true)
+    expect(resSafe.added).toBeGreaterThan(0)
+
+    const resUnknown = store.applyPreset(mockDb, 'unknown_preset_xyz')
+    expect(resUnknown.ok).toBe(false)
+    expect(resUnknown.error).toContain('unsupported preset')
+    expect(resUnknown.added).toBe(0)
+  })
 })
+
