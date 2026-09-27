@@ -232,9 +232,9 @@ let _syncTimer = null
 let _syncPromise = null
 let _pendingSyncArgs = null // the most recent args; used when timer fires
 
-async function sync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace }) {
+async function sync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onMemorySaved }) {
   // Always keep the latest args; the debounced call picks them up when it fires.
-  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal, sessionId, workspace }
+  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onMemorySaved }
 
   if (_syncTimer) clearTimeout(_syncTimer)
   _syncTimer = setTimeout(() => {
@@ -267,7 +267,7 @@ function _usedExternalTools(db, sessionId) {
   } catch { return false }
 }
 
-async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onEscalation }) {
+async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onEscalation, onMemorySaved }) {
   try {
     // H5: 本轮消费过 external 工具结果 → 跳过本次入库，防止被污染的外部
     // 内容经提取持久化、再在后续会话中回注（跨会话持久注入）。
@@ -348,6 +348,10 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     const recentKw = recent.map(m => ({ id: m.id, type: m.type || 'fact', kw: keywords(m.content) }))
     const seenBatch = new Set()
 
+    let addedCount = 0
+    let solidifiedCount = 0
+    const recordedPreviews = []
+
     for (const entry of entries.slice(0, 5)) {
       // 同批去重键：非 relation 条目不分类型（[FACT] X 与 [CONTEXT] X 是同一句
       // 话，双双入库就是用户看到的"一字不差重复"）；relation 内容是三元组串，
@@ -363,6 +367,7 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         // 按 id 定位：跨类型（fact 存/context 来）与空白变体也命中。
         try {
           db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?', [dupId])
+          solidifiedCount++
         } catch {}
         continue
       }
@@ -382,6 +387,7 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
           if (dup) {
             try {
               db.run('UPDATE memory SET confidence = MIN(COALESCE(confidence, 1.0) + 0.1, 1.0) WHERE id = ?', [dup.id])
+              solidifiedCount++
             } catch {}
             continue
           }
@@ -399,6 +405,8 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
           } else {
             db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 })
           }
+          addedCount++
+          recordedPreviews.push(entry.content.slice(0, 60))
         } catch {}
       } else {
         // H5: origin 落库 —— 自动提取自会话的记忆标记为 'assistant'，
@@ -412,6 +420,8 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
           // 不是冲突）。仅真正新插入的行才做 origin 落库与冲突连线。
           if (info && info.lastInsertRowid != null && !info.duplicate) {
             const newId = Number(info.lastInsertRowid)
+            addedCount++
+            recordedPreviews.push(entry.content.slice(0, 60))
             try { db.run('UPDATE memory SET origin = ? WHERE id = ?', 'assistant', newId) } catch {}
             // 同批可见性：recentKw 是 sync 开始时的快照，本批刚插入的行不在
             // 其中。若同一次提取返回两条改写版事实（"user likes X" +
@@ -424,7 +434,26 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
             if (entry.type === 'fact') {
               try { detectConflict(db, entry.content, 'fact', newId) } catch {}
             }
+          } else if (info && info.duplicate) {
+            solidifiedCount++
           }
+        } catch {}
+      }
+    }
+    const totalMem = addedCount + solidifiedCount
+    if (totalMem > 0) {
+      const text = `已保存到记忆 ${totalMem} entries${solidifiedCount > 0 ? ` (${addedCount} 新增, ${solidifiedCount} 加固)` : ''}`
+      log.info(`[autoMemory] ${text}`)
+      if (typeof onMemorySaved === 'function') {
+        try {
+          onMemorySaved({
+            sessionId,
+            added: addedCount,
+            solidified: solidifiedCount,
+            total: totalMem,
+            text,
+            previews: recordedPreviews.slice(0, 5),
+          })
         } catch {}
       }
     }

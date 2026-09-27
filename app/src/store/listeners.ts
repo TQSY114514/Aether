@@ -2,6 +2,7 @@ import type { StoreApi } from "zustand"
 import type { AppState } from "./types"
 import type { TaskInfo } from "./types"
 import { taskProgressText, taskApi } from "./types"
+import { t } from "../utils/i18n"
 
 // Lazy store reference - set by initStoreListeners() after store creation.
 let _store: StoreApi<AppState> | null = null
@@ -40,6 +41,9 @@ let _loopStateListenerInstalled = false
 let _planStepListenerInstalled = false
 let _usageListenerInstalled = false
 let _toolStreamListenerInstalled = false
+let _turnSummaryListenerInstalled = false
+let _memorySavedListenerInstalled = false
+let _skillPatchedListenerInstalled = false
 
 // Chunk listener
 
@@ -476,6 +480,36 @@ export function ensureTaskListeners() {
   })
 }
 
+// Turn summary & feedback listeners
+
+export function ensureTurnSummaryListener() {
+  if (_turnSummaryListenerInstalled) return
+  _turnSummaryListenerInstalled = true
+  window.electronAPI.chat.onTurnSummary?.(({ messageId, fileSummary }) => {
+    if (!messageId || !fileSummary) return
+    getStore().getState().setFileSummaryForMessage(messageId, fileSummary)
+  })
+}
+
+export function ensureMemorySavedListener() {
+  if (_memorySavedListenerInstalled) return
+  _memorySavedListenerInstalled = true
+  window.electronAPI.chat.onMemorySaved?.((payload) => {
+    const count = payload.total || payload.added || 1
+    const msg = payload.text || t('memory.saved_toast', String(count))
+    getStore().getState().triggerToast(msg, 'success')
+  })
+}
+
+export function ensureSkillPatchedListener() {
+  if (_skillPatchedListenerInstalled) return
+  _skillPatchedListenerInstalled = true
+  window.electronAPI.chat.onSkillPatched?.((payload) => {
+    const msg = payload.text || t('skill.patched_toast', payload.skillName || '')
+    getStore().getState().triggerToast(msg, 'info')
+  })
+}
+
 // All listeners
 
 export function ensureAllListeners() {
@@ -491,5 +525,8 @@ export function ensureAllListeners() {
   ensureToolStreamListener()
   ensureLoopStateListener()
   ensureUsageListener()
+  ensureTurnSummaryListener()
+  ensureMemorySavedListener()
+  ensureSkillPatchedListener()
   ensureTaskListeners()
 }

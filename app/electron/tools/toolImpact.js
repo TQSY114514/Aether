@@ -258,4 +258,4 @@ function generateAfterSnapshot(name, args) {
   }
 }
 
-module.exports = { toolImpact, generateDiff, generateAfterSnapshot }
+module.exports = { toolImpact, generateDiff, generateAfterSnapshot, buildUnifiedDiff }

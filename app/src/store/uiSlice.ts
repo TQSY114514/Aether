@@ -11,6 +11,7 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
   seenHints: [],
   tasks: [],
   tasksOpen: false,
+  checkpointsOpen: false,
   scores: [],
   toasts: [],
 
@@ -18,7 +19,10 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 
-  dismissToast: (id: number) => set((s) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })),
+  dismissToast: (id: number) => set((s) => ({
+    completionToasts: s.completionToasts.filter((t) => t.id !== id),
+    toasts: s.toasts.filter((t) => t.id !== id),
+  })),
   triggerToast: (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     const id = Date.now() + Math.random()
     set((s) => ({ toasts: [...s.toasts, { id, message, type }] }))
@@ -61,6 +65,7 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
   removeTask: (id) => set((s) => ({ tasks: s.tasks.filter((x) => x.id !== id) })),
 
   setTasksOpen: (v) => set({ tasksOpen: v }),
+  setCheckpointsOpen: (v) => set({ checkpointsOpen: v }),
 
   loadScores: async () => {
     const scores = await window.electronAPI.arena.scores()

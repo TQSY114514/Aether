@@ -23,6 +23,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import CompletionToasts from '@/components/chat/CompletionToasts'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import TaskPanel from '@/components/tasks/TaskPanel'
+import CheckpointTimelineDrawer from '@/components/chat/CheckpointTimelineDrawer'
 import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
 import { useFeatureFlag } from '@/utils/featureFlags'
 import { PanelLeft, ChevronLeft } from 'lucide-react'
@@ -314,6 +315,7 @@ export default function App() {
         </main>
         <CompletionToasts />
         <TaskPanel />
+        <CheckpointTimelineDrawer />
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

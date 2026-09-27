@@ -13,6 +13,7 @@ const { runCommandSync } = require('../tools/exec')
 const { nearestGitRoot } = require('./checkpoints')
 const log = require('../logger')
 const path = require('path')
+const fs = require('fs')
 
 // Configuration setting key stored in DB
 const SETTING_KEY = 'agent_auto_commit_after_file_change'
@@ -93,6 +94,7 @@ function generateCommitMessage(operation, filePath) {
 
 /**
  * Stage and commit a single file.
+ * Commits the staged index state without a working-tree override, preserving partially staged hunks.
  * @param {string} filePath - Absolute path to file
  * @param {'write'|'edit'|'apply'} operation - Operation type
  * @returns {{success: boolean, message: string, commitMessage: string|null}} Result
@@ -129,7 +131,7 @@ function gitCommit(filePath, operation = 'edit') {
     return { success: false, message: 'nothing to commit', commitMessage: null }
   }
 
-  // Commit
+  // Commit index state directly without working-tree override
   const commitResult = runCommandSync('git', ['commit', '-m', commitMessage], { cwd: gitRoot })
   if (commitResult.exitCode !== 0) {
     return {
@@ -147,7 +149,7 @@ function gitCommit(filePath, operation = 'edit') {
  * @param {string[]} filePaths - Array of absolute file paths
  * @param {string} cwd - Working directory (usually git root)
  * @param {string} message - Custom commit message (optional)
- * @returns {{success: boolean, message: string}} Result
+ * @returns {{success: boolean, message: string, skipped?: Array, nothingToCommit?: boolean}} Result
  */
 function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes') {
   // Find git root from first file if cwd not a repo
@@ -196,7 +198,7 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
     return { success: false, message: 'nothing to commit', nothingToCommit: true, skipped }
   }
 
-  // Commit
+  // Commit index state directly without working-tree override
   const commitResult = runCommandSync('git', ['commit', '-m', message], { cwd: gitRoot })
   if (commitResult.exitCode !== 0) {
     return {
@@ -208,6 +210,7 @@ function gitCommitMultiple(filePaths, cwd, message = 'checkpoint: agent changes'
 
   return { success: true, message: `committed: ${message}`, skipped }
 }
+
 
 /**
  * Get the auto-commit enabled setting from database.
@@ -234,6 +237,371 @@ function setAutoCommitEnabled(db, enabled) {
   db.setSetting(SETTING_KEY, enabled ? '1' : '0')
 }
 
+/**
+ * Craft a conventional commit message based on uncommitted changes in gitRoot.
+ * Inspired by Aider's smart commit message crafting.
+ * @param {string} gitRoot
+ * @returns {{ success: boolean, suggestedMessage?: string, files?: string[], error?: string }}
+ */
+function craftCommitMessage(gitRoot) {
+  if (!gitRoot || !isGitRepo(gitRoot)) {
+    return { success: false, error: 'not a git repository' }
+  }
+  const statusRes = runCommandSync('git', ['status', '--porcelain'], { cwd: gitRoot })
+  if (statusRes.exitCode !== 0) {
+    return { success: false, error: statusRes.stderr || 'git status failed' }
+  }
+  const rawStatus = (statusRes.stdout || '').trim()
+  if (!rawStatus) {
+    return { success: false, error: 'nothing to commit (working tree clean)' }
+  }
+
+  const lines = rawStatus.split('\n').filter(Boolean)
+  const files = []
+  for (const line of lines) {
+    const m = line.match(/^.{1,2}\s+(.+)$/)
+    if (m) {
+      const p = m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()
+      files.push(p)
+    }
+  }
+
+  let type = 'feat'
+  let scope = ''
+
+  const allTest = files.length > 0 && files.every(f => /test|\.spec\./i.test(f))
+  const allDocs = files.length > 0 && files.every(f => /\.md$/i.test(f) || f.startsWith('docs/'))
+  const allConfig = files.length > 0 && files.every(f => /(package\.json|tsconfig|\.config\.|pnpm|yarn)/i.test(f))
+
+  if (allTest) {
+    type = 'test'
+  } else if (allDocs) {
+    type = 'docs'
+  } else if (allConfig) {
+    type = 'chore'
+  } else {
+    const diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=1'], { cwd: gitRoot })
+    const diffText = (diffRes.stdout || '').slice(0, 3000).toLowerCase()
+    if (diffText.includes('fix') || diffText.includes('bug') || diffText.includes('error')) {
+      type = 'fix'
+    } else {
+      type = 'feat'
+    }
+  }
+
+  if (files.length > 0) {
+    const f0 = files[0].replace(/\\/g, '/')
+    if (f0.includes('components/chat') || f0.includes('chat.')) scope = 'chat'
+    else if (f0.includes('ipc/')) scope = 'ipc'
+    else if (f0.includes('llm/')) scope = 'llm'
+    else if (f0.includes('tools/')) scope = 'tools'
+    else if (f0.includes('store/')) scope = 'store'
+    else if (f0.includes('utils/')) scope = 'utils'
+    else if (f0.includes('tui/')) scope = 'tui'
+  }
+
+  let summary = ''
+  if (files.length === 1) {
+    const base = path.basename(files[0], path.extname(files[0]))
+    summary = `update ${base}`
+  } else if (files.length <= 3) {
+    const bases = files.map(f => path.basename(f, path.extname(f))).join(', ')
+    summary = `update ${bases}`
+  } else {
+    summary = `update ${files.length} files`
+  }
+
+  const prefix = scope ? `${type}(${scope}): ` : `${type}: `
+  const suggestedMessage = `${prefix}${summary}`
+
+  return {
+    success: true,
+    suggestedMessage,
+    files,
+  }
+}
+
+/**
+ * Commit changes to git working tree.
+ * @param {string} gitRoot
+ * @param {{ message: string, files?: string[] }} options
+ */
+function commitWorkingTree(gitRoot, { message, files }) {
+  if (!gitRoot || !isGitRepo(gitRoot)) {
+    return { success: false, error: 'not a git repository' }
+  }
+  const msg = String(message || '').trim()
+  if (!msg) {
+    return { success: false, error: 'commit message is required' }
+  }
+
+  let targetFiles = files
+  if (!targetFiles || targetFiles.length === 0) {
+    const statusRes = runCommandSync('git', ['status', '--porcelain', '-uall'], { cwd: gitRoot })
+    const candidateFiles = (statusRes.stdout || '').split('\n').filter(Boolean).map(line => {
+      const m = line.match(/^.{1,2}\s+(.+)$/)
+      return m ? (m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()) : null
+    }).filter(Boolean)
+    const dangerous = candidateFiles.filter(f => isSecretLike(f))
+    if (dangerous.length > 0) {
+      log.warn(`[gitAutoCommit] skipped committing secret-like file(s): ${dangerous.join(', ')}`)
+    }
+    targetFiles = candidateFiles.filter(f => !isSecretLike(f))
+    if (targetFiles.length === 0) {
+      return { success: false, error: 'nothing safe to commit (all modified files are secret-like or clean)' }
+    }
+  }
+
+  // Isolate index: preserve any pre-existing unrelated staged files (Qodo finding 1)
+  const stagedRes = runCommandSync('git', ['diff', '--cached', '--name-only'], { cwd: gitRoot })
+  const currentlyStaged = (stagedRes.stdout || '').split('\n').map(s => s.trim().replace(/^[A-Z?!\s]+\s+/, '')).filter(Boolean)
+  const normalizedTarget = (targetFiles || []).map(f => path.relative(gitRoot, f).replace(/\\/g, '/'))
+  const targetSet = new Set([...targetFiles, ...normalizedTarget])
+  const unrelatedStaged = currentlyStaged.filter(f => !targetSet.has(f) && !targetSet.has(path.resolve(gitRoot, f)))
+
+  if (unrelatedStaged.length > 0) {
+    runCommandSync('git', ['reset', '--', ...unrelatedStaged], { cwd: gitRoot })
+  }
+
+  const res = gitCommitMultiple(targetFiles, gitRoot, msg)
+
+  if (unrelatedStaged.length > 0) {
+    runCommandSync('git', ['add', ...unrelatedStaged], { cwd: gitRoot })
+  }
+
+  if (!res.success) {
+    return { success: false, error: res.message || 'git commit failed' }
+  }
+
+  const hashRes = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot })
+  const commitHash = (hashRes.stdout || '').trim() || null
+
+  return {
+    success: true,
+    commitHash,
+    message: msg,
+  }
+}
+
+/**
+ * Extract diff and structured prompt for workspace code review (Aider / Claude Code / Codex).
+ * @param {string} gitRoot
+ * @param {object} [options]
+ * @param {string} [options.targetRef] Optional commit/branch or 'HEAD'
+ * @param {number} [options.maxDiffLines=500] Maximum diff lines before truncation
+ * @param {string} [options.focus] Optional user focus (e.g. 'security', 'performance')
+ * @returns {object}
+ */
+function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}) {
+  const actualRepoRoot = isGitRepo(gitRoot)
+  if (!gitRoot || !actualRepoRoot) {
+    return { success: false, error: 'not a git repository' }
+  }
+  const root = actualRepoRoot
+
+  // Branch and commit info
+  let branch = 'unknown'
+  let commitHash = 'unknown'
+  let hasHead = false
+  try {
+    const headCheck = runCommandSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: root })
+    hasHead = headCheck.exitCode === 0
+    if (hasHead) {
+      const b = runCommandSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root })
+      branch = (b.stdout || '').trim() || 'HEAD'
+      const h = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root })
+      commitHash = (h.stdout || '').trim() || 'HEAD'
+    } else {
+      branch = 'main'
+      commitHash = '(no commits yet)'
+    }
+  } catch {}
+
+  // Check working tree status
+  const statusRes = runCommandSync('git', ['status', '--porcelain'], { cwd: root })
+  const rawStatus = (statusRes.stdout || '').trim()
+  const isClean = !rawStatus
+
+  let statSummary = ''
+  let diffRaw = ''
+  let scopeDesc = ''
+
+  if (targetRef && String(targetRef).trim()) {
+    // Review specific target reference or branch (e.g. HEAD~1, main)
+    const ref = String(targetRef).trim()
+    scopeDesc = `对比引用: ${ref}`
+    const statRes = runCommandSync('git', ['diff', ref, '--stat'], { cwd: root })
+    if (statRes.exitCode !== 0 && !statRes.stdout) {
+      return { success: false, error: statRes.stderr || `failed to get diff stat for ref: ${ref}` }
+    }
+    statSummary = (statRes.stdout || '').trim()
+    const diffRes = runCommandSync('git', ['diff', ref, '--unified=3'], { cwd: root })
+    if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+      return { success: false, error: diffRes.stderr || `failed to get diff for ref: ${ref}` }
+    }
+    diffRaw = diffRes.stdout || ''
+  } else if (!isClean) {
+    // Review uncommitted working tree changes
+    scopeDesc = '工作区待提交改动 (Working Tree Changes)'
+    let statRes, diffRes
+    if (hasHead) {
+      statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: root })
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
+        statRes = runCommandSync('git', ['diff', '--stat'], { cwd: root })
+      }
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
+        return { success: false, error: statRes.stderr || 'failed to get git diff stat for working tree' }
+      }
+      diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: root })
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+        diffRes = runCommandSync('git', ['diff', '--unified=3'], { cwd: root })
+      }
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+        return { success: false, error: diffRes.stderr || 'failed to get git diff for working tree' }
+      }
+    } else {
+      // In a repository without any commits yet, HEAD does not exist.
+      // Gather staged and unstaged diffs directly without referencing HEAD.
+      const stagedStat = runCommandSync('git', ['diff', '--cached', '--stat'], { cwd: root })
+      if (stagedStat.exitCode !== 0 && !stagedStat.stdout) {
+        return { success: false, error: stagedStat.stderr || 'failed to get staged stat' }
+      }
+      const unstagedStat = runCommandSync('git', ['diff', '--stat'], { cwd: root })
+      if (unstagedStat.exitCode !== 0 && !unstagedStat.stdout) {
+        return { success: false, error: unstagedStat.stderr || 'failed to get unstaged stat' }
+      }
+      statRes = {
+        exitCode: 0,
+        stdout: [stagedStat.stdout, unstagedStat.stdout].filter(Boolean).join('\n'),
+      }
+      const stagedDiff = runCommandSync('git', ['diff', '--cached', '--unified=3'], { cwd: root })
+      if (stagedDiff.exitCode !== 0 && !stagedDiff.stdout) {
+        return { success: false, error: stagedDiff.stderr || 'failed to get staged diff' }
+      }
+      const unstagedDiff = runCommandSync('git', ['diff', '--unified=3'], { cwd: root })
+      if (unstagedDiff.exitCode !== 0 && !unstagedDiff.stdout) {
+        return { success: false, error: unstagedDiff.stderr || 'failed to get unstaged diff' }
+      }
+      diffRes = {
+        exitCode: 0,
+        stdout: [stagedDiff.stdout, unstagedDiff.stdout].filter(Boolean).join('\n\n'),
+      }
+    }
+    statSummary = (statRes.stdout || '').trim()
+    diffRaw = diffRes.stdout || ''
+
+    // Look for untracked files and append their content (safely, excluding secret-like files)
+    const untrackedLines = rawStatus.split('\n')
+      .filter(l => l.startsWith('??'))
+      .map(l => l.slice(3).trim().replace(/^"(.*)"$/, '$1'))
+      .filter(f => !isSecretLike(f))
+
+    if (untrackedLines.length > 0) {
+      statSummary = (statSummary ? statSummary + '\n' : '') + `Untracked new files (${untrackedLines.length}):\n${untrackedLines.slice(0, 10).map(f => ' ' + f).join('\n')}`
+      const untrackedDiffs = []
+      for (const relPath of untrackedLines.slice(0, 10)) {
+        const absPath = path.resolve(root, relPath)
+        try {
+          if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+            const size = fs.statSync(absPath).size
+            if (size <= 50 * 1024) { // Only embed reasonable text files (<50KB)
+              const content = fs.readFileSync(absPath, 'utf8')
+              untrackedDiffs.push(`diff --git a/${relPath} b/${relPath} (new file)\n--- /dev/null\n+++ b/${relPath}\n${content.split('\n').map(l => '+' + l).join('\n')}`)
+            }
+          }
+        } catch {}
+      }
+      if (untrackedDiffs.length > 0) {
+        diffRaw = (diffRaw ? diffRaw + '\n\n' : '') + untrackedDiffs.join('\n\n')
+      }
+    }
+  } else {
+    // Working tree is completely clean: review latest commit
+    if (!hasHead) {
+      scopeDesc = '空仓库 (尚未创建任何提交)'
+      statSummary = '(无提交记录)'
+      diffRaw = '(仓库暂无提交且工作区完全干净)'
+    } else {
+      // Using -m and --first-parent so merge commits (e.g. GitHub Actions PR merge ref) show diff against base
+      scopeDesc = `最新提交 (${commitHash})`
+      let statRes = runCommandSync('git', ['show', '--stat', '--oneline', '-m', '--first-parent', 'HEAD'], { cwd: root })
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
+        statRes = runCommandSync('git', ['show', '--stat', '--oneline', 'HEAD'], { cwd: root })
+      }
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
+        return { success: false, error: statRes.error || statRes.stderr || 'failed to get commit stat for HEAD' }
+      }
+      statSummary = (statRes.stdout || '').trim()
+
+      let diffRes = runCommandSync('git', ['show', '-m', '--first-parent', '--unified=3', 'HEAD'], { cwd: root })
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+        diffRes = runCommandSync('git', ['show', '--unified=3', 'HEAD'], { cwd: root })
+      }
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+        return { success: false, error: diffRes.error || diffRes.stderr || 'failed to get git diff for HEAD' }
+      }
+      diffRaw = diffRes.stdout || ''
+      if (diffRes.truncated) {
+        statSummary = (statSummary ? statSummary + '\n' : '') + '[Warning: Git diff exceeded buffer limit]'
+      }
+    }
+  }
+
+  if (!diffRaw.trim()) {
+    diffRaw = '(当前基准与上一个版本之间未发现代码文件内容变更)'
+  }
+
+  // Truncate diff if excessive
+  const lines = diffRaw.split('\n')
+  let isTruncated = false
+  let truncatedDiff = diffRaw
+  if (lines.length > maxDiffLines) {
+    isTruncated = true
+    truncatedDiff = lines.slice(0, maxDiffLines).join('\n') + `\n\n... [Diff 截断：已展示前 ${maxDiffLines} 行，总行数: ${lines.length}]`
+  }
+
+  const focusNotice = focus ? `\n> 🎯 **用户特别关注维度**：${focus}\n` : ''
+
+  const suggestedReviewPrompt = `请作为资深代码评审专家 (Senior Staff Code Reviewer) 对以下代码改动进行多维度深度审查：
+
+${focusNotice}
+### 审查重点与标准
+1. **正确性与缺陷 (Bugs & Regressions)**：逻辑漏洞、边界条件遗漏、空指针/未定义引用、并发/竞态、资源泄露。
+2. **安全性 (Security)**：密钥/敏感凭证泄露风险、未清洗的输入、SQL注入/命令注入隐患。
+3. **架构与工程规范 (Design & Architecture)**：职责分离、异常处理与优雅降级、是否违反现有约定 (如 CommonJS/ESM 规范、IPC 三件套契约)。
+4. **性能与健壮性 (Performance & Reliability)**：无谓的高频重渲染、阻塞操作、缺少重试或超时机制。
+5. **具体修改建议 (Actionable Suggestions)**：提供精准的行号定位与精简的 drop-in 修复代码补丁。
+
+---
+
+### 改动概览
+- **分支/基准**: \`${branch}\` (\`${commitHash}\`)
+- **审查范围**: ${scopeDesc}
+- **统计摘要**:
+\`\`\`
+${statSummary || '无统计差异'}
+\`\`\`
+
+### 详细 Diff
+\`\`\`diff
+${truncatedDiff || '(未检测到代码 Diff 内容)'}
+\`\`\`
+`
+
+  return {
+    success: true,
+    branch,
+    commitHash,
+    isClean,
+    scopeDesc,
+    statSummary,
+    diffText: truncatedDiff,
+    isTruncated,
+    totalDiffLines: lines.length,
+    suggestedReviewPrompt,
+  }
+}
+
 module.exports = {
   isGitRepo,
   isSecretLike,
@@ -244,6 +612,9 @@ module.exports = {
   gitCommitMultiple,
   getAutoCommitEnabled,
   setAutoCommitEnabled,
+  craftCommitMessage,
+  commitWorkingTree,
+  getDiffForReview,
   SETTING_KEY,
   DEFAULT_ENABLED,
 }

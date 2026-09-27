@@ -147,6 +147,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         todosByMessage: cleanMap(s.todosByMessage),
         thinkingBlocksByMessage: cleanMap(s.thinkingBlocksByMessage),
         statusLinesByMessage: cleanMap(s.statusLinesByMessage),
+        fileSummariesByMessage: cleanMap(s.fileSummariesByMessage || {}),
         ...(currentSessionId === id ? { currentSessionId: null, messages: [] } : {}),
       }
     })
