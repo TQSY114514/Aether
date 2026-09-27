@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { diagnoseSystem, formatBytes, probeCliTool, generateDoctorMarkdown } from '../electron/system/doctor'
+import { diagnoseSystem, formatBytes, probeCliTool, probeEndpoint, generateDoctorMarkdown } from '../electron/system/doctor'
 import { getDiffForReview } from '../electron/llm/gitAutoCommit'
 import path from 'path'
+import fs from 'fs'
+import cp from 'child_process'
 
 describe('Doctor & Review Engine (Claude Code / OpenHands / Aider alignment)', () => {
   it('formatBytes formats zero and various binary magnitudes correctly', () => {
@@ -89,5 +91,33 @@ describe('Doctor & Review Engine (Claude Code / OpenHands / Aider alignment)', (
     expect(res.suggestedReviewPrompt).toContain('正确性与缺陷 (Bugs & Regressions)')
     expect(res.suggestedReviewPrompt).toContain('安全性 (Security)')
     expect(res.suggestedReviewPrompt).toContain('架构与工程规范 (Design & Architecture)')
+  })
+
+  it('probeEndpoint blocks cloud metadata endpoints and non-HTTP protocols', async () => {
+    const res1 = await probeEndpoint('http://169.254.169.254/latest/meta-data/')
+    expect(res1.reachable).toBe(false)
+    expect(res1.error).toContain('cloud metadata')
+
+    const res2 = await probeEndpoint('http://metadata.google.internal/computeMetadata/v1/')
+    expect(res2.reachable).toBe(false)
+    expect(res2.error).toContain('cloud metadata')
+
+    const res3 = await probeEndpoint('file:///etc/passwd')
+    expect(res3.reachable).toBe(false)
+    expect(res3.error).toContain('unsupported protocol')
+  })
+
+  it('getDiffForReview gracefully handles empty git repository without HEAD', () => {
+    const tmpDir = fs.mkdtempSync(path.join(__dirname, 'tmp-review-nohead-'))
+    try {
+      cp.execSync('git init', { cwd: tmpDir })
+      const res = getDiffForReview(tmpDir)
+      expect(res.success).toBe(true)
+      expect(res.commitHash).toBe('(no commits yet)')
+      expect(res.scopeDesc).toContain('空仓库')
+      expect(res.diffText).toBeDefined()
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 })

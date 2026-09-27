@@ -158,23 +158,23 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     setTesting(true)
     setTestStatus('idle')
     try {
-      useStore.getState().triggerToast('正在运行项目测试套件...', 'info')
+      useStore.getState().triggerToast(t('filesummary.testing_in_progress', '正在运行项目测试套件...'), 'info')
       const res = await window.electronAPI.chat.test({ sessionId: sessionId || undefined })
       if (res.ok || res.passed) {
         setTestStatus('passed')
-        useStore.getState().triggerToast(`测试通过 (${res.command}, ${res.durationMs}ms)`, 'success')
+        useStore.getState().triggerToast(t('filesummary.test_passed', res.command || '', res.durationMs ?? 0), 'success')
       } else {
         setTestStatus('failed')
-        useStore.getState().triggerToast(`测试未通过 (${res.command})`, 'error')
+        useStore.getState().triggerToast(t('filesummary.test_failed', res.command || ''), 'error')
         if (sessionId && res.suggestedRepairPrompt) {
-          if (window.confirm('项目测试未通过，是否让 Agent 自动分析并修复报错？')) {
+          if (window.confirm(t('filesummary.test_confirm_repair', '项目测试未通过，是否让 Agent 自动分析并修复报错？'))) {
             useStore.getState().sendMessage(res.suggestedRepairPrompt)
           }
         }
       }
     } catch (err: any) {
       setTestStatus('failed')
-      useStore.getState().triggerToast(`测试执行异常: ${err?.message || 'Error'}`, 'error')
+      useStore.getState().triggerToast(t('filesummary.test_error', err?.message || 'Error'), 'error')
     } finally {
       setTesting(false)
     }

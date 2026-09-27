@@ -91,16 +91,18 @@ export default function ContextBar() {
             try {
               const res = await window.electronAPI.chat.compact(currentSessionId)
               if (res.ok) {
-                await useStore.getState().loadMessages(currentSessionId)
+                if (useStore.getState().currentSessionId === currentSessionId) {
+                  await useStore.getState().loadMessages(currentSessionId)
+                }
                 useStore.getState().triggerToast(
-                  t('chat.compact_success', `上下文已压缩：从 ${res.beforeCount} 条优化为 ${res.afterCount} 条`),
+                  t('chat.compact_success', res.beforeCount ?? 0, res.afterCount ?? 0),
                   'success'
                 )
               } else {
                 useStore.getState().triggerToast(res.error || t('chat.compact_unnecessary', '无需压缩或压缩失败'), 'info')
               }
             } catch (err: any) {
-              useStore.getState().triggerToast(err?.message || 'Compact error', 'warning')
+              useStore.getState().triggerToast(err?.message || t('chat.compact_error', '压缩失败'), 'warning')
             }
           }}
           title={t('chat.compact_hint')}

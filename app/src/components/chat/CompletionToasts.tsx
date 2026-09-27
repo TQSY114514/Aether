@@ -1,4 +1,5 @@
 import { useStore } from '@/store'
+import { t } from '@/utils/i18n'
 import { Bell, X, CheckCircle2, AlertTriangle, AlertCircle, Info, Sparkles } from 'lucide-react'
 
 export default function CompletionToasts() {
@@ -49,7 +50,7 @@ export default function CompletionToasts() {
               dismiss(toast.id)
             }}
             className="p-0.5 rounded hover:bg-[var(--border)] transition-colors shrink-0"
-            aria-label="Dismiss notification"
+            aria-label={t('common.dismiss_notification', '关闭通知')}
           >
             <X size={10} style={{ color: 'var(--text-muted)' }} />
           </button>
@@ -71,7 +72,7 @@ export default function CompletionToasts() {
           <button
             onClick={() => dismiss(toast.id)}
             className="p-0.5 rounded hover:bg-[var(--border)] transition-colors shrink-0"
-            aria-label="Dismiss toast"
+            aria-label={t('common.dismiss', '关闭')}
           >
             <X size={10} style={{ color: 'var(--text-muted)' }} />
           </button>
