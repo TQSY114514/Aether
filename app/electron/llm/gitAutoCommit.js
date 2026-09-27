@@ -259,7 +259,7 @@ function craftCommitMessage(gitRoot) {
   const lines = rawStatus.split('\n').filter(Boolean)
   const files = []
   for (const line of lines) {
-    const m = line.match(/^.{2}\s+(.+)$/)
+    const m = line.match(/^.{1,2}\s+(.+)$/)
     if (m) {
       const p = m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()
       files.push(p)
@@ -339,7 +339,7 @@ function commitWorkingTree(gitRoot, { message, files }) {
   if (!targetFiles || targetFiles.length === 0) {
     const statusRes = runCommandSync('git', ['status', '--porcelain', '-uall'], { cwd: gitRoot })
     const candidateFiles = (statusRes.stdout || '').split('\n').filter(Boolean).map(line => {
-      const m = line.match(/^.{2}\s+(.+)$/)
+      const m = line.match(/^.{1,2}\s+(.+)$/)
       return m ? (m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()) : null
     }).filter(Boolean)
     const dangerous = candidateFiles.filter(f => isSecretLike(f))
@@ -352,7 +352,23 @@ function commitWorkingTree(gitRoot, { message, files }) {
     }
   }
 
+  // Isolate index: preserve any pre-existing unrelated staged files (Qodo finding 1)
+  const stagedRes = runCommandSync('git', ['diff', '--cached', '--name-only'], { cwd: gitRoot })
+  const currentlyStaged = (stagedRes.stdout || '').split('\n').map(s => s.trim().replace(/^[A-Z?!\s]+\s+/, '')).filter(Boolean)
+  const normalizedTarget = (targetFiles || []).map(f => path.relative(gitRoot, f).replace(/\\/g, '/'))
+  const targetSet = new Set([...targetFiles, ...normalizedTarget])
+  const unrelatedStaged = currentlyStaged.filter(f => !targetSet.has(f) && !targetSet.has(path.resolve(gitRoot, f)))
+
+  if (unrelatedStaged.length > 0) {
+    runCommandSync('git', ['reset', '--', ...unrelatedStaged], { cwd: gitRoot })
+  }
+
   const res = gitCommitMultiple(targetFiles, gitRoot, msg)
+
+  if (unrelatedStaged.length > 0) {
+    runCommandSync('git', ['add', ...unrelatedStaged], { cwd: gitRoot })
+  }
+
   if (!res.success) {
     return { success: false, error: res.message || 'git commit failed' }
   }
@@ -377,21 +393,23 @@ function commitWorkingTree(gitRoot, { message, files }) {
  * @returns {object}
  */
 function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}) {
-  if (!gitRoot || !isGitRepo(gitRoot)) {
+  const actualRepoRoot = isGitRepo(gitRoot)
+  if (!gitRoot || !actualRepoRoot) {
     return { success: false, error: 'not a git repository' }
   }
+  const root = actualRepoRoot
 
   // Branch and commit info
   let branch = 'unknown'
   let commitHash = 'unknown'
   let hasHead = false
   try {
-    const headCheck = runCommandSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: gitRoot })
+    const headCheck = runCommandSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: root })
     hasHead = headCheck.exitCode === 0
     if (hasHead) {
-      const b = runCommandSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: gitRoot })
+      const b = runCommandSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root })
       branch = (b.stdout || '').trim() || 'HEAD'
-      const h = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: gitRoot })
+      const h = runCommandSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root })
       commitHash = (h.stdout || '').trim() || 'HEAD'
     } else {
       branch = 'main'
@@ -400,7 +418,7 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
   } catch {}
 
   // Check working tree status
-  const statusRes = runCommandSync('git', ['status', '--porcelain'], { cwd: gitRoot })
+  const statusRes = runCommandSync('git', ['status', '--porcelain'], { cwd: root })
   const rawStatus = (statusRes.stdout || '').trim()
   const isClean = !rawStatus
 
@@ -412,13 +430,13 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     // Review specific target reference or branch (e.g. HEAD~1, main)
     const ref = String(targetRef).trim()
     scopeDesc = `对比引用: ${ref}`
-    const statRes = runCommandSync('git', ['diff', ref, '--stat'], { cwd: gitRoot })
-    if (statRes.exitCode !== 0) {
+    const statRes = runCommandSync('git', ['diff', ref, '--stat'], { cwd: root })
+    if (statRes.exitCode !== 0 && !statRes.stdout) {
       return { success: false, error: statRes.stderr || `failed to get diff stat for ref: ${ref}` }
     }
     statSummary = (statRes.stdout || '').trim()
-    const diffRes = runCommandSync('git', ['diff', ref, '--unified=3'], { cwd: gitRoot })
-    if (diffRes.exitCode !== 0) {
+    const diffRes = runCommandSync('git', ['diff', ref, '--unified=3'], { cwd: root })
+    if (diffRes.exitCode !== 0 && !diffRes.stdout) {
       return { success: false, error: diffRes.stderr || `failed to get diff for ref: ${ref}` }
     }
     diffRaw = diffRes.stdout || ''
@@ -427,35 +445,41 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     scopeDesc = '工作区待提交改动 (Working Tree Changes)'
     let statRes, diffRes
     if (hasHead) {
-      statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: gitRoot })
-      if (statRes.exitCode !== 0) {
+      statRes = runCommandSync('git', ['diff', 'HEAD', '--stat'], { cwd: root })
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
+        statRes = runCommandSync('git', ['diff', '--stat'], { cwd: root })
+      }
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
         return { success: false, error: statRes.stderr || 'failed to get git diff stat for working tree' }
       }
-      diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: gitRoot })
-      if (diffRes.exitCode !== 0) {
+      diffRes = runCommandSync('git', ['diff', 'HEAD', '--unified=3'], { cwd: root })
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+        diffRes = runCommandSync('git', ['diff', '--unified=3'], { cwd: root })
+      }
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
         return { success: false, error: diffRes.stderr || 'failed to get git diff for working tree' }
       }
     } else {
       // In a repository without any commits yet, HEAD does not exist.
       // Gather staged and unstaged diffs directly without referencing HEAD.
-      const stagedStat = runCommandSync('git', ['diff', '--cached', '--stat'], { cwd: gitRoot })
-      if (stagedStat.exitCode !== 0) {
+      const stagedStat = runCommandSync('git', ['diff', '--cached', '--stat'], { cwd: root })
+      if (stagedStat.exitCode !== 0 && !stagedStat.stdout) {
         return { success: false, error: stagedStat.stderr || 'failed to get staged stat' }
       }
-      const unstagedStat = runCommandSync('git', ['diff', '--stat'], { cwd: gitRoot })
-      if (unstagedStat.exitCode !== 0) {
+      const unstagedStat = runCommandSync('git', ['diff', '--stat'], { cwd: root })
+      if (unstagedStat.exitCode !== 0 && !unstagedStat.stdout) {
         return { success: false, error: unstagedStat.stderr || 'failed to get unstaged stat' }
       }
       statRes = {
         exitCode: 0,
         stdout: [stagedStat.stdout, unstagedStat.stdout].filter(Boolean).join('\n'),
       }
-      const stagedDiff = runCommandSync('git', ['diff', '--cached', '--unified=3'], { cwd: gitRoot })
-      if (stagedDiff.exitCode !== 0) {
+      const stagedDiff = runCommandSync('git', ['diff', '--cached', '--unified=3'], { cwd: root })
+      if (stagedDiff.exitCode !== 0 && !stagedDiff.stdout) {
         return { success: false, error: stagedDiff.stderr || 'failed to get staged diff' }
       }
-      const unstagedDiff = runCommandSync('git', ['diff', '--unified=3'], { cwd: gitRoot })
-      if (unstagedDiff.exitCode !== 0) {
+      const unstagedDiff = runCommandSync('git', ['diff', '--unified=3'], { cwd: root })
+      if (unstagedDiff.exitCode !== 0 && !unstagedDiff.stdout) {
         return { success: false, error: unstagedDiff.stderr || 'failed to get unstaged diff' }
       }
       diffRes = {
@@ -476,7 +500,7 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
       statSummary = (statSummary ? statSummary + '\n' : '') + `Untracked new files (${untrackedLines.length}):\n${untrackedLines.slice(0, 10).map(f => ' ' + f).join('\n')}`
       const untrackedDiffs = []
       for (const relPath of untrackedLines.slice(0, 10)) {
-        const absPath = path.resolve(gitRoot, relPath)
+        const absPath = path.resolve(root, relPath)
         try {
           if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
             const size = fs.statSync(absPath).size
@@ -500,13 +524,20 @@ function getDiffForReview(gitRoot, { targetRef, maxDiffLines = 500, focus } = {}
     } else {
       // Using -m and --first-parent so merge commits (e.g. GitHub Actions PR merge ref) show diff against base
       scopeDesc = `最新提交 (${commitHash})`
-      const statRes = runCommandSync('git', ['show', '--stat', '--oneline', '-m', '--first-parent', 'HEAD'], { cwd: gitRoot })
-      if (statRes.exitCode !== 0) {
+      let statRes = runCommandSync('git', ['show', '--stat', '--oneline', '-m', '--first-parent', 'HEAD'], { cwd: root })
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
+        statRes = runCommandSync('git', ['show', '--stat', '--oneline', 'HEAD'], { cwd: root })
+      }
+      if (statRes.exitCode !== 0 && !statRes.stdout) {
         return { success: false, error: statRes.error || statRes.stderr || 'failed to get commit stat for HEAD' }
       }
       statSummary = (statRes.stdout || '').trim()
-      const diffRes = runCommandSync('git', ['show', '-m', '--first-parent', '--unified=3', 'HEAD'], { cwd: gitRoot })
-      if (diffRes.exitCode !== 0) {
+
+      let diffRes = runCommandSync('git', ['show', '-m', '--first-parent', '--unified=3', 'HEAD'], { cwd: root })
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
+        diffRes = runCommandSync('git', ['show', '--unified=3', 'HEAD'], { cwd: root })
+      }
+      if (diffRes.exitCode !== 0 && !diffRes.stdout) {
         return { success: false, error: diffRes.error || diffRes.stderr || 'failed to get git diff for HEAD' }
       }
       diffRaw = diffRes.stdout || ''
