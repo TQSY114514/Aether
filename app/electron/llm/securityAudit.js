@@ -37,6 +37,7 @@ function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailabl
     } catch {
       hasDocker = false
     }
+  }
   const hasWinJob = process.platform === 'win32'
   const sandboxAvailable = hasDocker || hasWinJob
 
