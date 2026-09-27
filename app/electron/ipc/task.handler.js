@@ -55,14 +55,28 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
             wc.send('task:done', evt.payload)
             // 后台任务完成 → 系统通知（仅当窗口不可见/最小化时, 不打扰前台用户）
             try {
-              const { Notification } = require('electron')
+              const { Notification, BrowserWindow } = require('electron')
               if (Notification.isSupported() && !wc.isFocused()) {
                 const content = evt.payload && evt.payload.finalContent ? String(evt.payload.finalContent).slice(0, 80) : ''
-                new Notification({
+                const n = new Notification({
                   title: 'Aether 任务完成',
                   body: content || '后台任务已完成',
-                  silent: true,
-                }).show()
+                  silent: false,
+                })
+                n.on('click', () => {
+                  try {
+                    const win = BrowserWindow.fromWebContents(wc) || BrowserWindow.getAllWindows()[0]
+                    if (win) {
+                      if (win.isMinimized()) win.restore()
+                      win.show()
+                      win.focus()
+                    }
+                    if (evt.payload?.sessionId && !wc.isDestroyed()) {
+                      wc.send('session:switch-requested', { sessionId: Number(evt.payload.sessionId), taskId: String(taskId) })
+                    }
+                  } catch {}
+                })
+                n.show()
               }
             } catch {}
           } else if (evt.type === 'cancelled') {
@@ -70,14 +84,28 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
           } else if (evt.type === 'error') {
             wc.send('task:error', evt.payload)
             try {
-              const { Notification } = require('electron')
+              const { Notification, BrowserWindow } = require('electron')
               if (Notification.isSupported() && !wc.isFocused()) {
                 const errMsg = evt.payload && evt.payload.errorMsg ? String(evt.payload.errorMsg).slice(0, 80) : '任务失败'
-                new Notification({
+                const n = new Notification({
                   title: 'Aether 任务失败',
                   body: errMsg,
-                  silent: true,
-                }).show()
+                  silent: false,
+                })
+                n.on('click', () => {
+                  try {
+                    const win = BrowserWindow.fromWebContents(wc) || BrowserWindow.getAllWindows()[0]
+                    if (win) {
+                      if (win.isMinimized()) win.restore()
+                      win.show()
+                      win.focus()
+                    }
+                    if (evt.payload?.sessionId && !wc.isDestroyed()) {
+                      wc.send('session:switch-requested', { sessionId: Number(evt.payload.sessionId), taskId: String(taskId) })
+                    }
+                  } catch {}
+                })
+                n.show()
               }
             } catch {}
           }

@@ -110,11 +110,17 @@ const sdk = {
   // Pre-Push Review & Defense Pipeline
   prePushGuard: require('../tools/prePushGuard'),
 
+  // Adaptive Patch Routing
+  adaptivePatch: require('../llm/adaptivePatch'),
+
   classifyAgentMode,
 }
 
 // todo 10/13 延后挂载（存在才暴露，缺省时 undefined）
 try { sdk.rpc = require('../llm/rpc/frames.js') } catch { /* rpc frames land in todo 10 */ }
 try { sdk.sessionContext = require('../llm/sessionContext.js') } catch { /* sessionContext lands in todo 13 */ }
+try { sdk.acp = require('../llm/rpc/acpServer.js') } catch { /* acp server */ }
+try { sdk.pipeIpc = require('../llm/rpc/pipeIpc.js') } catch {}
+try { sdk.a2a = require('../llm/rpc/a2aProtocol.js') } catch {}
 
 module.exports = sdk

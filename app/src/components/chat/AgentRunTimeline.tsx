@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import { useStore } from '@/store'
+import { useUI } from '@/components/ui/feedback'
 
 interface AuditLogEntry {
   id: number
@@ -74,11 +75,17 @@ export default function AgentRunTimeline({
   const [rollingBack, setRollingBack] = useState(false)
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({})
   const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({})
+  const { confirm } = useUI()
 
   const handleRollback = async () => {
-    if (!window.confirm(t('agent.timeline.rollback_confirm', '确定要撤销 Agent 上一次对工作区进行的修改吗？'))) {
-      return
-    }
+    const ok = await confirm({
+      title: t('agent.timeline.rollback_title', '撤销修改'),
+      description: t('agent.timeline.rollback_confirm', '确定要撤销 Agent 上一次对工作区进行的修改吗？'),
+      danger: true,
+      confirmText: t('common.rollback', '撤销'),
+      cancelText: t('common.cancel', '取消'),
+    })
+    if (!ok) return
     setRollingBack(true)
     try {
       const res = await useStore.getState().undoLastAction()

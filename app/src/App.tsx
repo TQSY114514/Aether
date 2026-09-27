@@ -20,7 +20,7 @@ import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
 import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import CompletionToasts from '@/components/chat/CompletionToasts'
+import { useUI } from '@/components/ui/feedback'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import TaskPanel from '@/components/tasks/TaskPanel'
 import CheckpointTimelineDrawer from '@/components/chat/CheckpointTimelineDrawer'
@@ -59,6 +59,7 @@ export default function App() {
   const selectSession = useStore((s) => s.selectSession)
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const { confirm } = useUI()
   const mainRef = useRef<HTMLDivElement>(null)
   const shortcutsOpenRef = useRef(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -212,7 +213,12 @@ export default function App() {
       if (payload.action === 'open' && payload.workspace) {
         // M6（2026-08 安全审计）：深链可静默切换 agent 工作区，先展示完整
         // 路径让用户确认；取消则不发生任何变更。
-        const ok = window.confirm(`是否将 Aether 的 Agent 工作区切换到：\n${payload.workspace}`)
+        const ok = await confirm({
+          title: '切换工作区',
+          description: `是否将 Aether 的 Agent 工作区切换到：\n${payload.workspace}`,
+          confirmText: '切换',
+          cancelText: '取消',
+        })
         if (!ok) return
         // 右键/协议「用 Aether 打开文件夹」→ 设为 agent 工作区 + 新建会话
         try { await window.electronAPI?.agent?.setWorkspace?.({ dir: payload.workspace }) } catch {}
@@ -223,6 +229,17 @@ export default function App() {
         useStore.getState().newChat()
       }
       // 'tui' 动作属终端形态，桌面无对应 UI，忽略
+    })
+    return () => off?.()
+  }, [])
+
+  // Listen for system notification click navigation (P0-4)
+  useEffect(() => {
+    const off = window.electronAPI?.system?.onSwitchSession?.(async (payload) => {
+      if (payload?.sessionId) {
+        await useStore.getState().selectSession(payload.sessionId)
+        useStore.getState().setCurrentView('chat')
+      }
     })
     return () => off?.()
   }, [])
@@ -313,7 +330,6 @@ export default function App() {
             {renderPage()}
           </div>
         </main>
-        <CompletionToasts />
         <TaskPanel />
         <CheckpointTimelineDrawer />
         <PermissionDialog />

@@ -173,6 +173,7 @@ function persist(record) {
       result: record.finalContent ?? null,
       attempts: record.attempts,
       max_retry: record.maxRetry,
+      tool_journal: record.toolJournal && record.toolJournal.length ? JSON.stringify(record.toolJournal) : null,
     })
   } catch (err) { log.warn(`backgroundTasks: persist failed: ${err.message}`) }
 }
@@ -385,6 +386,12 @@ async function runTask(record) {
       messageId: msgId,
       db,
       autoCommit: false,
+      toolJournal: record.toolJournal || [],
+      onJournalEntry: (entry) => {
+        if (!record.toolJournal) record.toolJournal = []
+        record.toolJournal.push(entry)
+        persist(record)
+      },
       waitIfPaused: async () => {
         if (record.status === 'paused') {
           await gate.promise      // waits until resume (release) or abort (reject)
@@ -533,6 +540,7 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
     createdAt: Date.now(),
     finalContent: null,
     error: null,
+    toolJournal: [],
     controller: null,
     gate: null,
     emit,
@@ -655,7 +663,9 @@ function getTask(taskId, db) {
       content: r.content, modelId: r.model_id, agentMode: r.agent_mode,
       priority: r.priority, attempts: r.attempts, maxRetry: r.max_retry,
       createdAt: new Date(r.created_at).getTime(),
-      finalContent: r.result, error: r.error, controller: null, emit: noopEmit,
+      finalContent: r.result, error: r.error,
+      toolJournal: r.tool_journal ? (() => { try { return JSON.parse(r.tool_journal) } catch { return [] } })() : [],
+      controller: null, emit: noopEmit,
     }
   }
   return null
@@ -682,6 +692,7 @@ function rowToRecord(r) {
     createdAt: new Date(r.created_at).getTime(),
     finalContent: r.result,
     error: r.error,
+    toolJournal: r.tool_journal ? (() => { try { return JSON.parse(r.tool_journal) } catch { return [] } })() : [],
     controller: null,
     gate: null,
     emit: noopEmit,

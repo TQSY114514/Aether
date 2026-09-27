@@ -37,7 +37,18 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
   notifyComplete: (sessionId: number, sessionTitle: string) => {
     const id = Date.now() + Math.random()
     set((s) => ({ completionToasts: [...s.completionToasts, { id, sessionId, sessionTitle }] }))
-    setTimeout(() => set((s) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })), 3000)
+    setTimeout(() => set((s) => ({ completionToasts: s.completionToasts.filter((t) => t.id !== id) })), 4000)
+
+    try {
+      const isBackgrounded = typeof document !== 'undefined' && (document.hidden || !document.hasFocus())
+      if (isBackgrounded && window.electronAPI?.system?.notify) {
+        window.electronAPI.system.notify({
+          title: 'Aether 任务完成',
+          body: sessionTitle ? `会话「${sessionTitle}」已完成执行` : '后台任务已执行完毕',
+          sessionId,
+        }).catch(() => {})
+      }
+    } catch {}
   },
 
   dismissHint: (flag: string) => {

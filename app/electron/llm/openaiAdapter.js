@@ -127,39 +127,60 @@ function normalizeMessages(messages) {
 // support it and either drop the stream or return empty — which surfaced as
 // "blank output" for the main reply while non-streaming calls (title, arena)
 // worked fine. Usage stats are collected on the non-streaming paths instead.
-async function* streamChat({ provider, model, messages, signal, options = {} }) {
+function streamChat({ provider, model, messages, signal, options = {} }) {
   const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
   const thinkExtractor = new ThinkTagExtractor()
-  const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
-    method: 'POST',
-    headers: headers(provider),
-    body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
-    signal: withTimeout(signal),
-  })
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '')
-    const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
-    err.status = res.status
-    if (err.status === 429 && provider.id != null) {
-      try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+  const gen = (async function* () {
+    const res = await fetch(`${baseUrl(provider)}/chat/completions`, {
+      method: 'POST',
+      headers: headers(provider),
+      body: JSON.stringify({ model: model.model_name, messages: normalizeMessages(messages), stream: true, ...options }),
+      signal: withTimeout(signal),
+    })
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
+      err.status = res.status
+      if (err.status === 429 && provider.id != null) {
+        try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+      }
+      throw err
     }
-    throw err
-  }
 
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  streamChat.usage = null
-  let _thinkingText = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || '' // keep the partial last line
-    for (const line of lines) {
-      const { delta, reasoning, usage } = parseSSELine(line)
-      if (usage) streamChat.usage = usage
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // keep the partial last line
+      for (const line of lines) {
+        const { delta, reasoning, usage } = parseSSELine(line)
+        if (usage) {
+          gen.usage = usage
+          try { options?.onUsage?.(usage) } catch {}
+        }
+        if (reasoning) {
+          try { onThinking?.(reasoning) } catch {}
+        }
+        if (delta) {
+          const ext = thinkExtractor.process(delta)
+          if (ext.reasoning) {
+            try { onThinking?.(ext.reasoning) } catch {}
+          }
+          if (ext.content) { yield ext.content }
+        }
+      }
+    }
+    // Flush any trailing buffered line.
+    if (buffer.startsWith('data: ')) {
+      const { delta, reasoning, usage } = parseSSELine(buffer)
+      if (usage) {
+        gen.usage = usage
+        try { options?.onUsage?.(usage) } catch {}
+      }
       if (reasoning) {
         try { onThinking?.(reasoning) } catch {}
       }
@@ -171,27 +192,14 @@ async function* streamChat({ provider, model, messages, signal, options = {} }) 
         if (ext.content) { yield ext.content }
       }
     }
-  }
-  // Flush any trailing buffered line.
-  if (buffer.startsWith('data: ')) {
-    const { delta, reasoning, usage } = parseSSELine(buffer)
-    if (usage) streamChat.usage = usage
-    if (reasoning) {
-      try { onThinking?.(reasoning) } catch {}
+    const flushed = thinkExtractor.flush()
+    if (flushed.reasoning) {
+      try { onThinking?.(flushed.reasoning) } catch {}
     }
-    if (delta) {
-      const ext = thinkExtractor.process(delta)
-      if (ext.reasoning) {
-        try { onThinking?.(ext.reasoning) } catch {}
-      }
-      if (ext.content) { yield ext.content }
-    }
-  }
-  const flushed = thinkExtractor.flush()
-  if (flushed.reasoning) {
-    try { onThinking?.(flushed.reasoning) } catch {}
-  }
-  if (flushed.content) { yield flushed.content }
+    if (flushed.content) { yield flushed.content }
+  })()
+  gen.usage = null
+  return gen
 }
 
 // Parse one SSE `data:` line into { delta, usage }. delta is the content

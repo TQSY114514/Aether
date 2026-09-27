@@ -18,7 +18,7 @@ function localNow() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-const AGENT_TASK_PATCH_COLS = new Set(['status', 'error', 'result', 'attempts', 'priority', 'max_retry'])
+const AGENT_TASK_PATCH_COLS = new Set(['status', 'error', 'result', 'attempts', 'priority', 'max_retry', 'tool_journal'])
 
 function taskDbAdapter(raw) {
   return {
@@ -45,6 +45,7 @@ function taskDbAdapter(raw) {
         try { raw.prepare('DELETE FROM messages_fts WHERE session_id = ?').run(sid) } catch {}
         raw.prepare('DELETE FROM message WHERE session_id = ?').run(sid)
         try { raw.prepare('DELETE FROM agent_checkpoint WHERE session_id = ?').run(sid) } catch {}
+        try { raw.prepare('DELETE FROM agent_turn_checkpoint WHERE session_id = ?').run(sid) } catch {}
         try { raw.prepare('DELETE FROM agent_execution_log WHERE session_id = ?').run(sid) } catch {}
         try { raw.prepare('DELETE FROM usage_log WHERE session_id = ?').run(sid) } catch {}
         try { raw.prepare('UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?').run(sid) } catch {}

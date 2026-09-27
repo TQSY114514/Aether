@@ -305,6 +305,9 @@ interface Window {
       graph: (opts?: { nodeLimit?: number; edgeLimit?: number }) => Promise<{ nodes: { id: string; label: string; type: string }[]; edges: { source: string; target: string; relation: string; confidence: number }[] }>
       deleteNode: (entity: string) => Promise<{ ok: boolean; removed?: number; entity?: string; error?: string }>
       renameNode: (entity: string, newEntity: string) => Promise<{ ok: boolean; entity?: string; error?: string }>
+      addRelation: (from: string, to: string, relation: string, confidence?: number) => Promise<{ ok: boolean; error?: string }>
+      deleteRelation: (from: string, to: string, relation?: string) => Promise<{ ok: boolean; removed?: number; error?: string }>
+      wikiArticle: (entity: string) => Promise<{ entity: string; type: string; markdown: string; outgoing: { to: string; relation: string; confidence: number }[]; backlinks: { from: string; relation: string; confidence: number }[]; memories: string[] }>
     }
     background: {
       set: (dataUrl: string | null) => Promise<{ success: boolean; hasImage?: boolean; error?: string }>
@@ -317,11 +320,12 @@ interface Window {
     system: {
       getAutoLaunch: () => Promise<{ enabled: boolean }>
       setAutoLaunch: (enabled: boolean) => Promise<{ ok: boolean; enabled?: boolean; error?: string }>
-      notify: (data: { title?: string; body?: string }) => Promise<{ ok: boolean; error?: string }>
+      notify: (data: { title?: string; body?: string; sessionId?: number; taskId?: string }) => Promise<{ ok: boolean; error?: string }>
       clipboardWrite: (text: string) => Promise<{ ok: boolean; error?: string }>
       clipboardRead: () => Promise<{ ok: boolean; text?: string; error?: string }>
       registerFileAssociations: () => Promise<{ ok: boolean; error?: string }>
       setTitleBarOverlay: (opts?: { color?: string; symbolColor?: string; height?: number }) => Promise<{ ok: boolean; error?: string }>
+      onSwitchSession: (cb: (payload: { sessionId: number; taskId?: string }) => void) => () => void
       doctor: (opts?: { cwd?: string; sessionId?: number | string }) => Promise<{
         timestamp: string
         overallStatus: 'healthy' | 'warning' | 'degraded'
@@ -476,10 +480,13 @@ interface Window {
       steer: (params: { sessionId: number; text: string; priority?: string }) => Promise<{ text: string; priority: string; timestamp: number; processed: boolean }>
       followUp: (params: { sessionId: number; task: string | { text: string; context?: Record<string, unknown> } }) => Promise<{ id: string; text: string; status: string }>
       listSessions: () => Promise<number[]>
-      planControl: {
-        skipStep: (params: { sessionId: number; stepId: string }) => Promise<{ stepId: string; action: string }>
-        retryStep: (params: { sessionId: number; stepId: string }) => Promise<{ stepId: string; action: string }>
-      }
+    }
+    planControl: {
+      skipStep: (params: { sessionId: number; stepId: string }) => Promise<{ stepId: string; action: string }>
+      retryStep: (params: { sessionId: number; stepId: string }) => Promise<{ stepId: string; action: string }>
+      getPlan: (sessionId: number) => Promise<any>
+      savePlan: (params: { sessionId: number; plan: any }) => Promise<{ ok: boolean; error?: string }>
+      updateStep: (params: { sessionId: number; stepIndex: number; status: string }) => Promise<{ ok: boolean; error?: string }>
     }
     evolution: {
       runCycle: (params: { strategy?: string; auditTrail?: { name: string; args?: Record<string, unknown>; error?: string | null }[] }) => Promise<{ ok: boolean; result?: unknown; error?: string }>

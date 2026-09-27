@@ -34,6 +34,7 @@ function warn(msg) { warnings.push(msg) }
 // ---------- 1. 解析 handler 文件 ----------
 function parseHandlers() {
   const channels = new Set()
+  const channelSources = new Map()
   // 扫描整个 electron 目录的 .js 文件（handler 在 ipc/ 以及 main.js/updater.js 等）
   const electronDir = path.join(ROOT, 'electron')
   function walk(dir) {
@@ -46,12 +47,21 @@ function parseHandlers() {
         const re = /ipcMain\.handle\(\s*['"]([^'"]+)['"]/g
         let m
         while ((m = re.exec(content)) !== null) {
-          channels.add(m[1])
+          const ch = m[1]
+          channels.add(ch)
+          const rel = path.relative(ROOT, full).replace(/\\/g, '/')
+          if (!channelSources.has(ch)) channelSources.set(ch, [])
+          channelSources.get(ch).push(rel)
         }
       }
     }
   }
   walk(electronDir)
+  for (const [ch, files] of channelSources.entries()) {
+    if (files.length > 1) {
+      fail(`IPC 通道重复注册: "${ch}" 在多个文件中被 ipcMain.handle 注册: ${files.join(', ')}`)
+    }
+  }
   return channels
 }
 

@@ -201,6 +201,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     graph: (opts) => ipcRenderer.invoke('kg:graph', opts),
     deleteNode: (nodeId) => ipcRenderer.invoke('kg:delete-node', nodeId),
     renameNode: (nodeId, newEntity) => ipcRenderer.invoke('kg:rename-node', nodeId, newEntity),
+    addRelation: (from, to, relation, confidence) => ipcRenderer.invoke('kg:add-relation', from, to, relation, confidence),
+    deleteRelation: (from, to, relation) => ipcRenderer.invoke('kg:delete-relation', from, to, relation),
+    wikiArticle: (entity) => ipcRenderer.invoke('kg:wiki-article', entity),
   },
   background: {
     set: (dataUrl) => ipcRenderer.invoke('background:set', dataUrl),
@@ -219,6 +222,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     registerFileAssociations: () => ipcRenderer.invoke('system:register-file-associations'),
     setTitleBarOverlay: (opts) => ipcRenderer.invoke('system:set-title-bar-overlay', opts),
     doctor: (opts) => ipcRenderer.invoke('system:doctor', opts),
+    onSwitchSession: (cb) => subscribe('session:switch-requested', cb),
   },
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts),
@@ -289,11 +293,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       steer: (params) => ipcRenderer.invoke('steering:steer', params),
       followUp: (params) => ipcRenderer.invoke('steering:follow-up', params),
       listSessions: () => ipcRenderer.invoke('steering:list-sessions'),
-    },
-    planControl: {
-      skipStep: (params) => ipcRenderer.invoke('plan:skip-step', params),
-      retryStep: (params) => ipcRenderer.invoke('plan:retry-step', params),
-    },
+  },
+  planControl: {
+    skipStep: (params) => ipcRenderer.invoke('plan:skip-step', params),
+    retryStep: (params) => ipcRenderer.invoke('plan:retry-step', params),
+    getPlan: (sessionId) => ipcRenderer.invoke('plan:get', sessionId),
+    savePlan: (params) => ipcRenderer.invoke('plan:save', params),
+    updateStep: (params) => ipcRenderer.invoke('plan:update-step', params),
+  },
   evolution: {
     runCycle: (params) => ipcRenderer.invoke('evolution:run-cycle', params),
     history: () => ipcRenderer.invoke('evolution:history'),

@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal, Sparkles } from 'lucide-react'
+import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal, Sparkles, Copy, Folder, HelpCircle } from 'lucide-react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+
+export function stripAnsi(text: string): string {
+  if (!text) return ''
+  return String(text).replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g, '')
+}
 
 type ToolCall = {
   name: string
@@ -137,10 +142,37 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
     setRollbackState(res.success ? 'done' : 'error')
     if (!res.success) setOpen(true)
   }
+  const [copied, setCopied] = useState(false)
+  const isCommand = tool.name === 'run_command' || Boolean(tool.args && typeof tool.args === 'object' && (tool.args as any).command)
+  const cmdArgs = (tool.args && typeof tool.args === 'object' ? tool.args : {}) as any
+  const cmdString = cmdArgs.command ? String(cmdArgs.command) : ''
+  const cmdCwd = cmdArgs.cwd ? String(cmdArgs.cwd) : ''
+
+  const handleCleanCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const fullText = (tool.error || tool.result || tool.liveOutput || '').trim()
+    const clean = stripAnsi(fullText)
+    navigator.clipboard.writeText(clean)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  const handleExplain = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const cmd = cmdString || tool.name
+    const fullText = stripAnsi((tool.error || tool.result || tool.liveOutput || '').trim())
+    const lines = fullText.split('\n')
+    const snippet = lines.length > 25 ? lines.slice(-25).join('\n') : fullText
+    const exitReason = cmdFailure.reason ? `(${cmdFailure.reason})` : ''
+
+    const explainPrompt = `${t('tool.explain_error.prompt_prefix')}: \`${cmd}\` ${exitReason}\n\`\`\`\n${snippet}\n\`\`\`\n${t('tool.quick_fix.prompt_suffix')}`
+    useStore.getState().sendMessage(explainPrompt)
+  }
+
   const handleQuickFix = () => {
     const a = (tool.args && typeof tool.args === 'object' ? tool.args : {}) as any
     const cmd = a.command ? String(a.command) : tool.name
-    const fullText = (tool.error || tool.result || tool.liveOutput || '').trim()
+    const fullText = stripAnsi((tool.error || tool.result || tool.liveOutput || '').trim())
     const lines = fullText.split('\n')
     const snippet = lines.length > 25 ? lines.slice(-25).join('\n') : fullText
     const exitReason = cmdFailure.reason ? `(${cmdFailure.reason})` : ''
@@ -153,20 +185,72 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
   return (
     <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors" title={tool.name}>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors" title={cmdString || tool.name}>
         {open ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />}
-        {dangerous ? <ShieldAlert size={12} className="text-amber-500 shrink-0" /> : <ShieldCheck size={12} className="text-[var(--text-muted)] shrink-0" />}
-        <span className="font-medium truncate text-left" style={{ color: 'var(--text-primary)' }}>{label}</span>
+        {isCommand ? (
+          <Terminal size={12} className={isFailed ? "text-red-500 shrink-0" : running ? "text-amber-500 shrink-0" : "text-emerald-500 shrink-0"} />
+        ) : dangerous ? (
+          <ShieldAlert size={12} className="text-amber-500 shrink-0" />
+        ) : (
+          <ShieldCheck size={12} className="text-[var(--text-muted)] shrink-0" />
+        )}
+        <span className={`truncate text-left ${isCommand ? 'font-mono font-medium' : 'font-medium'}`} style={{ color: 'var(--text-primary)' }}>
+          {isCommand ? `$ ${cmdString || label}` : label}
+        </span>
+        {isCommand && cmdCwd && (
+          <span className="flex items-center gap-0.5 text-[9px] font-mono px-1 py-0.2 rounded border border-[var(--border)] bg-[var(--bg-primary)] opacity-70 truncate max-w-[120px]" title={cmdCwd}>
+            <Folder size={9} />
+            {cmdCwd.replace(/\\/g, '/').split('/').pop()}
+          </span>
+        )}
         {dangerous && (
           <span className="text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium shrink-0 border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">{t('tool.risk.dangerous')}</span>
         )}
-        {failureKey && tool.error && (
+        {isCommand && cmdFailure.exitCode != null && (
+          <span className={`text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium shrink-0 border ${cmdFailure.exitCode === 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'}`}>
+            exit {cmdFailure.exitCode}
+          </span>
+        )}
+        {failureKey && tool.error && !isCommand && (
           <span className="text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium shrink-0 border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">{t(failureKey)}</span>
         )}
-        {cmdFailure.failed && !tool.error && (
+        {cmdFailure.failed && !tool.error && !cmdFailure.exitCode && (
           <span className="text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium shrink-0 border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">{cmdFailure.reason || t('tool.failure.command_failed')}</span>
         )}
-        <span className="ml-auto flex items-center gap-2 shrink-0">
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          {isCommand && (
+            <button
+              type="button"
+              onClick={handleCleanCopy}
+              title={t('tool.clean_copy')}
+              className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-primary)] hover:bg-[var(--border)]/40 transition-colors"
+            >
+              {copied ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} className="text-[var(--text-muted)]" />}
+              <span className="hidden sm:inline">{copied ? t('tool.clean_copied') : t('tool.clean_copy')}</span>
+            </button>
+          )}
+          {isCommand && isFailed && (
+            <>
+              <button
+                type="button"
+                onClick={handleExplain}
+                title={t('tool.explain_error')}
+                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
+              >
+                <HelpCircle size={10} />
+                <span className="hidden sm:inline">{t('tool.explain_error')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleQuickFix() }}
+                title={t('tool.quick_fix.tooltip')}
+                className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
+              >
+                <Sparkles size={10} />
+                <span className="hidden sm:inline">{t('tool.quick_fix')}</span>
+              </button>
+            </>
+          )}
           {tool.result != null && tool.latencyMs != null && (
             <span className="text-[10px] font-mono tabular-nums opacity-60" style={{ color: 'var(--text-muted)' }}>{tool.latencyMs < 1000 ? `[${tool.latencyMs}ms]` : `[${(tool.latencyMs/1000).toFixed(1)}s]`}</span>
           )}
@@ -176,7 +260,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
           <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: status.color }}>
             <StatusIcon size={11} />{status.label}
           </span>
-        </span>
+        </div>
       </button>
       <div
         className="transition-[grid-template-rows] duration-250 ease-out"
@@ -187,16 +271,39 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
       >
         <div className="overflow-hidden">
           <div className="px-2.5 pb-2 pt-1 border-t border-[var(--border)] space-y-1.5" style={{ backgroundColor: 'var(--content-bg)' }}>
-            {hasArgs ? (
+            {hasArgs && !isCommand ? (
               <div>
                 <div className="text-[10px] font-mono mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.args')}</div>
                 <pre className="text-[11px] font-mono p-1.5 rounded-[2px] border border-[var(--border)] whitespace-pre-wrap break-all bg-[var(--bg-secondary)]" style={{ color: 'var(--text-secondary)' }}>{JSON.stringify(tool.args, null, 2)}</pre>
               </div>
             ) : null}
-            {/* Live terminal output — streamed stdout/stderr from run_command and
-                other streaming tools. Shown while running and after completion so
-                the user can see exactly what the command printed. */}
-            {tool.liveOutput && (
+            {/* Warp Terminal Block Drawer */}
+            {isCommand && (
+              <div className="rounded-[2px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: '#0d1117' }}>
+                <div className="flex items-center justify-between px-2 py-1 text-[10px] font-mono border-b" style={{ borderColor: '#30363d', backgroundColor: '#161b22', color: '#8b949e' }}>
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Terminal size={10} className="text-emerald-400" />
+                    <span className="font-semibold text-emerald-400">$</span>
+                    <span className="truncate text-[#e6edf3]">{cmdString || tool.name}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCleanCopy}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[#c9d1d9] hover:bg-[#30363d] transition-colors"
+                    title={t('tool.clean_copy')}
+                  >
+                    {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                    <span>{copied ? t('tool.clean_copied') : t('tool.clean_copy')}</span>
+                  </button>
+                </div>
+                <pre className="text-[11px] font-mono p-2.5 whitespace-pre-wrap break-all max-h-56 overflow-y-auto leading-relaxed text-[#c9d1d9]">
+                  {stripAnsi(tool.liveOutput || tool.result || tool.error || '')}
+                  {running && !tool.liveOutputDone && <span className="animate-pulse text-emerald-400">▋</span>}
+                </pre>
+              </div>
+            )}
+            {/* Non-command Live terminal output */}
+            {!isCommand && tool.liveOutput && (
               <div>
                 <div className="flex items-center gap-1.5 text-[10px] font-mono mb-0.5" style={{ color: 'var(--text-muted)' }}>
                   <Terminal size={10} />
@@ -206,7 +313,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                 <pre className="text-[11px] font-mono p-2 rounded-[2px] border whitespace-pre-wrap break-all max-h-48 overflow-y-auto leading-relaxed" style={{ backgroundColor: '#0d1117', color: '#e6edf3', borderColor: 'var(--border)' }}>{tool.liveOutput}{running && !tool.liveOutputDone && <span className="animate-pulse" style={{ color: 'var(--accent)' }}>▋</span>}</pre>
               </div>
             )}
-            {tool.result != null && (
+            {!isCommand && tool.result != null && (
               <div>
                 <div className="text-[10px] mb-0.5" style={{ color: 'var(--text-muted)' }}>{t('tool.result')}</div>
                 {isLongResult && collapsed ? (

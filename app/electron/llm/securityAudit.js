@@ -37,20 +37,21 @@ function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailabl
     } catch {
       hasDocker = false
     }
-  }
+  const hasWinJob = process.platform === 'win32'
+  const sandboxAvailable = hasDocker || hasWinJob
 
   const capabilities = {
     READ: true,
     GIT: true,
     WRITE: mode === 'full',
-    EXECUTE: mode === 'full' && hasDocker,
+    EXECUTE: mode === 'full' && sandboxAvailable,
     NETWORK: false,
     EXTERNAL: false,
   }
 
   return {
     mode: mode === 'full' ? 'full' : 'guidance',
-    sandboxAvailable: hasDocker,
+    sandboxAvailable,
     capabilities,
   }
 }
@@ -251,7 +252,7 @@ async function runVerifierPass({ workspaceDir, candidates, verifierId = 'verifie
         sandboxVerified = false
       } else {
         finalStatus = 'confirmed'
-        validationReason = 'verified_in_docker_sandbox'
+        validationReason = 'verified_in_sandbox'
         sandboxVerified = true
       }
     } else {

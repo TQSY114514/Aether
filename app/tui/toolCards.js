@@ -64,3 +64,45 @@ export function summarizeTool(entry = {}) {
     latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : null,
   }
 }
+
+/**
+ * 清除终端 ANSI 逃逸序列（用于纯文本日志、复制、折叠）。
+ * @param {unknown} text
+ * @returns {string}
+ */
+export function stripAnsi(text) {
+  if (!text) return ''
+  return String(text).replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g, '')
+}
+
+/**
+ * 格式化 Warp 风格终端卡片块（用于 run_command 等执行工具输出卡片化）。
+ * @param {object} [entry]
+ * @returns {object|null}
+ */
+export function formatWarpBlock(entry = {}) {
+  const isCmd = entry.name === 'run_command' || Boolean(entry.args && typeof entry.args === 'object' && entry.args.command)
+  if (!isCmd) return null
+
+  const isStart = isToolStart(entry)
+  const args = (entry.args && typeof entry.args === 'object') ? entry.args : {}
+  const command = String(args.command || entry.name)
+  const cwd = args.cwd ? String(args.cwd) : ''
+  const exitCode = typeof entry.exitCode === 'number' ? entry.exitCode : (entry.error ? 1 : (entry.result != null ? 0 : null))
+  const status = isStart ? 'running' : exitCode === 0 && !entry.error ? 'done' : 'error'
+
+  const raw = entry.error ? String(entry.error) : String(entry.result ?? '')
+  const clean = stripAnsi(raw)
+
+  return {
+    isCommand: true,
+    command,
+    cwd,
+    status,
+    exitCode,
+    latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : null,
+    cleanOutput: clean,
+    summary: truncateLines(clean, 25),
+  }
+}
+

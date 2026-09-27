@@ -352,7 +352,7 @@ function prune(db, maxAgeDays = 90) {
 // ── Desktop polish #7: manual KG node editing ──────────────────────────────
 // Delete a node by entity, along with all edges touching it.
 function deleteNode(db, entity) {
-  const name = String(entity || '').trim()
+  const name = String(entity || '').trim().toLowerCase()
   if (!name) return { ok: false, error: 'empty entity' }
   try {
     const node = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(name)
@@ -367,8 +367,8 @@ function deleteNode(db, entity) {
 
 // Rename a node's entity, updating edges that reference the old name.
 function renameNode(db, entity, newEntity) {
-  const oldName = String(entity || '').trim()
-  const name = String(newEntity || '').trim()
+  const oldName = String(entity || '').trim().toLowerCase()
+  const name = String(newEntity || '').trim().toLowerCase()
   if (!oldName || !name) return { ok: false, error: 'empty entity' }
   try {
     const node = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(oldName)
@@ -384,4 +384,122 @@ function renameNode(db, entity, newEntity) {
   }
 }
 
-module.exports = { buildGraph, searchGraph, prune, getSecondDegreeNeighbors, getGraphData, injectContext, deleteNode, renameNode }
+// Add or update a relationship between two entities.
+function addRelation(db, from, to, relation, confidence = 0.8) {
+  const f = String(from || '').trim().toLowerCase()
+  const t = String(to || '').trim().toLowerCase()
+  const r = String(relation || 'relates_to').trim().toLowerCase()
+  if (!f || !t || !r) return { ok: false, error: 'invalid from, to, or relation' }
+  try {
+    // Ensure nodes exist in kg_nodes
+    const getFrom = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(f)
+    if (!getFrom) db.prepare('INSERT INTO kg_nodes (entity, type) VALUES (?, ?)').run(f, 'entity')
+    const getTo = db.prepare('SELECT id FROM kg_nodes WHERE entity = ?').get(t)
+    if (!getTo) db.prepare('INSERT INTO kg_nodes (entity, type) VALUES (?, ?)').run(t, 'entity')
+
+    // Upsert edge
+    const existing = db.prepare('SELECT id FROM kg_edges WHERE "from" = ? AND "to" = ? AND relation = ?').get(f, t, r)
+    if (existing) {
+      db.prepare('UPDATE kg_edges SET confidence = ? WHERE id = ?').run(Number(confidence), existing.id)
+    } else {
+      db.prepare('INSERT INTO kg_edges ("from", "to", relation, confidence) VALUES (?, ?, ?, ?)').run(f, t, r, Number(confidence))
+    }
+    return { ok: true, from: f, to: t, relation: r, confidence: Number(confidence) }
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) }
+  }
+}
+
+// Delete a relation between two entities.
+function deleteRelation(db, from, to, relation) {
+  const f = String(from || '').trim().toLowerCase()
+  const t = String(to || '').trim().toLowerCase()
+  const r = String(relation || '').trim().toLowerCase()
+  if (!f || !t) return { ok: false, error: 'invalid from or to' }
+  try {
+    let info
+    if (r) {
+      info = db.prepare('DELETE FROM kg_edges WHERE "from" = ? AND "to" = ? AND relation = ?').run(f, t, r)
+    } else {
+      info = db.prepare('DELETE FROM kg_edges WHERE "from" = ? AND "to" = ?').run(f, t)
+    }
+    return { ok: true, removed: Number(info.changes) }
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) }
+  }
+}
+
+// DeepWiki: Generate a bidirectional Markdown Wiki article for an entity.
+function getWikiArticle(db, entity) {
+  const name = String(entity || '').trim().toLowerCase()
+  if (!name) return { entity: '', type: 'unknown', markdown: '', outgoing: [], backlinks: [], memories: [] }
+  try {
+    const node = db.prepare('SELECT id, entity, type, created_at, updated_at FROM kg_nodes WHERE entity = ?').get(name) || { entity: name, type: 'entity', created_at: null, updated_at: null }
+
+    const outgoing = (db.prepare('SELECT "to", relation, confidence FROM kg_edges WHERE "from" = ? ORDER BY confidence DESC').all(name) || [])
+      .map(r => ({ to: r.to, relation: r.relation, confidence: r.confidence }))
+
+    const backlinks = (db.prepare('SELECT "from", relation, confidence FROM kg_edges WHERE "to" = ? ORDER BY confidence DESC').all(name) || [])
+      .map(r => ({ from: r.from, relation: r.relation, confidence: r.confidence }))
+
+    const memRows = db.prepare('SELECT content FROM memory WHERE LOWER(content) LIKE ? LIMIT 5').all(`%${name}%`) || []
+    const memories = memRows.map(r => r.content)
+
+    // Build Markdown DeepWiki content
+    const lines = [
+      `# [[${node.entity}]]`,
+      '',
+      `> **实体类型**: \`${node.type || 'entity'}\`  `,
+      `> **关联密度**: 引用 ${outgoing.length} · 反链 ${backlinks.length}`,
+      '',
+      '## 🔗 关联实体 (Outgoing)',
+      outgoing.length > 0
+        ? outgoing.map(o => `- 依赖/指向 [[${o.to}]] *(关系: ${o.relation}, 置信度: ${Math.round((o.confidence || 0.8) * 100)}%)*`).join('\n')
+        : '*暂无向外关联实体*',
+      '',
+      '## ↩️ 反向链接 (Backlinks / 被引用)',
+      backlinks.length > 0
+        ? backlinks.map(b => `- 来自 [[${b.from}]] *(关系: ${b.relation})*`).join('\n')
+        : '*暂无反向引用*',
+      '',
+      '## 💡 相关记忆与上下文片段',
+      memories.length > 0
+        ? memories.map(m => `> ${m}`).join('\n\n')
+        : '*暂无直接关联的记忆记录*',
+    ]
+
+    return {
+      entity: node.entity,
+      type: node.type || 'entity',
+      markdown: lines.join('\n'),
+      outgoing,
+      backlinks,
+      memories,
+    }
+  } catch (e) {
+    log.warn('[knowledgeGraph] getWikiArticle error:', e && e.message)
+    return {
+      entity: name,
+      type: 'entity',
+      markdown: `# [[${name}]]\n\n*获取维基文章出错: ${e && e.message ? e.message : String(e)}*`,
+      outgoing: [],
+      backlinks: [],
+      memories: [],
+    }
+  }
+}
+
+module.exports = {
+  buildGraph,
+  searchGraph,
+  prune,
+  getSecondDegreeNeighbors,
+  getGraphData,
+  injectContext,
+  deleteNode,
+  renameNode,
+  addRelation,
+  deleteRelation,
+  getWikiArticle,
+}
+

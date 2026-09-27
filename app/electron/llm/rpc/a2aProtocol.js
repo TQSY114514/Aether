@@ -57,8 +57,27 @@ function createStateSync(sender, state) {
   }
 }
 
+/**
+ * Create an A2A Interrupt message.
+ * @param {string} sender 
+ * @param {string} [reason]
+ * @returns {Object}
+ */
+function createInterrupt(sender, reason = '') {
+  return {
+    protocol: 'a2a-v1',
+    type: 'interrupt',
+    sender,
+    payload: {
+      reason
+    },
+    timestamp: Date.now()
+  }
+}
+
 module.exports = {
   isValidA2AMessage,
   createDelegation,
-  createStateSync
+  createStateSync,
+  createInterrupt
 }

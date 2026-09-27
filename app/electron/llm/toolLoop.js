@@ -344,7 +344,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
  * @param {Function} [args.waitIfPaused] - Async function that suspends execution if the loop is paused.
  * @returns {Promise<Object>} The final LLM response message and metrics.
  */
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry }) {
   const wsRoot = getWorkspaceRoot(sessionId) || process.cwd()
   const turnFileTracker = createTurnFileTracker(wsRoot)
   const emitFileSummary = () => {
@@ -366,9 +366,13 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const rawToolPayload = Array.isArray(tools)
     ? tools
     : (tools ? toolsPayload(agentMode, { cacheStable: cachePrefixStable }) : [])
-  const toolPayload = (cachePrefixStable && rawToolPayload.length > 1)
+  let toolPayload = (cachePrefixStable && rawToolPayload.length > 1)
     ? (() => { try { return require('./toolRouter').sortToolsForCacheStability(rawToolPayload) } catch { return rawToolPayload } })()
     : rawToolPayload
+  try {
+    const { adaptToolsPayload } = require('./adaptivePatch')
+    toolPayload = adaptToolsPayload(toolPayload, model)
+  } catch {}
 
   // ── Tool Router（外部评审 P0-1）─────────────────────────────────────────
   // 默认全量注入既有行为; 当 feature flag 'agent.toolRouter' 开启时, 基于
@@ -420,8 +424,19 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     } catch {}
   }
 
+  // Poor Mode: aggressive token and compute conservation (max 8 iterations, tighter microcompact)
+  const isPoorMode = (() => {
+    try { return db && require('../featureFlags').isEnabled(db, 'agent.poorMode') === true } catch { return false }
+  })()
+  const effectiveMaxIterations = isPoorMode
+    ? Math.min(Number(maxIterations) || 25, 8)
+    : maxIterations
+  if (isPoorMode) {
+    try { onStatus?.({ kind: 'poor_mode', text: '💸 穷鬼省流模式已启用：循环预算严格压制为 8 轮，激进压缩 Token' }) } catch {}
+  }
+
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
-  const budget = externalBudget || new IterationBudget(maxIterations)
+  const budget = externalBudget || new IterationBudget(effectiveMaxIterations)
   budget.start()
   // Surface the 80% iteration/token/time budget warning as a status line.
   // iterationBudget.js emits `budget:warning` once per dimension at 80%.
@@ -505,6 +520,19 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     }
   } catch {}
 
+  // P1-6: Inject model-adaptive code editing protocol (strong vs compact)
+  try {
+    const { getAdaptiveEditPrompt } = require('./adaptivePatch')
+    const editProtocol = getAdaptiveEditPrompt(model)
+    if (editProtocol) {
+      const sysIdx = convo.findIndex(m => m.role === 'system')
+      convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, {
+        role: 'system',
+        content: editProtocol,
+      })
+    }
+  } catch {}
+
   // Inject the repo map (project structure + top-level symbols) so the agent
   // has a project-level understanding of the codebase from the first turn.
   // Generated on first use and cached; incremental updates re-parse only
@@ -514,7 +542,10 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     const lastUserMsg = Array.isArray(lastUserRaw)
       ? lastUserRaw.map(p => typeof p === 'string' ? p : (p.text || '')).join(' ')
       : String(lastUserRaw)
-    const repoMapMsg = await buildRepoMapMessage({ userMessage: lastUserMsg })
+    const repoMapMsg = await buildRepoMapMessage({
+      userMessage: lastUserMsg,
+      budgetTokens: isPoorMode ? 512 : 1024,
+    })
     if (repoMapMsg) {
       const sysIdx = convo.findIndex(m => m.role === 'system')
       convo.splice(sysIdx >= 0 ? sysIdx + 1 : 0, 0, repoMapMsg)
@@ -759,13 +790,16 @@ Reply in this format:
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
-  while (true) {
+  while (!loopStateMachine.state.isDone) {
     // consume() 返回 false = 迭代预算在上一轮用尽。缩围重试在此与下方
     // exhausted 检查两条出口都有机会续期（CodeRabbit #48 复审意见）;
     // tryShrinkRetry 单发闩锁保证最多追加一次, 不会无限循环。
     if (!budget.consume()) {
       const _st0 = budget.exhausted()
-      if (!(_st0.exhausted && _st0.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) break
+      if (!(_st0.exhausted && _st0.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) {
+        loopStateMachine.step({ type: 'BUDGET_EXHAUSTED', payload: _st0 })
+        break
+      }
     }
     // 预算检查: 仅 iterations 耗尽且缩围可用时放行本轮——直接落到本轮 body,
     // 不再 continue(那会先 consume 掉刚追加的额度, 实际只多跑 3 轮; 落地
@@ -774,13 +808,17 @@ Reply in this format:
     const budgetStatus = budget.exhausted()
     if (budgetStatus.exhausted && !(budgetStatus.reason === 'iterations' && tryShrinkRetry('迭代预算耗尽'))) {
       try { onStatus?.({ kind: 'budget_exhausted', text: `预算耗尽: ${budgetStatus.reason}` }) } catch {}
+      loopStateMachine.step({ type: 'BUDGET_EXHAUSTED', payload: budgetStatus })
       break
     }
 
     // TaskEngine pause gate: when the owning task is paused, wait at this
     // iteration boundary until resumed (or aborted). No-op when absent.
     if (waitIfPaused) {
-      try { await waitIfPaused() } catch { break }
+      try { await waitIfPaused() } catch {
+        loopStateMachine.step({ type: 'ABORTED', payload: { error: 'paused_abort' } })
+        break
+      }
     }
 
     const depth = budget.used
@@ -850,7 +888,7 @@ Reply in this format:
         convo.splice(0, convo.length, ...ordered)
       }
       const mcEnabled = db && typeof db.getSetting === 'function' ? db.getSetting('agent_microcompact_enabled') !== '0' : true
-      const mcKeepRecent = db && typeof db.getSetting === 'function' ? Number(db.getSetting('agent_microcompact_keep_recent')) || 5 : 5
+      const mcKeepRecent = isPoorMode ? 2 : (db && typeof db.getSetting === 'function' ? Number(db.getSetting('agent_microcompact_keep_recent')) || 5 : 5)
       const mcCacheTtlMin = db && typeof db.getSetting === 'function' ? Number(db.getSetting('agent_cache_ttl_minutes')) || 60 : 60
       const mcResult = maybeLocalMicrocompactMessages({
         messages: convo,
@@ -972,6 +1010,7 @@ Reply in this format:
     try { if (msg.content && hasToolCalls) onPlanStep?.({ step: depth, depth, remaining: budget.remaining, assistantText: msg.content, kind }) } catch {}
 
     if (msg.tool_calls && msg.tool_calls.length) {
+      loopStateMachine.step({ type: 'LLM_RESPONSE', payload: msg })
       loopStateMachine.transition(LoopStates.EXECUTING_TOOLS, { step: depth, count: msg.tool_calls.length })
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls })
 
@@ -984,6 +1023,7 @@ Reply in this format:
         // tryShrinkRetry 之前——缩围注入的是 system 消息，不能被弹掉。
         convo.pop()
         if (!tryShrinkRetry('重复工具调用循环')) {
+          loopStateMachine.step({ type: 'ABORTED', payload: { error: 'loop_detected' } })
           if (onAudit) try { onAudit({ totalIterations: budget.used, toolCalls: auditTrail, finalStatus: 'loop_detected', planId: plan?.id }) } catch {}
           try { onToolCall?.({ name: msg.tool_calls[0].function.name, args: {}, result: null, error: `loop detected: identical tool-call round repeated ${sigRepeat} times — stopping`, risk: null, latencyMs: null }) } catch {}
           emitFileSummary()
@@ -1289,17 +1329,35 @@ Reply ONLY with JSON:
             // later in the allExecuted loop.
             try { onToolCall?.({ name: fn.name, args, result: null, error: null, risk: tool.risk, latencyMs: null, startedAt: Date.now() }) } catch {}
             const t0 = Date.now()
-            // Tool cache: skip execution if we already have a result for this
-            // exact call in this turn (idempotent read-only tools only).
             let r
-            const cached = toolCache.get(fn.name, args)
-            if (cached.hit) {
-              r = { result: cached.result }
-            } else {
-              r = await runToolWithTimeout(tool, args, { ...toolCtx, agentMode: effectiveMode }, signal)
-              if (!r.error) toolCache.set(fn.name, args, r.result)
+            const currentArgsHash = hashToolArgs(fn.name, args)
+            let journalHit = null
+            if (Array.isArray(toolJournal) && toolJournal.length > 0) {
+              const hitIdx = toolJournal.findIndex(j => !j._replayed && j.tool === fn.name && j.argsHash === currentArgsHash && j.success)
+              if (hitIdx !== -1) {
+                journalHit = toolJournal[hitIdx]
+                journalHit._replayed = true
+              }
             }
-            entry.latencyMs = cached.hit ? 0 : Date.now() - t0
+
+            let cachedHit = false
+            if (journalHit) {
+              r = { result: journalHit.result }
+              entry.replayed = true
+              try { onStatus?.({ text: `⚡ [Journal重放] ${fn.name} (已跳过重复执行)`, kind: 'journal_replay' }) } catch {}
+            } else {
+              // Tool cache: skip execution if we already have a result for this
+              // exact call in this turn (idempotent read-only tools only).
+              const cached = toolCache.get(fn.name, args)
+              if (cached.hit) {
+                cachedHit = true
+                r = { result: cached.result }
+              } else {
+                r = await runToolWithTimeout(tool, args, { ...toolCtx, agentMode: effectiveMode }, signal)
+                if (!r.error) toolCache.set(fn.name, args, r.result)
+              }
+            }
+            entry.latencyMs = (journalHit || cachedHit) ? 0 : Date.now() - t0
             try { toolMetrics.recordTool({ runId: metricsRunId, toolName: fn.name, ms: entry.latencyMs, success: !r.error }) } catch {}
             if (r.error) {
               entry.error = r.error
@@ -1316,6 +1374,17 @@ Reply ONLY with JSON:
               }
             } else {
               entry.result = r.result
+              if (!journalHit && typeof onJournalEntry === 'function') {
+                try {
+                  onJournalEntry({
+                    tool: fn.name,
+                    argsHash: currentArgsHash,
+                    result: typeof r.result === 'string' ? (r.result.length > 4000 ? r.result.slice(0, 4000) + '...[truncated]' : r.result) : r.result,
+                    success: true,
+                    timestamp: Date.now()
+                  })
+                } catch {}
+              }
               if (fn.name === 'run_command' && typeof entry.result === 'string') {
                 const exitMatch = entry.result.match(/(?:exit\s+code:\s*|\[FAILED:\s*exit\s+)(-?\d+)/i)
                 if (exitMatch) {
@@ -1547,7 +1616,7 @@ Reply ONLY with JSON:
       }
       if (planningMode && plan && typeof planning.advancePlanOnToolRound === 'function') {
         try {
-          const advanced = planning.advancePlanOnToolRound(plan, results)
+          const advanced = planning.advancePlanOnToolRound(plan, allExecuted)
           if (advanced) {
             if (db && db.saveSessionPlan) db.saveSessionPlan(sessionId, plan)
             onPlanSnapshot?.(plan)
@@ -1599,10 +1668,12 @@ Reply ONLY with JSON:
         const folded = compaction.foldStaleToolOutputs(convo, { preservePrefix: cachePrefixStable })
         if (Array.isArray(folded)) convo.splice(0, convo.length, ...folded)
       } catch {}
+      loopStateMachine.step({ type: 'TOOL_RESULTS_APPLIED', payload: { results: auditTrail.slice(-msg.tool_calls.length) } })
       loopStateMachine.transition(LoopStates.PLANNING, { step: depth + 1 })
       continue
     }
     // No tool calls — final answer.
+    loopStateMachine.step({ type: 'LLM_RESPONSE', payload: msg })
     // Visual Verification Loop (Grok P0 / Slice 5):
     // If frontend UI files were changed during this run, run offscreen visual check.
     // If console errors or page breakdown occurred, feed error back into convo for auto-repair.
@@ -1622,12 +1693,15 @@ Reply ONLY with JSON:
           })
           if (vResult.performed && vResult.hasErrors) {
             visualVerified = true
+            loopStateMachine.step({ type: 'VERIFICATION_FAILED', payload: vResult })
             loopStateMachine.transition(LoopStates.PLANNING, { phase: 'visual_fix' })
             const fixMsg = visualVerifier.buildVisualFixPrompt(vResult)
             if (msg.content) convo.push({ role: 'assistant', content: msg.content })
             convo.push(fixMsg)
             try { onStatus?.({ kind: 'visual_verify', text: `视觉自检捕获报错 (${vResult.errors.length} 项)，触发自动修复循环...` }) } catch {}
             continue
+          } else if (vResult.performed) {
+            loopStateMachine.step({ type: 'VERIFICATION_PASSED', payload: vResult })
           }
         }
       } catch (err) {
@@ -1636,6 +1710,7 @@ Reply ONLY with JSON:
     }
 
     const finalStatus = budget.used >= budget.maxTotal ? 'budget_exhausted' : 'success'
+    loopStateMachine.step(finalStatus === 'success' ? { type: 'VERIFICATION_PASSED' } : { type: 'BUDGET_EXHAUSTED', payload: { finalStatus } })
     loopStateMachine.transition(finalStatus === 'success' ? LoopStates.COMPLETED : LoopStates.FAILED, { finalStatus })
     if (finalStatus === 'success' && planningMode && plan) {
       try {
@@ -1647,9 +1722,26 @@ Reply ONLY with JSON:
         if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
       } catch {}
     }
-    // Event stream: agent end
     eventStream.agentEnd({ sessionId, finalStatus, totalIterations: budget.used })
     steering.setRunning(sessionId, false)
+    try {
+      const pendingFollowUps = steering.getPendingFollowUps(sessionId)
+      if (pendingFollowUps && pendingFollowUps.length > 0) {
+        log.info(`[toolLoop] Processing ${pendingFollowUps.length} pending follow-up(s) for session ${sessionId}`)
+        for (const fu of pendingFollowUps) {
+          steering.completeFollowUp(fu.id)
+          try {
+            const bgTasks = require('./backgroundTasks')
+            bgTasks.createTask(db, {
+              sessionId,
+              title: `[Follow-up] ${fu.instruction?.slice(0, 40) || 'Task'}`,
+              content: fu.instruction || '',
+              agentMode: 'ask',
+            })
+          } catch {}
+        }
+      }
+    } catch {}
     try {
       toolMetrics.updateRun(metricsRunId, {
         iterations: budget.used, durationMs: Date.now() - loopStart,

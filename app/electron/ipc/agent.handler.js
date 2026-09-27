@@ -81,7 +81,7 @@ function registerAgentHandlers(ipcMain, db) {
     try {
       // better-sqlite3: db.exec() takes no bound parameters — use the facade's
       // allRows (prepare().all(?)) instead of interpolating/exec-ing `?`.
-      const rows = db.allRows('SELECT * FROM agent_checkpoint WHERE id = ? LIMIT 1', [id])
+      const rows = db.allRows('SELECT * FROM agent_turn_checkpoint WHERE id = ? LIMIT 1', [id])
       const row = rows && rows[0]
       if (!row) return null
       return {

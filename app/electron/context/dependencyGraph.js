@@ -137,4 +137,59 @@ function getStats(graph) {
   }
 }
 
-module.exports = { buildGraph, query, getStats }
+/**
+ * Compute PageRank centrality scores on the dependency graph.
+ * @param {{ files: Map<string, object>, edges: Array<{ from: string, to: string, type: string }> }} graph
+ * @param {number} [iterations=20]
+ * @param {number} [damping=0.85]
+ * @returns {Map<string, number>} Path -> PageRank score
+ */
+function computePageRank(graph, iterations = 20, damping = 0.85) {
+  if (!graph || !graph.files) return new Map()
+  const paths = Array.from(graph.files.keys())
+  const N = paths.length
+  if (N === 0) return new Map()
+
+  const outDegree = new Map()
+  const inEdges = new Map()
+
+  for (const p of paths) {
+    outDegree.set(p, 0)
+    inEdges.set(p, [])
+  }
+
+  for (const edge of graph.edges || []) {
+    if (edge.type === 'imports' && inEdges.has(edge.to) && outDegree.has(edge.from)) {
+      outDegree.set(edge.from, outDegree.get(edge.from) + 1)
+      inEdges.get(edge.to).push(edge.from)
+    }
+  }
+
+  let pr = new Map()
+  const initial = 1 / N
+  for (const p of paths) pr.set(p, initial)
+
+  for (let it = 0; it < iterations; it++) {
+    const nextPr = new Map()
+    let danglingSum = 0
+    for (const p of paths) {
+      if (outDegree.get(p) === 0) danglingSum += pr.get(p)
+    }
+
+    for (const p of paths) {
+      let incoming = 0
+      const sources = inEdges.get(p)
+      for (const src of sources) {
+        const out = outDegree.get(src)
+        if (out > 0) incoming += pr.get(src) / out
+      }
+      const score = (1 - damping) / N + damping * (incoming + danglingSum / N)
+      nextPr.set(p, score)
+    }
+    pr = nextPr
+  }
+
+  return pr
+}
+
+module.exports = { buildGraph, query, getStats, computePageRank }

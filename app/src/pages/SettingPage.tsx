@@ -238,7 +238,7 @@ export default function SettingPage() {
   const [localTimeout, setLocalTimeout] = useState(String(fallbackTimeout))
   const [localBudget, setLocalBudget] = useState(String(sessionBudgetUsd))
   const [toolsPanel, setToolsPanel] = useState<ToolsPanel>(null)
-  const { toast } = useUI()
+  const { toast, confirm } = useUI()
 
   useEffect(() => { setLocalTimeout(String(fallbackTimeout)) }, [fallbackTimeout])
   useEffect(() => { setLocalBudget(String(sessionBudgetUsd)) }, [sessionBudgetUsd])
@@ -706,7 +706,13 @@ export default function SettingPage() {
               <div className="flex gap-2.5 flex-wrap">
                 <button
                   onClick={async () => {
-                    const withSecrets = window.confirm('导出是否包含 API 密钥？\n\n包含密钥的配置文件请妥善保管，避免泄露。默认不含密钥。')
+                    const withSecrets = await confirm({
+                      title: '导出配置',
+                      description: '导出是否包含 API 密钥？\n\n包含密钥的配置文件请妥善保管，避免泄露。默认不含密钥。',
+                      confirmText: '包含密钥',
+                      cancelText: '不含密钥（推荐）',
+                      danger: true,
+                    })
                     const res = await window.electronAPI.config.export({ includeSecrets: withSecrets })
                     if (!res.success || !res.bundle) return
                     const blob = new Blob([JSON.stringify(res.bundle, null, 2)], { type: 'application/json' })

@@ -263,6 +263,40 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { error: e.message }
     }
   })
+  ipcMain.handle('plan:get', (_e, sessionId) => {
+    try {
+      if (!sessionId || !db?.getSessionPlan) return null
+      return db.getSessionPlan(Number(sessionId))
+    } catch {
+      return null
+    }
+  })
+  ipcMain.handle('plan:save', (_e, { sessionId, plan }) => {
+    try {
+      if (!sessionId || !plan || !db?.saveSessionPlan) return { ok: false }
+      db.saveSessionPlan(Number(sessionId), plan)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  })
+  ipcMain.handle('plan:update-step', (_e, { sessionId, stepIndex, status }) => {
+    try {
+      if (!sessionId || !db?.getSessionPlan) return { ok: false }
+      const sid = Number(sessionId)
+      const plan = db.getSessionPlan(sid)
+      if (plan) {
+        const list = plan.tasks || plan.steps || plan.todos
+        if (Array.isArray(list) && list[stepIndex]) {
+          list[stepIndex].status = status
+          db.saveSessionPlan(sid, plan)
+        }
+      }
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  })
 
   // ─── Trajectory IPC ──────────────────────────────────────────────────────
   ipcMain.handle('trajectory:stats', (_e, sessionId) => {

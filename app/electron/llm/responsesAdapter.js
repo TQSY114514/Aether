@@ -1,4 +1,4 @@
-﻿// ───────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
 // OpenAI Responses API adapter.
 //
 // Implements the newer OpenAI Responses protocol (POST /responses via SSE)
@@ -129,53 +129,58 @@ function withTimeout(signal) {
   return signal ? AbortSignal.any([signal, t]) : t
 }
 
-async function* streamChat({ provider, model, messages, signal, options = {} }) {
+function streamChat({ provider, model, messages, signal, options = {} }) {
   const onThinking = typeof options?.onThinkingDelta === 'function' ? options.onThinkingDelta : null
-  const res = await fetch(`${baseUrl(provider)}/responses`, {
-    method: 'POST',
-    headers: headers(provider),
-    body: JSON.stringify({ model: model.model_name, input: toResponsesInput(messages), stream: true, ...options }),
-    signal: withTimeout(signal),
-  })
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '')
-    const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
-    err.status = res.status
-    if (err.status === 429 && provider.id != null) {
-      try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+  const gen = (async function* () {
+    const res = await fetch(`${baseUrl(provider)}/responses`, {
+      method: 'POST',
+      headers: headers(provider),
+      body: JSON.stringify({ model: model.model_name, input: toResponsesInput(messages), stream: true, ...options }),
+      signal: withTimeout(signal),
+    })
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      const err = new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`)
+      err.status = res.status
+      if (err.status === 429 && provider.id != null) {
+        try { _credentialPool.markCooldownForProvider(provider.id) } catch {}
+      }
+      throw err
     }
-    throw err
-  }
 
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  streamChat.usage = null
-  let _thinkingText = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-    for (const line of lines) {
-      const evt = parseSSEEvent(line)
-      if (!evt) continue
-      if (evt.type === 'response.output_text.delta' && evt.delta != null) {
-        yield evt.delta
-      } else if (evt.type === 'response.completed') {
-        streamChat.usage = evt.response?.usage ? normalizeUsage(evt.response.usage) : null
-      } else if ((evt.type === 'response.reasoning_summary_text.delta' || evt.type === 'response.reasoning_text.delta') && evt.delta != null) {
-        _thinkingText += evt.delta
-        try { onThinking?.(_thinkingText) } catch {}
-      } else if (evt.type === 'response.failed') {
-        const msg = evt.response?.error?.message || 'Responses API request failed'
-        const err = new Error(msg)
-        err.status = 500
-        throw err
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let _thinkingText = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const evt = parseSSEEvent(line)
+        if (!evt) continue
+        if (evt.type === 'response.output_text.delta' && evt.delta != null) {
+          yield evt.delta
+        } else if (evt.type === 'response.completed') {
+          const u = evt.response?.usage ? normalizeUsage(evt.response.usage) : null
+          gen.usage = u
+          try { options?.onUsage?.(u) } catch {}
+        } else if ((evt.type === 'response.reasoning_summary_text.delta' || evt.type === 'response.reasoning_text.delta') && evt.delta != null) {
+          _thinkingText += evt.delta
+          try { onThinking?.(_thinkingText) } catch {}
+        } else if (evt.type === 'response.failed') {
+          const msg = evt.response?.error?.message || 'Responses API request failed'
+          const err = new Error(msg)
+          err.status = 500
+          throw err
+        }
       }
     }
-  }
+  })()
+  gen.usage = null
+  return gen
 }
 
 // Non-streaming completion. Returns the full text content string.

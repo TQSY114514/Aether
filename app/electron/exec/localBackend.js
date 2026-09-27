@@ -72,8 +72,19 @@ const localBackend = {
       stdoutTail: '',
       stderrTail: '',
       killed: false,
+      sandboxed: false,
     }
     executions.set(execId, entry)
+
+    // Assign process to Windows Job Object sandbox (kill-on-close + 2GB limit)
+    if (process.platform === 'win32' && child.pid) {
+      try {
+        const winJobObject = require('./winJobObject')
+        winJobObject.assignProcess(child.pid).then((res) => {
+          if (res && res.ok) entry.sandboxed = true
+        }).catch(() => {})
+      } catch {}
+    }
 
     // Cap the tail on every chunk.
     child.stdout?.on('data', (d) => { entry.stdoutTail = capTail(entry.stdoutTail, d.toString()) })
@@ -114,6 +125,7 @@ const localBackend = {
     return {
       ok: true,
       state: e.state,
+      sandboxed: !!e.sandboxed,
       exitCode: e.exitCode,
       stdoutTail: e.stdoutTail,
       stderrTail: e.stderrTail,

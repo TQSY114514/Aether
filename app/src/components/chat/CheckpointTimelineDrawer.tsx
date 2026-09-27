@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import { useUI } from '@/components/ui/feedback'
 import {
   History,
   X,
@@ -70,6 +71,7 @@ export default function CheckpointTimelineDrawer() {
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [rollingId, setRollingId] = useState<number | null>(null)
+  const { confirm } = useUI()
 
   const currentSessionRef = useRef(currentSessionId)
   currentSessionRef.current = currentSessionId
@@ -120,9 +122,12 @@ export default function CheckpointTimelineDrawer() {
   const handleRollback = useCallback(
     async (cp: CheckpointRecord) => {
       if (rollingId !== null || cp.rolled_back_at || !currentSessionId) return
-      const ok = window.confirm(
-        t('checkpoints.confirm_rollback_msg', `#${cp.id}`, cp.tool_name || '')
-      )
+      const ok = await confirm({
+        title: t('checkpoints.confirm_rollback_title', '回滚检查点'),
+        description: t('checkpoints.confirm_rollback_msg', `#${cp.id}`, cp.tool_name || ''),
+        confirmText: t('common.confirm', '确定'),
+        cancelText: t('common.cancel', '取消'),
+      })
       if (!ok) return
 
       setRollingId(cp.id)
@@ -132,9 +137,13 @@ export default function CheckpointTimelineDrawer() {
           sessionId: currentSessionId,
         })
         if (res && res.conflict) {
-          const forceConfirm = window.confirm(
-            `${res.error}\n\n${t('checkpoints.confirm_force_rollback', '是否强制覆盖回滚？')}`
-          )
+          const forceConfirm = await confirm({
+            title: t('checkpoints.conflict_title', '版本冲突警告'),
+            description: `${res.error}\n\n${t('checkpoints.confirm_force_rollback', '是否强制覆盖回滚？')}`,
+            danger: true,
+            confirmText: t('checkpoints.force_rollback', '强制覆盖'),
+            cancelText: t('common.cancel', '取消'),
+          })
           if (forceConfirm) {
             res = await window.electronAPI.agentCheckpoint.rollback({
               id: cp.id,

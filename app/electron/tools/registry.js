@@ -52,7 +52,7 @@ function guardWorkspaceRead(target, ctx, label) {
   const p = String(target || ''); if (!p) return
   if (ctx?.agentMode !== 'ask') return
   if (isInsideWorkspace(p, ctx?.sessionId)) return
-  throw new Error(`璇诲彇琚嫆缁濓細${label} ${p} 浣嶄簬宸ヤ綔鍖轰箣澶栵紙褰撳墠涓?ask 妯″紡锛夈€傚纭渶璇诲彇璇ヨ矾寰勶紝璇锋敼鐢?ask_user 宸ュ叿鍚戠敤鎴疯鏄庡苟璇锋眰鎵瑰噯`)
+  throw new Error(`读取被拒绝：${label} ${p} 位于工作区之外（当前为 ask 模式）。如确需读取该路径，请改用 ask_user 工具向用户说明并请求批准`)
 }
 
 function lspFullEnabled(ctx) {
@@ -99,7 +99,7 @@ function formatRipgrepLines(output, cwd) {
   return hits.join('\n') || '(no matches)'
 }
 
-// 鈹€鈹€ DDG snippet extraction 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── DDG snippet extraction ──────────────────────────────────────────
 function extractDdgSnippets(html, q) {
   const snippets = []; const re = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g; let m
   while ((m = re.exec(html)) && snippets.length < 5) { const t = m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); if (t) snippets.push(`- ${t}`) }
@@ -110,7 +110,7 @@ function extractDdgSnippets(html, q) {
 // ── Unified diff and SEARCH/REPLACE patch engine ────────────────────────
 const { parseUnifiedDiff, applyHunks, applyAnyPatch } = require('./patchEngine')
 
-// 鈹€鈹€ Shell result formatting + optional Docker sandbox for run_command 鈹€鈹€鈹€
+// ──  ─────────────────────────────────────────────────────────
 
 function formatShellResult(stdout, stderr, exitCode, timedOut) {
   let stripAnsi
@@ -155,7 +155,7 @@ function runCommandStreaming(cmd, { cwd, timeoutMs, onChunk }) {
 }
 
 const DOCKER_EXIT_MARKER = 'AETHER_EXIT_CODE:'
-// Sentinel for "our time budget ran out" 鈥?distinct from backend errors so
+// Sentinel for "our time budget ran out" --distinct from backend errors so
 // races between backend calls and the deadline resolve unambiguously.
 const DOCKER_DEADLINE_LOST = { __deadlineLost: true }
 
@@ -168,7 +168,7 @@ async function runInDocker(cmd, timeoutMs, db) {
   try { image = String(db?.getSetting('exec.docker.image') || image) } catch { /* keep default image */ }
   // One budget covers the WHOLE operation. Probe (~8s), `docker run` (~30s)
   // and each inspect/logs poll (their own CLI timeouts) all burn wall-clock
-  // time, so the deadline must start BEFORE execute() and race every await 鈥?
+  // time, so the deadline must start BEFORE execute() and race every await --
   // otherwise a 1s request could realistically take a minute.
   const deadline = Date.now() + Math.max(timeoutMs, 1000)
   const remaining = () => deadline - Date.now()
@@ -186,7 +186,7 @@ async function runInDocker(cmd, timeoutMs, db) {
     sleep(Math.max(remaining(), 1)).then(() => DOCKER_DEADLINE_LOST),
   ])
   if (started === DOCKER_DEADLINE_LOST) {
-    // execute() may still land later 鈥?reap its container in the background
+    // execute() may still land later --reap its container in the background
     // so nothing lingers past our budget.
     void execPromise.then((s) => { if (s && s.ok) { try { dockerBackend.dispose(s.execId) } catch { /* best effort */ } } })
     return formatShellResult('', '', '', true)
@@ -223,9 +223,9 @@ async function runInDocker(cmd, timeoutMs, db) {
 
     const raw = `${st.stdoutTail || ''}\n${st.stderrTail || ''}`
     const idx = raw.lastIndexOf(DOCKER_EXIT_MARKER)
-    // Exit code priority: in-band marker (command ran to completion) 鈫?
+    // Exit code priority: in-band marker (command ran to completion) ->
     // the container's real .State.ExitCode from docker inspect. Never default
-    // an exited container to 0 鈥?a failed entrypoint or a kill must surface.
+    // an exited container to 0 --a failed entrypoint or a kill must surface.
     let exitCode = typeof st.exitCode === 'number' ? st.exitCode : undefined
     let combined = raw
     if (idx !== -1) {
@@ -239,9 +239,9 @@ async function runInDocker(cmd, timeoutMs, db) {
   }
 }
 
-// 鈹€鈹€ Tool definitions 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ──  ─────────────────────────────────────────────────────────
 const TOOLS = [
-  // 鈹€鈹€ Read tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ──  ─────────────────────────────────────────────────────────
   { name: 'read_file', description: 'Read file content (up to 64KB).', risk: 'safe', parameters: { type: 'object', properties: { path: { type: 'string' }, offset: { type: 'number' }, limit: { type: 'number' } }, required: ['path'] }, run: (args, ctx) => {
     const p = String(args.path || ''); if (!p) throw new Error('path is required'); guardWorkspaceRead(p, ctx, 'path')
     const buf = fs.readFileSync(p); let text = buf.slice(0, MAX_READ_BYTES).toString('utf-8')
@@ -294,7 +294,7 @@ const TOOLS = [
     if (mode === 'impact') {
       const g = await pi.indexWorkspace(root); const r = a.analyzeImpact(g, String(args.query || ''))
       if (!r.total) return `no files reference "${args.query}"`
-      return [`Impact: "${args.query}"`, `Direct: ${r.direct.length}`, ...r.direct.map(f => `  鈫?${f}`), `Transitive: ${r.transitive.length}`, ...r.transitive.map(f => `  鈫?${f}`), `Total: ${r.total}`].join('\n')
+      return [`Impact: "${args.query}"`, `Direct: ${r.direct.length}`, ...r.direct.map(f => `  ->${f}`), `Transitive: ${r.transitive.length}`, ...r.transitive.map(f => `  ->${f}`), `Total: ${r.total}`].join('\n')
     }
     if (mode === 'relevance') {
       const g = await pi.indexWorkspace(root); const topN = Number(args.maxFiles) || 20
@@ -305,7 +305,7 @@ const TOOLS = [
     const an = a.analyzeCodebase(null, root, { maxFiles: 3000 }); if (!an) return 'analysis failed'
     const L = [`Codebase: ${path.basename(root)}`, `Frameworks: ${an.frameworks.map(f => `${f.framework} (${Math.round(f.confidence * 100)}%)`).join(', ') || 'none'}`, `Files: ${an.fileCount} | Graph: ${an.graphNodes} nodes, ${an.graphEdges} edges`, '']
     if (an.entryPoints.length) { L.push(`Entry points:`, ...an.entryPoints.slice(0, 10).map(e => `  [${e.type}] ${e.file}`)); L.push('') }
-    if (an.apiRoutes.length) { L.push(`API routes:`, ...an.apiRoutes.slice(0, 15).map(r => `  ${r.path} 鈫?${r.file}`)); L.push('') }
+    if (an.apiRoutes.length) { L.push(`API routes:`, ...an.apiRoutes.slice(0, 15).map(r => `  ${r.path} ->${r.file}`)); L.push('') }
     if (an.configs.length) L.push(`Configs: ${an.configs.map(c => c.type).join(', ')}`)
     return L.join('\n')
   }},
@@ -316,7 +316,7 @@ const TOOLS = [
     return Object.entries(files).map(([t, f]) => `## ${f.fileName} (${t})\n\n${f.content}`).join('\n\n---\n\n')
   }},
 
-  // 鈹€鈹€ Write tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── Write tools ─────────────────────────────────────────────────────
   { name: 'write_file', description: 'Write text to a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const c = String(args.content ?? ''); if (!p) throw new Error('path is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
@@ -407,7 +407,12 @@ const TOOLS = [
     const p = String(args.path || ''); const pt = String(args.patch || ''); if (!p || !pt) throw new Error('path and patch required')
     if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
     const orig = await fs.promises.readFile(p, 'utf-8')
-    const r = applyAnyPatch(orig, pt)
+    let cleanedPatch = pt
+    try {
+      const { repairPatchIfMalformed } = require('../llm/adaptivePatch')
+      cleanedPatch = repairPatchIfMalformed(pt)
+    } catch {}
+    const r = applyAnyPatch(orig, cleanedPatch)
     if (r.conflicts && r.conflicts.length) {
       throw new Error(`Patch conflicts in ${p}:\n${r.conflicts.join('\n')}\nHint: Verify lines with read_file before applying changes.`)
     }
@@ -418,7 +423,7 @@ const TOOLS = [
     return `patched ${p} (${r.applied} changes applied via ${r.format})`
   }},
 
-  // 鈹€鈹€ Execution tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── Execution tools ─────────────────────────────────────────────────
   { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: async (args, ctx) => {
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
     if (ctx?.agentMode !== 'yolo') { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
@@ -526,7 +531,7 @@ const TOOLS = [
     const ftr = (Array.isArray(args.files) ? args.files : []).slice(0, 5).map(f => { try { return { path: f, content: fs.readFileSync(f, 'utf-8') } } catch { return null } }).filter(Boolean)
     return (await reviewFiles({ provider: ctx.provider, model: ctx.model, files: ftr, signal: ctx.signal })).summary
   }},
-  { name: 'run_arena', description: 'Multi-agent arena: plan 鈫?cross-review 鈫?judge 鈫?execute. Modes: plan_only, full. Optional: maxRounds>1 enables Evaluator-Optimizer refine loop with judgeThreshold; roles can be [{role, model}] for role-model mapping; executeModel overrides executor model; supervise=true lets an LLM supervisor pick roles dynamically; checkpointKey persists phase state for resume.', risk: 'dangerous', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['plan_only', 'full'] }, request: { type: 'string' }, roles: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { role: { type: 'string' }, model: { type: 'object' } } }] } }, maxRounds: { type: 'number', minimum: 1 }, judgeThreshold: { type: 'number', minimum: 0 }, maxSubagentCalls: { type: 'number', minimum: 1 }, executeModel: { type: 'object' }, supervise: { type: 'boolean' }, checkpointKey: { type: 'string' } }, required: ['request'] }, run: async (args, ctx) => {
+  { name: 'run_arena', description: 'Multi-agent arena: plan ->cross-review ->judge ->execute. Modes: plan_only, full. Optional: maxRounds>1 enables Evaluator-Optimizer refine loop with judgeThreshold; roles can be [{role, model}] for role-model mapping; executeModel overrides executor model; supervise=true lets an LLM supervisor pick roles dynamically; checkpointKey persists phase state for resume.', risk: 'dangerous', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['plan_only', 'full'] }, request: { type: 'string' }, roles: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { role: { type: 'string' }, model: { type: 'object' } } }] } }, maxRounds: { type: 'number', minimum: 1 }, judgeThreshold: { type: 'number', minimum: 0 }, maxSubagentCalls: { type: 'number', minimum: 1 }, executeModel: { type: 'object' }, supervise: { type: 'boolean' }, checkpointKey: { type: 'string' } }, required: ['request'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
     const ar = require('../llm/agentArena'); const mode = String(args.mode || 'plan_only'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
@@ -537,7 +542,7 @@ const TOOLS = [
     } catch (e) { return `error: ${e?.message}` }
   }},
 
-  // 鈹€鈹€ Memory tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── Memory tools ────────────────────────────────────────────────────
   { name: 'memory_save', description: 'Save a structured memory entry (entity/fact/context/relation). DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { content: { type: 'string' }, type: { type: 'string', enum: ['entity', 'fact', 'context', 'relation'] } }, required: ['content', 'type'] }, run: async (args, ctx) => {
     if (!ctx?.db) return 'no db'
     const c = String(args.content || '').trim(); const t = String(args.type || 'fact')
@@ -549,7 +554,7 @@ const TOOLS = [
     } catch (e) { return `error: ${e.message}` }
   }},
 
-  // 鈹€鈹€ Web tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── Web tools ───────────────────────────────────────────────────────
   { name: 'web_search', description: 'Search the web (DDG).', risk: 'safe', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, run: async (args, ctx) => {
     const q = String(args.query || ''); if (!q) throw new Error('query required')
     const ctrl = new AbortController(); const timeout = setTimeout(() => ctrl.abort(), 15000)
@@ -693,7 +698,7 @@ const TOOLS = [
     } catch (e) { return `[error: ${e.message}]` } finally { if (win && !win.isDestroyed()) win.destroy() }
   }},
 
-  // 鈹€鈹€ Platform tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── Platform tools ──────────────────────────────────────────────────
   { name: 'use_skill', description: 'Load a skill by name.', risk: 'safe', parameters: { type: 'object', properties: { skill_name: { type: 'string' } }, required: ['skill_name'] }, run: (args) => {
     const name = String(args.skill_name || ''); if (!name) throw new Error('skill_name required')
     const skillsMod = require('../llm/skills')
@@ -716,16 +721,16 @@ const TOOLS = [
     } catch (e) { return `error: ${e.message}` }
   }},
 
-  // 鈹€鈹€ Debug tools 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-  { name: 'debug_loop', description: 'Run test 鈫?analyze 鈫?fix loop until tests pass or max cycles.', risk: 'dangerous', parameters: { type: 'object', properties: { maxCycles: { type: 'number' } } }, run: async (args, ctx) => {
+  // ── Debug tools ─────────────────────────────────────────────────────
+  { name: 'debug_loop', description: 'Run test -> analyze -> fix loop until tests pass or max cycles.', risk: 'dangerous', parameters: { type: 'object', properties: { maxCycles: { type: 'number' } } }, run: async (args, ctx) => {
     const da = require('./debugAgent'); const maxC = Math.min(Number(args.maxCycles) || 5, 10)
     const r = await da.runDebugLoop({ provider: ctx.provider, model: ctx.model, signal: ctx.signal, sessionId: ctx.sessionId })
-    if (r.success) return `鉁?${r.summary} (${r.cycles} cycles)`
-    const lines = [r.analysis ? r.analysis.description : `鉂?Failed (${r.cycles}/${maxC})`]; return lines.join('\n')
+    if (r.success) return `[PASS] ${r.summary} (${r.cycles} cycles)`
+    const lines = [r.analysis ? r.analysis.description : `[FAIL] Failed (${r.cycles}/${maxC})`]; return lines.join('\n')
   }},
 ]
 
-// 鈹€鈹€ LSP tools (feature-flagged) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── LSP tools (feature-flagged) ──────────────────────────────────────
 function makeLspTool(name, desc, fn) {
   return { name, description: desc, risk: 'safe', parameters: { type: 'object', properties: { position: { type: 'object' } } }, run: async (args, ctx) => {
     if (!lspFullEnabled(ctx)) return 'LSP disabled'
