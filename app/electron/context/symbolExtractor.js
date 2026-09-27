@@ -109,7 +109,12 @@ function extractJS(content, filePath, lang) {
     const tsTypeM = trimmed.match(/^(?:export\s+)?(?:declare\s+)?(?:interface|type|enum)\s+(\w+)/)
     if (tsTypeM) {
       const openCol = line.lastIndexOf('{')
-      addSymbol(tsTypeM[1], idx, openCol === -1 ? 0 : openCol)
+      if (openCol === -1 && /^type\s+/i.test(trimmed.replace(/^(?:export\s+)?(?:declare\s+)?/, ''))) {
+        symbols.push(tsTypeM[1])
+        symbolLocs.push({ name: tsTypeM[1], locStart: idx + 1, locEnd: idx + 1 })
+      } else {
+        addSymbol(tsTypeM[1], idx, openCol === -1 ? 0 : openCol)
+      }
       continue
     }
     // class X { ... } — may span multiple lines
