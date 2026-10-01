@@ -283,13 +283,20 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('plan:update-step', (_e, { sessionId, stepIndex, status }) => {
     try {
       if (!sessionId || !db?.getSessionPlan) return { ok: false }
-      const sid = Number(sessionId)
-      const plan = db.getSessionPlan(sid)
-      if (plan) {
-        const list = plan.tasks || plan.steps || plan.todos
-        if (Array.isArray(list) && list[stepIndex]) {
-          list[stepIndex].status = status
-          db.saveSessionPlan(sid, plan)
+      // While the loop is streaming it owns the in-memory plan and its next
+      // snapshot save would clobber a direct DB write — record the tick for
+      // the loop to merge instead, and only persist directly when idle.
+      // planControl/steering key on the raw sessionId (same convention as
+      // plan:skip-step / plan:retry-step); DB calls take the numeric id.
+      planControl.setStatus(sessionId, stepIndex, status)
+      if (!steering.isRunning(sessionId)) {
+        const plan = db.getSessionPlan(Number(sessionId))
+        if (plan) {
+          const list = plan.tasks || plan.steps || plan.todos
+          if (Array.isArray(list) && list[stepIndex]) {
+            list[stepIndex].status = status
+            db.saveSessionPlan(Number(sessionId), plan)
+          }
         }
       }
       return { ok: true }

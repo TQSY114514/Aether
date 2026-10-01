@@ -82,7 +82,7 @@ const localBackend = {
         const featureFlags = require('../featureFlags')
         const database = require('../database')
         const db = database.getDatabase ? database.getDatabase() : null
-        const enabled = featureFlags.isEnabled(db, 'exec.windowsSandbox')
+        const enabled = featureFlags.isEnabled(db, 'exec.jobSandbox')
         if (enabled) {
           const winJobObject = require('./winJobObject')
           winJobObject.assignProcess(child.pid).then((res) => {

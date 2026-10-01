@@ -297,7 +297,9 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                   </button>
                 </div>
                 <pre className="text-[11px] font-mono p-2.5 whitespace-pre-wrap break-all max-h-56 overflow-y-auto leading-relaxed text-[#c9d1d9]">
-                  {stripAnsi(tool.liveOutput || tool.result || tool.error || '')}
+                  {stripAnsi(running && !tool.liveOutputDone
+                    ? (tool.liveOutput || tool.result || tool.error || '')
+                    : (tool.error || tool.result || tool.liveOutput || ''))}
                   {running && !tool.liveOutputDone && <span className="animate-pulse text-emerald-400">▋</span>}
                 </pre>
               </div>

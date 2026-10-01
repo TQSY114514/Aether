@@ -50,6 +50,26 @@ describe('P1-6: Multi-Model Adaptive Edit Patch Routing', () => {
       expect(res.tier).toBe('compact')
       expect(res.format).toBe('search_replace')
     })
+
+    it('classifies 2026 frontier families as strong', () => {
+      for (const m of [
+        'claude-sonnet-4-5', 'claude-opus-4-6', 'gpt-5.2', 'gemini-2.5-pro',
+        'gemini-3-pro-preview', 'qwen3-235b-a22b', 'glm-4.6', 'kimi-k2-0905',
+        'deepseek-v3.2', 'grok-4', 'minimax-m2',
+      ]) {
+        const res = classifyModelCapability(m)
+        expect(res.tier).toBe('strong')
+        expect(res.format).toBe('unified')
+      }
+    })
+
+    it('keeps compact variants of 2026 families in the compact tier', () => {
+      for (const m of ['gemini-2.5-flash', 'claude-4-5-haiku', 'glm-4-5-flash', 'gpt-5-mini']) {
+        const res = classifyModelCapability(m)
+        expect(res.tier).toBe('compact')
+        expect(res.format).toBe('search_replace')
+      }
+    })
   })
 
   describe('adaptToolsPayload', () => {

@@ -71,7 +71,7 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
                       win.show()
                       win.focus()
                     }
-                    const targetSessionId = evt.payload?.sessionId || getTask(taskId, db)?.session_id
+                    const targetSessionId = evt.payload?.sessionId || getTask(taskId, db)?.sessionId
                     if (targetSessionId && !wc.isDestroyed()) {
                       wc.send('session:switch-requested', { sessionId: Number(targetSessionId), taskId: String(taskId) })
                     }
@@ -101,7 +101,7 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
                       win.show()
                       win.focus()
                     }
-                    const targetSessionId = evt.payload?.sessionId || getTask(taskId, db)?.session_id
+                    const targetSessionId = evt.payload?.sessionId || getTask(taskId, db)?.sessionId
                     if (targetSessionId && !wc.isDestroyed()) {
                       wc.send('session:switch-requested', { sessionId: Number(targetSessionId), taskId: String(taskId) })
                     }

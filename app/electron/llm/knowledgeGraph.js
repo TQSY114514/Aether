@@ -384,9 +384,9 @@ function renameNode(db, entity, newEntity) {
     }
     if (!node) return { ok: false, error: 'node not found' }
 
-    // If stored entity is lowercase and query entity was mixed-case, normalize target to lowercase
-    const isStoredLower = (node.entity === node.entity.toLowerCase()) && (oldName !== oldName.toLowerCase())
-    const targetEntity = isStoredLower ? name.toLowerCase() : name
+    // Every other code path (addRelation/deleteRelation/getWikiArticle/deleteNode)
+    // lowercases entity lookups, so renames must stay lowercase to remain reachable.
+    const targetEntity = name.toLowerCase()
 
     const dup = db.prepare('SELECT id FROM kg_nodes WHERE entity = ? AND id != ?').get(targetEntity, node.id)
     if (dup) return { ok: false, error: `entity already exists: ${targetEntity}` }
@@ -398,7 +398,7 @@ function renameNode(db, entity, newEntity) {
       db.prepare('UPDATE kg_edges SET "from" = ? WHERE "from" = ?').run(targetEntity, oldName)
       db.prepare('UPDATE kg_edges SET "to" = ? WHERE "to" = ?').run(targetEntity, oldName)
     }
-    return { ok: true, entity: name }
+    return { ok: true, entity: targetEntity }
   } catch (e) {
     return { ok: false, error: e && e.message ? e.message : String(e) }
   }

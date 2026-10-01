@@ -50,7 +50,7 @@ export default function TodoList({ todos, interactive = false, onToggle, onSkip,
                       type="button"
                       onClick={() => onSkip?.(i)}
                       className="p-1 rounded hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                      title="跳过此步"
+                      title={t('chat.task_skip_step')}
                     >
                       <FastForward size={11} />
                     </button>
@@ -59,7 +59,7 @@ export default function TodoList({ todos, interactive = false, onToggle, onSkip,
                       type="button"
                       onClick={() => onRetry?.(i)}
                       className="p-1 rounded hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--accent)]"
-                      title="重试此步"
+                      title={t('chat.task_retry_step')}
                     >
                       <RotateCcw size={11} />
                     </button>

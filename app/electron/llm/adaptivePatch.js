@@ -2,7 +2,7 @@
 // app/electron/llm/adaptivePatch.js — Multi-Model Adaptive Edit Patch Routing
 //
 // Aligns with Aider & Cursor practices and 2026 Competitive Agent Research §10.2 (P1-6):
-// Strong models (Claude 3.5+, GPT-4o, o1, Gemini 1.5 Pro, Qwen 72B) excel at generating
+// Strong models (Claude 3.5+/4, GPT-4o/5, Gemini 2.5 Pro, Qwen 72B/Qwen3, GLM-4) excel at generating
 // standard Unified Diffs with @@ line offsets. Smaller/compact models (7B/8B, Mini,
 // Haiku, Flash, Ollama local models) frequently miscalculate line numbers, leading to
 // patch conflict errors.
@@ -39,12 +39,13 @@ function classifyModelCapability(model) {
 
   // Known strong reasoning / coding models
   const isStrongModel = [
-    'claude-3-5', 'claude-3.5', 'claude-3-7', 'claude-3.7', 'claude-opus',
-    'gpt-4', 'o1', 'o3', 'o4',
-    'gemini-1.5-pro', 'gemini-2.0-pro', 'gemini-exp',
-    'deepseek-chat', 'deepseek-coder', 'deepseek-reasoner',
-    'qwen-max', 'qwen-2.5-72b', 'qwen2.5-72b', 'qwen2.5-32b',
-    'llama-3.1-70b', 'llama-3.3-70b', 'llama-3-70b',
+    'claude-3-5', 'claude-3.5', 'claude-3-7', 'claude-3.7', 'claude-opus', 'claude-sonnet-4', 'claude-4',
+    'gpt-4', 'gpt-5', 'o1', 'o3', 'o4',
+    'gemini-1.5-pro', 'gemini-2.0-pro', 'gemini-2.5-pro', 'gemini-3', 'gemini-exp',
+    'deepseek-chat', 'deepseek-coder', 'deepseek-reasoner', 'deepseek-v3', 'deepseek-r1',
+    'qwen-max', 'qwen-2.5-72b', 'qwen2.5-72b', 'qwen2.5-32b', 'qwen3',
+    'llama-3.1-70b', 'llama-3.3-70b', 'llama-3-70b', 'llama-4',
+    'glm-4', 'kimi-k2', 'grok-3', 'grok-4', 'minimax-m2',
   ].some(tag => modelName.includes(tag))
 
   if (isStrongModel) {

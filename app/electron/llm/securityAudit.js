@@ -24,7 +24,7 @@ const CAPABILITY_AXES = Object.freeze(['READ', 'WRITE', 'EXECUTE', 'NETWORK', 'G
 /**
  * Determine active capability profile for the audit run.
  */
-function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailable = null } = {}) {
+function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailable = null, winSandboxAvailable = null } = {}) {
   let hasDocker = false
   let featureFlags
   try {
@@ -43,10 +43,12 @@ function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailabl
     }
   }
   let hasWinJob = false
-  if (process.platform === 'win32') {
+  if (typeof winSandboxAvailable === 'boolean') {
+    hasWinJob = winSandboxAvailable
+  } else if (process.platform === 'win32') {
     try {
       const winJobObject = require('../exec/winJobObject')
-      const flagOn = featureFlags ? featureFlags.isEnabled(db, 'exec.windowsSandbox') : true
+      const flagOn = featureFlags ? featureFlags.isEnabled(db, 'exec.jobSandbox') : true
       hasWinJob = Boolean(flagOn && winJobObject && typeof winJobObject.isSupported === 'function' && winJobObject.isSupported())
     } catch {
       hasWinJob = false
@@ -301,6 +303,7 @@ async function runSecurityAudit({
   mode = 'guidance',
   db = null,
   dockerAvailable = null,
+  winSandboxAvailable = null,
   outputDir = null,
   hunterId = 'subagent_hunter_iso_1',
   verifierId = 'subagent_verifier_iso_2',
@@ -311,7 +314,7 @@ async function runSecurityAudit({
     throw new Error('runSecurityAudit: finder_id and verifier_id must be distinct isolated identities')
   }
 
-  const capProfile = resolveAuditCapabilities({ mode, db, dockerAvailable })
+  const capProfile = resolveAuditCapabilities({ mode, db, dockerAvailable, winSandboxAvailable })
   const ledger = buildCoverageLedger(workspaceDir, {
     mode: capProfile.mode,
     capabilities: capProfile.capabilities,

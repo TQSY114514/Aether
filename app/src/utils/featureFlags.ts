@@ -88,6 +88,14 @@ export function getFeatureFlag(key: string, fallback = false): boolean {
   return entry ? entry.enabled : fallback
 }
 
+// Effective value of one flag after forcing a reload from main. Use this in
+// toggle flows where acting on the pre-load fallback would flip the wrong way.
+export async function getFeatureFlagFresh(key: string, fallback = false): Promise<boolean> {
+  await refresh()
+  const entry = (cache ?? EMPTY_FLAGS).find(f => f.key === key)
+  return entry ? entry.enabled : fallback
+}
+
 // React hook: re-renders the component when the flag's value changes.
 export function useFeatureFlag(key: string, fallback = false): boolean {
   ensureLoaded()

@@ -548,7 +548,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       : String(lastUserRaw)
     const repoMapMsg = await buildRepoMapMessage({
       userMessage: lastUserMsg,
-      budgetTokens: isPoorMode ? 512 : 1024,
+      maxTokens: isPoorMode ? 512 : 1024,
     })
     if (repoMapMsg) {
       const sysIdx = convo.findIndex(m => m.role === 'system')
@@ -872,6 +872,24 @@ Reply in this format:
             content: `[用户更新了执行计划: ${parts.join('; ')}。请调整后续步骤，跳过已标记跳过的步骤，重新执行标记重试的步骤。]`,
           })
           try { onStatus?.({ text: `📋 计划已更新: ${parts.join('; ')}`, kind: 'plan' }) } catch {}
+        }
+        // Merge user checklist ticks recorded via plan:update-step while this
+        // loop owns the in-memory plan, so its next save doesn't clobber them.
+        if (plan && plan.tasks) {
+          const pendingStatus = planControl.consumeStatusOverrides(sessionId)
+          if (pendingStatus && pendingStatus.length > 0) {
+            let touched = false
+            for (const [idx, st] of pendingStatus) {
+              if (plan.tasks[idx]) { plan.tasks[idx].status = st; touched = true }
+            }
+            if (touched) {
+              try {
+                onPlanSnapshot?.(plan)
+                onTodoUpdate?.(planToTodos(plan))
+                if (db && db.saveSessionPlan) db.saveSessionPlan(sessionId, plan)
+              } catch {}
+            }
+          }
         }
       } catch {}
     }
@@ -1781,16 +1799,21 @@ Reply ONLY with JSON:
       if (pendingFollowUps && pendingFollowUps.length > 0) {
         log.info(`[toolLoop] Processing ${pendingFollowUps.length} pending follow-up(s) for session ${sessionId}`)
         for (const fu of pendingFollowUps) {
-          steering.completeFollowUp(fu.id)
           try {
+            if (!fu.text || !model?.id) throw new Error('follow-up missing text or model id')
             const bgTasks = require('./backgroundTasks')
-            bgTasks.createTask(db, {
-              sessionId,
-              title: `[Follow-up] ${fu.instruction?.slice(0, 40) || 'Task'}`,
-              content: fu.instruction || '',
+            await bgTasks.startTask({
+              db,
+              parentSessionId: sessionId,
+              content: fu.text,
+              modelId: model.id,
               agentMode: 'ask',
             })
-          } catch {}
+            steering.completeFollowUp(sessionId, fu.id)
+          } catch (e) {
+            log.warn(`[toolLoop] Failed to start follow-up task: ${e?.message}`)
+            steering.failFollowUp(sessionId, fu.id, e?.message)
+          }
         }
       }
     } catch {}

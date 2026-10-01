@@ -88,11 +88,20 @@ export function formatWarpBlock(entry = {}) {
   const args = (entry.args && typeof entry.args === 'object') ? entry.args : {}
   const command = String(args.command || entry.name)
   const cwd = args.cwd ? String(args.cwd) : ''
-  const exitCode = typeof entry.exitCode === 'number' ? entry.exitCode : (entry.error ? 1 : (entry.result != null ? 0 : null))
-  const status = isStart ? 'running' : exitCode === 0 && !entry.error ? 'done' : 'error'
 
   const raw = entry.error ? String(entry.error) : String(entry.result ?? '')
   const clean = stripAnsi(raw)
+
+  // RPC entry 不带独立 exitCode 字段——run_command 的退出状态以文本标记内嵌在
+  // result 里（registry.js: [FAILED: exit N] / [TIMED OUT] / [COMMAND NOT FOUND]）。
+  let exitCode = typeof entry.exitCode === 'number' ? entry.exitCode : (entry.error ? 1 : (entry.result != null ? 0 : null))
+  if (exitCode == null || exitCode === 0) {
+    const m = raw.match(/(?:\[FAILED:\s*exit\s+|exit\s+code:\s*)(-?\d+)/i)
+    if (m && parseInt(m[1], 10) !== 0) exitCode = parseInt(m[1], 10)
+    else if (raw.includes('[COMMAND NOT FOUND]')) exitCode = 127
+    else if (raw.includes('[TIMED OUT]')) exitCode = 1
+  }
+  const status = isStart ? 'running' : exitCode === 0 && !entry.error ? 'done' : 'error'
 
   return {
     isCommand: true,

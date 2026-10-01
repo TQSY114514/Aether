@@ -7,7 +7,7 @@
 
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
-import { getFeatureFlag, setFeatureFlag } from '@/utils/featureFlags'
+import { getFeatureFlagFresh, setFeatureFlag } from '@/utils/featureFlags'
 
 export type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
 
@@ -29,9 +29,13 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     name: t('slash.poor', '穷鬼省流模式'),
     description: t('slash.poor_desc', '切换穷鬼省流模式：严格压制思考轮数至 8 轮，激进压缩上下文节省 Token'),
     action: async () => {
-      const current = getFeatureFlag('agent.poorMode', false)
+      const current = await getFeatureFlagFresh('agent.poorMode', false)
       const next = !current
-      await setFeatureFlag('agent.poorMode', next)
+      const ok = await setFeatureFlag('agent.poorMode', next)
+      if (!ok) {
+        useStore.getState().triggerToast(t('slash.poor_failed', '切换穷鬼省流模式失败，请重试'), 'error')
+        return
+      }
       useStore.getState().triggerToast(
         next ? t('slash.poor_enabled', '穷鬼省流模式已开启：最大循环限制为 8 轮，激进压缩 Token') : t('slash.poor_disabled', '穷鬼省流模式已关闭：恢复标准预算'),
         next ? 'info' : 'success'

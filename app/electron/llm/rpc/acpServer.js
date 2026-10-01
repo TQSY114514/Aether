@@ -113,16 +113,18 @@ function createAcpServer({ db, deps = {} }) {
 
       let provider = params.provider
       let model = params.model
-      if (!provider || !model) {
+      // ACP clients pass provider/model as string identifiers — resolve them
+      // against the registry so runAgent receives the object shapes it expects.
+      if (!provider || !model || typeof provider === 'string' || typeof model === 'string') {
         const resolved = agentCore.resolveProviderModel(db, {
-          providerName: params.providerName,
-          modelName: params.modelName,
+          providerName: typeof provider === 'string' ? provider : params.providerName,
+          modelName: typeof model === 'string' ? model : params.modelName,
         })
         if (!resolved) {
           throw { code: -32603, message: 'No enabled model found in Aether. Configure one in app or pass provider/model.' }
         }
-        provider = provider || resolved.provider
-        model = model || resolved.model
+        if (!provider || typeof provider === 'string') provider = resolved.provider
+        if (!model || typeof model === 'string') model = resolved.model
       }
 
       const controller = new AbortController()
@@ -279,6 +281,15 @@ function createAcpServer({ db, deps = {} }) {
  * @returns {Promise<number>}
  */
 async function main({ db: dbPath, deps = {} } = {}) {
+  // stdout carries the JSON-RPC frame stream — the logger (and any stray
+  // console.* call) must never interleave with it. Route console output to
+  // stderr; the logger resolves console methods at call time, so this covers
+  // every level, while file persistence in userData is unaffected.
+  const util = require('node:util')
+  for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+    console[level] = (...args) => process.stderr.write(util.format(...args) + '\n')
+  }
+
   const db = agentCore.openDatabase(dbPath)
   if (!db) {
     process.stdout.write(jsonRpcError(null, -32603, 'Database unavailable') + '\n')

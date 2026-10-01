@@ -139,6 +139,16 @@ function getPendingFollowUps(sessionId) {
   return getSession(sessionId).getPendingFollowUps()
 }
 
+// Mark a follow-up as done.
+function completeFollowUp(sessionId, id) {
+  return getSession(sessionId).completeFollowUp(id)
+}
+
+// Mark a follow-up as failed.
+function failFollowUp(sessionId, id, error) {
+  return getSession(sessionId).failFollowUp(id, error)
+}
+
 // Clear a session's steering state.
 function clearSession(sessionId) {
   getSession(sessionId).reset()
@@ -166,6 +176,8 @@ module.exports = {
   followUp,
   getPendingInjections,
   getPendingFollowUps,
+  completeFollowUp,
+  failFollowUp,
   clearSession,
   setRunning,
   isRunning,
