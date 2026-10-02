@@ -119,9 +119,17 @@ function createAcpServer({ db, deps = {} }) {
         const resolved = agentCore.resolveProviderModel(db, {
           providerName: typeof provider === 'string' ? provider : params.providerName,
           modelName: typeof model === 'string' ? model : params.modelName,
+          // An ACP client names the model it wants; silently running a different
+          // one (or failing to resolve at all) must surface as an error instead.
+          strict: true,
         })
         if (!resolved) {
           throw { code: -32603, message: 'No enabled model found in Aether. Configure one in app or pass provider/model.' }
+        }
+        // A caller-supplied provider object paired with a registry-resolved model
+        // can end up sending a model name to an endpoint that does not serve it.
+        if (provider && typeof provider === 'object' && typeof model === 'string' && resolved.provider.name !== provider.name) {
+          throw { code: -32602, message: `model "${model}" is not available on provider "${provider.name}"` }
         }
         if (!provider || typeof provider === 'string') provider = resolved.provider
         if (!model || typeof model === 'string') model = resolved.model

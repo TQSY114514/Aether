@@ -80,9 +80,11 @@ const localBackend = {
     if (process.platform === 'win32' && child.pid) {
       try {
         const featureFlags = require('../featureFlags')
+        // Pass the module wrapper, not getDatabase(): featureFlags reads stored
+        // values via db.getSetting(), which the raw better-sqlite3 handle lacks —
+        // that mismatch pinned exec.jobSandbox to its default true.
         const database = require('../database')
-        const db = database.getDatabase ? database.getDatabase() : null
-        const enabled = featureFlags.isEnabled(db, 'exec.jobSandbox')
+        const enabled = featureFlags.isEnabled(database, 'exec.jobSandbox')
         if (enabled) {
           const winJobObject = require('./winJobObject')
           winJobObject.assignProcess(child.pid).then((res) => {

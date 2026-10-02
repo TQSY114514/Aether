@@ -85,13 +85,7 @@ function load(db, sessionId, turnId, beforeStep = null) {
       params.push(beforeStep)
     }
     sql += ' ORDER BY step_index DESC LIMIT 1'
-    let r = null
-    if (typeof db.prepare === 'function') {
-      r = db.prepare(sql).get(...params)
-    } else if (typeof db.allRows === 'function') {
-      const rows = db.allRows(sql, params)
-      r = rows && rows[0]
-    }
+    const r = typeof db.prepare === 'function' ? db.prepare(sql).get(...params) : null
     if (!r) return null
     return {
       id: r.id,
@@ -113,13 +107,7 @@ function listForSession(db, sessionId, limit = 20) {
   try {
     const sql = `SELECT id, session_id, turn_id, step_index, checkpoint_meta, created_at FROM ${TABLE} WHERE session_id = ? ORDER BY id DESC LIMIT ?`
     const lim = Math.min(limit, MAX_CHECKPOINTS_PER_SESSION)
-    let rows = null
-    if (typeof db.prepare === 'function') {
-      rows = db.prepare(sql).all(sessionId, lim)
-    } else if (typeof db.allRows === 'function') {
-      rows = db.allRows(sql, [sessionId, lim])
-    }
-    if (!rows) return []
+    const rows = typeof db.prepare === 'function' ? db.prepare(sql).all(sessionId, lim) : []
     return rows.map(row => ({
       id: row.id, sessionId: row.session_id, turnId: row.turn_id,
       stepIndex: row.step_index, meta: JSON.parse(row.checkpoint_meta || '{}'), createdAt: row.created_at,

@@ -54,7 +54,11 @@ function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailabl
       hasWinJob = false
     }
   }
-  const sandboxAvailable = hasDocker || hasWinJob
+  // A Windows Job Object only caps memory and kills orphans on close — it gives
+  // no filesystem or network isolation, so it is process containment, not a
+  // verification sandbox. Counting it here let execution findings be marked
+  // 'confirmed' (verified_in_sandbox) while the PoC actually ran unisolated.
+  const sandboxAvailable = hasDocker
 
   const capabilities = {
     READ: true,
@@ -68,6 +72,7 @@ function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailabl
   return {
     mode: mode === 'full' ? 'full' : 'guidance',
     sandboxAvailable,
+    processContainment: hasWinJob,
     capabilities,
   }
 }

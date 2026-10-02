@@ -288,8 +288,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       // the loop to merge instead, and only persist directly when idle.
       // planControl/steering key on the raw sessionId (same convention as
       // plan:skip-step / plan:retry-step); DB calls take the numeric id.
-      planControl.setStatus(sessionId, stepIndex, status)
-      if (!steering.isRunning(sessionId)) {
+      if (steering.isRunning(sessionId)) {
+        planControl.setStatus(sessionId, stepIndex, status)
+      } else {
+        // Idle: persist directly and leave no queued override behind — an idle
+        // tick used to stay in planControl and get applied to whatever plan the
+        // next run in this session loaded or generated.
         const plan = db.getSessionPlan(Number(sessionId))
         if (plan) {
           const list = plan.tasks || plan.steps || plan.todos

@@ -648,7 +648,7 @@ export default function ChatInput() {
               }} />
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto flex-nowrap">
+          <div className="flex items-center gap-1.5 min-w-0 shrink ml-auto flex-nowrap">
             {isStreaming ? (
               <StreamingStatusBar sessionId={currentSessionId} />
             ) : (
@@ -779,8 +779,8 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   const cumCost = cumUsage?.costUsd || 0
   const showCost = turnCost > 0 || cumCost > 0
   return (
-    <div className="px-0.5 mt-1.5 animate-blur-fade">
-      <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+    <div className="px-0.5 mt-1.5 min-w-0 animate-blur-fade">
+      <div className="flex items-center gap-1.5 text-[11px] min-w-0" style={{ color: 'var(--text-muted)' }}>
         {stopped ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -788,8 +788,8 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
           </>
         ) : (
           <>
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-            <span>{status}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse shrink-0" />
+            <span className="min-w-0 truncate" title={status}>{status}</span>
           </>
         )}
         {showCost && (

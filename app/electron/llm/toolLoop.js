@@ -1808,6 +1808,10 @@ Reply ONLY with JSON:
               content: fu.text,
               modelId: model.id,
               agentMode: 'ask',
+              // startTask calls emit() on completion; omitting it threw inside
+              // the success path and turned a finished follow-up into a retry.
+              // User-visible completion still arrives via enqueueTaskNotification.
+              emit: () => {},
             })
             steering.completeFollowUp(sessionId, fu.id)
           } catch (e) {
@@ -1914,6 +1918,24 @@ Reply ONLY with JSON:
       } finally {
         shadowWorktree = null
       }
+    }
+    // A checklist tick that landed after the final iteration consumed its overrides
+    // would be dropped by clearSession below — plan:update-step already answered
+    // ok, so persist the leftovers instead of losing the user's edit.
+    if (sessionId && db && db.getSessionPlan && db.saveSessionPlan) {
+      try {
+        const sid = Number(sessionId)
+        const leftover = Number.isNaN(sid) ? null : planControl.consumeStatusOverrides(sessionId)
+        const stored = Number.isNaN(sid) ? null : db.getSessionPlan(sid)
+        const list = stored && (stored.tasks || stored.steps || stored.todos)
+        if (Array.isArray(list) && leftover && leftover.length > 0) {
+          let touched = false
+          for (const [idx, st] of leftover) {
+            if (list[idx]) { list[idx].status = st; touched = true }
+          }
+          if (touched) db.saveSessionPlan(sid, stored)
+        }
+      } catch {}
     }
     if (sessionId) {
       try { planControl.clearSession(sessionId) } catch {}

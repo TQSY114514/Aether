@@ -96,10 +96,12 @@ export function formatWarpBlock(entry = {}) {
   // result 里（registry.js: [FAILED: exit N] / [TIMED OUT] / [COMMAND NOT FOUND]）。
   let exitCode = typeof entry.exitCode === 'number' ? entry.exitCode : (entry.error ? 1 : (entry.result != null ? 0 : null))
   if (exitCode == null || exitCode === 0) {
-    const m = raw.match(/(?:\[FAILED:\s*exit\s+|exit\s+code:\s*)(-?\d+)/i)
+    // Anchor on the markers registry.js prepends. Scanning the whole output let a
+    // command whose own stdout mentions "exit code: 1" render as failed.
+    const m = raw.match(/\[FAILED:\s*exit\s+(-?\d+)/i)
     if (m && parseInt(m[1], 10) !== 0) exitCode = parseInt(m[1], 10)
-    else if (raw.includes('[COMMAND NOT FOUND]')) exitCode = 127
-    else if (raw.includes('[TIMED OUT]')) exitCode = 1
+    else if (/^\s*\[COMMAND NOT FOUND\]/im.test(raw)) exitCode = 127
+    else if (/^\s*\[TIMED OUT\]/im.test(raw)) exitCode = 1
   }
   const status = isStart ? 'running' : exitCode === 0 && !entry.error ? 'done' : 'error'
 

@@ -85,11 +85,16 @@ function listModels(db) {
 // Resolve a provider + model row for the adapter. `modelName` may be a bare
 // model name or a "provider/model" pair. Falls back to the primary model, then
 // the first enabled model. Returns { provider, model } or null.
-function resolveProviderModel(db, { providerName, modelName } = {}) {
+function resolveProviderModel(db, { providerName, modelName, strict = false } = {}) {
   if (!db) return null
   const providers = listProviders(db)
   const models = listModels(db)
   if (!models.length) return null
+
+  const wantedProvider = providerName ? (providers.find(pr => pr.name === providerName) || null) : null
+  // strict callers (ACP/RPC) asked for a specific pair: an unknown provider name
+  // must not be answered with somebody else's model.
+  if (providerName && !wantedProvider && strict) return null
 
   let target = null
   if (modelName) {
@@ -103,13 +108,22 @@ function resolveProviderModel(db, { providerName, modelName } = {}) {
     if (prov && target) {
       target = models.find(m => m.provider_name === prov && m.model_name === target.model_name) || target
     }
+    // Falling back to the primary model here would answer a typo'd or retired
+    // model name with a different model, without telling the caller.
+    if (!target && strict) return null
   }
   if (!target) {
     target = models.find(m => m.is_primary) || models[0]
   }
-  if (providerName) {
-    const p = providers.find(pr => pr.name === providerName)
-    if (p) target = models.find(m => m.provider_id === p.id) || target
+  if (wantedProvider) {
+    // Only substitute the provider's first model when the matched model does not
+    // already belong to that provider — the unconditional replacement silently
+    // discarded the caller's model choice.
+    if (!target || target.provider_id !== wantedProvider.id) {
+      const inProvider = models.find(m => m.provider_id === wantedProvider.id)
+      if (inProvider) target = inProvider
+      else if (strict) return null
+    }
   }
   if (!target) return null
 
