@@ -276,10 +276,12 @@ function buildSendAdapter(record) {
   }
 }
 
-/** running count (used by both queue and legacy paths). */
+/** Active execution count (paused tasks still hold their execution slot). */
 function runningCount() {
   let n = 0
-  for (const t of tasks.values()) if (t.status === 'running') n++
+  for (const t of tasks.values()) {
+    if (t.status === 'running' || t.status === 'paused') n++
+  }
   return n
 }
 
@@ -719,6 +721,7 @@ function cancelTask(taskId) {
     if (t.gate) { try { t.gate.abort() } catch {} }
     persist(t)
     try { t.emit(taskId, { type: 'cancelled', payload: { taskId } }) } catch {}
+    notifySlotFree()
   }
 }
 
@@ -734,7 +737,8 @@ function pauseTask(taskId) {
   t.status = 'paused'
   persist(t)
   try { t.emit(taskId, { type: 'paused', payload: { taskId, text: '已暂停' } }) } catch {}
-  notifySlotFree()
+  // The tool/model call may still be active until it reaches waitIfPaused;
+  // keep this task's execution slot reserved while it is paused.
   return true
 }
 
@@ -746,6 +750,9 @@ function resumeTask(taskId) {
   const t = tasks.get(taskId)
   if (!t) return false
   if (t.status === 'paused') {
+    // Paused tasks reserve a slot; also guard against a cap lowered while
+    // this task was paused rather than exceeding the current limit on resume.
+    if (runningCount() > getConcurrencyLimit()) return false
     t.status = 'running'
     persist(t)
     if (t.gate) { try { t.gate.release() } catch {} }
