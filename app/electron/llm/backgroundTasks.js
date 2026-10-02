@@ -23,7 +23,7 @@
 
 const { runToolLoop: defaultRunToolLoop } = require('./toolLoop')
 const { createAllowRulesStore, buildToolLoopCallbacks } = require('../ipc/toolLoopCallbacks')
-const { isValidTaskTransition, normalizeTaskStatus } = require('./eventTypes')
+const { isValidTaskTransition, normalizeTaskStatus, TASK_PROGRESS_TYPES } = require('./eventTypes')
 const featureFlags = require('../featureFlags')
 const log = require('../logger')
 
@@ -149,6 +149,57 @@ function initBackgroundTasks({ getWebContents, db, runToolLoop }) {
   _getWebContents = getWebContents
   if (db) setDatabase(db)
   if (typeof runToolLoop === 'function') _runToolLoop = runToolLoop
+}
+
+const TASK_PROGRESS_TYPE_SET = new Set(TASK_PROGRESS_TYPES)
+
+/**
+ * Build the `emit` that every task starter must pass to startTask — it calls
+ * emit() unconditionally on completion. Shared so tool-loop follow-ups reach
+ * the same task:done + notification route as IPC-started tasks.
+ */
+function createTaskEmitter() {
+  return function emitTaskEvent(taskId, evt) {
+    try {
+      const wc = _getWebContents()
+      if (!wc || wc.isDestroyed()) return
+      if (TASK_PROGRESS_TYPE_SET.has(evt.type)) {
+        wc.send('task:progress', { taskId, type: evt.type, payload: evt.payload })
+      } else if (evt.type === 'done') {
+        wc.send('task:done', evt.payload)
+        notifyTerminal(wc, taskId, evt.payload, 'Aether 任务完成', String(evt.payload?.finalContent || '').slice(0, 80) || '后台任务已完成')
+      } else if (evt.type === 'cancelled') {
+        wc.send('task:cancelled', evt.payload)
+      } else if (evt.type === 'error') {
+        wc.send('task:error', evt.payload)
+        notifyTerminal(wc, taskId, evt.payload, 'Aether 任务失败', String(evt.payload?.errorMsg || '').slice(0, 80) || '任务失败')
+      }
+    } catch {}
+  }
+}
+
+// Gate on isFocused so a notification never interrupts a foreground user.
+function notifyTerminal(wc, taskId, payload, title, body) {
+  try {
+    const { Notification, BrowserWindow } = require('electron')
+    if (!Notification.isSupported() || wc.isFocused()) return
+    const n = new Notification({ title, body, silent: false })
+    n.on('click', () => {
+      try {
+        const win = BrowserWindow.fromWebContents(wc) || BrowserWindow.getAllWindows()[0]
+        if (win) {
+          if (win.isMinimized()) win.restore()
+          win.show()
+          win.focus()
+        }
+        const targetSessionId = payload?.sessionId || getTask(taskId, _db)?.sessionId
+        if (targetSessionId && !wc.isDestroyed()) {
+          wc.send('session:switch-requested', { sessionId: Number(targetSessionId), taskId: String(taskId) })
+        }
+      } catch {}
+    })
+    n.show()
+  } catch {}
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────
@@ -735,6 +786,7 @@ module.exports = {
   MAX_CONCURRENT_TASKS: DEFAULT_CONCURRENT_TASKS,
   getConcurrencyLimit,
   initBackgroundTasks,
+  createTaskEmitter,
   getBranchGeneration,
   bumpBranchGeneration,
   enqueueTaskNotification,

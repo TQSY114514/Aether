@@ -30,7 +30,7 @@ function isAvailable() {
   return gitAvailable
 }
 
-function getShadowRepoDir(sessionId) {
+function getShadowReposRoot() {
   let base = null
   try {
     const { app } = require('electron')
@@ -41,7 +41,11 @@ function getShadowRepoDir(sessionId) {
   if (!base) {
     base = process.env.APPDATA ? path.join(process.env.APPDATA, 'aetherai') : path.join(os.homedir(), '.aetherai')
   }
-  return path.join(base, 'shadow_repos', `${sessionId}.git`)
+  return path.join(base, 'shadow_repos')
+}
+
+function getShadowRepoDir(sessionId) {
+  return path.join(getShadowReposRoot(), `${sessionId}.git`)
 }
 
 function ensureShadowRepo(sessionId, workspaceRoot) {
@@ -249,12 +253,22 @@ function getDiff(sessionId, workspaceRoot, commitHashA, commitHashB = 'HEAD') {
  * @param {number|string} sessionId
  */
 function deleteShadowRepo(sessionId) {
+  // sessionId is interpolated into a path that gets rmSync'd recursively, so it
+  // arrives from an IPC argument: accept a positive integer and re-assert that
+  // the resolved dir is still a direct child of shadow_repos (CWE-22 guard).
+  const id = Number(sessionId)
+  if (!Number.isInteger(id) || id <= 0) return false
   try {
-    const dir = getShadowRepoDir(sessionId)
+    const root = path.resolve(getShadowReposRoot())
+    const dir = path.resolve(getShadowRepoDir(id))
+    if (path.dirname(dir) !== root) return false
     if (fs.existsSync(dir)) {
       fs.rmSync(dir, { recursive: true, force: true })
     }
-  } catch {}
+    return true
+  } catch {
+    return false
+  }
 }
 
 module.exports = {

@@ -94,8 +94,9 @@ export function formatWarpBlock(entry = {}) {
 
   // RPC entry 不带独立 exitCode 字段——run_command 的退出状态以文本标记内嵌在
   // result 里（registry.js: [FAILED: exit N] / [TIMED OUT] / [COMMAND NOT FOUND]）。
-  let exitCode = typeof entry.exitCode === 'number' ? entry.exitCode : (entry.error ? 1 : (entry.result != null ? 0 : null))
-  if (exitCode == null || exitCode === 0) {
+  const hasNumericExit = typeof entry.exitCode === 'number'
+  let exitCode = hasNumericExit ? entry.exitCode : (entry.error ? 1 : (entry.result != null ? 0 : null))
+  if (!hasNumericExit && (exitCode == null || exitCode === 0 || entry.error)) {
     // Anchor on the markers registry.js prepends. Scanning the whole output let a
     // command whose own stdout mentions "exit code: 1" render as failed.
     const m = raw.match(/\[FAILED:\s*exit\s+(-?\d+)/i)

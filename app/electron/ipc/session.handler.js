@@ -16,11 +16,14 @@ function registerSessionHandlers(ipcMain, db) {
     return db.forkSession(sessionId, title)
   })
   ipcMain.handle('session:delete', (_e, id) => {
-    try { require('../llm/backgroundTasks').bumpBranchGeneration(id) } catch {}
-    try { db.deleteSession(id) } catch (e) { log.warn('session:delete db error:', e) }
-    try { clearAllowRules(id) } catch {}
-    try { cleanupSessionControllers(id) } catch {}
-    try { require('../llm/shadowGit').deleteShadowRepo(id) } catch {}
+    const sid = Number(id)
+    if (!Number.isInteger(sid) || sid <= 0) return { ok: false, error: 'invalid session id' }
+    try { require('../llm/backgroundTasks').bumpBranchGeneration(sid) } catch {}
+    try { db.deleteSession(sid) } catch (e) { log.warn('session:delete db error:', e) }
+    try { clearAllowRules(sid) } catch {}
+    try { cleanupSessionControllers(sid) } catch {}
+    try { require('../llm/shadowGit').deleteShadowRepo(sid) } catch {}
+    return { ok: true }
   })
   ipcMain.handle('session:touch', (_e, id) => db.touchSession(id))
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))

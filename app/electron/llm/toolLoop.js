@@ -1808,10 +1808,7 @@ Reply ONLY with JSON:
               content: fu.text,
               modelId: model.id,
               agentMode: 'ask',
-              // startTask calls emit() on completion; omitting it threw inside
-              // the success path and turned a finished follow-up into a retry.
-              // User-visible completion still arrives via enqueueTaskNotification.
-              emit: () => {},
+              emit: bgTasks.createTaskEmitter(),
             })
             steering.completeFollowUp(sessionId, fu.id)
           } catch (e) {

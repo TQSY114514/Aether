@@ -283,6 +283,8 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('plan:update-step', (_e, { sessionId, stepIndex, status }) => {
     try {
       if (!sessionId || !db?.getSessionPlan) return { ok: false }
+      const idx = Number(stepIndex)
+      if (!Number.isInteger(idx) || idx < 0) return { ok: false, error: 'invalid stepIndex' }
       // While the loop is streaming it owns the in-memory plan and its next
       // snapshot save would clobber a direct DB write — record the tick for
       // the loop to merge instead, and only persist directly when idle.
@@ -295,13 +297,11 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         // tick used to stay in planControl and get applied to whatever plan the
         // next run in this session loaded or generated.
         const plan = db.getSessionPlan(Number(sessionId))
-        if (plan) {
-          const list = plan.tasks || plan.steps || plan.todos
-          if (Array.isArray(list) && list[stepIndex]) {
-            list[stepIndex].status = status
-            db.saveSessionPlan(Number(sessionId), plan)
-          }
-        }
+        if (!plan) return { ok: false, error: 'no plan for session' }
+        const list = plan.tasks || plan.steps || plan.todos
+        if (!Array.isArray(list) || !list[idx]) return { ok: false, error: 'stepIndex out of range' }
+        list[idx].status = status
+        db.saveSessionPlan(Number(sessionId), plan)
       }
       return { ok: true }
     } catch (e) {

@@ -106,7 +106,16 @@ function resolveProviderModel(db, { providerName, modelName, strict = false } = 
       || models.find(m => m.model_name.toLowerCase().includes(lower))
       || null
     if (prov && target) {
-      target = models.find(m => m.provider_name === prov && m.model_name === target.model_name) || target
+      const exact = models.find(m => m.provider_name === prov && m.model_name === target.model_name)
+      if (exact) {
+        target = exact
+      } else if (strict && providers.some(p => p.name === prov)) {
+        // "known-provider/known-model" where the model belongs to another
+        // provider: keeping the match would hand the caller someone else's model.
+        // An unknown prefix may just be part of an org/model style id, so only a
+        // prefix that names a real provider is treated as an error.
+        return null
+      }
     }
     // Falling back to the primary model here would answer a typo'd or retired
     // model name with a different model, without telling the caller.
@@ -116,12 +125,12 @@ function resolveProviderModel(db, { providerName, modelName, strict = false } = 
     target = models.find(m => m.is_primary) || models[0]
   }
   if (wantedProvider) {
-    // Only substitute the provider's first model when the matched model does not
-    // already belong to that provider — the unconditional replacement silently
-    // discarded the caller's model choice.
+    // Never substitute here in strict mode: the caller named both provider and
+    // model, so "that provider's first model" is still the wrong model. Requiring
+    // an exact pair is the whole point of strict.
     if (!target || target.provider_id !== wantedProvider.id) {
       const inProvider = models.find(m => m.provider_id === wantedProvider.id)
-      if (inProvider) target = inProvider
+      if (inProvider && !strict) target = inProvider
       else if (strict) return null
     }
   }
