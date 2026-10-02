@@ -374,7 +374,7 @@ async function runTask(record) {
     record.error = errMsg
     persist(record)
     emit(id, { type: 'error', payload: { taskId: id, error: errMsg } })
-    maybeDispatch()
+    notifySlotFree()
     return
   }
 
@@ -385,7 +385,7 @@ async function runTask(record) {
     persist(record)
     record._reentry = false
     emit(id, { type: 'status', payload: { text: '规划阶段：等待批准后开始执行', kind: 'plan' } })
-    maybeDispatch()
+    notifySlotFree()
     return
   }
 
@@ -399,7 +399,7 @@ async function runTask(record) {
     record.error = `failed to create assistant message: ${e.message}`
     persist(record)
     emit(id, { type: 'error', payload: { taskId: id, error: record.error } })
-    maybeDispatch()
+    notifySlotFree()
     return
   }
 
@@ -493,7 +493,7 @@ async function runTask(record) {
         record._reentry = false // allow the retry runTask to enter
         persist(record)
         emit(id, { type: 'status', payload: { text: `自动重试 (${record.attempts}/${record.maxRetry})`, kind: 'info' } })
-        maybeDispatch()
+        notifySlotFree()
         return
       }
       record.error = errMsg
@@ -520,7 +520,6 @@ async function runTask(record) {
     }
   }
 
-  maybeDispatch()
   notifySlotFree()
 }
 
@@ -537,6 +536,9 @@ function isConcurrencyFull(e) {
 }
 
 function notifySlotFree() {
+  // Every state change that frees a counted slot funnels through here: the queue
+  // dispatcher first, then any follow-up waiting on a slot.
+  try { maybeDispatch() } catch {}
   if (_deferredFollowUps.size === 0) return
   for (const sid of Array.from(_deferredFollowUps.keys())) {
     void dispatchPendingFollowUps(sid).catch(() => {})
@@ -560,6 +562,20 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
   const pending = steering.getPendingFollowUps(sessionId)
   if (!pending || pending.length === 0) {
     _deferredFollowUps.delete(sessionId)
+    return { started: 0, waiting: 0 }
+  }
+
+  // Deleting a session abandons its queued follow-ups. Without this check a later
+  // slot-free would run them in a fresh child — work the user threw away.
+  let sessionAlive = true
+  try {
+    if (typeof deferred.db?.getSession === 'function' && !deferred.db.getSession(Number(sessionId))) {
+      sessionAlive = false
+    }
+  } catch {}
+  if (!sessionAlive) {
+    _deferredFollowUps.delete(sessionId)
+    for (const fu of pending) steering.failFollowUp(sessionId, fu.id, 'session deleted')
     return { started: 0, waiting: 0 }
   }
 
@@ -590,8 +606,12 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
     }
   } finally {
     _drainingSessions.delete(sessionId)
-    // Keep the registration while something is still waiting for a slot.
-    if (waiting === 0) _deferredFollowUps.delete(sessionId)
+    // `pending` was a snapshot: anything queued while this drain awaited
+    // startTask is missing from it. Keep the registration whenever anything is
+    // still pending, or those entries sit forever with nothing to retry them.
+    let stillPending = 0
+    try { stillPending = require('./steering').getPendingFollowUps(sessionId).length } catch {}
+    if (waiting === 0 && stillPending === 0) _deferredFollowUps.delete(sessionId)
   }
   return { started, waiting }
 }
@@ -714,6 +734,7 @@ function pauseTask(taskId) {
   t.status = 'paused'
   persist(t)
   try { t.emit(taskId, { type: 'paused', payload: { taskId, text: '已暂停' } }) } catch {}
+  notifySlotFree()
   return true
 }
 

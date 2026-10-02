@@ -162,4 +162,55 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     expect(startedTotal).toBe(1)
     expect(runningCount()).toBe(1)
   })
+
+  // ── lifecycle guards ──────────────────────────────────────────────────────
+
+  it('abandons deferred follow-ups when their session was deleted', async () => {
+    await fillSlots()
+    steering.followUp(SESSION_ID, 'should not run')
+    await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
+
+    // The session goes away while the follow-up is still waiting for a slot.
+    db.getSession = (id) => (id === SESSION_ID ? null : { id })
+
+    openDeferreds[0].resolve('done')
+    await until(() => runningCount() < CONCURRENCY_CAP, 4000, 'a slot to free')
+
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    // Nothing new was spawned for the deleted session.
+    expect(bt.listTasks(db).every(t => t.title !== '任务: should not run')).toBe(true)
+  })
+
+  it('retries a deferred follow-up after a task fails to resolve its model', async () => {
+    await fillSlots()
+    steering.followUp(SESSION_ID, 'runs after failure')
+    await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+
+    // runTask takes its model/provider early-return path (model deleted), which
+    // frees a slot without ever reaching the end-of-run notify.
+    db.getModel = () => null
+    openDeferreds[0].resolve('done')
+
+    await until(
+      () => steering.getPendingFollowUps(SESSION_ID).length === 0,
+      4000,
+      'follow-up to start after a failed task'
+    )
+  })
+
+  it('keeps the registration when a follow-up is queued during a drain', async () => {
+    // A slot is free so the first drain starts immediately rather than deferring.
+    steering.followUp(SESSION_ID, 'first')
+
+    const drain = bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+    // Queued while the drain is awaiting startTask — absent from its snapshot.
+    steering.followUp(SESSION_ID, 'second')
+    await drain
+
+    // The second entry must not be stranded with nothing left to retry it.
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
+    await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+  })
 })
