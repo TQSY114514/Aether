@@ -574,15 +574,26 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
   // tell is no guard at all. Headless adapters (taskDbAdapter) expose no
   // getSession, so an unanswerable question must abandon the follow-up rather
   // than silently resurrect the parent's work.
+  // Returns true/false when we can tell, null when we cannot (adapter has
+  // no getSession, or the lookup threw). null must NOT be treated as dead —
+  // that would fail the user's follow-ups during a transient DB error. It
+  // also must not be treated as alive — that would resurrect a deleted
+  // session. The right answer is to keep the registration and wait for a
+  // future slot-free, when the lookup may succeed.
   function isSessionAlive(db, id) {
-    if (!db || typeof db.getSession !== 'function') return false
+    if (!db || typeof db.getSession !== 'function') return null
     try {
       return !!db.getSession(Number(id))
     } catch {
-      return false
+      return null
     }
   }
-  if (!isSessionAlive(deferred.db, sessionId)) {
+  const alive = isSessionAlive(deferred.db, sessionId)
+  if (alive === null) {
+    // Unknown — leave every follow-up queued and the registration intact.
+    return { started: 0, waiting: pending.length }
+  }
+  if (!alive) {
     _deferredFollowUps.delete(sessionId)
     for (const fu of pending) steering.failFollowUp(sessionId, fu.id, 'session unavailable or deleted')
     return { started: 0, waiting: 0 }
@@ -755,6 +766,10 @@ function pauseTask(taskId) {
   if (t.status !== 'running' || !t.controller || !t.gate) return false
   t.status = 'paused'
   persist(t)
+  // Lock the gate so waitIfPaused awaits a promise that resume/cancel can
+  // actually settle. Without this, the initial unlocked promise never settles
+  // and a paused task reserves its slot forever (queue starvation).
+  try { t.gate.lock() } catch {}
   try { t.emit(taskId, { type: 'paused', payload: { taskId, text: '已暂停' } }) } catch {}
   // The tool/model call may still be active until it reaches waitIfPaused;
   // keep this task's execution slot reserved while it is paused.

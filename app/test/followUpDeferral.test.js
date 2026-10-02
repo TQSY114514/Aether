@@ -218,28 +218,30 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     })
   })
 
-  it('abandons the follow-up when the adapter cannot answer the liveness question', async () => {
-    // Headless taskDbAdapter exposes no getSession at all. Treating "cannot tell"
-    // as "alive" is what let a deleted parent session's work resurrect.
+  it('keeps the follow-up queued when the adapter cannot answer the liveness question', async () => {
+    // Headless taskDbAdapter exposes no getSession at all. "Cannot tell" is
+    // neither alive nor dead — failing the user's follow-ups here would be a
+    // false negative during a transient lookup gap. Leave them queued.
     delete db.getSession
     steering.followUp(SESSION_ID, 'unverifiable parent')
 
     const res = await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
 
-    expect(res).toEqual({ started: 0, waiting: 0 })
-    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    expect(res).toEqual({ started: 0, waiting: 1 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
     expect(bt.listTasks(db)).toHaveLength(0)
   })
 
-  it('abandons the follow-up when the liveness lookup throws', async () => {
-    // A throwing lookup is also "cannot tell" — the guard must not fail open.
+  it('keeps the follow-up queued when the liveness lookup throws', async () => {
+    // A throwing lookup is also "cannot tell" — fail closed would discard a
+    // live session's follow-ups during a transient DB error. Preserve them.
     db.getSession = () => { throw new Error('db unavailable') }
     steering.followUp(SESSION_ID, 'throwing lookup')
 
     const res = await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
 
-    expect(res).toEqual({ started: 0, waiting: 0 })
-    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    expect(res).toEqual({ started: 0, waiting: 1 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
     expect(bt.listTasks(db)).toHaveLength(0)
   })
 })
