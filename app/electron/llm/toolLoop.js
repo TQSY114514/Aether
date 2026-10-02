@@ -1795,29 +1795,14 @@ Reply ONLY with JSON:
     eventStream.agentEnd({ sessionId, finalStatus, totalIterations: budget.used })
     steering.setRunning(sessionId, false)
     try {
-      const pendingFollowUps = steering.getPendingFollowUps(sessionId)
-      if (pendingFollowUps && pendingFollowUps.length > 0) {
-        log.info(`[toolLoop] Processing ${pendingFollowUps.length} pending follow-up(s) for session ${sessionId}`)
-        for (const fu of pendingFollowUps) {
-          try {
-            if (!fu.text || !model?.id) throw new Error('follow-up missing text or model id')
-            const bgTasks = require('./backgroundTasks')
-            await bgTasks.startTask({
-              db,
-              parentSessionId: sessionId,
-              content: fu.text,
-              modelId: model.id,
-              agentMode: 'ask',
-              emit: bgTasks.createTaskEmitter(),
-            })
-            steering.completeFollowUp(sessionId, fu.id)
-          } catch (e) {
-            log.warn(`[toolLoop] Failed to start follow-up task: ${e?.message}`)
-            steering.failFollowUp(sessionId, fu.id, e?.message)
-          }
-        }
+      const bgTasks = require('./backgroundTasks')
+      const res = await bgTasks.dispatchPendingFollowUps(sessionId, { db, modelId: model?.id })
+      if (res.started || res.waiting) {
+        log.info(`[toolLoop] follow-ups for session ${sessionId}: started ${res.started}, waiting for a free slot ${res.waiting}`)
       }
-    } catch {}
+    } catch (e) {
+      log.warn(`[toolLoop] failed to dispatch follow-ups: ${e?.message}`)
+    }
     try {
       toolMetrics.updateRun(metricsRunId, {
         iterations: budget.used, durationMs: Date.now() - loopStart,

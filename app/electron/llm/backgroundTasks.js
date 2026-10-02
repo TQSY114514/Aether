@@ -521,6 +521,79 @@ async function runTask(record) {
   }
 
   maybeDispatch()
+  notifySlotFree()
+}
+
+// ─── Deferred follow-ups (concurrency-full deferral) ───────────────────────
+// Outside queue mode startTask throws when the concurrency cap is already
+// reached, and nothing is persisted at that point — so a follow-up the agent
+// already accepted used to be dropped outright. Deferred sessions are retried
+// from notifySlotFree() every time a task finishes and frees a slot.
+const _deferredFollowUps = new Map()   // sessionId -> { db, modelId }
+const _drainingSessions = new Set()
+
+function isConcurrencyFull(e) {
+  return String(e?.message || e || '').includes('已达最大并发任务数')
+}
+
+function notifySlotFree() {
+  if (_deferredFollowUps.size === 0) return
+  for (const sid of Array.from(_deferredFollowUps.keys())) {
+    void dispatchPendingFollowUps(sid).catch(() => {})
+  }
+}
+
+/**
+ * Start every pending follow-up for `sessionId` as a background task.
+ *
+ * Supplying db/modelId registers the session for later retries; calls without
+ * them (from notifySlotFree) reuse what was registered. Follow-ups that hit the
+ * concurrency cap stay pending instead of failing, so nothing the user typed is
+ * lost while slots are busy.
+ */
+async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
+  if (db && modelId) _deferredFollowUps.set(sessionId, { db, modelId })
+  const deferred = _deferredFollowUps.get(sessionId)
+  if (!deferred || _drainingSessions.has(sessionId)) return { started: 0, waiting: 0 }
+
+  const steering = require('./steering')
+  const pending = steering.getPendingFollowUps(sessionId)
+  if (!pending || pending.length === 0) {
+    _deferredFollowUps.delete(sessionId)
+    return { started: 0, waiting: 0 }
+  }
+
+  _drainingSessions.add(sessionId)
+  let started = 0
+  let waiting = 0
+  try {
+    for (const fu of pending) {
+      if (!fu.text) {
+        steering.failFollowUp(sessionId, fu.id, 'follow-up missing text')
+        continue
+      }
+      try {
+        await startTask({
+          db: deferred.db,
+          parentSessionId: sessionId,
+          content: fu.text,
+          modelId: deferred.modelId,
+          agentMode: 'ask',
+          emit: createTaskEmitter(),
+        })
+        steering.completeFollowUp(sessionId, fu.id)
+        started++
+      } catch (e) {
+        if (isConcurrencyFull(e)) { waiting++; continue }
+        steering.failFollowUp(sessionId, fu.id, e?.message)
+      }
+    }
+  } finally {
+    _drainingSessions.delete(sessionId)
+    // Keep the registration while something is still waiting for a slot.
+    if (waiting === 0) _deferredFollowUps.delete(sessionId)
+  }
+  return { started, waiting }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────
@@ -787,6 +860,7 @@ module.exports = {
   getConcurrencyLimit,
   initBackgroundTasks,
   createTaskEmitter,
+  dispatchPendingFollowUps,
   getBranchGeneration,
   bumpBranchGeneration,
   enqueueTaskNotification,
