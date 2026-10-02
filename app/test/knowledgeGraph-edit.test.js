@@ -60,7 +60,10 @@ describe('renameNode', () => {
     const db = mkDb({ existing: { id: 1, entity: 'Alice' } })
     const r = renameNode(db, 'Alice', 'Alice2')
     expect(r.ok).toBe(true)
-    expect(r.entity).toBe('Alice2')
+    // renameNode lowercases the target: every other KG path (addRelation/
+    // deleteRelation/getWikiArticle/buildGraph) queries lowercase entities,
+    // so a mixed-case rename would orphan the node.
+    expect(r.entity).toBe('alice2')
     const updates = db._runs.filter(([sql]) => sql.startsWith('UPDATE'))
     expect(updates.some(([sql]) => sql.includes('kg_nodes'))).toBe(true)
     expect(updates.some(([sql]) => sql.includes('kg_edges') && sql.includes('"from"'))).toBe(true)

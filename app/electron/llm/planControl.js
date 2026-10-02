@@ -19,6 +19,7 @@ class PlanControlSession {
     this.sessionId = sessionId
     this.skipSteps = new Set()   // step ids to skip
     this.retrySteps = new Set()  // step ids to retry
+    this.statusOverrides = new Map()  // stepIndex -> status (user checklist ticks)
   }
 
   skipStep(stepId) {
@@ -56,9 +57,27 @@ class PlanControlSession {
     }
   }
 
+  // Record a user checklist tick (plan:update-step). The running loop merges
+  // these into its in-memory plan before its next save; without this the
+  // loop's snapshot would clobber the DB write mid-run.
+  setStatus(stepIndex, status) {
+    const idx = Number(stepIndex)
+    if (!Number.isInteger(idx) || idx < 0) return { stepIndex: idx, status }
+    this.statusOverrides.set(idx, status)
+    return { stepIndex: idx, status }
+  }
+
+  // Consume pending status overrides. Returns [stepIndex, status][] and clears them.
+  consumeStatusOverrides() {
+    const result = Array.from(this.statusOverrides.entries())
+    this.statusOverrides.clear()
+    return result
+  }
+
   reset() {
     this.skipSteps.clear()
     this.retrySteps.clear()
+    this.statusOverrides.clear()
   }
 }
 
@@ -89,6 +108,14 @@ function consumePending(sessionId) {
   return getSession(sessionId).consumePending()
 }
 
+function setStatus(sessionId, stepIndex, status) {
+  return getSession(sessionId).setStatus(stepIndex, status)
+}
+
+function consumeStatusOverrides(sessionId) {
+  return getSession(sessionId).consumeStatusOverrides()
+}
+
 function peekPending(sessionId) {
   return getSession(sessionId).peekPending()
 }
@@ -104,6 +131,8 @@ module.exports = {
   skipStep,
   retryStep,
   consumePending,
+  setStatus,
+  consumeStatusOverrides,
   peekPending,
   clearSession,
 }

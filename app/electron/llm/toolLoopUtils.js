@@ -200,7 +200,8 @@ function agentModeToPermissionMode(agentMode) {
 /** Convert a generated plan into the todo shape emitted to the renderer. */
 function planToTodos(plan) {
   if (!plan || !Array.isArray(plan.tasks)) return []
-  return plan.tasks.map(t => ({
+  return plan.tasks.map((t, i) => ({
+    id: t.id || `t${i + 1}`,
     content: t.description,
     status: t.status === 'completed' ? 'completed' : t.status === 'in_progress' ? 'in_progress' : 'pending',
     activeForm: t.status === 'in_progress' ? `正在执行: ${t.description}` : undefined,

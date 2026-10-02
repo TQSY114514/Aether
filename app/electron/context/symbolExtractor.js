@@ -105,6 +105,18 @@ function extractJS(content, filePath, lang) {
       }
       if (trimmed.includes('export default')) exports.push('__default__')
     }
+    // interface X { ... } / type X = ... / enum X { ... }
+    const tsTypeM = trimmed.match(/^(?:export\s+)?(?:declare\s+)?(?:interface|type|enum)\s+(\w+)/)
+    if (tsTypeM) {
+      const openCol = line.lastIndexOf('{')
+      if (openCol === -1 && /^type\s+/i.test(trimmed.replace(/^(?:export\s+)?(?:declare\s+)?/, ''))) {
+        symbols.push(tsTypeM[1])
+        symbolLocs.push({ name: tsTypeM[1], locStart: idx + 1, locEnd: idx + 1 })
+      } else {
+        addSymbol(tsTypeM[1], idx, openCol === -1 ? 0 : openCol)
+      }
+      continue
+    }
     // class X { ... } — may span multiple lines
     const classM = trimmed.match(/^(?:export\s+)?(?:default\s+)?class\s+(\w+)/)
     if (classM) {
@@ -113,14 +125,15 @@ function extractJS(content, filePath, lang) {
       continue
     }
     // function X(...) { ... } — may span multiple lines
-    const fnM = trimmed.match(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+(\w+)/)
+    const fnM = trimmed.match(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*(\*?\s*\w+)/)
     if (fnM) {
+      const fnName = fnM[1].replace(/^\*\s*/, '')
       const openCol = line.lastIndexOf('{')
-      addSymbol(fnM[1], idx, openCol === -1 ? 0 : openCol)
+      addSymbol(fnName, idx, openCol === -1 ? 0 : openCol)
       continue
     }
-    // const X = (...) => { ... } — arrow-function assignment
-    const arrowM = trimmed.match(/^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*[:=].*=>/)
+    // const X = (...) => { ... } — arrow-function assignment or function expression
+    const arrowM = trimmed.match(/^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*[:=].*(?:=>|function)/)
     if (arrowM) {
       const openCol = line.lastIndexOf('{')
       addSymbol(arrowM[1], idx, openCol === -1 ? 0 : openCol)
@@ -148,7 +161,7 @@ function extractPY(content, filePath, lang) {
     }
     const classM = trimmed.match(/^class\s+(\w+)/)
     if (classM) { symbols.push(classM[1]); symbolLocs.push({ name: classM[1], locStart: idx + 1, locEnd: idx + 1 }) }
-    const fnM = trimmed.match(/^def\s+(\w+)/)
+    const fnM = trimmed.match(/^(?:async\s+)?def\s+(\w+)/)
     if (fnM) { symbols.push(fnM[1]); symbolLocs.push({ name: fnM[1], locStart: idx + 1, locEnd: idx + 1 }) }
     if (trimmed.includes('__all__')) {
       const allM = trimmed.match(/\[([^\]]+)\]/)

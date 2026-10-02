@@ -164,7 +164,7 @@ async function generateRepoMap(rootDir, options = {}) {
   }
 
   try {
-    const { buildGraph } = require('./dependencyGraph')
+    const { buildGraph, computePageRank } = require('./dependencyGraph')
     const graph = buildGraph(map.files)
     const inDegreeMap = new Map()
     for (const edge of graph.edges) {
@@ -173,8 +173,10 @@ async function generateRepoMap(rootDir, options = {}) {
       }
     }
     map.inDegreeMap = inDegreeMap
+    map.pageRankMap = typeof computePageRank === 'function' ? computePageRank(graph) : new Map()
   } catch {
     map.inDegreeMap = new Map()
+    map.pageRankMap = new Map()
   }
 
   let newest = 0
@@ -190,9 +192,9 @@ async function generateRepoMap(rootDir, options = {}) {
 
 /**
  * Score a file node for prioritization when budget clamping.
- * Incorporates git changes, critical entry points, in-degree centrality (PageRank), and query relevance.
+ * Incorporates git changes, critical entry points, PageRank topological centrality, and query relevance.
  */
-function scoreFileNode(node, gitChangedSet, inDegreeMap = null, queryKeywords = null) {
+function scoreFileNode(node, gitChangedSet, inDegreeMap = null, queryKeywords = null, pageRankMap = null) {
   let score = 1
   const rel = toPosix(node.relPath || node.name || node.path || '')
   const base = path.basename(rel).toLowerCase()
@@ -203,8 +205,11 @@ function scoreFileNode(node, gitChangedSet, inDegreeMap = null, queryKeywords = 
   if (node.exports && node.exports.length) score += Math.min(30, node.exports.length * 5)
   if (node.symbols && node.symbols.length) score += Math.min(20, node.symbols.length * 2)
 
-  // Dependency graph reference centrality boost (up to 80 points)
-  if (inDegreeMap) {
+  // PageRank topological centrality boost (up to 100 points)
+  if (pageRankMap && pageRankMap.size > 0) {
+    const pr = pageRankMap.get(node.path) || pageRankMap.get(rel) || 0
+    score += Math.min(100, Math.round(pr * pageRankMap.size * 30))
+  } else if (inDegreeMap) {
     const deg = inDegreeMap.get(node.path) || inDegreeMap.get(rel) || 0
     score += Math.min(80, deg * 12)
   }
@@ -297,7 +302,7 @@ function buildRepoMapText(map, optsOrMaxLines = 160) {
   // Score all files
   const scored = allFileNodes.map(node => ({
     node,
-    score: scoreFileNode(node, gitChangedSet, inDegreeMap, queryKeywords),
+    score: scoreFileNode(node, gitChangedSet, inDegreeMap, queryKeywords, map.pageRankMap),
   }))
   scored.sort((a, b) => b.score - a.score)
 

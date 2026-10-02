@@ -33,6 +33,7 @@ const FLAG_DEFS = [
   { key: 'lsp.full',             default: false, category: 'code-intel',  description: 'Full LSP feature set (definition / references / rename / code actions)' },
   // Phase 1 — cloud execution + parallel tasks
   { key: 'exec.docker',          default: false, category: 'exec',        description: 'Docker sandbox execution backend' },
+  { key: 'exec.jobSandbox',      default: true,  category: 'exec',        description: 'Windows native Job Object process isolation (2GB memory limit + kill-on-close zombie prevention)' },
   { key: 'exec.ssh',             default: false, category: 'exec',        description: 'SSH remote execution backend' },
   { key: 'exec.cloud',           default: false, category: 'exec',        description: 'Cloud sandbox execution backend' },
   { key: 'exec.docker.defaultForAuto', default: false, category: 'exec',   description: 'Auto mode prefers the Docker sandbox for shell commands when Docker is available (falls back to local)' },
@@ -48,6 +49,7 @@ const FLAG_DEFS = [
   { key: 'agent.toolRouter.staged', default: false, category: 'agent',   description: 'Stage-aware tool routing: re-estimate the task stage (explore/build/verify/deliver) each round and merge in its tool categories (additive only)' },
   { key: 'agent.cachePrefixStability', default: true, category: 'agent', description: 'Prefix cache stability invariant: order always-on/MCP tools before staged categories, append-only stage routing, and preserve sent message prefix across rounds' },
   { key: 'agent.shrinkRetry',    default: false, category: 'agent',      description: 'Auto scope-reduction retry: when the iteration budget runs out or a loop guard blocks, shrink to one completable increment and add a few rounds (fires at most once per run)' },
+  { key: 'agent.poorMode',       default: false, category: 'agent',      description: 'Poor Mode: aggressive token and compute conservation (max 8 iterations, tighter context compaction, minimal tool payloads)' },
   // Phase 3 — code understanding + orchestration
   { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
   { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },

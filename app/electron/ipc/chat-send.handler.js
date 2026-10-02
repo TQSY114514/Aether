@@ -603,7 +603,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Fire-and-forget, never blocks the reply.
         if (autoMemoryOn && sessionId && db) {
           try {
-            const msgCount = (db.allRows('SELECT COUNT(*) as c FROM messages WHERE session_id = ?', [sessionId]) || [])[0]?.c || 0
+            const msgCount = (db.allRows('SELECT COUNT(*) as c FROM message WHERE session_id = ?', [sessionId]) || [])[0]?.c || 0
             if (msgCount > 0 && msgCount % 20 === 0) {
               const bridge = require('../llm/memorySkillBridge')
               const electron = require('electron')

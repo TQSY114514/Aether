@@ -32,13 +32,19 @@ function emitChange() {
   for (const l of listeners) l()
 }
 
-async function refresh() {
+async function refresh(): Promise<boolean> {
   try {
     cache = (await window.electronAPI.flags.list()) as FeatureFlagEntry[]
+    return true
   } catch {
+    // Drop the cache instead of keeping a stale snapshot: getFeatureFlag would
+    // then answer from stale data. The failure is reported so toggle flows can
+    // refuse to act rather than treat "unknown" as "off".
     cache = null
+    return false
+  } finally {
+    emitChange()
   }
-  emitChange()
 }
 
 function subscribe(cb: () => void) {
@@ -84,6 +90,18 @@ export function getFeatureFlags(): FeatureFlagEntry[] {
 // Effective value of one flag. Unknown flags / pre-load resolve to `fallback`.
 export function getFeatureFlag(key: string, fallback = false): boolean {
   ensureLoaded()
+  const entry = (cache ?? EMPTY_FLAGS).find(f => f.key === key)
+  return entry ? entry.enabled : fallback
+}
+
+// Effective value of one flag after forcing a reload from main. Use this in
+// toggle flows where acting on the pre-load fallback would flip the wrong way.
+// Throws when the reload fails so callers can abort instead of toggling blind —
+// answering `fallback` here would make an enabled flag look disabled, and the
+// toggle would then write `true` again and never turn the flag off.
+export async function getFeatureFlagFresh(key: string, fallback = false): Promise<boolean> {
+  const ok = await refresh()
+  if (!ok) throw new Error(`feature flag refresh failed: ${key}`)
   const entry = (cache ?? EMPTY_FLAGS).find(f => f.key === key)
   return entry ? entry.enabled : fallback
 }

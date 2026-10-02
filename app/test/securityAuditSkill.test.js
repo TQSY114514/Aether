@@ -91,6 +91,7 @@ describe('P0-3: End-to-End Security Audit on app/evals/fixtures/mini-vuln-repo',
       workspaceDir: fixtureDir,
       mode: 'full',
       dockerAvailable: false,
+      winSandboxAvailable: false, // force "no OS sandbox" regardless of host platform/native build
       outputDir: outDir,
     })
 

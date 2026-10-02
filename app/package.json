@@ -51,6 +51,7 @@
     "electron/cli/",
     "electron/sdk/",
     "electron/llm/",
+    "electron/migrations/",
     "electron/tools/",
     "electron/utils/",
     "electron/cron/",

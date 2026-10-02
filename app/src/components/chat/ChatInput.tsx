@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Shield, RotateCcw, Zap, Sparkles, ShieldAlert, Trophy } from 'lucide-react'
+import { Send, Square, Paperclip, X, FileText, Brain, Shield, RotateCcw, Zap, Sparkles, ShieldAlert, Trophy, Leaf } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
@@ -11,6 +11,7 @@ import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_C
 import { estimateTextTokens } from '@/utils/tokenEstimate'
 import ContextMeterBadge from './ContextMeterBadge'
 import { useShallow } from 'zustand/react/shallow'
+import { useFeatureFlag } from '@/utils/featureFlags'
 
 import { DEFAULT_COMMANDS, executeTypedSlashCommand, type SlashCommand, type AgentMode } from './slashCommands'
 
@@ -77,6 +78,7 @@ export default function ChatInput() {
   const prevSessionRef = useRef<number | null>(null)
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
+  const poorMode = useFeatureFlag('agent.poorMode')
   const [slashIndex, setSlashIndex] = useState(0)
   const [pending, setPending] = useState<PendingAttachment[]>([])
   const [snippets, setSnippets] = useState<Snippet[]>([])
@@ -577,13 +579,17 @@ export default function ChatInput() {
                 const active = idx === slashIndex
                 return (
                   <div key={cmd.id} role="option" aria-selected={active}
-                    className={cn('slash-item', active && 'bg-[var(--bg-secondary)]')}
+                    className={cn('slash-item', active && 'active')}
                     onMouseEnter={() => setSlashIndex(idx)} onClick={() => handleSlashSelect(cmd)}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium">{cmd.name}</div>
-                      <kbd className="text-[10px] rounded border px-1.5 py-0.5 font-mono" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>/{cmd.id}</kbd>
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-[11px] font-semibold text-[var(--accent)] shrink-0">/{cmd.id}</span>
+                        <span className="text-[11px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>{cmd.name}</span>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-[var(--text-muted)] truncate">{cmd.description}</div>
+                    {cmd.description && (
+                      <div className="text-[10px] truncate leading-tight" style={{ color: 'var(--text-muted)' }}>{cmd.description}</div>
+                    )}
                   </div>
                 )
               })}
@@ -623,19 +629,8 @@ export default function ChatInput() {
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-wrap min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            {!isStreaming && !isArenaRunning && (
-              <div className="flex items-center gap-1 shrink-0">
-                {slashCommands.slice(0, 2).map((cmd) => (
-                  <button key={cmd.id} onClick={() => {
-                    const prompt = cmd.prompt
-                    if (prompt) setInput(prev => prev ? prev + '\n---\n' + prompt : prompt)
-                    textareaRef.current?.focus()
-                  }} className="qaction">{cmd.name}</button>
-                ))}
-              </div>
-            )}
+        <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-nowrap min-w-0">
+          <div className="flex items-center gap-1.5 flex-nowrap min-w-0 shrink">
             <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
             <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
             <ModelSelector providers={providers} allModels={allModels}
@@ -653,18 +648,26 @@ export default function ChatInput() {
               }} />
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 ml-auto">
+          <div className="flex items-center gap-1.5 min-w-0 shrink ml-auto flex-nowrap">
             {isStreaming ? (
               <StreamingStatusBar sessionId={currentSessionId} />
             ) : (
               <>
+                {poorMode && (
+                  <span
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono text-emerald-500 border-emerald-500/30 bg-emerald-500/10 cursor-help shrink-0"
+                    title={t('slash.poor_enabled', '穷鬼省流模式：最大循环限制为 8 轮，激进压缩 Token')}
+                  >
+                    <Leaf size={10} className="shrink-0" />
+                    <span className="hidden sm:inline">{t('slash.poor', '省流')}</span>
+                  </span>
+                )}
                 <ContextMeterBadge />
                 {totalInputTokens > 0 && (
-                  <span className="text-[10px] tabular-nums shrink-0 font-mono" style={{ color: 'var(--text-muted)' }}>
+                  <span className="text-[10px] tabular-nums shrink-0 font-mono hidden sm:inline" style={{ color: 'var(--text-muted)' }}>
                     {t('chat.tokens_estimate', String(totalInputTokens))}
                   </span>
                 )}
-                <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden sm:inline">{t('empty.hint.slash')}</span>
               </>
             )}
           </div>
@@ -698,7 +701,7 @@ function EffortControl({ thinkingEnabled, onToggleThinking, level, onLevelChange
       </button>
       <input type="range" min={0} max={2} step={1} value={idx}
         onChange={(e) => onLevelChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
-        className="effort-slider w-20" disabled={!thinkingEnabled}
+        className="effort-slider w-14 sm:w-16" disabled={!thinkingEnabled}
         style={{ ['--fill' as string]: `${fill}%` }} />
       <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{t(EFFORT_LEVELS[idx].labelKey)}</span>
     </div>
@@ -776,8 +779,8 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
   const cumCost = cumUsage?.costUsd || 0
   const showCost = turnCost > 0 || cumCost > 0
   return (
-    <div className="px-0.5 mt-1.5 animate-blur-fade">
-      <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+    <div className="px-0.5 mt-1.5 min-w-0 animate-blur-fade">
+      <div className="flex items-center gap-1.5 text-[11px] min-w-0" style={{ color: 'var(--text-muted)' }}>
         {stopped ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -785,8 +788,8 @@ function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
           </>
         ) : (
           <>
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-            <span>{status}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse shrink-0" />
+            <span className="min-w-0 truncate" title={status}>{status}</span>
           </>
         )}
         {showCost && (
@@ -886,7 +889,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
             const model = allModels.find(m => m.id === mid)
             if (model) onSelect(mid, model.provider_id)
           }}
-          className="text-[11px] rounded-lg border px-2 py-1 outline-none max-w-[160px] bg-[var(--content-bg)]"
+          className="text-[11px] rounded-lg border px-1.5 sm:px-2 py-1 outline-none max-w-[125px] sm:max-w-[155px] truncate bg-[var(--content-bg)]"
           style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
           <option value="" disabled>{t('chat.select_model')}</option>
           {groups.map(g => (
@@ -901,7 +904,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
 
       {arenaElo != null && (
         <span
-          className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] shrink-0 select-none shadow-2xs font-mono"
+          className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] shrink-0 select-none shadow-2xs font-mono"
           style={{
             borderColor: 'var(--border)',
             backgroundColor: 'var(--bg-secondary)',
@@ -922,7 +925,7 @@ function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSug
         aria-label={t('chat.model_auto_route')}
       >
         <Sparkles size={11} className="text-amber-500 shrink-0" />
-        <span className="hidden sm:inline font-medium">{t('chat.model_auto_route')}</span>
+        <span className="hidden md:inline font-medium">{t('chat.model_auto_route')}</span>
       </button>
     </div>
   )

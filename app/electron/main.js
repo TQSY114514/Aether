@@ -99,7 +99,6 @@ const { registerTaskHandlers } = require('./ipc/task.handler')
 const { registerCronHandlers } = require('./ipc/cron.handler')
 const { registerFlagsHandlers } = require('./ipc/flags.handler')
 const { registerLearningHandlers } = require('./ipc/learning.handler')
-const { registerMarketHandlers } = require('./ipc/market.handler')
 const { registerRecipeHandlers } = require('./ipc/recipe.handler')
 const { initScheduler } = require('./cron/scheduler')
 
@@ -361,7 +360,6 @@ function setupIpcHandlers() {
   registerCronHandlers(ipcMain, db)
   registerFlagsHandlers(ipcMain, db)
   registerLearningHandlers(ipcMain, db)
-  registerMarketHandlers(ipcMain, db, mcpManager)
   registerRecipeHandlers(ipcMain)
 
   // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──

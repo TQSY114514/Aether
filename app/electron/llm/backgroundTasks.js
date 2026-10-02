@@ -23,7 +23,7 @@
 
 const { runToolLoop: defaultRunToolLoop } = require('./toolLoop')
 const { createAllowRulesStore, buildToolLoopCallbacks } = require('../ipc/toolLoopCallbacks')
-const { isValidTaskTransition, normalizeTaskStatus } = require('./eventTypes')
+const { isValidTaskTransition, normalizeTaskStatus, TASK_PROGRESS_TYPES } = require('./eventTypes')
 const featureFlags = require('../featureFlags')
 const log = require('../logger')
 
@@ -151,6 +151,57 @@ function initBackgroundTasks({ getWebContents, db, runToolLoop }) {
   if (typeof runToolLoop === 'function') _runToolLoop = runToolLoop
 }
 
+const TASK_PROGRESS_TYPE_SET = new Set(TASK_PROGRESS_TYPES)
+
+/**
+ * Build the `emit` that every task starter must pass to startTask — it calls
+ * emit() unconditionally on completion. Shared so tool-loop follow-ups reach
+ * the same task:done + notification route as IPC-started tasks.
+ */
+function createTaskEmitter() {
+  return function emitTaskEvent(taskId, evt) {
+    try {
+      const wc = _getWebContents()
+      if (!wc || wc.isDestroyed()) return
+      if (TASK_PROGRESS_TYPE_SET.has(evt.type)) {
+        wc.send('task:progress', { taskId, type: evt.type, payload: evt.payload })
+      } else if (evt.type === 'done') {
+        wc.send('task:done', evt.payload)
+        notifyTerminal(wc, taskId, evt.payload, 'Aether 任务完成', String(evt.payload?.finalContent || '').slice(0, 80) || '后台任务已完成')
+      } else if (evt.type === 'cancelled') {
+        wc.send('task:cancelled', evt.payload)
+      } else if (evt.type === 'error') {
+        wc.send('task:error', evt.payload)
+        notifyTerminal(wc, taskId, evt.payload, 'Aether 任务失败', String(evt.payload?.error || '').slice(0, 80) || '任务失败')
+      }
+    } catch {}
+  }
+}
+
+// Gate on isFocused so a notification never interrupts a foreground user.
+function notifyTerminal(wc, taskId, payload, title, body) {
+  try {
+    const { Notification, BrowserWindow } = require('electron')
+    if (!Notification.isSupported() || wc.isFocused()) return
+    const n = new Notification({ title, body, silent: false })
+    n.on('click', () => {
+      try {
+        const win = BrowserWindow.fromWebContents(wc) || BrowserWindow.getAllWindows()[0]
+        if (win) {
+          if (win.isMinimized()) win.restore()
+          win.show()
+          win.focus()
+        }
+        const targetSessionId = payload?.sessionId || getTask(taskId, _db)?.sessionId
+        if (targetSessionId && !wc.isDestroyed()) {
+          wc.send('session:switch-requested', { sessionId: Number(targetSessionId), taskId: String(taskId) })
+        }
+      } catch {}
+    })
+    n.show()
+  } catch {}
+}
+
 // ─── Internal helpers ─────────────────────────────────────────────────────
 
 function queueModeEnabled() {
@@ -173,6 +224,7 @@ function persist(record) {
       result: record.finalContent ?? null,
       attempts: record.attempts,
       max_retry: record.maxRetry,
+      tool_journal: record.toolJournal && record.toolJournal.length ? JSON.stringify(record.toolJournal) : null,
     })
   } catch (err) { log.warn(`backgroundTasks: persist failed: ${err.message}`) }
 }
@@ -385,6 +437,12 @@ async function runTask(record) {
       messageId: msgId,
       db,
       autoCommit: false,
+      toolJournal: record.toolJournal || [],
+      onJournalEntry: (entry) => {
+        if (!record.toolJournal) record.toolJournal = []
+        record.toolJournal.push(entry)
+        persist(record)
+      },
       waitIfPaused: async () => {
         if (record.status === 'paused') {
           await gate.promise      // waits until resume (release) or abort (reject)
@@ -424,7 +482,7 @@ async function runTask(record) {
       try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted' }) } catch {}
       record.status = 'cancelled'
       persist(record)
-      emit(id, { type: 'cancelled', payload: { taskId: id } })
+      emit(id, { type: 'cancelled', payload: { taskId: id, sessionId } })
     } else {
       // ── Error — retryable while the budget remains ────────────────────
       const errMsg = err.message || String(err)
@@ -457,12 +515,85 @@ async function runTask(record) {
           title: record.title,
           error: errMsg,
         })
-        emit(id, { type: 'error', payload: { taskId: id, error: errMsg } })
+        emit(id, { type: 'error', payload: { taskId: id, sessionId, error: errMsg } })
       }
     }
   }
 
   maybeDispatch()
+  notifySlotFree()
+}
+
+// ─── Deferred follow-ups (concurrency-full deferral) ───────────────────────
+// Outside queue mode startTask throws when the concurrency cap is already
+// reached, and nothing is persisted at that point — so a follow-up the agent
+// already accepted used to be dropped outright. Deferred sessions are retried
+// from notifySlotFree() every time a task finishes and frees a slot.
+const _deferredFollowUps = new Map()   // sessionId -> { db, modelId }
+const _drainingSessions = new Set()
+
+function isConcurrencyFull(e) {
+  return String(e?.message || e || '').includes('已达最大并发任务数')
+}
+
+function notifySlotFree() {
+  if (_deferredFollowUps.size === 0) return
+  for (const sid of Array.from(_deferredFollowUps.keys())) {
+    void dispatchPendingFollowUps(sid).catch(() => {})
+  }
+}
+
+/**
+ * Start every pending follow-up for `sessionId` as a background task.
+ *
+ * Supplying db/modelId registers the session for later retries; calls without
+ * them (from notifySlotFree) reuse what was registered. Follow-ups that hit the
+ * concurrency cap stay pending instead of failing, so nothing the user typed is
+ * lost while slots are busy.
+ */
+async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
+  if (db && modelId) _deferredFollowUps.set(sessionId, { db, modelId })
+  const deferred = _deferredFollowUps.get(sessionId)
+  if (!deferred || _drainingSessions.has(sessionId)) return { started: 0, waiting: 0 }
+
+  const steering = require('./steering')
+  const pending = steering.getPendingFollowUps(sessionId)
+  if (!pending || pending.length === 0) {
+    _deferredFollowUps.delete(sessionId)
+    return { started: 0, waiting: 0 }
+  }
+
+  _drainingSessions.add(sessionId)
+  let started = 0
+  let waiting = 0
+  try {
+    for (const fu of pending) {
+      if (!fu.text) {
+        steering.failFollowUp(sessionId, fu.id, 'follow-up missing text')
+        continue
+      }
+      try {
+        await startTask({
+          db: deferred.db,
+          parentSessionId: sessionId,
+          content: fu.text,
+          modelId: deferred.modelId,
+          agentMode: 'ask',
+          emit: createTaskEmitter(),
+        })
+        steering.completeFollowUp(sessionId, fu.id)
+        started++
+      } catch (e) {
+        if (isConcurrencyFull(e)) { waiting++; continue }
+        steering.failFollowUp(sessionId, fu.id, e?.message)
+      }
+    }
+  } finally {
+    _drainingSessions.delete(sessionId)
+    // Keep the registration while something is still waiting for a slot.
+    if (waiting === 0) _deferredFollowUps.delete(sessionId)
+  }
+  return { started, waiting }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────
@@ -533,6 +664,7 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
     createdAt: Date.now(),
     finalContent: null,
     error: null,
+    toolJournal: [],
     controller: null,
     gate: null,
     emit,
@@ -655,7 +787,9 @@ function getTask(taskId, db) {
       content: r.content, modelId: r.model_id, agentMode: r.agent_mode,
       priority: r.priority, attempts: r.attempts, maxRetry: r.max_retry,
       createdAt: new Date(r.created_at).getTime(),
-      finalContent: r.result, error: r.error, controller: null, emit: noopEmit,
+      finalContent: r.result, error: r.error,
+      toolJournal: r.tool_journal ? (() => { try { return JSON.parse(r.tool_journal) } catch { return [] } })() : [],
+      controller: null, emit: noopEmit,
     }
   }
   return null
@@ -682,6 +816,7 @@ function rowToRecord(r) {
     createdAt: new Date(r.created_at).getTime(),
     finalContent: r.result,
     error: r.error,
+    toolJournal: r.tool_journal ? (() => { try { return JSON.parse(r.tool_journal) } catch { return [] } })() : [],
     controller: null,
     gate: null,
     emit: noopEmit,
@@ -724,6 +859,8 @@ module.exports = {
   MAX_CONCURRENT_TASKS: DEFAULT_CONCURRENT_TASKS,
   getConcurrencyLimit,
   initBackgroundTasks,
+  createTaskEmitter,
+  dispatchPendingFollowUps,
   getBranchGeneration,
   bumpBranchGeneration,
   enqueueTaskNotification,

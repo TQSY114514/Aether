@@ -41,6 +41,7 @@ Usage:
   aether completion <shell>      Print a shell completion script (bash|zsh|powershell).
   aether --mode json "prompt"    NDJSON event stream (like --json-lines).
   aether --mode rpc              JSONL request/result loop over stdin/stdout.
+  aether --mode acp              Standard Agent Client Protocol (JSON-RPC 2.0) server.
   echo "prompt" | aether         Piped stdin becomes the prompt.
 
 Options:
@@ -50,7 +51,7 @@ Options:
   --api-url <url>         Override the provider base URL (else read from DB).
   --api-format <fmt>      Provider format: openai | anthropic (default openai).
   --mode <mode>           Agent permission mode: auto | plan | ask | yolo (default auto);
-                          or transport mode: json (NDJSON stream) | rpc (JSONL loop).
+                          or transport mode: json (NDJSON) | rpc (JSONL) | acp (JSON-RPC 2.0).
   -p <prompt>             Explicit single-shot prompt (alternative to positional).
   --stdin                 Read the prompt from stdin (explicit). Also auto-detected
                           when stdin is piped and no prompt is given.
@@ -347,6 +348,20 @@ function main() {
           console.error('error: --mode rpc server is not built yet.')
           return 1
         }
+        console.error(`error: ${err && err.message ? err.message : String(err)}`)
+        return 1
+      }
+    })()
+  }
+
+  // --mode acp：Standard Agent Client Protocol (JSON-RPC 2.0) server over stdin/stdout.
+  if (opts.mode === 'acp') {
+    return (async () => {
+      try {
+        const acp = require('./electron/llm/rpc/acpServer.js')
+        const code = await acp.main({ db: opts.db })
+        return typeof code === 'number' ? code : 0
+      } catch (err) {
         console.error(`error: ${err && err.message ? err.message : String(err)}`)
         return 1
       }

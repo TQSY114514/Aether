@@ -209,6 +209,7 @@ function createEmptyDatabase(dbPath) {
     max_retry INTEGER NOT NULL DEFAULT 2,
     error TEXT,
     result TEXT,
+    tool_journal TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME
   )`);
@@ -279,6 +280,20 @@ function createEmptyDatabase(dbPath) {
     rolled_back_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  target.exec(`CREATE TABLE IF NOT EXISTS agent_turn_checkpoint (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    turn_id INTEGER NOT NULL,
+    step_index INTEGER NOT NULL DEFAULT 0,
+    messages TEXT NOT NULL,
+    tool_trace TEXT DEFAULT '[]',
+    checkpoint_meta TEXT DEFAULT '{}',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  try {
+    target.exec(`CREATE INDEX IF NOT EXISTS idx_turn_checkpoint_session ON agent_turn_checkpoint(session_id, turn_id, step_index)`);
+  } catch {}
 
   target.exec(
     "CREATE TABLE IF NOT EXISTS user_habit (key TEXT PRIMARY KEY, imperative TEXT, reason TEXT, occurrences INTEGER NOT NULL DEFAULT 0, proposed INTEGER NOT NULL DEFAULT 0, first_seen DATETIME DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP)",
@@ -365,6 +380,13 @@ function initDatabase() {
   db = createEmptyDatabase(dbPath);
 
   try {
+    const { runMigrations } = require("./migrations");
+    runMigrations(db);
+  } catch (e) {
+    log.warn("[database] runMigrations failed:", e && e.message);
+  }
+
+  try {
     db.exec("ALTER TABLE memory ADD COLUMN type TEXT DEFAULT 'fact'");
   } catch {}
   try {
@@ -439,6 +461,10 @@ function initDatabase() {
   // 启动时自动合并完全重复的记忆（幂等）：历史去重漏洞积累的存量在升级后
   // 首次启动即清零，无需再手动点"记忆去重"。个人应用规模的全表 GROUP BY
   // 开销可忽略；函数声明在模块内提升，运行期调用安全。
+  // 注意：workspace 列必须在此之前存在（mergeDuplicateMemories 查询依赖它）。
+  try {
+    db.exec("ALTER TABLE memory ADD COLUMN workspace TEXT");
+  } catch {}
   try {
     mergeDuplicateMemories();
   } catch {}
@@ -527,11 +553,16 @@ function initDatabase() {
     provider_credential: getTableColumns("provider_credential"),
     skill_patterns: getTableColumns("skill_patterns"),
     memory: getTableColumns("memory"),
+    agent_task: getTableColumns("agent_task"),
   };
   const addCol = (table, col, def) => {
+    if (!cols[table]) {
+      cols[table] = getTableColumns(table);
+    }
     if (!cols[table].includes(col)) {
       try {
         db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+        cols[table].push(col);
       } catch {}
     }
   };
@@ -572,6 +603,7 @@ function initDatabase() {
   // settings 的 agent_workspace_root。NULL = 全局记忆(所有会话注入)；非 NULL =
   // 仅注入到该 workspace 的会话。注入侧只对 type='project' 做作用域过滤。
   addCol("memory", "workspace", "TEXT");
+  addCol("agent_task", "tool_journal", "TEXT");
 
   // agent_task status CHECK 迁移：旧库 CHECK 只允许 5 态 (pending/running/
   // done/cancelled/error)，Phase 0 状态机扩为 7 态 (queued/plan/paused)。
@@ -587,6 +619,7 @@ function initDatabase() {
       agentTaskSql.sql &&
       !/'(queued|plan|paused)'/.test(agentTaskSql.sql)
     ) {
+      const hasJournal = /tool_journal/.test(agentTaskSql.sql);
       db.exec(`
         CREATE TABLE agent_task_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -601,14 +634,16 @@ function initDatabase() {
           max_retry INTEGER NOT NULL DEFAULT 2,
           error TEXT,
           result TEXT,
+          tool_journal TEXT,
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME
         );
-        INSERT INTO agent_task_new (id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, created_at, updated_at)
-          SELECT id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, created_at, updated_at FROM agent_task;
+        INSERT INTO agent_task_new (id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, tool_journal, created_at, updated_at)
+          SELECT id, session_id, title, content, model_id, agent_mode, status, priority, attempts, max_retry, error, result, ${hasJournal ? 'tool_journal' : 'NULL'}, created_at, updated_at FROM agent_task;
         DROP TABLE agent_task;
         ALTER TABLE agent_task_new RENAME TO agent_task;
       `);
+      addCol("agent_task", "tool_journal", "TEXT");
     }
   } catch {}
 
@@ -986,6 +1021,9 @@ function deleteSession(id) {
       db.prepare("DELETE FROM agent_checkpoint WHERE session_id = ?").run(sid);
     } catch {}
     try {
+      db.prepare("DELETE FROM agent_turn_checkpoint WHERE session_id = ?").run(sid);
+    } catch {}
+    try {
       db.prepare("DELETE FROM agent_execution_log WHERE session_id = ?").run(
         sid,
       );
@@ -1175,6 +1213,7 @@ const AGENT_TASK_PATCH_COLS = new Set([
   "attempts",
   "priority",
   "max_retry",
+  "tool_journal",
 ]);
 function updateAgentTask(id, patch) {
   const cols = Object.keys(patch || {}).filter((k) =>
@@ -2603,9 +2642,14 @@ module.exports = {
       return null;
     }
   },
+  getDatabase: () => db,
   getDatabasePath: () => dbPath,
   encryptKey,
   decryptKey,
   isPlaintextKey,
   migrateLegacyPlaintextKeys,
+  runMigrations: () => (db ? require("./migrations").runMigrations(db) : { appliedCount: 0, currentVersion: 0 }),
+  migrateUp: (target) => (db ? require("./migrations").migrateUp(db, target) : { appliedCount: 0, currentVersion: 0 }),
+  migrateDown: (target) => (db ? require("./migrations").migrateDown(db, target) : { rolledBackCount: 0, currentVersion: 0 }),
+  getMigrationStatus: () => (db ? require("./migrations").getMigrationStatus(db) : null),
 };

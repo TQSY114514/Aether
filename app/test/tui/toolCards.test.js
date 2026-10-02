@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest'
 import { createElement as h } from '../../tui/node_modules/react/index.js'
 // ink 仅安装在 app/tui/node_modules（TUI 局部依赖），测试从相对路径直引入口。
 import { render, Box, Text } from '../../tui/node_modules/ink/build/index.js'
-import { summarizeTool, truncateLines, summarizeArgs, TOOL_STATUS } from '../../tui/toolCards.js'
+import { summarizeTool, truncateLines, summarizeArgs, TOOL_STATUS, formatWarpBlock } from '../../tui/toolCards.js'
 
 describe('summarizeTool（纯函数）', () => {
   it('running：startedAt 有值且 result/error 空 → running + 黄', () => {
@@ -64,6 +64,38 @@ describe('summarizeArgs', () => {
     // 117 字符 + 1 个省略号 = 118
     expect(out.length).toBe(118)
     expect(out.endsWith('…')).toBe(true)
+  })
+})
+
+describe('formatWarpBlock（run_command 卡）', () => {
+  it('running：startedAt 有值且 result/error 空 → running + exitCode null', () => {
+    const b = formatWarpBlock({ name: 'run_command', args: { command: 'npm test' }, startedAt: Date.now() })
+    expect(b.isCommand).toBe(true)
+    expect(b.status).toBe('running')
+    expect(b.exitCode).toBeNull()
+  })
+
+  it('done：result 无失败标记 → exitCode 0', () => {
+    const b = formatWarpBlock({ name: 'run_command', args: { command: 'npm test' }, result: '42 passed', startedAt: 1 })
+    expect(b.status).toBe('done')
+    expect(b.exitCode).toBe(0)
+  })
+
+  it('error：result 内嵌 [FAILED: exit N] 标记 → 解析出非零退出码', () => {
+    const b = formatWarpBlock({ name: 'run_command', args: { command: 'npm test' }, result: '[FAILED: exit 2 (exit code: 2)]\n1 failed', startedAt: 1 })
+    expect(b.status).toBe('error')
+    expect(b.exitCode).toBe(2)
+  })
+
+  it('error：[TIMED OUT] 与 [COMMAND NOT FOUND] 标记', () => {
+    expect(formatWarpBlock({ name: 'run_command', args: { command: 'a' }, result: '[TIMED OUT] x', startedAt: 1 }).status).toBe('error')
+    const nf = formatWarpBlock({ name: 'run_command', args: { command: 'b' }, result: '[COMMAND NOT FOUND]\nb', startedAt: 1 })
+    expect(nf.status).toBe('error')
+    expect(nf.exitCode).toBe(127)
+  })
+
+  it('非命令工具返回 null', () => {
+    expect(formatWarpBlock({ name: 'read_file', args: { path: 'a.txt' }, result: 'x', startedAt: 1 })).toBeNull()
   })
 })
 

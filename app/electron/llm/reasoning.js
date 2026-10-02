@@ -24,7 +24,7 @@
 // Regexes are pre-compiled once (module-level) since they're called once per turn.
 const RE_OPENAI = /^o[134]|^gpt-5/
 const RE_CLAUDE = /claude/
-const RE_DEEPSEEK_R = /deepseek[_-]r/i
+const RE_DEEPSEEK_R = /deepseek[_-](r\d|reasoner)/i
 const RE_QWEN = /^qwq|qwen.*-(thinking|reason)/
 function reasoningFamily(modelName = '') {
   const m = modelName.toLowerCase()

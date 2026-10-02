@@ -27,9 +27,9 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
   })
 
   // 系统通知: 由渲染进程请求（任务完成/新消息等）
-  ipcMain.handle('system:notify', (_e, { title, body } = {}) => {
+  ipcMain.handle('system:notify', (_e, { title, body, sessionId, taskId } = {}) => {
     try {
-      const { Notification } = require('electron')
+      const { Notification, BrowserWindow } = require('electron')
       if (!Notification.isSupported()) return { ok: false, error: 'notifications not supported' }
       const n = new Notification({
         title: String(title || 'Aether'),
@@ -37,7 +37,18 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
         silent: false,
       })
       n.on('click', () => {
-        try { getWebContents()?.focus() } catch {}
+        try {
+          const wc = getWebContents()
+          const win = wc ? BrowserWindow.fromWebContents(wc) : (BrowserWindow.getAllWindows()[0] || null)
+          if (win) {
+            if (win.isMinimized()) win.restore()
+            win.show()
+            win.focus()
+          }
+          if (sessionId && wc && !wc.isDestroyed()) {
+            wc.send('session:switch-requested', { sessionId: Number(sessionId), taskId: taskId ? String(taskId) : undefined })
+          }
+        } catch {}
       })
       n.show()
       return { ok: true }

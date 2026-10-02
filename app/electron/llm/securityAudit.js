@@ -24,33 +24,55 @@ const CAPABILITY_AXES = Object.freeze(['READ', 'WRITE', 'EXECUTE', 'NETWORK', 'G
 /**
  * Determine active capability profile for the audit run.
  */
-function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailable = null } = {}) {
+function resolveAuditCapabilities({ mode = 'guidance', db = null, dockerAvailable = null, winSandboxAvailable = null } = {}) {
   let hasDocker = false
+  let featureFlags
+  try {
+    featureFlags = require('../featureFlags')
+  } catch {}
+
   if (typeof dockerAvailable === 'boolean') {
     hasDocker = dockerAvailable
   } else {
     try {
-      const featureFlags = require('../featureFlags')
       const { dockerBackend } = require('../exec/dockerBackend')
-      const flagOn = featureFlags.isEnabled(db, 'exec.docker') || featureFlags.isEnabled(db, 'exec.docker.defaultForAuto')
+      const flagOn = featureFlags ? (featureFlags.isEnabled(db, 'exec.docker') || featureFlags.isEnabled(db, 'exec.docker.defaultForAuto')) : false
       hasDocker = Boolean(flagOn && dockerBackend && typeof dockerBackend.isAvailable === 'function' && dockerBackend.isAvailable())
     } catch {
       hasDocker = false
     }
   }
+  let hasWinJob = false
+  if (typeof winSandboxAvailable === 'boolean') {
+    hasWinJob = winSandboxAvailable
+  } else if (process.platform === 'win32') {
+    try {
+      const winJobObject = require('../exec/winJobObject')
+      const flagOn = featureFlags ? featureFlags.isEnabled(db, 'exec.jobSandbox') : true
+      hasWinJob = Boolean(flagOn && winJobObject && typeof winJobObject.isSupported === 'function' && winJobObject.isSupported())
+    } catch {
+      hasWinJob = false
+    }
+  }
+  // A Windows Job Object only caps memory and kills orphans on close — it gives
+  // no filesystem or network isolation, so it is process containment, not a
+  // verification sandbox. Counting it here let execution findings be marked
+  // 'confirmed' (verified_in_sandbox) while the PoC actually ran unisolated.
+  const sandboxAvailable = hasDocker
 
   const capabilities = {
     READ: true,
     GIT: true,
     WRITE: mode === 'full',
-    EXECUTE: mode === 'full' && hasDocker,
+    EXECUTE: mode === 'full' && sandboxAvailable,
     NETWORK: false,
     EXTERNAL: false,
   }
 
   return {
     mode: mode === 'full' ? 'full' : 'guidance',
-    sandboxAvailable: hasDocker,
+    sandboxAvailable,
+    processContainment: hasWinJob,
     capabilities,
   }
 }
@@ -251,7 +273,7 @@ async function runVerifierPass({ workspaceDir, candidates, verifierId = 'verifie
         sandboxVerified = false
       } else {
         finalStatus = 'confirmed'
-        validationReason = 'verified_in_docker_sandbox'
+        validationReason = 'verified_in_sandbox'
         sandboxVerified = true
       }
     } else {
@@ -286,6 +308,7 @@ async function runSecurityAudit({
   mode = 'guidance',
   db = null,
   dockerAvailable = null,
+  winSandboxAvailable = null,
   outputDir = null,
   hunterId = 'subagent_hunter_iso_1',
   verifierId = 'subagent_verifier_iso_2',
@@ -296,7 +319,7 @@ async function runSecurityAudit({
     throw new Error('runSecurityAudit: finder_id and verifier_id must be distinct isolated identities')
   }
 
-  const capProfile = resolveAuditCapabilities({ mode, db, dockerAvailable })
+  const capProfile = resolveAuditCapabilities({ mode, db, dockerAvailable, winSandboxAvailable })
   const ledger = buildCoverageLedger(workspaceDir, {
     mode: capProfile.mode,
     capabilities: capProfile.capabilities,

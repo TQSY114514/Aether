@@ -68,6 +68,28 @@ function createCheckpoint({ sessionId, messageId, toolName, args }) {
   } catch (e) {
     snapshot.gitCommit = { success: false, error: e.message }
   }
+
+  // P0-5: Shadow Git bare repo snapshot (fast, isolated, no workspace git pollution)
+  try {
+    const shadowGit = require('./shadowGit')
+    const { getWorkspaceRoot } = require('../tools/sandbox')
+    const wsRoot = getWorkspaceRoot(sessionId)
+    if (wsRoot && shadowGit.isAvailable()) {
+      const sRes = shadowGit.commitCheckpoint(sessionId, wsRoot, {
+        affectedPaths,
+        message: `checkpoint_${toolName}_${Date.now()}`,
+      })
+      if (sRes.ok) {
+        snapshot.shadowGit = {
+          commitHash: sRes.commitHash,
+          durationMs: sRes.durationMs,
+        }
+      }
+    }
+  } catch (e) {
+    snapshot.shadowGit = { error: e.message }
+  }
+
   const row = db.addAgentCheckpoint({ sessionId, messageId, toolName, args, affectedPaths, snapshot })
   return row?.lastInsertRowid || null
 }
@@ -137,6 +159,39 @@ function rollbackCheckpoint(id, opts = {}) {
   }
 
   const snapshot = cp.snapshot || {}
+
+  // P0-5: If a Shadow Git commit hash is recorded, attempt fast tree rollback first
+  if (snapshot.shadowGit && snapshot.shadowGit.commitHash) {
+    try {
+      const shadowGit = require('./shadowGit')
+      const { getWorkspaceRoot } = require('../tools/sandbox')
+      const wsRoot = getWorkspaceRoot(cp.session_id)
+      if (wsRoot && shadowGit.isAvailable()) {
+        let affected = []
+        if (Array.isArray(cp.affected_paths)) {
+          affected = cp.affected_paths
+        } else if (typeof cp.affected_paths === 'string') {
+          try { affected = JSON.parse(cp.affected_paths) } catch {}
+        }
+        const fs = require('fs')
+        const path = require('path')
+        const fileOnlyAffected = (Array.isArray(affected) ? affected : []).filter(p => {
+          try {
+            const abs = path.resolve(wsRoot, p)
+            return fs.existsSync(abs) ? !fs.statSync(abs).isDirectory() : true
+          } catch { return true }
+        })
+        if (fileOnlyAffected.length > 0) {
+          const sRes = shadowGit.rollbackCheckpoint(cp.session_id, wsRoot, snapshot.shadowGit.commitHash, fileOnlyAffected)
+          if (sRes.ok) {
+            db.markAgentCheckpointRolledBack(id)
+            return { success: true, restored: sRes.restored || fileOnlyAffected, method: 'shadow_git' }
+          }
+        }
+      }
+    } catch {}
+  }
+
   const restored = []
   const failed = []
   // Restore each file in its own try-catch so one failure (permission, disk,

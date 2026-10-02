@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import type { TurnFileSummary, FileChangeEntry } from '@/store/types'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import { useUI } from '@/components/ui/feedback'
 import { FileCode, RotateCcw, ChevronDown, ChevronRight, Check, GitCommit, Play, AlertCircle, Maximize2, X } from 'lucide-react'
 
 interface FileSummaryDeckProps {
@@ -18,6 +19,7 @@ function formatPath(fullPath: string) {
 }
 
 export default function FileSummaryDeck({ summary, sessionId, messageId }: FileSummaryDeckProps) {
+  const { confirm } = useUI()
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({})
   const [modalDiffFile, setModalDiffFile] = useState<FileChangeEntry | null>(null)
   const [rollingBack, setRollingBack] = useState(false)
@@ -90,9 +92,14 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
   }, [commitMsg, committing, summary.files, sessionId])
 
   const handleRollback = useCallback(async () => {
-    if (!window.confirm(t('filesummary.undo_confirm', '确定要撤销本轮对话对文件所做的修改吗？'))) {
-      return
-    }
+    const ok = await confirm({
+      title: t('filesummary.undo_title', '撤销本轮修改'),
+      description: t('filesummary.undo_confirm', '确定要撤销本轮对话对文件所做的修改吗？'),
+      danger: true,
+      confirmText: t('common.undo', '撤销'),
+      cancelText: t('common.cancel', '取消'),
+    })
+    if (!ok) return
 
     setRollingBack(true)
     try {
@@ -108,9 +115,13 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
               let res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId, force: userConfirmedConflict })
               if (res && !res.success && res.conflict) {
                 if (!userConfirmedConflict) {
-                  const confirmed = window.confirm(
-                    t('filesummary.undo_conflict_confirm', '检测到在此之后的对话轮次中存在更新的文件修改。强制撤销将覆盖后续修改，是否仍要继续？')
-                  )
+                  const confirmed = await confirm({
+                    title: t('filesummary.conflict_title', '后续轮次冲突'),
+                    description: t('filesummary.undo_conflict_confirm', '检测到在此之后的对话轮次中存在更新的文件修改。强制撤销将覆盖后续修改，是否仍要继续？'),
+                    danger: true,
+                    confirmText: t('common.force_continue', '继续强制撤销'),
+                    cancelText: t('common.cancel', '取消'),
+                  })
                   if (confirmed) {
                     userConfirmedConflict = true
                     res = await window.electronAPI.agentCheckpoint.rollback({ id: cp.id, sessionId, force: true })
@@ -182,7 +193,13 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
         setTestStatus('failed')
         useStore.getState().triggerToast(t('filesummary.test_failed', res.command || ''), 'error')
         if (sessionId && res.suggestedRepairPrompt) {
-          if (window.confirm(t('filesummary.test_confirm_repair', '项目测试未通过，是否让 Agent 自动分析并修复报错？'))) {
+          const doRepair = await confirm({
+            title: t('filesummary.test_failed_title', '测试未通过'),
+            description: t('filesummary.test_confirm_repair', '项目测试未通过，是否让 Agent 自动分析并修复报错？'),
+            confirmText: t('filesummary.auto_repair', '自动修复'),
+            cancelText: t('common.cancel', '取消'),
+          })
+          if (doRepair) {
             useStore.getState().sendMessage(res.suggestedRepairPrompt)
           }
         }

@@ -112,7 +112,8 @@ export function ensureChunkListener() {
             getStore().setState({ todosByMessage: nextTodosByMsg })
           }
         }
-        if (st.currentSessionId !== sid) {
+        const isBackgrounded = typeof document !== 'undefined' && (document.hidden || !document.hasFocus())
+        if (st.currentSessionId !== sid || isBackgrounded) {
           getStore().getState().pinSession(sid, 0).then(() => {
             const s = getStore().getState().sessions.find(x => x.id === sid)
             if (s) getStore().getState().notifyComplete(sid, s.title || "Chat")

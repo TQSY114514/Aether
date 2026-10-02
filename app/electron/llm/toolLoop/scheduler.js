@@ -50,9 +50,8 @@ class StepScheduler {
    * @returns {object} Next state
    */
   step(state, event) {
-    if (state.isDone) return state
-
     const { type, payload } = event
+    if (state.isDone && type !== 'VERIFICATION_FAILED') return state
 
     switch (type) {
       case 'LLM_RESPONSE': {

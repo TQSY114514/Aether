@@ -85,11 +85,17 @@ function listModels(db) {
 // Resolve a provider + model row for the adapter. `modelName` may be a bare
 // model name or a "provider/model" pair. Falls back to the primary model, then
 // the first enabled model. Returns { provider, model } or null.
-function resolveProviderModel(db, { providerName, modelName } = {}) {
+function resolveProviderModel(db, { providerName, modelName, strict = false } = {}) {
   if (!db) return null
   const providers = listProviders(db)
   const models = listModels(db)
   if (!models.length) return null
+
+  const providerByName = (n) => providers.find(pr => pr.name === n) || null
+  const wantedProvider = providerName ? providerByName(providerName) : null
+  // strict callers (ACP/RPC) asked for a specific pair: an unknown provider name
+  // must not be answered with somebody else's model.
+  if (providerName && !wantedProvider && strict) return null
 
   let target = null
   if (modelName) {
@@ -97,19 +103,36 @@ function resolveProviderModel(db, { providerName, modelName } = {}) {
     const q = parts.length > 1 ? parts[1] : parts[0]
     const prov = parts.length > 1 ? parts[0] : null
     const lower = q.toLowerCase()
-    target = models.find(m => m.model_name.toLowerCase() === lower)
-      || models.find(m => m.model_name.toLowerCase().includes(lower))
-      || null
-    if (prov && target) {
-      target = models.find(m => m.provider_name === prov && m.model_name === target.model_name) || target
+    // A bare model name under a strict caller still means "that model on the
+    // provider I asked for", so scope the lookup when the provider is known.
+    const scopeProv = providerByName(prov)?.name
+      || (strict && wantedProvider ? wantedProvider.name : null)
+    const candidates = scopeProv ? models.filter(m => m.provider_name === scopeProv) : models
+
+    target = candidates.find(m => m.model_name.toLowerCase() === lower) || null
+    if (!target && !strict) {
+      // Loose callers keep the forgiving substring behaviour they always had.
+      target = models.find(m => m.model_name.toLowerCase() === lower)
+        || models.find(m => m.model_name.toLowerCase().includes(lower))
+        || null
     }
+    // Substring hits are not an answer for a caller that named a model: it would
+    // run "gpt-4o" for a request of "gpt-4". Unresolvable means return null.
+    if (!target && strict) return null
   }
   if (!target) {
     target = models.find(m => m.is_primary) || models[0]
   }
-  if (providerName) {
-    const p = providers.find(pr => pr.name === providerName)
-    if (p) target = models.find(m => m.provider_id === p.id) || target
+  if (wantedProvider && (!target || target.provider_id !== wantedProvider.id)) {
+    const inProvider = models.find(m => m.provider_id === wantedProvider.id)
+    if (!inProvider) {
+      if (strict) return null
+    } else if (strict && modelName) {
+      // Both were named, so this provider's own model is still the wrong one.
+      return null
+    } else {
+      target = inProvider
+    }
   }
   if (!target) return null
 

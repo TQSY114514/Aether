@@ -52,7 +52,7 @@ export declare function openDatabase(dbPath?: string): unknown
 
 export declare function resolveProviderModel(
   db: unknown,
-  opts?: { providerName?: string; modelName?: string },
+  opts?: { providerName?: string; modelName?: string; strict?: boolean },
 ): ResolvedModel | null
 
 export declare function taskDbAdapter(db: unknown): unknown

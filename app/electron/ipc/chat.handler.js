@@ -263,6 +263,60 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { error: e.message }
     }
   })
+  ipcMain.handle('plan:get', (_e, sessionId) => {
+    try {
+      if (!sessionId || !db?.getSessionPlan) return null
+      return db.getSessionPlan(Number(sessionId))
+    } catch {
+      return null
+    }
+  })
+  ipcMain.handle('plan:save', (_e, { sessionId, plan }) => {
+    try {
+      if (!sessionId || !plan || !db?.saveSessionPlan) return { ok: false }
+      db.saveSessionPlan(Number(sessionId), plan)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  })
+  ipcMain.handle('plan:update-step', (_e, { sessionId, stepIndex, status }) => {
+    try {
+      if (!sessionId || !db?.getSessionPlan) return { ok: false }
+      // Number(null)/Number('')/Number(false) are all 0, so the type has to be
+      // checked before coercing or a malformed request would rewrite step 0.
+      let idx
+      if (typeof stepIndex === 'number') {
+        idx = stepIndex
+      } else if (typeof stepIndex === 'string' && /^\d+$/.test(stepIndex)) {
+        idx = Number(stepIndex)
+      } else {
+        return { ok: false, error: 'invalid stepIndex' }
+      }
+      if (!Number.isInteger(idx) || idx < 0) return { ok: false, error: 'invalid stepIndex' }
+      // While the loop is streaming it owns the in-memory plan and its next
+      // snapshot save would clobber a direct DB write — record the tick for
+      // the loop to merge instead, and only persist directly when idle.
+      // planControl/steering key on the raw sessionId (same convention as
+      // plan:skip-step / plan:retry-step); DB calls take the numeric id.
+      if (steering.isRunning(sessionId)) {
+        planControl.setStatus(sessionId, stepIndex, status)
+      } else {
+        // Idle: persist directly and leave no queued override behind — an idle
+        // tick used to stay in planControl and get applied to whatever plan the
+        // next run in this session loaded or generated.
+        const plan = db.getSessionPlan(Number(sessionId))
+        if (!plan) return { ok: false, error: 'no plan for session' }
+        const list = plan.tasks || plan.steps || plan.todos
+        if (!Array.isArray(list) || !list[idx]) return { ok: false, error: 'stepIndex out of range' }
+        list[idx].status = status
+        db.saveSessionPlan(Number(sessionId), plan)
+      }
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  })
 
   // ─── Trajectory IPC ──────────────────────────────────────────────────────
   ipcMain.handle('trajectory:stats', (_e, sessionId) => {

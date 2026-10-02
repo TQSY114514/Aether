@@ -7,6 +7,7 @@
 
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import { getFeatureFlagFresh, setFeatureFlag } from '@/utils/featureFlags'
 
 export type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
 
@@ -23,6 +24,29 @@ export interface SlashCommand {
  * Commands with `action` execute directly without inserting a static prompt.
  */
 export const DEFAULT_COMMANDS: SlashCommand[] = [
+  {
+    id: 'poor',
+    name: t('slash.poor', '穷鬼省流模式'),
+    description: t('slash.poor_desc', '切换穷鬼省流模式：严格压制思考轮数至 8 轮，激进压缩上下文节省 Token'),
+    action: async () => {
+      try {
+        const current = await getFeatureFlagFresh('agent.poorMode', false)
+        const next = !current
+        const ok = await setFeatureFlag('agent.poorMode', next)
+        if (!ok) {
+          useStore.getState().triggerToast(t('slash.poor_failed', '切换穷鬼省流模式失败，请重试'), 'error')
+          return
+        }
+        useStore.getState().triggerToast(
+          next ? t('slash.poor_enabled', '穷鬼省流模式已开启：最大循环限制为 8 轮，激进压缩 Token') : t('slash.poor_disabled', '穷鬼省流模式已关闭：恢复标准预算'),
+          next ? 'info' : 'success'
+        )
+      } catch {
+        // Reading the current value failed: abort rather than toggle blind.
+        useStore.getState().triggerToast(t('slash.poor_failed', '切换穷鬼省流模式失败，请重试'), 'error')
+      }
+    },
+  },
   { id: 'summarize', name: t('slash.summarize', '总结对话'), description: '详细总结以上对话的要点', prompt: '请详细总结以上对话的要点，用中文回复。' },
   { id: 'translate', name: t('slash.translate', '翻译'), description: '将以上内容翻译成中文', prompt: '请将以上内容翻译成中文。' },
   { id: 'polish', name: t('slash.polish', '润色'), description: '润色文字，使其更流畅专业', prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
@@ -269,6 +293,13 @@ export async function executeTypedSlashCommand(
       await window.electronAPI.message.deleteAfter(sid, 0).catch(() => {})
       store.loadMessages(sid)
     }
+    return true
+  }
+
+  if (cmd === '/poor') {
+    setInput('')
+    const match = DEFAULT_COMMANDS.find(c => c.id === 'poor')
+    if (match && match.action) await match.action(arg)
     return true
   }
 

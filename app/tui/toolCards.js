@@ -64,3 +64,57 @@ export function summarizeTool(entry = {}) {
     latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : null,
   }
 }
+
+/**
+ * 清除终端 ANSI 逃逸序列（用于纯文本日志、复制、折叠）。
+ * @param {unknown} text
+ * @returns {string}
+ */
+export function stripAnsi(text) {
+  if (!text) return ''
+  return String(text).replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g, '')
+}
+
+/**
+ * 格式化 Warp 风格终端卡片块（用于 run_command 等执行工具输出卡片化）。
+ * @param {object} [entry]
+ * @returns {object|null}
+ */
+export function formatWarpBlock(entry = {}) {
+  const isCmd = entry.name === 'run_command' || Boolean(entry.args && typeof entry.args === 'object' && entry.args.command)
+  if (!isCmd) return null
+
+  const isStart = isToolStart(entry)
+  const args = (entry.args && typeof entry.args === 'object') ? entry.args : {}
+  const command = String(args.command || entry.name)
+  const cwd = args.cwd ? String(args.cwd) : ''
+
+  const raw = entry.error ? String(entry.error) : String(entry.result ?? '')
+  const clean = stripAnsi(raw)
+
+  // RPC entry 不带独立 exitCode 字段——run_command 的退出状态以文本标记内嵌在
+  // result 里（registry.js: [FAILED: exit N] / [TIMED OUT] / [COMMAND NOT FOUND]）。
+  const hasNumericExit = typeof entry.exitCode === 'number'
+  let exitCode = hasNumericExit ? entry.exitCode : (entry.error ? 1 : (entry.result != null ? 0 : null))
+  if (!hasNumericExit && (exitCode == null || exitCode === 0 || entry.error)) {
+    // Anchor on the markers registry.js prepends. Scanning the whole output let a
+    // command whose own stdout mentions "exit code: 1" render as failed.
+    const m = raw.match(/\[FAILED:\s*exit\s+(-?\d+)/i)
+    if (m && parseInt(m[1], 10) !== 0) exitCode = parseInt(m[1], 10)
+    else if (/^\s*\[COMMAND NOT FOUND\]/im.test(raw)) exitCode = 127
+    else if (/^\s*\[TIMED OUT\]/im.test(raw)) exitCode = 1
+  }
+  const status = isStart ? 'running' : exitCode === 0 && !entry.error ? 'done' : 'error'
+
+  return {
+    isCommand: true,
+    command,
+    cwd,
+    status,
+    exitCode,
+    latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : null,
+    cleanOutput: clean,
+    summary: truncateLines(clean, 25),
+  }
+}
+

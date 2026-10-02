@@ -94,6 +94,23 @@ class ToolStateMachine {
   }
 
   /**
+   * Advance state machine via explicit StepScheduler event.
+   * @param {object} event - { type, payload }
+   * @returns {object} Updated state
+   */
+  step(event) {
+    const prevPhase = this.state ? this.state.phase : LoopPhase.INIT
+    this.state = this.scheduler.step(this.state, event)
+    this.history.push({
+      from: prevPhase,
+      to: this.state.phase,
+      event,
+      ts: Date.now(),
+    })
+    return this.state
+  }
+
+  /**
    * Initialize and run the state machine until termination.
    * @param {Array<object>} initialMessages
    * @param {Array<object>} toolPayload

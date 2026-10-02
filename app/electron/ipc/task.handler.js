@@ -15,9 +15,7 @@
 
 
 
-const { TASK_PROGRESS_TYPES } = require('../llm/eventTypes')
 
-const PROGRESS_TYPES = new Set(TASK_PROGRESS_TYPES)
 
 function stripRecord(record) {
   const { controller, emit, ...rest } = record
@@ -25,7 +23,7 @@ function stripRecord(record) {
 }
 
 function registerTaskHandlers(ipcMain, db, getWebContents) {
-  const { startTask, cancelTask, pauseTask, resumeTask, listTasks, getTask, initBackgroundTasks, restorePendingTasks } = require('../llm/backgroundTasks');
+  const { startTask, cancelTask, pauseTask, resumeTask, listTasks, getTask, initBackgroundTasks, restorePendingTasks, createTaskEmitter } = require('../llm/backgroundTasks');
   // Wire getWebContents into the TaskManager so dialog events (permission,
   // question) can reach the renderer even from detached task sessions.
   initBackgroundTasks({ getWebContents, db })
@@ -44,45 +42,7 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
         return { error: '未指定模型' }
       }
 
-      // Per-task emit: routes events to the renderer via task:progress / terminal channels.
-      const emit = (taskId, evt) => {
-        try {
-          const wc = getWebContents()
-          if (!wc || wc.isDestroyed()) return
-          if (PROGRESS_TYPES.has(evt.type)) {
-            wc.send('task:progress', { taskId, type: evt.type, payload: evt.payload })
-          } else if (evt.type === 'done') {
-            wc.send('task:done', evt.payload)
-            // 后台任务完成 → 系统通知（仅当窗口不可见/最小化时, 不打扰前台用户）
-            try {
-              const { Notification } = require('electron')
-              if (Notification.isSupported() && !wc.isFocused()) {
-                const content = evt.payload && evt.payload.finalContent ? String(evt.payload.finalContent).slice(0, 80) : ''
-                new Notification({
-                  title: 'Aether 任务完成',
-                  body: content || '后台任务已完成',
-                  silent: true,
-                }).show()
-              }
-            } catch {}
-          } else if (evt.type === 'cancelled') {
-            wc.send('task:cancelled', evt.payload)
-          } else if (evt.type === 'error') {
-            wc.send('task:error', evt.payload)
-            try {
-              const { Notification } = require('electron')
-              if (Notification.isSupported() && !wc.isFocused()) {
-                const errMsg = evt.payload && evt.payload.errorMsg ? String(evt.payload.errorMsg).slice(0, 80) : '任务失败'
-                new Notification({
-                  title: 'Aether 任务失败',
-                  body: errMsg,
-                  silent: true,
-                }).show()
-              }
-            } catch {}
-          }
-        } catch {}
-      }
+      const emit = createTaskEmitter()
 
       const result = await startTask({ db, parentSessionId: null, content, modelId, agentMode, priority, maxRetry, emit })
 
