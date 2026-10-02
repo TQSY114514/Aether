@@ -18,12 +18,23 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:delete', (_e, id) => {
     const sid = Number(id)
     if (!Number.isInteger(sid) || sid <= 0) return { ok: false, error: 'invalid session id' }
+    // The DB delete is the authoritative step: if it fails the session and its
+    // checkpoint rows survive, so deleting the Shadow Git repo here would drop
+    // live snapshots while the session they belong to is still listed.
+    try {
+      db.deleteSession(sid)
+    } catch (e) {
+      log.warn('session:delete db error:', e)
+      return { ok: false, error: e?.message || 'delete failed' }
+    }
     try { require('../llm/backgroundTasks').bumpBranchGeneration(sid) } catch {}
-    try { db.deleteSession(sid) } catch (e) { log.warn('session:delete db error:', e) }
     try { clearAllowRules(sid) } catch {}
     try { cleanupSessionControllers(sid) } catch {}
-    try { require('../llm/shadowGit').deleteShadowRepo(sid) } catch {}
-    return { ok: true }
+    // deleteShadowRepo returns false when the removal itself failed (locked or
+    // unreadable path) — surface it instead of reporting a clean delete.
+    let shadowRemoved = true
+    try { shadowRemoved = require('../llm/shadowGit').deleteShadowRepo(sid) !== false } catch {}
+    return { ok: true, shadowRemoved }
   })
   ipcMain.handle('session:touch', (_e, id) => db.touchSession(id))
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))

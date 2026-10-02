@@ -283,7 +283,16 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   ipcMain.handle('plan:update-step', (_e, { sessionId, stepIndex, status }) => {
     try {
       if (!sessionId || !db?.getSessionPlan) return { ok: false }
-      const idx = Number(stepIndex)
+      // Number(null)/Number('')/Number(false) are all 0, so the type has to be
+      // checked before coercing or a malformed request would rewrite step 0.
+      let idx
+      if (typeof stepIndex === 'number') {
+        idx = stepIndex
+      } else if (typeof stepIndex === 'string' && /^\d+$/.test(stepIndex)) {
+        idx = Number(stepIndex)
+      } else {
+        return { ok: false, error: 'invalid stepIndex' }
+      }
       if (!Number.isInteger(idx) || idx < 0) return { ok: false, error: 'invalid stepIndex' }
       // While the loop is streaming it owns the in-memory plan and its next
       // snapshot save would clobber a direct DB write — record the tick for

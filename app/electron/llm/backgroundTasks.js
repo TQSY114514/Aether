@@ -172,7 +172,7 @@ function createTaskEmitter() {
         wc.send('task:cancelled', evt.payload)
       } else if (evt.type === 'error') {
         wc.send('task:error', evt.payload)
-        notifyTerminal(wc, taskId, evt.payload, 'Aether 任务失败', String(evt.payload?.errorMsg || '').slice(0, 80) || '任务失败')
+        notifyTerminal(wc, taskId, evt.payload, 'Aether 任务失败', String(evt.payload?.error || '').slice(0, 80) || '任务失败')
       }
     } catch {}
   }
