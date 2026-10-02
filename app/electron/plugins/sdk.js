@@ -37,8 +37,7 @@ function createPluginSDK(opts = {}) {
   const providers = new Map() // name → { name, apiFormat, apiUrl?, key? }
   const enabled = () => {
     const db = opts.db
-    if (!db || typeof db.getSetting !== 'function') return true // default on for SDK surface
-    try { return String(db.getSetting(`feature_flag.${FLAG_KEY}`) ?? '1') !== '0' } catch { return true }
+    return require('../featureFlags').isEnabled(db, FLAG_KEY)
   }
 
   function registerTool(name, def) {

@@ -11,6 +11,15 @@ export default function SystemSettings() {
   const [autoLaunch, setAutoLaunch] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [encryptionAvailable, setEncryptionAvailable] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    try {
+      window.electronAPI?.system?.encryptionStatus?.().then((r) => {
+        setEncryptionAvailable(r?.ok ? !!r.available : null)
+      }).catch(() => {})
+    } catch {}
+  }, [])
 
   useEffect(() => {
     try {
@@ -50,6 +59,13 @@ export default function SystemSettings() {
         <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>系统集成</h2>
       </div>
       <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Windows 原生能力：开机自启、系统通知、剪贴板、文件关联。仅桌面形态可用。</p>
+      {encryptionAvailable === false && (
+        <div className="mb-4 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+            <span className="font-medium">API Key 未加密存储</span> —— 当前系统不提供安全加密（safeStorage 不可用），API Key 将以明文保存在本地数据库中。建议配置系统密钥环后重启。
+          </p>
+        </div>
+      )}
       <div className="mb-4 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
         <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
           💡 <span className="font-medium">终端续会话</span> —— 在侧边栏任意会话悬停, 点终端图标复制{' '}

@@ -202,7 +202,7 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     )
   })
 
-  it('keeps the registration when a follow-up is queued during a drain', async () => {
+  it('drains a follow-up that arrives mid-drain', async () => {
     // A slot is free so the first drain starts immediately rather than deferring.
     steering.followUp(SESSION_ID, 'first')
 
@@ -211,10 +211,11 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     steering.followUp(SESSION_ID, 'second')
     await drain
 
-    // The second entry must not be stranded with nothing left to retry it.
-    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
-    await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
-    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    // The drain must re-run for the late entry instead of stranding it with
+    // nothing left to retry it.
+    await vi.waitFor(() => {
+      expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    })
   })
 
   it('abandons the follow-up when the adapter cannot answer the liveness question', async () => {

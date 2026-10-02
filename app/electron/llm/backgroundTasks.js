@@ -622,7 +622,13 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
     // throw here would strand the follow-ups with no retry path.
     let stillPending = null
     try { stillPending = require('./steering').getPendingFollowUps(sessionId).length } catch {}
-    if (waiting === 0 && stillPending === 0) _deferredFollowUps.delete(sessionId)
+    if (waiting === 0 && stillPending === 0) {
+      _deferredFollowUps.delete(sessionId)
+    } else if (waiting === 0 && stillPending > 0) {
+      // New items arrived during the drain and slots were never saturated —
+      // no future slot-free is guaranteed, so drain again or they strand.
+      void dispatchPendingFollowUps(sessionId).catch(() => {})
+    }
   }
   return { started, waiting }
 }
