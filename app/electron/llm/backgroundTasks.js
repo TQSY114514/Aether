@@ -454,6 +454,15 @@ async function runTask(record) {
     })
 
     // ── Success ──────────────────────────────────────────────────────────
+    // A paused task cancelled while waiting at the gate causes gate.abort() to
+    // reject, which the tool loop may catch internally and return normally from.
+    // Guard against overwriting a 'cancelled' status set by cancelTask().
+    if (record.status === 'cancelled') {
+      try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted' }) } catch {}
+      persist(record)
+      emit(id, { type: 'cancelled', payload: { taskId: id, sessionId } })
+      return
+    }
     try { db.updateMessage(msgId, { content: finalContent, status: 'success' }) } catch {}
     record.status       = 'done'
     record.finalContent = finalContent
@@ -567,19 +576,17 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
     return { started: 0, waiting: 0 }
   }
 
-  // Deleting a session abandons its queued follow-ups. Without this check a later
-  // slot-free would run them in a fresh child — work the user threw away.
+  // Session liveness guard: deleting a session should abandon its queued follow-ups.
+  // Without this check a slot-free would restart work the user explicitly discarded.
   //
-  // Fail closed on every uncertainty: a guard that assumes "alive" when it cannot
-  // tell is no guard at all. Headless adapters (taskDbAdapter) expose no
-  // getSession, so an unanswerable question must abandon the follow-up rather
-  // than silently resurrect the parent's work.
-  // Returns true/false when we can tell, null when we cannot (adapter has
-  // no getSession, or the lookup threw). null must NOT be treated as dead —
-  // that would fail the user's follow-ups during a transient DB error. It
-  // also must not be treated as alive — that would resurrect a deleted
-  // session. The right answer is to keep the registration and wait for a
-  // future slot-free, when the lookup may succeed.
+  // isSessionAlive returns three values:
+  //   true  — session row exists; safe to start the follow-up.
+  //   false — session was deleted; abandon all queued follow-ups.
+  //   null  — cannot determine (adapter has no getSession, or the lookup threw);
+  //           keep the registration intact and retry on the next slot-free.
+  //           This is intentionally neither fail-open nor fail-closed: treating
+  //           null as 'dead' would discard live work during a transient DB error;
+  //           treating it as 'alive' would resurrect a deleted session's work.
   function isSessionAlive(db, id) {
     if (!db || typeof db.getSession !== 'function') return null
     try {
@@ -591,6 +598,14 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
   const alive = isSessionAlive(deferred.db, sessionId)
   if (alive === null) {
     // Unknown — leave every follow-up queued and the registration intact.
+    // Schedule a retry in case no future slot-free arrives (e.g. all tasks
+    // are paused or the queue is empty) so a transient DB error doesn't
+    // permanently strand the follow-ups once the database recovers.
+    setTimeout(() => {
+      if (_deferredFollowUps.has(sessionId)) {
+        dispatchPendingFollowUps(sessionId).catch(() => {})
+      }
+    }, 5000)
     return { started: 0, waiting: pending.length }
   }
   if (!alive) {

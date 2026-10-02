@@ -1,12 +1,12 @@
-﻿// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-// Aether centralized logger 鈥?replaces scattered console.* calls.
+// ───────────────────────────────────────────────────────────────────────────
+// Aether centralized logger — replaces scattered console.* calls.
 //
 // Levels:  debug < info < warn < error
 // In dev  : everything passes through to console.
 // In prod : debug is silenced (still stored), warn/error also print.
 // File    : all levels that reach write() persist to aetherai.log in userData
 //           so logs survive a crash. Rotates at 5 MB -> .log.old.
-// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs')
 const path = require('path')
@@ -26,10 +26,10 @@ let _logPath = null
 const MAX_LOG_SIZE = 5 * 1024 * 1024
 
 // File logging can be switched off at runtime (Phase 0: feature-flag driven).
-// Default ON 鈥?matches the pre-existing behavior.
+// Default ON — matches the pre-existing behavior.
 let _fileLogging = true
 
-// Entry-forwarding listeners (main 鈫?renderer logs panel). Each listener
+// Entry-forwarding listeners (main → renderer logs panel). Each listener
 // receives { level, time, msg }. Kept in a Set; addEntryListener returns an
 // unsubscribe function.
 const entryListeners = new Set()
@@ -114,7 +114,7 @@ function getFileLogging() {
 }
 
 // Register a listener for every log entry. Returns an unsubscribe function.
-// Entries are plain { level, time, msg } objects 鈥?safe to send over IPC.
+// Entries are plain { level, time, msg } objects — safe to send over IPC.
 function onEntry(cb) {
   if (typeof cb !== 'function') return () => {}
   entryListeners.add(cb)
