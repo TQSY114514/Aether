@@ -348,7 +348,7 @@ function createGate() {
       return g
     },
     release() { if (locked) { locked = false; resolveFn() } },
-    abort()  { if (locked) { locked = false; rejectFn(new Error('aborted')) } },
+    abort()  { if (locked) { locked = false; const e = new Error('aborted'); e.name = 'AbortError'; rejectFn(e) } },
     get locked() { return locked },
   }
 }

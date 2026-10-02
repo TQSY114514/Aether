@@ -1,12 +1,12 @@
-// ───────────────────────────────────────────────────────────────────────────
-// Aether centralized logger — replaces scattered console.* calls.
+﻿// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// Aether centralized logger 鈥?replaces scattered console.* calls.
 //
 // Levels:  debug < info < warn < error
 // In dev  : everything passes through to console.
 // In prod : debug is silenced (still stored), warn/error also print.
 // File    : all levels that reach write() persist to aetherai.log in userData
 //           so logs survive a crash. Rotates at 5 MB -> .log.old.
-// ───────────────────────────────────────────────────────────────────────────
+// 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 const fs = require('fs')
 const path = require('path')
@@ -26,10 +26,10 @@ let _logPath = null
 const MAX_LOG_SIZE = 5 * 1024 * 1024
 
 // File logging can be switched off at runtime (Phase 0: feature-flag driven).
-// Default ON — matches the pre-existing behavior.
+// Default ON 鈥?matches the pre-existing behavior.
 let _fileLogging = true
 
-// Entry-forwarding listeners (main → renderer logs panel). Each listener
+// Entry-forwarding listeners (main 鈫?renderer logs panel). Each listener
 // receives { level, time, msg }. Kept in a Set; addEntryListener returns an
 // unsubscribe function.
 const entryListeners = new Set()
@@ -66,10 +66,13 @@ function ts() {
 }
 
 const REDACT_PATTERNS = [
-  [/\b(sk|gho|ghp|ghu|ghs|glpat)-[A-Za-z0-9_-]{8,}/g, '$1-***'],
+  // GitHub tokens use underscore separators (ghp_, gho_, ghu_, ghs_, glpat_).
+  [/\b(sk|gho|ghp|ghu|ghs|glpat)[_-][A-Za-z0-9_-]{8,}/g, '$1_***'],
   [/\bAKIA[0-9A-Z]{12,}/g, 'AKIA***'],
-  [/(["']?(?:api[_-]?key|token|secret|password|authorization)["']?\s*[:=]\s*["']?)[^"'\s,}]+/gi, '$1***'],
+  // Bearer must run before the generic authorization= matcher so
+  // "Authorization: Bearer <token>" is fully redacted (not just the header name).
   [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer ***'],
+  [/(["']?(?:api[_-]?key|token|secret|password|authorization)["']?\s*[:=]\s*["']?)[^"'\s,}]+/gi, '$1***'],
 ]
 
 function redact(msg) {
@@ -111,7 +114,7 @@ function getFileLogging() {
 }
 
 // Register a listener for every log entry. Returns an unsubscribe function.
-// Entries are plain { level, time, msg } objects — safe to send over IPC.
+// Entries are plain { level, time, msg } objects 鈥?safe to send over IPC.
 function onEntry(cb) {
   if (typeof cb !== 'function') return () => {}
   entryListeners.add(cb)

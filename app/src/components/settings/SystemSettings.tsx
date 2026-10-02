@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { Power, Bell, Rocket, Clipboard, FileText } from 'lucide-react'
+import { t } from '@/utils/i18n'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SystemSettings — Windows 系统集成（Phase 3 剩余项）
@@ -62,7 +63,7 @@ export default function SystemSettings() {
       {encryptionAvailable === false && (
         <div className="mb-4 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
           <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-            <span className="font-medium">API Key 未加密存储</span> —— 当前系统不提供安全加密（safeStorage 不可用），API Key 将以明文保存在本地数据库中。建议配置系统密钥环后重启。
+            <span className="font-medium">{t('settings.api_key_unencrypted_title')}</span>{' — '}{t('settings.api_key_unencrypted_desc')}
           </p>
         </div>
       )}
