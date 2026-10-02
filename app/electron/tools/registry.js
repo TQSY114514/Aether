@@ -801,7 +801,7 @@ TOOLS.push(
     if (!result.ok) return '[API error] ' + result.error
     return 'PR created: ' + result.data.html_url
   }},
-  { name: 'sandbox_init', description: 'Create a Shadow Workspace (Sandbox) in .aether/shadow/ for safe experimentation. Mirrors the current project into the shadow directory, skipping node_modules, .git, and .aether. Returns the absolute path of the new shadow workspace. Read-only tool.', risk: 'safe', parameters: { type: 'object', properties: { excludes: { type: 'array', items: { type: 'string' }, description: 'Additional directory names to exclude from the sandbox (e.g., dist, build)' } } }, run: async (args, ctx) => {
+  { name: 'sandbox_init', description: 'Create a Shadow Workspace (Sandbox) in .aether/shadow/ for safe experimentation. Mirrors the current project into the shadow directory, skipping node_modules, .git, and .aether. Returns the absolute path of the new shadow workspace. Writes a full project mirror to disk.', risk: 'dangerous', parameters: { type: 'object', properties: { excludes: { type: 'array', items: { type: 'string' }, description: 'Additional directory names to exclude from the sandbox (e.g., dist, build)' } } }, run: async (args, ctx) => {
     const cwd = ctx.cwd
     if (!cwd) throw new Error('No cwd provided')
     const shadowDir = path.join(cwd, '.aether', 'shadow')

@@ -276,10 +276,12 @@ function buildSendAdapter(record) {
   }
 }
 
-/** running count (used by both queue and legacy paths). */
+/** Active execution count (paused tasks still hold their execution slot). */
 function runningCount() {
   let n = 0
-  for (const t of tasks.values()) if (t.status === 'running') n++
+  for (const t of tasks.values()) {
+    if (t.status === 'running' || t.status === 'paused') n++
+  }
   return n
 }
 
@@ -346,7 +348,7 @@ function createGate() {
       return g
     },
     release() { if (locked) { locked = false; resolveFn() } },
-    abort()  { if (locked) { locked = false; rejectFn(new Error('aborted')) } },
+    abort()  { if (locked) { locked = false; const e = new Error('aborted'); e.name = 'AbortError'; rejectFn(e) } },
     get locked() { return locked },
   }
 }
@@ -374,7 +376,7 @@ async function runTask(record) {
     record.error = errMsg
     persist(record)
     emit(id, { type: 'error', payload: { taskId: id, error: errMsg } })
-    maybeDispatch()
+    notifySlotFree()
     return
   }
 
@@ -385,7 +387,7 @@ async function runTask(record) {
     persist(record)
     record._reentry = false
     emit(id, { type: 'status', payload: { text: '规划阶段：等待批准后开始执行', kind: 'plan' } })
-    maybeDispatch()
+    notifySlotFree()
     return
   }
 
@@ -399,7 +401,7 @@ async function runTask(record) {
     record.error = `failed to create assistant message: ${e.message}`
     persist(record)
     emit(id, { type: 'error', payload: { taskId: id, error: record.error } })
-    maybeDispatch()
+    notifySlotFree()
     return
   }
 
@@ -452,6 +454,15 @@ async function runTask(record) {
     })
 
     // ── Success ──────────────────────────────────────────────────────────
+    // A paused task cancelled while waiting at the gate causes gate.abort() to
+    // reject, which the tool loop may catch internally and return normally from.
+    // Guard against overwriting a 'cancelled' status set by cancelTask().
+    if (record.status === 'cancelled') {
+      try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted' }) } catch {}
+      persist(record)
+      emit(id, { type: 'cancelled', payload: { taskId: id, sessionId } })
+      return
+    }
     try { db.updateMessage(msgId, { content: finalContent, status: 'success' }) } catch {}
     record.status       = 'done'
     record.finalContent = finalContent
@@ -493,7 +504,7 @@ async function runTask(record) {
         record._reentry = false // allow the retry runTask to enter
         persist(record)
         emit(id, { type: 'status', payload: { text: `自动重试 (${record.attempts}/${record.maxRetry})`, kind: 'info' } })
-        maybeDispatch()
+        notifySlotFree()
         return
       }
       record.error = errMsg
@@ -520,7 +531,6 @@ async function runTask(record) {
     }
   }
 
-  maybeDispatch()
   notifySlotFree()
 }
 
@@ -537,6 +547,9 @@ function isConcurrencyFull(e) {
 }
 
 function notifySlotFree() {
+  // Every state change that frees a counted slot funnels through here: the queue
+  // dispatcher first, then any follow-up waiting on a slot.
+  try { maybeDispatch() } catch {}
   if (_deferredFollowUps.size === 0) return
   for (const sid of Array.from(_deferredFollowUps.keys())) {
     void dispatchPendingFollowUps(sid).catch(() => {})
@@ -560,6 +573,44 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
   const pending = steering.getPendingFollowUps(sessionId)
   if (!pending || pending.length === 0) {
     _deferredFollowUps.delete(sessionId)
+    return { started: 0, waiting: 0 }
+  }
+
+  // Session liveness guard: deleting a session should abandon its queued follow-ups.
+  // Without this check a slot-free would restart work the user explicitly discarded.
+  //
+  // isSessionAlive returns three values:
+  //   true  — session row exists; safe to start the follow-up.
+  //   false — session was deleted; abandon all queued follow-ups.
+  //   null  — cannot determine (adapter has no getSession, or the lookup threw);
+  //           keep the registration intact and retry on the next slot-free.
+  //           This is intentionally neither fail-open nor fail-closed: treating
+  //           null as 'dead' would discard live work during a transient DB error;
+  //           treating it as 'alive' would resurrect a deleted session's work.
+  function isSessionAlive(db, id) {
+    if (!db || typeof db.getSession !== 'function') return null
+    try {
+      return !!db.getSession(Number(id))
+    } catch {
+      return null
+    }
+  }
+  const alive = isSessionAlive(deferred.db, sessionId)
+  if (alive === null) {
+    // Unknown — leave every follow-up queued and the registration intact.
+    // Schedule a retry in case no future slot-free arrives (e.g. all tasks
+    // are paused or the queue is empty) so a transient DB error doesn't
+    // permanently strand the follow-ups once the database recovers.
+    setTimeout(() => {
+      if (_deferredFollowUps.has(sessionId)) {
+        dispatchPendingFollowUps(sessionId).catch(() => {})
+      }
+    }, 5000)
+    return { started: 0, waiting: pending.length }
+  }
+  if (!alive) {
+    _deferredFollowUps.delete(sessionId)
+    for (const fu of pending) steering.failFollowUp(sessionId, fu.id, 'session unavailable or deleted')
     return { started: 0, waiting: 0 }
   }
 
@@ -590,8 +641,20 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
     }
   } finally {
     _drainingSessions.delete(sessionId)
-    // Keep the registration while something is still waiting for a slot.
-    if (waiting === 0) _deferredFollowUps.delete(sessionId)
+    // `pending` was a snapshot: anything queued while this drain awaited
+    // startTask is missing from it. Keep the registration whenever anything is
+    // still pending, or those entries sit forever with nothing to retry them.
+    // `null` means "could not tell" — that must keep the registration too, or a
+    // throw here would strand the follow-ups with no retry path.
+    let stillPending = null
+    try { stillPending = require('./steering').getPendingFollowUps(sessionId).length } catch {}
+    if (waiting === 0 && stillPending === 0) {
+      _deferredFollowUps.delete(sessionId)
+    } else if (waiting === 0 && stillPending > 0) {
+      // New items arrived during the drain and slots were never saturated —
+      // no future slot-free is guaranteed, so drain again or they strand.
+      void dispatchPendingFollowUps(sessionId).catch(() => {})
+    }
   }
   return { started, waiting }
 }
@@ -694,11 +757,16 @@ function cancelTask(taskId) {
   if (t.status === 'running' && t.controller) {
     try { t.controller.abort(); if (t.gate) t.gate.abort() } catch {}
   } else if (t.status === 'queued' || t.status === 'pending' || t.status === 'plan' || t.status === 'paused') {
+    // Pause only takes effect at the next loop boundary, so a paused task's
+    // in-flight model call is still running. Abort before releasing the slot or
+    // the call we just freed a slot for overlaps it and breaches the cap.
+    if (t.controller) { try { t.controller.abort() } catch {} }
     t.status = 'cancelled'
     t.controller = null
     if (t.gate) { try { t.gate.abort() } catch {} }
     persist(t)
     try { t.emit(taskId, { type: 'cancelled', payload: { taskId } }) } catch {}
+    notifySlotFree()
   }
 }
 
@@ -713,7 +781,13 @@ function pauseTask(taskId) {
   if (t.status !== 'running' || !t.controller || !t.gate) return false
   t.status = 'paused'
   persist(t)
+  // Lock the gate so waitIfPaused awaits a promise that resume/cancel can
+  // actually settle. Without this, the initial unlocked promise never settles
+  // and a paused task reserves its slot forever (queue starvation).
+  try { t.gate.lock() } catch {}
   try { t.emit(taskId, { type: 'paused', payload: { taskId, text: '已暂停' } }) } catch {}
+  // The tool/model call may still be active until it reaches waitIfPaused;
+  // keep this task's execution slot reserved while it is paused.
   return true
 }
 
@@ -725,6 +799,9 @@ function resumeTask(taskId) {
   const t = tasks.get(taskId)
   if (!t) return false
   if (t.status === 'paused') {
+    // Paused tasks reserve a slot; also guard against a cap lowered while
+    // this task was paused rather than exceeding the current limit on resume.
+    if (runningCount() > getConcurrencyLimit()) return false
     t.status = 'running'
     persist(t)
     if (t.gate) { try { t.gate.release() } catch {} }
