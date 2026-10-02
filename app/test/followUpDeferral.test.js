@@ -59,6 +59,9 @@ function makeFakeDb() {
     },
     getAgentTask: (id) => agentTasks.get(id) || null,
     listAgentTasks: () => Array.from(agentTasks.values()),
+    // Live by default; a test flips `db._sessionExists` to model a deleted session.
+    getSession: (id) => (db._sessionExists === false ? null : { id: Number(id) }),
+    _sessionExists: true,
   }
 }
 
@@ -212,5 +215,30 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
     await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
     expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+  })
+
+  it('abandons the follow-up when the adapter cannot answer the liveness question', async () => {
+    // Headless taskDbAdapter exposes no getSession at all. Treating "cannot tell"
+    // as "alive" is what let a deleted parent session's work resurrect.
+    delete db.getSession
+    steering.followUp(SESSION_ID, 'unverifiable parent')
+
+    const res = await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+
+    expect(res).toEqual({ started: 0, waiting: 0 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    expect(bt.listTasks(db)).toHaveLength(0)
+  })
+
+  it('abandons the follow-up when the liveness lookup throws', async () => {
+    // A throwing lookup is also "cannot tell" — the guard must not fail open.
+    db.getSession = () => { throw new Error('db unavailable') }
+    steering.followUp(SESSION_ID, 'throwing lookup')
+
+    const res = await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+
+    expect(res).toEqual({ started: 0, waiting: 0 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    expect(bt.listTasks(db)).toHaveLength(0)
   })
 })

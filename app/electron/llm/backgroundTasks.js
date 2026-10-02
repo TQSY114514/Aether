@@ -569,15 +569,22 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
 
   // Deleting a session abandons its queued follow-ups. Without this check a later
   // slot-free would run them in a fresh child — work the user threw away.
-  let sessionAlive = true
-  try {
-    if (typeof deferred.db?.getSession === 'function' && !deferred.db.getSession(Number(sessionId))) {
-      sessionAlive = false
+  //
+  // Fail closed on every uncertainty: a guard that assumes "alive" when it cannot
+  // tell is no guard at all. Headless adapters (taskDbAdapter) expose no
+  // getSession, so an unanswerable question must abandon the follow-up rather
+  // than silently resurrect the parent's work.
+  function isSessionAlive(db, id) {
+    if (!db || typeof db.getSession !== 'function') return false
+    try {
+      return !!db.getSession(Number(id))
+    } catch {
+      return false
     }
-  } catch {}
-  if (!sessionAlive) {
+  }
+  if (!isSessionAlive(deferred.db, sessionId)) {
     _deferredFollowUps.delete(sessionId)
-    for (const fu of pending) steering.failFollowUp(sessionId, fu.id, 'session deleted')
+    for (const fu of pending) steering.failFollowUp(sessionId, fu.id, 'session unavailable or deleted')
     return { started: 0, waiting: 0 }
   }
 
@@ -611,7 +618,9 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
     // `pending` was a snapshot: anything queued while this drain awaited
     // startTask is missing from it. Keep the registration whenever anything is
     // still pending, or those entries sit forever with nothing to retry them.
-    let stillPending = 0
+    // `null` means "could not tell" — that must keep the registration too, or a
+    // throw here would strand the follow-ups with no retry path.
+    let stillPending = null
     try { stillPending = require('./steering').getPendingFollowUps(sessionId).length } catch {}
     if (waiting === 0 && stillPending === 0) _deferredFollowUps.delete(sessionId)
   }
@@ -716,6 +725,10 @@ function cancelTask(taskId) {
   if (t.status === 'running' && t.controller) {
     try { t.controller.abort(); if (t.gate) t.gate.abort() } catch {}
   } else if (t.status === 'queued' || t.status === 'pending' || t.status === 'plan' || t.status === 'paused') {
+    // Pause only takes effect at the next loop boundary, so a paused task's
+    // in-flight model call is still running. Abort before releasing the slot or
+    // the call we just freed a slot for overlaps it and breaches the cap.
+    if (t.controller) { try { t.controller.abort() } catch {} }
     t.status = 'cancelled'
     t.controller = null
     if (t.gate) { try { t.gate.abort() } catch {} }
