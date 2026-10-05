@@ -67,7 +67,7 @@ function ts() {
 
 const REDACT_PATTERNS = [
   // GitHub tokens use underscore separators (ghp_, gho_, ghu_, ghs_, glpat_).
-  [/\b(sk|gho|ghp|ghu|ghs|glpat)[_-][A-Za-z0-9_-]{8,}/g, '$1_***'],
+  [/\b(sk|gho|ghp|ghu|ghs|glpat|github_pat|ghr)([_-])[A-Za-z0-9_-]{8,}/g, '$1$2***'],
   [/\bAKIA[0-9A-Z]{12,}/g, 'AKIA***'],
   // Bearer must run before the generic authorization= matcher so
   // "Authorization: Bearer <token>" is fully redacted (not just the header name).

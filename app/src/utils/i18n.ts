@@ -1057,7 +1057,9 @@ const translations: Record<string, Record<string, string>> = {
     "usage.total_cost": "Total cost",
     "usage.total_requests": "Total requests",
     "usage.trend": "Usage trend",
-    "usage.unpriced": "unpriced"
+    "usage.unpriced": "unpriced",
+    "settings.encryption_status_unknown_title": "Unable to confirm encryption status",
+    "settings.encryption_status_unknown_desc": "The system encryption status could not be checked. API key storage safety is unknown."
   },
   "en-upside": {
     "agent.ask": "suoᴉʇɔɐ ʎʞsᴉɹ ǝɹoɟǝq ɯɹᴉɟuoɔ — ʞsɐ",
@@ -2019,7 +2021,9 @@ const translations: Record<string, Record<string, string>> = {
     "usage.total_cost": "ʇsoɔ lɐʇoʇ",
     "usage.total_requests": "sʇsǝnbǝɹ lɐʇoʇ",
     "usage.trend": "puǝɹʇ ǝƃɐsn",
-    "usage.unpriced": "pǝɔᴉɹdun"
+    "usage.unpriced": "pǝɔᴉɹdun",
+    "settings.encryption_status_unknown_title": "snʇɐʇs uoᴉʇdʎɹɔuǝ ɯɹᴉɟuoɔ oʇ ǝlqɐun",
+    "settings.encryption_status_unknown_desc": ".uʍouʞun sᴉ ʎʇǝɟɐs ǝƃɐɹoʇs ʎǝʞ ᴉdɐ .pǝʞɔǝɥɔ ǝq ʇou plnoɔ snʇɐʇs uoᴉʇdʎɹɔuǝ ɯǝʇsʎs ǝɥʇ"
   },
   "zh-CN": {
     "agent.ask": "询问 — 危险操作前确认",
@@ -2962,7 +2966,9 @@ const translations: Record<string, Record<string, string>> = {
     "thinking.expand": "展开完整思考过程",
     "thinking.lines": "行",
     "settings.api_key_unencrypted_title": "API Key 未加密存储",
-    "settings.api_key_unencrypted_desc": "当前系统不提供安全加密（safeStorage 不可用），API Key 将以明文保存在本地数据库中。建议配置系统密钥环后重启以启用加密。"
+    "settings.api_key_unencrypted_desc": "当前系统不提供安全加密（safeStorage 不可用），API Key 将以明文保存在本地数据库中。建议配置系统密钥环后重启以启用加密。",
+    "settings.encryption_status_unknown_title": "无法确认加密状态",
+    "settings.encryption_status_unknown_desc": "暂时无法确认系统加密状态，请稍后重试。API Key 的存储安全性目前未知。"
   },
   "es": {
     "app.name": "Aether",

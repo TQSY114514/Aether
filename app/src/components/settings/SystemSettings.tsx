@@ -12,14 +12,14 @@ export default function SystemSettings() {
   const [autoLaunch, setAutoLaunch] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [encryptionAvailable, setEncryptionAvailable] = useState<boolean | null>(null)
+  const [encryptionAvailable, setEncryptionAvailable] = useState<boolean | 'error' | null>(null)
 
   useEffect(() => {
     try {
       window.electronAPI?.system?.encryptionStatus?.().then((r) => {
-        setEncryptionAvailable(r?.ok ? !!r.available : null)
-      }).catch(() => {})
-    } catch {}
+        setEncryptionAvailable(r?.ok ? !!r.available : 'error')
+      }).catch(() => { setEncryptionAvailable('error') })
+    } catch { setEncryptionAvailable('error') }
   }, [])
 
   useEffect(() => {
@@ -60,6 +60,13 @@ export default function SystemSettings() {
         <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>系统集成</h2>
       </div>
       <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Windows 原生能力：开机自启、系统通知、剪贴板、文件关联。仅桌面形态可用。</p>
+      {encryptionAvailable === 'error' && (
+        <div className="mb-4 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+            <span className="font-medium">{t('settings.encryption_status_unknown_title')}</span>{' — '}{t('settings.encryption_status_unknown_desc')}
+          </p>
+        </div>
+      )}
       {encryptionAvailable === false && (
         <div className="mb-4 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
           <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>

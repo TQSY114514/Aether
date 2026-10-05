@@ -958,5 +958,7 @@
   "usage.total_cost": "Total cost",
   "usage.total_requests": "Total requests",
   "usage.trend": "Usage trend",
-  "usage.unpriced": "unpriced"
+  "usage.unpriced": "unpriced",
+  "settings.encryption_status_unknown_title": "Unable to confirm encryption status",
+  "settings.encryption_status_unknown_desc": "The system encryption status could not be checked. API key storage safety is unknown."
 }

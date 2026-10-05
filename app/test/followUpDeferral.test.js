@@ -189,16 +189,19 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     await fillSlots()
     steering.followUp(SESSION_ID, 'runs after failure')
     await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+    steering.followUp(SESSION_ID, 'runs after second failure')
+    await bt.dispatchPendingFollowUps(SESSION_ID)
 
-    // runTask takes its model/provider early-return path (model deleted), which
-    // frees a slot without ever reaching the end-of-run notify.
+    // The first completed task frees a slot and starts the first follow-up.
+    // Make that follow-up fail model resolution before it enters runToolLoop;
+    // its early return must notifySlotFree so the second follow-up starts too.
     db.getModel = () => null
     openDeferreds[0].resolve('done')
 
     await until(
       () => steering.getPendingFollowUps(SESSION_ID).length === 0,
       4000,
-      'follow-up to start after a failed task'
+      'follow-ups to start after failed model resolution'
     )
   })
 

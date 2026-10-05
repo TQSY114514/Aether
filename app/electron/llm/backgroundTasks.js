@@ -344,6 +344,8 @@ function createGate() {
       // (re)create a fresh gate only when unlocked → a single pending gate.
       locked = true
       const g = new Promise((res, rej) => { resolveFn = res; rejectFn = rej })
+      // An early cancel may reject before waitIfPaused() reaches await.
+      g.catch(() => {})
       Object.defineProperty(this, 'promise', { value: g, configurable: true })
       return g
     },
@@ -541,6 +543,22 @@ async function runTask(record) {
 // from notifySlotFree() every time a task finishes and frees a slot.
 const _deferredFollowUps = new Map()   // sessionId -> { db, modelId }
 const _drainingSessions = new Set()
+const _followUpRetryTimers = new Map()
+function clearFollowUpRetryTimer(sessionId) {
+  const timer = _followUpRetryTimers.get(sessionId)
+  if (timer !== undefined) {
+    clearTimeout(timer)
+    _followUpRetryTimers.delete(sessionId)
+  }
+}
+function scheduleFollowUpRetry(sessionId) {
+  if (_followUpRetryTimers.has(sessionId)) return
+  const timer = setTimeout(() => {
+    _followUpRetryTimers.delete(sessionId)
+    if (_deferredFollowUps.has(sessionId)) dispatchPendingFollowUps(sessionId).catch(() => {})
+  }, 5000)
+  _followUpRetryTimers.set(sessionId, timer)
+}
 
 function isConcurrencyFull(e) {
   return String(e?.message || e || '').includes('已达最大并发任务数')
@@ -573,6 +591,7 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
   const pending = steering.getPendingFollowUps(sessionId)
   if (!pending || pending.length === 0) {
     _deferredFollowUps.delete(sessionId)
+    clearFollowUpRetryTimer(sessionId)
     return { started: 0, waiting: 0 }
   }
 
@@ -601,15 +620,12 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
     // Schedule a retry in case no future slot-free arrives (e.g. all tasks
     // are paused or the queue is empty) so a transient DB error doesn't
     // permanently strand the follow-ups once the database recovers.
-    setTimeout(() => {
-      if (_deferredFollowUps.has(sessionId)) {
-        dispatchPendingFollowUps(sessionId).catch(() => {})
-      }
-    }, 5000)
+    scheduleFollowUpRetry(sessionId)
     return { started: 0, waiting: pending.length }
   }
   if (!alive) {
     _deferredFollowUps.delete(sessionId)
+    clearFollowUpRetryTimer(sessionId)
     for (const fu of pending) steering.failFollowUp(sessionId, fu.id, 'session unavailable or deleted')
     return { started: 0, waiting: 0 }
   }
@@ -650,6 +666,7 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
     try { stillPending = require('./steering').getPendingFollowUps(sessionId).length } catch {}
     if (waiting === 0 && stillPending === 0) {
       _deferredFollowUps.delete(sessionId)
+      clearFollowUpRetryTimer(sessionId)
     } else if (waiting === 0 && stillPending > 0) {
       // New items arrived during the drain and slots were never saturated —
       // no future slot-free is guaranteed, so drain again or they strand.
@@ -757,6 +774,7 @@ function cancelTask(taskId) {
   if (t.status === 'running' && t.controller) {
     try { t.controller.abort(); if (t.gate) t.gate.abort() } catch {}
   } else if (t.status === 'queued' || t.status === 'pending' || t.status === 'plan' || t.status === 'paused') {
+    const wasPaused = t.status === 'paused'
     // Pause only takes effect at the next loop boundary, so a paused task's
     // in-flight model call is still running. Abort before releasing the slot or
     // the call we just freed a slot for overlaps it and breaches the cap.
@@ -766,7 +784,7 @@ function cancelTask(taskId) {
     if (t.gate) { try { t.gate.abort() } catch {} }
     persist(t)
     try { t.emit(taskId, { type: 'cancelled', payload: { taskId } }) } catch {}
-    notifySlotFree()
+    if (!wasPaused) notifySlotFree()
   }
 }
 
@@ -799,9 +817,6 @@ function resumeTask(taskId) {
   const t = tasks.get(taskId)
   if (!t) return false
   if (t.status === 'paused') {
-    // Paused tasks reserve a slot; also guard against a cap lowered while
-    // this task was paused rather than exceeding the current limit on resume.
-    if (runningCount() > getConcurrencyLimit()) return false
     t.status = 'running'
     persist(t)
     if (t.gate) { try { t.gate.release() } catch {} }
