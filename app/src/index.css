@@ -1,9 +1,8 @@
-@tailwind base;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 @layer base {
   * { margin: 0; padding: 0; box-sizing: border-box; }
 }
-@tailwind components;
-@tailwind utilities;
 
 :root {
   --bg-primary: #FFFFFF;
@@ -326,10 +325,21 @@ textarea, input {
 
 /* Quick action pills */
 .qaction {
-  @apply px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all duration-150;
-  @apply border-[var(--border)] text-[var(--text-secondary)];
-  @apply hover:bg-[var(--accent)] hover:text-white hover:border-[var(--accent)] hover-lift;
+  padding: 0.25rem 0.625rem;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all 150ms;
   cursor: pointer;
+}
+.qaction:hover {
+  background-color: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 .qaction:active { transform: scale(0.96); }
 
@@ -877,6 +887,4 @@ div[style*="borderLeft: 2px solid"] {
     scroll-behavior: auto !important;
   }
 }
-
-
 
