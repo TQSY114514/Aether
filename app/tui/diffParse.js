@@ -6,6 +6,15 @@
 // 渲染样式与 toolCards 的 DiffView 一致（+ 绿 / - 红 / 上下文灰）。
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Git may emit ANSI colors when the user's global color.ui is set to `always`,
+// including when stdout is piped. Strip those control sequences before parsing
+// so colored `git diff` output cannot disappear from the quality-review view.
+const ANSI_ESCAPE_RE = /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g
+
+function stripAnsi(value) {
+  return String(value || '').replace(ANSI_ESCAPE_RE, '')
+}
+
 /**
  * 解析 git diff --stat 输出（'file | N ++--' 格式, 含 Bin 与重命名行）。
  * @param {string} output
@@ -13,7 +22,7 @@
  *   Bin 行 added/removed 为 null; 无法解析的行跳过。
  */
 export function parseDiffStat(output) {
-  const lines = String(output || '').split(/\r?\n/)
+  const lines = stripAnsi(output).split(/\r?\n/)
   const files = []
   for (const raw of lines) {
     const line = raw.replace(/\r$/, '')
@@ -43,7 +52,7 @@ export function parseDiffStat(output) {
  * @returns {Array<{path: string, content: string}>}  content 为去头后的行文本
  */
 export function splitDiffFiles(output) {
-  const text = String(output || '')
+  const text = stripAnsi(output)
   if (!text.trim()) return []
   const lines = text.split(/\r?\n/)
   const files = []

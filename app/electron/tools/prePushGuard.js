@@ -610,10 +610,12 @@ function scanForSecrets(gitRoot, details) {
 
     // 2. Added lines for high-confidence token shapes. Only additions matter: a
     //    key being removed is a fix, not a leak. `core.quotePath=false` keeps a
-    //    non-ASCII path from arriving escaped inside the `+++` header.
+    //    non-ASCII path from arriving escaped inside the `+++` header. Explicitly
+    //    disable color too: a global `color.ui=always` can add ANSI bytes even
+    //    when stdout is piped, hiding the `+++` and `+` line prefixes.
     const patch = gitText(
       gitRoot,
-      ['-c', 'core.quotePath=false', 'diff', '-U0', '--diff-filter=d', range],
+      ['-c', 'core.quotePath=false', 'diff', '--no-color', '-U0', '--diff-filter=d', range],
       { timeout: DIFF_TIMEOUT_MS }
     )
     if (patch === null) return scanError('secret scan', `git diff -U0 ${range} did not complete.`)
