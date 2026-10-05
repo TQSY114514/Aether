@@ -6,6 +6,8 @@ All notable changes to AetherAI are documented here.
 
 ### Changed
 
+- **Git diff 安全与质量扫描兼容性修复。** 显式关闭推送前秘密扫描中的 ANSI 颜色，并让 TUI diff 解析器剥离彩色控制序列，避免用户的 `color.ui=always` 配置导致密钥漏报或质量审查结果为空。
+- **升级 DOMPurify 至 3.4.16。** 修复上游 DOM XSS 安全公告对应的依赖漏洞。
 - **License: MIT → Apache-2.0.** From this release onward the project is licensed under the
   Apache License 2.0 — see `LICENSE` (full text) and `NOTICE` (attribution). The change adds an
   explicit patent grant, a trademark clause, and a NOTICE mechanism. Versions released before
