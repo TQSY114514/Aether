@@ -940,7 +940,11 @@
       "skills.unpin": "取消固定",
       "slash.poor_failed": "切换穷鬼省流模式失败，请重试",
       "thinking.expand": "展开完整思考过程",
-      "thinking.lines": "行"
+      "thinking.lines": "行",
+      "settings.api_key_unencrypted_title": "API Key 未加密存储",
+      "settings.api_key_unencrypted_desc": "当前系统不提供安全加密（safeStorage 不可用），API Key 将以明文保存在本地数据库中。建议配置系统密钥环后重启以启用加密。",
+      "settings.encryption_status_unknown_title": "无法确认加密状态",
+      "settings.encryption_status_unknown_desc": "暂时无法确认系统加密状态，请稍后重试。API Key 的存储安全性目前未知。"
     }
   },
   {

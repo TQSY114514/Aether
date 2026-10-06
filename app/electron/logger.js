@@ -65,8 +65,24 @@ function ts() {
   return new Date().toLocaleTimeString('en-US', { hour12: false })
 }
 
+const REDACT_PATTERNS = [
+  // GitHub tokens use underscore separators (ghp_, gho_, ghu_, ghs_, glpat_).
+  [/\b(sk|gho|ghp|ghu|ghs|glpat|github_pat|ghr)([_-])[A-Za-z0-9_-]{8,}/g, '$1$2***'],
+  [/\bAKIA[0-9A-Z]{12,}/g, 'AKIA***'],
+  // Bearer must run before the generic authorization= matcher so
+  // "Authorization: Bearer <token>" is fully redacted (not just the header name).
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer ***'],
+  [/(["']?(?:api[_-]?key|token|secret|password|authorization)["']?\s*[:=]\s*["']?)[^"'\s,}]+/gi, '$1***'],
+]
+
+function redact(msg) {
+  let out = msg
+  for (const [re, rep] of REDACT_PATTERNS) out = out.replace(re, rep)
+  return out
+}
+
 function write(level, ...args) {
-  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
+  const msg = redact(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '))
   const time = ts()
   const entry = { level, time, msg }
   entries.push(entry)
@@ -115,6 +131,7 @@ const log = {
   setFileLogging,
   getFileLogging,
   addEntryListener: onEntry,
+  redact,
 }
 
 module.exports = log
