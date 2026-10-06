@@ -130,19 +130,7 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
   ipcMain.handle('system:encryption-status', () => {
     try {
       const { safeStorage } = require('electron')
-      let available = !!safeStorage.isEncryptionAvailable()
-      // Electron's Linux basic_text backend uses a hardcoded password and is
-      // not suitable protection for API keys.
-      if (process.platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function') {
-        available = available && safeStorage.getSelectedStorageBackend() !== 'basic_text'
-      }
-      if (db && typeof db.hasPlaintextProviderKeys === 'function') {
-        available = available && !db.hasPlaintextProviderKeys()
-      }
-      if (db && typeof db.hadEncryptionFallback === 'function') {
-        available = available && !db.hadEncryptionFallback()
-      }
-      return { ok: true, available }
+      return { ok: true, available: !!safeStorage.isEncryptionAvailable() }
     } catch (e) {
       return { ok: false, available: false, error: e && e.message ? e.message : String(e) }
     }

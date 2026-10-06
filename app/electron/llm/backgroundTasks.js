@@ -280,10 +280,7 @@ function buildSendAdapter(record) {
 function runningCount() {
   let n = 0
   for (const t of tasks.values()) {
-    // A cancelled paused task remains counted until its in-flight loop unwinds.
-    // Restored paused records have no controller and therefore consume no slot.
-    if (t.status === 'running' || t.status === 'paused' ||
-        (t.status === 'cancelled' && t.controller)) n++
+    if (t.status === 'running' || t.status === 'paused') n++
   }
   return n
 }
@@ -464,10 +461,8 @@ async function runTask(record) {
     // Guard against overwriting a 'cancelled' status set by cancelTask().
     if (record.status === 'cancelled') {
       try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted' }) } catch {}
-      record.controller = null
       persist(record)
       emit(id, { type: 'cancelled', payload: { taskId: id, sessionId } })
-      notifySlotFree()
       return
     }
     try { db.updateMessage(msgId, { content: finalContent, status: 'success' }) } catch {}
@@ -785,13 +780,11 @@ function cancelTask(taskId) {
     // the call we just freed a slot for overlaps it and breaches the cap.
     if (t.controller) { try { t.controller.abort() } catch {} }
     t.status = 'cancelled'
-    // Keep the controller while a paused execution unwinds so runningCount()
-    // continues to reserve its slot. Restored pauses have no controller.
-    if (!wasPaused) t.controller = null
+    t.controller = null
     if (t.gate) { try { t.gate.abort() } catch {} }
     persist(t)
     try { t.emit(taskId, { type: 'cancelled', payload: { taskId } }) } catch {}
-    if (!wasPaused || !t.controller) notifySlotFree()
+    if (!wasPaused) notifySlotFree()
   }
 }
 
@@ -824,18 +817,9 @@ function resumeTask(taskId) {
   const t = tasks.get(taskId)
   if (!t) return false
   if (t.status === 'paused') {
-    // A pause restored after a restart has no live execution to release; put it
-    // back in the scheduler rather than creating a permanently running record.
-    if (!t.controller || !t.gate) {
-      t.status = 'queued'
-      persist(t)
-      if (queueModeEnabled()) maybeDispatch()
-      else { t._reentry = false; runTask(t) }
-    } else {
-      t.status = 'running'
-      persist(t)
-      try { t.gate.release() } catch {}
-    }
+    t.status = 'running'
+    persist(t)
+    if (t.gate) { try { t.gate.release() } catch {} }
     try { t.emit(taskId, { type: 'resumed', payload: { taskId, text: '已恢复' } }) } catch {}
     return true
   }

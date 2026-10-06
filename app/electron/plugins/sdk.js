@@ -37,9 +37,7 @@ function createPluginSDK(opts = {}) {
   const providers = new Map() // name → { name, apiFormat, apiUrl?, key? }
   const enabled = () => {
     const db = opts.db
-    // Preserve the headless/test default; a supplied database explicitly
-    // controls the feature flag (whose persisted/default value remains false).
-    return !db || require('../featureFlags').isEnabled(db, FLAG_KEY)
+    return require('../featureFlags').isEnabled(db, FLAG_KEY)
   }
 
   function registerTool(name, def) {

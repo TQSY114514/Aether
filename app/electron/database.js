@@ -20,7 +20,6 @@ let _eloMutex = Promise.resolve();
 // ─── API Key Encryption (safeStorage) ─────────────────────────────────────
 
 let _warnedNoEncryption = false;
-let _encryptionFallback = false;
 
 function encryptKey(plain) {
   if (!plain) return plain;
@@ -36,9 +35,6 @@ function encryptKey(plain) {
   try {
     return safeStorage.encryptString(String(plain)).toString("base64");
   } catch {
-    // Keep the write compatible, but expose the failure so the UI can warn
-    // that a plaintext key may have been persisted.
-    _encryptionFallback = true;
     return plain;
   }
 }
@@ -82,18 +78,6 @@ function isBase64String(s) {
 
 function isPlaintextKey(stored) {
   return !!stored && !isBase64String(stored);
-}
-
-// Detect keys that were written without safeStorage (including an encryption
-// operation that fell back to returning the plaintext value).
-function hasPlaintextProviderKeys() {
-  if (!db) return false;
-  try {
-    return db.prepare("SELECT api_key FROM provider WHERE api_key IS NOT NULL AND api_key != ''")
-      .all().some((row) => isPlaintextKey(row.api_key));
-  } catch {
-    return false;
-  }
 }
 
 // Idempotent startup migration: re-encrypt any legacy plaintext API keys once
@@ -2663,8 +2647,6 @@ module.exports = {
   encryptKey,
   decryptKey,
   isPlaintextKey,
-  hasPlaintextProviderKeys,
-  hadEncryptionFallback: () => _encryptionFallback,
   migrateLegacyPlaintextKeys,
   runMigrations: () => (db ? require("./migrations").runMigrations(db) : { appliedCount: 0, currentVersion: 0 }),
   migrateUp: (target) => (db ? require("./migrations").migrateUp(db, target) : { appliedCount: 0, currentVersion: 0 }),
