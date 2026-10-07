@@ -595,6 +595,7 @@ function initDatabase() {
   addCol("session", "trust_score", "INTEGER DEFAULT 50");
   addCol("session", "last_update", "DATETIME");
   addCol("session", "parent_session_id", "INTEGER");
+  addCol("session", "session_kind", "TEXT NOT NULL DEFAULT 'chat'");
   addCol("session", "status", "TEXT NOT NULL DEFAULT 'active'");
   addCol("provider_credential", "disable_reason", "TEXT");
   // Project Brain: workspace 列 —— 项目级记忆(architecture/conventions/decisions)
@@ -916,7 +917,7 @@ function deletePersona(id) {
 function getSessions() {
   return db
     .prepare(
-      "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s ORDER BY s.pinned DESC, s.updated_at DESC",
+      "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s WHERE COALESCE(s.session_kind, 'chat') <> 'subagent' ORDER BY s.pinned DESC, s.updated_at DESC",
     )
     .all();
 }
@@ -932,12 +933,17 @@ function createSession({
   title = "新会话",
   persona_id = null,
   parentSessionId = null,
+  config = null,
+  session_kind = "chat",
 }) {
+  const normalizedConfig = config == null
+    ? null
+    : (typeof config === "string" ? config : JSON.stringify(config));
   const info = db
     .prepare(
-      "INSERT INTO session (title, persona_id, parent_session_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, 1)",
+      "INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, 1)",
     )
-    .run(title, persona_id, parentSessionId, localNow());
+    .run(title, persona_id, parentSessionId, normalizedConfig, String(session_kind || "chat"), localNow());
   return { lastInsertRowid: Number(info.lastInsertRowid) };
 }
 
