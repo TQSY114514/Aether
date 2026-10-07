@@ -1508,7 +1508,7 @@ Reply ONLY with JSON:
         .map(tc => ({ name: (tc.function || {}).name, args: safeParseToolCallArgs((tc.function || {}).arguments) }))
         .filter(tc => tc.name)
       if (toolCalls.length > 0) {
-        try { skillSelfCreate.recordPattern(toolCalls) } catch {}
+        try { skillSelfCreate.recordPattern(toolCalls, db) } catch {}
       }
       // Dynamic concurrency: use getMaxConcurrent to determine batch size based
       // on tool types. Write tools and sequential tools serialize; read-only
