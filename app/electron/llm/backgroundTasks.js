@@ -648,6 +648,7 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
 
   const rowId = db.createAgentTask({
     session_id: childSessionId,
+    parent_session_id: parentSessionId ?? null,
     title,
     content,
     model_id: modelId,
@@ -795,7 +796,7 @@ function getTask(taskId, db) {
   if (db && typeof db.getAgentTask === 'function') {
     const r = db.getAgentTask(taskId)
     if (r) return {
-      id: r.id, sessionId: r.session_id, status: normalizeTaskStatus(r.status), title: r.title,
+      id: r.id, sessionId: r.session_id, parentSessionId: r.parent_session_id ?? null, status: normalizeTaskStatus(r.status), title: r.title,
       content: r.content, modelId: r.model_id, agentMode: r.agent_mode,
       priority: r.priority, attempts: r.attempts, maxRetry: r.max_retry,
       createdAt: new Date(r.created_at).getTime(),
@@ -817,6 +818,7 @@ function rowToRecord(r) {
     rowId: r.id,
     db: _db,
     sessionId: r.session_id,
+    parentSessionId: r.parent_session_id ?? null,
     status: normalizeTaskStatus(r.status),
     title: r.title,
     content: r.content,
