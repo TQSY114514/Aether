@@ -126,6 +126,16 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
     }
   })
 
+  // API Key 加密状态: 渲染进程用于在设置页显式提示 safeStorage 不可用时密钥明文落盘
+  ipcMain.handle('system:encryption-status', () => {
+    try {
+      const { safeStorage } = require('electron')
+      return { ok: true, available: !!safeStorage.isEncryptionAvailable() }
+    } catch (e) {
+      return { ok: false, available: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
+
   // 系统与工作区全面体检 (Claude Code / OpenHands 对齐)
   ipcMain.handle('system:doctor', async (_e, { cwd, sessionId } = {}) => {
     try {
