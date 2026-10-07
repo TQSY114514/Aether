@@ -596,6 +596,11 @@ function initDatabase() {
   addCol("session", "last_update", "DATETIME");
   addCol("session", "parent_session_id", "INTEGER");
   addCol("session", "session_kind", "TEXT NOT NULL DEFAULT 'chat'");
+  // Migrate pre-2.0 internal child sessions out of the normal chat list.
+  try {
+    target.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
+    target.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND title LIKE 'subagent%'" ).run();
+  } catch {}
   addCol("session", "status", "TEXT NOT NULL DEFAULT 'active'");
   addCol("provider_credential", "disable_reason", "TEXT");
   // Project Brain: workspace 列 —— 项目级记忆(architecture/conventions/decisions)
@@ -917,7 +922,7 @@ function deletePersona(id) {
 function getSessions() {
   return db
     .prepare(
-      "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s WHERE COALESCE(s.session_kind, 'chat') <> 'subagent' ORDER BY s.pinned DESC, s.updated_at DESC",
+      "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s WHERE COALESCE(s.session_kind, 'chat') = 'chat' ORDER BY s.pinned DESC, s.updated_at DESC",
     )
     .all();
 }
