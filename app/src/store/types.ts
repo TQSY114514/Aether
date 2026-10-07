@@ -52,6 +52,7 @@ export type TaskStatus = 'queued' | 'running' | 'plan' | 'paused' | 'done' | 'ca
 export interface TaskInfo {
   id: number
   sessionId: number
+  parentSessionId?: number | null
   status: TaskStatus
   title: string
   createdAt: number
@@ -69,12 +70,12 @@ export type TaskProgressType = 'tool-call' | 'plan-step' | 'status' | 'todo-upda
  *  it runs against an older main process: `electron/` files are NOT hot-reloaded,
  *  so a rebuilt renderer can legitimately meet a preload without `task`. */
 interface TaskApi {
-  start: (params: { content: string; modelId: number; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+  start: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
   list: () => Promise<TaskInfo[]>
   cancel: (taskId: number) => Promise<{ ok: boolean }>
   pause: (taskId: number) => Promise<{ ok: boolean }>
   resume: (taskId: number) => Promise<{ ok: boolean }>
-  derive: (params: { content: string; modelId: number; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+  derive: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
   getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
   onStarted: (cb: (task: TaskInfo) => void) => () => void
   onProgress: (cb: (p: { taskId: number; type: TaskProgressType; payload: unknown }) => void) => () => void
@@ -98,6 +99,7 @@ export function mergeTask(prev: TaskInfo, patch: Partial<TaskInfo>): TaskInfo {
   return {
     id: prev.id,
     sessionId: patch.sessionId ?? prev.sessionId,
+    parentSessionId: patch.parentSessionId !== undefined ? patch.parentSessionId : prev.parentSessionId ?? null,
     status: patch.status ?? prev.status,
     title: patch.title ?? prev.title,
     createdAt: patch.createdAt ?? prev.createdAt,
@@ -111,6 +113,7 @@ export function newTask(patch: Partial<TaskInfo> & { id: number }): TaskInfo {
   return {
     id: patch.id,
     sessionId: patch.sessionId ?? 0,
+    parentSessionId: patch.parentSessionId ?? null,
     status: patch.status ?? 'running',
     title: patch.title ?? '',
     createdAt: patch.createdAt ?? Date.now(),

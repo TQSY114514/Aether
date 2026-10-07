@@ -16,7 +16,8 @@ const { runToolLoop } = require('./toolLoop')
 const { buildReasoningParams } = require('./reasoning')
 const log = require('../logger')
 const { IterationBudget } = require('./toolLoop');
-const { subagentLimit } = require('./concurrency');
+const { subagentLimit } = require('./concurrency')
+const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox');
 
 const SUBAGENT_SYSTEM_PROMPT = `You are a sub-agent spawned by the parent agent to handle a delegated task.
 You have your own isolated context — previous conversation history is not available.
@@ -53,16 +54,24 @@ async function _runSubagent({
   }
 
   const cfg = { ...DEFAULT_SUBAGENT_CONFIG, ...config }
+  const inheritedWorkspace = (() => {
+    try { return getWorkspaceRoot(parentSessionId) || null } catch { return null }
+  })()
 
-  // Create child session (persistent — not deleted immediately)
+  // Child sessions are runtime implementation details, not user chat tabs.
+  // Keep them persistent for auditing/review, but classify them explicitly so
+  // the normal session list can hide them.
   let childSessionId
   try {
     const result = db.createSession({
       title: `subagent-${new Date().toISOString().slice(0, 19)}`,
       persona_id: null,
-      parent_session_id: parentSessionId || null,
+      parentSessionId: parentSessionId || null,
+      config: inheritedWorkspace ? { workspace: inheritedWorkspace } : null,
+      session_kind: 'subagent',
     })
     childSessionId = result?.lastInsertRowid || result
+    if (inheritedWorkspace) setWorkspaceRootForSession(childSessionId, inheritedWorkspace)
   } catch (e) {
     throw new Error(`runSubagent: failed to create child session: ${e.message}`)
   }
@@ -101,14 +110,31 @@ async function _runSubagent({
   let hasError = false
   let errorMessage = ''
   try {
+    let childTools = true
+    if (Array.isArray(cfg.allowedTools)) {
+      try {
+        const mcp = require('../mcp/manager')
+        childTools = mcp.getMergedToolsPayload(childAgentMode, { cacheStable: true })
+          .filter(t => cfg.allowedTools.includes(t?.function?.name))
+      } catch {
+        try {
+          const registry = require('../tools/registry')
+          childTools = registry.toolsPayload(childAgentMode, { cacheStable: true })
+            .filter(t => cfg.allowedTools.includes(t?.function?.name))
+        } catch {
+          childTools = []
+        }
+      }
+    }
     finalContent = await runToolLoop({
       provider,
       model,
       messages,
-      tools: true,
+      tools: childTools,
       signal: mergedSignal,
       options: opts,
       agentMode: childAgentMode,
+      maxIterations: cfg.maxIterations,
       budget,
       sessionId: childSessionId,
       messageId: 0,

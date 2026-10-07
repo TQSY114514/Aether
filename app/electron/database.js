@@ -199,6 +199,7 @@ function createEmptyDatabase(dbPath) {
   target.exec(`CREATE TABLE IF NOT EXISTS agent_task (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER,
+    parent_session_id INTEGER,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     model_id INTEGER,
@@ -595,6 +596,14 @@ function initDatabase() {
   addCol("session", "trust_score", "INTEGER DEFAULT 50");
   addCol("session", "last_update", "DATETIME");
   addCol("session", "parent_session_id", "INTEGER");
+  addCol("session", "session_kind", "TEXT NOT NULL DEFAULT 'chat'");
+  addCol("agent_task", "parent_session_id", "INTEGER");
+  try { target.prepare("UPDATE agent_task SET parent_session_id = session_id WHERE parent_session_id IS NULL AND session_id IS NOT NULL").run() } catch {}
+  // Migrate pre-2.0 internal child sessions out of the normal chat list.
+  try {
+    target.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
+    target.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND title LIKE 'subagent%'" ).run();
+  } catch {}
   addCol("session", "status", "TEXT NOT NULL DEFAULT 'active'");
   addCol("provider_credential", "disable_reason", "TEXT");
   // Project Brain: workspace 列 —— 项目级记忆(architecture/conventions/decisions)
@@ -916,7 +925,7 @@ function deletePersona(id) {
 function getSessions() {
   return db
     .prepare(
-      "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s ORDER BY s.pinned DESC, s.updated_at DESC",
+      "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s WHERE COALESCE(s.session_kind, 'chat') = 'chat' ORDER BY s.pinned DESC, s.updated_at DESC",
     )
     .all();
 }
@@ -932,12 +941,17 @@ function createSession({
   title = "新会话",
   persona_id = null,
   parentSessionId = null,
+  config = null,
+  session_kind = "chat",
 }) {
+  const normalizedConfig = config == null
+    ? null
+    : (typeof config === "string" ? config : JSON.stringify(config));
   const info = db
     .prepare(
-      "INSERT INTO session (title, persona_id, parent_session_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, 1)",
+      "INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, 1)",
     )
-    .run(title, persona_id, parentSessionId, localNow());
+    .run(title, persona_id, parentSessionId, normalizedConfig, String(session_kind || "chat"), localNow());
   return { lastInsertRowid: Number(info.lastInsertRowid) };
 }
 
@@ -1178,6 +1192,7 @@ function importSettings(settingsObj) {
 // ===== Agent Task CRUD (persistent background tasks) =====
 function createAgentTask({
   session_id = null,
+  parent_session_id = null,
   title,
   content,
   model_id = null,
@@ -1187,9 +1202,9 @@ function createAgentTask({
 }) {
   const info = db
     .prepare(
-      "INSERT INTO agent_task (session_id, title, content, model_id, agent_mode, priority, max_retry) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO agent_task (session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .run(session_id, title, content, model_id, agent_mode, priority, max_retry);
+    .run(session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry);
   return Number(info.lastInsertRowid);
 }
 function getAgentTask(id) {

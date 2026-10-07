@@ -6,7 +6,8 @@ function registerStrategyHandlers(ipcMain, db) {
   ipcMain.handle('evolution:strategy:get', () => {
     try {
       const s = require('../evolution/strategyStore')
-      return { ...s.stats(), entries: s.load().entries, file: s.getStoreFile() }
+      const reflect = require('../evolution/reflect')
+      return { ...s.stats(), entries: s.load().entries, file: s.getStoreFile(), learning: reflect.getStatus(db) }
     } catch (e) { return { count: 0, chars: 0, maxChars: 2200, needsMerge: false, entries: [], error: e.message } }
   })
   ipcMain.handle('evolution:strategy:add', (_e, text) => {

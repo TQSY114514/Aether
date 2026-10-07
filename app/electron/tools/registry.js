@@ -505,8 +505,20 @@ const TOOLS = [
     if (!roles.getRole(args.role)) return `unknown role: ${args.role}`
     const td = String(args.task || '').trim(); if (!td) return 'task is required'
     const mp = roles.buildRolePrompt(args.role, td); if (!mp) return 'prompt build failed'
+    const allowedTools = roles.buildToolFilter(args.role)
+    const maxIterations = Math.max(1, Math.min(50, Number(args.maxIterations) || 15))
     try {
-      const o = await SA.runSubagent({ db: ctx.db, parentSessionId: ctx.sessionId, provider: ctx.provider, model: ctx.model, prompt: mp, signal: ctx.signal, agentMode: roles.getRoleDefaultMode(args.role), callbacks: ctx.callbacks || {} })
+      const o = await SA.runSubagent({
+        db: ctx.db,
+        parentSessionId: ctx.sessionId,
+        provider: ctx.provider,
+        model: ctx.model,
+        prompt: mp,
+        signal: ctx.signal,
+        agentMode: roles.getRoleDefaultMode(args.role),
+        callbacks: ctx.callbacks || {},
+        config: { allowedTools, maxIterations, inheritPermissions: false, cleanup: 'keep' },
+      })
       return o.content || '(no content)'
     } catch (e) { return `agent error: ${e?.message}` }
   }},
@@ -514,16 +526,8 @@ const TOOLS = [
     if (!ctx) return 'no context'
     const wf = require('../llm/workflow'); const tn = String(args.template || 'feature'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
-      const r = await wf.runWorkflow({ db: ctx.db, provider: ctx.provider, model: ctx.model, templateName: tn, userRequest: req, signal: ctx.signal, maxSubagentCalls: args.maxSubagentCalls != null ? Number(args.maxSubagentCalls) : null, stepModels: args.stepModels || null, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
+      const r = await wf.runWorkflow({ db: ctx.db, provider: ctx.provider, model: ctx.model, templateName: tn, userRequest: req, signal: ctx.signal, parentSessionId: ctx.sessionId, maxSubagentCalls: args.maxSubagentCalls != null ? Number(args.maxSubagentCalls) : null, stepModels: args.stepModels || null, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
       if (!r.ok) return `failed: ${r.error}`; return r.summary || '(done)'
-    } catch (e) { return `error: ${e?.message}` }
-  }},
-  { name: 'run_long_task', description: 'Run a long-running persistent task (debug_loop/test_fix/build_verify).', risk: 'dangerous', parameters: { type: 'object', properties: { taskType: { type: 'string', enum: ['debug_loop', 'test_fix', 'build_verify'] }, prompt: { type: 'string' } }, required: ['taskType', 'prompt'] }, run: async (args, ctx) => {
-    if (!ctx) return 'no context'
-    const lrt = require('../llm/longRunningTask'); const tt = String(args.taskType || 'debug_loop'); const p = String(args.prompt || '').trim(); if (!p) return 'prompt required'
-    try {
-      const r = await lrt.runLongTask({ db: ctx.db, provider: ctx.provider, model: ctx.model, sessionId: ctx.sessionId, taskType: tt, prompt: p, signal: ctx.signal })
-      if (!r.ok) return `failed: ${r.error} (${r.cycles} cycles)`; return r.summary || 'done'
     } catch (e) { return `error: ${e?.message}` }
   }},
   { name: 'review_code', description: 'Review code for bugs, security, performance.', risk: 'safe', parameters: { type: 'object', properties: { files: { type: 'array', items: { type: 'string' } } } }, run: async (args, ctx) => {
@@ -535,7 +539,7 @@ const TOOLS = [
     if (!ctx) return 'no context'
     const ar = require('../llm/agentArena'); const mode = String(args.mode || 'plan_only'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
-      const r = await ar.runArena({ db: ctx.db, provider: ctx.provider, model: ctx.model, userRequest: req, signal: ctx.signal, mode, roles: Array.isArray(args.roles) && args.roles.length ? args.roles : ['explore', 'build', 'review'], maxRounds: Number(args.maxRounds) || 1, judgeThreshold: Number(args.judgeThreshold) || 0, maxSubagentCalls: Number(args.maxSubagentCalls) || 20, executeModel: args.executeModel || null, supervise: args.supervise === true, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
+      const r = await ar.runArena({ db: ctx.db, provider: ctx.provider, model: ctx.model, userRequest: req, signal: ctx.signal, parentSessionId: ctx.sessionId, mode, roles: Array.isArray(args.roles) && args.roles.length ? args.roles : ['explore', 'build', 'review'], maxRounds: Number(args.maxRounds) || 1, judgeThreshold: Number(args.judgeThreshold) || 0, maxSubagentCalls: Number(args.maxSubagentCalls) || 20, executeModel: args.executeModel || null, supervise: args.supervise === true, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
       if (!r.ok) return `failed: ${r.error}`
       if (mode === 'plan_only') return (r.plans || []).map(p => `[${p.role}] ${(p.plan || '').slice(0, 300)}...`).join('\n')
       return [`Best: ${r.bestPlan.role} (${r.bestPlan.score})`, r.execution?.success ? r.execution.output : `exec failed: ${r.execution?.error}`].join('\n')

@@ -19,7 +19,7 @@ const log = require('../logger')
 const strategyStore = require('./strategyStore')
 
 // 每 20 条轨迹触发一次反思；容量超限时下一条轨迹立即触发。
-const REFLECT_EVERY_N_TRACES = 20
+const REFLECT_EVERY_N_TRACES = 8
 const MAX_TRACE_LINES = 200
 
 function getTracesFile() { return path.join(strategyStore.getStoreDir(), 'traces.jsonl') }
@@ -82,6 +82,33 @@ function pendingTraceCount() {
   try {
     return fs.readFileSync(getTracesFile(), 'utf8').split('\n').filter(Boolean).length
   } catch { return 0 }
+}
+
+const REFLECT_STATUS_PREFIX = 'learning.reflect.'
+
+function setStatus(db, patch) {
+  if (!db || typeof db.setSetting !== 'function') return
+  try {
+    for (const [key, value] of Object.entries(patch || {})) {
+      db.setSetting(REFLECT_STATUS_PREFIX + key, String(value ?? ''))
+    }
+  } catch {}
+}
+
+function getStatus(db) {
+  const get = (key) => {
+    try { return db?.getSetting?.(REFLECT_STATUS_PREFIX + key) ?? null } catch { return null }
+  }
+  return {
+    lastAttemptAt: get('last_attempt_at'),
+    lastSuccessAt: get('last_success_at'),
+    lastError: get('last_error'),
+    lastReason: get('last_reason'),
+    lastAdded: Number(get('last_added') || 0),
+    lastReplaced: Number(get('last_replaced') || 0),
+    lastRemoved: Number(get('last_removed') || 0),
+    pendingTraces: pendingTraceCount(),
+  }
 }
 
 function clearTraces() {
@@ -170,18 +197,66 @@ function parseOps(text) {
 // ─── 主入口 ────────────────────────────────────────────────────────────────
 // provider/model 缺省时从设置读取上次会话使用的配置（由聊天链路回写）。
 async function resolveProvider(db, provider, model) {
-  if (provider && model) return { provider, model }
+  // Callers may pass fully resolved provider/model objects, but persisted
+  // settings contain only an id/name. Never feed those strings directly into
+  // providerAdapter: it expects api_url/api_key/api_format and model_name.
+  if (provider && model && typeof provider === 'object' && typeof model === 'object') {
+    return { provider, model }
+  }
   try {
-    const p = provider || (db.getSetting ? db.getSetting('llm.lastProvider') : null)
-    const m = model || (db.getSetting ? db.getSetting('llm.lastModel') : null)
-    if (p && m) return { provider: p, model: m }
-  } catch {}
+    const pRaw = provider || (db?.getSetting ? db.getSetting('llm.lastProvider') : null)
+    const mRaw = model || (db?.getSetting ? db.getSetting('llm.lastModel') : null)
+    if (!pRaw && !mRaw) return null
+
+    let resolvedProvider = (pRaw && typeof pRaw === 'object') ? pRaw : null
+    let resolvedModel = (mRaw && typeof mRaw === 'object') ? mRaw : null
+
+    // Prefer an explicit numeric provider id when available.
+    if (!resolvedProvider && pRaw != null && typeof db?.getProvider === 'function') {
+      const pid = Number(pRaw)
+      if (Number.isFinite(pid) && pid > 0) resolvedProvider = db.getProvider(pid)
+    }
+
+    // Resolve the model by id first, then by model_name.
+    if (!resolvedModel && mRaw != null && typeof db?.getModel === 'function') {
+      const mid = Number(mRaw)
+      if (Number.isFinite(mid) && mid > 0) resolvedModel = db.getModel(mid)
+    }
+    if (!resolvedModel && mRaw != null && typeof db?.prepare === 'function') {
+      resolvedModel = db.prepare(
+        'SELECT * FROM model WHERE model_name = ? ORDER BY is_primary DESC, fallback_order ASC, id ASC LIMIT 1'
+      ).get(String(mRaw)) || null
+    }
+
+    // If the model identifies a provider, that relation is more authoritative
+    // than a stale llm.lastProvider setting.
+    if (resolvedModel?.provider_id && typeof db?.getProvider === 'function') {
+      const modelProvider = db.getProvider(resolvedModel.provider_id)
+      if (modelProvider) resolvedProvider = modelProvider
+    }
+
+    if (resolvedProvider && resolvedModel) return { provider: resolvedProvider, model: resolvedModel }
+  } catch (e) {
+    log.debug('reflect.resolveProvider failed:', e?.message)
+  }
   return null
 }
 
 // 单飞守卫：手动按钮 / 审计自动触发 / 定时任务可能并发调 reflectNow，
 // 共享同一次在途反思（认领轨迹 + LLM 调用只发生一次），后到者直接复用结果。
 let _inFlight = null
+const AUTO_REFLECT_MIN_MS = 10 * 60 * 1000
+
+function canAutoReflect(db, minMs = AUTO_REFLECT_MIN_MS) {
+  try {
+    const raw = db?.getSetting?.('learning.reflect.last_attempt_at')
+    const last = raw ? Date.parse(String(raw)) : NaN
+    if (!Number.isFinite(last)) return true
+    return Date.now() - last >= Math.max(0, Number(minMs) || AUTO_REFLECT_MIN_MS)
+  } catch {
+    return true
+  }
+}
 
 async function reflectNow(db, opts = {}) {
   if (_inFlight) return _inFlight
@@ -190,8 +265,15 @@ async function reflectNow(db, opts = {}) {
 }
 
 async function _reflectInner(db, opts = {}) {
+  setStatus(db, {
+    last_attempt_at: new Date().toISOString(),
+    last_error: '',
+  })
   const resolved = await resolveProvider(db, opts.provider, opts.model)
-  if (!resolved) return { ok: false, reason: 'no-provider' }
+  if (!resolved) {
+    setStatus(db, { last_reason: 'no-provider', last_error: '没有可用的 Provider/Model' })
+    return { ok: false, reason: 'no-provider' }
+  }
   const { completeChat } = require('../llm/providerAdapter')
 
   const { entries } = strategyStore.load()
@@ -210,12 +292,14 @@ async function _reflectInner(db, opts = {}) {
         { role: 'system', content: REFLECT_SYSTEM },
         { role: 'user', content: buildUserPrompt(entries, traces, st.needsMerge) },
       ],
-      options: { max_tokens: 500, temperature: 0.2 },
+      options: { max_tokens: 500, temperature: 0.2, db },
     })
   } catch (e) {
-    log.warn('reflect: LLM call failed:', e && e.message)
+    const error = e && e.message ? e.message : String(e)
+    log.warn('reflect: LLM call failed:', error)
     restoreTraces(claimedLines)
-    return { ok: false, reason: 'llm-error', error: e && e.message }
+    setStatus(db, { last_reason: 'llm-error', last_error: error })
+    return { ok: false, reason: 'llm-error', error }
   }
 
   const ops = parseOps(text)
@@ -245,8 +329,17 @@ async function _reflectInner(db, opts = {}) {
           null, new Date().toISOString())
     } catch (e) { log.debug('reflect: event insert failed:', e && e.message) }
   }
+  const result = { ok: true, ...applied, needsMerge: strategyStore.stats().needsMerge }
+  setStatus(db, {
+    last_success_at: new Date().toISOString(),
+    last_reason: produced > 0 ? 'changed' : 'no-changes',
+    last_error: '',
+    last_added: applied.added.length,
+    last_replaced: applied.replaced.length,
+    last_removed: applied.removed.length,
+  })
   log.info(`reflect: done (+${applied.added.length} ~${applied.replaced.length} -${applied.removed.length})`)
-  return { ok: true, ...applied, needsMerge: strategyStore.stats().needsMerge }
+  return result
 }
 
-module.exports = { noteTrace, pendingTraceCount, reflectNow, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES }
+module.exports = { noteTrace, pendingTraceCount, reflectNow, resolveProvider, getStatus, canAutoReflect, AUTO_REFLECT_MIN_MS, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES }

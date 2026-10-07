@@ -26,6 +26,7 @@ const { createAllowRulesStore, buildToolLoopCallbacks } = require('../ipc/toolLo
 const { isValidTaskTransition, normalizeTaskStatus, TASK_PROGRESS_TYPES } = require('./eventTypes')
 const featureFlags = require('../featureFlags')
 const log = require('../logger')
+const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox')
 
 // Default concurrency cap when the user setting is absent.
 const DEFAULT_CONCURRENT_TASKS = 3
@@ -725,12 +726,23 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
   }
 
   const title     = `任务: ${content.slice(0, 30)}`
+  const inheritedWorkspace = (() => {
+    try { return getWorkspaceRoot(parentSessionId) || null } catch { return null }
+  })()
 
-  // ── Create child session + task row (row id becomes the task id) ────────
+  // Background tasks are runtime children, not user chat sessions.
+  // Preserve the parent workspace so the task operates on the same project.
   let childSessionId
   try {
-    const result = db.createSession({ title, persona_id: null })
+    const result = db.createSession({
+      title,
+      persona_id: null,
+      parentSessionId: parentSessionId ?? null,
+      config: inheritedWorkspace ? { workspace: inheritedWorkspace } : null,
+      session_kind: 'task',
+    })
     childSessionId = result?.lastInsertRowid || result
+    if (inheritedWorkspace) setWorkspaceRootForSession(childSessionId, inheritedWorkspace)
   } catch (e) {
     throw new Error(`startTask: failed to create child session: ${e.message}`)
   }
@@ -738,6 +750,7 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
 
   const rowId = db.createAgentTask({
     session_id: childSessionId,
+    parent_session_id: parentSessionId ?? null,
     title,
     content,
     model_id: modelId,
@@ -873,6 +886,7 @@ function listTasks(db) {
     out.push({
       id: r.id,
       sessionId: r.session_id,
+      parentSessionId: r.parent_session_id ?? null,
       status: normalizeTaskStatus(r.status),
       title: r.title,
       content: r.content,
@@ -897,7 +911,7 @@ function getTask(taskId, db) {
   if (db && typeof db.getAgentTask === 'function') {
     const r = db.getAgentTask(taskId)
     if (r) return {
-      id: r.id, sessionId: r.session_id, status: normalizeTaskStatus(r.status), title: r.title,
+      id: r.id, sessionId: r.session_id, parentSessionId: r.parent_session_id ?? null, status: normalizeTaskStatus(r.status), title: r.title,
       content: r.content, modelId: r.model_id, agentMode: r.agent_mode,
       priority: r.priority, attempts: r.attempts, maxRetry: r.max_retry,
       createdAt: new Date(r.created_at).getTime(),
@@ -919,6 +933,7 @@ function rowToRecord(r) {
     rowId: r.id,
     db: _db,
     sessionId: r.session_id,
+    parentSessionId: r.parent_session_id ?? null,
     status: normalizeTaskStatus(r.status),
     title: r.title,
     content: r.content,

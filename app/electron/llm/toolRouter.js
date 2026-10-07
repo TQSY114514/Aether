@@ -30,7 +30,9 @@ const CATEGORY_TOOLS = {
     'lsp_code_actions', 'lsp_rename', 'find_symbol',
   ],
   agent: [
-    'delegate_task', 'task', 'debug_loop', 'test_first', 'review_code',
+    'delegate_task', 'run_agent', 'task',
+    'run_workflow', 'run_arena',
+    'debug_loop', 'test_first', 'review_code',
   ],
   memory: ['memory_save', 'memory_list', 'memory_search'],
   git: ['git_status', 'git_diff', 'git_log', 'git_commit', 'git_push', 'git_create_branch'],
@@ -49,7 +51,7 @@ const CORE_TOOLS = new Set([
 const CATEGORY_PATTERNS = [
   { category: 'github', re: /\b(pr|pull\s*request|github|issue|release|actions)\b/i },
   { category: 'lsp', re: /\b(symbol|definition|references|diagnostic|refactor|rename|定位|定义|引用|重构|重命名)\b/i },
-  { category: 'agent', re: /\b(delegate|sub.?agent|parallel|debug|test.first|review|子代理|并行|调试|审查|测试)\b/i },
+  { category: 'agent', re: /\b(delegate|sub.?agent|parallel|run.?agent|workflow|arena|background.?task|debug|test.first|review|agent)\b|子代理|并行|编排|竞技场|后台任务|调试|审查|测试/i },
   { category: 'memory', re: /\b(memory|remember|recall|记住|回忆|记忆)\b/i },
   { category: 'git', re: /\b(git|commit|push|branch|diff|提交|分支|推送)\b/i },
 ]

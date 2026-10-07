@@ -31,7 +31,6 @@ const TOOL_AXIS = {
   sandbox_init: AXES.FILESYSTEM, sandbox_apply: AXES.FILESYSTEM, generate_repo_map: AXES.FILESYSTEM,
   // shell: 命令执行
   run_command: AXES.SHELL, debug_loop: AXES.SHELL, test_first: AXES.SHELL,
-  run_long_task: AXES.SHELL,
   // network: 网络访问
   web_search: AXES.NETWORK, web_fetch: AXES.NETWORK, web_visualize: AXES.NETWORK, gateway: AXES.NETWORK,
   github_pr_create: AXES.NETWORK, github_pr_list: AXES.NETWORK, github_pr_merge: AXES.NETWORK,
@@ -55,7 +54,7 @@ function axisFor(toolName) {
 
 /** 动态命令安全分析，返回强制 POLICY（如果有） */
 function analyzeCommandRisk(toolName, input) {
-  if (toolName === 'run_command' || toolName === 'run_long_task') {
+  if (toolName === 'run_command') {
     let command = ''
     if (input && typeof input === 'object') {
       command = input.command || input.code || ''

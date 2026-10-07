@@ -5,6 +5,9 @@
 // mock loop, so tests never leak tasks into each other.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { createRequire } from 'node:module'
+
+const nodeRequire = createRequire(import.meta.url)
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -108,6 +111,36 @@ function statusMapFor(mod, dbb = db) {
 }
 
 // ─── legacy mode (queue off) ────────────────────────────────────────────────
+
+describe('child session isolation', () => {
+  it('inherits parent workspace and is hidden from normal chat sessions', async () => {
+    const sandbox = nodeRequire('../electron/tools/sandbox')
+    sandbox.setWorkspaceRoot('C:\\AetherProject')
+
+    let created = null
+    db.createSession = (args) => {
+      created = args
+      return { lastInsertRowid: 9001 }
+    }
+
+    const result = await bt.startTask({
+      db,
+      parentSessionId: 77,
+      content: 'inspect this project',
+      modelId: 1,
+      agentMode: 'plan',
+      emit: vi.fn(),
+    })
+
+    expect(result.sessionId).toBe(9001)
+    expect(created).toMatchObject({
+      parentSessionId: 77,
+      session_kind: 'task',
+      config: { workspace: 'C:\\AetherProject' },
+    })
+    expect(sandbox.getWorkspaceRoot(9001)).toBe('C:\\AetherProject')
+  })
+})
 
 describe('legacy mode (scheduler.queue off)', () => {
   it('runs immediately and persists the terminal state', async () => {

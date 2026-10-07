@@ -343,48 +343,36 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
     }
   }
 
-  // Audit log — persists the agent turn trace. Also feeds the real audit
-  // trail into the GEP evolution engine (previously invoked with `[]` from
-  // the evolution:run-cycle IPC, so signals never fired from real runs).
-  // Throttled: at most one evolution cycle per 10 minutes, only when the
-  // turn actually used tools. Never throws — evolution is best-effort.
-  // The cycle's <evolution_guidance> prompt is stored per-session so
-  // toolLoop.js can inject it into subsequent turns — closing the loop
-  // between "learned strategies" and "applied strategies".
-  let _lastGepFeed = 0
-  const GEP_FEED_MIN_MS = 10 * 60 * 1000
-  // 反思触发的节流：即使条件持续满足也最多 10 分钟尝试一次。
-  let _lastReflectTry = 0
-  const REFLECT_TRY_MIN_MS = 10 * 60 * 1000
-  // in-flight 防重入：上一次反思还在跑（LLM 往返可能数秒）时不重复触发。
+  // Audit log + learning observation sink. There is intentionally one learning
+  // curator now: strategy reflection. The older GEP cycle used to run beside it,
+  // producing a second, opaque guidance path with different semantics.
   let _reflectInFlight = false
   callbacks.onAudit = (trace) => {
     try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
-    // 策略反思：采集轨迹摘要进环形缓冲；攒够条数或策略库超容时触发一次
-    // LLM 反思（异步、绝不阻塞当前回合；无 provider 时静默跳过）。
+    // The Evolution page toggles this single flag. When paused, do not collect
+    // or run automatic learning work; manual reflection remains available.
+    try {
+      const featureFlags = require('../featureFlags')
+      if (!featureFlags.isEnabled(db, 'skills.selfEvolution')) return
+    } catch {
+      return
+    }
     try {
       const reflect = require('../evolution/reflect')
       const queued = reflect.noteTrace(trace)
-      if (queued.queued) {
-        const overCapacity = require('../evolution/strategyStore').stats().needsMerge
-        const now = Date.now()
-        if ((queued.count >= reflect.REFLECT_EVERY_N_TRACES || overCapacity) && now - _lastReflectTry >= REFLECT_TRY_MIN_MS && !_reflectInFlight) {
-          _lastReflectTry = now
-          _reflectInFlight = true
-          reflect.reflectNow(db).catch(() => {}).finally(() => { _reflectInFlight = false })
-        }
-      }
-    } catch {}
-    try {
-      const toolCalls = Array.isArray(trace?.toolCalls) ? trace.toolCalls : []
-      if (toolCalls.length === 0) return
+      if (!queued.queued) return
+
+      const overCapacity = require('../evolution/strategyStore').stats().needsMerge
+      const highSignalFailure = String(trace?.finalStatus || '') !== 'success'
       const now = Date.now()
-      if (now - _lastGepFeed < GEP_FEED_MIN_MS) return
-      _lastGepFeed = now
-      const gep = require('../evolution/gep')
-      const result = gep.runEvolutionCycle(db, toolCalls, 'balanced', [], [])
-      if (result && result.prompt) {
-        try { gep.storeGuidance(sessionId, result.prompt, result.capsule) } catch {}
+      if (
+        (queued.count >= reflect.REFLECT_EVERY_N_TRACES || overCapacity || highSignalFailure) &&
+        reflect.canAutoReflect(db) &&
+        !_reflectInFlight
+      ) {
+
+        _reflectInFlight = true
+        reflect.reflectNow(db).catch(() => {}).finally(() => { _reflectInFlight = false })
       }
     } catch {}
   }

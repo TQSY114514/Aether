@@ -176,7 +176,7 @@ export default function TaskPanel() {
       // Default mode = shared classifier (todo 7); explicit manual toggle wins.
       const cls = classifyAgentMode({ prompt: content }).mode
       const effectivePlan = modeTouched ? planMode : cls === 'plan'
-      const r = await api.start({ content, modelId, agentMode: effectivePlan ? 'plan' : 'ask' })
+      const r = await api.start({ content, modelId, parentSessionId: currentSessionId ?? null, agentMode: effectivePlan ? 'plan' : 'ask' })
       if (r?.error) { setError(r.error); return }
       // `task:started` is the source of truth for the row; this upsert is only a
       // fallback so the task is visible even if that broadcast is missed. Merge
@@ -185,7 +185,7 @@ export default function TaskPanel() {
         useStore.getState().upsertTask({
           id: r.taskId,
           sessionId: r.sessionId,
-          status: 'running',
+          status: effectivePlan ? 'plan' : 'running',
           title: content.slice(0, 40),
         })
       }
@@ -401,7 +401,7 @@ export default function TaskPanel() {
       </div>
 
       <div className="px-3 py-2 shrink-0 text-[10px] leading-relaxed" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-        {tx('task.volatile_note', '任务状态存在主进程内存中，重启应用后列表清空（会话与结果仍在历史里）。')}
+        {tx('task.persisted_note', '任务记录会保留；运行中的任务会在应用重启后根据调度策略处理。')}
       </div>
     </aside>
   )

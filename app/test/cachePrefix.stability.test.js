@@ -147,8 +147,8 @@ describe('P0-1 Step 1d & 1b: Static Tool Surface Ordering & Insertion Point Quan
 
     // In legacy order, find_symbol is at index 4 in TOOLS (right after read_file, list_dir, glob_find, grep_search)
     expect(legacyNoMcpMetrics.insertionIndex).toBe(4)
-    expect(legacyNoMcpMetrics.beforeCount).toBe(23)
-    expect(legacyNoMcpMetrics.reuseRatio).toBeCloseTo(4 / 23, 3)
+    expect(legacyNoMcpMetrics.beforeCount).toBe(legacyNoMcpR1.length)
+    expect(legacyNoMcpMetrics.reuseRatio).toBeCloseTo(4 / legacyNoMcpR1.length, 3)
 
     // 2. Legacy unsorted with 4 MCP tools at tail: Turn 1 ([]) -> Turn 2 (['lsp'])
     const mcpEntries = [
@@ -163,8 +163,8 @@ describe('P0-1 Step 1d & 1b: Static Tool Surface Ordering & Insertion Point Quan
     const legacyMcpMetrics = measureToolInsertion(legacyMcpR1, legacyMcpR2)
 
     expect(legacyMcpMetrics.insertionIndex).toBe(4)
-    expect(legacyMcpMetrics.beforeCount).toBe(27)
-    expect(legacyMcpMetrics.reuseRatio).toBeCloseTo(4 / 27, 3)
+    expect(legacyMcpMetrics.beforeCount).toBe(legacyMcpR1.length)
+    expect(legacyMcpMetrics.reuseRatio).toBeCloseTo(4 / legacyMcpR1.length, 3)
 
     // 3. Cache-stable sorted without MCP: Turn 1 ([]) -> Turn 2 (['lsp']) -> Turn 3 (['lsp', 'agent']) -> Turn 4 (['lsp', 'agent', 'git'])
     const stableNoMcpR1 = filterByStage(sortedBuiltin, [])
@@ -177,11 +177,11 @@ describe('P0-1 Step 1d & 1b: Static Tool Surface Ordering & Insertion Point Quan
     const mNoMcp34 = measureToolInsertion(stableNoMcpR3, stableNoMcpR4)
 
     expect(mNoMcp12.isPureTailAppend).toBe(true)
-    expect(mNoMcp12.insertionIndex).toBe(23)
+    expect(mNoMcp12.insertionIndex).toBe(stableNoMcpR1.length)
     expect(mNoMcp12.reuseRatio).toBe(1)
 
     expect(mNoMcp23.isPureTailAppend).toBe(true)
-    expect(mNoMcp23.insertionIndex).toBe(29)
+    expect(mNoMcp23.insertionIndex).toBe(stableNoMcpR2.length)
     expect(mNoMcp23.reuseRatio).toBe(1)
 
     expect(mNoMcp34.isPureTailAppend).toBe(true)
@@ -197,11 +197,11 @@ describe('P0-1 Step 1d & 1b: Static Tool Surface Ordering & Insertion Point Quan
     const mMcp23 = measureToolInsertion(stableMcpR2, stableMcpR3)
 
     expect(mMcp12.isPureTailAppend).toBe(true)
-    expect(mMcp12.insertionIndex).toBe(27)
+    expect(mMcp12.insertionIndex).toBe(stableMcpR1.length)
     expect(mMcp12.reuseRatio).toBe(1)
 
     expect(mMcp23.isPureTailAppend).toBe(true)
-    expect(mMcp23.insertionIndex).toBe(33)
+    expect(mMcp23.insertionIndex).toBe(stableMcpR2.length)
     expect(mMcp23.reuseRatio).toBe(1)
   })
 })

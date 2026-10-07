@@ -84,7 +84,7 @@ Task: ${userRequest}`
 
 // ── Plan phase (并行) ─────────────────────────────────────────────────────
 
-async function runPlanPhase({ db, provider, model, userRequest, signal, roles }) {
+async function runPlanPhase({ db, provider, model, userRequest, signal, roles, parentSessionId = null }) {
   const slots = normalizeRoles(roles)
 
   // Fast path: same model for every role → reuse runParallel (events + isolation).
@@ -93,7 +93,7 @@ async function runPlanPhase({ db, provider, model, userRequest, signal, roles })
     const tasks = slots.map(s => buildPlanPrompt(s.role, userRequest))
     const outputs = await subAgent.runParallel(tasks, {
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       signal,
@@ -115,7 +115,7 @@ async function runPlanPhase({ db, provider, model, userRequest, signal, roles })
     try {
       const r = await subAgent.runSubagent({
         db,
-        parentSessionId: null,
+        parentSessionId,
         provider,
         model: s.model || model,
         prompt: buildPlanPrompt(s.role, userRequest),
@@ -133,7 +133,7 @@ async function runPlanPhase({ db, provider, model, userRequest, signal, roles })
 
 // ── Cross-review phase (并行) ─────────────────────────────────────────────
 
-async function runCrossReview({ db, provider, model, userRequest, signal, plans }) {
+async function runCrossReview({ db, provider, model, userRequest, signal, plans, parentSessionId = null }) {
   // Keep the reviews array indexed identically to plans (legacy callers rely on order).
   const tasks = []      // prompts, one per reviewer that has something to compare
   const meta = []       // { planIndex, taskIndex? } to map outputs back
@@ -185,7 +185,7 @@ Respond in a structured format.`
 
   const outputs = await subAgent.runParallel(tasks, {
     db,
-    parentSessionId: null,
+    parentSessionId,
     provider,
     model,
     signal,
@@ -278,7 +278,7 @@ function parseJudgeJSON(text) {
 
 // LLM judge: single sub-agent reads every plan + its peer reviews and returns
 // strict JSON scores. Falls back to judgePlans heuristics on any failure.
-async function runJudgePhase({ db, provider, model, userRequest, signal, plans, reviews }) {
+async function runJudgePhase({ db, provider, model, userRequest, signal, plans, reviews, parentSessionId = null }) {
   const eligible = plans.filter(p => p.success && p.plan)
   if (eligible.length === 0) return judgePlans(plans, reviews)
 
@@ -304,7 +304,7 @@ A plan is better when it is concrete (file paths, key functions), complete (all 
   try {
     const result = await subAgent.runSubagent({
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       prompt,
@@ -375,7 +375,7 @@ function saveArenaCheckpoint(db, key, data) {
 
 const SUPERVISOR_ROLE_POOL = ['explore', 'build', 'review', 'research', 'debug']
 
-async function runSupervisorPhase({ db, provider, model, userRequest, signal, fallbackRoles }) {
+async function runSupervisorPhase({ db, provider, model, userRequest, signal, fallbackRoles, parentSessionId = null }) {
   const pool = SUPERVISOR_ROLE_POOL.join(', ')
   const prompt = `You are the supervisor of a multi-agent arena. Read the task below and decide the smallest effective team of agents to plan its implementation.
 
@@ -398,7 +398,7 @@ Pick 2-3 roles. Every role must come from the available pool above.`
   try {
     const result = await subAgent.runSubagent({
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       prompt,
@@ -423,7 +423,7 @@ Pick 2-3 roles. Every role must come from the available pool above.`
 
 // ── Execute phase ─────────────────────────────────────────────────────────
 
-async function executeBestPlan({ db, provider, model, userRequest, signal, bestPlan }) {
+async function executeBestPlan({ db, provider, model, userRequest, signal, bestPlan, parentSessionId = null }) {
   const executePrompt = `You are implementing the following task using the best plan that was selected after multi-agent competition and cross-review.
 
 Task: ${userRequest}
@@ -438,7 +438,7 @@ Execute this plan. Write code, run tests, verify. When done, report what you did
   try {
     const result = await subAgent.runSubagent({
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       prompt: executePrompt,
@@ -455,7 +455,7 @@ Execute this plan. Write code, run tests, verify. When done, report what you did
 // ── Evaluator-Optimizer helpers ───────────────────────────────────────────
 
 // Refine the current best plan against peer review feedback.
-async function refinePlan({ db, provider, model, userRequest, signal, bestPlan, reviews }) {
+async function refinePlan({ db, provider, model, userRequest, signal, bestPlan, reviews, parentSessionId = null }) {
   const feedback = reviews
     .filter(r => r.success && r.review)
     .map(r => `[${r.reviewer}] ${r.review}`)
@@ -477,7 +477,7 @@ Produce the complete final improved plan — not a diff, not a summary: the full
   try {
     const r = await subAgent.runSubagent({
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       prompt,
@@ -493,7 +493,7 @@ Produce the complete final improved plan — not a diff, not a summary: the full
 }
 
 // Single-plan review used by the Evaluator-Optimizer loop.
-async function reviewSinglePlan({ db, provider, model, userRequest, signal, plan }) {
+async function reviewSinglePlan({ db, provider, model, userRequest, signal, plan, parentSessionId = null }) {
   const prompt = `You are a senior software architect reviewing an implementation plan.
 
 Task: ${userRequest}
@@ -511,7 +511,7 @@ Respond in a structured format.`
   try {
     const r = await subAgent.runSubagent({
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       prompt,
@@ -542,6 +542,7 @@ async function runArena({
   model,
   userRequest,
   signal,
+  parentSessionId = null,
   mode = 'plan_only',
   roles = ['explore', 'build', 'review'],
   executeModel = null,       // role→model mapping for the executor (defaults to `model`)
@@ -572,7 +573,7 @@ async function runArena({
   let supervisor = null
   if (supervise) {
     const sup = await runSupervisorPhase({
-      db, provider, model, userRequest, signal,
+      db, provider, model, userRequest, signal, parentSessionId,
       fallbackRoles: slots.map(s => s.role),
     })
     charge(1)
@@ -599,7 +600,7 @@ async function runArena({
 
   // Phase 1: Plan (parallel)
   if (!plans) {
-    plans = await runPlanPhase({ db, provider, model, userRequest, signal, roles: slots })
+    plans = await runPlanPhase({ db, provider, model, userRequest, signal, roles: slots, parentSessionId })
     charge(plans.length)
     if (exhausted()) {
       return { ok: false, error: budgetBreach('plan phase'), plans: plans.map(p => ({ role: p.role, success: p.success, plan: p.plan?.slice(0, 2000) })) }
@@ -620,7 +621,7 @@ async function runArena({
 
   // Phase 2: Cross-review (parallel)
   if (!reviews) {
-    reviews = await runCrossReview({ db, provider, model, userRequest, signal, plans })
+    reviews = await runCrossReview({ db, provider, model, userRequest, signal, plans, parentSessionId })
     charge(plans.filter(p => p.success).length)
     if (exhausted()) {
       return { ok: false, error: budgetBreach('cross-review phase'), plans, reviews }
@@ -630,7 +631,7 @@ async function runArena({
 
   // Phase 3: Judge (LLM with heuristic fallback)
   if (!ranked) {
-    ranked = await runJudgePhase({ db, provider, model, userRequest, signal, plans, reviews })
+    ranked = await runJudgePhase({ db, provider, model, userRequest, signal, plans, reviews, parentSessionId })
     charge(1)
     if (exhausted()) {
       return { ok: false, error: budgetBreach('judge phase'), plans, reviews, ranked }
@@ -650,11 +651,11 @@ async function runArena({
     best.finalScore < judgeThreshold &&
     calls + 2 <= maxSubagentCalls
   ) {
-    const refined = await refinePlan({ db, provider, model, userRequest, signal, bestPlan: best, reviews })
+    const refined = await refinePlan({ db, provider, model, userRequest, signal, bestPlan: best, reviews, parentSessionId })
     charge(1)
     if (!refined) break
 
-    const critique = await reviewSinglePlan({ db, provider, model, userRequest, signal, plan: refined })
+    const critique = await reviewSinglePlan({ db, provider, model, userRequest, signal, plan: refined, parentSessionId })
     charge(1)
 
     ranked = judgePlans([refined], critique ? [critique] : [])
@@ -674,6 +675,7 @@ async function runArena({
     userRequest,
     signal,
     bestPlan: best,
+    parentSessionId,
   })
   charge(1)  // count executor toward the budget accounting (unlikely to exceed — final call)
 
