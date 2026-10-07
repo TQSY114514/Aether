@@ -33,7 +33,7 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
   restorePendingTasks(db)
 
   // ── task:start ──────────────────────────────────────────────────────────
-  ipcMain.handle('task:start', async (_e, { content, modelId, agentMode = 'ask', priority = 0, maxRetry = 2 }) => {
+  ipcMain.handle('task:start', async (_e, { content, modelId, parentSessionId = null, agentMode = 'ask', priority = 0, maxRetry = 2 }) => {
     try {
       if (!content || typeof content !== 'string' || !content.trim()) {
         return { error: '无效的任务内容' }
@@ -44,7 +44,7 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
 
       const emit = createTaskEmitter()
 
-      const result = await startTask({ db, parentSessionId: null, content, modelId, agentMode, priority, maxRetry, emit })
+      const result = await startTask({ db, parentSessionId: parentSessionId ?? null, content, modelId, agentMode, priority, maxRetry, emit })
 
       // Notify the renderer immediately that a new task has been registered.
       const record = getTask(result.taskId, db)
@@ -89,11 +89,11 @@ function registerTaskHandlers(ipcMain, db, getWebContents) {
   // ── task:derive ─────────────────────────────────────────────────────────
   // CLI / 脚本从外部派生任务：不经窗口直接进 TaskEngine（同 task:start 语义，
   // 但来源标注为 'cli'，供权限弹窗/审计区分）。
-  ipcMain.handle('task:derive', async (_e, { content, modelId, agentMode = 'ask', priority = 0, maxRetry = 2 }) => {
+  ipcMain.handle('task:derive', async (_e, { content, modelId, parentSessionId = null, agentMode = 'ask', priority = 0, maxRetry = 2 }) => {
     try {
       const result = await startTask({
         db,
-        parentSessionId: null,
+        parentSessionId: parentSessionId ?? null,
         content,
         modelId,
         agentMode,
