@@ -530,14 +530,6 @@ const TOOLS = [
       if (!r.ok) return `failed: ${r.error}`; return r.summary || '(done)'
     } catch (e) { return `error: ${e?.message}` }
   }},
-  { name: 'run_long_task', description: 'Run a long-running persistent task (debug_loop/test_fix/build_verify).', risk: 'dangerous', parameters: { type: 'object', properties: { taskType: { type: 'string', enum: ['debug_loop', 'test_fix', 'build_verify'] }, prompt: { type: 'string' } }, required: ['taskType', 'prompt'] }, run: async (args, ctx) => {
-    if (!ctx) return 'no context'
-    const lrt = require('../llm/longRunningTask'); const tt = String(args.taskType || 'debug_loop'); const p = String(args.prompt || '').trim(); if (!p) return 'prompt required'
-    try {
-      const r = await lrt.runLongTask({ db: ctx.db, provider: ctx.provider, model: ctx.model, sessionId: ctx.sessionId, taskType: tt, prompt: p, signal: ctx.signal })
-      if (!r.ok) return `failed: ${r.error} (${r.cycles} cycles)`; return r.summary || 'done'
-    } catch (e) { return `error: ${e?.message}` }
-  }},
   { name: 'review_code', description: 'Review code for bugs, security, performance.', risk: 'safe', parameters: { type: 'object', properties: { files: { type: 'array', items: { type: 'string' } } } }, run: async (args, ctx) => {
     const { reviewFiles } = require('./reviewer')
     const ftr = (Array.isArray(args.files) ? args.files : []).slice(0, 5).map(f => { try { return { path: f, content: fs.readFileSync(f, 'utf-8') } } catch { return null } }).filter(Boolean)
