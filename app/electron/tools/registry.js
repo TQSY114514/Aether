@@ -505,8 +505,20 @@ const TOOLS = [
     if (!roles.getRole(args.role)) return `unknown role: ${args.role}`
     const td = String(args.task || '').trim(); if (!td) return 'task is required'
     const mp = roles.buildRolePrompt(args.role, td); if (!mp) return 'prompt build failed'
+    const allowedTools = roles.buildToolFilter(args.role)
+    const maxIterations = Math.max(1, Math.min(50, Number(args.maxIterations) || 15))
     try {
-      const o = await SA.runSubagent({ db: ctx.db, parentSessionId: ctx.sessionId, provider: ctx.provider, model: ctx.model, prompt: mp, signal: ctx.signal, agentMode: roles.getRoleDefaultMode(args.role), callbacks: ctx.callbacks || {} })
+      const o = await SA.runSubagent({
+        db: ctx.db,
+        parentSessionId: ctx.sessionId,
+        provider: ctx.provider,
+        model: ctx.model,
+        prompt: mp,
+        signal: ctx.signal,
+        agentMode: roles.getRoleDefaultMode(args.role),
+        callbacks: ctx.callbacks || {},
+        config: { allowedTools, maxIterations, inheritPermissions: false, cleanup: 'keep' },
+      })
       return o.content || '(no content)'
     } catch (e) { return `agent error: ${e?.message}` }
   }},
