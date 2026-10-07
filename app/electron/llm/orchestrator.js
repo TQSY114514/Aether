@@ -103,6 +103,7 @@ function summarizeResults(results, plan) {
  * @param {function} [opts.runner]     injected runner ({ db, provider, model, prompt, signal, agentMode }) => result
  * @param {boolean} [opts.planRequested] force planning on/off
  * @param {string} [opts.context]      extra context for sub-tasks
+ * @param {string|number} [opts.parentSessionId] parent chat session for workspace/runtime inheritance
  */
 async function orchestrate(opts = {}) {
   const db = opts.db
@@ -113,6 +114,7 @@ async function orchestrate(opts = {}) {
   const planProvider = opts.generatePlan || ((provider, model, text, signal, o) => planning.generatePlan(provider, model, text, signal, o))
   const runner = opts.runParallel || ((tasks, shared) => subAgent.runParallel(tasks, shared))
   const sharedCallbacks = opts.callbacks || {}
+  const parentSessionId = opts.parentSessionId ?? null
   const aggregatedFiles = new Map()
   let totalAdded = 0
   let totalRemoved = 0
@@ -159,7 +161,7 @@ async function orchestrate(opts = {}) {
     // No orchestration — single runner pass, still wrapped so the caller
     // sees the same result shape.
     try {
-      const single = await runner([request], { db, provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: childCallbacks })
+      const single = await runner([request], { db, provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, parentSessionId, callbacks: childCallbacks })
       emitAggregatedSummary()
       return { ok: true, plan: null, results: single, summary: single[0] ? (single[0].output || single[0].error) : '' }
     } catch (e) {
@@ -180,7 +182,7 @@ async function orchestrate(opts = {}) {
 
     const batches = batchTasks(plan.tasks)
     const results = []
-    const shared = { provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, callbacks: childCallbacks }
+    const shared = { db, provider: opts.provider, model: opts.model, signal: opts.signal, agentMode: opts.agentMode, parentSessionId, callbacks: childCallbacks }
 
     for (const batch of batches) {
       const prompts = batch.map(id => {
