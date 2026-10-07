@@ -222,6 +222,7 @@ function initScheduler(db) {
 
   // Load user-configured scheduled tasks from the DB and register them.
   try {
+    try { require('../llm/skillSelfCreate').loadPatterns(db) } catch (e) { log.warn('cron: failed to load self-learning patterns:', e.message) }
     const tasks = db.getScheduledTasks ? db.getScheduledTasks() : []
     for (const t of tasks) {
       if (t.enabled) registerUserTask(t)
