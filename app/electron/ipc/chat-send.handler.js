@@ -557,7 +557,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
-            const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', callbacks: {
+            const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', parentSessionId: sessionId, callbacks: {
               ...cb,
               onFileSummary: (summary) => { mergeFileSummary(summary) },
             } })
