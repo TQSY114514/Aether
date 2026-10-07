@@ -351,6 +351,14 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   let _reflectInFlight = false
   callbacks.onAudit = (trace) => {
     try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
+    // The Evolution page toggles this single flag. When paused, do not collect
+    // or run automatic learning work; manual reflection remains available.
+    try {
+      const featureFlags = require('../featureFlags')
+      if (!featureFlags.isEnabled(db, 'skills.selfEvolution')) return
+    } catch {
+      return
+    }
     try {
       const reflect = require('../evolution/reflect')
       const queued = reflect.noteTrace(trace)
