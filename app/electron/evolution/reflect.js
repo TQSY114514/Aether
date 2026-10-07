@@ -245,6 +245,18 @@ async function resolveProvider(db, provider, model) {
 // 单飞守卫：手动按钮 / 审计自动触发 / 定时任务可能并发调 reflectNow，
 // 共享同一次在途反思（认领轨迹 + LLM 调用只发生一次），后到者直接复用结果。
 let _inFlight = null
+const AUTO_REFLECT_MIN_MS = 10 * 60 * 1000
+
+function canAutoReflect(db, minMs = AUTO_REFLECT_MIN_MS) {
+  try {
+    const raw = db?.getSetting?.('learning.reflect.last_attempt_at')
+    const last = raw ? Date.parse(String(raw)) : NaN
+    if (!Number.isFinite(last)) return true
+    return Date.now() - last >= Math.max(0, Number(minMs) || AUTO_REFLECT_MIN_MS)
+  } catch {
+    return true
+  }
+}
 
 async function reflectNow(db, opts = {}) {
   if (_inFlight) return _inFlight
@@ -330,4 +342,4 @@ async function _reflectInner(db, opts = {}) {
   return result
 }
 
-module.exports = { noteTrace, pendingTraceCount, reflectNow, resolveProvider, getStatus, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES }
+module.exports = { noteTrace, pendingTraceCount, reflectNow, resolveProvider, getStatus, canAutoReflect, AUTO_REFLECT_MIN_MS, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES }
