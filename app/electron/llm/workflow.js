@@ -136,7 +136,7 @@ function listTemplates(workspaceRoot) {
 
 // ── Workflow step execution (Sequential / Broadcast / Cycle) ─────────────
 
-async function runSingleRoleStep({ db, provider, model, step, stepIndex, context, signal, userRequest }) {
+async function runSingleRoleStep({ db, provider, model, step, stepIndex, context, signal, userRequest, parentSessionId = null }) {
   const roleName = step.role || 'build'
   const role = agentRoles.getRole(roleName)
   if (!role) return { success: false, error: `unknown role: ${roleName}`, output: null }
@@ -158,7 +158,7 @@ ${context || '(no previous context — this is the first step)'}`
   try {
     const result = await subAgent.runSubagent({
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       prompt: fullPrompt,
@@ -183,7 +183,7 @@ ${context || '(no previous context — this is the first step)'}`
  * Execute a `broadcast` workflow step: fan out the same context & step goal to
  * multiple read-only roles in parallel via `subAgent.runParallel`.
  */
-async function runBroadcastStep({ db, provider, model, step, stepIndex, context, signal, userRequest }) {
+async function runBroadcastStep({ db, provider, model, step, stepIndex, context, signal, userRequest, parentSessionId = null }) {
   const roles = Array.isArray(step.roles) && step.roles.length > 0
     ? step.roles
     : ['explore', 'review']
@@ -217,7 +217,7 @@ ${context || '(no previous context — this is the first step)'}`
   try {
     const results = await subAgent.runParallel(parallelTasks, {
       db,
-      parentSessionId: null,
+      parentSessionId,
       provider,
       model,
       signal,
@@ -247,7 +247,7 @@ ${context || '(no previous context — this is the first step)'}`
  * Execute a `cycle` workflow step: repeat sub-steps up to `maxCycles` until
  * `step.until` regex/substring matches in the step output.
  */
-async function runCycleStep({ db, provider, model, step, stepIndex, context, signal, userRequest }) {
+async function runCycleStep({ db, provider, model, step, stepIndex, context, signal, userRequest, parentSessionId = null }) {
   const subSteps = Array.isArray(step.steps) && step.steps.length > 0
     ? step.steps
     : [{ type: step.type || 'iterate', role: step.role || 'build', description: step.description || 'Execute cycle step' }]
@@ -271,6 +271,7 @@ async function runCycleStep({ db, provider, model, step, stepIndex, context, sig
         context: cycleContext,
         signal,
         userRequest,
+        parentSessionId,
       })
       callsUsed += res.callsUsed || 1
       cycleHistory.push({
@@ -317,7 +318,7 @@ async function runCycleStep({ db, provider, model, step, stepIndex, context, sig
   }
 }
 
-async function runWorkflowStep({ db, provider, model, step, stepIndex, context, signal, userRequest }) {
+async function runWorkflowStep({ db, provider, model, step, stepIndex, context, signal, userRequest, parentSessionId = null }) {
   if (step && step.kind === 'broadcast') {
     return runBroadcastStep({ db, provider, model, step, stepIndex, context, signal, userRequest })
   }
@@ -365,6 +366,7 @@ function saveWorkflowCheckpoint(db, key, data) {
 
 async function runWorkflow({
   db, provider, model, templateName, userRequest, signal, onStepComplete,
+  parentSessionId = null,
   maxSubagentCalls = null,   // hard budget on spawned sub-agents; null = unlimited (legacy)
   stepModels = null,         // role→model or step-index→model override: { explore: m1 } | [m1, m2]
   checkpointKey = null,      // resume/save checkpoint under this key
@@ -410,7 +412,7 @@ async function runWorkflow({
     const stepResult = await runWorkflowStep({
       db, provider, model: stepModelFor(i, step.role),
       step, stepIndex: i,
-      context, signal, userRequest,
+      context, signal, userRequest, parentSessionId,
     })
     calls += stepResult.callsUsed || 1
 
