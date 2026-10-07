@@ -84,6 +84,33 @@ function pendingTraceCount() {
   } catch { return 0 }
 }
 
+const REFLECT_STATUS_PREFIX = 'learning.reflect.'
+
+function setStatus(db, patch) {
+  if (!db || typeof db.setSetting !== 'function') return
+  try {
+    for (const [key, value] of Object.entries(patch || {})) {
+      db.setSetting(REFLECT_STATUS_PREFIX + key, String(value ?? ''))
+    }
+  } catch {}
+}
+
+function getStatus(db) {
+  const get = (key) => {
+    try { return db?.getSetting?.(REFLECT_STATUS_PREFIX + key) ?? null } catch { return null }
+  }
+  return {
+    lastAttemptAt: get('last_attempt_at'),
+    lastSuccessAt: get('last_success_at'),
+    lastError: get('last_error'),
+    lastReason: get('last_reason'),
+    lastAdded: Number(get('last_added') || 0),
+    lastReplaced: Number(get('last_replaced') || 0),
+    lastRemoved: Number(get('last_removed') || 0),
+    pendingTraces: pendingTraceCount(),
+  }
+}
+
 function clearTraces() {
   try { fs.unlinkSync(getTracesFile()) } catch {}
 }
@@ -226,8 +253,15 @@ async function reflectNow(db, opts = {}) {
 }
 
 async function _reflectInner(db, opts = {}) {
+  setStatus(db, {
+    last_attempt_at: new Date().toISOString(),
+    last_error: '',
+  })
   const resolved = await resolveProvider(db, opts.provider, opts.model)
-  if (!resolved) return { ok: false, reason: 'no-provider' }
+  if (!resolved) {
+    setStatus(db, { last_reason: 'no-provider', last_error: '没有可用的 Provider/Model' })
+    return { ok: false, reason: 'no-provider' }
+  }
   const { completeChat } = require('../llm/providerAdapter')
 
   const { entries } = strategyStore.load()
@@ -249,9 +283,11 @@ async function _reflectInner(db, opts = {}) {
       options: { max_tokens: 500, temperature: 0.2, db },
     })
   } catch (e) {
-    log.warn('reflect: LLM call failed:', e && e.message)
+    const error = e && e.message ? e.message : String(e)
+    log.warn('reflect: LLM call failed:', error)
     restoreTraces(claimedLines)
-    return { ok: false, reason: 'llm-error', error: e && e.message }
+    setStatus(db, { last_reason: 'llm-error', last_error: error })
+    return { ok: false, reason: 'llm-error', error }
   }
 
   const ops = parseOps(text)
@@ -281,8 +317,17 @@ async function _reflectInner(db, opts = {}) {
           null, new Date().toISOString())
     } catch (e) { log.debug('reflect: event insert failed:', e && e.message) }
   }
+  const result = { ok: true, ...applied, needsMerge: strategyStore.stats().needsMerge }
+  setStatus(db, {
+    last_success_at: new Date().toISOString(),
+    last_reason: produced > 0 ? 'changed' : 'no-changes',
+    last_error: '',
+    last_added: applied.added.length,
+    last_replaced: applied.replaced.length,
+    last_removed: applied.removed.length,
+  })
   log.info(`reflect: done (+${applied.added.length} ~${applied.replaced.length} -${applied.removed.length})`)
-  return { ok: true, ...applied, needsMerge: strategyStore.stats().needsMerge }
+  return result
 }
 
-module.exports = { noteTrace, pendingTraceCount, reflectNow, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES }
+module.exports = { noteTrace, pendingTraceCount, reflectNow, resolveProvider, getStatus, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES }
