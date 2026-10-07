@@ -256,4 +256,36 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
     expect(bt.listTasks(db)).toHaveLength(0)
   })
+  it('identifies live sessions when the database exposes prepare instead of getSession', async () => {
+    delete db.getSession
+    db.prepare = (sql) => ({
+      get: (id) => (id === SESSION_ID ? { id: SESSION_ID } : null),
+    })
+    steering.followUp(SESSION_ID, 'raw sqlite db')
+
+    const res = await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+
+    expect(res).toEqual({ started: 1, waiting: 0 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+  })
+
+  it('notifies free slot and unblocks deferred follow-up when a paused task is cancelled', async () => {
+    await fillSlots()
+    steering.followUp(SESSION_ID, 'after cancelled paused task')
+    await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+
+    const runningTasks = bt.listTasks(db).filter(t => t.status === 'running')
+    const taskToPause = runningTasks[0]
+    bt.pauseTask(taskToPause.id)
+    bt.cancelTask(taskToPause.id)
+
+    // Unblock the tool loop for the paused task so it unwinds and returns
+    openDeferreds[0].resolve('done')
+
+    await until(
+      () => steering.getPendingFollowUps(SESSION_ID).length === 0,
+      4000,
+      'follow-up to start after paused task is cancelled'
+    )
+  })
 })

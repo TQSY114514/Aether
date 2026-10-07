@@ -461,8 +461,9 @@ async function runTask(record) {
     // Guard against overwriting a 'cancelled' status set by cancelTask().
     if (record.status === 'cancelled') {
       try { db.updateMessage(msgId, { content: finalContent ?? '', status: 'aborted' }) } catch {}
+      record.controller = null
       persist(record)
-      emit(id, { type: 'cancelled', payload: { taskId: id, sessionId } })
+      notifySlotFree()
       return
     }
     try { db.updateMessage(msgId, { content: finalContent, status: 'success' }) } catch {}
@@ -607,12 +608,28 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
   //           null as 'dead' would discard live work during a transient DB error;
   //           treating it as 'alive' would resurrect a deleted session's work.
   function isSessionAlive(db, id) {
-    if (!db || typeof db.getSession !== 'function') return null
-    try {
-      return !!db.getSession(Number(id))
-    } catch {
-      return null
+    if (!db) return null
+    if (typeof db.getSession === 'function') {
+      try {
+        const num = Number(id)
+        if (Number.isFinite(num)) return !!db.getSession(num)
+        return true
+      } catch {
+        return null
+      }
     }
+    if (typeof db.prepare === 'function') {
+      try {
+        const num = Number(id)
+        if (Number.isFinite(num)) {
+          return !!db.prepare('SELECT 1 FROM session WHERE id = ?').get(num)
+        }
+        return true
+      } catch {
+        return null
+      }
+    }
+    return null
   }
   const alive = isSessionAlive(deferred.db, sessionId)
   if (alive === null) {
@@ -638,6 +655,11 @@ async function dispatchPendingFollowUps(sessionId, { db, modelId } = {}) {
       if (!fu.text) {
         steering.failFollowUp(sessionId, fu.id, 'follow-up missing text')
         continue
+      }
+      const currentAlive = isSessionAlive(deferred.db, sessionId)
+      if (currentAlive === false) {
+        steering.failFollowUp(sessionId, fu.id, 'session unavailable or deleted')
+        break
       }
       try {
         await startTask({

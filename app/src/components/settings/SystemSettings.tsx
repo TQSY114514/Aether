@@ -16,7 +16,10 @@ export default function SystemSettings() {
 
   useEffect(() => {
     try {
-      if (!window.electronAPI?.system?.encryptionStatus) return
+      if (!window.electronAPI?.system?.encryptionStatus) {
+        setEncryptionAvailable('error')
+        return
+      }
       window.electronAPI.system.encryptionStatus().then((r) => {
         setEncryptionAvailable(r?.ok ? !!r.available : 'error')
       }).catch(() => { setEncryptionAvailable('error') })
