@@ -346,8 +346,6 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   // Audit log + learning observation sink. There is intentionally one learning
   // curator now: strategy reflection. The older GEP cycle used to run beside it,
   // producing a second, opaque guidance path with different semantics.
-  let _lastReflectTry = 0
-  const REFLECT_TRY_MIN_MS = 10 * 60 * 1000
   let _reflectInFlight = false
   callbacks.onAudit = (trace) => {
     try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
@@ -369,10 +367,10 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       const now = Date.now()
       if (
         (queued.count >= reflect.REFLECT_EVERY_N_TRACES || overCapacity || highSignalFailure) &&
-        now - _lastReflectTry >= REFLECT_TRY_MIN_MS &&
+        reflect.canAutoReflect(db) &&
         !_reflectInFlight
       ) {
-        _lastReflectTry = now
+
         _reflectInFlight = true
         reflect.reflectNow(db).catch(() => {}).finally(() => { _reflectInFlight = false })
       }
