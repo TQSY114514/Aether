@@ -526,7 +526,7 @@ const TOOLS = [
     if (!ctx) return 'no context'
     const wf = require('../llm/workflow'); const tn = String(args.template || 'feature'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
-      const r = await wf.runWorkflow({ db: ctx.db, provider: ctx.provider, model: ctx.model, templateName: tn, userRequest: req, signal: ctx.signal, maxSubagentCalls: args.maxSubagentCalls != null ? Number(args.maxSubagentCalls) : null, stepModels: args.stepModels || null, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
+      const r = await wf.runWorkflow({ db: ctx.db, provider: ctx.provider, model: ctx.model, templateName: tn, userRequest: req, signal: ctx.signal, parentSessionId: ctx.sessionId, maxSubagentCalls: args.maxSubagentCalls != null ? Number(args.maxSubagentCalls) : null, stepModels: args.stepModels || null, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
       if (!r.ok) return `failed: ${r.error}`; return r.summary || '(done)'
     } catch (e) { return `error: ${e?.message}` }
   }},
@@ -547,7 +547,7 @@ const TOOLS = [
     if (!ctx) return 'no context'
     const ar = require('../llm/agentArena'); const mode = String(args.mode || 'plan_only'); const req = String(args.request || '').trim(); if (!req) return 'request required'
     try {
-      const r = await ar.runArena({ db: ctx.db, provider: ctx.provider, model: ctx.model, userRequest: req, signal: ctx.signal, mode, roles: Array.isArray(args.roles) && args.roles.length ? args.roles : ['explore', 'build', 'review'], maxRounds: Number(args.maxRounds) || 1, judgeThreshold: Number(args.judgeThreshold) || 0, maxSubagentCalls: Number(args.maxSubagentCalls) || 20, executeModel: args.executeModel || null, supervise: args.supervise === true, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
+      const r = await ar.runArena({ db: ctx.db, provider: ctx.provider, model: ctx.model, userRequest: req, signal: ctx.signal, parentSessionId: ctx.sessionId, mode, roles: Array.isArray(args.roles) && args.roles.length ? args.roles : ['explore', 'build', 'review'], maxRounds: Number(args.maxRounds) || 1, judgeThreshold: Number(args.judgeThreshold) || 0, maxSubagentCalls: Number(args.maxSubagentCalls) || 20, executeModel: args.executeModel || null, supervise: args.supervise === true, checkpointKey: args.checkpointKey ? String(args.checkpointKey) : null })
       if (!r.ok) return `failed: ${r.error}`
       if (mode === 'plan_only') return (r.plans || []).map(p => `[${p.role}] ${(p.plan || '').slice(0, 300)}...`).join('\n')
       return [`Best: ${r.bestPlan.role} (${r.bestPlan.score})`, r.execution?.success ? r.execution.output : `exec failed: ${r.execution?.error}`].join('\n')
