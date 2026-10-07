@@ -69,12 +69,12 @@ export type TaskProgressType = 'tool-call' | 'plan-step' | 'status' | 'todo-upda
  *  it runs against an older main process: `electron/` files are NOT hot-reloaded,
  *  so a rebuilt renderer can legitimately meet a preload without `task`. */
 interface TaskApi {
-  start: (params: { content: string; modelId: number; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+  start: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
   list: () => Promise<TaskInfo[]>
   cancel: (taskId: number) => Promise<{ ok: boolean }>
   pause: (taskId: number) => Promise<{ ok: boolean }>
   resume: (taskId: number) => Promise<{ ok: boolean }>
-  derive: (params: { content: string; modelId: number; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+  derive: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: AppState['agentMode'] }) => Promise<{ taskId: number; sessionId: number; error?: string }>
   getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
   onStarted: (cb: (task: TaskInfo) => void) => () => void
   onProgress: (cb: (p: { taskId: number; type: TaskProgressType; payload: unknown }) => void) => () => void
