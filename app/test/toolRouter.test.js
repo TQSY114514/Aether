@@ -97,7 +97,7 @@ describe('conservative fallback: unknown tools stay injected', () => {
   // 回归锁定: 不在 CORE ∪ CATEGORY_TOOLS 里的工具(新内置 / MCP / gateway /
   // run_arena 等)曾被静默过滤 —— 模型 payload 里永远看不到它们。兜底规则:
   // 路由只能过滤"认识"的工具, 不认识的一律恒注入。
-  const UNKNOWN = ['run_arena', 'gateway', 'codebase_graph', 'workspace_files', 'mcp_notion_search']
+  const UNKNOWN = ['custom_extension_tool', 'gateway', 'codebase_graph', 'workspace_files', 'mcp_notion_search']
   const NEUTRAL = '帮我看看这个函数写得对不对'
 
   it('未分类工具在无关键词命中时仍出现在注入集', () => {
@@ -107,7 +107,8 @@ describe('conservative fallback: unknown tools stay injected', () => {
   })
 
   it('已分类工具关键词未命中时仍被过滤(既有行为不变)', () => {
-    const want = routeTools({ mode: undefined, prompt: NEUTRAL, allToolNames: [...UNKNOWN, 'github_pr_create', 'memory_search'], safeNames: new Set() })
+    const want = routeTools({ mode: undefined, prompt: NEUTRAL, allToolNames: [...UNKNOWN, 'run_arena', 'github_pr_create', 'memory_search'], safeNames: new Set() })
+    expect(want.has('run_arena')).toBe(false)
     expect(want.has('github_pr_create')).toBe(false)
     expect(want.has('memory_search')).toBe(false)
   })

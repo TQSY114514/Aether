@@ -5,6 +5,9 @@
 // mock loop, so tests never leak tasks into each other.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { createRequire } from 'node:module'
+
+const nodeRequire = createRequire(import.meta.url)
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -111,7 +114,7 @@ function statusMapFor(mod, dbb = db) {
 
 describe('child session isolation', () => {
   it('inherits parent workspace and is hidden from normal chat sessions', async () => {
-    const sandbox = await import('../electron/tools/sandbox')
+    const sandbox = nodeRequire('../electron/tools/sandbox')
     sandbox.setWorkspaceRoot('C:\\AetherProject')
 
     let created = null
