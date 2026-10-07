@@ -38,6 +38,26 @@ const MAX_ARGS_KEPT = 8        // max number of distinct arg templates kept per 
 // where each element is `{ templates: [{ template, count }] }` — the distinct
 // argument templates seen for that step, most common first.
 let _patterns = new Map()
+let _persistDb = null
+let _persistTimer = null
+
+// Persist learned patterns shortly after new observations. Pattern learning is
+// deliberately independent from auto-drafting, but observations must survive
+// app restarts or the detector can never accumulate evidence across sessions.
+function schedulePersist(db) {
+  if (!db) return
+  _persistDb = db
+  if (_persistTimer) return
+  _persistTimer = setTimeout(() => {
+    const target = _persistDb
+    _persistDb = null
+    _persistTimer = null
+    try { if (target) savePatterns(target) } catch {}
+  }, 1500)
+}
+process.on?.('exit', () => {
+  try { if (_persistDb) savePatterns(_persistDb) } catch {}
+})
 
 // Path-ish argument keys that should be generalized to workspace-relative form.
 const PATHISH_KEYS = new Set([
@@ -47,7 +67,7 @@ const PATHISH_KEYS = new Set([
 
 // Record a tool-call sequence (with arguments) from one agent round.
 // `toolCalls` is an array of `{ name, args }` called in this round.
-function recordPattern(toolCalls) {
+function recordPattern(toolCalls, db = null) {
   if (!toolCalls || toolCalls.length < MIN_SEQUENCE_LEN) return
   const names = toolCalls.map(tc => tc.name).filter(Boolean)
   if (names.length < MIN_SEQUENCE_LEN) return
@@ -74,6 +94,7 @@ function recordPattern(toolCalls) {
       params: templates.map(t => ({ templates: [{ template: t, count: 1 }] })),
     })
   }
+  schedulePersist(db)
 }
 
 // Merge the argument templates from a new observation into the existing per-step
@@ -170,8 +191,9 @@ function savePatterns(db) {
 
 // Load patterns from database on startup.
 function loadPatterns(db) {
+  _patterns.clear()
   try {
-    const rows = db.allRows('SELECT signature, tools, params_json, count, last_seen FROM skill_patterns') || []
+    const rows = db.allRows('SELECT signature, tools, params_json, count, last_seen FROM skill_patterns ORDER BY last_seen ASC') || []
     for (const row of rows) {
       let tools
       try { tools = JSON.parse(row.tools) } catch { tools = [row.signature] }
