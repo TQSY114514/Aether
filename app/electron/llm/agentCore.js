@@ -271,7 +271,7 @@ async function runAgent({
     const { orchestrate } = require('./orchestrator')
     if (db && featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(prompt, 0)) {
       const orc = await orchestrate({
-        db, request: String(prompt || ''), provider, model, signal, agentMode,
+        db, request: String(prompt || ''), provider, model, signal, agentMode, parentSessionId: sessionId,
         callbacks: {
           requestPermission,
           onToolCall: (entry) => { emit(entry); if (onToolCall) onToolCall(entry) },
