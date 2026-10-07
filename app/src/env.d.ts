@@ -339,6 +339,7 @@ interface Window {
         markdownReport: string
         error?: string
       }>
+      encryptionStatus: () => Promise<{ ok: boolean; available: boolean; error?: string }>
     }
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>

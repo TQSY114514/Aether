@@ -29,6 +29,11 @@ function taskDbAdapter(raw) {
       return { lastInsertRowid: Number(info.lastInsertRowid) }
     },
 
+    getSession(id) {
+      const row = raw.prepare('SELECT * FROM session WHERE id = ?').get(id)
+      return row ? { ...row, id: Number(row.id) } : null
+    },
+
     // Mirror database.js renameSession — no-op silently if id is null/undefined
     // (better-sqlite3 throws on undefined bind parameters).
     renameSession(id, title) {

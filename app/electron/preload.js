@@ -222,6 +222,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     registerFileAssociations: () => ipcRenderer.invoke('system:register-file-associations'),
     setTitleBarOverlay: (opts) => ipcRenderer.invoke('system:set-title-bar-overlay', opts),
     doctor: (opts) => ipcRenderer.invoke('system:doctor', opts),
+    encryptionStatus: () => ipcRenderer.invoke('system:encryption-status'),
     onSwitchSession: (cb) => subscribe('session:switch-requested', cb),
   },
   config: {
