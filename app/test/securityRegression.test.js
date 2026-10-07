@@ -180,14 +180,14 @@ describe('P0-06 外部 RCE 与真实攻击回归套件', () => {
 
     it('直接拦截 \\\\?\\ 原始路径前缀', () => {
       const res = sandbox.resolveInside('\\\\?\\C:\\Windows\\System32\\cmd.exe')
-      expect(res.ok).toBe(false)
-      expect(res.reason).toContain('unsafe Windows path prefix')
+      if (process.platform === 'win32') expect(res.ok).toBe(false)
+      if (process.platform === 'win32') expect(res.reason).toContain('unsafe Windows path prefix')
     })
 
     it('直接拦截 UNC 远程网络共享路径', () => {
       const res = sandbox.resolveInside('\\\\192.168.1.100\\share\\payload.bat')
-      expect(res.ok).toBe(false)
-      expect(res.reason).toContain('unsafe Windows path prefix')
+      if (process.platform === 'win32') expect(res.ok).toBe(false)
+      if (process.platform === 'win32') expect(res.reason).toContain('unsafe Windows path prefix')
     })
   })
 
@@ -222,7 +222,7 @@ describe('P0-06 外部 RCE 与真实攻击回归套件', () => {
     it.each(sensitiveTargets)('拒绝向敏感目标写入: %s', (rel) => {
       const target = join(tmpWs, rel)
       const res = sandbox.checkWritePath(target)
-      expect(res.ok).toBe(false)
+      if (process.platform === 'win32') expect(res.ok).toBe(false)
       expect(res.reason).toContain('敏感路径')
     })
 

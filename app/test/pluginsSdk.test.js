@@ -96,7 +96,7 @@ describe('registerSkill / registerAgent / registerProvider', () => {
 
 describe('loadPluginDir', () => {
   it('loads the fixture plugin and its registrations', () => {
-    const sdk = createPluginSDK({ db: null })
+    const sdk = createPluginSDK({ db: { getSetting: () => '1' } })
     const count = sdk.loadPluginDir(FIXTURES)
     expect(count).toBe(1)
     expect(sdk.listTools().map(t => t.name)).toContain('sample_greet')

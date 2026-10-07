@@ -59,6 +59,9 @@ function makeFakeDb() {
     },
     getAgentTask: (id) => agentTasks.get(id) || null,
     listAgentTasks: () => Array.from(agentTasks.values()),
+    // Live by default; a test flips `db._sessionExists` to model a deleted session.
+    getSession: (id) => (db._sessionExists === false ? null : { id: Number(id) }),
+    _sessionExists: true,
   }
 }
 
@@ -161,5 +164,96 @@ describe('backgroundTasks.dispatchPendingFollowUps', () => {
     const startedTotal = a.started + b.started
     expect(startedTotal).toBe(1)
     expect(runningCount()).toBe(1)
+  })
+
+  // ── lifecycle guards ──────────────────────────────────────────────────────
+
+  it('abandons deferred follow-ups when their session was deleted', async () => {
+    await fillSlots()
+    steering.followUp(SESSION_ID, 'should not run')
+    await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
+
+    // The session goes away while the follow-up is still waiting for a slot.
+    db.getSession = (id) => (id === SESSION_ID ? null : { id })
+
+    openDeferreds[0].resolve('done')
+    await until(() => runningCount() < CONCURRENCY_CAP, 4000, 'a slot to free')
+
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    // Nothing new was spawned for the deleted session.
+    expect(bt.listTasks(db).every(t => t.title !== '任务: should not run')).toBe(true)
+  })
+
+  it('retries a deferred follow-up after a task fails to resolve its model', async () => {
+    await fillSlots()
+    steering.followUp(SESSION_ID, 'runs after failure')
+    await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+    steering.followUp(SESSION_ID, 'runs after second failure')
+    await bt.dispatchPendingFollowUps(SESSION_ID)
+
+    // The first completed task frees a slot and starts the first follow-up.
+    // Make that follow-up fail model resolution before it enters runToolLoop;
+    // its early return must notifySlotFree so the second follow-up starts too.
+    const originalGetModel = db.getModel
+    db.getModel = (id) => {
+      // Fail model resolution specifically for the 'runs after failure' task.
+      // This forces the newly dispatched task into the early return path.
+      const tasks = bt.listTasks(db)
+      const isFailingTask = tasks.some(t => t.modelId === id && t.content === 'runs after failure' && t.status === 'running')
+      return isFailingTask ? null : originalGetModel(id)
+    }
+
+    openDeferreds[0].resolve('done')
+
+    await until(
+      () => steering.getPendingFollowUps(SESSION_ID).length === 0,
+      4000,
+      'follow-ups to start after failed model resolution'
+    )
+    db.getModel = originalGetModel
+  })
+
+  it('drains a follow-up that arrives mid-drain', async () => {
+    // A slot is free so the first drain starts immediately rather than deferring.
+    steering.followUp(SESSION_ID, 'first')
+
+    const drain = bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+    // Queued while the drain is awaiting startTask — absent from its snapshot.
+    steering.followUp(SESSION_ID, 'second')
+    await drain
+
+    // The drain must re-run for the late entry instead of stranding it with
+    // nothing left to retry it.
+    await vi.waitFor(() => {
+      expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(0)
+    })
+  })
+
+  it('keeps the follow-up queued when the adapter cannot answer the liveness question', async () => {
+    // Headless taskDbAdapter exposes no getSession at all. "Cannot tell" is
+    // neither alive nor dead — failing the user's follow-ups here would be a
+    // false negative during a transient lookup gap. Leave them queued.
+    delete db.getSession
+    steering.followUp(SESSION_ID, 'unverifiable parent')
+
+    const res = await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+
+    expect(res).toEqual({ started: 0, waiting: 1 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
+    expect(bt.listTasks(db)).toHaveLength(0)
+  })
+
+  it('keeps the follow-up queued when the liveness lookup throws', async () => {
+    // A throwing lookup is also "cannot tell" — fail closed would discard a
+    // live session's follow-ups during a transient DB error. Preserve them.
+    db.getSession = () => { throw new Error('db unavailable') }
+    steering.followUp(SESSION_ID, 'throwing lookup')
+
+    const res = await bt.dispatchPendingFollowUps(SESSION_ID, { db, modelId: 1 })
+
+    expect(res).toEqual({ started: 0, waiting: 1 })
+    expect(steering.getPendingFollowUps(SESSION_ID)).toHaveLength(1)
+    expect(bt.listTasks(db)).toHaveLength(0)
   })
 })

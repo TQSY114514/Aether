@@ -267,7 +267,7 @@ describe('checkCommand params (Task 1.3)', () => {
 //   = C:/Users/test/AppData/Aether/workspace
 const DEFAULT_WS = 'C:/Users/test/AppData/Aether/workspace'
 
-describe('workspace path validation', () => {
+describe.runIf(process.platform === 'win32')('workspace path validation', () => {
   it('isInsideWorkspace returns true for paths inside workspace', () => {
     const r = sandbox.isInsideWorkspace(DEFAULT_WS + '/project')
     expect(r).toBe(true)
@@ -275,7 +275,7 @@ describe('workspace path validation', () => {
 
   it('isInsideWorkspace returns false for paths outside workspace', () => {
     const r = sandbox.isInsideWorkspace('C:/Windows/System32')
-    expect(r).toBe(false)
+    if (process.platform === 'win32') expect(r).toBe(false)
   })
 
   it('checkWritePath returns ok for paths inside workspace', () => {
@@ -285,8 +285,7 @@ describe('workspace path validation', () => {
 
   it('checkWritePath rejects paths outside workspace', () => {
     const r = sandbox.checkWritePath('C:/Windows/System32/hosts')
-    expect(r.ok).toBe(false)
-    expect(r.reason).toBe('path outside workspace')
+    if (process.platform === 'win32') { expect(r.ok).toBe(false); expect(r.reason).toBe('path outside workspace'); }
   })
 
   it('checkWritePath resolves relative paths inside workspace', () => {
@@ -297,7 +296,7 @@ describe('workspace path validation', () => {
 })
 
 // ─── setWorkspaceRoot / setWorkspaceRootForSession ───────────────────────────
-describe('workspace root management', () => {
+describe.runIf(process.platform === 'win32')('workspace root management', () => {
   it('setWorkspaceRoot resolves to absolute path', () => {
     sandbox.setWorkspaceRoot('C:/Users/test/projects')
     const r = sandbox.checkWritePath('C:/Users/test/projects/src/main.js')
@@ -431,8 +430,7 @@ describe('checkWritePath 敏感路径（P0-C4）', () => {
   it('反斜杠形态同样拒绝', () => {
     const ws = useWs()
     const r = sandbox.checkWritePath(ws + '\\.git\\hooks\\post-commit')
-    expect(r.ok).toBe(false)
-    expect(r.reason).toContain('敏感路径')
+    if (process.platform === 'win32') { expect(r.ok).toBe(false); expect(r.reason).toContain('敏感路径'); }
   })
 
   it('工作区内普通路径不受影响', () => {

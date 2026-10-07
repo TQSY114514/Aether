@@ -10,7 +10,7 @@ describe('Aider-style Smart Commit Crafting', () => {
   })
 
   it('rejects craftCommitMessage on non-git directory', () => {
-    const res = craftCommitMessage('C:\\non_existent_folder_xyz_123')
+    const res = craftCommitMessage(process.platform === 'win32' ? 'C:\\non_existent_folder_xyz_123' : '/tmp/non_existent_folder_xyz_123')
     expect(res.success).toBe(false)
     expect(res.error).toBe('not a git repository')
   })

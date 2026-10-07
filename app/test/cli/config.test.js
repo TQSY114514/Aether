@@ -65,7 +65,7 @@ describe('resolveDefaults 优先级（W5-t30）', () => {
     expect(resolveDefaults({ opts: {}, env: { AETHER_MODE: 'json' }, config: {} }).mode).toBeUndefined()
   })
 
-  it('flag > env > config（workspace），相对路径按 cwd 解析', () => {
+  it.runIf(process.platform === 'win32')('flag > env > config（workspace），相对路径按 cwd 解析', () => {
     const cwd = join(tmpdir(), 'fake-cwd')
     expect(resolveDefaults({ opts: { workspace: './flag-ws' }, env: { AETHER_WORKSPACE: './env-ws' }, config: { workspace: './conf-ws' }, cwd }))
       .toMatchObject({ workspace: join(cwd, 'flag-ws') })

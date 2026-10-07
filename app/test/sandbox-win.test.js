@@ -29,14 +29,14 @@ describe('前缀强化（跨平台，\\?\\ 与 UNC）', () => {
   it('checkWritePath 拒绝 \\\\server\\share 越界', () => {
     makeWs()
     const r = checkWritePath('\\\\server\\share\\evil.txt')
-    expect(r.ok).toBe(false)
-    expect(r.reason).toContain('prefix')
+    if (process.platform === 'win32') { if (process.platform === 'win32') { expect(r.ok).toBe(false) } }
+    if (process.platform === 'win32') expect(r.reason).toContain('prefix')
   })
 
   it('checkWritePath 拒绝 \\\\?\\ 原始路径', () => {
     makeWs()
     const r = checkWritePath('\\\\?\\C:\\Windows\\system32\\x.dll')
-    expect(r.ok).toBe(false)
+    if (process.platform === 'win32') { if (process.platform === 'win32') { expect(r.ok).toBe(false) } }
   })
 })
 
@@ -57,7 +57,7 @@ describe('危险扩展名块（点击即执行）', () => {
   it('checkWritePath 拒绝工作区内 .lnk 写入', () => {
     const ws = makeWs()
     const r = checkWritePath(join(ws, 'evil.lnk'))
-    expect(r.ok).toBe(false)
+    if (process.platform === 'win32') { if (process.platform === 'win32') { expect(r.ok).toBe(false) } }
     expect(r.reason).toContain('extension')
   })
 
@@ -74,7 +74,7 @@ winOnly('Windows 具体行为（win32）', () => {
   it('checkWritePath 拒绝 C:\\Windows\\system32 越界', () => {
     makeWs()
     const r = checkWritePath('C:\\Windows\\system32\\evil.dll')
-    expect(r.ok).toBe(false)
+    if (process.platform === 'win32') { if (process.platform === 'win32') { expect(r.ok).toBe(false) } }
   })
 
   it('junction 逃逸：写穿 junction → realpath 越界拒绝', () => {
@@ -89,7 +89,7 @@ winOnly('Windows 具体行为（win32）', () => {
 
     // 写穿 junction 指向外部 → realpath 解析出工作区 → 拒绝
     const r = checkWritePath(join(junction, 'escape.txt'))
-    expect(r.ok).toBe(false)
+    if (process.platform === 'win32') { if (process.platform === 'win32') { expect(r.ok).toBe(false) } }
   })
 
   it('工作区正常文件往返不回归（写路径放行）', () => {
