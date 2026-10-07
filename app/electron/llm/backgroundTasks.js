@@ -772,6 +772,7 @@ function listTasks(db) {
     out.push({
       id: r.id,
       sessionId: r.session_id,
+      parentSessionId: r.parent_session_id ?? null,
       status: normalizeTaskStatus(r.status),
       title: r.title,
       content: r.content,
