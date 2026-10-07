@@ -31,7 +31,7 @@ const CATEGORY_TOOLS = {
   ],
   agent: [
     'delegate_task', 'run_agent', 'task',
-    'run_workflow', 'run_long_task', 'run_arena',
+    'run_workflow', 'run_arena',
     'debug_loop', 'test_first', 'review_code',
   ],
   memory: ['memory_save', 'memory_list', 'memory_search'],
