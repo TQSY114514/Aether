@@ -12,12 +12,18 @@ class IterationBudget { constructor(n) { this.n = n } }
 const mockedProviderAdapter = { completeChatMessage: vi.fn() }
 const mockedReasoning = { buildReasoningParams: () => ({}) }
 const mockedToolLoop = { runToolLoop, IterationBudget }
+const setWorkspaceRootForSession = vi.fn()
+const mockedSandbox = {
+  getWorkspaceRoot: vi.fn(() => 'C:\\AetherProject'),
+  setWorkspaceRootForSession,
+}
 
 const origLoad = Module._load
 Module._load = function (request, ...args) {
   if (request === './toolLoop' || request === '../electron/llm/toolLoop') return mockedToolLoop
   if (request === './providerAdapter' || request === '../electron/llm/providerAdapter') return mockedProviderAdapter
   if (request === './reasoning' || request === '../electron/llm/reasoning') return mockedReasoning
+  if (request === '../tools/sandbox' || request === './sandbox') return mockedSandbox
   return origLoad.apply(this, [request, ...args])
 }
 
@@ -35,7 +41,30 @@ beforeEach(async () => {
   vi.resetModules()
   runToolLoop.mockReset()
   runToolLoop.mockResolvedValue('final answer')
+  setWorkspaceRootForSession.mockReset()
+  mockedSandbox.getWorkspaceRoot.mockReset()
+  mockedSandbox.getWorkspaceRoot.mockReturnValue('C:\\AetherProject')
   subAgent = await import('../electron/llm/subAgent')
+})
+
+describe('runSubagent — workspace + hidden child session', () => {
+  it('inherits the parent workspace and marks the child as a subagent session', async () => {
+    let created = null
+    const db = {
+      createSession: (args) => { created = args; return { lastInsertRowid: 42 } },
+      addMessage: () => {},
+      deleteSession: () => {},
+    }
+    await subAgent.runSubagent({
+      db, parentSessionId: 7, provider: { id: 1 }, model: { model_name: 'test' }, prompt: 'inspect'
+    })
+    expect(created).toMatchObject({
+      parentSessionId: 7,
+      session_kind: 'subagent',
+      config: { workspace: 'C:\\AetherProject' },
+    })
+    expect(setWorkspaceRootForSession).toHaveBeenCalledWith(42, 'C:\\AetherProject')
+  })
 })
 
 describe('runSubagent — 权限继承', () => {
