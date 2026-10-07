@@ -19,7 +19,7 @@ const log = require('../logger')
 const strategyStore = require('./strategyStore')
 
 // 每 20 条轨迹触发一次反思；容量超限时下一条轨迹立即触发。
-const REFLECT_EVERY_N_TRACES = 20
+const REFLECT_EVERY_N_TRACES = 8
 const MAX_TRACE_LINES = 200
 
 function getTracesFile() { return path.join(strategyStore.getStoreDir(), 'traces.jsonl') }
@@ -170,12 +170,48 @@ function parseOps(text) {
 // ─── 主入口 ────────────────────────────────────────────────────────────────
 // provider/model 缺省时从设置读取上次会话使用的配置（由聊天链路回写）。
 async function resolveProvider(db, provider, model) {
-  if (provider && model) return { provider, model }
+  // Callers may pass fully resolved provider/model objects, but persisted
+  // settings contain only an id/name. Never feed those strings directly into
+  // providerAdapter: it expects api_url/api_key/api_format and model_name.
+  if (provider && model && typeof provider === 'object' && typeof model === 'object') {
+    return { provider, model }
+  }
   try {
-    const p = provider || (db.getSetting ? db.getSetting('llm.lastProvider') : null)
-    const m = model || (db.getSetting ? db.getSetting('llm.lastModel') : null)
-    if (p && m) return { provider: p, model: m }
-  } catch {}
+    const pRaw = provider || (db?.getSetting ? db.getSetting('llm.lastProvider') : null)
+    const mRaw = model || (db?.getSetting ? db.getSetting('llm.lastModel') : null)
+    if (!pRaw && !mRaw) return null
+
+    let resolvedProvider = (pRaw && typeof pRaw === 'object') ? pRaw : null
+    let resolvedModel = (mRaw && typeof mRaw === 'object') ? mRaw : null
+
+    // Prefer an explicit numeric provider id when available.
+    if (!resolvedProvider && pRaw != null && typeof db?.getProvider === 'function') {
+      const pid = Number(pRaw)
+      if (Number.isFinite(pid) && pid > 0) resolvedProvider = db.getProvider(pid)
+    }
+
+    // Resolve the model by id first, then by model_name.
+    if (!resolvedModel && mRaw != null && typeof db?.getModel === 'function') {
+      const mid = Number(mRaw)
+      if (Number.isFinite(mid) && mid > 0) resolvedModel = db.getModel(mid)
+    }
+    if (!resolvedModel && mRaw != null && typeof db?.prepare === 'function') {
+      resolvedModel = db.prepare(
+        'SELECT * FROM model WHERE model_name = ? ORDER BY is_primary DESC, fallback_order ASC, id ASC LIMIT 1'
+      ).get(String(mRaw)) || null
+    }
+
+    // If the model identifies a provider, that relation is more authoritative
+    // than a stale llm.lastProvider setting.
+    if (resolvedModel?.provider_id && typeof db?.getProvider === 'function') {
+      const modelProvider = db.getProvider(resolvedModel.provider_id)
+      if (modelProvider) resolvedProvider = modelProvider
+    }
+
+    if (resolvedProvider && resolvedModel) return { provider: resolvedProvider, model: resolvedModel }
+  } catch (e) {
+    log.debug('reflect.resolveProvider failed:', e?.message)
+  }
   return null
 }
 
@@ -210,7 +246,7 @@ async function _reflectInner(db, opts = {}) {
         { role: 'system', content: REFLECT_SYSTEM },
         { role: 'user', content: buildUserPrompt(entries, traces, st.needsMerge) },
       ],
-      options: { max_tokens: 500, temperature: 0.2 },
+      options: { max_tokens: 500, temperature: 0.2, db },
     })
   } catch (e) {
     log.warn('reflect: LLM call failed:', e && e.message)
