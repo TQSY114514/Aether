@@ -18,7 +18,7 @@ describe('evolution reflection provider resolution', () => {
       getSetting: (key) => key === 'llm.lastProvider' ? '7' : key === 'llm.lastModel' ? 'deepseek-test' : null,
       getProvider: (id) => id === 7 ? provider : null,
       getModel: () => null,
-      prepare: () => ({ get: () => null }),
+      prepare: () => ({ get: (name) => name === 'deepseek-test' ? model : null }),
     }
 
     const resolved = await mod.resolveProvider(db)
