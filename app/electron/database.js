@@ -199,6 +199,7 @@ function createEmptyDatabase(dbPath) {
   target.exec(`CREATE TABLE IF NOT EXISTS agent_task (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER,
+    parent_session_id INTEGER,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     model_id INTEGER,
@@ -596,6 +597,8 @@ function initDatabase() {
   addCol("session", "last_update", "DATETIME");
   addCol("session", "parent_session_id", "INTEGER");
   addCol("session", "session_kind", "TEXT NOT NULL DEFAULT 'chat'");
+  addCol("agent_task", "parent_session_id", "INTEGER");
+  try { target.prepare("UPDATE agent_task SET parent_session_id = session_id WHERE parent_session_id IS NULL AND session_id IS NOT NULL").run() } catch {}
   // Migrate pre-2.0 internal child sessions out of the normal chat list.
   try {
     target.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
@@ -1189,6 +1192,7 @@ function importSettings(settingsObj) {
 // ===== Agent Task CRUD (persistent background tasks) =====
 function createAgentTask({
   session_id = null,
+  parent_session_id = null,
   title,
   content,
   model_id = null,
@@ -1198,9 +1202,9 @@ function createAgentTask({
 }) {
   const info = db
     .prepare(
-      "INSERT INTO agent_task (session_id, title, content, model_id, agent_mode, priority, max_retry) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO agent_task (session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .run(session_id, title, content, model_id, agent_mode, priority, max_retry);
+    .run(session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry);
   return Number(info.lastInsertRowid);
 }
 function getAgentTask(id) {
