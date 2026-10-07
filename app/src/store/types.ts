@@ -52,6 +52,7 @@ export type TaskStatus = 'queued' | 'running' | 'plan' | 'paused' | 'done' | 'ca
 export interface TaskInfo {
   id: number
   sessionId: number
+  parentSessionId?: number | null
   status: TaskStatus
   title: string
   createdAt: number
@@ -98,6 +99,7 @@ export function mergeTask(prev: TaskInfo, patch: Partial<TaskInfo>): TaskInfo {
   return {
     id: prev.id,
     sessionId: patch.sessionId ?? prev.sessionId,
+    parentSessionId: patch.parentSessionId !== undefined ? patch.parentSessionId : prev.parentSessionId ?? null,
     status: patch.status ?? prev.status,
     title: patch.title ?? prev.title,
     createdAt: patch.createdAt ?? prev.createdAt,
@@ -111,6 +113,7 @@ export function newTask(patch: Partial<TaskInfo> & { id: number }): TaskInfo {
   return {
     id: patch.id,
     sessionId: patch.sessionId ?? 0,
+    parentSessionId: patch.parentSessionId ?? null,
     status: patch.status ?? 'running',
     title: patch.title ?? '',
     createdAt: patch.createdAt ?? Date.now(),
