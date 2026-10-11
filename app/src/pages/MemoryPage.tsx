@@ -20,7 +20,8 @@ const ORIGIN_META: Record<string, { label: string; color: string }> = {
 }
 
 export default function MemoryPage() {
-  const [activeTab, setActiveTab] = useState<'memories' | 'strategies'>('memories')
+  const activeTab = useStore((s) => s.memoryActiveTab)
+  const setActiveTab = useStore((s) => s.setMemoryActiveTab)
   const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string; workspace?: string | null }[]>([])
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState('fact')
@@ -256,7 +257,7 @@ export default function MemoryPage() {
               activeTab === 'memories' ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-xs' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            知识记忆
+            {t('memory.tabs.memories', '知识记忆')}
           </button>
           <button
             type="button"
@@ -265,7 +266,7 @@ export default function MemoryPage() {
               activeTab === 'strategies' ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-xs' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            自进化策略 (STRATEGY.md)
+            {t('memory.tabs.strategies', '自进化策略 (STRATEGY.md)')}
           </button>
         </div>
 

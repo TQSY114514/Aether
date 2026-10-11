@@ -69,6 +69,12 @@ function taskDbAdapter(raw) {
       del(id)
     },
 
+    reassignCheckpoints(fromSessionId, toSessionId) {
+      if (fromSessionId == null || toSessionId == null) return
+      try { raw.prepare('UPDATE agent_checkpoint SET session_id = ? WHERE session_id = ?').run(toSessionId, fromSessionId) } catch {}
+      try { raw.prepare('UPDATE agent_turn_checkpoint SET session_id = ? WHERE session_id = ?').run(toSessionId, fromSessionId) } catch {}
+    },
+
     // ── Message ────────────────────────────────────────────────────────────
     addMessage({ session_id, role, content, model_used = null, provider_used = null }) {
       const info = raw.prepare('INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model) VALUES (?, ?, ?, ?, ?, NULL, NULL, \'success\', NULL, NULL)')

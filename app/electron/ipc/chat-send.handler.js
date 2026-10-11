@@ -467,31 +467,16 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
         const mergeFileSummary = (incoming) => {
           if (!incoming || !Array.isArray(incoming.files)) return
-          if (!turnFileSummary) {
-            turnFileSummary = {
-              totalAdded: incoming.totalAdded || 0,
-              totalRemoved: incoming.totalRemoved || 0,
-              fileCount: incoming.files.length,
-              files: [...incoming.files],
-            }
-            return
-          }
           const fileMap = new Map()
-          for (const f of (turnFileSummary.files || [])) {
-            if (f && f.path) fileMap.set(f.path, { ...f })
+          if (turnFileSummary?.files) {
+            for (const f of turnFileSummary.files) {
+              if (f && f.path) fileMap.set(f.path, { ...f })
+            }
           }
           for (const f of incoming.files) {
             if (!f || !f.path) continue
-            if (fileMap.has(f.path)) {
-              const existing = fileMap.get(f.path)
-              existing.added = (existing.added || 0) + (f.added || 0)
-              existing.removed = (existing.removed || 0) + (f.removed || 0)
-              if (f.status === 'deleted') existing.status = 'deleted'
-              else if (f.status) existing.status = f.status
-              if (f.diff) existing.diff = f.diff
-            } else {
-              fileMap.set(f.path, { ...f })
-            }
+            // Overwrite with the latest snapshot for this file
+            fileMap.set(f.path, { ...f })
           }
           const mergedFiles = Array.from(fileMap.values())
           turnFileSummary = {

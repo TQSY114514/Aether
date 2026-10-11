@@ -27,30 +27,38 @@ export default function ThinkingBlock({
   const [elapsed, setElapsed] = useState<number>(0)
   const [duration, setDuration] = useState<number | null>(null)
 
-  const contentRef = useRef<HTMLPreElement>(null)
+  const contentRef = useRef<HTMLPreElement | null>(null)
   const followingRef = useRef<boolean>(true)
+  const prevStreamingRef = useRef<boolean>(streaming)
 
-  // Auto-expand on streaming start
+  // Auto-expand on streaming start, auto-collapse on streaming finish if initialCollapsed
   useEffect(() => {
     if (streaming) {
       setOpen(true)
-    }
-  }, [streaming])
-
-  // Live timer during streaming
-  useEffect(() => {
-    if (!streaming) {
-      if (elapsed > 0 && duration === null) {
-        setDuration(elapsed)
+    } else if (prevStreamingRef.current && !streaming) {
+      if (initialCollapsed) {
+        setOpen(false)
       }
-      return
     }
+    prevStreamingRef.current = streaming
+  }, [streaming, initialCollapsed])
+
+  // Live timer during streaming: only recreate when streaming state or startTime changes
+  useEffect(() => {
+    if (!streaming) return
     const interval = setInterval(() => {
       const sec = (Date.now() - startTime) / 1000
       setElapsed(sec)
     }, 100)
     return () => clearInterval(interval)
-  }, [streaming, startTime, elapsed, duration])
+  }, [streaming, startTime])
+
+  // Record duration upon stream completion
+  useEffect(() => {
+    if (!streaming && elapsed > 0 && duration === null) {
+      setDuration(elapsed)
+    }
+  }, [streaming, elapsed, duration])
 
   // Smart follow scroll: track if user manually scrolled up
   const handleScroll = useCallback(() => {

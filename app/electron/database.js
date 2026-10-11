@@ -1764,6 +1764,14 @@ function addAgentCheckpoint({
     );
   return { lastInsertRowid: Number(info.lastInsertRowid) };
 }
+function reassignCheckpoints(fromSessionId, toSessionId) {
+  try {
+    db.prepare("UPDATE agent_checkpoint SET session_id = ? WHERE session_id = ?").run(toSessionId, fromSessionId);
+  } catch {}
+  try {
+    db.prepare("UPDATE agent_turn_checkpoint SET session_id = ? WHERE session_id = ?").run(toSessionId, fromSessionId);
+  } catch {}
+}
 function getAgentCheckpoint(id) {
   const row = db.prepare("SELECT * FROM agent_checkpoint WHERE id = ?").get(id);
   if (!row) return null;
@@ -2386,6 +2394,7 @@ module.exports = {
   deleteCheckpoints,
   deleteCheckpoint,
   addAgentCheckpoint,
+  reassignCheckpoints,
   getAgentCheckpoint,
   markAgentCheckpointRolledBack,
   listAgentCheckpoints,

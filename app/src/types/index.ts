@@ -71,7 +71,7 @@ export interface Message {
   file_summary?: string | null
 }
 
-export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning' | 'skills' | 'evolution' | 'learningStatus' | 'security'
+export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning' | 'skills' | 'learningStatus' | 'security'
 
 export interface TestConnectionResult {
   success: boolean

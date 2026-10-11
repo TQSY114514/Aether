@@ -18,6 +18,16 @@ function formatPath(fullPath: string) {
   return { dir, fileName }
 }
 
+function cleanDiffLines(rawDiff: string): string[] {
+  if (!rawDiff) return []
+  const lines = rawDiff.split('\n')
+  const firstHunkIndex = lines.findIndex(l => l.startsWith('@@'))
+  if (firstHunkIndex === -1) {
+    return lines.filter(l => !l.startsWith('diff --git') && !l.startsWith('index '))
+  }
+  return lines.slice(firstHunkIndex)
+}
+
 export default function FileSummaryDeck({ summary, sessionId, messageId }: FileSummaryDeckProps) {
   const { confirm } = useUI()
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({})
@@ -488,7 +498,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
                   }}
                 >
                   <pre className="whitespace-pre">
-                    {file.diff.split('\n').filter((l: string) => !l.startsWith('diff --git') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ ')).map((line: string, idx: number) => {
+                    {cleanDiffLines(file.diff).map((line: string, idx: number) => {
                       if (line.startsWith('+')) {
                         return (
                           <div key={idx} className="border-l-2 border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 whitespace-pre">
@@ -559,7 +569,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
             </div>
             <div className="flex-1 overflow-auto p-4 font-mono text-[11px] leading-relaxed" style={{ backgroundColor: 'var(--bg-secondary)' }}>
               <pre className="whitespace-pre">
-                {(modalDiffFile.diff || '').split('\n').filter((l: string) => !l.startsWith('diff --git') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ ')).map((line: string, idx: number) => {
+                {cleanDiffLines(modalDiffFile.diff || '').map((line: string, idx: number) => {
                   if (line.startsWith('+')) {
                     return (
                       <div key={idx} className="border-l-2 border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 whitespace-pre">

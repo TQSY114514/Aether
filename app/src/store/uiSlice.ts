@@ -5,6 +5,7 @@ import log from "@/utils/logger"
 
 export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = (set, get) => ({
   currentView: "chat",
+  memoryActiveTab: 'memories',
   sidebarOpen: true,
   completionToasts: [],
   activeHints: [],
@@ -16,6 +17,7 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
   toasts: [],
 
   setCurrentView: (view) => set({ currentView: view }),
+  setMemoryActiveTab: (tab) => set({ memoryActiveTab: tab }),
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 

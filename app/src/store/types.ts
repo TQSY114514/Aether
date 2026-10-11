@@ -165,6 +165,8 @@ export interface AppState {
   // Navigation
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
+  memoryActiveTab: 'memories' | 'strategies'
+  setMemoryActiveTab: (tab: 'memories' | 'strategies') => void
   newChat: () => Promise<number | null>
   // Chat mode
   sessions: Session[]

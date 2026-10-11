@@ -7,6 +7,7 @@ const fs = require('fs')
 function createTurnFileTracker(wsRoot) {
   const files = new Map() // absPath -> { absPath, path: relPath, initialExisted: boolean, initialContent: string|null, finalContent: string|null }
   let commandRan = false
+  const turnStartTime = Date.now() - 1000
 
   function resolvePath(args) {
     const raw = args?.path || args?.targetPath || args?.filePath || args?.file
@@ -60,6 +61,7 @@ function createTurnFileTracker(wsRoot) {
     getSummary() {
       const summary = []
       const { buildUnifiedDiff } = require('../tools/toolImpact')
+
       for (const [absPath, record] of files.entries()) {
         try {
           if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
@@ -78,20 +80,20 @@ function createTurnFileTracker(wsRoot) {
 
         if (!initialExisted && finalContent !== null) {
           status = 'created'
-          const lines = finalContent.split('\n')
+          const lines = finalContent.length === 0 ? [] : finalContent.replace(/\r?\n$/, '').split('\n')
           added = lines.length
           diff = lines.map(l => '+' + l).join('\n')
         } else if (initialExisted && finalContent === null) {
           status = 'deleted'
-          const lines = (initialContent || '').split('\n')
+          const lines = (initialContent || '').length === 0 ? [] : (initialContent || '').replace(/\r?\n$/, '').split('\n')
           removed = lines.length
           diff = lines.map(l => '-' + l).join('\n')
         } else if (initialContent !== null && finalContent !== null) {
           status = 'modified'
           diff = buildUnifiedDiff(initialContent.split('\n'), finalContent.split('\n'))
           for (const line of diff.split('\n')) {
-            if (line.startsWith('+') && !line.startsWith('+++')) added++
-            else if (line.startsWith('-') && !line.startsWith('---')) removed++
+            if (line.startsWith('+')) added++
+            else if (line.startsWith('-')) removed++
           }
         }
 
@@ -109,16 +111,28 @@ function createTurnFileTracker(wsRoot) {
       if (commandRan && wsRoot) {
         try {
           const { runCommandSync } = require('../tools/exec')
-          const st = runCommandSync('git', ['status', '--porcelain', '-uall'], { cwd: wsRoot })
+          const st = runCommandSync('git', ['status', '--porcelain', '-z', '-uall'], { cwd: wsRoot })
           if (st.exitCode === 0 && st.stdout) {
-            const lines = st.stdout.split('\n').filter(Boolean)
-            for (const line of lines) {
-              const m = line.match(/^.{2}\s+(.+)$/)
-              if (!m) continue
-              const relRaw = m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()
+            const entries = st.stdout.split('\0').filter(Boolean)
+            for (let i = 0; i < entries.length; i++) {
+              const entry = entries[i]
+              if (entry.length < 3) continue
+              const code = entry.slice(0, 2).trim()
+              let relRaw = entry.slice(3)
+              // If renamed or copied, next token is destination
+              if (code.includes('R') || code.includes('C')) {
+                i++
+                if (i < entries.length) relRaw = entries[i]
+              }
               const absPath = path.resolve(wsRoot, relRaw)
               if (!files.has(absPath)) {
-                const code = line.slice(0, 2).trim()
+                try {
+                  const stat = fs.existsSync(absPath) ? fs.statSync(absPath) : null
+                  if (stat && stat.mtimeMs < turnStartTime) {
+                    continue // Skip files untouched in this turn
+                  }
+                } catch {}
+
                 let status = 'modified'
                 if (code === '??' || code === 'A') status = 'created'
                 else if (code === 'D') status = 'deleted'
@@ -129,15 +143,18 @@ function createTurnFileTracker(wsRoot) {
                 const diffRes = runCommandSync('git', ['diff', 'HEAD', '--', relRaw], { cwd: wsRoot })
                 if (diffRes.exitCode === 0 && diffRes.stdout) {
                   diff = diffRes.stdout
+                  let inHunk = false
                   for (const dl of diff.split('\n')) {
-                    if (dl.startsWith('+') && !dl.startsWith('+++')) added++
-                    else if (dl.startsWith('-') && !dl.startsWith('---')) removed++
+                    if (dl.startsWith('@@')) { inHunk = true; continue }
+                    if (!inHunk) continue
+                    if (dl.startsWith('+')) added++
+                    else if (dl.startsWith('-')) removed++
                   }
                 } else if (status === 'created') {
                   try {
                     if (fs.existsSync(absPath)) {
                       const c = fs.readFileSync(absPath, 'utf8')
-                      const clines = c.split('\n')
+                      const clines = c.length === 0 ? [] : c.replace(/\r?\n$/, '').split('\n')
                       added = clines.length
                       diff = clines.map(l => '+' + l).join('\n')
                     }

@@ -32,11 +32,7 @@ function registerLearningHandlers(ipcMain, db) {
     try {
       const s = require('../evolution/strategyStore')
       evolution = num(s.stats()?.count || 0)
-    } catch {
-      try {
-        evolution = num(db.prepare('SELECT COUNT(*) AS c FROM evolution_events').get()?.c)
-      } catch {}
-    }
+    } catch {}
 
     // 4. 习惯(agent 学到的用户偏好 / standing instructions)
     const habits = { total: 0, recent: [] }

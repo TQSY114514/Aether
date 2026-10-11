@@ -8,21 +8,30 @@ export interface StreamingStatusBarProps {
 
 export default function StreamingStatusBar({ sessionId }: StreamingStatusBarProps) {
   const statusLines = useStore((s) => s.statusLinesByMessage)
+  const streamingBySession = useStore((s) => s.streamingBySession)
   const turnUsage = useStore((s) => (sessionId ? s.turnUsageBySession[sessionId] : null))
   const cumUsage = useStore((s) => (sessionId ? s.usageBySession[sessionId] : null))
   const [status, setStatus] = useState('')
   const [stopped, setStopped] = useState(false)
 
   useEffect(() => {
-    if (!sessionId) return
-    let latest = ''
-    for (const [, lines] of Object.entries(statusLines)) {
-      if (lines.length > 0 && lines[lines.length - 1].length > latest.length) {
-        latest = lines[lines.length - 1]
-      }
+    if (!sessionId) {
+      setStatus('')
+      return
     }
-    setStatus(latest)
-  }, [statusLines, sessionId])
+    const currentStream = streamingBySession[sessionId]
+    const msgId = currentStream?.messageId
+    if (!msgId) {
+      setStatus('')
+      return
+    }
+    const lines = statusLines[msgId]
+    if (lines && lines.length > 0) {
+      setStatus(lines[lines.length - 1])
+    } else {
+      setStatus('')
+    }
+  }, [statusLines, sessionId, streamingBySession])
 
   // Listen for stop generation event
   useEffect(() => {

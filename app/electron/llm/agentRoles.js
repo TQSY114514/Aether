@@ -36,7 +36,7 @@ RULES:
 - Be thorough: check multiple locations before reporting "not found"
 - Report exact file paths and line numbers
 - If something is ambiguous, list all possibilities`,
-    defaultMode: 'auto',
+    defaultMode: 'plan',
     allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
   },
   build: {
@@ -80,7 +80,7 @@ RULES:
 - Cite specific file paths and line numbers
 - Prioritize findings: Critical > High > Medium > Low
 - For each issue, explain the impact and suggest a fix`,
-    defaultMode: 'auto',
+    defaultMode: 'plan',
     allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
   },
   research: {
@@ -101,7 +101,7 @@ RULES:
 - Don't read local files unless the parent agent specifically asks
 - Provide URLs and sources for all findings
 - If you can't find a definitive answer, say so and explain what you tried`,
-    defaultMode: 'auto',
+    defaultMode: 'plan',
     allowTools: ['web_search', 'web_fetch'],
   },
   debug: {
@@ -123,7 +123,7 @@ RULES:
 - Read the actual code — don't guess based on error messages alone
 - Check edge cases and error handling
 - If the fix isn't obvious, explain what you've ruled out`,
-    defaultMode: 'auto',
+    defaultMode: 'plan',
     allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'run_command'],
   },
 }

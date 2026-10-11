@@ -41,7 +41,11 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   // A message is "streaming" when it's the last message (assistant, empty content)
   // and the session has an active stream buffer.
   const streamingBySession = useStore(s => s.streamingBySession)
-  const isStreaming = !isUser && message.content === '' && streamingBySession[message.session_id]
+  const sessionStream = streamingBySession[message.session_id]
+  const isStreaming = !isUser && message.content === '' && sessionStream
+  const isAnswerStreaming = Boolean(sessionStream && sessionStream.content && sessionStream.content.length > 0)
+  const hasActiveTool = Boolean(toolCalls && toolCalls.some(t => t.result === null && !t.error))
+  const isThinkingStreaming = Boolean(isStreaming && !isAnswerStreaming && !hasActiveTool)
   const isError = message.status === 'error'
   const isFallback = message.status === 'fallback'
   const isAborted = message.status === 'aborted'
@@ -232,7 +236,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             {(thinkingBlocks || (toolCalls && toolCalls.length > 0) || (planSteps && planSteps.length > 0)) && (
               <AgentTimeline
                 thinkingText={thinkingBlocks || undefined}
-                thinkingStreaming={Boolean(isStreaming)}
+                thinkingStreaming={isThinkingStreaming}
                 toolCalls={toolCalls && toolCalls.length > 0 ? toolCalls : undefined}
                 planSteps={planSteps || undefined}
               />

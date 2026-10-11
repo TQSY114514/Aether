@@ -165,6 +165,17 @@ async function _runSubagent({
 
   // Cleanup policy
   if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && !hasError && finalContent && !finalContent.startsWith('['))) {
+    // Reassign child checkpoints to parent session so rollback records are never lost
+    if (parentSessionId) {
+      try {
+        if (typeof db.reassignCheckpoints === 'function') {
+          db.reassignCheckpoints(childSessionId, parentSessionId)
+        } else if (db.db && typeof db.db.prepare === 'function') {
+          db.db.prepare('UPDATE agent_checkpoint SET session_id = ? WHERE session_id = ?').run(parentSessionId, childSessionId)
+          db.db.prepare('UPDATE agent_turn_checkpoint SET session_id = ? WHERE session_id = ?').run(parentSessionId, childSessionId)
+        }
+      } catch {}
+    }
     try { db.deleteSession(childSessionId) } catch {}
   }
 

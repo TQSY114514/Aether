@@ -93,7 +93,14 @@ export default function LearningStatusPage() {
             {cards.map((c) => (
               <button
                 key={c.key}
-                onClick={() => setCurrentView(c.view)}
+                onClick={() => {
+                  if (c.key === 'evolution') {
+                    useStore.getState().setMemoryActiveTab('strategies')
+                  } else if (c.view === 'memory') {
+                    useStore.getState().setMemoryActiveTab('memories')
+                  }
+                  setCurrentView(c.view)
+                }}
                 className="group text-left rounded-lg border p-4 transition-colors hover:bg-[var(--bg-secondary)]"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
               >

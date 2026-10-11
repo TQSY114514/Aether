@@ -493,6 +493,10 @@ const TOOLS = [
     const tasks = Array.isArray(args.tasks) ? args.tasks.filter(Boolean) : []
     if (!tasks.length) throw new Error('tasks must be non-empty')
     const SA = require('../llm/subAgent')
+    // Isolate callbacks: subagent tokens must not pollute parent chat's onStreamDelta
+    const subCallbacks = ctx.callbacks ? { ...ctx.callbacks } : (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {})
+    delete subCallbacks.onStreamDelta
+
     const shared = {
       db: ctx.db,
       provider: ctx.provider,
@@ -502,7 +506,7 @@ const TOOLS = [
       agentMode: ctx.agentMode === 'plan' ? 'plan' : 'auto',
       parentSessionId: ctx.sessionId,
       onSubagentEvent: ctx.onSubagentEvent,
-      callbacks: ctx.callbacks || (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {}),
+      callbacks: subCallbacks,
     }
     let results
     try {
@@ -534,6 +538,8 @@ const TOOLS = [
     const allowedTools = roles.buildToolFilter(args.role)
     const maxIterations = Math.max(1, Math.min(50, Number(args.maxIterations) || 15))
     try {
+      const agentCallbacks = ctx.callbacks ? { ...ctx.callbacks } : (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {})
+      delete agentCallbacks.onStreamDelta
       const o = await SA.runSubagent({
         db: ctx.db,
         parentSessionId: ctx.sessionId,
@@ -542,7 +548,7 @@ const TOOLS = [
         prompt: mp,
         signal: ctx.signal,
         agentMode: roles.getRoleDefaultMode(args.role),
-        callbacks: ctx.callbacks || (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {}),
+        callbacks: agentCallbacks,
         config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'delete' },
       })
       return o.content || '(no content)'

@@ -42,11 +42,11 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
         {open ? <ChevronDown size={12} style={{ color: accentColor }} /> : <ChevronRight size={12} style={{ color: accentColor }} />}
         <Bot size={13} style={{ color: accentColor }} />
         <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-          {isAllDone ? t('chat.subagent_completed') || '子任务执行完毕' : t('chat.subagent_running') || '子任务协同执行中'}
+          {isAllDone ? t('chat.subagent_completed', '子任务执行完毕') : t('chat.subagent_running', '子任务协同执行中')}
         </span>
         <span
           className="text-[10px] px-1.5 py-0.2 rounded-full tabular-nums shrink-0"
-          style={{ backgroundColor: accentColor, color: '#fff' }}
+          style={{ backgroundColor: accentColor, color: 'var(--accent-contrast, #ffffff)' }}
         >
           {completed}/{total}
         </span>
@@ -95,7 +95,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                       onClick={() => setExpandedIndex(isOutputExpanded ? null : idx)}
                       className="text-[10px] text-[var(--accent)] hover:underline flex items-center gap-1 mt-0.5"
                     >
-                      {isOutputExpanded ? '收起详情' : '查看执行结果'}
+                      {isOutputExpanded ? t('chat.subagent_hide_output', '收起详情') : t('chat.subagent_view_output', '查看执行结果')}
                     </button>
                     {isOutputExpanded && (
                       <div className="mt-1 p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border)] text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap max-h-48 overflow-y-auto font-mono">

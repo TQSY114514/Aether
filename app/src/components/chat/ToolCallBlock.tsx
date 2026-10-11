@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal, Sparkles, Copy, Folder, HelpCircle } from 'lucide-react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
@@ -96,6 +96,29 @@ function toolLabel(tool: ToolCall): string {
   }
 }
 
+function cleanDiffLines(rawDiff: string): string[] {
+  if (!rawDiff) return []
+  const lines = rawDiff.split('\n')
+  const firstHunkIndex = lines.findIndex(l => l.startsWith('@@'))
+  if (firstHunkIndex === -1) {
+    return lines.filter(l => !l.startsWith('diff --git') && !l.startsWith('index '))
+  }
+  return lines.slice(firstHunkIndex)
+}
+
+function countDiffLines(diffStr: string): { added: number; removed: number } {
+  if (!diffStr) return { added: 0, removed: 0 }
+  const clean = cleanDiffLines(diffStr)
+  let added = 0
+  let removed = 0
+  for (const line of clean) {
+    if (line.startsWith('@@')) continue
+    if (line.startsWith('+')) added++
+    else if (line.startsWith('-')) removed++
+  }
+  return { added, removed }
+}
+
 function argsCount(args: unknown): number {
   return (args && typeof args === 'object' && !Array.isArray(args) ? Object.keys(args as Record<string, unknown>).length : 0)
 }
@@ -184,8 +207,9 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   }
   const hasArgs = argsCount(tool.args) > 0
   const failureKey = tool.failureKind && FAILURE_LABELS[tool.failureKind] ? FAILURE_LABELS[tool.failureKind] : null
-  const diffAdded = tool.added ?? (tool.diff ? tool.diff.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++')).length : 0)
-  const diffRemoved = tool.removed ?? (tool.diff ? tool.diff.split('\n').filter(l => l.startsWith('-') && !l.startsWith('---')).length : 0)
+  const fallbackDiffCounts = useMemo(() => countDiffLines(tool.diff || ''), [tool.diff])
+  const diffAdded = tool.added ?? fallbackDiffCounts.added
+  const diffRemoved = tool.removed ?? fallbackDiffCounts.removed
 
   return (
     <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -426,22 +450,19 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
 function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
   const [showFull, setShowFull] = useState(false)
-  const allLines = diff.split('\n')
-  // Strip machine noise headers up to actual hunks
-  const cleanLines = allLines.filter(l => !l.startsWith('diff --git') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ '))
+  const cleanLines = useMemo(() => cleanDiffLines(diff), [diff])
   const maxShow = 60
   const isTruncated = cleanLines.length > maxShow
   const displayLines = showFull || !isTruncated ? cleanLines : cleanLines.slice(0, maxShow)
 
-  const addedCount = allLines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length
-  const removedCount = allLines.filter(l => l.startsWith('-') && !l.startsWith('---')).length
+  const { added: addedCount, removed: removedCount } = useMemo(() => countDiffLines(diff), [diff])
 
   return (
     <div className="rounded-[4px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
         <FileDiff size={12} style={{ color: 'var(--accent)' }} />
         <span className="text-[11px] font-medium" style={{ color: 'var(--text-primary)' }}>
-          {toolName === 'write_file' ? t('tool.write_file', '写入文件') : toolName === 'apply_patch' ? '补丁变更' : t('tool.edit_file', '编辑变更')}
+          {toolName === 'write_file' ? t('tool.write_file', '写入文件') : toolName === 'apply_patch' ? t('tool.apply_patch', '补丁变更') : t('tool.edit_file', '编辑变更')}
         </span>
         <div className="text-[10px] ml-auto font-mono flex items-center gap-1">
           {addedCount > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{addedCount}</span>}
@@ -450,7 +471,7 @@ function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
       </div>
       <div className="overflow-x-auto max-h-60 overflow-y-auto p-1 leading-relaxed" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <pre className="font-mono text-[11px]">
-          {displayLines.map((line, i) => {
+          {displayLines.map((line: string, i: number) => {
             if (line.startsWith('+')) {
               return (
                 <div key={i} className="border-l-2 border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 whitespace-pre">
