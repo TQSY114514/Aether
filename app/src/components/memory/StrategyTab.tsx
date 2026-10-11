@@ -26,9 +26,9 @@ export default function StrategyTab() {
     setReflecting(true)
     try {
       const r = await window.electronAPI.evolution.strategy.reflectNow()
-      if (r?.ok) toast(t('evolution.strategyLib.done', '反思完成，策略库已更新'), { type: 'success' })
-      else if (r?.reason === 'no-provider') toast(t('evolution.strategyLib.noProvider', '请先配置默认 Provider 与 Model'), { type: 'info' })
-      else if (r) toast(String(r?.error || r?.reason || t('evolution.strategyLib.no_new_strategies', '反思未产生新策略')), { type: 'info' })
+      if (r?.ok) toast(t('evolution.strategyLib.done'), { type: 'success' })
+      else if (r?.reason === 'no-provider') toast(t('evolution.strategyLib.noProvider'), { type: 'info' })
+      else if (r) toast(String(r?.error || r?.reason || t('evolution.strategyLib.no_new_strategies')), { type: 'info' })
     } catch (e: any) {
       toast(String(e?.message || e), { type: 'error' })
     } finally {
@@ -42,9 +42,12 @@ export default function StrategyTab() {
     if (!text) return
     window.electronAPI.evolution.strategy.add(text).then(r => {
       if (r?.ok) setNewEntry('')
-      else if (r?.reason === 'duplicate') toast(t('evolution.strategyLib.duplicate', '该策略已存在'), { type: 'info' })
+      else if (r?.reason === 'duplicate') toast(t('evolution.strategyLib.duplicate'), { type: 'info' })
+      else toast(t('evolution.strategyLib.add_failed', r?.reason || 'error'), { type: 'error' })
       loadStrategies()
-    }).catch(() => {})
+    }).catch((err) => {
+      toast(t('evolution.strategyLib.add_failed', err?.message || 'IPC error'), { type: 'error' })
+    })
   }
 
   const toggleAutoEvolution = async () => {
@@ -52,7 +55,8 @@ export default function StrategyTab() {
     try {
       const next = !selfEvolutionEnabled
       const ok = await setFeatureFlag('skills.selfEvolution', next)
-      if (ok) toast(next ? t('evolution.strategyLib.toast_enabled', '自进化轨迹反思已开启') : t('evolution.strategyLib.toast_paused', '自进化轨迹反思已暂停'), { type: 'info' })
+      if (ok) toast(next ? t('evolution.strategyLib.toast_enabled') : t('evolution.strategyLib.toast_paused'), { type: 'info' })
+      else toast(t('evolution.strategyLib.toggle_failed'), { type: 'error' })
     } finally {
       setToggling(false)
     }
@@ -77,7 +81,7 @@ export default function StrategyTab() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {selfEvolutionEnabled ? t('evolution.strategyLib.status_ready', '会话轨迹自进化反思已就绪') : t('evolution.strategyLib.status_paused', '自进化轨迹反思已暂停')}
+                  {selfEvolutionEnabled ? t('evolution.strategyLib.status_ready') : t('evolution.strategyLib.status_paused')}
                 </span>
                 <span
                   className={`text-[10px] font-mono px-2 py-0.2 rounded border ${
@@ -86,13 +90,13 @@ export default function StrategyTab() {
                       : 'border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
                   }`}
                 >
-                  {selfEvolutionEnabled ? t('evolution.strategyLib.badge_running', '自动运行中') : t('evolution.strategyLib.badge_paused', '已暂停')}
+                  {selfEvolutionEnabled ? t('evolution.strategyLib.badge_running') : t('evolution.strategyLib.badge_paused')}
                 </span>
               </div>
               <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                 {selfEvolutionEnabled
-                  ? t('evolution.strategyLib.desc_enabled', 'Agent 在会话中调用工具时会自动提炼高效经验与避坑策略，并同步至 STRATEGY.md 注入所有新会话。')
-                  : t('evolution.strategyLib.desc_disabled', '开启后，Agent 会根据真实执行成功与失败轨迹，提炼通用策略规则。')}
+                  ? t('evolution.strategyLib.desc_enabled')
+                  : t('evolution.strategyLib.desc_disabled')}
               </p>
             </div>
           </div>
@@ -104,16 +108,16 @@ export default function StrategyTab() {
             className="text-xs px-3 py-1.5 rounded-md border shrink-0 transition-colors hover:bg-[var(--bg-primary)] disabled:opacity-50 cursor-pointer"
             style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           >
-            {selfEvolutionEnabled ? t('evolution.strategyLib.btn_pause', '暂停自进化') : t('evolution.strategyLib.btn_enable', '启用自进化')}
+            {selfEvolutionEnabled ? t('evolution.strategyLib.btn_pause') : t('evolution.strategyLib.btn_enable')}
           </button>
         </div>
 
         <div className="flex items-center gap-4 mt-3 pt-3 border-t text-xs" style={{ borderColor: 'var(--border)' }}>
           <span style={{ color: 'var(--text-muted)' }}>
-            {t('evolution.strategyLib.capacity', '策略容量：{0} 条（{1} / {2} 字符）', String(strategies.length), String(cap.chars), String(cap.maxChars))}
+            {t('evolution.strategyLib.capacity', String(strategies.length), String(cap.chars), String(cap.maxChars))}
           </span>
           {cap.needsMerge && (
-            <span className="text-amber-600 dark:text-amber-400 font-medium">{t('evolution.strategyLib.near_limit', '容量接近上限，将自动合并')}</span>
+            <span className="text-amber-600 dark:text-amber-400 font-medium">{t('evolution.strategyLib.near_limit')}</span>
           )}
         </div>
       </div>
@@ -127,7 +131,7 @@ export default function StrategyTab() {
           <div className="flex items-center gap-1.5">
             <BookOpen size={14} style={{ color: 'var(--accent)' }} />
             <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {t('evolution.strategyLib.active_lib_title', '当前有效策略库 (STRATEGY.md)')}
+              {t('evolution.strategyLib.active_lib_title')}
             </span>
           </div>
           <button
@@ -138,7 +142,7 @@ export default function StrategyTab() {
             style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           >
             <RefreshCw size={11} className={reflecting ? 'animate-spin' : ''} />
-            <span>{reflecting ? t('evolution.strategyLib.reflecting', '正在反思轨迹…') : t('evolution.strategyLib.reflect', '立即执行反思')}</span>
+            <span>{reflecting ? t('evolution.strategyLib.reflecting') : t('evolution.strategyLib.reflect')}</span>
           </button>
         </div>
 
@@ -147,7 +151,7 @@ export default function StrategyTab() {
             className="text-xs py-6 text-center rounded-md border border-dashed"
             style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
           >
-            {t('evolution.strategyLib.empty', '暂无自进化策略条目。你可以手动添加常用经验，或让 Agent 在日常对话中自动提炼。')}
+            {t('evolution.strategyLib.empty')}
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -165,16 +169,16 @@ export default function StrategyTab() {
                     window.electronAPI.evolution.strategy.remove(s.id)
                       .then((r) => {
                         if (r && r.ok === false) {
-                          toast(t('evolution.strategyLib.remove_failed', `删除策略失败: ${r.reason || '未知错误'}`, r.reason || '未知错误'), { type: 'error' })
+                          toast(t('evolution.strategyLib.remove_failed', r.reason || 'error'), { type: 'error' })
                         } else {
                           loadStrategies()
                         }
                       })
                       .catch((err) => {
-                        toast(t('evolution.strategyLib.remove_failed', `删除策略失败: ${err?.message || 'IPC 异常'}`, err?.message || 'IPC 异常'), { type: 'error' })
+                        toast(t('evolution.strategyLib.remove_failed', err?.message || 'IPC error'), { type: 'error' })
                       })
                   }}
-                  aria-label={t('evolution.strategyLib.remove_aria', `删除策略 S{0}`, String(s.id))}
+                  aria-label={t('evolution.strategyLib.remove_aria', String(s.id))}
                   className="shrink-0 opacity-30 group-hover:opacity-100 hover:text-red-500 transition-opacity p-0.5 cursor-pointer"
                   style={{ color: 'var(--text-secondary)' }}
                 >
@@ -191,7 +195,7 @@ export default function StrategyTab() {
             value={newEntry}
             onChange={(e) => setNewEntry(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') addEntry() }}
-            placeholder={t('evolution.strategyLib.placeholder', '手动输入一条需要 Agent 遵守的工作策略或习惯（回车添加）…')}
+            placeholder={t('evolution.strategyLib.placeholder')}
             className="flex-1 text-xs px-3 py-1.5 rounded-md border bg-[var(--bg-primary)] text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
             style={{ borderColor: 'var(--border)' }}
           />
@@ -203,7 +207,7 @@ export default function StrategyTab() {
             style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           >
             <Plus size={12} />
-            <span>{t('evolution.strategyLib.add', '添加')}</span>
+            <span>{t('evolution.strategyLib.add')}</span>
           </button>
         </div>
       </div>

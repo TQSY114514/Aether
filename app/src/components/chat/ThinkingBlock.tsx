@@ -53,9 +53,11 @@ export default function ThinkingBlock({
     return () => clearInterval(interval)
   }, [streaming, startTime])
 
-  // Record duration upon stream completion
+  // Record duration upon stream completion, clearing cached duration if streaming resumes
   useEffect(() => {
-    if (!streaming && elapsed > 0 && duration === null) {
+    if (streaming) {
+      if (duration !== null) setDuration(null)
+    } else if (elapsed > 0 && duration === null) {
       setDuration(elapsed)
     }
   }, [streaming, elapsed, duration])

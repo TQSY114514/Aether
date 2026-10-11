@@ -81,6 +81,7 @@ export default function ChatInput() {
   const [pending, setPending] = useState<PendingAttachment[]>([])
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
+  const [stoppedHint, setStoppedHint] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -131,6 +132,17 @@ export default function ChatInput() {
     }, 6000)
     return () => clearInterval(timer)
   }, [chatMode, isStreaming, isLooping, input])
+
+  // Listen for stop generation event to show stopped hint even after unmount of StreamingStatusBar
+  useEffect(() => {
+    const handler = () => setStoppedHint(true)
+    window.addEventListener('aether:generation-stopped', handler)
+    return () => window.removeEventListener('aether:generation-stopped', handler)
+  }, [])
+
+  useEffect(() => {
+    if (isStreaming) setStoppedHint(false)
+  }, [isStreaming])
 
   const currentPlaceholder = useMemo(() => {
     if (chatMode === 'arena') return t('chat.arena.placeholder')
@@ -255,6 +267,8 @@ export default function ChatInput() {
       const handled = await executeTypedSlashCommand(content, setInput)
       if (handled) return
     }
+
+    setStoppedHint(false)
 
     if (!overrides || overrides.agentMode !== 'plan') {
       if (isArenaRunning) {
@@ -599,6 +613,15 @@ export default function ChatInput() {
               <StreamingStatusBar sessionId={currentSessionId} />
             ) : (
               <>
+                {stoppedHint && (
+                  <span
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-mono border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0"
+                    title={t('chat.generation_stopped_hint')}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                    <span className="hidden sm:inline">{t('chat.generation_stopped_hint')}</span>
+                  </span>
+                )}
                 {poorMode && (
                   <span
                     className="flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono text-emerald-500 border-emerald-500/30 bg-emerald-500/10 cursor-help shrink-0"

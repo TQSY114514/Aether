@@ -1032,5 +1032,12 @@
   "evolution.strategyLib.toast_enabled": "Trajectory reflection enabled",
   "evolution.strategyLib.toast_paused": "Trajectory reflection paused",
   "memory.tabs.memories": "Knowledge Memories",
-  "memory.tabs.strategies": "Self-Evolution Strategies (STRATEGY.md)"
+  "memory.tabs.strategies": "Self-Evolution Strategies (STRATEGY.md)",
+  "chat.subagent_failed": "Subtasks failed",
+  "diff.title_write": "Write File",
+  "diff.title_patch": "Apply Patch",
+  "diff.title_edit": "Edit File",
+  "diff.expand_all_lines": "Show all {0} lines",
+  "evolution.strategyLib.add_failed": "Failed to add strategy: {0}",
+  "evolution.strategyLib.toggle_failed": "Failed to toggle auto evolution"
 }

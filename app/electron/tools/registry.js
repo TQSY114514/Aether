@@ -547,7 +547,7 @@ const TOOLS = [
         model: ctx.model,
         prompt: mp,
         signal: ctx.signal,
-        agentMode: roles.getRoleDefaultMode(args.role),
+        agentMode: ctx.agentMode === 'plan' ? 'plan' : (ctx.agentMode || roles.getRoleDefaultMode(args.role)),
         callbacks: agentCallbacks,
         config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'delete' },
       })

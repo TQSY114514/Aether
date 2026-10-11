@@ -22,7 +22,7 @@ export default function GatewayCard() {
       await window.electronAPI?.gateway?.setEnabled?.(!info.enabled)
       await refresh()
     } catch {
-      toast(t('settings.gateway.toggle_failed', '切换网关状态失败'), { type: 'error' })
+      toast(t('settings.gateway.toggle_failed'), { type: 'error' })
     }
     setBusy(false)
   }
@@ -30,9 +30,9 @@ export default function GatewayCard() {
   const copy = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast(t('settings.gateway.copied', `${label} 已复制`, label), { type: 'success' })
+      toast(t('settings.gateway.copied', label), { type: 'success' })
     } catch {
-      toast(t('settings.gateway.copy_failed', '复制失败'), { type: 'error' })
+      toast(t('settings.gateway.copy_failed'), { type: 'error' })
     }
   }
 
@@ -42,9 +42,9 @@ export default function GatewayCard() {
         <div className="flex items-center gap-2">
           <Plug size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
           <div>
-            <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.gateway.title', 'Local Gateway / VS Code 集成')}</h2>
+            <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.gateway.title')}</h2>
             <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              {t('settings.gateway.subtitle', '本地端口网关')} · {info?.enabled ? (info?.running ? t('settings.gateway.running', '运行中') : t('settings.gateway.enabled', '已启用')) : t('settings.gateway.disabled', '未启用')}
+              {t('settings.gateway.subtitle')} · {info?.enabled ? (info?.running ? t('settings.gateway.running') : t('settings.gateway.enabled')) : t('settings.gateway.disabled')}
             </div>
           </div>
         </div>
@@ -54,7 +54,7 @@ export default function GatewayCard() {
             className="px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
           >
-            {expanded ? t('settings.gateway.collapse', '收起配置') : t('settings.gateway.configure', '配置连接')}
+            {expanded ? t('settings.gateway.collapse') : t('settings.gateway.configure')}
           </button>
           <button
             onClick={toggle}
@@ -64,21 +64,21 @@ export default function GatewayCard() {
             }`}
             style={info?.enabled ? { backgroundColor: 'var(--accent)' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
           >
-            {info?.enabled ? t('settings.gateway.enabled', '已启用') : t('settings.gateway.status_stopped', '已停用')} · {busy ? '…' : t('settings.gateway.toggle', '切换')}
+            {info?.enabled ? t('settings.gateway.enabled') : t('settings.gateway.status_stopped')} · {busy ? '…' : t('settings.gateway.toggle')}
           </button>
         </div>
       </div>
       {expanded && (
         <div className="mt-3 pt-3 border-t space-y-2.5" style={{ borderColor: 'var(--border)' }}>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            {t('settings.gateway.description', '在 VS Code 里安装 Aether 扩展后，填入下面的地址与 Token 即可连接当前桌面 App，复用已配置的模型/记忆/技能。')}
+            {t('settings.gateway.description')}
           </p>
           {info ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2 text-xs">
-                <span style={{ color: 'var(--text-muted)' }}>{t('settings.gateway.address', '服务地址')}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('settings.gateway.address')}</span>
                 <button
-                  onClick={() => copy(`http://127.0.0.1:${info.port}`, t('settings.gateway.address', '地址'))}
+                  onClick={() => copy(`http://127.0.0.1:${info.port}`, t('settings.gateway.address'))}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono active:scale-[0.98] cursor-pointer"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                 >
@@ -86,9 +86,9 @@ export default function GatewayCard() {
                 </button>
               </div>
               <div className="flex items-center justify-between gap-2 text-xs">
-                <span style={{ color: 'var(--text-muted)' }}>{t('settings.gateway.token', '访问 Token')}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('settings.gateway.token')}</span>
                 <button
-                  onClick={() => info.token && copy(info.token, t('settings.gateway.token', 'Token'))}
+                  onClick={() => info.token && copy(info.token, t('settings.gateway.token'))}
                   disabled={!info.token}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono disabled:opacity-40 active:scale-[0.98] cursor-pointer"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
@@ -97,11 +97,11 @@ export default function GatewayCard() {
                 </button>
               </div>
               <div className="text-[11px] font-medium pt-1" style={{ color: info.running ? 'var(--success)' : '#dc2626' }}>
-                {info.running ? t('settings.gateway.running_local_only', '● 运行中（仅本机可访问）') : t('settings.gateway.not_running', '● 未运行（启用后生效）')}
+                {info.running ? t('settings.gateway.running_local_only') : t('settings.gateway.not_running')}
               </div>
             </div>
           ) : (
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.gateway.loading', '加载中…')}</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.gateway.loading')}</p>
           )}
         </div>
       )}

@@ -5,6 +5,8 @@ import { t } from '@/utils/i18n'
 import { useUI } from '@/components/ui/feedback'
 import { FileCode, RotateCcw, ChevronDown, ChevronRight, Check, GitCommit, Play, AlertCircle, Maximize2, X } from 'lucide-react'
 
+import { cleanDiffLines } from '@/utils/diff'
+
 interface FileSummaryDeckProps {
   summary: TurnFileSummary
   sessionId?: number
@@ -16,16 +18,6 @@ function formatPath(fullPath: string) {
   const fileName = parts.pop() || fullPath
   const dir = parts.length > 0 ? parts.join('/') + '/' : ''
   return { dir, fileName }
-}
-
-function cleanDiffLines(rawDiff: string): string[] {
-  if (!rawDiff) return []
-  const lines = rawDiff.split('\n')
-  const firstHunkIndex = lines.findIndex(l => l.startsWith('@@'))
-  if (firstHunkIndex === -1) {
-    return lines.filter(l => !l.startsWith('diff --git') && !l.startsWith('index '))
-  }
-  return lines.slice(firstHunkIndex)
 }
 
 export default function FileSummaryDeck({ summary, sessionId, messageId }: FileSummaryDeckProps) {

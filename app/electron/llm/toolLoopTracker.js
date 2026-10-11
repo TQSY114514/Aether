@@ -119,10 +119,10 @@ function createTurnFileTracker(wsRoot) {
               if (entry.length < 3) continue
               const code = entry.slice(0, 2).trim()
               let relRaw = entry.slice(3)
-              // If renamed or copied, next token is destination
+              // In git status -z format, entry.slice(3) is the new destination path;
+              // the next token is the original path, which we skip so the loop continues properly.
               if (code.includes('R') || code.includes('C')) {
                 i++
-                if (i < entries.length) relRaw = entries[i]
               }
               const absPath = path.resolve(wsRoot, relRaw)
               if (!files.has(absPath)) {

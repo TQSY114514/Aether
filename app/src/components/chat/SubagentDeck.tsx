@@ -22,9 +22,16 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
   const total = items.length
   const completed = items.filter(x => x.status === 'done').length
   const hasError = items.some(x => x.status === 'error')
-  const isAllDone = completed === total
+  const isAllDone = items.length > 0 && items.every(x => x.status === 'done')
+  const isFinished = items.length > 0 && items.every(x => x.status === 'done' || x.status === 'error')
 
   const accentColor = hasError ? 'var(--error)' : isAllDone ? 'var(--success)' : 'var(--accent)'
+
+  const titleText = isAllDone
+    ? t('chat.subagent_completed')
+    : isFinished && hasError
+    ? t('chat.subagent_failed')
+    : t('chat.subagent_running')
 
   return (
     <div
@@ -42,7 +49,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
         {open ? <ChevronDown size={12} style={{ color: accentColor }} /> : <ChevronRight size={12} style={{ color: accentColor }} />}
         <Bot size={13} style={{ color: accentColor }} />
         <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-          {isAllDone ? t('chat.subagent_completed', '子任务执行完毕') : t('chat.subagent_running', '子任务协同执行中')}
+          {titleText}
         </span>
         <span
           className="text-[10px] px-1.5 py-0.2 rounded-full tabular-nums shrink-0"

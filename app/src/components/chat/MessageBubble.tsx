@@ -42,7 +42,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   // and the session has an active stream buffer.
   const streamingBySession = useStore(s => s.streamingBySession)
   const sessionStream = streamingBySession[message.session_id]
-  const isStreaming = !isUser && message.content === '' && sessionStream
+  const isStreaming = !isUser && message.content === '' && Boolean(sessionStream && sessionStream.messageId === message.id)
   const isAnswerStreaming = Boolean(sessionStream && sessionStream.content && sessionStream.content.length > 0)
   const hasActiveTool = Boolean(toolCalls && toolCalls.some(t => t.result === null && !t.error))
   const isThinkingStreaming = Boolean(isStreaming && !isAnswerStreaming && !hasActiveTool)

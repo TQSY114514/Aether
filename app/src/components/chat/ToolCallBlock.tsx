@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Wrench, ChevronDown, ChevronRight, Check, AlertCircle, ShieldAlert, ShieldCheck, RotateCcw, Info, FileDiff, FileText, Terminal, Sparkles, Copy, Folder, HelpCircle } from 'lucide-react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
+import { cleanDiffLines, countDiffLines } from '@/utils/diff'
 
 export function stripAnsi(text: string): string {
   if (!text) return ''
@@ -94,29 +95,6 @@ function toolLabel(tool: ToolCall): string {
     case 'todo_write': return t('tool.todo_write')
     default: return tool.name
   }
-}
-
-function cleanDiffLines(rawDiff: string): string[] {
-  if (!rawDiff) return []
-  const lines = rawDiff.split('\n')
-  const firstHunkIndex = lines.findIndex(l => l.startsWith('@@'))
-  if (firstHunkIndex === -1) {
-    return lines.filter(l => !l.startsWith('diff --git') && !l.startsWith('index '))
-  }
-  return lines.slice(firstHunkIndex)
-}
-
-function countDiffLines(diffStr: string): { added: number; removed: number } {
-  if (!diffStr) return { added: 0, removed: 0 }
-  const clean = cleanDiffLines(diffStr)
-  let added = 0
-  let removed = 0
-  for (const line of clean) {
-    if (line.startsWith('@@')) continue
-    if (line.startsWith('+')) added++
-    else if (line.startsWith('-')) removed++
-  }
-  return { added, removed }
 }
 
 function argsCount(args: unknown): number {
@@ -462,7 +440,7 @@ function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
         <FileDiff size={12} style={{ color: 'var(--accent)' }} />
         <span className="text-[11px] font-medium" style={{ color: 'var(--text-primary)' }}>
-          {toolName === 'write_file' ? t('tool.write_file', '写入文件') : toolName === 'apply_patch' ? t('tool.apply_patch', '补丁变更') : t('tool.edit_file', '编辑变更')}
+          {toolName === 'write_file' ? t('diff.title_write') : toolName === 'apply_patch' ? t('diff.title_patch') : t('diff.title_edit')}
         </span>
         <div className="text-[10px] ml-auto font-mono flex items-center gap-1">
           {addedCount > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{addedCount}</span>}
@@ -508,7 +486,7 @@ function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
           className="w-full text-[10px] py-1 border-t hover:bg-[var(--border)]/40 transition-colors"
           style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}
         >
-          {t('thinking.expand', '展开全部')} {cleanLines.length} {t('thinking.lines', '行')}
+          {t('diff.expand_all_lines', cleanLines.length)}
         </button>
       )}
     </div>
