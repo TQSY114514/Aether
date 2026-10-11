@@ -48,7 +48,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
       >
         {open ? <ChevronDown size={12} style={{ color: accentColor }} /> : <ChevronRight size={12} style={{ color: accentColor }} />}
         <Bot size={13} style={{ color: accentColor }} />
-        <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+        <span className="font-medium" style={{ color: 'var(--text-primary)' }} aria-live="polite">
           {titleText}
         </span>
         <span

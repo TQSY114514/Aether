@@ -7,11 +7,20 @@ import { t } from '@/utils/i18n'
 export default function GatewayCard() {
   const { toast } = useUI()
   const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string | null; running: boolean } | null>(null)
+  const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
   const refresh = async () => {
-    try { setInfo(await window.electronAPI?.gateway?.info?.()) } catch { setInfo(null) }
+    setLoading(true)
+    try {
+      const data = await window.electronAPI?.gateway?.info?.()
+      setInfo(data ?? null)
+    } catch {
+      setInfo(null)
+    } finally {
+      setLoading(false)
+    }
   }
   useEffect(() => { refresh() }, [])
 
@@ -36,6 +45,12 @@ export default function GatewayCard() {
     }
   }
 
+  const statusText = info === null
+    ? (loading ? t('settings.gateway.loading') : t('settings.gateway.unknown'))
+    : info.enabled
+    ? (info.running ? t('settings.gateway.running') : t('settings.gateway.enabled'))
+    : t('settings.gateway.disabled')
+
   return (
     <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
       <div className="flex items-center justify-between">
@@ -43,8 +58,17 @@ export default function GatewayCard() {
           <Plug size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
           <div>
             <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.gateway.title')}</h2>
-            <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              {t('settings.gateway.subtitle')} · {info?.enabled ? (info?.running ? t('settings.gateway.running') : t('settings.gateway.enabled')) : t('settings.gateway.disabled')}
+            <div className="text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--text-muted)' }}>
+              <span>{t('settings.gateway.subtitle')} · {statusText}</span>
+              {info === null && !loading && (
+                <button
+                  type="button"
+                  onClick={refresh}
+                  className="underline hover:text-[var(--text-primary)] cursor-pointer text-[10px]"
+                >
+                  {t('chat.retry')}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -56,16 +80,27 @@ export default function GatewayCard() {
           >
             {expanded ? t('settings.gateway.collapse') : t('settings.gateway.configure')}
           </button>
-          <button
-            onClick={toggle}
-            disabled={busy || !info}
-            className={`px-3 py-1 text-xs rounded-md font-medium transition-all active:scale-[0.98] cursor-pointer ${
-              info?.enabled ? 'text-white' : 'border'
-            }`}
-            style={info?.enabled ? { backgroundColor: 'var(--accent)' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-          >
-            {info?.enabled ? t('settings.gateway.enabled') : t('settings.gateway.status_stopped')} · {busy ? '…' : t('settings.gateway.toggle')}
-          </button>
+          {info === null ? (
+            <button
+              onClick={refresh}
+              disabled={loading || busy}
+              className="px-3 py-1 text-xs rounded-md font-medium border transition-all active:scale-[0.98] cursor-pointer hover:bg-[var(--bg-secondary)]"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            >
+              {loading ? '…' : t('chat.retry')}
+            </button>
+          ) : (
+            <button
+              onClick={toggle}
+              disabled={busy}
+              className={`px-3 py-1 text-xs rounded-md font-medium transition-all active:scale-[0.98] cursor-pointer ${
+                info.enabled ? 'text-white' : 'border'
+              }`}
+              style={info.enabled ? { backgroundColor: 'var(--accent)' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            >
+              {info.enabled ? t('settings.gateway.enabled') : t('settings.gateway.status_stopped')} · {busy ? '…' : t('settings.gateway.toggle')}
+            </button>
+          )}
         </div>
       </div>
       {expanded && (
@@ -101,7 +136,19 @@ export default function GatewayCard() {
               </div>
             </div>
           ) : (
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.gateway.loading')}</p>
+            <div className="flex items-center justify-between text-xs py-1" style={{ color: 'var(--text-muted)' }}>
+              <span>{loading ? t('settings.gateway.loading') : t('settings.gateway.unknown')}</span>
+              {!loading && (
+                <button
+                  type="button"
+                  onClick={refresh}
+                  className="px-2 py-0.5 rounded border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer text-xs"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                >
+                  {t('chat.retry')}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

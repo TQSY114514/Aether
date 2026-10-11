@@ -41,7 +41,7 @@ export default function StreamingStatusBar({ sessionId }: StreamingStatusBarProp
     <div className="px-0.5 mt-1.5 min-w-0 animate-blur-fade">
       <div className="flex items-center gap-1.5 text-[11px] min-w-0" style={{ color: 'var(--text-muted)' }}>
         <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse shrink-0" />
-        <span className="min-w-0 truncate" title={status}>{status}</span>
+        <span className="min-w-0 truncate" title={status} aria-live="polite">{status}</span>
         {showCost && (
           <span className="tabular-nums shrink-0 ml-auto">
             {t('usage.cost_line', `$${turnCost.toFixed(4)}`, `$${cumCost.toFixed(3)}`)}

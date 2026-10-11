@@ -5,49 +5,93 @@
 export function cleanDiffLines(rawDiff: string): string[] {
   if (!rawDiff) return []
   const lines = rawDiff.replace(/\r/g, '').split('\n')
-  const firstHunkIndex = lines.findIndex(l => l.startsWith('@@'))
-  if (firstHunkIndex !== -1) {
-    return lines.slice(firstHunkIndex)
+
+  const isGitMeta = (l: string) =>
+    l.startsWith('diff --git') ||
+    l.startsWith('index ') ||
+    l.startsWith('new file mode') ||
+    l.startsWith('deleted file mode') ||
+    l.startsWith('old mode') ||
+    l.startsWith('new mode') ||
+    l.startsWith('similarity index') ||
+    l.startsWith('rename from') ||
+    l.startsWith('rename to') ||
+    l.startsWith('copy from') ||
+    l.startsWith('copy to') ||
+    l.startsWith('Binary files')
+
+  const isFileHeaderMinus = (l: string) =>
+    l.startsWith('--- a/') ||
+    l.startsWith('--- /dev/null') ||
+    l.startsWith('--- b/') ||
+    l.startsWith('--- i/') ||
+    l.startsWith('--- w/') ||
+    l.startsWith('--- ')
+
+  const isFileHeaderPlus = (l: string) =>
+    l.startsWith('+++ b/') ||
+    l.startsWith('+++ /dev/null') ||
+    l.startsWith('+++ a/') ||
+    l.startsWith('+++ w/') ||
+    l.startsWith('+++ ')
+
+  const isFileBoundary = (linesArr: string[], i: number) => {
+    const l = linesArr[i]
+    if (l.startsWith('diff --git')) return true
+    if (l.startsWith('--- a/') || l.startsWith('--- /dev/null') || l.startsWith('--- b/')) {
+      const next = linesArr[i + 1]
+      if (next && (next.startsWith('+++ b/') || next.startsWith('+++ /dev/null') || next.startsWith('+++ a/'))) {
+        return true
+      }
+    }
+    return false
   }
 
-  // When no @@ hunk header exists:
-  // Strip git metadata header lines and the leading --- / +++ file header pair.
-  let startIndex = 0
-  let foundMinusHeader = false
+  const result: string[] = []
+  let inHeader = true
+  let foundFileHeaderMinus = false
 
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i]
-    if (
-      l.startsWith('diff --git') ||
-      l.startsWith('index ') ||
-      l.startsWith('new file mode') ||
-      l.startsWith('deleted file mode') ||
-      l.startsWith('old mode') ||
-      l.startsWith('new mode') ||
-      l.startsWith('similarity index') ||
-      l.startsWith('rename from') ||
-      l.startsWith('rename to') ||
-      l.startsWith('Binary files')
-    ) {
-      startIndex = i + 1
+
+    // Detect new file boundary inside hunks
+    if (!inHeader && isFileBoundary(lines, i)) {
+      inHeader = true
+      foundFileHeaderMinus = false
+    }
+
+    if (inHeader) {
+      if (isGitMeta(l)) {
+        continue
+      }
+      if (!foundFileHeaderMinus && isFileHeaderMinus(l)) {
+        foundFileHeaderMinus = true
+        continue
+      }
+      if (foundFileHeaderMinus && isFileHeaderPlus(l)) {
+        foundFileHeaderMinus = false
+        const next = lines[i + 1]
+        if (!next || !next.startsWith('@@')) {
+          inHeader = false
+        }
+        continue
+      }
+      if (l.startsWith('@@')) {
+        inHeader = false
+        result.push(l)
+        continue
+      }
+      // If we encounter a line that isn't a known header while inHeader,
+      // it means there's no @@ header in this section, so treat as diff content
+      inHeader = false
+      result.push(l)
       continue
     }
 
-    if (!foundMinusHeader && (l.startsWith('--- a/') || l.startsWith('--- /dev/null') || l.startsWith('--- '))) {
-      foundMinusHeader = true
-      startIndex = i + 1
-      continue
-    }
-
-    if (foundMinusHeader && (l.startsWith('+++ b/') || l.startsWith('+++ /dev/null') || l.startsWith('+++ '))) {
-      startIndex = i + 1
-      break // Done skipping the file header pair
-    }
-
-    break
+    result.push(l)
   }
 
-  return lines.slice(startIndex)
+  return result
 }
 
 export function countDiffLines(diffStr: string): { added: number; removed: number } {

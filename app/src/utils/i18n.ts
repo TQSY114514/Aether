@@ -1132,7 +1132,8 @@ const translations: Record<string, Record<string, string>> = {
     "diff.title_edit": "Edit File",
     "diff.expand_all_lines": "Show all {0} lines",
     "evolution.strategyLib.add_failed": "Failed to add strategy: {0}",
-    "evolution.strategyLib.toggle_failed": "Failed to toggle auto evolution"
+    "evolution.strategyLib.toggle_failed": "Failed to toggle auto evolution",
+    "settings.gateway.unknown": "Unknown"
   },
   "zh-CN": {
     "agent.ask": "询问 — 危险操作前确认",
@@ -2175,7 +2176,8 @@ const translations: Record<string, Record<string, string>> = {
     "diff.title_edit": "编辑文件",
     "diff.expand_all_lines": "展开全部 {0} 行",
     "evolution.strategyLib.add_failed": "添加策略失败: {0}",
-    "evolution.strategyLib.toggle_failed": "切换自进化状态失败"
+    "evolution.strategyLib.toggle_failed": "切换自进化状态失败",
+    "settings.gateway.unknown": "未知"
   },
   "es": {
     "app.name": "Aether",
@@ -3219,7 +3221,8 @@ const translations: Record<string, Record<string, string>> = {
     "usage.trend": "Tendencia de uso",
     "usage.unpriced": "sin precio",
     "settings.encryption_status_unknown_title": "No se puede confirmar el estado de cifrado",
-    "settings.encryption_status_unknown_desc": "No se pudo comprobar el estado de cifrado del sistema. Se desconoce la seguridad del almacenamiento de las claves de API."
+    "settings.encryption_status_unknown_desc": "No se pudo comprobar el estado de cifrado del sistema. Se desconoce la seguridad del almacenamiento de las claves de API.",
+    "settings.gateway.unknown": "Desconocido"
   },
   "ja": {
     "app.name": "Aether",
@@ -4263,7 +4266,8 @@ const translations: Record<string, Record<string, string>> = {
     "task.title": "バックグラウンドタスク",
     "task.unavailable": "バックグラウンドタスクは利用できません",
     "task.untitled": "無題のタスク",
-    "taskcard.completed": "完了"
+    "taskcard.completed": "完了",
+    "settings.gateway.unknown": "不明"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -5307,7 +5311,8 @@ const translations: Record<string, Record<string, string>> = {
     "diff.title_edit": "修潤簡牘",
     "diff.expand_all_lines": "盡覽全數 {0} 行",
     "evolution.strategyLib.add_failed": "增補策論未遂: {0}",
-    "evolution.strategyLib.toggle_failed": "變更自進之境未成"
+    "evolution.strategyLib.toggle_failed": "變更自進之境未成",
+    "settings.gateway.unknown": "未知"
   },
   "fr": {
     "app.name": "Aether",
@@ -6351,7 +6356,8 @@ const translations: Record<string, Record<string, string>> = {
     "slash.review_failed": "Échec du lancement de la revue de code : {0}",
     "slash.review_no_session": "Veuillez sélectionner ou créer une session pour lancer la revue de code",
     "slash.summarize": "Résumer",
-    "slash.test": "Exécuter les tests"
+    "slash.test": "Exécuter les tests",
+    "settings.gateway.unknown": "Inconnu"
   },
   "de": {
     "app.name": "Aether",
@@ -7395,7 +7401,8 @@ const translations: Record<string, Record<string, string>> = {
     "usage.subtitle": "Nutzung und Kostenstatistiken der KI-Modelle anzeigen",
     "usage.title": "Nutzungsstatistiken",
     "usage.total_cost": "Gesamtkosten",
-    "usage.total_requests": "Anfragen insgesamt"
+    "usage.total_requests": "Anfragen insgesamt",
+    "settings.gateway.unknown": "Unbekannt"
   },
   "pt": {
     "app.name": "Aether",
@@ -8439,7 +8446,8 @@ const translations: Record<string, Record<string, string>> = {
     "usage.trend": "Tendência de uso",
     "usage.unpriced": "sem preço",
     "settings.encryption_status_unknown_title": "Não foi possível confirmar o status de criptografia",
-    "settings.encryption_status_unknown_desc": "Não foi possível verificar o status de criptografia do sistema. A segurança do armazenamento da chave de API é desconhecida."
+    "settings.encryption_status_unknown_desc": "Não foi possível verificar o status de criptografia do sistema. A segurança do armazenamento da chave de API é desconhecida.",
+    "settings.gateway.unknown": "Desconhecido"
   },
   "ru": {
     "app.name": "Aether",
@@ -9483,7 +9491,8 @@ const translations: Record<string, Record<string, string>> = {
     "task.title": "Background Tasks",
     "task.unavailable": "Background tasks unavailable",
     "task.untitled": "Untitled task",
-    "taskcard.completed": "Completed"
+    "taskcard.completed": "Completed",
+    "settings.gateway.unknown": "Неизвестно"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -10526,7 +10535,8 @@ const translations: Record<string, Record<string, string>> = {
     "diff.title_edit": "編輯檔案",
     "diff.expand_all_lines": "展開全部 {0} 行",
     "evolution.strategyLib.add_failed": "新增策略失敗: {0}",
-    "evolution.strategyLib.toggle_failed": "切換自進化狀態失敗"
+    "evolution.strategyLib.toggle_failed": "切換自進化狀態失敗",
+    "settings.gateway.unknown": "未知"
   },
   "ar": {
     "app.name": "Aether",
@@ -11570,7 +11580,8 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.disable": "أرشفة",
     "settings.skills.drafted": "مهارة تمت صياغتها: {0}",
     "settings.skills.empty": "لم يتم العثور على مهارات. أفلت مجلدًا باسم <skill>/SKILL.md في .claude/skills/ داخل مساحة العمل.",
-    "settings.skills.enable": "تمكين"
+    "settings.skills.enable": "تمكين",
+    "settings.gateway.unknown": "غير معروف"
   },
   "uk": {
     "app.name": "Aether",
@@ -12614,7 +12625,8 @@ const translations: Record<string, Record<string, string>> = {
     "slash.review_failed": "Не вдалося розпочати рев'ю коду: {0}",
     "slash.review_no_session": "Будь ласка, виберіть або створіть сесію для початку рев'ю коду",
     "slash.summarize": "Підсумувати",
-    "slash.test": "Запустити тести"
+    "slash.test": "Запустити тести",
+    "settings.gateway.unknown": "Невідомо"
   },
   "ko": {
     "app.name": "Aether",
@@ -13658,7 +13670,8 @@ const translations: Record<string, Record<string, string>> = {
     "usage.trend": "사용량 추세",
     "usage.unpriced": "가격 미정",
     "settings.encryption_status_unknown_title": "암호화 상태를 확인할 수 없음",
-    "settings.encryption_status_unknown_desc": "시스템 암호화 상태를 확인할 수 없습니다. API 키 저장 안전성을 알 수 없습니다."
+    "settings.encryption_status_unknown_desc": "시스템 암호화 상태를 확인할 수 없습니다. API 키 저장 안전성을 알 수 없습니다.",
+    "settings.gateway.unknown": "알 수 없음"
   },
   "hi": {
     "app.name": "Aether",
@@ -14702,7 +14715,8 @@ const translations: Record<string, Record<string, string>> = {
     "slash.review_failed": "कोड समीक्षा शुरू करने में विफल: {0}",
     "slash.review_no_session": "कोड समीक्षा शुरू करने के लिए कृपया एक सत्र चुनें या बनाएँ",
     "slash.summarize": "सारांशित करें",
-    "slash.test": "टेस्ट चलाएँ"
+    "slash.test": "टेस्ट चलाएँ",
+    "settings.gateway.unknown": "अज्ञात"
   }
 }
 

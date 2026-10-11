@@ -1039,5 +1039,6 @@
   "diff.title_edit": "Edit File",
   "diff.expand_all_lines": "Show all {0} lines",
   "evolution.strategyLib.add_failed": "Failed to add strategy: {0}",
-  "evolution.strategyLib.toggle_failed": "Failed to toggle auto evolution"
+  "evolution.strategyLib.toggle_failed": "Failed to toggle auto evolution",
+  "settings.gateway.unknown": "Unknown"
 }
