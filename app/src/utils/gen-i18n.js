@@ -3,23 +3,11 @@ const fs = require('fs')
 const en = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'i18n-en-base.json'), 'utf-8'))
 const data = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'i18n-translations.json'), 'utf-8'))
 
-// Upside-down English: reverse the string and swap a few letters so it reads
-// upside-down. Cosmetic joke locale, not a real translation.
-const F = { a: 'ɐ', b: 'q', c: 'ɔ', d: 'p', e: 'ǝ', f: 'ɟ', g: 'ƃ', h: 'ɥ', i: 'ᴉ', j: 'ɾ', k: 'ʞ', l: 'l', m: 'ɯ', n: 'u', o: 'o', p: 'd', q: 'b', r: 'ɹ', s: 's', t: 'ʇ', u: 'n', v: 'ʌ', w: 'ʍ', x: 'x', y: 'ʎ', z: 'z' }
-function flip(s) {
-  // Preserve {N} placeholder tokens: split on them, flip each literal part, reassemble
-  const parts = s.split(/(\{\d+\})/)
-  return parts.map(p => /\{\d+\}/.test(p) ? p : p.split('').map(c => F[c.toLowerCase()] || c).reverse().join('')).join('')
-}
-const enUpside = {}
-for (const k in en) enUpside[k] = flip(en[k])
-
-const translations = { en, 'en-upside': enUpside }
+const translations = { en }
 for (const r of data) translations[r.lang] = r.strings
 
 const langs = [
   { code: 'en', label: 'English', native: 'English', dir: 'ltr' },
-  { code: 'en-upside', label: 'English (uʍoᗁ ǝpᴉsd∩)', native: 'English', dir: 'ltr' },
   { code: 'zh-CN', label: 'Chinese (Simplified)', native: '简体中文', dir: 'ltr' },
   { code: 'zh-TW', label: 'Chinese (Traditional)', native: '繁體中文', dir: 'ltr' },
   { code: 'zh-WEN', label: 'Chinese (Classical)', native: '文言文', dir: 'ltr' },

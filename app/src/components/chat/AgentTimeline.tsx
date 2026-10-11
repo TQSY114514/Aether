@@ -172,7 +172,7 @@ function AgentTimeline({ thinkingText, thinkingStreaming, toolCalls, planSteps, 
         <ThinkingBlock
           text={thinkingText!}
           streaming={thinkingStreaming}
-          collapsed={false}
+          collapsed={!thinkingStreaming}
         />
       )}
 

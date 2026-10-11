@@ -26,6 +26,8 @@ type ToolCall = {
   exitCode?: number | null
   commandFailed?: boolean
   timedOut?: boolean
+  added?: number | null
+  removed?: number | null
 }
 
 const FAILURE_LABELS: Record<string, string> = {
@@ -182,6 +184,8 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   }
   const hasArgs = argsCount(tool.args) > 0
   const failureKey = tool.failureKind && FAILURE_LABELS[tool.failureKind] ? FAILURE_LABELS[tool.failureKind] : null
+  const diffAdded = tool.added ?? (tool.diff ? tool.diff.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++')).length : 0)
+  const diffRemoved = tool.removed ?? (tool.diff ? tool.diff.split('\n').filter(l => l.startsWith('-') && !l.startsWith('---')).length : 0)
 
   return (
     <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -216,6 +220,20 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
         )}
         {cmdFailure.failed && !tool.error && !cmdFailure.exitCode && (
           <span className="text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono font-medium shrink-0 border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">{cmdFailure.reason || t('tool.failure.command_failed')}</span>
+        )}
+        {(diffAdded > 0 || diffRemoved > 0) && (
+          <span className="flex items-center gap-1 font-mono text-[10px] font-semibold shrink-0 ml-1">
+            {diffAdded > 0 && (
+              <span className="px-1 py-0.2 rounded text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
+                +{diffAdded}
+              </span>
+            )}
+            {diffRemoved > 0 && (
+              <span className="px-1 py-0.2 rounded text-rose-600 dark:text-rose-400 bg-rose-500/10">
+                −{diffRemoved}
+              </span>
+            )}
+          </span>
         )}
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           {isCommand && (
@@ -408,37 +426,68 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
 function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
   const [showFull, setShowFull] = useState(false)
-  const lines = diff.split('\n')
+  const allLines = diff.split('\n')
+  // Strip machine noise headers up to actual hunks
+  const cleanLines = allLines.filter(l => !l.startsWith('diff --git') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ '))
   const maxShow = 60
-  const isTruncated = lines.length > maxShow
-  const displayLines = showFull || !isTruncated ? lines : lines.slice(0, maxShow)
+  const isTruncated = cleanLines.length > maxShow
+  const displayLines = showFull || !isTruncated ? cleanLines : cleanLines.slice(0, maxShow)
+
+  const addedCount = allLines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length
+  const removedCount = allLines.filter(l => l.startsWith('-') && !l.startsWith('---')).length
 
   return (
-    <div className="rounded-[2px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
-      <div className="flex items-center gap-1.5 px-2.5 py-1.5" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-        <FileDiff size={11} style={{ color: 'var(--accent)' }} />
-        <span className="text-[10px] font-medium" style={{ color: 'var(--text-primary)' }}>
-          {toolName === 'write_file' ? '新建文件预览' : toolName === 'apply_patch' ? '补丁预览' : '编辑差异'}
+    <div className="rounded-[4px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <FileDiff size={12} style={{ color: 'var(--accent)' }} />
+        <span className="text-[11px] font-medium" style={{ color: 'var(--text-primary)' }}>
+          {toolName === 'write_file' ? t('tool.write_file', '写入文件') : toolName === 'apply_patch' ? '补丁变更' : t('tool.edit_file', '编辑变更')}
         </span>
-        <span className="text-[10px] ml-auto font-mono" style={{ color: 'var(--text-muted)' }}>
-          +{lines.filter(l => l.startsWith('+')).length} -{lines.filter(l => l.startsWith('-')).length}
-        </span>
+        <div className="text-[10px] ml-auto font-mono flex items-center gap-1">
+          {addedCount > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{addedCount}</span>}
+          {removedCount > 0 && <span className="text-rose-600 dark:text-rose-400">−{removedCount}</span>}
+        </div>
       </div>
-      <pre className="text-[10px] font-mono whitespace-pre overflow-x-auto max-h-56 overflow-y-auto p-2 leading-relaxed"
-        style={{ color: 'var(--text-secondary)' }}>
-        {displayLines.map((line, i) => {
-          let color = 'var(--text-muted)'
-          if (line.startsWith('+') && !line.startsWith('+++')) color = 'var(--success)'
-          else if (line.startsWith('-') && !line.startsWith('---')) color = 'var(--error)'
-          else if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')) color = 'var(--accent)'
-          return <span key={i} style={{ color }}>{line || '\n'}</span>
-        })}
-      </pre>
+      <div className="overflow-x-auto max-h-60 overflow-y-auto p-1 leading-relaxed" style={{ backgroundColor: 'var(--bg-primary)' }}>
+        <pre className="font-mono text-[11px]">
+          {displayLines.map((line, i) => {
+            if (line.startsWith('+')) {
+              return (
+                <div key={i} className="border-l-2 border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 whitespace-pre">
+                  {line}
+                </div>
+              )
+            }
+            if (line.startsWith('-')) {
+              return (
+                <div key={i} className="border-l-2 border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-400 px-2 py-0.5 whitespace-pre">
+                  {line}
+                </div>
+              )
+            }
+            if (line.startsWith('@@')) {
+              return (
+                <div key={i} className="text-[10px] text-[var(--accent)] bg-[var(--bg-secondary)] px-2 py-0.5 rounded-[2px] opacity-80 my-0.5 font-semibold whitespace-pre">
+                  {line}
+                </div>
+              )
+            }
+            return (
+              <div key={i} className="border-l-2 border-transparent px-2 py-0.5 text-[var(--text-secondary)] whitespace-pre">
+                {line || ' '}
+              </div>
+            )
+          })}
+        </pre>
+      </div>
       {isTruncated && (
-        <button onClick={() => setShowFull(true)}
-          className="w-full text-[10px] py-1 hover:bg-[var(--border)] transition-colors"
-          style={{ color: 'var(--text-muted)' }}>
-          展开全部 {lines.length} 行
+        <button
+          type="button"
+          onClick={() => setShowFull(true)}
+          className="w-full text-[10px] py-1 border-t hover:bg-[var(--border)]/40 transition-colors"
+          style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}
+        >
+          {t('thinking.expand', '展开全部')} {cleanLines.length} {t('thinking.lines', '行')}
         </button>
       )}
     </div>

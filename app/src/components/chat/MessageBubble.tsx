@@ -11,6 +11,7 @@ import TaskCard from './TaskCard'
 import ThinkingBlock from './ThinkingBlock'
 import AgentTimeline from './AgentTimeline'
 import FileSummaryDeck from './FileSummaryDeck'
+import SubagentDeck from './SubagentDeck'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
@@ -25,6 +26,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
   const todos = useStore(s => s.todosByMessage[message.id])
+  const subagents = useStore(s => s.subagentsByMessage[message.id])
   const thinkingBlocks = useStore(s => s.thinkingBlocksByMessage[message.id])
   const statusLines = useStore(s => s.statusLinesByMessage[message.id])
   const fileSummary = useStore(s => s.fileSummariesByMessage[message.id])
@@ -230,9 +232,13 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             {(thinkingBlocks || (toolCalls && toolCalls.length > 0) || (planSteps && planSteps.length > 0)) && (
               <AgentTimeline
                 thinkingText={thinkingBlocks || undefined}
+                thinkingStreaming={Boolean(isStreaming)}
                 toolCalls={toolCalls && toolCalls.length > 0 ? toolCalls : undefined}
                 planSteps={planSteps || undefined}
               />
+            )}
+            {subagents && subagents.length > 0 && (
+              <SubagentDeck items={subagents} />
             )}
             {message.attachment && message.attachment.kind === 'image' && (
               <div className="mb-2 rounded-md overflow-hidden border max-w-sm" style={{ borderColor: 'var(--border)' }}>

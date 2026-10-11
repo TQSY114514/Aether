@@ -51,6 +51,11 @@ desktop.ini
 app/dist-out/
 app/.electron-builder-cache/
 
+# Local backups and scratch assets
+/Aether-acl-recovery/
+/Aether.git.backup/
+/*.png
+
 # Release artifacts staging (local downloads, not for the repo)
 release-download/
 

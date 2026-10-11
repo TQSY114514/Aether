@@ -447,11 +447,19 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
                 </div>
 
                 <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0 ml-2">
-                  {file.added > 0 && (
-                    <span style={{ color: 'var(--success)' }}>+{file.added}</span>
-                  )}
-                  {file.removed > 0 && (
-                    <span style={{ color: 'var(--error)' }}>-{file.removed}</span>
+                  {(file.added > 0 || file.removed > 0) && (
+                    <span className="flex items-center gap-1 font-mono text-[10px] font-semibold shrink-0">
+                      {file.added > 0 && (
+                        <span className="px-1 py-0.2 rounded text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
+                          +{file.added}
+                        </span>
+                      )}
+                      {file.removed > 0 && (
+                        <span className="px-1 py-0.2 rounded text-rose-600 dark:text-rose-400 bg-rose-500/10">
+                          −{file.removed}
+                        </span>
+                      )}
+                    </span>
                   )}
                   {file.diff && (
                     <button
@@ -460,7 +468,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
                         e.stopPropagation()
                         setModalDiffFile(file)
                       }}
-                      className="ms-1.5 p-0.5 rounded hover:bg-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                      className="ms-1 p-0.5 rounded hover:bg-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                       title={t('filesummary.view_full_diff', '查看完整差异')}
                       aria-label={t('filesummary.view_full_diff', '查看完整差异')}
                     >
@@ -473,31 +481,37 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
               {/* Collapsible Unified Diff */}
               {isExpanded && file.diff && (
                 <div
-                  className="px-3 py-2 border-t font-mono text-[10px] leading-relaxed overflow-x-auto max-h-60 overflow-y-auto"
+                  className="px-2 py-1.5 border-t font-mono text-[11px] leading-relaxed overflow-x-auto max-h-60 overflow-y-auto"
                   style={{
                     backgroundColor: 'var(--bg-primary)',
                     borderColor: 'var(--border)',
                   }}
                 >
                   <pre className="whitespace-pre">
-                    {file.diff.split('\n').map((line, idx) => {
-                      let color = 'var(--text-secondary)'
-                      let bg = 'transparent'
-                      if (line.startsWith('+') && !line.startsWith('+++')) {
-                        color = 'var(--success)'
-                        bg = 'rgba(34, 197, 94, 0.08)'
-                      } else if (line.startsWith('-') && !line.startsWith('---')) {
-                        color = 'var(--error)'
-                        bg = 'rgba(239, 68, 68, 0.08)'
-                      } else if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')) {
-                        color = 'var(--accent)'
+                    {file.diff.split('\n').filter((l: string) => !l.startsWith('diff --git') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ ')).map((line: string, idx: number) => {
+                      if (line.startsWith('+')) {
+                        return (
+                          <div key={idx} className="border-l-2 border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 whitespace-pre">
+                            {line}
+                          </div>
+                        )
+                      }
+                      if (line.startsWith('-')) {
+                        return (
+                          <div key={idx} className="border-l-2 border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-400 px-2 py-0.5 whitespace-pre">
+                            {line}
+                          </div>
+                        )
+                      }
+                      if (line.startsWith('@@')) {
+                        return (
+                          <div key={idx} className="text-[10px] text-[var(--accent)] bg-[var(--bg-secondary)] px-2 py-0.5 rounded-[2px] opacity-80 my-0.5 font-semibold whitespace-pre">
+                            {line}
+                          </div>
+                        )
                       }
                       return (
-                        <div
-                          key={idx}
-                          className="px-1 rounded-sm"
-                          style={{ color, backgroundColor: bg }}
-                        >
+                        <div key={idx} className="border-l-2 border-transparent px-2 py-0.5 text-[var(--text-secondary)] whitespace-pre">
                           {line || ' '}
                         </div>
                       )
@@ -545,20 +559,30 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
             </div>
             <div className="flex-1 overflow-auto p-4 font-mono text-[11px] leading-relaxed" style={{ backgroundColor: 'var(--bg-secondary)' }}>
               <pre className="whitespace-pre">
-                {(modalDiffFile.diff || '').split('\n').map((line, idx) => {
-                  let color = 'var(--text-secondary)'
-                  let bg = 'transparent'
-                  if (line.startsWith('+') && !line.startsWith('+++')) {
-                    color = 'var(--success)'
-                    bg = 'rgba(34, 197, 94, 0.08)'
-                  } else if (line.startsWith('-') && !line.startsWith('---')) {
-                    color = 'var(--error)'
-                    bg = 'rgba(239, 68, 68, 0.08)'
-                  } else if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')) {
-                    color = 'var(--accent)'
+                {(modalDiffFile.diff || '').split('\n').filter((l: string) => !l.startsWith('diff --git') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ ')).map((line: string, idx: number) => {
+                  if (line.startsWith('+')) {
+                    return (
+                      <div key={idx} className="border-l-2 border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 whitespace-pre">
+                        {line}
+                      </div>
+                    )
+                  }
+                  if (line.startsWith('-')) {
+                    return (
+                      <div key={idx} className="border-l-2 border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-400 px-2 py-0.5 whitespace-pre">
+                        {line}
+                      </div>
+                    )
+                  }
+                  if (line.startsWith('@@')) {
+                    return (
+                      <div key={idx} className="text-[10px] text-[var(--accent)] bg-[var(--bg-secondary)] px-2 py-0.5 rounded-[2px] opacity-80 my-0.5 font-semibold whitespace-pre">
+                        {line}
+                      </div>
+                    )
                   }
                   return (
-                    <div key={idx} className="px-1 rounded-sm" style={{ color, backgroundColor: bg }}>
+                    <div key={idx} className="border-l-2 border-transparent px-2 py-0.5 text-[var(--text-secondary)] whitespace-pre">
                       {line || ' '}
                     </div>
                   )

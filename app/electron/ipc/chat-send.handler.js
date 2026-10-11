@@ -500,6 +500,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
             fileCount: mergedFiles.length,
             files: mergedFiles,
           }
+          try {
+            wc?.send('chat:turn-summary', {
+              messageId: msgId,
+              sessionId,
+              fileSummary: turnFileSummary,
+            })
+          } catch {}
         }
 
         const runSingleLoop = () => runToolLoop({

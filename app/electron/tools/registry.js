@@ -492,11 +492,37 @@ const TOOLS = [
   { name: 'delegate_task', description: 'Delegate parallel sub-tasks to sub-agents. Parallel writers MUST declare non-overlapping write_paths (omitting write_paths claims the entire workspace and blocks other parallel writers; pass write_paths: [] or read_only: true for read-only tasks; max 3 parallel writers).', risk: 'dangerous', parameters: { type: 'object', properties: { tasks: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { task: { type: 'string', description: 'Sub-task instruction' }, prompt: { type: 'string' }, write_paths: { type: 'array', items: { type: 'string' }, description: 'Disjoint relative file/directory paths this writer touches (omit = whole workspace, [] = read-only)' }, read_only: { type: 'boolean' } }, required: ['task'] }] }, minItems: 1, maxItems: 5 } }, required: ['tasks'] }, run: async (args, ctx) => {
     const tasks = Array.isArray(args.tasks) ? args.tasks.filter(Boolean) : []
     if (!tasks.length) throw new Error('tasks must be non-empty')
-    const SA = require('../llm/subAgent'); const shared = { db: ctx.db, provider: ctx.provider, model: ctx.model, signal: ctx.signal, options: ctx.options || {}, agentMode: 'auto', parentSessionId: ctx.sessionId, onSubagentEvent: ctx.onSubagentEvent }
-    const results = await SA.runParallel(tasks, shared)
+    const SA = require('../llm/subAgent')
+    const shared = {
+      db: ctx.db,
+      provider: ctx.provider,
+      model: ctx.model,
+      signal: ctx.signal,
+      options: ctx.options || {},
+      agentMode: ctx.agentMode === 'plan' ? 'plan' : 'auto',
+      parentSessionId: ctx.sessionId,
+      onSubagentEvent: ctx.onSubagentEvent,
+      callbacks: ctx.callbacks || (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {}),
+    }
+    let results
+    try {
+      results = await SA.runParallel(tasks, shared)
+    } catch (err) {
+      if (err?.code === 'WHOLE_WORKSPACE_CONFLICT' || err?.code === 'WRITE_PATH_OVERLAP') {
+        // Parallel write preflight detected whole-workspace conflict.
+        // Fallback: run sequentially so tasks complete reliably without fail-closed crash.
+        results = []
+        for (let i = 0; i < tasks.length; i++) {
+          const single = await SA.runParallel([tasks[i]], shared)
+          results.push(single[0])
+        }
+      } else {
+        throw err
+      }
+    }
     return results.map((r, i) => {
       const label = typeof tasks[i] === 'string' ? tasks[i] : (tasks[i]?.task || tasks[i]?.prompt || '')
-      return `### Task ${i + 1}: ${String(label).slice(0, 80)}\n${r.success ? r.output : `(failed: ${r.error})`}`
+      return `### Task ${i + 1}: ${String(label).slice(0, 80)}\n${r?.success ? r?.output : `(failed: ${r?.error})`}`
     }).join('\n\n')
   }},
   { name: 'run_agent', description: 'Spawn a specialized sub-agent (explore/build/review/research/debug).', risk: 'dangerous', parameters: { type: 'object', properties: { role: { type: 'string', enum: ['explore', 'build', 'review', 'research', 'debug'] }, task: { type: 'string' }, maxIterations: { type: 'number' } }, required: ['role', 'task'] }, run: async (args, ctx) => {
@@ -516,8 +542,8 @@ const TOOLS = [
         prompt: mp,
         signal: ctx.signal,
         agentMode: roles.getRoleDefaultMode(args.role),
-        callbacks: ctx.callbacks || {},
-        config: { allowedTools, maxIterations, inheritPermissions: false, cleanup: 'keep' },
+        callbacks: ctx.callbacks || (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {}),
+        config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'delete' },
       })
       return o.content || '(no content)'
     } catch (e) { return `agent error: ${e?.message}` }

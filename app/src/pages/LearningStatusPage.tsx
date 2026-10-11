@@ -47,9 +47,9 @@ export default function LearningStatusPage() {
       sub: '从重复工具序列自动 draft 的 SKILL.md',
     },
     {
-      key: 'evolution', label: '进化胶囊', icon: GitBranch, view: 'evolution' as const,
+      key: 'evolution', label: '自进化策略', icon: GitBranch, view: 'memory' as const,
       value: data?.evolution ?? 0,
-      sub: 'GEP 自进化引擎产出的策略胶囊',
+      sub: '从真实会话轨迹提炼的 STRATEGY.md 经验规则',
     },
     {
       key: 'habits', label: '习惯', icon: ListChecks, view: 'memory' as const,

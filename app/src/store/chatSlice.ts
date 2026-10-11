@@ -9,6 +9,7 @@ function ensureAllChatListeners() {
   ensureThinkingListener()
   ensureLoopStateListener()
   ensureUsageListener()
+  ensureTurnSummaryListener()
 }
 
 import type { StateCreator } from "zustand"
@@ -17,7 +18,7 @@ import type { AppState } from "./types"
 import { decodeDataUrlText } from "./types"
 import { t } from "@/utils/i18n"
 import log from "@/utils/logger"
-import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensurePlanSnapshotListener, ensureStatusListener, ensureTodoListener, ensureSubagentListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
+import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensurePlanSnapshotListener, ensureStatusListener, ensureTodoListener, ensureSubagentListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, ensureTurnSummaryListener, setStoppingSessionId } from "./listeners"
 
 interface ChatUndoSnapshot {
   sessionId: number

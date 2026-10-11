@@ -1,4 +1,4 @@
-﻿// 鈹€鈹€鈹€ Feature-flag registry unit tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// 鈹€鈹€鈹€ Feature-flag registry unit tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 import { describe, it, expect, beforeEach } from 'vitest'
 import flags from '../electron/featureFlags'
 
@@ -148,11 +148,10 @@ describe('featureFlags registry', () => {
   describe('safe-by-default: experimental flags default OFF', () => {
     const EXPERIMENTAL = [
       'memory.experienceReplay',
-      'skills.selfEvolution',
       'memory.codeUnderstanding',
       'agent.orchestrator',
     ]
-    it('四个实验能力声明默认值为 false', () => {
+    it('实验能力声明默认值为 false', () => {
       for (const key of EXPERIMENTAL) {
         const def = flags.defs().find(d => d.key === key)
         expect(def, `flag ${key} 应存在于 FLAG_DEFS`).toBeTruthy()
@@ -166,6 +165,7 @@ describe('featureFlags registry', () => {
       expect(flags.isEnabled(null, 'repoMap.enabled')).toBe(true)
       expect(flags.isEnabled(null, 'agent.toolRouter')).toBe(true)
       expect(flags.isEnabled(null, 'ux.firstRunWizard')).toBe(true)
+      expect(flags.isEnabled(null, 'skills.selfEvolution')).toBe(true)
     })
   })
 })

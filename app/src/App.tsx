@@ -12,7 +12,7 @@ import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
 import LearningGraphPage from '@/pages/LearningGraphPage'
 import SkillsPage from '@/pages/SkillsPage'
-import EvolutionPage from '@/pages/EvolutionPage'
+import StrategyTab from '@/components/memory/StrategyTab'
 import LearningStatusPage from '@/pages/LearningStatusPage'
 import SecurityPage from '@/pages/SecurityPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
@@ -284,7 +284,7 @@ export default function App() {
       case 'memory': return <MemoryPage />
       case 'learning': return <LearningGraphPage />
       case 'skills': return <SkillsPage />
-      case 'evolution': return <EvolutionPage />
+      case 'evolution': return <div className="max-w-4xl mx-auto w-full px-6 py-8 overflow-y-auto"><StrategyTab /></div>
       case 'learningStatus': return <LearningStatusPage />
       case 'security': return <SecurityPage />
     }

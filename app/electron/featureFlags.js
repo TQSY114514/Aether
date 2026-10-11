@@ -57,7 +57,7 @@ const FLAG_DEFS = [
   { key: 'network.policy',        default: false, category: 'agent',      description: 'Network allowlist policy for agent web tools (web_fetch/web_search)' },
   // Phase 4 — self-evolving memory
   { key: 'memory.experienceReplay', default: false, category: 'learning', description: 'Trajectory experience replay into the loop' },
-  { key: 'skills.selfEvolution', default: false, category: 'learning',    description: 'Agent-created skill drafts (skill evolution)' },
+  { key: 'skills.selfEvolution', default: true,  category: 'learning',    description: 'Autonomous strategy reflection from execution traces into STRATEGY.md' },
   // Phase 5 — LLM routing & resilience
   { key: 'llm.autoFallback',     default: false, category: 'agent',       description: 'Enable transparent provider fallback on 429/5xx errors' },
   { key: 'llm.smartPool',        default: false, category: 'agent',       description: 'Enable load balancing across multiple free-tier providers' },

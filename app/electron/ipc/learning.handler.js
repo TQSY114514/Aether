@@ -27,11 +27,16 @@ function registerLearningHandlers(ipcMain, db) {
       autoSkills = num(db.prepare('SELECT COUNT(*) AS c FROM skill_drafts').get()?.c)
     } catch {}
 
-    // 3. 进化胶囊(GEP 自进化引擎产出的 capsule)
+    // 3. 自进化策略(STRATEGY.md 经验规则)
     let evolution = 0
     try {
-      evolution = num(db.prepare('SELECT COUNT(*) AS c FROM evolution_events').get()?.c)
-    } catch {}
+      const s = require('../evolution/strategyStore')
+      evolution = num(s.stats()?.count || 0)
+    } catch {
+      try {
+        evolution = num(db.prepare('SELECT COUNT(*) AS c FROM evolution_events').get()?.c)
+      } catch {}
+    }
 
     // 4. 习惯(agent 学到的用户偏好 / standing instructions)
     const habits = { total: 0, recent: [] }

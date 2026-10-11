@@ -23,10 +23,19 @@ const AGENT_TASK_PATCH_COLS = new Set(['status', 'error', 'result', 'attempts', 
 function taskDbAdapter(raw) {
   return {
     // ── Session ────────────────────────────────────────────────────────────
-    createSession({ title = '新会话', persona_id = null, parentSessionId = null } = {}) {
-      const info = raw.prepare('INSERT INTO session (title, persona_id, parent_session_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, 1)')
-        .run(title, persona_id, parentSessionId, localNow())
-      return { lastInsertRowid: Number(info.lastInsertRowid) }
+    createSession({ title = '新会话', persona_id = null, parentSessionId = null, session_kind = 'task' } = {}) {
+      try {
+        const info = raw.prepare('INSERT INTO session (title, persona_id, parent_session_id, session_kind, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, 1)')
+          .run(title, persona_id, parentSessionId, String(session_kind || 'task'), localNow())
+        return { lastInsertRowid: Number(info.lastInsertRowid) }
+      } catch (err) {
+        if (err && String(err.message).includes('no column named session_kind')) {
+          const info = raw.prepare('INSERT INTO session (title, persona_id, parent_session_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, 1)')
+            .run(title, persona_id, parentSessionId, localNow())
+          return { lastInsertRowid: Number(info.lastInsertRowid) }
+        }
+        throw err
+      }
     },
 
     getSession(id) {
