@@ -22,18 +22,20 @@
 
 // Classify a model by its id/name prefix. Returns the reasoning family.
 // Regexes are pre-compiled once (module-level) since they're called once per turn.
-const RE_OPENAI = /^o[134]|^gpt-5/
-const RE_CLAUDE = /claude/
+const RE_OPENAI = /^o[134]|^gpt-5/i
+const RE_CLAUDE = /claude/i
 const RE_DEEPSEEK_R = /deepseek[_-](r\d|reasoner)/i
-const RE_QWEN = /^qwq|qwen.*-(thinking|reason)/
+const RE_QWEN = /^qwq|qwen.*-(thinking|reason)|qwen3/i
+const RE_GEMINI = /gemini.*thinking|gemini-2\.[05]|gemini-3/i
+
 function reasoningFamily(modelName = '') {
   const m = modelName.toLowerCase()
   if (RE_OPENAI.test(m)) return 'openai'
   if (RE_CLAUDE.test(m)) return 'claude'
-  // Only match deepseek-reasoner / deepseek-r1 style names. The old
-  // /deepseek/ + /r/.test(m) regex falsely matched "deepseek-coder" (has r).
+  // Only match deepseek-reasoner / deepseek-r1 style names.
   if (RE_DEEPSEEK_R.test(m)) return 'deepseek'
   if (RE_QWEN.test(m)) return 'qwen'
+  if (RE_GEMINI.test(m)) return 'gemini'
   return 'none'
 }
 
@@ -42,40 +44,57 @@ const OPENAI_EFFORT = { low: 'low', medium: 'medium', high: 'high' }
 
 // Build the reasoning params to spread into the request body.
 // `effort` is 'low' | 'medium' | 'high'. `thinkingEnabled` is boolean.
-// Returns {} when thinking is off (OpenAI/Claude) or the model doesn't support
-// reasoning. DeepSeek gets { thinking: { type: 'disabled' } } when off.
+// Returns {} when thinking is off (OpenAI) or the model doesn't support reasoning.
 function buildReasoningParams(modelName, effort, thinkingEnabled) {
   const fam = reasoningFamily(modelName)
   if (fam === 'deepseek') {
     // DeepSeek supports explicit on/off via thinking.type
     return thinkingEnabled ? { thinking: { type: 'enabled' } } : { thinking: { type: 'disabled' } }
   }
-  if (!thinkingEnabled) return {}
+  if (!thinkingEnabled) {
+    if (fam === 'qwen') return { enable_thinking: false }
+    if (fam === 'gemini') return { thinking_config: { thinking_budget: 0 } }
+    return {}
+  }
   if (fam === 'openai') {
     const e = OPENAI_EFFORT[effort]
     return e ? { reasoning_effort: e } : {}
   }
   if (fam === 'claude') {
-    // Aether only ships an OpenAI-compatible adapter, so Claude models are
-    // reached through a relay/shim. Most relays (new-api, OpenRouter) accept
-    // `reasoning_effort` for Claude and translate it; sending a native Claude
-    // `thinking` block to an OpenAI-shape endpoint usually 400s. So we use the
-    // OpenAI vocabulary here and let the relay handle conversion. We do NOT
-    // force temperature=1/top_p=undefined — those are only required for the
-    // native Claude thinking API and break OpenAI-shape requests.
-    const e = OPENAI_EFFORT[effort]
-    return e ? { reasoning_effort: e } : {}
+    // Both reasoning_effort and Anthropic-native thinking budget are supplied
+    // so relays (OpenRouter / new-api / OneAPI) can pick the shape they need.
+    const e = OPENAI_EFFORT[effort] || 'medium'
+    const budget = effort === 'low' ? 2048 : effort === 'medium' ? 8192 : 24576
+    return {
+      reasoning_effort: e,
+      thinking: { type: 'enabled', budget_tokens: budget },
+    }
   }
-  // Qwen: reasoning is usually always-on for these models; sending an
-  // extra_body is unreliable across shims, so we send nothing and let the model
-  // behave by default. (Best-effort — no harm if omitted.)
+  if (fam === 'gemini') {
+    const budget = effort === 'low' ? 1024 : effort === 'medium' ? 4096 : 16384
+    return {
+      thinking_config: { thinking_budget: budget },
+      reasoning_effort: OPENAI_EFFORT[effort] || 'medium',
+    }
+  }
+  if (fam === 'qwen') {
+    const budget = effort === 'low' ? 2048 : effort === 'medium' ? 8192 : 16384
+    return {
+      enable_thinking: true,
+      thinking_budget: budget,
+    }
+  }
   return {}
 }
 
 // Whether the model accepts user-controlled reasoning params (drives UI: show/hide slider).
 function supportsReasoning(modelName = '') {
-  const fam = reasoningFamily(modelName)
-  return fam === 'openai' || fam === 'claude' || fam === 'deepseek'
+  return reasoningFamily(modelName) !== 'none'
 }
 
-module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning }
+// Whether the model only supports binary on/off without tiered effort levels.
+function isBinaryReasoning(modelName = '') {
+  return reasoningFamily(modelName) === 'deepseek'
+}
+
+module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning, isBinaryReasoning }

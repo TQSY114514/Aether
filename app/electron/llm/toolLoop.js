@@ -256,15 +256,19 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     } catch {}
   }
 
-  // Poor Mode: aggressive token and compute conservation (max 8 iterations, tighter microcompact)
+  // Poor Mode: genuine token and compute conservation (low reasoning effort, tighter tool payloads, max 15 iterations)
   const isPoorMode = (() => {
     try { return db && require('../featureFlags').isEnabled(db, 'agent.poorMode') === true } catch { return false }
   })()
   const effectiveMaxIterations = isPoorMode
-    ? Math.min(Number(maxIterations) || 25, 8)
+    ? Math.min(Number(maxIterations) || 25, 15)
     : maxIterations
   if (isPoorMode) {
-    try { onStatus?.({ kind: 'poor_mode', text: '💸 穷鬼省流模式已启用：循环预算严格压制为 8 轮，激进压缩 Token' }) } catch {}
+    if (options) {
+      // Clamp reasoning effort to 'low' to avoid thousands of extended thinking tokens per turn
+      options.reasoningEffort = 'low'
+    }
+    try { onStatus?.({ kind: 'poor_mode', text: '💸 穷鬼省流模式已启用：低推理预算 + 激进工具截断 + 强化上下文压缩' }) } catch {}
   }
 
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
@@ -1392,7 +1396,7 @@ Reply ONLY with JSON:
           rawContent = `${rawContent}\n[recovery: ${rh.kind || rh.action || 'unknown'}${hintText}]`
         }
         // Middleware chain (redact, truncate) — never let it break the loop.
-        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args }) } catch {}
+        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args, isPoorMode }) } catch {}
         // Enrich structured results with a summary line (OpenClaw-inspired).
         try { rawContent = enrichWithSummary(rawContent, (tc.function||{}).name) } catch {}
         // Collect evidence for verification (Codex-inspired).

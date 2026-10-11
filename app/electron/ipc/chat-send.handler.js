@@ -686,6 +686,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         const wc = getWebContents()
         let hasThinking = false
         let thinkingEnded = false
+        let thinkingStartedAt = null
         const stream = streamChat({
           provider: p,
           model: m,
@@ -697,7 +698,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
               if (delta) {
                 if (!hasThinking) {
                   hasThinking = true
-                  try { wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) } catch {}
+                  thinkingStartedAt = Date.now()
+                  try { wc?.send('chat:thinking-start', { messageId: msgId, sessionId, startedAt: thinkingStartedAt }) } catch {}
                 }
                 try { wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta, done: false }) } catch {}
               }
@@ -711,14 +713,16 @@ ipcMain.handle('chat:complete', handleChatComplete)
             // Signal thinking is complete as soon as main content tokens start flowing
             if (hasThinking && !thinkingEnded) {
               thinkingEnded = true
-              try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
+              const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+              try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
             }
             try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
           }
         }
         if (hasThinking && !thinkingEnded) {
           thinkingEnded = true
-          try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
+          const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+          try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
         }
         clearTimeout(timeout)
         abortControllers.delete(msgId)

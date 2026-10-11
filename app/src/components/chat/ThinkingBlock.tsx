@@ -9,6 +9,10 @@ type ThinkingBlockProps = {
   streaming?: boolean
   // When true: show first 3 lines as preview (for finalized messages).
   preview?: boolean
+  // Pre-calculated or persisted duration in seconds from backend/store
+  duration?: number | null
+  // Start timestamp in ms from backend/store
+  startedAt?: number | null
 }
 
 /**
@@ -21,11 +25,22 @@ export default function ThinkingBlock({
   collapsed: initialCollapsed = true,
   streaming = false,
   preview = false,
+  duration: propDuration = null,
+  startedAt = null,
 }: ThinkingBlockProps) {
   const [open, setOpen] = useState(streaming || !initialCollapsed)
-  const [startTime] = useState<number>(() => Date.now())
+  const startTimeRef = useRef<number>(startedAt || Date.now())
+  if (startedAt && startTimeRef.current !== startedAt) {
+    startTimeRef.current = startedAt
+  }
   const [elapsed, setElapsed] = useState<number>(0)
-  const [duration, setDuration] = useState<number | null>(null)
+  const [duration, setDuration] = useState<number | null>(propDuration)
+
+  useEffect(() => {
+    if (propDuration !== undefined && propDuration !== null && propDuration > 0) {
+      setDuration(propDuration)
+    }
+  }, [propDuration])
 
   const contentRef = useRef<HTMLPreElement | null>(null)
   const followingRef = useRef<boolean>(true)
@@ -43,24 +58,24 @@ export default function ThinkingBlock({
     prevStreamingRef.current = streaming
   }, [streaming, initialCollapsed])
 
-  // Live timer during streaming: only recreate when streaming state or startTime changes
+  // Live timer during streaming
   useEffect(() => {
     if (!streaming) return
     const interval = setInterval(() => {
-      const sec = (Date.now() - startTime) / 1000
+      const sec = Math.max(0, (Date.now() - startTimeRef.current) / 1000)
       setElapsed(sec)
     }, 100)
     return () => clearInterval(interval)
-  }, [streaming, startTime])
+  }, [streaming])
 
   // Record duration upon stream completion, clearing cached duration if streaming resumes
   useEffect(() => {
     if (streaming) {
-      if (duration !== null) setDuration(null)
-    } else if (elapsed > 0 && duration === null) {
+      if (duration !== null && propDuration == null) setDuration(null)
+    } else if (elapsed > 0 && duration === null && propDuration == null) {
       setDuration(elapsed)
     }
-  }, [streaming, elapsed, duration])
+  }, [streaming, elapsed, duration, propDuration])
 
   // Smart follow scroll: track if user manually scrolled up
   const handleScroll = useCallback(() => {
@@ -79,13 +94,14 @@ export default function ThinkingBlock({
   if (!text || !text.trim()) return null
 
   // Format header status label
+  const finalDuration = propDuration != null && propDuration > 0 ? propDuration : duration
   let statusLabel: string
   if (streaming) {
     statusLabel = t('thinking.running', elapsed.toFixed(1))
-  } else if (duration !== null && duration > 0) {
-    statusLabel = duration < 1
+  } else if (finalDuration !== null && finalDuration > 0) {
+    statusLabel = finalDuration < 1
       ? t('thinking.thought_briefly', '思考片刻')
-      : t('thinking.thought_for', duration.toFixed(1))
+      : t('thinking.thought_for', finalDuration.toFixed(1))
   } else {
     statusLabel = open ? t('thinking.full', '思考过程') : t('thinking.collapsed', '思考过程')
   }

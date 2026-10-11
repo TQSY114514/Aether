@@ -238,6 +238,10 @@ export interface AppState {
   // extended thinking, OpenAI o-series reasoning_content). Accumulated as
   // deltas arrive during streaming; cleared when the stream ends.
   thinkingBlocksByMessage: Record<number, string>
+  // Per-message duration of thinking in seconds (persisted & calculated accurately from stream).
+  thinkingDurationsByMessage: Record<number, number>
+  // Per-message start timestamp in ms (to compute real elapsed time during and across streams).
+  thinkingStartsByMessage: Record<number, number>
   // Inline status lines per message (compaction notice, budget-exhausted, etc.).
   statusLinesByMessage: Record<number, string[]>
   // Per-message file modification summary for Git-like change deck.

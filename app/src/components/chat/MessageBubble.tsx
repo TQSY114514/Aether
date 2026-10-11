@@ -28,6 +28,8 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const todos = useStore(s => s.todosByMessage[message.id])
   const subagents = useStore(s => s.subagentsByMessage[message.id])
   const thinkingBlocks = useStore(s => s.thinkingBlocksByMessage[message.id])
+  const thinkingDuration = useStore(s => s.thinkingDurationsByMessage[message.id])
+  const thinkingStartedAt = useStore(s => s.thinkingStartsByMessage[message.id])
   const statusLines = useStore(s => s.statusLinesByMessage[message.id])
   const fileSummary = useStore(s => s.fileSummariesByMessage[message.id])
 
@@ -39,11 +41,11 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   // An assistant turn with a live todo checklist renders as a task card.
   const hasTask = !!todos && todos.length > 0
   // A message is "streaming" when it's the last message (assistant, empty content)
-  // and the session has an active stream buffer.
-  const streamingBySession = useStore(s => s.streamingBySession)
-  const sessionStream = streamingBySession[message.session_id]
-  const isStreaming = !isUser && message.content === '' && Boolean(sessionStream && sessionStream.messageId === message.id)
-  const isAnswerStreaming = Boolean(sessionStream && sessionStream.content && sessionStream.content.length > 0)
+  // and the session has an active stream buffer. Scoped selector prevents historical
+  // messages from re-rendering on every stream token.
+  const isStreamingCandidate = !isUser && message.content === ''
+  const isStreaming = useStore(s => isStreamingCandidate && s.streamingBySession[message.session_id]?.messageId === message.id)
+  const isAnswerStreaming = useStore(s => isStreaming && Boolean(s.streamingBySession[message.session_id]?.content))
   const hasActiveTool = Boolean(toolCalls && toolCalls.some(t => t.result === null && !t.error))
   const isThinkingStreaming = Boolean(isStreaming && !isAnswerStreaming && !hasActiveTool)
   const isError = message.status === 'error'
@@ -237,6 +239,8 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               <AgentTimeline
                 thinkingText={thinkingBlocks || undefined}
                 thinkingStreaming={isThinkingStreaming}
+                thinkingDuration={thinkingDuration}
+                thinkingStartedAt={thinkingStartedAt}
                 toolCalls={toolCalls && toolCalls.length > 0 ? toolCalls : undefined}
                 planSteps={planSteps || undefined}
               />

@@ -29,6 +29,8 @@ interface ChatUndoSnapshot {
   planSnapshotsByMessage: Record<number, any>
   subagentsByMessage: Record<number, any>
   thinkingBlocksByMessage: Record<number, any>
+  thinkingDurationsByMessage: Record<number, any>
+  thinkingStartsByMessage: Record<number, any>
   statusLinesByMessage: Record<number, any>
   fileSummariesByMessage: Record<number, any>
 }
@@ -48,6 +50,8 @@ function pushUndo(sessionId: number, messages: Message[], clearRedo = true, extr
     planSnapshotsByMessage: { ...(extra?.planSnapshotsByMessage || {}) },
     subagentsByMessage: { ...(extra?.subagentsByMessage || {}) },
     thinkingBlocksByMessage: { ...(extra?.thinkingBlocksByMessage || {}) },
+    thinkingDurationsByMessage: { ...(extra?.thinkingDurationsByMessage || {}) },
+    thinkingStartsByMessage: { ...(extra?.thinkingStartsByMessage || {}) },
     statusLinesByMessage: { ...(extra?.statusLinesByMessage || {}) },
     fileSummariesByMessage: { ...(extra?.fileSummariesByMessage || {}) },
   })
@@ -72,6 +76,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   planSnapshotsByMessage: {},
   subagentsByMessage: {},
   thinkingBlocksByMessage: {},
+  thinkingDurationsByMessage: {},
+  thinkingStartsByMessage: {},
   statusLinesByMessage: {},
   fileSummariesByMessage: {},
   setFileSummaryForMessage: (messageId, summary) => {
@@ -297,6 +303,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         const { [regeneratedMsgId]: __, ...restPS } = s.planStepsByMessage
         const { [regeneratedMsgId]: ___, ...restTB } = s.todosByMessage
         const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
+        const { [regeneratedMsgId]: ____D, ...restTDB } = s.thinkingDurationsByMessage
+        const { [regeneratedMsgId]: ____S, ...restTSB } = s.thinkingStartsByMessage
         const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
         const { [regeneratedMsgId]: ______, ...restSNAP } = s.planSnapshotsByMessage
         const { [regeneratedMsgId]: _______, ...restSA } = s.subagentsByMessage
@@ -305,6 +313,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         next.planStepsByMessage = restPS
         next.todosByMessage = restTB
         next.thinkingBlocksByMessage = restTIB
+        next.thinkingDurationsByMessage = restTDB
+        next.thinkingStartsByMessage = restTSB
         next.statusLinesByMessage = restSIB
         next.planSnapshotsByMessage = restSNAP
         next.subagentsByMessage = restSA
@@ -361,6 +371,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           planSnapshotsByMessage: { ...get().planSnapshotsByMessage },
           subagentsByMessage: { ...get().subagentsByMessage },
           thinkingBlocksByMessage: { ...get().thinkingBlocksByMessage },
+          thinkingDurationsByMessage: { ...get().thinkingDurationsByMessage },
+          thinkingStartsByMessage: { ...get().thinkingStartsByMessage },
           statusLinesByMessage: { ...get().statusLinesByMessage },
           fileSummariesByMessage: { ...get().fileSummariesByMessage },
         })
@@ -373,6 +385,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           planSnapshotsByMessage: entry.planSnapshotsByMessage,
           subagentsByMessage: entry.subagentsByMessage,
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
+          thinkingDurationsByMessage: entry.thinkingDurationsByMessage || {},
+          thinkingStartsByMessage: entry.thinkingStartsByMessage || {},
           statusLinesByMessage: entry.statusLinesByMessage,
           fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })
@@ -397,6 +411,8 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           planSnapshotsByMessage: entry.planSnapshotsByMessage,
           subagentsByMessage: entry.subagentsByMessage,
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
+          thinkingDurationsByMessage: entry.thinkingDurationsByMessage || {},
+          thinkingStartsByMessage: entry.thinkingStartsByMessage || {},
           statusLinesByMessage: entry.statusLinesByMessage,
           fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })

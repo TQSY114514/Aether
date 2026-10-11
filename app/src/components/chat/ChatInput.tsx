@@ -164,6 +164,13 @@ export default function ChatInput() {
     return null
   }, [currentSessionId, sessionConfigs, allModels])
 
+  const isBinaryReasoning = useMemo(() => {
+    if (!activeModelId) return false
+    const m = allModels.find(x => x.id === activeModelId)
+    const name = (m?.model_name || '').toLowerCase()
+    return /deepseek[_-](r\d|reasoner)/i.test(name)
+  }, [activeModelId, allModels])
+
   const sessionIdRef = useRef(currentSessionId)
   useEffect(() => { sessionIdRef.current = currentSessionId }, [currentSessionId])
 
@@ -590,6 +597,7 @@ export default function ChatInput() {
               onToggleThinking={setThinkingEnabled}
               level={effortLevel}
               onLevelChange={setEffortLevel}
+              isBinary={isBinaryReasoning}
             />
             <ModelSelector
               providers={providers}

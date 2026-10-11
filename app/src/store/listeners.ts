@@ -31,6 +31,8 @@ let _toolCallListenerInstalled = false
 let _arenaListenerInstalled = false
 let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
+let _thinkingStreamRaf = 0
+let _pendingThinkingDeltas: Record<number, string> = {}
 let _statusListenerInstalled = false
 let _habitSuggestionInstalled = false
 let _todoListenerInstalled = false
@@ -44,6 +46,20 @@ let _toolStreamListenerInstalled = false
 let _turnSummaryListenerInstalled = false
 let _memorySavedListenerInstalled = false
 let _skillPatchedListenerInstalled = false
+
+function flushThinkingUpdates() {
+  const deltas = _pendingThinkingDeltas
+  _pendingThinkingDeltas = {}
+  if (Object.keys(deltas).length === 0) return
+  getStore().setState((s) => {
+    const next = { ...s.thinkingBlocksByMessage }
+    for (const [mid, delta] of Object.entries(deltas)) {
+      const n = Number(mid)
+      next[n] = (next[n] || "") + delta
+    }
+    return { thinkingBlocksByMessage: next }
+  })
+}
 
 // Chunk listener
 
@@ -85,8 +101,11 @@ export function ensureChunkListener() {
     }
     if (done) {
       flushStreamUpdates()
+      flushThinkingUpdates()
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
+      if (_thinkingStreamRaf) { cancelAnimationFrame(_thinkingStreamRaf); _thinkingStreamRaf = 0 }
       _pendingDeltas = {}
+      _pendingThinkingDeltas = {}
       const sid = sessionId
       const finishedMsgId = messageId || (buf && buf.messageId) || null
       requestAnimationFrame(() => {
@@ -343,24 +362,9 @@ export function ensureThinkingListener() {
   if (_thinkingListenerInstalled) return
   _thinkingListenerInstalled = true
 
-  window.electronAPI.chat.onThinkingStart?.(({ messageId, sessionId }) => {
+  window.electronAPI.chat.onThinkingStart?.(({ messageId, sessionId, startedAt }) => {
     if (!messageId) return
-    getStore().setState((s) => {
-      const sid = sessionId || s.currentSessionId
-      const nextStreaming = { ...s.streamingBySession }
-      if (sid) {
-        if (!nextStreaming[sid]) {
-          nextStreaming[sid] = { content: "", messageId }
-        } else if (nextStreaming[sid].messageId !== messageId) {
-          nextStreaming[sid] = { ...nextStreaming[sid], messageId }
-        }
-      }
-      return { streamingBySession: nextStreaming }
-    })
-  })
-
-  window.electronAPI.chat.onThinkingChunk?.(({ messageId, sessionId, delta }) => {
-    if (!messageId || !delta) return
+    const now = startedAt || Date.now()
     getStore().setState((s) => {
       const sid = sessionId || s.currentSessionId
       const nextStreaming = { ...s.streamingBySession }
@@ -373,9 +377,54 @@ export function ensureThinkingListener() {
       }
       return {
         streamingBySession: nextStreaming,
-        thinkingBlocksByMessage: {
-          ...s.thinkingBlocksByMessage,
-          [messageId]: (s.thinkingBlocksByMessage[messageId] || "") + delta,
+        thinkingStartsByMessage: {
+          ...s.thinkingStartsByMessage,
+          [messageId]: now,
+        },
+      }
+    })
+  })
+
+  window.electronAPI.chat.onThinkingChunk?.(({ messageId, sessionId, delta }) => {
+    if (!messageId || !delta) return
+    _pendingThinkingDeltas[messageId] = (_pendingThinkingDeltas[messageId] || "") + delta
+    const sid = sessionId || getStore().getState().currentSessionId
+    if (sid) {
+      const st = getStore().getState()
+      const buf = st.streamingBySession[sid]
+      if (!buf || buf.messageId !== messageId) {
+        getStore().setState((s) => ({
+          streamingBySession: {
+            ...s.streamingBySession,
+            [sid]: { content: buf?.content || "", messageId },
+          },
+        }))
+      }
+    }
+    if (!_thinkingStreamRaf) {
+      _thinkingStreamRaf = requestAnimationFrame(() => {
+        _thinkingStreamRaf = 0
+        flushThinkingUpdates()
+      })
+    }
+  })
+
+  window.electronAPI.chat.onThinkingEnd?.(({ messageId, durationMs }) => {
+    if (!messageId) return
+    flushThinkingUpdates()
+    if (_thinkingStreamRaf) {
+      cancelAnimationFrame(_thinkingStreamRaf)
+      _thinkingStreamRaf = 0
+    }
+    getStore().setState((s) => {
+      const start = s.thinkingStartsByMessage[messageId]
+      const durationSec = durationMs != null && durationMs > 0
+        ? durationMs / 1000
+        : (start ? (Date.now() - start) / 1000 : 0)
+      return {
+        thinkingDurationsByMessage: {
+          ...s.thinkingDurationsByMessage,
+          [messageId]: (s.thinkingDurationsByMessage[messageId] || 0) + durationSec,
         },
       }
     })

@@ -158,18 +158,24 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   const thinkingRafRef = useRef<number>(0)
   const mdRafRef = useRef<number>(0)
   const lastLenRef = useRef<number>(0)
+  const lastMdRenderTimeRef = useRef<number>(0)
   const activeMidRef = useRef<number | null>(null)
 
   // Live streaming states: React state so blocks re-render on each new chunk/step.
   const [thinkingText, setThinkingText] = useState('')
   const [thinkingStreaming, setThinkingStreaming] = useState(false)
+  const [thinkingDuration, setThinkingDuration] = useState<number | null>(null)
+  const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null)
   const [toolCalls, setToolCalls] = useState<any[]>(EMPTY_ARRAY)
 
   const resetLocalState = useCallback(() => {
     setThinkingText('')
     setThinkingStreaming(false)
+    setThinkingDuration(null)
+    setThinkingStartedAt(null)
     setToolCalls(EMPTY_ARRAY)
     lastLenRef.current = 0
+    lastMdRenderTimeRef.current = 0
     if (ref.current) ref.current.innerHTML = ''
   }, [])
 
@@ -201,23 +207,39 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
             setThinkingStreaming(!buf.content)
           })
         }
+
+        const dur = s.thinkingDurationsByMessage[mid] ?? null
+        const start = s.thinkingStartsByMessage[mid] ?? null
+        setThinkingDuration(dur)
+        setThinkingStartedAt(start)
+
         // Tool calls in progress or completed
         const tc = s.toolCallsByMessage[mid] || EMPTY_ARRAY
         setToolCalls(tc)
       }
 
-      // -- Main content: RAF-throttled real-time Markdown rendering --
+      // -- Main content: Throttled RAF real-time Markdown rendering --
+      // High token rates (>40 tok/s) can trigger 60+ DOMPurify + regex re-parses/sec.
+      // Coalescing to a 50ms window eliminates frame drops while keeping typing fluid.
       if (!ref.current) return
       const newLen = buf.content.length
       if (newLen === lastLenRef.current) return
       lastLenRef.current = newLen
 
-      cancelAnimationFrame(mdRafRef.current)
-      mdRafRef.current = requestAnimationFrame(() => {
+      const now = performance.now()
+      if (now - lastMdRenderTimeRef.current >= 50) {
+        lastMdRenderTimeRef.current = now
+        cancelAnimationFrame(mdRafRef.current)
         mdRafRef.current = 0
-        if (!ref.current) return
         ref.current.innerHTML = renderMarkdown(buf.content)
-      })
+      } else if (!mdRafRef.current) {
+        mdRafRef.current = requestAnimationFrame(() => {
+          mdRafRef.current = 0
+          if (!ref.current) return
+          lastMdRenderTimeRef.current = performance.now()
+          ref.current.innerHTML = renderMarkdown(buf.content)
+        })
+      }
 
       if (bubbleRef.current) {
         bubbleRef.current.style.minHeight = ''
@@ -263,6 +285,8 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
           <AgentTimeline
             thinkingText={thinkingText || undefined}
             thinkingStreaming={thinkingStreaming}
+            thinkingDuration={thinkingDuration}
+            thinkingStartedAt={thinkingStartedAt}
             toolCalls={toolCalls.length > 0 ? toolCalls : undefined}
             streaming
           />
