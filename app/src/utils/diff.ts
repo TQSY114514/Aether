@@ -35,29 +35,36 @@ export function cleanDiffLines(rawDiff: string): string[] {
     l.startsWith('+++ w/') ||
     l.startsWith('+++ ')
 
-  const isFileBoundary = (linesArr: string[], i: number) => {
-    const l = linesArr[i]
-    if (l.startsWith('diff --git')) return true
-    if (l.startsWith('--- a/') || l.startsWith('--- /dev/null') || l.startsWith('--- b/')) {
-      const next = linesArr[i + 1]
-      if (next && (next.startsWith('+++ b/') || next.startsWith('+++ /dev/null') || next.startsWith('+++ a/'))) {
-        return true
-      }
-    }
-    return false
-  }
-
   const result: string[] = []
   let inHeader = true
   let foundFileHeaderMinus = false
 
+  let remainingOld = 0
+  let remainingNew = 0
+  let inHunk = false
+
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i]
 
-    // Detect new file boundary inside hunks
-    if (!inHeader && isFileBoundary(lines, i)) {
+    // Check if current hunk is actively consuming lines
+    const hunkActive = inHunk && (remainingOld > 0 || remainingNew > 0)
+
+    // A new file boundary inside hunks:
+    // 1) diff --git is always a new file
+    // 2) pair of --- and +++ ONLY when current hunk has ended
+    const isNewFileBoundary =
+      l.startsWith('diff --git') ||
+      (!hunkActive &&
+        isFileHeaderMinus(l) &&
+        lines[i + 1] != null &&
+        isFileHeaderPlus(lines[i + 1]))
+
+    if (!inHeader && isNewFileBoundary) {
       inHeader = true
       foundFileHeaderMinus = false
+      inHunk = false
+      remainingOld = 0
+      remainingNew = 0
     }
 
     if (inHeader) {
@@ -78,6 +85,12 @@ export function cleanDiffLines(rawDiff: string): string[] {
       }
       if (l.startsWith('@@')) {
         inHeader = false
+        const m = l.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+        if (m) {
+          inHunk = true
+          remainingOld = m[2] !== undefined ? parseInt(m[2], 10) : 1
+          remainingNew = m[4] !== undefined ? parseInt(m[4], 10) : 1
+        }
         result.push(l)
         continue
       }
@@ -86,6 +99,28 @@ export function cleanDiffLines(rawDiff: string): string[] {
       inHeader = false
       result.push(l)
       continue
+    }
+
+    // Inside hunk content: track line counts
+    if (l.startsWith('@@')) {
+      const m = l.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+      if (m) {
+        inHunk = true
+        remainingOld = m[2] !== undefined ? parseInt(m[2], 10) : 1
+        remainingNew = m[4] !== undefined ? parseInt(m[4], 10) : 1
+      }
+    } else if (inHunk) {
+      if (l.startsWith(' ')) {
+        remainingOld = Math.max(0, remainingOld - 1)
+        remainingNew = Math.max(0, remainingNew - 1)
+      } else if (l.startsWith('-')) {
+        remainingOld = Math.max(0, remainingOld - 1)
+      } else if (l.startsWith('+')) {
+        remainingNew = Math.max(0, remainingNew - 1)
+      }
+      if (remainingOld === 0 && remainingNew === 0) {
+        inHunk = false
+      }
     }
 
     result.push(l)
