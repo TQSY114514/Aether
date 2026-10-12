@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Aether interactive terminal UI (Ink v5, Electron-free). Local type:module — app root stays CJS.",
   "dependencies": {
-    "ink": "^7.1.1",
+    "ink": "^8.0.0",
     "react": "^19.3.0"
   }
 }
