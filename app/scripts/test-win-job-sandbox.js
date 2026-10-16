@@ -40,19 +40,29 @@ function isPidAlive(pid) {
 
 function findChildPids(parentPid) {
   if (!parentPid) return []
-  try {
-    const stdout = execSync(
-      `powershell.exe -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${parentPid}').ProcessId"`,
-      { encoding: 'utf8', windowsHide: true, timeout: 5000 }
-    )
-    return stdout
-      .trim()
-      .split(/\r?\n/)
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((n) => Number.isInteger(n) && n > 0)
-  } catch {
-    return []
+  const allDescendants = new Set()
+  const queue = [parentPid]
+  while (queue.length > 0) {
+    const current = queue.shift()
+    try {
+      const stdout = execSync(
+        `powershell.exe -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${current}').ProcessId"`,
+        { encoding: 'utf8', windowsHide: true, timeout: 5000 }
+      )
+      const pids = stdout
+        .trim()
+        .split(/\r?\n/)
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => Number.isInteger(n) && n > 0)
+      for (const pid of pids) {
+        if (!allDescendants.has(pid)) {
+          allDescendants.add(pid)
+          queue.push(pid)
+        }
+      }
+    } catch {}
   }
+  return Array.from(allDescendants)
 }
 
 async function sleep(ms) {
@@ -173,6 +183,10 @@ async function main() {
   const termRes = await terminateProcess(child2.pid)
   console.log(`  -> terminateProcess result:`, termRes)
   if (!termRes || !termRes.ok) {
+    try { child2.kill() } catch {}
+    for (const p of descendants2) {
+      try { process.kill(p, 'SIGKILL') } catch {}
+    }
     throw new Error(`terminateProcess returned error: ${JSON.stringify(termRes)}`)
   }
 
@@ -184,6 +198,10 @@ async function main() {
   console.log(`  -> child 2 descendants lingering: ${lingering2.length ? lingering2.join(', ') : 'none'}`)
 
   if (child2Alive || lingering2.length > 0) {
+    try { child2.kill() } catch {}
+    for (const p of lingering2) {
+      try { process.kill(p, 'SIGKILL') } catch {}
+    }
     throw new Error('terminateProcess failed to terminate child process tree!')
   }
   console.log('PASSED: terminateProcess killed the process tree.\n')

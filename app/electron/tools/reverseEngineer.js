@@ -89,11 +89,19 @@ function flattenAsarFiles(tree, prefix = '') {
 
 function readAsarFileContent(asarPath, asarInfo, filePath) {
   const cleanPath = filePath.replace(/\\/g, '/').replace(/^\//, '')
-  const flat = flattenAsarFiles(asarInfo.header)
-  const entry = flat.find(f => f.path === cleanPath)
+  if (!asarInfo.filesMap) {
+    const flat = flattenAsarFiles(asarInfo.header)
+    asarInfo.filesMap = new Map(flat.map(f => [f.path, f]))
+  }
+  const entry = asarInfo.filesMap.get(cleanPath)
   if (!entry) return null
   if (entry.unpacked) {
-    const unpackedPath = `${asarPath}.unpacked/${cleanPath}`
+    const unpackedDir = path.resolve(`${asarPath}.unpacked`)
+    const unpackedPath = path.resolve(unpackedDir, cleanPath)
+    const rel = path.relative(unpackedDir, unpackedPath)
+    if (rel.startsWith('..') || path.isAbsolute(rel) || !rel) {
+      return null
+    }
     if (fs.existsSync(unpackedPath)) {
       return fs.readFileSync(unpackedPath)
     }
@@ -119,52 +127,55 @@ function detectFuses(filePath) {
     if (!stat.isFile() || stat.size === 0) return null
 
     const fd = fs.openSync(filePath, 'r')
-    const CHUNK_SIZE = 4 * 1024 * 1024
-    const OVERLAP = 64
-    const buf = Buffer.alloc(CHUNK_SIZE + OVERLAP)
-    const sentinels = [
-      Buffer.from('dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX'),
-      Buffer.from('dL7NfxNSEpTS4tKaMQbu5avD'),
-    ]
+    try {
+      const CHUNK_SIZE = 4 * 1024 * 1024
+      const OVERLAP = 64
+      const buf = Buffer.alloc(CHUNK_SIZE + OVERLAP)
+      const sentinels = [
+        Buffer.from('dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX'),
+        Buffer.from('dL7NfxNSEpTS4tKaMQbu5avD'),
+      ]
 
-    let offset = 0
-    let found = null
-    while (offset < stat.size) {
-      const bytesToRead = Math.min(CHUNK_SIZE + OVERLAP, stat.size - offset)
-      const bytesRead = fs.readSync(fd, buf, 0, bytesToRead, offset)
-      if (bytesRead <= 0) break
+      let offset = 0
+      let found = null
+      while (offset < stat.size) {
+        const bytesToRead = Math.min(CHUNK_SIZE + OVERLAP, stat.size - offset)
+        const bytesRead = fs.readSync(fd, buf, 0, bytesToRead, offset)
+        if (bytesRead <= 0) break
 
-      for (const sentinel of sentinels) {
-        const idx = buf.subarray(0, bytesRead).indexOf(sentinel)
-        if (idx !== -1 && idx + sentinel.length + 2 <= bytesRead) {
-          const version = buf[idx + sentinel.length]
-          const length = buf[idx + sentinel.length + 1]
-          const fuses = {}
-          for (let i = 0; i < length; i++) {
-            const fuseIdx = idx + sentinel.length + 2 + i
-            if (fuseIdx < bytesRead) {
-              const val = buf[fuseIdx]
-              const state = val === 48 ? 'disabled' : val === 49 ? 'enabled' : val === 114 ? 'removed' : val === 144 ? 'inherit' : String(val)
-              const name = FUSE_V1_NAMES[i] || `Fuse_${i}`
-              fuses[name] = state
+        for (const sentinel of sentinels) {
+          const idx = buf.subarray(0, bytesRead).indexOf(sentinel)
+          if (idx !== -1 && idx + sentinel.length + 2 <= bytesRead) {
+            const version = buf[idx + sentinel.length]
+            const length = buf[idx + sentinel.length + 1]
+            const fuses = {}
+            for (let i = 0; i < length; i++) {
+              const fuseIdx = idx + sentinel.length + 2 + i
+              if (fuseIdx < bytesRead) {
+                const val = buf[fuseIdx]
+                const state = val === 48 ? 'disabled' : val === 49 ? 'enabled' : val === 114 ? 'removed' : val === 144 ? 'inherit' : String(val)
+                const name = FUSE_V1_NAMES[i] || `Fuse_${i}`
+                fuses[name] = state
+              }
             }
+            found = {
+              detected: true,
+              binaryPath: filePath,
+              sentinel: sentinel.toString(),
+              version,
+              fusesCount: length,
+              fuses,
+            }
+            break
           }
-          found = {
-            detected: true,
-            binaryPath: filePath,
-            sentinel: sentinel.toString(),
-            version,
-            fusesCount: length,
-            fuses,
-          }
-          break
         }
+        if (found) break
+        offset += CHUNK_SIZE
       }
-      if (found) break
-      offset += CHUNK_SIZE
+      return found || { detected: false, binaryPath: filePath }
+    } finally {
+      try { fs.closeSync(fd) } catch {}
     }
-    fs.closeSync(fd)
-    return found || { detected: false, binaryPath: filePath }
   } catch (err) {
     return { detected: false, binaryPath: filePath, error: err.message }
   }
@@ -302,9 +313,9 @@ function findBinariesInDir(dirPath, maxDepth = 2) {
 
 // ── 1. inspectAppBundle ─────────────────────────────────────────────────────
 
-async function inspectAppBundle({ targetPath }) {
+async function inspectAppBundle({ targetPath, cwd }) {
   if (!targetPath) throw new Error('targetPath is required')
-  const resolved = path.resolve(targetPath)
+  const resolved = path.resolve(cwd || process.cwd(), targetPath)
   if (!fs.existsSync(resolved)) {
     throw new Error(`Target path does not exist: ${resolved}`)
   }
@@ -606,12 +617,13 @@ async function inspectAppBundle({ targetPath }) {
 
 // ── 2. extractAsar ──────────────────────────────────────────────────────────
 
-async function extractAsar({ asarPath, outputDir }) {
+async function extractAsar({ asarPath, outputDir, cwd, checkDestination }) {
   if (!asarPath) throw new Error('asarPath is required')
   if (!outputDir) throw new Error('outputDir is required')
 
-  const resolvedAsar = path.resolve(asarPath)
-  const resolvedOut = path.resolve(outputDir)
+  const baseDir = cwd || process.cwd()
+  const resolvedAsar = path.resolve(baseDir, asarPath)
+  const resolvedOut = path.resolve(baseDir, outputDir)
 
   if (!fs.existsSync(resolvedAsar)) {
     throw new Error(`ASAR archive not found: ${resolvedAsar}`)
@@ -631,8 +643,35 @@ async function extractAsar({ asarPath, outputDir }) {
   const flatFiles = flattenAsarFiles(asarInfo.header)
   for (const file of flatFiles) {
     const targetDest = path.resolve(resolvedOut, file.path)
-    if (!targetDest.startsWith(resolvedOut + path.sep) && targetDest !== resolvedOut) {
+    const rel = path.relative(resolvedOut, targetDest)
+    if (!targetDest.startsWith(resolvedOut + path.sep) || rel.startsWith('..') || path.isAbsolute(rel) || !rel) {
       throw new Error(`Security Violation: Path traversal detected in ASAR archive entry "${file.path}"`)
+    }
+
+    // Check write rules against each destination file (e.g. .git/config or outside allowed workspace)
+    if (checkDestination && typeof checkDestination === 'function') {
+      const g = checkDestination(targetDest)
+      if (g && !g.ok) {
+        throw new Error(`Security Violation: ${g.reason || 'Write prohibited to destination'} (${file.path})`)
+      }
+    }
+
+    // Check every existing component from root down to targetDest for symbolic links to prevent link-redirection escapes
+    const parsed = path.parse(targetDest)
+    let cur = parsed.root
+    const parts = targetDest.slice(cur.length).split(path.sep).filter(Boolean)
+    for (const part of parts) {
+      cur = path.join(cur, part)
+      try {
+        const lstat = fs.lstatSync(cur)
+        if (lstat.isSymbolicLink()) {
+          throw new Error(`Security Violation: Component in extraction path is a symbolic link: ${cur}`)
+        }
+      } catch (err) {
+        if (err.message && err.message.startsWith('Security Violation:')) throw err
+        // Component does not exist yet, which is expected for new subdirectories/files
+        break
+      }
     }
   }
 
@@ -660,7 +699,12 @@ async function extractAsar({ asarPath, outputDir }) {
         }
 
         if (file.unpacked) {
-          const unpackedSource = path.join(`${resolvedAsar}.unpacked`, file.path)
+          const unpackedDir = path.resolve(`${resolvedAsar}.unpacked`)
+          const unpackedSource = path.resolve(unpackedDir, file.path)
+          const relSource = path.relative(unpackedDir, unpackedSource)
+          if (!unpackedSource.startsWith(unpackedDir + path.sep) || relSource.startsWith('..') || path.isAbsolute(relSource) || !relSource) {
+            throw new Error(`Security Violation: Unpacked source traversal detected in "${file.path}"`)
+          }
           if (fs.existsSync(unpackedSource)) {
             fs.copyFileSync(unpackedSource, destPath)
           }
@@ -710,9 +754,9 @@ async function extractAsar({ asarPath, outputDir }) {
 
 // ── 3. auditAgentBundle ─────────────────────────────────────────────────────
 
-async function auditAgentBundle({ targetPath, maxMatches = 50 }) {
+async function auditAgentBundle({ targetPath, maxMatches = 50, cwd }) {
   if (!targetPath) throw new Error('targetPath is required')
-  const resolved = path.resolve(targetPath)
+  const resolved = path.resolve(cwd || process.cwd(), targetPath)
   if (!fs.existsSync(resolved)) {
     throw new Error(`Target path does not exist: ${resolved}`)
   }
@@ -727,6 +771,7 @@ async function auditAgentBundle({ targetPath, maxMatches = 50 }) {
     if (resolved.toLowerCase().endsWith('.asar')) {
       const asarInfo = readAsarHeader(resolved)
       const flat = flattenAsarFiles(asarInfo.header)
+      asarInfo.filesMap = new Map(flat.map(f => [f.path, f]))
       for (const f of flat) {
         if (/\.(js|cjs|mjs|ts|tsx|jsx|json)$/i.test(f.path)) {
           filesToScan.push({

@@ -261,8 +261,12 @@ export default function App() {
       when: () => !shortcutsOpenRef.current, // ShortcutOverlay handles its own ESC
       run: () => {
         const s = useStore.getState()
-        if (s.sending) s.stopGeneration()
-        else if (s.currentView !== 'chat') s.setCurrentView('chat')
+        if (s.sending) {
+          s.stopGeneration()
+          window.dispatchEvent(new CustomEvent('aether:generation-stopped'))
+        } else if (s.currentView !== 'chat') {
+          s.setCurrentView('chat')
+        }
       },
     },
     { id: 'history-back', run: () => useStore.getState().goBack() },

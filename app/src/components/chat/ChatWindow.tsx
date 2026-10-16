@@ -203,8 +203,11 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
           cancelAnimationFrame(thinkingRafRef.current)
           thinkingRafRef.current = requestAnimationFrame(() => {
             thinkingRafRef.current = 0
-            setThinkingText(thinking)
-            setThinkingStreaming(!buf.content)
+            const latestBuf = useStore.getState().streamingBySession[sessionId]
+            if (!latestBuf || latestBuf.messageId !== mid || activeMidRef.current !== mid) return
+            const latestThinking = useStore.getState().thinkingBlocksByMessage[mid] ?? thinking
+            setThinkingText(latestThinking)
+            setThinkingStreaming(!latestBuf.content)
           })
         }
 
@@ -236,8 +239,10 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         mdRafRef.current = requestAnimationFrame(() => {
           mdRafRef.current = 0
           if (!ref.current) return
+          const latestBuf = useStore.getState().streamingBySession[sessionId]
+          if (!latestBuf || latestBuf.messageId !== mid || activeMidRef.current !== mid) return
           lastMdRenderTimeRef.current = performance.now()
-          ref.current.innerHTML = renderMarkdown(buf.content)
+          ref.current.innerHTML = renderMarkdown(latestBuf.content)
         })
       }
 

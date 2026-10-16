@@ -30,9 +30,12 @@ describe('reasoningFamily', () => {
     expect(reasoningFamily('qwen3-72b')).toBe('qwen')
   })
 
-  it('identifies Gemini models with thinking', () => {
+  it('identifies Gemini models with thinking while excluding non-thinking models', () => {
     expect(reasoningFamily('gemini-2.0-flash-thinking-exp')).toBe('gemini')
     expect(reasoningFamily('gemini-2.5-pro')).toBe('gemini')
+    expect(reasoningFamily('gemini-3-flash-preview')).toBe('gemini')
+    expect(reasoningFamily('gemini-2.0-flash')).toBe('none')
+    expect(reasoningFamily('gemini-2.0-flash-lite')).toBe('none')
   })
 
   it('returns none for non-reasoning models', () => {
@@ -46,13 +49,18 @@ describe('buildReasoningParams', () => {
     expect(buildReasoningParams('o1-mini', 'high', true)).toEqual({ reasoning_effort: 'high' })
     expect(buildReasoningParams('o1-mini', 'low', true)).toEqual({ reasoning_effort: 'low' })
     expect(buildReasoningParams('o1-mini', 'medium', false)).toEqual({})
+    expect(buildReasoningParams('o1-mini', 'invalid', true)).toEqual({ reasoning_effort: 'medium' })
   })
 
-  it('builds Claude effort + budget_tokens', () => {
+  it('builds Claude effort + budget_tokens and clamps to max_tokens', () => {
     const res = buildReasoningParams('claude-3-7-sonnet', 'medium', true)
     expect(res.reasoning_effort).toBe('medium')
     expect(res.thinking).toEqual({ type: 'enabled', budget_tokens: 8192 })
     expect(buildReasoningParams('claude-3-7-sonnet', 'medium', false)).toEqual({})
+
+    // Clamps when maxTokens is smaller than default budget
+    const clamped = buildReasoningParams('claude-3-7-sonnet', 'high', true, { maxTokens: 4000 })
+    expect(clamped.thinking.budget_tokens).toBe(3999)
   })
 
   it('builds DeepSeek explicit on/off', () => {

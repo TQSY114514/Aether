@@ -24,7 +24,7 @@ const { classifyError } = require('./errorClassify')
 const toolCache = require('./toolCache')
 const toolMetrics = require('./toolLoopMetrics')
 const checkpointMgr = require('./checkpointManager')
-const { generateDiff, generateAfterSnapshot } = require('../tools/toolImpact')
+const { generateDiff, generateAfterSnapshot, countDiffLines } = require('../tools/toolImpact')
 const { buildProjectContextMessage, invalidateCache } = require('./projectInstructions')
 const { buildRepoMapMessage } = require('../context/repoMap')
 const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox')
@@ -76,7 +76,7 @@ try {
 }
 
 const planning = require('./planning')
-const { reasoningFamily } = require('./reasoning')
+const { reasoningFamily, buildReasoningParams } = require('./reasoning')
 const hooks = require('./hooks')
 const { stream: eventStream } = require('./agentEvents')
 const skillSelfCreate = require('./skillSelfCreate')
@@ -265,10 +265,25 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     : maxIterations
   if (isPoorMode) {
     if (options) {
-      // Clamp reasoning effort to 'low' to avoid thousands of extended thinking tokens per turn
+      // Clamp reasoning effort to 'low' and update model-specific thinking budgets
+      const thinkingDisabled = options.enable_thinking === false ||
+        options.thinking?.type === 'disabled' ||
+        options.thinking_config?.thinking_budget === 0
+      if (!thinkingDisabled) {
+        const modelName = model?.model_name || model?.id || (typeof model === 'string' ? model : '')
+        try {
+          const lowReasoning = buildReasoningParams(modelName, 'low', true)
+          Object.assign(options, lowReasoning)
+        } catch {}
+        options.reasoning_effort = 'low'
+      }
       options.reasoningEffort = 'low'
     }
-    try { onStatus?.({ kind: 'poor_mode', text: '💸 穷鬼省流模式已启用：低推理预算 + 激进工具截断 + 强化上下文压缩' }) } catch {}
+    const isZh = (db && typeof db.getSetting === 'function' ? (db.getSetting('language') || '') : '').startsWith('zh')
+    const noticeText = isZh
+      ? '💸 穷鬼省流模式已启用：低推理预算 + 激进工具截断 + 强化上下文压缩'
+      : '💸 Poor mode enabled: low reasoning budget + aggressive tool truncation + enhanced context compaction'
+    try { onStatus?.({ kind: 'poor_mode', text: noticeText }) } catch {}
   }
 
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
@@ -1296,9 +1311,9 @@ Reply ONLY with JSON:
                 const diffResult = generateDiff(fn.name, args)
                 if (diffResult) {
                   entry.diff = diffResult.diff
-                  const dLines = diffResult.diff.split('\n')
-                  entry.added = dLines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length
-                  entry.removed = dLines.filter(l => l.startsWith('-') && !l.startsWith('---')).length
+                  const counts = countDiffLines(diffResult.diff)
+                  entry.added = counts.added
+                  entry.removed = counts.removed
                 }
                 const snapshot = generateAfterSnapshot(fn.name, args)
                 if (snapshot) entry.afterSnapshot = snapshot

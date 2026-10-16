@@ -58,6 +58,7 @@
     "electron/evolution/",
     "electron/mcp/",
     "electron/context/",
+    "electron/db/",
     "electron/plugins/",
     "electron/database.js",
     "electron/logger.js",

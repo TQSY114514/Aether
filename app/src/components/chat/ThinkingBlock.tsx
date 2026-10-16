@@ -30,9 +30,11 @@ export default function ThinkingBlock({
 }: ThinkingBlockProps) {
   const [open, setOpen] = useState(streaming || !initialCollapsed)
   const startTimeRef = useRef<number>(startedAt || Date.now())
-  if (startedAt && startTimeRef.current !== startedAt) {
-    startTimeRef.current = startedAt
-  }
+  useEffect(() => {
+    if (startedAt && startTimeRef.current !== startedAt) {
+      startTimeRef.current = startedAt
+    }
+  }, [startedAt])
   const [elapsed, setElapsed] = useState<number>(0)
   const [duration, setDuration] = useState<number | null>(propDuration)
 

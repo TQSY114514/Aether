@@ -108,6 +108,14 @@ export function ensureChunkListener() {
       _pendingThinkingDeltas = {}
       const sid = sessionId
       const finishedMsgId = messageId || (buf && buf.messageId) || null
+      if (finishedMsgId != null) {
+        getStore().setState((s) => {
+          if (!s.thinkingActiveByMessage?.[finishedMsgId]) return s
+          const next = { ...s.thinkingActiveByMessage }
+          delete next[finishedMsgId]
+          return { thinkingActiveByMessage: next }
+        })
+      }
       requestAnimationFrame(() => {
         const st = getStore().getState()
         const isStopping = _stoppingSessionId === sid
@@ -266,14 +274,15 @@ export function ensureStatusListener() {
   _statusListenerInstalled = true
   window.electronAPI.chat.onStatus(({ messageId, text, kind }) => {
     if (!messageId || !text) return
+    const displayText = kind === 'poor_mode' ? t('status.poor_mode') : text
     getStore().setState((s) => {
       const existing = s.statusLinesByMessage[messageId] || []
-      if (existing.some(l => l === text || (l.includes(text.slice(0, 30)) && kind === "context_budget"))) return s
-      const next = [...existing.slice(-4), text]
+      if (existing.some(l => l === displayText || (l.includes(displayText.slice(0, 30)) && kind === "context_budget"))) return s
+      const next = [...existing.slice(-4), displayText]
       return { statusLinesByMessage: { ...s.statusLinesByMessage, [messageId]: next } }
     })
     if (kind === "context_budget") {
-      getStore().setState({ contextBudgetText: text })
+      getStore().setState({ contextBudgetText: displayText })
     }
   })
 }

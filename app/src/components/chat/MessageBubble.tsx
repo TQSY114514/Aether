@@ -40,6 +40,9 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const isUser = message.role === 'user'
   // An assistant turn with a live todo checklist renders as a task card.
   const hasTask = !!todos && todos.length > 0
+  const isError = message.status === 'error'
+  const isFallback = message.status === 'fallback'
+  const isAborted = message.status === 'aborted'
   // A message is "streaming" when it's the last message (assistant, empty content)
   // and the session has an active stream buffer. Scoped selector prevents historical
   // messages from re-rendering on every stream token.
@@ -48,10 +51,9 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const isAnswerStreaming = useStore(s => isStreaming && Boolean(s.streamingBySession[message.session_id]?.content))
   const hasActiveTool = Boolean(toolCalls && toolCalls.some(t => t.result === null && !t.error))
   const isThinkingActive = useStore(s => Boolean(s.thinkingActiveByMessage?.[message.id]))
-  const isThinkingStreaming = isThinkingActive || Boolean(isStreaming && !isAnswerStreaming && !hasActiveTool && thinkingBlocks && !thinkingDuration)
-  const isError = message.status === 'error'
-  const isFallback = message.status === 'fallback'
-  const isAborted = message.status === 'aborted'
+  const isThinkingStreaming = !isAborted && !isError && Boolean(
+    isStreaming && (isThinkingActive || (!isAnswerStreaming && !hasActiveTool && thinkingBlocks && !thinkingDuration))
+  )
 
   const hlRe = useMemo(() => searchHighlight ? new RegExp(`(${escapeRegex(searchHighlight)})`, 'gi') : null, [searchHighlight])
 

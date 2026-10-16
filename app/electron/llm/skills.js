@@ -124,7 +124,7 @@ function scanSkills() {
     roots.push(path.join(ws, '.agents', 'skills'))
   }
   roots.push(path.join(getUserDataDir(), 'skills'))
-  roots.push(path.join(require('os').homedir(), '.agents', 'skills'))
+  roots.push(path.join(getHomeDir(), '.agents', 'skills'))
   // Built-in skills shipped with the app (lowest precedence — user copies override).
   roots.push(path.join(__dirname, '..', '..', 'skills'))
   // GEP 自进化胶囊目录(进化产物也作为 skill 加载, 最低优先级)。

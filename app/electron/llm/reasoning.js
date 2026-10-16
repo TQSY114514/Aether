@@ -26,7 +26,7 @@ const RE_OPENAI = /^o[134]|^gpt-5/i
 const RE_CLAUDE = /claude/i
 const RE_DEEPSEEK_R = /deepseek[_-](r\d|reasoner)/i
 const RE_QWEN = /^qwq|qwen.*-(thinking|reason)|qwen3/i
-const RE_GEMINI = /gemini.*thinking|gemini-2\.[05]|gemini-3/i
+const RE_GEMINI = /gemini.*thinking|gemini-2\.5|gemini-3/i
 
 function reasoningFamily(modelName = '') {
   const m = modelName.toLowerCase()
@@ -39,13 +39,20 @@ function reasoningFamily(modelName = '') {
   return 'none'
 }
 
+function normalizeEffort(effort) {
+  if (effort === 'low' || effort === 'medium' || effort === 'high') {
+    return effort
+  }
+  return 'medium'
+}
+
 // The OpenAI effort vocabulary.
 const OPENAI_EFFORT = { low: 'low', medium: 'medium', high: 'high' }
 
 // Build the reasoning params to spread into the request body.
 // `effort` is 'low' | 'medium' | 'high'. `thinkingEnabled` is boolean.
 // Returns {} when thinking is off (OpenAI) or the model doesn't support reasoning.
-function buildReasoningParams(modelName, effort, thinkingEnabled) {
+function buildReasoningParams(modelName, effort, thinkingEnabled, options) {
   const fam = reasoningFamily(modelName)
   if (fam === 'deepseek') {
     // DeepSeek supports explicit on/off via thinking.type
@@ -56,29 +63,34 @@ function buildReasoningParams(modelName, effort, thinkingEnabled) {
     if (fam === 'gemini') return { thinking_config: { thinking_budget: 0 } }
     return {}
   }
+
+  const normEffort = normalizeEffort(effort)
+  const maxTokens = typeof options === 'number' ? options : (options?.max_tokens || options?.maxTokens)
+
   if (fam === 'openai') {
-    const e = OPENAI_EFFORT[effort]
-    return e ? { reasoning_effort: e } : {}
+    return { reasoning_effort: normEffort }
   }
   if (fam === 'claude') {
     // Both reasoning_effort and Anthropic-native thinking budget are supplied
     // so relays (OpenRouter / new-api / OneAPI) can pick the shape they need.
-    const e = OPENAI_EFFORT[effort] || 'medium'
-    const budget = effort === 'low' ? 2048 : effort === 'medium' ? 8192 : 24576
+    let budget = normEffort === 'low' ? 2048 : normEffort === 'medium' ? 8192 : 24576
+    if (typeof maxTokens === 'number' && maxTokens > 0 && budget >= maxTokens) {
+      budget = Math.max(1, maxTokens - 1)
+    }
     return {
-      reasoning_effort: e,
+      reasoning_effort: normEffort,
       thinking: { type: 'enabled', budget_tokens: budget },
     }
   }
   if (fam === 'gemini') {
-    const budget = effort === 'low' ? 1024 : effort === 'medium' ? 4096 : 16384
+    const budget = normEffort === 'low' ? 1024 : normEffort === 'medium' ? 4096 : 16384
     return {
       thinking_config: { thinking_budget: budget },
-      reasoning_effort: OPENAI_EFFORT[effort] || 'medium',
+      reasoning_effort: normEffort,
     }
   }
   if (fam === 'qwen') {
-    const budget = effort === 'low' ? 2048 : effort === 'medium' ? 8192 : 16384
+    const budget = normEffort === 'low' ? 2048 : normEffort === 'medium' ? 8192 : 16384
     return {
       enable_thinking: true,
       thinking_budget: budget,
@@ -97,4 +109,4 @@ function isBinaryReasoning(modelName = '') {
   return reasoningFamily(modelName) === 'deepseek'
 }
 
-module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning, isBinaryReasoning }
+module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning, isBinaryReasoning, normalizeEffort }

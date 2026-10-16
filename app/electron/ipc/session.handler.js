@@ -21,19 +21,25 @@ function registerSessionHandlers(ipcMain, db) {
     // The DB delete is the authoritative step: if it fails the session and its
     // checkpoint rows survive, so deleting the Shadow Git repo here would drop
     // live snapshots while the session they belong to is still listed.
+    let delRes
     try {
-      db.deleteSession(sid)
+      delRes = db.deleteSession(sid)
     } catch (e) {
       log.warn('session:delete db error:', e)
       return { ok: false, error: e?.message || 'delete failed' }
     }
-    try { require('../llm/backgroundTasks').bumpBranchGeneration(sid) } catch {}
-    try { clearAllowRules(sid) } catch {}
-    try { cleanupSessionControllers(sid) } catch {}
+    const allIds = [sid, ...(delRes?.childIds || [])]
+    for (const targetId of allIds) {
+      try { require('../llm/backgroundTasks').bumpBranchGeneration(targetId) } catch {}
+      try { clearAllowRules(targetId) } catch {}
+      try { cleanupSessionControllers(targetId) } catch {}
+    }
     // deleteShadowRepo returns false when the removal itself failed (locked or
     // unreadable path) — surface it instead of reporting a clean delete.
     let shadowRemoved = true
-    try { shadowRemoved = require('../llm/shadowGit').deleteShadowRepo(sid) !== false } catch {}
+    for (const targetId of allIds) {
+      try { if (require('../llm/shadowGit').deleteShadowRepo(targetId) === false) shadowRemoved = false } catch {}
+    }
     return { ok: true, shadowRemoved }
   })
   ipcMain.handle('session:touch', (_e, id) => db.touchSession(id))

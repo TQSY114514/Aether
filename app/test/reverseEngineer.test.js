@@ -155,6 +155,40 @@ describe('extractAsar', () => {
       extractAsar({ asarPath: path.join(tmpDir, 'missing.asar'), outputDir: tmpDir })
     ).rejects.toThrow('ASAR archive not found')
   })
+
+  it('rejects path traversal in ASAR archive and prevents writing outside outputDir', async () => {
+    const headerObj = {
+      files: {
+        '../evil.txt': { size: 12, offset: '0' },
+      },
+    }
+    const jsonStr = JSON.stringify(headerObj)
+    const jsonLen = Buffer.byteLength(jsonStr, 'utf8')
+    const headerBuf = Buffer.alloc(8 + jsonLen)
+    headerBuf.writeUInt32LE(jsonLen + 4, 0)
+    headerBuf.writeUInt32LE(jsonLen, 4)
+    headerBuf.write(jsonStr, 8, jsonLen, 'utf8')
+
+    const sizeBuf = Buffer.alloc(8)
+    sizeBuf.writeUInt32LE(4, 0)
+    sizeBuf.writeUInt32LE(headerBuf.length, 4)
+
+    const content = Buffer.from('malicious!!!')
+    const totalBuf = Buffer.concat([sizeBuf, headerBuf, content])
+
+    const evilAsar = path.join(tmpDir, 'evil.asar')
+    fs.writeFileSync(evilAsar, totalBuf)
+
+    const out = path.join(tmpDir, 'out')
+    fs.mkdirSync(out)
+
+    await expect(
+      extractAsar({ asarPath: evilAsar, outputDir: out })
+    ).rejects.toThrow(/Security Violation/)
+
+    const evilPath = path.join(tmpDir, 'evil.txt')
+    expect(fs.existsSync(evilPath)).toBe(false)
+  })
 })
 
 describe('auditAgentBundle', () => {

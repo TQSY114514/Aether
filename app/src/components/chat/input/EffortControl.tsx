@@ -31,6 +31,7 @@ export default function EffortControl({
         onClick={() => onToggleThinking(!thinkingEnabled)}
         className={`thinking-toggle ${thinkingEnabled ? 'is-on' : 'is-off'}`}
         aria-label={t('effort.tooltip')}
+        aria-pressed={thinkingEnabled}
       >
         <Brain size={13} />
       </button>

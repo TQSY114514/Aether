@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
+import { t } from '@/utils/i18n'
 import { Brain, Wand2, GitBranch, ListChecks, Repeat, ArrowUpRight } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,9 +48,9 @@ export default function LearningStatusPage() {
       sub: '从重复工具序列自动 draft 的 SKILL.md',
     },
     {
-      key: 'evolution', label: '自进化策略', icon: GitBranch, view: 'memory' as const,
+      key: 'evolution', label: t('learning_status.evolution_label'), icon: GitBranch, view: 'memory' as const,
       value: data?.evolution ?? 0,
-      sub: '从真实会话轨迹提炼的 STRATEGY.md 经验规则',
+      sub: t('learning_status.evolution_sub'),
     },
     {
       key: 'habits', label: '习惯', icon: ListChecks, view: 'memory' as const,

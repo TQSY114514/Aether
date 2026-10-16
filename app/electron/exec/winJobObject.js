@@ -21,6 +21,7 @@ let supervisorProcess = null
 let supervisorRl = null
 let isReady = false
 let initPromise = null
+let initResolve = null
 let startupTimer = null
 const pendingAssigns = new Map()
 
@@ -38,9 +39,10 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
   if (initPromise) return initPromise
 
   initPromise = new Promise((resolve) => {
+    initResolve = resolve
     try {
       const scriptPath = path.join(__dirname, 'jobSupervisor.ps1')
-      supervisorProcess = spawn(
+      const proc = spawn(
         'powershell.exe',
         [
           '-NoProfile',
@@ -53,9 +55,10 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
           stdio: ['pipe', 'pipe', 'pipe'],
         }
       )
+      supervisorProcess = proc
 
       supervisorRl = readline.createInterface({
-        input: supervisorProcess.stdout,
+        input: proc.stdout,
         crlfDelay: Infinity,
       })
 
@@ -67,7 +70,9 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
             clearTimeout(startupTimer)
             startupTimer = null
           }
-          resolve(true)
+          const resolveFn = initResolve
+          initResolve = null
+          if (resolveFn) resolveFn(true)
           return
         }
 
@@ -94,38 +99,41 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
         }
       })
 
-      supervisorProcess.stderr?.on('data', (d) => {
-        log.warn?.('[winJobObject] Supervisor stderr:', d.toString().trim())
+      proc.stderr?.on('data', (d) => {
+        if (supervisorProcess === proc) {
+          log.warn?.('[winJobObject] Supervisor stderr:', d.toString().trim())
+        }
       })
 
-      supervisorProcess.on('error', (err) => {
+      proc.on('error', (err) => {
         log.warn?.('[winJobObject] Supervisor spawn error:', err.message)
-        cleanup()
-        resolve(false)
+        if (supervisorProcess === proc) {
+          cleanup()
+        }
       })
 
-      supervisorProcess.on('exit', (code) => {
+      proc.on('exit', (code) => {
         if (code !== 0 && code !== null) {
           log.warn?.(`[winJobObject] Supervisor exited with code ${code}`)
         }
-        cleanup()
+        if (supervisorProcess === proc) {
+          cleanup()
+        }
       })
 
-      // Timeout for startup readiness (5 seconds)
+      // Timeout for startup readiness (20 seconds to tolerate CI runner compilation load)
       startupTimer = setTimeout(() => {
         startupTimer = null
-        if (!isReady) {
+        if (!isReady && supervisorProcess === proc) {
           log.warn?.('[winJobObject] Supervisor initialization timed out')
           cleanup()
-          resolve(false)
         }
-      }, 5000)
+      }, 20000)
       startupTimer.unref?.()
 
     } catch (err) {
       log.warn?.('[winJobObject] Exception starting supervisor:', err.message)
       cleanup()
-      resolve(false)
     }
   })
 
@@ -133,6 +141,11 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
 }
 
 function cleanup() {
+  if (initResolve) {
+    const resolveFn = initResolve
+    initResolve = null
+    resolveFn(false)
+  }
   if (startupTimer) {
     clearTimeout(startupTimer)
     startupTimer = null

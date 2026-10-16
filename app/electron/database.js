@@ -797,34 +797,46 @@ function pinSession(id, pinned = 1) {
   );
 }
 function deleteSession(id) {
+  if (id == null) return null;
   const del = db.transaction((sid) => {
-    try {
-      db.prepare("DELETE FROM messages_fts WHERE session_id = ?").run(sid);
-    } catch {}
-    db.prepare("DELETE FROM message WHERE session_id = ?").run(sid);
-    try {
-      db.prepare("DELETE FROM agent_checkpoint WHERE session_id = ?").run(sid);
-    } catch {}
-    try {
-      db.prepare("DELETE FROM agent_turn_checkpoint WHERE session_id = ?").run(sid);
-    } catch {}
-    try {
-      db.prepare("DELETE FROM agent_execution_log WHERE session_id = ?").run(
-        sid,
-      );
-    } catch {}
-    try {
-      db.prepare("DELETE FROM usage_log WHERE session_id = ?").run(sid);
-    } catch {}
-    try {
-      db.prepare(
-        "UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?",
-      ).run(sid);
-    } catch {}
-    db.prepare("DELETE FROM session WHERE id = ?").run(sid);
-    return sid;
+    const deletedChildIds = [];
+    function deleteSingle(targetId) {
+      try {
+        const children = db
+          .prepare("SELECT id FROM session WHERE parent_session_id = ? AND session_kind = 'subagent'")
+          .all(targetId);
+        for (const child of children) {
+          deletedChildIds.push(child.id);
+          deleteSingle(child.id);
+        }
+      } catch {}
+      try {
+        db.prepare("DELETE FROM messages_fts WHERE session_id = ?").run(targetId);
+      } catch {}
+      db.prepare("DELETE FROM message WHERE session_id = ?").run(targetId);
+      try {
+        db.prepare("DELETE FROM agent_checkpoint WHERE session_id = ?").run(targetId);
+      } catch {}
+      try {
+        db.prepare("DELETE FROM agent_turn_checkpoint WHERE session_id = ?").run(targetId);
+      } catch {}
+      try {
+        db.prepare("DELETE FROM agent_execution_log WHERE session_id = ?").run(targetId);
+      } catch {}
+      try {
+        db.prepare("DELETE FROM usage_log WHERE session_id = ?").run(targetId);
+      } catch {}
+      try {
+        db.prepare(
+          "UPDATE memory SET source_session_id = NULL WHERE source_session_id = ?",
+        ).run(targetId);
+      } catch {}
+      db.prepare("DELETE FROM session WHERE id = ?").run(targetId);
+    }
+    deleteSingle(sid);
+    return { id: sid, childIds: deletedChildIds };
   });
-  del(id);
+  return del(id);
 }
 function touchSession(id) {
   db.prepare("UPDATE session SET updated_at = ? WHERE id = ?").run(

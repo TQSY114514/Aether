@@ -64,8 +64,15 @@ function pushUndo(sessionId: number, messages: Message[], clearRedo = true, extr
 function clearStreaming(sid: number | null) {
   return (s: AppState): Partial<AppState> => {
     const next = { ...s.streamingBySession }
+    const mid = sid != null ? next[sid]?.messageId : null
     if (sid != null) delete next[sid]
-    return { streamingBySession: next, sending: Object.keys(next).length > 0 }
+    const nextThinkingActive = { ...s.thinkingActiveByMessage }
+    if (mid != null) delete nextThinkingActive[mid]
+    return {
+      streamingBySession: next,
+      sending: Object.keys(next).length > 0,
+      thinkingActiveByMessage: nextThinkingActive,
+    }
   }
 }
 
@@ -232,6 +239,14 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     const sid0 = st0.currentSessionId
     const preservedContent = (sid0 ? st0.streamingBySession[sid0]?.content : "") ?? ""
     const preservedMsgId = sid0 ? st0.streamingBySession[sid0]?.messageId : null
+    if (preservedMsgId != null) {
+      set((s) => {
+        if (!s.thinkingActiveByMessage?.[preservedMsgId]) return s
+        const next = { ...s.thinkingActiveByMessage }
+        delete next[preservedMsgId]
+        return { thinkingActiveByMessage: next }
+      })
+    }
     setStoppingSessionId(sid0)
     try {
       if (sid0) await window.electronAPI.chat.stop(sid0)

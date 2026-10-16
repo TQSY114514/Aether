@@ -9,8 +9,9 @@ function createTurnFileTracker(wsRoot) {
   let commandRan = false
   const turnStartTime = Date.now() - 1000
 
-  // Capture baseline git status at tracker creation to filter pre-turn changes
+  // Capture baseline git status & file content snapshot at tracker creation to filter pre-turn changes
   const baselineGit = new Map() // relPath -> code
+  const baselineSnapshots = new Map() // absPath -> { existed: boolean, content: string|null }
   if (wsRoot) {
     try {
       const { runCommandSync } = require('../tools/exec')
@@ -21,11 +22,22 @@ function createTurnFileTracker(wsRoot) {
           const entry = entries[i]
           if (entry.length < 3) continue
           const code = entry.slice(0, 2).trim()
-          const relRaw = entry.slice(3)
+          let relRaw = entry.slice(3)
           if (code.includes('R') || code.includes('C')) {
             i++
           }
-          baselineGit.set(relRaw.replace(/\\/g, '/'), code)
+          const normRel = relRaw.replace(/\\/g, '/')
+          baselineGit.set(normRel, code)
+          const absPath = path.resolve(wsRoot, relRaw)
+          let existed = false
+          let content = null
+          try {
+            if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+              existed = true
+              content = fs.readFileSync(absPath, 'utf8')
+            }
+          } catch {}
+          baselineSnapshots.set(absPath, { existed, content })
         }
       }
     } catch {}
@@ -105,21 +117,59 @@ function createTurnFileTracker(wsRoot) {
           const lines = finalContent.length === 0 ? [] : finalContent.replace(/\r?\n$/, '').split('\n')
           added = lines.length
           diff = lines.map(l => '+' + l).join('\n')
+          if (!/\r?\n$/.test(finalContent) && lines.length > 0) {
+            diff += '\n\\ No newline at end of file'
+          }
         } else if (initialExisted && finalContent === null) {
           status = 'deleted'
           const lines = (initialContent || '').length === 0 ? [] : (initialContent || '').replace(/\r?\n$/, '').split('\n')
           removed = lines.length
           diff = lines.map(l => '-' + l).join('\n')
+          if (!/\r?\n$/.test(initialContent || '') && lines.length > 0) {
+            diff += '\n\\ No newline at end of file'
+          }
         } else if (initialContent !== null && finalContent !== null) {
           status = 'modified'
+          const oldEndsNewline = /\r?\n$/.test(initialContent)
+          const newEndsNewline = /\r?\n$/.test(finalContent)
           const oldLines = initialContent.length === 0 ? [] : initialContent.replace(/\r?\n$/, '').split('\n')
           const newLines = finalContent.length === 0 ? [] : finalContent.replace(/\r?\n$/, '').split('\n')
           diff = buildUnifiedDiff(oldLines, newLines)
+          if (oldEndsNewline !== newEndsNewline) {
+            const diffLines = diff ? diff.split('\n') : []
+            const lastIdx = diffLines.length - 1
+            if (lastIdx >= 0) {
+              const last = diffLines[lastIdx]
+              if (last.startsWith(' ')) {
+                const content = last.slice(1)
+                if (!oldEndsNewline && newEndsNewline) {
+                  diffLines.splice(lastIdx, 1, '-' + content, '\\ No newline at end of file', '+' + content)
+                } else if (oldEndsNewline && !newEndsNewline) {
+                  diffLines.splice(lastIdx, 1, '-' + content, '+' + content, '\\ No newline at end of file')
+                }
+              } else if (last.startsWith('+')) {
+                if (!newEndsNewline) diffLines.push('\\ No newline at end of file')
+              } else if (last.startsWith('-')) {
+                if (!oldEndsNewline) diffLines.push('\\ No newline at end of file')
+              }
+            } else {
+              const lastLine = oldLines[oldLines.length - 1] || ''
+              diffLines.push(`@@ -${oldLines.length || 1} +${newLines.length || 1} @@`)
+              if (!oldEndsNewline && newEndsNewline) {
+                diffLines.push('-' + lastLine, '\\ No newline at end of file', '+' + lastLine)
+              } else {
+                diffLines.push('-' + lastLine, '+' + lastLine, '\\ No newline at end of file')
+              }
+            }
+            diff = diffLines.join('\n')
+          }
           for (const line of diff.split('\n')) {
             if (line.startsWith('+')) added++
             else if (line.startsWith('-')) removed++
           }
         }
+
+        if (added === 0 && removed === 0) continue
 
         summary.push({
           path: relPath,
@@ -165,42 +215,97 @@ function createTurnFileTracker(wsRoot) {
                 }
               }
               if (!files.has(absPath)) {
+                let currentExisted = false
+                let currentContent = null
                 try {
-                  const stat = fs.existsSync(absPath) ? fs.statSync(absPath) : null
-                  if (stat && stat.mtimeMs < turnStartTime) {
-                    continue // Skip files untouched in this turn
+                  if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+                    currentExisted = true
+                    currentContent = fs.readFileSync(absPath, 'utf8')
                   }
                 } catch {}
 
-                let status = 'modified'
-                if (code === '??' || code === 'A') status = 'created'
-                else if (code === 'D') status = 'deleted'
+                let initialExisted = false
+                let initialContent = null
+                if (baselineSnapshots.has(absPath)) {
+                  const snap = baselineSnapshots.get(absPath)
+                  initialExisted = snap.existed
+                  initialContent = snap.content
+                } else {
+                  const showRes = runCommandSync('git', ['show', `HEAD:${normRel}`], { cwd: wsRoot })
+                  if (showRes.exitCode === 0) {
+                    initialExisted = true
+                    initialContent = showRes.stdout
+                  }
+                }
 
+                if (initialContent === currentContent) continue
+
+                let status = 'modified'
                 let diff = ''
                 let added = 0
                 let removed = 0
-                const diffRes = runCommandSync('git', ['diff', 'HEAD', '--', relRaw], { cwd: wsRoot })
-                if (diffRes.exitCode === 0 && diffRes.stdout) {
-                  diff = diffRes.stdout
-                  let inHunk = false
-                  for (const dl of diff.split('\n')) {
-                    if (dl.startsWith('@@')) { inHunk = true; continue }
-                    if (!inHunk) continue
-                    if (dl.startsWith('+')) added++
-                    else if (dl.startsWith('-')) removed++
+
+                if (!initialExisted && currentExisted && currentContent !== null) {
+                  status = 'created'
+                  const lines = currentContent.length === 0 ? [] : currentContent.replace(/\r?\n$/, '').split('\n')
+                  added = lines.length
+                  diff = lines.map(l => '+' + l).join('\n')
+                  if (!/\r?\n$/.test(currentContent) && lines.length > 0) {
+                    diff += '\n\\ No newline at end of file'
                   }
-                } else if (status === 'created') {
-                  try {
-                    if (fs.existsSync(absPath)) {
-                      const c = fs.readFileSync(absPath, 'utf8')
-                      const clines = c.length === 0 ? [] : c.replace(/\r?\n$/, '').split('\n')
-                      added = clines.length
-                      diff = clines.map(l => '+' + l).join('\n')
+                } else if (initialExisted && !currentExisted) {
+                  status = 'deleted'
+                  const lines = (initialContent || '').length === 0 ? [] : (initialContent || '').replace(/\r?\n$/, '').split('\n')
+                  removed = lines.length
+                  diff = lines.map(l => '-' + l).join('\n')
+                  if (!/\r?\n$/.test(initialContent || '') && lines.length > 0) {
+                    diff += '\n\\ No newline at end of file'
+                  }
+                } else if (initialContent !== null && currentContent !== null) {
+                  status = 'modified'
+                  const oldEndsNewline = /\r?\n$/.test(initialContent)
+                  const newEndsNewline = /\r?\n$/.test(currentContent)
+                  const oldLines = initialContent.length === 0 ? [] : initialContent.replace(/\r?\n$/, '').split('\n')
+                  const newLines = currentContent.length === 0 ? [] : currentContent.replace(/\r?\n$/, '').split('\n')
+                  diff = buildUnifiedDiff(oldLines, newLines)
+                  if (oldEndsNewline !== newEndsNewline) {
+                    const diffLines = diff ? diff.split('\n') : []
+                    const lastIdx = diffLines.length - 1
+                    if (lastIdx >= 0) {
+                      const last = diffLines[lastIdx]
+                      if (last.startsWith(' ')) {
+                        const content = last.slice(1)
+                        if (!oldEndsNewline && newEndsNewline) {
+                          diffLines.splice(lastIdx, 1, '-' + content, '\\ No newline at end of file', '+' + content)
+                        } else if (oldEndsNewline && !newEndsNewline) {
+                          diffLines.splice(lastIdx, 1, '-' + content, '+' + content, '\\ No newline at end of file')
+                        }
+                      } else if (last.startsWith('+')) {
+                        if (!newEndsNewline) diffLines.push('\\ No newline at end of file')
+                      } else if (last.startsWith('-')) {
+                        if (!oldEndsNewline) diffLines.push('\\ No newline at end of file')
+                      }
+                    } else {
+                      const lastLine = oldLines[oldLines.length - 1] || ''
+                      diffLines.push(`@@ -${oldLines.length || 1} +${newLines.length || 1} @@`)
+                      if (!oldEndsNewline && newEndsNewline) {
+                        diffLines.push('-' + lastLine, '\\ No newline at end of file', '+' + lastLine)
+                      } else {
+                        diffLines.push('-' + lastLine, '+' + lastLine, '\\ No newline at end of file')
+                      }
                     }
-                  } catch {}
+                    diff = diffLines.join('\n')
+                  }
+                  for (const line of diff.split('\n')) {
+                    if (line.startsWith('+')) added++
+                    else if (line.startsWith('-')) removed++
+                  }
                 }
+
+                if (added === 0 && removed === 0) continue
+
                 summary.push({
-                  path: relRaw.replace(/\\/g, '/'),
+                  path: normRel,
                   absPath,
                   status,
                   added,

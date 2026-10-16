@@ -878,33 +878,45 @@ TOOLS.push(
     }
   }},
   { name: 'inspect_app_bundle', description: 'Inspect an Electron application bundle or ASAR file. Analyzes package.json, directory structure, main/preload scripts, contextBridge exposed APIs, Electron fuses, and IPC channels.', risk: 'safe', parameters: { type: 'object', properties: { targetPath: { type: 'string', description: 'Path to an ASAR archive, application directory, or Electron binary' } }, required: ['targetPath'] }, run: async (args, ctx) => {
-    const targetPath = String(args.targetPath || '')
-    if (!targetPath) throw new Error('targetPath is required')
+    const rawTarget = String(args.targetPath || '')
+    if (!rawTarget) throw new Error('targetPath is required')
+    const wsRoot = getWorkspaceRoot(ctx?.sessionId) || process.cwd()
+    const targetPath = path.resolve(wsRoot, rawTarget)
     guardWorkspaceRead(targetPath, ctx, 'targetPath')
     const { inspectAppBundle } = require('./reverseEngineer')
-    const res = await inspectAppBundle({ targetPath })
+    const res = await inspectAppBundle({ targetPath, cwd: wsRoot })
     return res.formattedSummary || String(res)
   }},
   { name: 'extract_asar', description: 'Safely unpack an Electron ASAR archive to a destination directory. DANGEROUS: writes unpacked files to disk.', risk: 'dangerous', parameters: { type: 'object', properties: { asarPath: { type: 'string', description: 'Path to the .asar archive file' }, outputDir: { type: 'string', description: 'Destination directory where unpacked files will be written' } }, required: ['asarPath', 'outputDir'] }, run: async (args, ctx) => {
-    const asarPath = String(args.asarPath || '')
-    const outputDir = String(args.outputDir || '')
-    if (!asarPath) throw new Error('asarPath is required')
-    if (!outputDir) throw new Error('outputDir is required')
+    const rawAsar = String(args.asarPath || '')
+    const rawOut = String(args.outputDir || '')
+    if (!rawAsar) throw new Error('asarPath is required')
+    if (!rawOut) throw new Error('outputDir is required')
+    const wsRoot = getWorkspaceRoot(ctx?.sessionId) || process.cwd()
+    const asarPath = path.resolve(wsRoot, rawAsar)
+    const outputDir = path.resolve(wsRoot, rawOut)
     guardWorkspaceRead(asarPath, ctx, 'asarPath')
     if (ctx?.agentMode !== 'yolo') {
       const g = checkWritePath(outputDir, ctx?.sessionId)
       if (!g.ok) throw new Error(g.reason)
     }
     const { extractAsar } = require('./reverseEngineer')
-    const res = await extractAsar({ asarPath, outputDir })
+    const res = await extractAsar({
+      asarPath,
+      outputDir,
+      cwd: wsRoot,
+      checkDestination: ctx?.agentMode === 'yolo' ? null : (p) => checkWritePath(p, ctx?.sessionId),
+    })
     return res.formattedSummary || String(res)
   }},
   { name: 'audit_agent_bundle', description: 'Audit a JavaScript/TypeScript source file or unpacked application bundle for agent artifacts: embedded system prompts, tool schemas, API endpoints/wire formats, and lifecycle hooks.', risk: 'safe', parameters: { type: 'object', properties: { targetPath: { type: 'string', description: 'Path to a JS/TS source file, directory, or unpacked bundle' }, maxMatches: { type: 'number', description: 'Maximum matches to return per category (default: 50)' } }, required: ['targetPath'] }, run: async (args, ctx) => {
-    const targetPath = String(args.targetPath || '')
-    if (!targetPath) throw new Error('targetPath is required')
+    const rawTarget = String(args.targetPath || '')
+    if (!rawTarget) throw new Error('targetPath is required')
+    const wsRoot = getWorkspaceRoot(ctx?.sessionId) || process.cwd()
+    const targetPath = path.resolve(wsRoot, rawTarget)
     guardWorkspaceRead(targetPath, ctx, 'targetPath')
     const { auditAgentBundle } = require('./reverseEngineer')
-    const res = await auditAgentBundle({ targetPath, maxMatches: args.maxMatches })
+    const res = await auditAgentBundle({ targetPath, maxMatches: args.maxMatches, cwd: wsRoot })
     return res.formattedSummary || String(res)
   }}
 )

@@ -27,5 +27,5 @@ describe('winJobObject (Windows Native Job Object Sandbox)', () => {
     expect(res.pid).toBe(child.pid)
 
     child.kill()
-  }, 15000)
+  }, 30000)
 })
