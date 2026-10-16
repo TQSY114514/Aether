@@ -31,6 +31,7 @@ interface ChatUndoSnapshot {
   thinkingBlocksByMessage: Record<number, any>
   thinkingDurationsByMessage: Record<number, any>
   thinkingStartsByMessage: Record<number, any>
+  thinkingActiveByMessage: Record<number, any>
   statusLinesByMessage: Record<number, any>
   fileSummariesByMessage: Record<number, any>
 }
@@ -52,6 +53,7 @@ function pushUndo(sessionId: number, messages: Message[], clearRedo = true, extr
     thinkingBlocksByMessage: { ...(extra?.thinkingBlocksByMessage || {}) },
     thinkingDurationsByMessage: { ...(extra?.thinkingDurationsByMessage || {}) },
     thinkingStartsByMessage: { ...(extra?.thinkingStartsByMessage || {}) },
+    thinkingActiveByMessage: { ...(extra?.thinkingActiveByMessage || {}) },
     statusLinesByMessage: { ...(extra?.statusLinesByMessage || {}) },
     fileSummariesByMessage: { ...(extra?.fileSummariesByMessage || {}) },
   })
@@ -78,6 +80,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   thinkingBlocksByMessage: {},
   thinkingDurationsByMessage: {},
   thinkingStartsByMessage: {},
+  thinkingActiveByMessage: {},
   statusLinesByMessage: {},
   fileSummariesByMessage: {},
   setFileSummaryForMessage: (messageId, summary) => {
@@ -305,6 +308,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
         const { [regeneratedMsgId]: ____D, ...restTDB } = s.thinkingDurationsByMessage
         const { [regeneratedMsgId]: ____S, ...restTSB } = s.thinkingStartsByMessage
+        const { [regeneratedMsgId]: ____A, ...restTAB } = s.thinkingActiveByMessage
         const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
         const { [regeneratedMsgId]: ______, ...restSNAP } = s.planSnapshotsByMessage
         const { [regeneratedMsgId]: _______, ...restSA } = s.subagentsByMessage
@@ -315,6 +319,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         next.thinkingBlocksByMessage = restTIB
         next.thinkingDurationsByMessage = restTDB
         next.thinkingStartsByMessage = restTSB
+        next.thinkingActiveByMessage = restTAB
         next.statusLinesByMessage = restSIB
         next.planSnapshotsByMessage = restSNAP
         next.subagentsByMessage = restSA
@@ -373,6 +378,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           thinkingBlocksByMessage: { ...get().thinkingBlocksByMessage },
           thinkingDurationsByMessage: { ...get().thinkingDurationsByMessage },
           thinkingStartsByMessage: { ...get().thinkingStartsByMessage },
+          thinkingActiveByMessage: { ...get().thinkingActiveByMessage },
           statusLinesByMessage: { ...get().statusLinesByMessage },
           fileSummariesByMessage: { ...get().fileSummariesByMessage },
         })
@@ -387,6 +393,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
           thinkingDurationsByMessage: entry.thinkingDurationsByMessage || {},
           thinkingStartsByMessage: entry.thinkingStartsByMessage || {},
+          thinkingActiveByMessage: entry.thinkingActiveByMessage || {},
           statusLinesByMessage: entry.statusLinesByMessage,
           fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })
@@ -413,6 +420,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
           thinkingDurationsByMessage: entry.thinkingDurationsByMessage || {},
           thinkingStartsByMessage: entry.thinkingStartsByMessage || {},
+          thinkingActiveByMessage: entry.thinkingActiveByMessage || {},
           statusLinesByMessage: entry.statusLinesByMessage,
           fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })

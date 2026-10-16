@@ -381,6 +381,10 @@ export function ensureThinkingListener() {
           ...s.thinkingStartsByMessage,
           [messageId]: now,
         },
+        thinkingActiveByMessage: {
+          ...s.thinkingActiveByMessage,
+          [messageId]: true,
+        },
       }
     })
   })
@@ -425,6 +429,10 @@ export function ensureThinkingListener() {
         thinkingDurationsByMessage: {
           ...s.thinkingDurationsByMessage,
           [messageId]: (s.thinkingDurationsByMessage[messageId] || 0) + durationSec,
+        },
+        thinkingActiveByMessage: {
+          ...s.thinkingActiveByMessage,
+          [messageId]: false,
         },
       }
     })

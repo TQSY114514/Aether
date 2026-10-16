@@ -131,7 +131,7 @@ export default function GatewayCard() {
                   {info.token ? `${info.token.slice(0, 12)}…` : '—'} <Copy size={11} />
                 </button>
               </div>
-              <div className="text-[11px] font-medium pt-1" style={{ color: info.running ? 'var(--success)' : '#dc2626' }}>
+              <div className="text-[11px] font-medium pt-1" style={{ color: info.running ? 'var(--success)' : 'var(--error)' }}>
                 {info.running ? t('settings.gateway.running_local_only') : t('settings.gateway.not_running')}
               </div>
             </div>

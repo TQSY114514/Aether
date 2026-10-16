@@ -467,23 +467,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
         const mergeFileSummary = (incoming) => {
           if (!incoming || !Array.isArray(incoming.files)) return
-          const fileMap = new Map()
-          if (turnFileSummary?.files) {
-            for (const f of turnFileSummary.files) {
-              if (f && f.path) fileMap.set(f.path, { ...f })
-            }
-          }
-          for (const f of incoming.files) {
-            if (!f || !f.path) continue
-            // Overwrite with the latest snapshot for this file
-            fileMap.set(f.path, { ...f })
-          }
-          const mergedFiles = Array.from(fileMap.values())
           turnFileSummary = {
-            totalAdded: mergedFiles.reduce((acc, f) => acc + (f.added || 0), 0),
-            totalRemoved: mergedFiles.reduce((acc, f) => acc + (f.removed || 0), 0),
-            fileCount: mergedFiles.length,
-            files: mergedFiles,
+            totalAdded: incoming.totalAdded ?? incoming.files.reduce((acc, f) => acc + (f.added || 0), 0),
+            totalRemoved: incoming.totalRemoved ?? incoming.files.reduce((acc, f) => acc + (f.removed || 0), 0),
+            fileCount: incoming.fileCount ?? incoming.files.length,
+            files: incoming.files,
           }
           try {
             wc?.send('chat:turn-summary', {

@@ -31,7 +31,7 @@ const DEFAULT_SUBAGENT_CONFIG = {
   maxIterations: 15,
   timeoutMs: 5 * 60 * 1000,  // 5 minutes default
   maxOutputChars: 16000,      // summarize if output exceeds this
-  cleanup: 'delete',          // ephemeral child session cleaned up after summary
+  cleanup: 'keep',            // retain child session for auditing and review
   inheritPermissions: true,   // inherit parent's agentMode
   allowedTools: null,         // null = all tools
 }

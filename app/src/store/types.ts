@@ -242,6 +242,8 @@ export interface AppState {
   thinkingDurationsByMessage: Record<number, number>
   // Per-message start timestamp in ms (to compute real elapsed time during and across streams).
   thinkingStartsByMessage: Record<number, number>
+  // Per-message flag indicating active thinking phase (set on thinking-start, cleared on thinking-end).
+  thinkingActiveByMessage: Record<number, boolean>
   // Inline status lines per message (compaction notice, budget-exhausted, etc.).
   statusLinesByMessage: Record<number, string[]>
   // Per-message file modification summary for Git-like change deck.

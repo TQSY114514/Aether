@@ -47,7 +47,8 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const isStreaming = useStore(s => isStreamingCandidate && s.streamingBySession[message.session_id]?.messageId === message.id)
   const isAnswerStreaming = useStore(s => isStreaming && Boolean(s.streamingBySession[message.session_id]?.content))
   const hasActiveTool = Boolean(toolCalls && toolCalls.some(t => t.result === null && !t.error))
-  const isThinkingStreaming = Boolean(isStreaming && !isAnswerStreaming && !hasActiveTool)
+  const isThinkingActive = useStore(s => Boolean(s.thinkingActiveByMessage?.[message.id]))
+  const isThinkingStreaming = isThinkingActive || Boolean(isStreaming && !isAnswerStreaming && !hasActiveTool && thinkingBlocks && !thinkingDuration)
   const isError = message.status === 'error'
   const isFallback = message.status === 'fallback'
   const isAborted = message.status === 'aborted'

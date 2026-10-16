@@ -549,7 +549,7 @@ const TOOLS = [
         signal: ctx.signal,
         agentMode: ctx.agentMode === 'plan' ? 'plan' : (ctx.agentMode || roles.getRoleDefaultMode(args.role)),
         callbacks: agentCallbacks,
-        config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'delete' },
+        config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'keep' },
       })
       return o.content || '(no content)'
     } catch (e) { return `agent error: ${e?.message}` }

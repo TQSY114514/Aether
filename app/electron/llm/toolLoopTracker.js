@@ -9,6 +9,28 @@ function createTurnFileTracker(wsRoot) {
   let commandRan = false
   const turnStartTime = Date.now() - 1000
 
+  // Capture baseline git status at tracker creation to filter pre-turn changes
+  const baselineGit = new Map() // relPath -> code
+  if (wsRoot) {
+    try {
+      const { runCommandSync } = require('../tools/exec')
+      const st = runCommandSync('git', ['status', '--porcelain', '-z', '-uall'], { cwd: wsRoot })
+      if (st.exitCode === 0 && st.stdout) {
+        const entries = st.stdout.split('\0').filter(Boolean)
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i]
+          if (entry.length < 3) continue
+          const code = entry.slice(0, 2).trim()
+          const relRaw = entry.slice(3)
+          if (code.includes('R') || code.includes('C')) {
+            i++
+          }
+          baselineGit.set(relRaw.replace(/\\/g, '/'), code)
+        }
+      }
+    } catch {}
+  }
+
   function resolvePath(args) {
     const raw = args?.path || args?.targetPath || args?.filePath || args?.file
     if (!raw || typeof raw !== 'string') return null
@@ -90,7 +112,9 @@ function createTurnFileTracker(wsRoot) {
           diff = lines.map(l => '-' + l).join('\n')
         } else if (initialContent !== null && finalContent !== null) {
           status = 'modified'
-          diff = buildUnifiedDiff(initialContent.split('\n'), finalContent.split('\n'))
+          const oldLines = initialContent.length === 0 ? [] : initialContent.replace(/\r?\n$/, '').split('\n')
+          const newLines = finalContent.length === 0 ? [] : finalContent.replace(/\r?\n$/, '').split('\n')
+          diff = buildUnifiedDiff(oldLines, newLines)
           for (const line of diff.split('\n')) {
             if (line.startsWith('+')) added++
             else if (line.startsWith('-')) removed++
@@ -124,7 +148,22 @@ function createTurnFileTracker(wsRoot) {
               if (code.includes('R') || code.includes('C')) {
                 i++
               }
+              const normRel = relRaw.replace(/\\/g, '/')
+              // If file had the exact same status prior to the turn, check if it was actually touched
+              const prevCode = baselineGit.get(normRel)
               const absPath = path.resolve(wsRoot, relRaw)
+              if (prevCode === code) {
+                try {
+                  const stat = fs.existsSync(absPath) ? fs.statSync(absPath) : null
+                  if (stat && stat.mtimeMs < turnStartTime) {
+                    continue // Untouched pre-existing modification
+                  } else if (!stat) {
+                    continue // Deleted prior to this turn
+                  }
+                } catch {
+                  continue
+                }
+              }
               if (!files.has(absPath)) {
                 try {
                   const stat = fs.existsSync(absPath) ? fs.statSync(absPath) : null
