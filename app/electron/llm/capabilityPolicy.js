@@ -29,6 +29,7 @@ const TOOL_AXIS = {
   lsp_diagnostics: AXES.FILESYSTEM, lsp_code_actions: AXES.FILESYSTEM,
   lsp_rename: AXES.FILESYSTEM, find_symbol: AXES.FILESYSTEM,
   sandbox_init: AXES.FILESYSTEM, sandbox_apply: AXES.FILESYSTEM, generate_repo_map: AXES.FILESYSTEM,
+  inspect_app_bundle: AXES.FILESYSTEM, extract_asar: AXES.FILESYSTEM, audit_agent_bundle: AXES.FILESYSTEM, extract_asar: AXES.FILESYSTEM, audit_agent_bundle: AXES.FILESYSTEM,
   // shell: 命令执行
   run_command: AXES.SHELL, debug_loop: AXES.SHELL, test_first: AXES.SHELL,
   // network: 网络访问
