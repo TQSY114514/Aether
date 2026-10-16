@@ -10,7 +10,10 @@
 // Scan roots (precedence: first match wins by name):
 //   <workspace>/.claude/skills   ← Claude-Code compat (public skill corpus)
 //   <workspace>/.aetherai/skills ← app-native
+//   <workspace>/.agents/skills   ← agents-sdk / Antigravity workspace skills
 //   <userData>/skills            ← user-global, ships a few built-ins here
+//   ~/.agents/skills             ← user home global agent skills
+//   <app>/skills                 ← built-in skills shipped with the app
 //
 // Only name + description + filePath enter the system prompt (as an
 // <available_skills> XML block, ~100 tokens/skill). The SKILL.md body is
@@ -19,8 +22,28 @@
 
 const fs = require('fs')
 const path = require('path')
-const { app } = require('electron')
+const os = require('os')
+const electron = (() => { try { return require('electron') } catch { return null } })()
+const app = (electron && typeof electron === 'object' && electron.app) ? electron.app : null
 const { getWorkspaceRoot } = require('../tools/sandbox')
+
+function getUserDataDir() {
+  if (app && typeof app.getPath === 'function') {
+    try { return app.getPath('userData') } catch {}
+  }
+  const base = process.env.APPDATA
+    || (process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : path.join(os.homedir(), '.config'))
+  return path.join(base, 'aetherai')
+}
+
+function getHomeDir() {
+  if (app && typeof app.getPath === 'function') {
+    try { return app.getPath('home') } catch {}
+  }
+  return os.homedir()
+}
 
 // In-memory index: name → skill metadata. Refreshed on demand.
 let _skills = new Map()
@@ -98,8 +121,10 @@ function scanSkills() {
   if (ws) {
     roots.push(path.join(ws, '.claude', 'skills'))
     roots.push(path.join(ws, '.aetherai', 'skills'))
+    roots.push(path.join(ws, '.agents', 'skills'))
   }
-  roots.push(path.join(app.getPath('userData'), 'skills'))
+  roots.push(path.join(getUserDataDir(), 'skills'))
+  roots.push(path.join(require('os').homedir(), '.agents', 'skills'))
   // Built-in skills shipped with the app (lowest precedence — user copies override).
   roots.push(path.join(__dirname, '..', '..', 'skills'))
   // GEP 自进化胶囊目录(进化产物也作为 skill 加载, 最低优先级)。
@@ -108,7 +133,7 @@ function scanSkills() {
   const byName = new Map()
   for (const root of roots) {
     for (const s of loadSkillsFromDir(root)) {
-      // First match wins (precedence: workspace .claude > .aetherai > userData > built-in).
+      // First match wins (precedence: workspace .claude > .aetherai > .agents > userData > ~/.agents > built-in).
       if (!byName.has(s.name)) byName.set(s.name, s)
     }
   }
@@ -174,7 +199,7 @@ const { formatSkillEntries, SKILL_PROMPT_CHAR_BUDGET } = require('./skillsEntrie
 function formatSkillsForPrompt() {
   const skills = getSkills()
   if (skills.length === 0) return ''
-  return formatSkillEntries(skills, _usage, SKILL_PROMPT_CHAR_BUDGET, app.getPath('home'))
+  return formatSkillEntries(skills, _usage, SKILL_PROMPT_CHAR_BUDGET, getHomeDir())
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -221,7 +246,7 @@ function scanCommands() {
     roots.push(path.join(ws, '.claude', 'commands'))
     roots.push(path.join(ws, '.aetherai', 'commands'))
   }
-  roots.push(path.join(app.getPath('userData'), 'commands'))
+  roots.push(path.join(getUserDataDir(), 'commands'))
   roots.push(path.join(__dirname, '..', '..', 'commands'))
   const byId = new Map()
   for (const root of roots) {
@@ -360,7 +385,7 @@ async function importSkillFromUrl(source, opts = {}) {
       return { ok: false, error: `Invalid skill name in frontmatter: ${meta.name}` }
     }
 
-    const targetRoot = opts.targetRoot || path.join(app.getPath('userData'), 'skills')
+    const targetRoot = opts.targetRoot || path.join(getUserDataDir(), 'skills')
     const skillDir = path.join(targetRoot, safeName)
     fs.mkdirSync(skillDir, { recursive: true })
     const skillFilePath = path.join(skillDir, 'SKILL.md')

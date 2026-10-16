@@ -118,3 +118,4 @@ Aether 在研发过程中研究了上述 20+ 款工具的源码与设计文档�
 | **LMSYS Chatbot Arena & SWE-bench** | 本地双盲竞技场（`arena.handler.js`）、动态 ELO 积分排名与代码能力自动化基准体系。 |
 | **OpenHands** | 多执行后端抽象（`backend.js`、`dockerBackend.js`、`sshBackend.js`）与全自主 Sandbox 隔离执行工作流。 |
 | **Kiro** | 推理深度多档位自适应控制（`reasoning.js` / `EffortControl.tsx`）与行内子代理执行视图（`SubagentDeck.tsx`）。 |
+| **Wish (wish-core / wish-web)** | Prompt Cache 零损耗的按需 CLI 桥接设计、Windows Win32 Job Object 内核级进程树生命周期沙箱、基于 Fetch 的高韧性指数退避 SSE 流状态机与长会话 Compaction 三维水位线。 |

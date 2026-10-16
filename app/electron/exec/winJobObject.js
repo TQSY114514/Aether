@@ -21,10 +21,15 @@ let supervisorProcess = null
 let supervisorRl = null
 let isReady = false
 let initPromise = null
+let startupTimer = null
 const pendingAssigns = new Map()
 
 function isSupported() {
   return IS_WINDOWS
+}
+
+function getSupervisorProcess() {
+  return supervisorProcess
 }
 
 async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
@@ -58,6 +63,10 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
         const text = line.trim()
         if (text === 'READY') {
           isReady = true
+          if (startupTimer) {
+            clearTimeout(startupTimer)
+            startupTimer = null
+          }
           resolve(true)
           return
         }
@@ -103,13 +112,15 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
       })
 
       // Timeout for startup readiness (5 seconds)
-      setTimeout(() => {
+      startupTimer = setTimeout(() => {
+        startupTimer = null
         if (!isReady) {
           log.warn?.('[winJobObject] Supervisor initialization timed out')
           cleanup()
           resolve(false)
         }
-      }, 5000).unref?.()
+      }, 5000)
+      startupTimer.unref?.()
 
     } catch (err) {
       log.warn?.('[winJobObject] Exception starting supervisor:', err.message)
@@ -122,6 +133,10 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
 }
 
 function cleanup() {
+  if (startupTimer) {
+    clearTimeout(startupTimer)
+    startupTimer = null
+  }
   isReady = false
   initPromise = null
   for (const [pid, handler] of pendingAssigns.entries()) {
@@ -174,6 +189,29 @@ async function assignProcess(pid, timeoutMs = 3000) {
   })
 }
 
+/**
+ * Forcefully terminate a specific Windows process tree.
+ * @param {number} pid - Target Process ID
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+async function terminateProcess(pid) {
+  if (!IS_WINDOWS) {
+    return { ok: false, error: 'Windows process termination only supported on Win32' }
+  }
+  if (!pid || typeof pid !== 'number') {
+    return { ok: false, error: 'Invalid PID' }
+  }
+  return new Promise((resolve) => {
+    const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true })
+    killer.on('exit', (code) => {
+      resolve({ ok: code === 0 || code === 128 })
+    })
+    killer.on('error', (err) => {
+      resolve({ ok: false, error: err.message })
+    })
+  })
+}
+
 function shutdown() {
   if (supervisorProcess && !supervisorProcess.killed) {
     try {
@@ -193,5 +231,8 @@ module.exports = {
   isSupported,
   ensureSupervisor,
   assignProcess,
+  terminateProcess,
+  getSupervisorProcess,
   shutdown,
 }
+
