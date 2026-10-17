@@ -34,7 +34,7 @@ const CATEGORY_TOOLS = {
     'run_workflow', 'run_arena',
     'debug_loop', 'test_first', 'review_code',
   ],
-  memory: ['memory_save', 'memory_list', 'memory_search', 'history_search'],
+  memory: ['memory_save', 'memory_list', 'memory_search'],
   git: ['git_status', 'git_diff', 'git_log', 'git_commit', 'git_push', 'git_create_branch'],
 }
 
@@ -193,7 +193,9 @@ const TOOL_TO_BUCKET = new Map()
 for (const c of CORE_TOOLS) TOOL_TO_BUCKET.set(c, 0)
 CATEGORY_BUCKET_ORDER.forEach((cat, idx) => {
   for (const t of CATEGORY_TOOLS[cat] || []) {
-    TOOL_TO_BUCKET.set(t, 2 + idx)
+    if (!TOOL_TO_BUCKET.has(t)) {
+      TOOL_TO_BUCKET.set(t, 2 + idx)
+    }
   }
 })
 
