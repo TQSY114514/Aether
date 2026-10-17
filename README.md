@@ -8,7 +8,9 @@
 
 # Aether
 
-### Local-first Multi-Model Desktop AI Workbench · Built-in Arena · Safe by Default
+### Intelligence, on your terms.
+
+A local-first AI workspace for models, memory, and agents.
 
 Benchmark multiple models concurrently on your actual code and route tasks based on empirical performance. 100% local SQLite storage, encrypted API keys, and capability-gated execution with zero telemetry.
 
