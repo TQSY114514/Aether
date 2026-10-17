@@ -3,16 +3,16 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/readme-hero-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="./assets/readme-hero-light.png" />
-  <img src="./assets/readme-hero.png" width="620" alt="Aether — Local-first Multi-Model AI Workbench" />
+  <img src="./assets/readme-hero.png" width="620" alt="Aether — Evidence-driven AI Development Workbench" />
 </picture>
 
 # Aether
 
-### Intelligence, on your terms.
+### Test models on your work. Put the results to work.
 
-A local-first AI workspace for models, memory, and agents.
+An evidence-driven AI development workbench connecting model evaluation, project context, and controlled agent execution.
 
-Benchmark multiple models concurrently on your actual code and route tasks based on empirical performance. 100% local SQLite storage, encrypted API keys, and capability-gated execution with zero telemetry.
+Compare models on real coding tasks, inspect the results, and use that evidence to inform your workflow. Local-first storage, provider flexibility, and capability-gated execution help keep your work under your control.
 
 [![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
@@ -30,14 +30,16 @@ Benchmark multiple models concurrently on your actual code and route tasks based
 
 ## Overview
 
-Aether is a local-first desktop AI workbench built with Electron, React/TypeScript, and better-sqlite3 (WAL mode). It treats LLM providers as pluggable compute backends without requiring cloud accounts or remote servers. All sessions, encrypted API keys, memories, and evaluation metrics reside locally in `%APPDATA%/aetherai/aetherai.db`.
+Aether is a desktop AI development workbench built with Electron, React/TypeScript, and SQLite. Its central idea is to connect three parts of AI-assisted development: evaluating models on real tasks, carrying project context across sessions, and executing work through a reviewable agent workflow.
 
-It is designed around four engineering requirements:
+It is built around four complementary capabilities:
 
-1. **Empirical Multi-Model Evaluation (Arena)**: Public benchmarks rarely reflect your specific codebase or workflow. Aether lets you dispatch the same task to 2–4 models concurrently, vote on blind outputs, and maintain local intent-categorized ELO ratings.
-2. **Capability-Gated Execution (6-Axis Permission System)**: The agent can inspect files and execute shell commands, but mutations are strictly gated by a 6-axis permission model (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) with inline Diff previews before changes land on disk.
-3. **Structured Long-Term Memory (AutoMemory & Project Brain)**: Facts, architectural decisions, and entity relationships are asynchronously extracted into SQLite + FTS5 tables, scoped per workspace, and prefetched in `< 2ms` without wasting extra LLM tool-call turns.
-4. **Desktop-First Workbench with Headless Automation**: Engineering focus is **100% centered on the Windows Desktop Workbench (GUI)**, featuring real-time streaming reasoning, BTW side questions, task queue dock, multi-model Arena, and local gateway. A lightweight Headless CLI (`aether run "prompt"` / `--eval`) and Electron-free SDK are published on npm for scripts and CI automation.
+1. **Task-based model evaluation (Arena)**: Compare multiple models on the same coding task, inspect their outputs, and collect preference or evaluation signals. Results are useful evidence for a workflow—not a universal ranking of model intelligence.
+2. **Evidence-informed model selection**: Model advice and routing can use task categories and available Arena scores. Recommendations are still affected by cold-start priors and the amount and quality of evaluation data, so they should be treated as guidance rather than a guarantee of the best model.
+3. **Project context and long-term memory**: AutoMemory, Project Brain, and repository mapping help preserve relevant facts and architectural context across sessions.
+4. **Controlled agent execution**: A six-axis permission system (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) and reviewable diffs help users inspect and control agent actions.
+
+Aether is local-first: sessions, memories, evaluation data, and encrypted provider credentials are stored in the local SQLite database. When you use a hosted model provider, prompts, code, or context sent to that provider are still subject to its data-handling policies.
 
 ---
 
