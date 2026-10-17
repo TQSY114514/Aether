@@ -342,7 +342,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     const mergedOpts = { ...genOpts, ...reasoningOpts }
 
     // If Hermes family and thinking is enabled, lift token limit so reasoning does not truncate
-    const modelFam = model?.model_name ? reasoningFamily(model.model_name) : 'none'
+    const modelFam = (typeof reasoningFamily === 'function' && model?.model_name) ? reasoningFamily(model.model_name) : 'none'
     if (modelFam === 'hermes' && thinkingEnabled) {
       if (!mergedOpts.max_tokens || mergedOpts.max_tokens < 8192) {
         mergedOpts.max_tokens = 8192
