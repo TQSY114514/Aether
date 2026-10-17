@@ -4,6 +4,7 @@ import { useUI } from '@/components/ui/feedback'
 import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield, PanelLeft } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
+import { stripChannelMarkers } from '@/utils/markdown'
 import FileTree from './FileTree'
 import HoverMarquee from '@/components/ui/HoverMarquee'
 
@@ -107,7 +108,7 @@ export default function Sidebar() {
     if (!title) return true
     return title === '新会话' || title === '新对话' || title === 'New Chat'
   }
-  const previewOf = (text: string) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
+  const previewOf = (text: string) => stripChannelMarkers(text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
 
   // Close context menu on outside click
   useEffect(() => {
