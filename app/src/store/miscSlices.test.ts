@@ -151,6 +151,31 @@ describe("arenaSlice", () => {
     expect(s.arenaError).toBeNull()
   })
 
+  it("runArena initializes arenaPending with models count times temperature count", async () => {
+    let capturedPendingDuringRun = -1
+    stubWindow({
+      arena: {
+        send: async () => {
+          capturedPendingDuringRun = useStore.getState().arenaPending
+          return { results: [] }
+        },
+        onModelDone: () => () => {},
+        scores: async () => [],
+      },
+      session: { list: async () => [], pin: async () => {}, setConfig: async () => {} },
+      message: { list: async () => [] },
+    })
+    useStore.setState({
+      currentSessionId: 5,
+      arenaModelIds: [1, 2],
+      arenaTemperatures: [0.2, 0.7, 1.0],
+      sessionConfigs: { 5: { providerId: 1, modelId: 1, personaId: null } },
+    })
+
+    await useStore.getState().runArena("hi")
+    expect(capturedPendingDuringRun).toBe(6)
+  })
+
   describe("appendArenaResult (chatSlice arena helper)", () => {
     it("appends a result for the active arena session and de-dupes by model_id", () => {
       const r1 = { model_id: 1, model_name: "a", provider_name: "p", content: "x" }

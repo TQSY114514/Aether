@@ -268,12 +268,14 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       // Clamp reasoning effort to 'low' and update model-specific thinking budgets only if reasoning was requested
       const thinkingDisabled = options.enable_thinking === false ||
         options.thinking?.type === 'disabled' ||
-        options.thinking_config?.thinking_budget === 0
+        options.thinking_config?.thinking_budget === 0 ||
+        options.reasoning?.effort === 'none'
       const thinkingRequested = options.reasoning_effort ||
         options.reasoningEffort ||
         options.enable_thinking === true ||
         options.thinking?.type === 'enabled' ||
-        (options.thinking_config?.thinking_budget && options.thinking_config.thinking_budget > 0)
+        (options.thinking_config?.thinking_budget && options.thinking_config.thinking_budget > 0) ||
+        (options.reasoning && options.reasoning.effort && options.reasoning.effort !== 'none')
       if (!thinkingDisabled && thinkingRequested) {
         const modelName = model?.model_name || model?.id || (typeof model === 'string' ? model : '')
         try {

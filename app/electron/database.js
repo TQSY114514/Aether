@@ -373,7 +373,7 @@ function initDatabase() {
   // Migrate pre-2.0 internal child sessions out of the normal chat list.
   try {
     db.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
-    db.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND parent_session_id IS NOT NULL AND title LIKE 'subagent%'").run();
+    db.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND parent_session_id IS NOT NULL AND (title GLOB 'subagent-*' OR title GLOB 'subagent: *')").run();
   } catch {}
   addCol("session", "status", "TEXT NOT NULL DEFAULT 'active'");
   addCol("provider_credential", "disable_reason", "TEXT");

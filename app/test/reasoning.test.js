@@ -38,6 +38,13 @@ describe('reasoningFamily', () => {
     expect(reasoningFamily('gemini-2.0-flash-lite')).toBe('none')
   })
 
+  it('identifies Hermes models', () => {
+    expect(reasoningFamily('deephermes-3-llama-3-8b')).toBe('hermes')
+    expect(reasoningFamily('hermes-3-llama-3.1-405b')).toBe('hermes')
+    expect(reasoningFamily('hermes-4-preview')).toBe('hermes')
+    expect(reasoningFamily('nous-hermes-2-mixtral')).toBe('hermes')
+  })
+
   it('returns none for non-reasoning models', () => {
     expect(reasoningFamily('gpt-4o')).toBe('none')
     expect(reasoningFamily('llama-3.3-70b')).toBe('none')
@@ -83,6 +90,23 @@ describe('buildReasoningParams', () => {
       thinking_config: { thinking_budget: 0 },
     })
   })
+
+  it('builds Hermes params with budget, reasoning effort, and disabled state', () => {
+    const onRes = buildReasoningParams('deephermes-3', 'medium', true)
+    expect(onRes.enable_thinking).toBe(true)
+    expect(onRes.thinking_budget).toBe(8192)
+    expect(onRes.reasoning).toEqual({ effort: 'medium', max_tokens: 8192 })
+
+    expect(buildReasoningParams('deephermes-3', 'medium', false)).toEqual({
+      enable_thinking: false,
+      thinking: { type: 'disabled' },
+      reasoning: { effort: 'none' },
+    })
+
+    const clamped = buildReasoningParams('hermes-4', 'high', true, { maxTokens: 4000 })
+    expect(clamped.thinking_budget).toBe(3999)
+    expect(clamped.reasoning.max_tokens).toBe(3999)
+  })
 })
 
 describe('supportsReasoning & isBinaryReasoning', () => {
@@ -92,11 +116,15 @@ describe('supportsReasoning & isBinaryReasoning', () => {
     expect(supportsReasoning('deepseek-r1')).toBe(true)
     expect(supportsReasoning('qwq-32b')).toBe(true)
     expect(supportsReasoning('gemini-2.5-pro')).toBe(true)
+    expect(supportsReasoning('deephermes-3')).toBe(true)
+    expect(supportsReasoning('hermes-3-llama-3.1')).toBe(true)
     expect(supportsReasoning('llama-3.1')).toBe(false)
   })
 
   it('identifies binary-only models correctly', () => {
     expect(isBinaryReasoning('deepseek-r1')).toBe(true)
+    expect(isBinaryReasoning('deephermes-3')).toBe(true)
+    expect(isBinaryReasoning('hermes-4')).toBe(false)
     expect(isBinaryReasoning('o1-mini')).toBe(false)
     expect(isBinaryReasoning('claude-3-7-sonnet')).toBe(false)
     expect(isBinaryReasoning('qwq-32b')).toBe(false)

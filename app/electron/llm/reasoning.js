@@ -25,6 +25,7 @@
 const RE_OPENAI = /^o[134]|^gpt-5/i
 const RE_CLAUDE = /claude/i
 const RE_DEEPSEEK_R = /deepseek[_-](r\d|reasoner)/i
+const RE_HERMES = /(deephermes|hermes[_-]?[34]|nous[_-]hermes)/i
 function isQwenReasoning(m) {
   if (m.startsWith('qwq') || m.startsWith('qwen3')) return true
   if (m.startsWith('qwen') && (m.includes('-thinking') || m.includes('-reason') || m.includes('_thinking') || m.includes('_reason'))) return true
@@ -43,6 +44,7 @@ function reasoningFamily(modelName = '') {
   if (RE_CLAUDE.test(m)) return 'claude'
   // Only match deepseek-reasoner / deepseek-r1 style names.
   if (RE_DEEPSEEK_R.test(m)) return 'deepseek'
+  if (RE_HERMES.test(m)) return 'hermes'
   if (isQwenReasoning(m)) return 'qwen'
   if (isGeminiReasoning(m)) return 'gemini'
   return 'none'
@@ -70,6 +72,7 @@ function buildReasoningParams(modelName, effort, thinkingEnabled, options) {
   if (!thinkingEnabled) {
     if (fam === 'qwen') return { enable_thinking: false }
     if (fam === 'gemini') return { thinking_config: { thinking_budget: 0 } }
+    if (fam === 'hermes') return { enable_thinking: false, thinking: { type: 'disabled' }, reasoning: { effort: 'none' } }
     return {}
   }
 
@@ -105,6 +108,17 @@ function buildReasoningParams(modelName, effort, thinkingEnabled, options) {
       thinking_budget: budget,
     }
   }
+  if (fam === 'hermes') {
+    let budget = normEffort === 'low' ? 2048 : normEffort === 'medium' ? 8192 : 16384
+    if (typeof maxTokens === 'number' && maxTokens > 0 && budget >= maxTokens) {
+      budget = Math.max(1, maxTokens - 1)
+    }
+    return {
+      enable_thinking: true,
+      thinking_budget: budget,
+      reasoning: { effort: normEffort, max_tokens: budget },
+    }
+  }
   return {}
 }
 
@@ -115,7 +129,10 @@ function supportsReasoning(modelName = '') {
 
 // Whether the model only supports binary on/off without tiered effort levels.
 function isBinaryReasoning(modelName = '') {
-  return reasoningFamily(modelName) === 'deepseek'
+  const m = String(modelName || '').toLowerCase()
+  if (reasoningFamily(m) === 'deepseek') return true
+  if (/deephermes/i.test(m)) return true
+  return false
 }
 
 module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning, isBinaryReasoning, normalizeEffort }

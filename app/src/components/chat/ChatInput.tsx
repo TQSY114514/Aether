@@ -171,7 +171,7 @@ export default function ChatInput() {
     if (!activeModelId) return false
     const m = allModels.find(x => x.id === activeModelId)
     const name = (m?.model_name || '').toLowerCase()
-    return /deepseek[_-](r\d|reasoner)/i.test(name)
+    return /deepseek[_-](r\d|reasoner)/i.test(name) || /deephermes/i.test(name)
   }, [activeModelId, allModels])
 
   const sessionIdRef = useRef(currentSessionId)

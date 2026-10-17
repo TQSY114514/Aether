@@ -179,16 +179,19 @@ export function ensureChunkListener() {
         getStore().getState().loadSessions()
         const st2 = getStore().getState()
         if (st2.queuedMessages.length > 0 && Object.keys(st2.streamingBySession).length === 0) {
-          const q = st2.queuedMessages[0]
-          getStore().setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
-          setTimeout(async () => {
-            const st3 = getStore().getState()
-            const targetSid = q.sessionId ?? st3.currentSessionId
-            if (!targetSid) return
-            const exists = st3.sessions.some((s) => s.id === targetSid)
-            if (!exists) return
-            if (st3.currentSessionId !== targetSid) {
-              await st3.selectSession(targetSid)
+          setTimeout(async function processNextQueued() {
+            const st = getStore().getState()
+            if (st.queuedMessages.length === 0 || Object.keys(st.streamingBySession).length > 0) return
+            const q = st.queuedMessages[0]
+            getStore().setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
+            const targetSid = q.sessionId ?? st.currentSessionId
+            if (!targetSid) return processNextQueued()
+            const exists = st.sessions.some((s) => s.id === targetSid)
+            if (!exists) {
+              return processNextQueued()
+            }
+            if (st.currentSessionId !== targetSid) {
+              await st.selectSession(targetSid)
             }
             const st4 = getStore().getState()
             if (st4.chatMode === "arena") st4.runArena(q.content)

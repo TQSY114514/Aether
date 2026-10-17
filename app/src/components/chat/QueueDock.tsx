@@ -43,18 +43,8 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
     >
       {/* Header bar */}
       <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        className="px-3 py-1.5 flex items-center justify-between text-xs cursor-pointer select-none border-b border-[var(--border)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+        className="px-3 py-1.5 flex items-center justify-between text-xs cursor-pointer select-none border-b border-[var(--border)]"
         onClick={() => setExpanded(!expanded)}
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setExpanded(!expanded)
-          }
-        }}
       >
         <div className="flex items-center gap-2 min-w-0">
           <ListOrdered size={14} style={{ color: 'var(--accent)' }} className="shrink-0" />
@@ -75,7 +65,11 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
           </span>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center gap-1 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={clearQueued}

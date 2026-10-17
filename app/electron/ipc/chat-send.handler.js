@@ -8,7 +8,7 @@
 
 const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
-const { buildReasoningParams } = require('../llm/reasoning')
+const { buildReasoningParams, reasoningFamily } = require('../llm/reasoning')
 const { maybeCompact, estimateMessagesTokens, estimateTextTokens, foldStaleToolOutputs } = require('../llm/compaction')
 const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
@@ -340,6 +340,31 @@ ipcMain.handle('chat:complete', handleChatComplete)
     if (genParams.temperature && genParams.temperature > 0) genOpts.temperature = genParams.temperature
     if (genParams.topP && genParams.topP > 0) genOpts.top_p = genParams.topP
     const mergedOpts = { ...genOpts, ...reasoningOpts }
+
+    // If Hermes family and thinking is enabled, lift token limit so reasoning does not truncate
+    const modelFam = model?.model_name ? reasoningFamily(model.model_name) : 'none'
+    if (modelFam === 'hermes' && thinkingEnabled) {
+      if (!mergedOpts.max_tokens || mergedOpts.max_tokens < 8192) {
+        mergedOpts.max_tokens = 8192
+      }
+    }
+
+    // DeepHermes prompt injection for dual-mode thinking models
+    if (modelFam === 'hermes' && /deephermes/i.test(model?.model_name || '')) {
+      const hasThinkPrompt = compacted.some(m => m.role === 'system' && (m.content.includes('<think>') || m.content.includes('deep thinking')))
+      if (thinkingEnabled && !hasThinkPrompt) {
+        compacted.unshift({
+          role: 'system',
+          content: 'You are a deep thinking AI, you may use extremely long chains of thought to deeply reason about problems. Enclose your chain of thought inside <think> and </think> tags.',
+        })
+      } else if (!thinkingEnabled && !hasThinkPrompt) {
+        compacted.unshift({
+          role: 'system',
+          content: 'Respond directly and concisely. Do not use <think> tags or chain-of-thought.',
+        })
+      }
+    }
+
     // Prepend a custom system prefix if set (advanced users). Done after compaction
     // so the prefix is never summarized away.
     if (systemPrefix && systemPrefix.trim()) {
