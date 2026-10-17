@@ -49,6 +49,7 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
         className="px-3 py-1.5 flex items-center justify-between text-xs cursor-pointer select-none border-b border-[var(--border)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
         onClick={() => setExpanded(!expanded)}
         onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             setExpanded(!expanded)

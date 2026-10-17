@@ -636,7 +636,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   appendArenaResult: (sessionId, result) => {
     set((s) => {
       if (s.arenaResultsSessionId !== sessionId) return {}
-      const exists = s.arenaResults.some(r => r.model_id === result.model_id)
+      const exists = s.arenaResults.some(r => r.model_id === result.model_id && (r.variant || '') === (result.variant || ''))
       return {
         arenaResults: exists ? s.arenaResults : [...s.arenaResults, result],
         arenaPending: Math.max(0, s.arenaPending - (exists ? 0 : 1)),

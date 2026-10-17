@@ -59,13 +59,21 @@ export default function ChatPage() {
   }, [currentSessionId])
 
   // Arena model selections — local state synced to store for persistence.
-  const [localArenaIds, setLocalArenaIds] = useState<number[]>([])
+  const [localArenaIds, setLocalArenaIds] = useState<[number | null, number | null]>([
+    arenaModelIds[0] ?? null,
+    arenaModelIds[1] ?? null,
+  ])
   useEffect(() => {
-    if (arenaModelIds.length >= 2) setLocalArenaIds(arenaModelIds.slice(0, 2))
+    setLocalArenaIds([arenaModelIds[0] ?? null, arenaModelIds[1] ?? null])
   }, [arenaModelIds])
-  const syncLocalArena = useCallback((ids: number[]) => {
-    setLocalArenaIds(ids.slice(0, 2))
-    if (ids.length >= 2) setArenaModelIds(ids.slice(0, 2))
+
+  const setModelSlot = useCallback((slot: 0 | 1, modelId: number | null) => {
+    setLocalArenaIds((prev) => {
+      const next: [number | null, number | null] = slot === 0 ? [modelId, prev[1]] : [prev[0], modelId]
+      const valid = next.filter((id): id is number => id !== null && id > 0)
+      setArenaModelIds(valid)
+      return next
+    })
   }, [setArenaModelIds])
 
   const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
@@ -124,29 +132,46 @@ export default function ChatPage() {
                   : 'max-w-0 opacity-0 pointer-events-none mr-0'
               }`}
             >
-              <select value={localArenaIds[0] ?? ''} onChange={(e) => {
-                const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
-                syncLocalArena(ids)
-              }}
-                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
+              <select
+                value={localArenaIds[0] ?? ''}
+                onChange={(e) => setModelSlot(0, Number(e.target.value) || null)}
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all"
+                style={{ borderColor: 'var(--border)' }}
+              >
                 <option value="">{t('chat.arena.model1')}</option>
                 {allArenaModels.map(m => (
                   <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                 ))}
               </select>
-              <select value={localArenaIds[1] ?? ''} onChange={(e) => {
-                const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
-                syncLocalArena(ids)
-              }}
-                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
+              <select
+                value={localArenaIds[1] ?? ''}
+                onChange={(e) => setModelSlot(1, Number(e.target.value) || null)}
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all"
+                style={{ borderColor: 'var(--border)' }}
+              >
                 <option value="">{t('chat.arena.model2')}</option>
                 {allArenaModels.map(m => (
                   <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
                 ))}
               </select>
+              {/* Arena 2.0: same-model multi-temperature comparison */}
+              <select
+                value={arenaTemperatures ? arenaTemperatures.join(',') : ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setArenaTemperatures(v ? v.split(',').map(Number) : null)
+                }}
+                title={t('chat.arena.temp_title')}
+                className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[120px] transition-all"
+                style={{ borderColor: 'var(--border)' }}
+              >
+                <option value="">{t('chat.arena.single')}</option>
+                <option value="0.2,0.8">{t('chat.arena.temp_pair')}</option>
+                <option value="0.2,0.5,0.8">{t('chat.arena.temp_triple')}</option>
+              </select>
             </div>
             <Tooltip text={t('tooltip.mode_switch')}>
-              <div className="relative inline-grid grid-cols-2 p-0.5 rounded-lg border text-xs bg-[var(--bg-secondary)] shrink-0 w-[148px] select-none" style={{ borderColor: 'var(--border)' }}>
+              <div className="relative inline-grid grid-cols-2 p-0.5 rounded-lg border text-xs bg-[var(--bg-secondary)] shrink-0 w-[148px] select-none app-no-drag" style={{ borderColor: 'var(--border)' }}>
                 <div
                   className="absolute inset-y-0.5 rounded-md bg-[var(--accent)] shadow-xs transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
                   style={{
@@ -218,21 +243,23 @@ export default function ChatPage() {
                 : 'max-w-0 opacity-0 pointer-events-none mr-0'
             }`}
           >
-            <select value={localArenaIds[0] ?? ''} onChange={(e) => {
-              const ids = [Number(e.target.value) || 0, localArenaIds[1] ?? 0].filter(Boolean)
-              syncLocalArena(ids)
-            }}
-              className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
-                <option value="">{t('chat.arena.model1')}</option>
-                {allArenaModels.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-                ))}
+            <select
+              value={localArenaIds[0] ?? ''}
+              onChange={(e) => setModelSlot(0, Number(e.target.value) || null)}
+              className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              <option value="">{t('chat.arena.model1')}</option>
+              {allArenaModels.map(m => (
+                <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
+              ))}
             </select>
-            <select value={localArenaIds[1] ?? ''} onChange={(e) => {
-              const ids = [localArenaIds[0] ?? 0, Number(e.target.value) || 0].filter(Boolean)
-              syncLocalArena(ids)
-            }}
-              className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all" style={{ borderColor: 'var(--border)' }}>
+            <select
+              value={localArenaIds[1] ?? ''}
+              onChange={(e) => setModelSlot(1, Number(e.target.value) || null)}
+              className="text-xs px-2 py-1 rounded border outline-none bg-[var(--content-bg)] shrink-0 max-w-[160px] transition-all"
+              style={{ borderColor: 'var(--border)' }}
+            >
               <option value="">{t('chat.arena.model2')}</option>
               {allArenaModels.map(m => (
                 <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
@@ -251,7 +278,7 @@ export default function ChatPage() {
             </select>
           </div>
           <Tooltip text={t('tooltip.mode_switch')}>
-            <div className="relative inline-grid grid-cols-2 p-0.5 rounded-lg border text-xs bg-[var(--bg-secondary)] shrink-0 w-[148px] select-none" style={{ borderColor: 'var(--border)' }}>
+            <div className="relative inline-grid grid-cols-2 p-0.5 rounded-lg border text-xs bg-[var(--bg-secondary)] shrink-0 w-[148px] select-none app-no-drag" style={{ borderColor: 'var(--border)' }}>
               <div
                 className="absolute inset-y-0.5 rounded-md bg-[var(--accent)] shadow-xs transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
                 style={{

@@ -782,8 +782,9 @@ const TOOLS = [
     const role = args.role && ['user', 'assistant'].includes(args.role) ? args.role : null
 
     try {
-      let sql = 'SELECT id, role, content, created_at FROM message WHERE session_id = ? AND content LIKE ?'
-      const params = [sessionId, `%${q}%`]
+      const escapedQ = q.replace(/[%_\\]/g, '\\$&')
+      let sql = "SELECT id, role, content, created_at FROM message WHERE session_id = ? AND content LIKE ? ESCAPE '\\'"
+      const params = [sessionId, `%${escapedQ}%`]
       if (role) {
         sql += ' AND role = ?'
         params.push(role)
@@ -795,7 +796,8 @@ const TOOLS = [
       if (!rows || rows.length === 0) return `No historical messages matched "${q}" in session ${sessionId}.`
 
       return rows.map((r) => {
-        const preview = r.content.length > 500 ? r.content.slice(0, 500) + '... [truncated]' : r.content
+        const text = r.content || ''
+        const preview = text.length > 500 ? text.slice(0, 500) + '... [truncated]' : text
         return `[Message #${r.id} | ${r.role} | ${r.created_at}]\n${preview}`
       }).join('\n\n---\n\n')
     } catch (err) {
