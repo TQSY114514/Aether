@@ -158,6 +158,22 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     await get().loadSessions()
   },
 
+  forkSession: async (messageId?: number) => {
+    const { currentSessionId } = get()
+    if (!currentSessionId) return null
+    try {
+      const res = await window.electronAPI.chat.fork({ sessionId: currentSessionId, messageId })
+      if (res && res.id) {
+        await get().loadSessions()
+        await get().selectSession(res.id)
+        return res.id
+      }
+    } catch (e) {
+      log.warn('forkSession failed:', e)
+    }
+    return null
+  },
+
   goBack: () => {
     const { sessionHistory, sessionHistoryIdx } = get()
     if (sessionHistoryIdx <= 0) return

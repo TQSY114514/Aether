@@ -401,12 +401,26 @@ function listHooks() {
   return result
 }
 
+// Programmatically register an in-memory hook function. Returns an unhook cleanup function.
+function registerHook(type, fn, name) {
+  if (typeof fn !== 'function') return () => {}
+  const hookName = name || `reg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  if (!_jsHooks.has(type)) _jsHooks.set(type, new Map())
+  _jsHooks.get(type).set(hookName, fn)
+  return () => {
+    if (_jsHooks.has(type)) {
+      _jsHooks.get(type).delete(hookName)
+    }
+  }
+}
+
 module.exports = {
   scanHooks,
   runHooks,
   runJsHooks,
   runShellHook,
   runShellHooks,
+  registerHook,
   rescan,
   listHooks,
   HOOK_TYPES,

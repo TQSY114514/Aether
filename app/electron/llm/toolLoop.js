@@ -174,6 +174,8 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
  * @returns {Promise<Object>} The final LLM response message and metrics.
  */
 async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry }) {
+  let activeProvider = provider
+  let activeModel = model
   const wsRoot = getWorkspaceRoot(sessionId) || process.cwd()
   const turnFileTracker = createTurnFileTracker(wsRoot)
   const emitFileSummary = () => {
@@ -556,12 +558,12 @@ Reply in this format:
 - SUMMARY: brief summary of what was accomplished`
 
       const result = await completeChatMessage({
-        provider, model,
+        provider: activeProvider, model: activeModel,
         messages: [...convo.filter(m => m.role !== 'system'), { role: 'user', content: verifyPrompt }],
         signal,
         options: { max_tokens: 512, ...options },
       })
-      accountToolLoopUsage({ db, sessionId, provider, model, usage: result && result.usage, status: 200 })
+      accountToolLoopUsage({ db, sessionId, provider: activeProvider, model: activeModel, usage: result && result.usage, status: 200 })
       const text = result?.content || null
 
       return text
@@ -631,8 +633,8 @@ Reply in this format:
     requestPermission, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
     onPlanStep, onPlanSnapshot, onStatus, onThinkingStart, onThinkingEnd, onThinkingDelta, onToolCall,
   }
-  const toolCtx = { sessionId, provider, model, signal, agentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
-  const permissionCtx = { provider, model, agentMode, sessionId, signal }
+  const toolCtx = { sessionId, provider: activeProvider, model: activeModel, signal, agentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
+  const permissionCtx = { provider: activeProvider, model: activeModel, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
   while (!loopStateMachine.state.isDone) {
@@ -813,13 +815,75 @@ Reply in this format:
       }
     } catch {}
 
+    // Arena ELO-Driven Phase & Role Model Routing (R2)
+    const isPhaseRoutingActive = (() => {
+      try {
+        const flagVal = db && typeof db.getSetting === 'function'
+          ? (db.getSetting('feature_flag.agent.phaseRouting') || db.getSetting('agent.phaseRouting'))
+          : null
+        if (flagVal === 'arena_elo' || flagVal === '1' || flagVal === 'true') return true
+        if (options && (options.phaseRouting === 'arena_elo' || options['agent.phaseRouting'] === 'arena_elo' || options.phaseRouting === true)) return true
+        const ff = require('../featureFlags')
+        return ff.isEnabled(db, 'agent.phaseRouting')
+      } catch {
+        return false
+      }
+    })()
+
+    if (isPhaseRoutingActive) {
+      try {
+        const recentWindow = auditTrail.slice(-6)
+        const recentToolCalls = recentWindow.map(e => e.name)
+        const recentErrorKinds = recentWindow.filter(e => e.error).map(e => e.failure_kind || 'error')
+        const isVerifying = loopStateMachine?.state?.current === LoopStates.VERIFYING ||
+          loopStateMachine?.state?.current === 'verifying' ||
+          recentWindow.some(e => ['run_command', 'run_test'].includes(e.name) && e.failure_kind === 'test_failure')
+
+        const currentPhase = modelRouter.inferToolLoopPhase({
+          depth,
+          turnIndex: depth,
+          lastToolCalls: recentToolCalls,
+          isPlanning: Boolean(planningMode && depth === 0),
+          isVerifying,
+          lastErrorKinds: recentErrorKinds,
+        })
+
+        const resolved = modelRouter.resolvePhaseTarget(currentPhase, {
+          db,
+          currentModelId: activeModel?.id,
+          currentModel: activeModel,
+          currentProvider: activeProvider,
+        })
+
+        if (resolved && resolved.model && (resolved.model.id !== activeModel?.id || resolved.model.model_name !== (activeModel?.model_name || activeModel))) {
+          const prevName = activeModel?.model_name || String(activeModel || 'default')
+          const nextName = resolved.model.model_name || String(resolved.model.id)
+          activeProvider = resolved.provider || activeProvider
+          activeModel = resolved.model
+          toolCtx.provider = activeProvider
+          toolCtx.model = activeModel
+          permissionCtx.provider = activeProvider
+          permissionCtx.model = activeModel
+          try {
+            onStatus?.({
+              kind: 'phase_route',
+              text: `🔀 阶段模型路由 [${currentPhase}]: 切换至 ${nextName} (${resolved.reason || 'elo_leader'})`,
+            })
+          } catch {}
+          log.info(`[toolLoop] Phase routing switched model [${currentPhase}]: ${prevName} -> ${nextName} (${resolved.reason})`)
+        }
+      } catch (err) {
+        log.warn(`[toolLoop] Phase routing error: ${err && err.message}`)
+      }
+    }
+
     let msg
     let hasStreamedThinking = false
     try {
       try { onThinkingStart?.() } catch {}
       msg = await completeChatMessage({
-        provider,
-        model,
+        provider: activeProvider,
+        model: activeModel,
         messages: convo,
         signal,
         options: {
@@ -847,7 +911,7 @@ Reply in this format:
       }
       // 用量统计 (/tokens): 每次主循环 LLM 调用计入 usage_log, TokenPage 可见。
       if (msg && msg.usage) {
-        accountToolLoopUsage({ db, sessionId, provider, model, usage: msg.usage, latencyMs: Date.now() - loopStart })
+        accountToolLoopUsage({ db, sessionId, provider: activeProvider, model: activeModel, usage: msg.usage, latencyMs: Date.now() - loopStart })
       }
     } catch (e) {
       try { onThinkingEnd?.() } catch {}
@@ -893,8 +957,8 @@ Reply in this format:
         await toolCallRepair.continueTruncatedToolCalls(msg, {
           completeFn: ({ provider: p, model: m, messages: msgs, signal: sig, max_tokens }) =>
             completeChatMessage({ provider: p, model: m, messages: msgs, signal: sig, options: { max_tokens } }),
-          provider,
-          model,
+          provider: activeProvider,
+          model: activeModel,
           signal,
         })
       } catch {}
@@ -1542,8 +1606,8 @@ Reply ONLY with JSON:
           let hasStreamedPlanThinking = false
           try { onThinkingStart?.() } catch {}
           const finalMsg = await completeChatMessage({
-            provider,
-            model,
+            provider: activeProvider,
+            model: activeModel,
             messages: convo,
             signal,
             options: {
@@ -1562,7 +1626,7 @@ Reply ONLY with JSON:
             try { onThinkingDelta?.(finalMsg.reasoning) } catch {}
           }
           try { onThinkingEnd?.() } catch {}
-          accountToolLoopUsage({ db, sessionId, provider, model, usage: finalMsg && finalMsg.usage, status: 200 })
+          accountToolLoopUsage({ db, sessionId, provider: activeProvider, model: activeModel, usage: finalMsg && finalMsg.usage, status: 200 })
           if (db && db.clearSessionPlan) db.clearSessionPlan(sessionId)
           if (finalMsg?.content) {
             shadowSuccess = true
@@ -1714,8 +1778,8 @@ Reply ONLY with JSON:
     // Strip caller tools/tool_choice so this "tools-free" wrap-up request
     // cannot be answered with yet another tool call (CodeRabbit follow-up).
     const { tools: _graceTools, tool_choice: _graceToolChoice, ...graceOptions } = options
-    const g = await completeChatMessage({ provider, model, messages: graceConvo, signal, options: graceOptions })
-    accountToolLoopUsage({ db, sessionId, provider, model, usage: g && g.usage, status: 200 })
+    const g = await completeChatMessage({ provider: activeProvider, model: activeModel, messages: graceConvo, signal, options: graceOptions })
+    accountToolLoopUsage({ db, sessionId, provider: activeProvider, model: activeModel, usage: g && g.usage, status: 200 })
     if (g && g.content && String(g.content).trim()) {
       graceNote = `\n\n---\n📋 收尾总结：\n${String(g.content).trim()}`
     }

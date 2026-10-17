@@ -11,12 +11,22 @@
 //   4. Tool result pruning: drop low-value tool results from older blocks
 // ───────────────────────────────────────────────────────────────────────────
 
-const { estimateTextTokens } = require('./tokenizer')
+const { countTokensFallback, countTokens } = require('./tokenizer')
+const estimateTextTokens = countTokensFallback || ((text) => Math.ceil((text || '').length / 4))
+
+/**
+ * @typedef {import('../../types/domain').ContextTier} ContextTier
+ * @typedef {import('../../types/domain').Message} Message
+ * @typedef {import('../../types/domain').ModelConfig} ModelConfig
+ * @typedef {import('../../types/domain').ProviderConfig} ProviderConfig
+ * @typedef {import('../../types/domain').ContextBudgetCalculation} ContextBudgetCalculation
+ */
 
 // ── Per-tool-type truncation limits ──────────────────────────────────────
 // Different tools produce different value-per-char. A grep hit is dense; a
 // directory listing is sparse. Truncate accordingly.
 
+/** @type {Record<string, number>} */
 const TOOL_TRUNCATION = {
   // Read tools: high value, allow longer
   read_file: 32000,
@@ -59,11 +69,16 @@ const TOOL_TRUNCATION = {
 // ── Context budget tiers ──────────────────────────────────────────────────
 // Messages are classified into tiers with different retention policies.
 
+/** @type {ContextTier} */
 const TIER_SYSTEM = 'system'       // System prompts — never prune
+/** @type {ContextTier} */
 const TIER_RECENT = 'recent'       // Last N messages — always keep
+/** @type {ContextTier} */
 const TIER_RELEVANT = 'relevant'   // Important tool results — keep if possible
+/** @type {ContextTier} */
 const TIER_NOISE = 'noise'         // Verbose tool results — prune first
 
+/** @type {Record<ContextTier, { maxAge: number, maxChars: number, priority: number }>} */
 const TIER_CONFIG = {
   [TIER_SYSTEM]: { maxAge: Infinity, maxChars: 64000, priority: 3 },
   [TIER_RECENT]: { maxAge: 30 * 60 * 1000, maxChars: 32000, priority: 2 },  // 30 min
@@ -74,6 +89,12 @@ const TIER_CONFIG = {
 // ── Tool result classifier ────────────────────────────────────────────────
 // Classify a tool result into a tier based on tool name + content shape.
 
+/**
+ * Classify a tool result into a tier based on tool name + content shape.
+ * @param {string} toolName
+ * @param {string} content
+ * @returns {ContextTier}
+ */
 function classifyToolResult(toolName, content) {
   const len = (content || '').length
 
@@ -104,6 +125,11 @@ function classifyToolResult(toolName, content) {
 
 // ── Get truncation limit for a tool ──────────────────────────────────────
 
+/**
+ * Get the character truncation limit for a specific tool.
+ * @param {string} toolName
+ * @returns {number}
+ */
 function getTruncationLimit(toolName) {
   return TOOL_TRUNCATION[toolName] || TOOL_TRUNCATION.default
 }
@@ -114,6 +140,11 @@ function getTruncationLimit(toolName) {
 // this mapping every TOOL_TRUNCATION lookup missed (dead code) and pruned
 // results showed "[call_xxx result pruned]" instead of the tool name.
 
+/**
+ * Build a map from tool call id to tool name from assistant messages.
+ * @param {Message[]} messages
+ * @returns {Map<string, string>}
+ */
 function buildCallIdToNameMap(messages) {
   const map = new Map()
   for (const msg of messages || []) {
@@ -130,6 +161,13 @@ function buildCallIdToNameMap(messages) {
 // Called BEFORE compaction. Walks messages from oldest to newest, applying
 // per-tier truncation limits. System messages are never touched.
 
+/**
+ * Apply tiered truncation to a message list based on age and tool limits.
+ * @param {Message[]} messages
+ * @param {ProviderConfig | null} [provider]
+ * @param {ModelConfig | null} [model]
+ * @returns {Message[]}
+ */
 function applyTieredTruncation(messages, provider, model) {
   if (!messages || messages.length === 0) return messages
   const nameMap = buildCallIdToNameMap(messages)
@@ -189,6 +227,13 @@ function applyTieredTruncation(messages, provider, model) {
 
 // ── Context budget calculation ───────────────────────────────────────────
 
+/**
+ * Calculate token budget and breakdown by message role.
+ * @param {Message[]} messages
+ * @param {ProviderConfig | null} [provider]
+ * @param {ModelConfig | null} [model]
+ * @returns {ContextBudgetCalculation}
+ */
 function calculateBudget(messages, provider, model) {
   let totalTokens = 0
   const breakdown = {
@@ -198,14 +243,17 @@ function calculateBudget(messages, provider, model) {
     tool: 0,
   }
 
-  for (const msg of messages) {
-    const tokens = estimateTextTokens(msg.content || '')
+  for (const msg of messages || []) {
+    const content = typeof msg?.content === 'string' ? msg.content : ''
+    const tokens = typeof countTokens === 'function' && (provider || model)
+      ? countTokens(content, provider, model)
+      : estimateTextTokens(content)
     totalTokens += tokens
-    const key = msg.role === 'system' ? 'system'
-      : msg.role === 'user' ? 'user'
-      : msg.role === 'assistant' ? 'assistant'
+    const key = msg?.role === 'system' ? 'system'
+      : msg?.role === 'user' ? 'user'
+      : msg?.role === 'assistant' ? 'assistant'
       : 'tool'
-    breakdown[key] += tokens
+    breakdown[key] = (breakdown[key] || 0) + tokens
   }
 
   return { totalTokens, breakdown }
@@ -215,6 +263,13 @@ function calculateBudget(messages, provider, model) {
 // Called by compaction.js before summarization. Walks the "older" block and
 // replaces verbose tool results with one-line summaries.
 
+/**
+ * Prune low-value tool results from older message blocks before compaction.
+ * @param {Message[]} olderMessages
+ * @param {ProviderConfig | null} [provider]
+ * @param {ModelConfig | null} [model]
+ * @returns {Message[]}
+ */
 function pruneOlderBlock(olderMessages, provider, model) {
   if (!olderMessages || olderMessages.length === 0) return olderMessages
   const nameMap = buildCallIdToNameMap(olderMessages)

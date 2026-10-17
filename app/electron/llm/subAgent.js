@@ -11,6 +11,8 @@
 // 5. Result summarization — child output is summarized if too long
 // ───────────────────────────────────────────────────────────────────────────
 
+const path = require('path')
+const fs = require('fs')
 const { completeChatMessage } = require('./providerAdapter')
 const { runToolLoop } = require('./toolLoop')
 const { buildReasoningParams } = require('./reasoning')
@@ -445,7 +447,65 @@ async function runParallel(tasks, shared = {}) {
   return Promise.all(runners)
 }
 
+/**
+ * Capture pre-execution snapshot of write paths for safety/rollback
+ * @param {string[]} paths
+ * @param {string} [wsRoot]
+ * @returns {{ files: Array<{ path: string, existed: boolean, content: string | null }> }}
+ */
+function captureBeforeSnapshot(paths, wsRoot) {
+  if (!paths || !Array.isArray(paths)) return { files: [] }
+  const files = []
+  for (const raw of paths) {
+    if (!raw || typeof raw !== 'string') continue
+    const resolvedPath = path.isAbsolute(raw) ? path.resolve(raw) : (wsRoot ? path.resolve(wsRoot, raw) : path.resolve(raw))
+    let existed = false
+    let content = null
+    try {
+      if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+        existed = true
+        content = fs.readFileSync(resolvedPath, 'utf8')
+      }
+    } catch {}
+    files.push({
+      path: resolvedPath,
+      existed,
+      content,
+    })
+  }
+  return { files }
+}
+
+/**
+ * Cleanly rollback modifications and created files based on pre-execution snapshot
+ * @param {{ files?: Array<{ path: string, existed: boolean, content: string | null }> } | null} snapshot
+ */
+function rollbackBeforeSnapshot(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.files)) return
+  for (const entry of snapshot.files) {
+    if (!entry || !entry.path) continue
+    try {
+      if (entry.existed) {
+        if (entry.content !== null) {
+          const dir = path.dirname(entry.path)
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true })
+          }
+          fs.writeFileSync(entry.path, entry.content, 'utf8')
+        }
+      } else {
+        if (fs.existsSync(entry.path)) {
+          fs.unlinkSync(entry.path)
+        }
+      }
+    } catch (err) {
+      log.warn('[subAgent] rollbackBeforeSnapshot error for path:', entry.path, err.message)
+    }
+  }
+}
+
 async function runSubagent(args) { return subagentLimit.run(() => _runSubagent(args)) }
+
 module.exports = {
   runSubagent,
   runParallel,
@@ -455,4 +515,6 @@ module.exports = {
   MAX_PARALLEL_WRITERS,
   SUBAGENT_SYSTEM_PROMPT,
   DEFAULT_SUBAGENT_CONFIG,
+  captureBeforeSnapshot,
+  rollbackBeforeSnapshot,
 }

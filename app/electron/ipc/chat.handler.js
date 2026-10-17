@@ -476,6 +476,11 @@ The user is asking a quick side question about the ongoing conversation.
     }
   })
 
+  // ─── Session Forking IPC ────────────────────────────────────────────────
+  ipcMain.handle('chat:fork', async (_e, { sessionId, messageId, title } = {}) => {
+    return db.forkSession(sessionId, title, messageId);
+  })
+
   // Surface the chat-send handler exports (e.g. handleChatComplete for the
   // local gateway) so main.js can register them as proxy channels.
   return chatSendState

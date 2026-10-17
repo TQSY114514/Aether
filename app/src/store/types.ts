@@ -176,6 +176,7 @@ export interface AppState {
   createSession: () => Promise<number | null>
   selectSession: (id: number) => Promise<void>
   deleteSession: (id: number) => Promise<void>
+  forkSession: (messageId?: number) => Promise<number | null>
 
   // Per-session config map
   sessionConfigs: Record<number, SessionConfig>

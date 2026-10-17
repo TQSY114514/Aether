@@ -727,22 +727,32 @@ function createSession({
 }
 
 /** Create a session branch by copying the parent configuration and messages. */
-function forkSession(parentSessionId, title) {
+function forkSession(parentSessionId, title, messageIdCutoff = null) {
   return db.transaction(() => {
     const parent = db.prepare('SELECT * FROM session WHERE id = ?').get(parentSessionId);
     if (!parent) {
       throw new Error(`Session does not exist: ${parentSessionId}`);
     }
+    if (messageIdCutoff != null) {
+      const targetMsg = db.prepare('SELECT id FROM message WHERE id = ? AND session_id = ?').get(messageIdCutoff, parentSessionId);
+      if (!targetMsg) {
+        throw new Error(`Message does not exist: ${messageIdCutoff}`);
+      }
+    }
     const newTitle = title || (parent.title ? `${parent.title} (Fork)` : '会话分支');
     const personaId = parent.persona_id || null;
     const config = parent.config || null;
+    const sessionKind = parent.session_kind || 'chat';
 
     const info = db.prepare(
-      'INSERT INTO session (title, persona_id, parent_session_id, config, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, 0)'
-    ).run(newTitle, personaId, parentSessionId, config, localNow());
+      'INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, 0)'
+    ).run(newTitle, personaId, parentSessionId, config, sessionKind, localNow());
     const newSessionId = Number(info.lastInsertRowid);
 
-    const parentMsgs = db.prepare('SELECT * FROM message WHERE session_id = ? ORDER BY id ASC').all(parentSessionId);
+    const parentMsgs = messageIdCutoff != null
+      ? db.prepare('SELECT * FROM message WHERE session_id = ? AND id <= ? ORDER BY id ASC').all(parentSessionId, messageIdCutoff)
+      : db.prepare('SELECT * FROM message WHERE session_id = ? ORDER BY id ASC').all(parentSessionId);
+
     if (parentMsgs.length > 0) {
       const insertMsg = db.prepare(`
         INSERT INTO message (
@@ -2205,9 +2215,10 @@ function getSessionPlan(sessionId) {
   }
 }
 function saveSessionPlan(sessionId, planObj) {
+  const jsonStr = typeof planObj === 'string' ? planObj : JSON.stringify(planObj);
   db.prepare(
-    'INSERT INTO session_plan (session_id, plan_json, updated_at) VALUES (?, ?, datetime("now")) ON CONFLICT(session_id) DO UPDATE SET plan_json = excluded.plan_json, updated_at = excluded.updated_at',
-  ).run(sessionId, JSON.stringify(planObj));
+    "INSERT INTO session_plan (session_id, plan_json, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(session_id) DO UPDATE SET plan_json = excluded.plan_json, updated_at = excluded.updated_at",
+  ).run(sessionId, jsonStr);
 }
 function clearSessionPlan(sessionId) {
   db.prepare("DELETE FROM session_plan WHERE session_id = ?").run(sessionId);

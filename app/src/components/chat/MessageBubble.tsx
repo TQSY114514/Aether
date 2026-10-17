@@ -2,7 +2,7 @@ import { useState, memo, useMemo, useCallback } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
-import { Copy, Check, RefreshCw, Pencil, Play } from 'lucide-react'
+import { Copy, Check, RefreshCw, Pencil, Play, GitFork } from 'lucide-react'
 import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
@@ -36,6 +36,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const regenerate = useStore(s => s.regenerate)
   const editMessage = useStore(s => s.editMessage)
   const continueMessage = useStore(s => s.continueMessage)
+  const forkSession = useStore(s => s.forkSession)
 
   const isUser = message.role === 'user'
   // An assistant turn with a live todo checklist renders as a task card.
@@ -200,6 +201,17 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                 <Pencil size={12} />
               </button>
             )}
+            {!isStreaming && (
+              <button
+                onClick={() => forkSession(message.id)}
+                disabled={sending}
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30"
+                title={t('chat.fork')}
+                aria-label={t('chat.fork')}
+              >
+                <GitFork size={12} />
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -322,6 +334,16 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                 onClick={() => regenerate()}
               >
                 <RefreshCw size={12} />
+              </button>
+            )}
+            {!isStreaming && (
+              <button
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
+                title={t('chat.fork')}
+                aria-label={t('chat.fork')}
+                onClick={() => forkSession(message.id)}
+              >
+                <GitFork size={12} />
               </button>
             )}
             {isAborted && !isStreaming && (
