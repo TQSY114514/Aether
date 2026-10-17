@@ -144,27 +144,37 @@ function truncate(s, max) {
   return s.slice(0, max) + '\n\n[… diff truncated …]'
 }
 
-// Build a simple line-by-line unified diff.
+// Build a simple line-by-line unified diff with bounded lookahead (O(N) time).
 function buildUnifiedDiff(oldLines, newLines) {
   const parts = []
-  const maxLen = Math.max(oldLines.length, newLines.length)
   let oi = 0, ni = 0
+  const LOOKAHEAD = 100
   while (oi < oldLines.length || ni < newLines.length) {
     const ol = oi < oldLines.length ? oldLines[oi] : null
     const nl = ni < newLines.length ? newLines[ni] : null
-    if (ol === null) { parts.push('+' + nl); ni++ }
-    else if (nl === null) { parts.push('-' + ol); oi++ }
-    else if (ol === nl) { parts.push(' ' + ol); oi++; ni++ }
-    else {
-      const newIdx = nl !== null ? newLines.slice(ni).indexOf(ol) : -1
-      const oldIdx = ol !== null ? oldLines.slice(oi).indexOf(nl) : -1
-      if (newIdx >= 0 && (oldIdx < 0 || newIdx <= oldIdx)) {
-        for (let k = 0; k < newIdx; k++) { parts.push('+' + newLines[ni + k]); ni++ }
-      } else if (oldIdx >= 0) {
-        for (let k = 0; k < oldIdx; k++) { parts.push('-' + oldLines[oi + k]); oi++ }
-      } else {
-        parts.push('-' + ol); parts.push('+' + nl); oi++; ni++
-      }
+    if (ol === null) { parts.push('+' + nl); ni++; continue }
+    if (nl === null) { parts.push('-' + ol); oi++; continue }
+    if (ol === nl) { parts.push(' ' + ol); oi++; ni++; continue }
+
+    // Bounded search without allocating slice copies
+    let newIdx = -1
+    const maxNi = Math.min(newLines.length, ni + LOOKAHEAD)
+    for (let j = ni; j < maxNi; j++) {
+      if (newLines[j] === ol) { newIdx = j - ni; break }
+    }
+
+    let oldIdx = -1
+    const maxOi = Math.min(oldLines.length, oi + LOOKAHEAD)
+    for (let j = oi; j < maxOi; j++) {
+      if (oldLines[j] === nl) { oldIdx = j - oi; break }
+    }
+
+    if (newIdx >= 0 && (oldIdx < 0 || newIdx <= oldIdx)) {
+      for (let k = 0; k < newIdx; k++) { parts.push('+' + newLines[ni + k]); ni++ }
+    } else if (oldIdx >= 0) {
+      for (let k = 0; k < oldIdx; k++) { parts.push('-' + oldLines[oi + k]); oi++ }
+    } else {
+      parts.push('-' + ol); parts.push('+' + nl); oi++; ni++
     }
   }
   return parts.join('\n')

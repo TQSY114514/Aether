@@ -836,7 +836,7 @@
   "slash.undo": "Undo Changes",
   "slash.undo_desc": "Restore working tree files from most recent checkpoint",
   "status.compacting": "Compressing context…",
-  "status.poor_mode": "💸 Poor mode enabled: low reasoning budget + aggressive tool truncation + enhanced context compaction",
+  "status.poor_mode": "Poor mode enabled: low reasoning budget + aggressive tool truncation + enhanced context compaction",
   "status.thinking": "Thinking…",
   "status.using_tools": "Using tools…",
   "task.cancel": "Cancel",

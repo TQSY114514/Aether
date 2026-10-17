@@ -88,6 +88,14 @@ function adjustTrust(db, sessionId, delta, toolName) {
   return newScore
 }
 
+let cachedRegistry = null
+function getRegistry() {
+  if (!cachedRegistry) {
+    try { cachedRegistry = require('../tools/registry') } catch {}
+  }
+  return cachedRegistry
+}
+
 // ─── Decision gate ─────────────────────────────────────────────────────────
 // Returns { mode: 'auto' | 'ask' | 'yolo' } for a given tool and session.
 
@@ -97,8 +105,8 @@ function getPermissionMode(db, sessionId, toolName) {
   // Non-dangerous tools: follow default policy.
   let isDangerous = false
   try {
-    const registry = require('../tools/registry')
-    const getTool = registry.getTool
+    const registry = getRegistry()
+    const getTool = registry?.getTool
     if (getTool) {
       const t = getTool(toolName)
       if (t && t.risk === 'dangerous') isDangerous = true

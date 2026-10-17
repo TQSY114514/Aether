@@ -558,7 +558,7 @@
       "slash.summarize": "总结",
       "slash.translate": "翻译",
       "status.compacting": "压缩上下文中…",
-      "status.poor_mode": "💸 穷鬼模式已生效：已锁定低推理等级 + 激进工具截断 + 强化上下文压缩",
+      "status.poor_mode": "穷鬼模式已生效：已锁定低推理等级 + 激进工具截断 + 强化上下文压缩",
       "status.thinking": "思考中…",
       "status.using_tools": "正在使用工具…",
       "task.cancel": "取消",

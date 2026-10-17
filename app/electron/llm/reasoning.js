@@ -25,17 +25,26 @@
 const RE_OPENAI = /^o[134]|^gpt-5/i
 const RE_CLAUDE = /claude/i
 const RE_DEEPSEEK_R = /deepseek[_-](r\d|reasoner)/i
-const RE_QWEN = /^qwq|qwen.*-(thinking|reason)|qwen3/i
-const RE_GEMINI = /gemini.*thinking|gemini-2\.5|gemini-3/i
+function isQwenReasoning(m) {
+  if (m.startsWith('qwq') || m.startsWith('qwen3')) return true
+  if (m.startsWith('qwen') && (m.includes('-thinking') || m.includes('-reason') || m.includes('_thinking') || m.includes('_reason'))) return true
+  return false
+}
+
+function isGeminiReasoning(m) {
+  if (m.includes('gemini-2.5') || m.includes('gemini-3')) return true
+  if (m.includes('gemini') && m.includes('thinking')) return true
+  return false
+}
 
 function reasoningFamily(modelName = '') {
-  const m = modelName.toLowerCase()
+  const m = String(modelName || '').toLowerCase()
   if (RE_OPENAI.test(m)) return 'openai'
   if (RE_CLAUDE.test(m)) return 'claude'
   // Only match deepseek-reasoner / deepseek-r1 style names.
   if (RE_DEEPSEEK_R.test(m)) return 'deepseek'
-  if (RE_QWEN.test(m)) return 'qwen'
-  if (RE_GEMINI.test(m)) return 'gemini'
+  if (isQwenReasoning(m)) return 'qwen'
+  if (isGeminiReasoning(m)) return 'gemini'
   return 'none'
 }
 

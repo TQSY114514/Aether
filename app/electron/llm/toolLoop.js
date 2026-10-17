@@ -272,7 +272,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       if (!thinkingDisabled) {
         const modelName = model?.model_name || model?.id || (typeof model === 'string' ? model : '')
         try {
-          const lowReasoning = buildReasoningParams(modelName, 'low', true)
+          const lowReasoning = buildReasoningParams(modelName, 'low', true, options.max_tokens || options.maxTokens)
           Object.assign(options, lowReasoning)
         } catch {}
         options.reasoning_effort = 'low'
@@ -281,8 +281,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     }
     const isZh = (db && typeof db.getSetting === 'function' ? (db.getSetting('language') || '') : '').startsWith('zh')
     const noticeText = isZh
-      ? '💸 穷鬼省流模式已启用：低推理预算 + 激进工具截断 + 强化上下文压缩'
-      : '💸 Poor mode enabled: low reasoning budget + aggressive tool truncation + enhanced context compaction'
+      ? '穷鬼省流模式已启用：低推理预算 + 激进工具截断 + 强化上下文压缩'
+      : 'Poor mode enabled: low reasoning budget + aggressive tool truncation + enhanced context compaction'
     try { onStatus?.({ kind: 'poor_mode', text: noticeText }) } catch {}
   }
 

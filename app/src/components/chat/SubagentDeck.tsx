@@ -52,7 +52,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
           {titleText}
         </span>
         <span
-          className="text-[10px] px-1.5 py-0.5 rounded-full tabular-nums shrink-0 border"
+          className="text-[10px] px-1.5 py-0.5 rounded-md tabular-nums shrink-0 border"
           style={{ borderColor: accentColor, color: accentColor, backgroundColor: 'transparent' }}
         >
           {completed}/{total}

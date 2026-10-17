@@ -139,5 +139,22 @@ describe('createTurnFileTracker', () => {
       // Git command might not be available or fail in minimal test environments
     }
   })
+
+  it('preserves empty created and deleted files in summary', () => {
+    const tracker = createTurnFileTracker(tmpDir)
+    const emptyFile = path.join(tmpDir, 'empty.txt')
+
+    // Create empty file
+    tracker.beforeTool('write_file', { path: emptyFile, content: '' })
+    fs.writeFileSync(emptyFile, '', 'utf-8')
+    tracker.afterTool('write_file', { path: emptyFile, content: '' })
+
+    const summary = tracker.getSummary()
+    expect(summary).not.toBeNull()
+    expect(summary.fileCount).toBe(1)
+    expect(summary.files[0].status).toBe('created')
+    expect(summary.files[0].added).toBe(0)
+    expect(summary.files[0].removed).toBe(0)
+  })
 })
 
