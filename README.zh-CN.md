@@ -3,18 +3,16 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/readme-hero-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="./assets/readme-hero-light.png" />
-  <img src="./assets/readme-hero.png" width="620" alt="Aether — Local-first Multi-Model AI Workbench" />
+  <img src="./assets/readme-hero.png" width="620" alt="Aether — 实证驱动的 AI 开发工作台" />
 </picture>
 
 # Aether
 
-### Intelligence, on your terms.
+### 用真实结果选模型，把有效的能力用到开发里。
 
-让 AI 按你的方式工作。
+Aether 将模型评测、项目上下文与可审阅的 Agent 执行流程连接起来。
 
-本地优先的 AI 工作空间，整合模型、记忆与 Agent。
-
-在本地真实任务上并行评测不同模型，基于实测表现路由工作流。所有会话、密钥与记忆图谱 100% 保存在本地 SQLite 数据库中，零云端遥测。
+在真实编码任务中比较不同模型，检查结果，并用这些证据辅助后续开发。本地优先的数据存储、灵活的模型接入与受控执行，让整个工作流程更可掌控。
 
 [![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
@@ -32,14 +30,16 @@
 
 ## 项目概述
 
-Aether 是一个专注于开发者与重度 AI 用户的**本地桌面工作台（Electron + React/TypeScript + better-sqlite3 WAL 模式）**。它不绑定单一模型厂商，不收集云端遥测，所有会话、系统级加密 API 密钥、记忆图谱与评测数据均完整保存在本机 `%APPDATA%/aetherai/aetherai.db`。
+Aether 是一个基于 Electron、React/TypeScript 与 SQLite 构建的桌面 AI 开发工作台。它的核心思路是把 AI 辅助开发中的三个环节连接起来：在真实任务中评测模型、跨会话保留项目上下文，以及通过可审阅的 Agent 工作流执行任务。
 
-它核心解决四个工程问题：
+它围绕四项互补能力构建：
 
-1. **实证多模型评测（Arena 竞技场）**：拒绝纸面 Benchmarks 幻觉。Aether 支持将同一任务并发发送给 2–4 个模型（或不同温度/参数），以盲测投票构建本地按意图分类的 ELO 排行榜。
-2. **细粒度权限门与行内 Diff 审阅（Permission System）**：Agent 执行读写与终端命令受 6 轴权限模型（`READ`、`WRITE`、`EXECUTE`、`NETWORK`、`GIT`、`EXTERNAL`）与 Win32 Job Object 内核进程树监管，高危变更在落盘前均提供交互式行内 Diff 预览。
-3. **低延迟结构化长期记忆（AutoMemory & Project Brain）**：会话结束后后台异步提取事实、技术决策与实体关系落盘至 SQLite FTS5，并在后续回合中 `< 2ms` 预取注入，无需额外消耗大模型工具轮次。
-4. **桌面为主的工作台体验与无头自动化（Desktop-First & Headless Automation）**：**研发重心 100% 聚焦于 Windows 桌面端（GUI）**，完整提供实时思考流可视化、BTW 只读追问抽屉、任务队列、多模型对战与配置中心；同时在 npm 发布轻量无头命令行工具（`aether run "prompt"` / `--eval`）与免 Electron 的 Node SDK，专用于本地自动化与 CI 批处理。
+1. **任务驱动的模型评测（Arena）**：让多个模型处理同一编码任务，检查各自输出，并收集用户偏好或评测信号。评测结果是辅助决策的证据，不是适用于所有场景的通用智能排名。
+2. **基于证据的模型选择**：模型建议与路由可以参考任务类别和已有 Arena 评分。推荐仍会受到冷启动先验、样本数量和评测质量影响，因此它提供的是决策依据，而非对“最佳模型”的保证。
+3. **项目上下文与长期记忆**：AutoMemory、Project Brain 与代码仓库映射帮助跨会话保留相关事实和架构背景。
+4. **受控的 Agent 执行**：六轴权限系统（`READ`、`WRITE`、`EXECUTE`、`NETWORK`、`GIT`、`EXTERNAL`）与可审阅的代码差异，帮助用户检查并控制 Agent 的操作。
+
+Aether 采用本地优先设计：会话、记忆、评测数据和加密后的模型提供商凭据保存在本地 SQLite 数据库中。使用托管模型服务时，发送给服务商的提示词、代码或上下文仍受该服务商的数据处理政策约束。
 
 ---
 
