@@ -728,7 +728,7 @@ export default function SettingPage() {
               <div className="pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                 <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>{t('settings.features')}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {['providers', 'chat', 'persona', 'arena', 'route'].map(k => (
+                  {['arena', 'privacy', 'permission', 'subagent', 'memory', 'gateway'].map(k => (
                     <div
                       key={k}
                       className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border"

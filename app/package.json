@@ -1,7 +1,7 @@
 {
   "name": "aetherai",
   "version": "0.9.2",
-  "description": "Aether headless agent — CLI, TUI, and Electron-free SDK. Pairs with the Aether Desktop GUI (separate installer) sharing the same agent runtime and SQLite store.",
+  "description": "Aether headless agent — CLI, Electron-free SDK, and automation runtime. Pairs with the Aether Desktop Workbench sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
   "contributors": [
     "TQSY114514 <tqishengyan@gmail.com> (https://github.com/TQSY114514)",
@@ -25,7 +25,9 @@
     "ai",
     "agent",
     "cli",
-    "tui",
+    "headless",
+    "automation",
+    "workbench",
     "sdk",
     "llm",
     "mcp",
@@ -52,8 +54,6 @@
   "//": "files: NPM publish whitelist. Keeps the npm tarball small (excludes Electron, src/, dist/, release/, resources/, e2e/). The full app/ tree is published EXCEPT desktop-only paths — these are the blacklisted dirs that would otherwise pull in Electron + the renderer + the bundler config.",
   "files": [
     "cli.js",
-    "tui/",
-    "tui/package.json",
     "electron/cli/",
     "electron/sdk/",
     "electron/llm/",
