@@ -277,6 +277,9 @@ export interface AppState {
   queuedMessages: { id: number; content: string }[]
   enqueueMessage: (content: string) => void
   removeQueued: (id: number) => void
+  reorderQueued: (fromIndex: number, toIndex: number) => void
+  updateQueued: (id: number, content: string) => void
+  clearQueued: () => void
   // Session navigation history (browser-style back/forward). selectSession pushes;
   // goBack/goForward move the pointer without pushing.
   sessionHistory: number[]
@@ -325,6 +328,9 @@ export interface AppState {
   setTasksOpen: (v: boolean) => void
   checkpointsOpen: boolean
   setCheckpointsOpen: (v: boolean) => void
+  btwOpen: boolean
+  setBtwOpen: (v: boolean) => void
+  toggleBtw: () => void
   stopGeneration: () => Promise<void>
   continueMessage: () => Promise<void>
 

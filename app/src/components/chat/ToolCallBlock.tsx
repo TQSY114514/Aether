@@ -92,6 +92,7 @@ function toolLabel(tool: ToolCall): string {
     case 'memory_list': return t('tool.memory_list')
     case 'use_skill': return a.name ? `${t('tool.use_skill')} ${first(a.name, 30)}` : t('tool.use_skill')
     case 'ask_user': return t('tool.ask_user')
+    case 'history_search': return a.query ? `${t('tool.history_search')}: ${first(a.query, 30)}` : t('tool.history_search')
     case 'todo_write': return t('tool.todo_write')
     default: return tool.name
   }

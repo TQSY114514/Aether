@@ -23,6 +23,7 @@ import { useUI } from '@/components/ui/feedback'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import TaskPanel from '@/components/tasks/TaskPanel'
 import CheckpointTimelineDrawer from '@/components/chat/CheckpointTimelineDrawer'
+import BtwDrawer from '@/components/chat/BtwDrawer'
 import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
 import { useFeatureFlag } from '@/utils/featureFlags'
 import { PanelLeft, ChevronLeft } from 'lucide-react'
@@ -333,6 +334,7 @@ export default function App() {
         </main>
         <TaskPanel />
         <CheckpointTimelineDrawer />
+        <BtwDrawer />
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

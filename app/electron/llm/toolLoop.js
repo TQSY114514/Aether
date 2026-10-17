@@ -197,7 +197,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   })()
   const rawToolPayload = Array.isArray(tools)
     ? tools
-    : (tools ? toolsPayload(agentMode, { cacheStable: cachePrefixStable }) : [])
+    : (tools ? toolsPayload(agentMode, { cacheStable: cachePrefixStable, db }) : [])
   let toolPayload = (cachePrefixStable && rawToolPayload.length > 1)
     ? (() => { try { return require('./toolRouter').sortToolsForCacheStability(rawToolPayload) } catch { return rawToolPayload } })()
     : rawToolPayload

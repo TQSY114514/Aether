@@ -34,7 +34,7 @@ const CATEGORY_TOOLS = {
     'run_workflow', 'run_arena',
     'debug_loop', 'test_first', 'review_code',
   ],
-  memory: ['memory_save', 'memory_list', 'memory_search'],
+  memory: ['memory_save', 'memory_list', 'memory_search', 'history_search'],
   git: ['git_status', 'git_diff', 'git_log', 'git_commit', 'git_push', 'git_create_branch'],
 }
 
@@ -43,7 +43,7 @@ const CORE_TOOLS = new Set([
   'read_file', 'list_dir', 'glob_find', 'grep_search',
   'web_search', 'web_fetch',
   'write_file', 'edit_file', 'apply_patch', 'run_command',
-  'use_skill', 'ask_user', 'todo_write',
+  'use_skill', 'ask_user', 'todo_write', 'history_search',
   'get_project_context',
 ])
 

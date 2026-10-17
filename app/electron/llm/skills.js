@@ -146,6 +146,63 @@ function getSkills() { return Array.from(_skills.values()) }
 function getSkillBody(name) { return _skills.get(name)?.body || null }
 function getSkill(name) { return _skills.get(name) || null }
 
+/**
+ * Progressive skill discovery:
+ * Rank skills against a search query using exact name match, prefix match,
+ * description words, and CJK 2-gram matching for non-English queries.
+ */
+function findSkills(query, limit = 5) {
+  const q = String(query || '').trim().toLowerCase()
+  if (!q) return []
+  const skills = getSkills()
+  if (skills.length === 0) return []
+
+  const tokens = q.split(/\s+/).filter(Boolean)
+  const cjkChars = q.replace(/[\x00-\x7F]/g, '')
+  const cjkTokens = []
+  for (let i = 0; i < cjkChars.length - 1; i++) {
+    cjkTokens.push(cjkChars.slice(i, i + 2))
+  }
+  const allTokens = Array.from(new Set([...tokens, ...cjkTokens]))
+
+  const scored = []
+  for (const s of skills) {
+    const sName = (s.name || '').toLowerCase()
+    const sDesc = (s.description || '').toLowerCase()
+    let score = 0
+
+    if (sName === q) {
+      score += 100
+    } else if (sName.startsWith(q)) {
+      score += 50
+    } else if (sName.includes(q)) {
+      score += 30
+    }
+
+    for (const tok of allTokens) {
+      if (sName.includes(tok)) score += 20
+      if (sDesc.includes(tok)) score += 10
+      if (s.body && typeof s.body === 'string') {
+        const bodyPreview = s.body.slice(0, 4096).toLowerCase()
+        if (bodyPreview.includes(tok)) score += 5
+      }
+    }
+
+    if (score > 0) {
+      scored.push({
+        name: s.name,
+        description: s.description,
+        score,
+        filePath: s.filePath,
+        permissions: s.permissions,
+      })
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, Math.max(1, limit))
+}
+
 // Add or replace a single skill in the in-memory index without a disk rescan.
 // Used by habitLearner.promoteToSkill to refresh the user-habits entry in O(1).
 function upsertSkill(name, skill) { _skills.set(name, skill) }
@@ -407,7 +464,7 @@ async function importSkillFromUrl(source, opts = {}) {
 }
 
 module.exports = {
-  scanSkills, getSkills, getSkill, getSkillBody, formatSkillsForPrompt, parseFrontmatter, upsertSkill,
+  scanSkills, getSkills, getSkill, getSkillBody, findSkills, formatSkillsForPrompt, parseFrontmatter, upsertSkill,
   scanCommands, getCommands, getCommand, rescan,
   recordSkillUse, getSkillUsage, resetSkillUsage, loadSkillUsage,
   resolveSkillSourceUrl, importSkillFromUrl, sanitizeImportedSkillName,

@@ -20,6 +20,7 @@ const pendingInjections = new Map() // sessionId -> string[] of pending injectio
 
 // Per-session message tracking for abortControllers cleanup on session delete.
 let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
+const sideAbortControllers = new Map() // sessionId -> AbortController
 function registerSessionMessages(sessionId, messageIds) {
   if (!sessionMessagesMap.has(sessionId)) sessionMessagesMap.set(sessionId, new Set())
   const set = sessionMessagesMap.get(sessionId)
@@ -33,6 +34,10 @@ function cleanupSessionControllers(sessionId) {
       if (ctrl) { ctrl.abort(); abortControllers.delete(mid) }
     }
     sessionMessagesMap.delete(sessionId)
+  }
+  if (sideAbortControllers.has(sessionId)) {
+    try { sideAbortControllers.get(sessionId).abort() } catch {}
+    sideAbortControllers.delete(sessionId)
   }
 }
 
@@ -89,6 +94,88 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     } catch {
       return { queued: false }
     }
+  })
+
+  // Side Questions (BTW / 旁支提问): read-only query over current session context without interrupting agent
+  ipcMain.handle('chat:ask-side', async (_e, { sessionId, question, modelId } = {}) => {
+    if (!sessionId || !question || !question.trim()) {
+      return { ok: false, error: 'sessionId and question are required' }
+    }
+    if (sideAbortControllers.has(sessionId)) {
+      try { sideAbortControllers.get(sessionId).abort() } catch {}
+      sideAbortControllers.delete(sessionId)
+    }
+    const controller = new AbortController()
+    sideAbortControllers.set(sessionId, controller)
+
+    const wc = getWebContents()
+    try {
+      const session = db.getSession(sessionId)
+      let targetModelId = modelId
+      if (!targetModelId && session && session.config) {
+        try { targetModelId = JSON.parse(session.config)?.modelId } catch {}
+      }
+      let model = targetModelId ? db.getModel(targetModelId) : null
+      if (!model) {
+        const all = db.getAllModels()
+        model = all[0]
+      }
+      if (!model) return { ok: false, error: 'No model available' }
+      const provider = db.getProvider(model.provider_id)
+      if (!provider) return { ok: false, error: 'No provider available' }
+
+      const msgs = db.getMessages(sessionId) || []
+      const recent = msgs
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
+        .slice(-20)
+        .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }))
+
+      const sideSystemPrompt = `You are Aether's Side Assistant (BTW mode).
+The user is asking a quick side question about the ongoing conversation.
+- Answer directly, concisely, and accurately based on the conversation context.
+- You do NOT have tool access. Do not attempt to run tools or commands.
+- Do NOT repeat or modify the main conversation task.
+- Be helpful, clear, and direct.`
+
+      const sideMessages = [
+        { role: 'system', content: sideSystemPrompt },
+        ...recent,
+        { role: 'user', content: question.trim() },
+      ]
+
+      let fullAnswer = ''
+      const { streamChat } = require('../llm/providerAdapter')
+      const stream = streamChat({
+        provider,
+        model,
+        messages: sideMessages,
+        signal: controller.signal,
+      })
+
+      for await (const delta of stream) {
+        if (delta) {
+          fullAnswer += delta
+          try { wc?.send('chat:side-chunk', { sessionId, delta, done: false }) } catch {}
+        }
+      }
+
+      try { wc?.send('chat:side-chunk', { sessionId, delta: '', done: true, fullContent: fullAnswer }) } catch {}
+      sideAbortControllers.delete(sessionId)
+      return { ok: true, answer: fullAnswer }
+    } catch (err) {
+      sideAbortControllers.delete(sessionId)
+      const errMsg = err.name === 'AbortError' ? '已取消' : (err.message || String(err))
+      try { wc?.send('chat:side-chunk', { sessionId, delta: '', done: true, error: errMsg }) } catch {}
+      return { ok: false, error: errMsg }
+    }
+  })
+
+  ipcMain.handle('chat:stop-side', (_e, sessionId) => {
+    if (sessionId && sideAbortControllers.has(sessionId)) {
+      try { sideAbortControllers.get(sessionId).abort() } catch {}
+      sideAbortControllers.delete(sessionId)
+    }
+    return { ok: true }
   })
 
   // Habit-confirmation flow: the renderer asks us to confirm (promote now) or

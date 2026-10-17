@@ -611,6 +611,27 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     set((s) => ({ queuedMessages: s.queuedMessages.filter((m) => m.id !== id) }))
   },
 
+  reorderQueued: (fromIndex, toIndex) => {
+    set((s) => {
+      if (fromIndex < 0 || fromIndex >= s.queuedMessages.length) return {}
+      if (toIndex < 0 || toIndex >= s.queuedMessages.length) return {}
+      const next = [...s.queuedMessages]
+      const [item] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, item)
+      return { queuedMessages: next }
+    })
+  },
+
+  updateQueued: (id, content) => {
+    set((s) => ({
+      queuedMessages: s.queuedMessages.map((m) => m.id === id ? { ...m, content } : m)
+    }))
+  },
+
+  clearQueued: () => {
+    set({ queuedMessages: [] })
+  },
+
   appendArenaResult: (sessionId, result) => {
     set((s) => {
       if (s.arenaResultsSessionId !== sessionId) return {}

@@ -16,10 +16,83 @@ const clients = new Map() // name -> McpClient
 const mergedTools = new Map() // tool name -> tool object (built-ins + MCP)
 const MCP_CONNECT_TIMEOUT = 5000 // 5s per server — a hung server must not block startup
 
+function isMcpTool(t) {
+  if (!t || !t.name) return false
+  if (t.name === 'mcp_list_tools' || t.name === 'mcp_call_tool') return false
+  return t.name.includes('__')
+}
+
+const LEAN_MCP_TOOLS = [
+  {
+    name: 'mcp_list_tools',
+    description: 'List available tools from connected MCP servers with their descriptions and argument schemas. Call this before using mcp_call_tool.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        server: { type: 'string', description: 'Optional MCP server name to filter tools by' }
+      }
+    },
+    run: async ({ server } = {}) => {
+      ensureSeeded()
+      const tools = []
+      for (const [name, tool] of mergedTools.entries()) {
+        if (!isMcpTool(tool)) continue
+        if (server && !name.startsWith(`${server}__`)) continue
+        tools.push({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        })
+      }
+      if (tools.length === 0) {
+        return server ? `No MCP tools found for server "${server}".` : 'No MCP tools are currently connected.'
+      }
+      return JSON.stringify(tools, null, 2)
+    }
+  },
+  {
+    name: 'mcp_call_tool',
+    description: 'Execute a specific MCP tool on a connected MCP server with arguments. Use mcp_list_tools to inspect tool signatures first.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        tool_name: { type: 'string', description: 'The exact name of the MCP tool to call (e.g. "github__create_issue")' },
+        arguments: { type: 'object', description: 'Arguments object matching the tool parameters schema' }
+      },
+      required: ['tool_name']
+    },
+    run: async ({ tool_name, arguments: toolArgs } = {}, context) => {
+      ensureSeeded()
+      if (!tool_name) throw new Error('tool_name is required')
+      let tool = mergedTools.get(tool_name)
+      if (!tool && !tool_name.includes('__')) {
+        for (const [k, v] of mergedTools.entries()) {
+          if (k.endsWith(`__${tool_name}`)) {
+            tool = v
+            break
+          }
+        }
+      }
+      if (!tool) {
+        throw new Error(`MCP tool "${tool_name}" not found. Call mcp_list_tools to see available tools.`)
+      }
+      if (typeof tool.run !== 'function') {
+        throw new Error(`Tool "${tool_name}" does not have a run function`)
+      }
+      return await tool.run(toolArgs || {}, context)
+    }
+  }
+]
+
 // Seed with built-in tools on first use.
 function ensureSeeded() {
   if (mergedTools.size === 0) {
     for (const t of builtin.TOOLS) mergedTools.set(t.name, t)
+  }
+  for (const t of LEAN_MCP_TOOLS) {
+    if (!mergedTools.has(t.name)) mergedTools.set(t.name, t)
   }
 }
 
@@ -81,9 +154,35 @@ function getMergedTool(name) {
 // unless opts.cacheStable === false so staged category additions are tail appends.
 function getMergedToolsPayload(mode, opts = {}) {
   ensureSeeded()
-  const list = mode === 'plan'
+  const isLean = Boolean(
+    opts && (
+      opts.leanMcp ||
+      (opts.db && (() => {
+        try {
+          const featureFlags = require('../featureFlags')
+          return featureFlags.isEnabled(opts.db, 'agent.leanMcp')
+        } catch {
+          return false
+        }
+      })())
+    )
+  )
+
+  let list = mode === 'plan'
     ? [...mergedTools.values()].filter(t => t.risk === 'safe')
     : [...mergedTools.values()]
+
+  if (isLean) {
+    const hasMcpTools = [...mergedTools.values()].some(isMcpTool)
+    list = list.filter(t => {
+      if (isMcpTool(t)) return false
+      if (!hasMcpTools && (t.name === 'mcp_list_tools' || t.name === 'mcp_call_tool')) return false
+      return true
+    })
+  } else {
+    list = list.filter(t => t.name !== 'mcp_list_tools' && t.name !== 'mcp_call_tool')
+  }
+
   const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
   if (opts && opts.cacheStable === false) return raw
   try {

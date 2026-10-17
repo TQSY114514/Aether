@@ -230,6 +230,9 @@ interface Window {
         suggestedRepairPrompt?: string | null
         error?: string
       }>
+      askSide: (params: { sessionId: number; question: string; modelId?: number | string }) => Promise<{ ok: boolean; answer?: string; error?: string }>
+      stopSide: (sessionId: number) => Promise<{ ok: boolean }>
+      onSideChunk: (callback: (payload: { sessionId: number; delta: string; done: boolean; fullContent?: string; error?: string }) => void) => () => void
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>

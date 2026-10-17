@@ -735,15 +735,72 @@ const TOOLS = [
   }},
 
   // ── Platform tools ──────────────────────────────────────────────────
-  { name: 'use_skill', description: 'Load a skill by name.', risk: 'safe', parameters: { type: 'object', properties: { skill_name: { type: 'string' } }, required: ['skill_name'] }, run: (args) => {
-    const name = String(args.skill_name || ''); if (!name) throw new Error('skill_name required')
+  { name: 'use_skill', description: 'Load or discover a skill. Provide skill_name to load full instructions, or query to search available skills.', risk: 'safe', parameters: { type: 'object', properties: { skill_name: { type: 'string', description: 'Name of the skill to load.' }, query: { type: 'string', description: 'Optional search query to discover relevant skills.' } } }, run: (args) => {
     const skillsMod = require('../llm/skills')
-    const skill = skillsMod.getSkill(name); if (!skill) throw new Error(`unknown skill: ${name}`)
+    const query = String(args.query || '').trim()
+    const name = String(args.skill_name || '').trim()
+
+    if (query && !name) {
+      const matches = skillsMod.findSkills(query, 8)
+      if (matches.length === 0) return `No skills matching query "${query}". Call use_skill with a specific skill_name.`
+      return `Matching skills for "${query}":\n` + matches.map(m => `  - ${m.name}: ${m.description}`).join('\n')
+    }
+
+    if (!name) throw new Error('skill_name or query is required')
+    const skill = skillsMod.getSkill(name)
+    if (!skill) {
+      const suggestions = skillsMod.findSkills(name, 5)
+      const hint = suggestions.length > 0
+        ? `\n\nDid you mean one of these?\n` + suggestions.map(s => `  - ${s.name}: ${s.description}`).join('\n')
+        : ''
+      throw new Error(`unknown skill: "${name}".${hint}`)
+    }
     try { skillsMod.recordSkillUse(name) } catch { }
     const perms = Array.isArray(skill.permissions) && skill.permissions.length > 0
       ? `\n\n[skill declares permissions: ${skill.permissions.join(', ')}]`
       : ''
     return skill.body + perms
+  }},
+  { name: 'ask_user', description: 'Ask the user one or more clarifying questions when requirements are underspecified, ambiguous, or need interactive confirmation. Presents a structured modal with choices/options and a custom write-in field.', risk: 'safe', parameters: { type: 'object', properties: { questions: { type: 'array', description: '1 to 8 questions to ask the user.', items: { type: 'object', properties: { question: { type: 'string', description: 'The question title or description.' }, header: { type: 'string', description: 'Optional short badge or category (e.g. Scope, Confirmation).' }, options: { type: 'array', description: 'Predefined options for the user to select from.', items: { type: 'object', properties: { label: { type: 'string', description: 'Option text.' }, description: { type: 'string', description: 'Optional detailed description of what selecting this option implies.' } }, required: ['label'] } } }, required: ['question', 'options'] } } }, required: ['questions'] }, run: async (args, ctx) => {
+    const questions = Array.isArray(args.questions) ? args.questions : []
+    if (questions.length === 0) throw new Error('At least one question is required')
+    const askFn = ctx?.onAskUser || ctx?.callbacks?.onAskUser
+    if (!askFn || typeof askFn !== 'function') {
+      throw new Error('ask_user is not supported in the current execution context')
+    }
+    return await askFn(questions)
+  }},
+  { name: 'history_search', description: 'Search previously committed conversation history and tool outputs in the current session. Use this to recall earlier user instructions, technical decisions, or code context that may have been compacted out of the active window.', risk: 'safe', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Keyword or phrase to search for in historical messages.' }, limit: { type: 'number', description: 'Maximum number of historical records to return (default: 10, max: 30).' }, role: { type: 'string', enum: ['all', 'user', 'assistant'], description: 'Optional role filter (default: "all").' } }, required: ['query'] }, run: async (args, ctx) => {
+    const q = String(args.query || '').trim()
+    if (!q) throw new Error('query is required')
+    const sessionId = ctx?.sessionId
+    if (!sessionId) return 'No active session id available for history search'
+    const dbi = require('../database')
+    const db = ctx?.db || (dbi.getDatabase && dbi.getDatabase())
+    if (!db || typeof db.prepare !== 'function') return 'Database is not accessible in this context'
+    const limit = Math.min(Math.max(1, Number(args.limit) || 10), 30)
+    const role = args.role && ['user', 'assistant'].includes(args.role) ? args.role : null
+
+    try {
+      let sql = 'SELECT id, role, content, created_at FROM message WHERE session_id = ? AND content LIKE ?'
+      const params = [sessionId, `%${q}%`]
+      if (role) {
+        sql += ' AND role = ?'
+        params.push(role)
+      }
+      sql += ' ORDER BY id DESC LIMIT ?'
+      params.push(limit)
+
+      const rows = db.prepare(sql).all(...params)
+      if (!rows || rows.length === 0) return `No historical messages matched "${q}" in session ${sessionId}.`
+
+      return rows.map((r) => {
+        const preview = r.content.length > 500 ? r.content.slice(0, 500) + '... [truncated]' : r.content
+        return `[Message #${r.id} | ${r.role} | ${r.created_at}]\n${preview}`
+      }).join('\n\n---\n\n')
+    } catch (err) {
+      return `Failed to search history: ${err.message}`
+    }
   }},
   { name: 'gateway', description: 'Start/stop/get status of gateway channels (webhook/telegram/discord).', risk: 'dangerous', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['start', 'stop', 'status', 'send'] }, channel: { type: 'string' }, type: { type: 'string', enum: ['webhook', 'telegram', 'discord'] }, config: { type: 'object' }, message: { type: 'string' } } }, run: async (args, ctx) => {
     if (!ctx) return 'no context'

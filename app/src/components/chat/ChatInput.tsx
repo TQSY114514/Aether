@@ -2,8 +2,9 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, Zap, Leaf } from 'lucide-react'
+import { Send, Square, Paperclip, Zap, Leaf, HelpCircle, ListPlus } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
+import QueueDock from './QueueDock'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -66,6 +67,18 @@ export default function ChatInput() {
     if (scores.length === 0) loadScores()
   }, [])
 
+  // Alt+B toggle for Side Questions (BTW drawer)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault()
+        useStore.getState().toggleBtw()
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
+
   // Per-session draft: each conversation has its own input draft persisted to localStorage.
   const [input, setInput] = useState(() => {
     try {
@@ -110,6 +123,7 @@ export default function ChatInput() {
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
     sessionConfigs: s.sessionConfigs, scores: s.scores,
     loopingSessions: s.loopingSessions,
+    toggleBtw: s.toggleBtw,
   })))
 
   // ELO score map for model selector display
@@ -506,9 +520,9 @@ export default function ChatInput() {
           </div>
         )}
 
+        <QueueDock onEditInComposer={(text) => setInput(text)} />
+
         <AttachmentBar
-          queuedMessages={queuedMessages}
-          onRemoveQueued={removeQueued}
           pending={pending}
           onRemovePending={(idx) => setPending(prev => prev.filter((_, j) => j !== idx))}
           onRemoveSensitive={() => setPending(prev => prev.filter(a => !SENSITIVE_FILE_PATTERN.test(a.name)))}
@@ -536,6 +550,7 @@ export default function ChatInput() {
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
 
           <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isStreaming}
             title={t('chat.upload')}
@@ -543,6 +558,16 @@ export default function ChatInput() {
             className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky disabled:opacity-30"
           >
             <Paperclip size={15} className="text-gray-400" />
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleBtw}
+            title={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+            aria-label={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky text-gray-400 hover:text-[var(--text-primary)] transition-colors"
+          >
+            <HelpCircle size={15} />
           </button>
 
           <textarea
@@ -568,14 +593,33 @@ export default function ChatInput() {
               <Square size={13} fill="currentColor" />
             </button>
           ) : isStreaming && input.trim() ? (
-            <button
-              onClick={() => handleSubmit()}
-              className="shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale shadow-sm"
-              title={t('inject.send_hint')}
-              aria-label={t('inject.send_hint')}
-            >
-              <Zap size={13} />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (input.trim()) {
+                    enqueueMessage(input.trim())
+                    setInput('')
+                  }
+                }}
+                className="p-1.5 px-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale text-xs flex items-center gap-1 font-medium"
+                title={t('queue.dock_title', '加入队列')}
+                aria-label={t('queue.dock_title', '加入队列')}
+              >
+                <ListPlus size={13} />
+                <span className="hidden sm:inline">{t('queue.add_button', '排队')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit()}
+                className="p-1.5 px-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale shadow-sm text-xs flex items-center gap-1 font-medium"
+                title={t('inject.send_hint', '立即插队到当前回合')}
+                aria-label={t('inject.send_hint', '立即插队到当前回合')}
+              >
+                <Zap size={13} />
+                <span className="hidden sm:inline">{t('queue.inject_button', '插队')}</span>
+              </button>
+            </div>
           ) : (
             <button
               onClick={() => handleSubmit()}

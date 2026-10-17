@@ -50,6 +50,7 @@ const FLAG_DEFS = [
   { key: 'agent.cachePrefixStability', default: true, category: 'agent', description: 'Prefix cache stability invariant: order always-on/MCP tools before staged categories, append-only stage routing, and preserve sent message prefix across rounds' },
   { key: 'agent.shrinkRetry',    default: false, category: 'agent',      description: 'Auto scope-reduction retry: when the iteration budget runs out or a loop guard blocks, shrink to one completable increment and add a few rounds (fires at most once per run)' },
   { key: 'agent.poorMode',       default: false, category: 'agent',      description: 'Poor Mode (Frugal): token & cost conservation without sacrificing task completion (low reasoning effort, aggressive tool truncation, tight context compaction, max 15 iterations)' },
+  { key: 'agent.leanMcp',        default: false, category: 'agent',      description: 'Lean MCP Bridge: expose MCP tools via lightweight on-demand gateway (mcp_list_tools, mcp_call_tool) to preserve prompt cache' },
   // Phase 3 — code understanding + orchestration
   { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
   { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },

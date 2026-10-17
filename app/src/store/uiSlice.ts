@@ -13,6 +13,7 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
   tasks: [],
   tasksOpen: false,
   checkpointsOpen: false,
+  btwOpen: false,
   scores: [],
   toasts: [],
 
@@ -79,6 +80,8 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
 
   setTasksOpen: (v) => set({ tasksOpen: v }),
   setCheckpointsOpen: (v) => set({ checkpointsOpen: v }),
+  setBtwOpen: (v) => set({ btwOpen: v }),
+  toggleBtw: () => set((s) => ({ btwOpen: !s.btwOpen })),
 
   loadScores: async () => {
     const scores = await window.electronAPI.arena.scores()

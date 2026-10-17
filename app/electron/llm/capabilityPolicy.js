@@ -42,6 +42,7 @@ const TOOL_AXIS = {
   git_commit: AXES.FILESYSTEM, git_push: AXES.FILESYSTEM, git_create_branch: AXES.FILESYSTEM,
   // agent meta: 工具自身（ask_user/todo/use_skill/memory/delegate）→ filesystem 兜底宽松
   use_skill: AXES.FILESYSTEM, ask_user: AXES.FILESYSTEM, todo_write: AXES.FILESYSTEM,
+  history_search: AXES.FILESYSTEM,
   memory_save: AXES.FILESYSTEM, memory_list: AXES.FILESYSTEM, memory_search: AXES.FILESYSTEM,
   delegate_task: AXES.FILESYSTEM, run_agent: AXES.FILESYSTEM,
   run_workflow: AXES.FILESYSTEM, run_arena: AXES.FILESYSTEM,
