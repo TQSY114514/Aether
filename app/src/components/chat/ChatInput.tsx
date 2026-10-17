@@ -108,7 +108,7 @@ export default function ChatInput() {
     thinkingEnabled, setThinkingEnabled,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
-    loopingSessions,
+    loopingSessions, toggleBtw,
   } = useStore(useShallow((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,

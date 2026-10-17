@@ -7,8 +7,8 @@ export type Snippet = { id: number; content: string; preview: string }
 export const SENSITIVE_FILE_PATTERN = /(\.env(\..+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.pkcs12|credentials\.json|service-account.*\.json)$/i
 
 export interface AttachmentBarProps {
-  queuedMessages: { id: number; content: string }[]
-  onRemoveQueued: (id: number) => void
+  queuedMessages?: { id: number; content: string }[]
+  onRemoveQueued?: (id: number) => void
   pending: PendingAttachment[]
   onRemovePending: (index: number) => void
   onRemoveSensitive: () => void

@@ -294,7 +294,6 @@ export default function BtwDrawer() {
                 {turn.answer ? (
                   <div
                     className="prose prose-sm dark:prose-invert max-w-none break-words leading-normal"
-                    dangerouslySetMuliti={false}
                     dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.answer) }}
                   />
                 ) : turn.streaming ? (

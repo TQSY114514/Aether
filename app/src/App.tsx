@@ -274,6 +274,7 @@ export default function App() {
     { id: 'history-forward', run: () => useStore.getState().goForward() },
     { id: 'undo', skipWhenEditable: true, run: () => useStore.getState().undoLastEdit() },
     { id: 'redo', skipWhenEditable: true, run: () => useStore.getState().redo() },
+    { id: 'toggle-btw', run: () => useStore.getState().toggleBtw() },
   ])
 
   const renderPage = () => {
