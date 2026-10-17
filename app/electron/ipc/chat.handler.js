@@ -98,19 +98,20 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
 
   // Side Questions (BTW / 旁支提问): read-only query over current session context without interrupting agent
   ipcMain.handle('chat:ask-side', async (_e, { sessionId, question, modelId } = {}) => {
-    if (!sessionId || !question || !question.trim()) {
-      return { ok: false, error: 'sessionId and question are required' }
+    if (!sessionId || typeof question !== 'string' || !question.trim()) {
+      return { ok: false, error: 'sessionId and non-empty question are required' }
     }
-    if (sideAbortControllers.has(sessionId)) {
-      try { sideAbortControllers.get(sessionId).abort() } catch {}
-      sideAbortControllers.delete(sessionId)
+    const sid = Number(sessionId) || sessionId
+    if (sideAbortControllers.has(sid)) {
+      try { sideAbortControllers.get(sid).abort() } catch {}
+      sideAbortControllers.delete(sid)
     }
     const controller = new AbortController()
-    sideAbortControllers.set(sessionId, controller)
+    sideAbortControllers.set(sid, controller)
 
     const wc = getWebContents()
     try {
-      const session = db.getSession(sessionId)
+      const session = db.getSession(sid)
       let targetModelId = modelId
       if (!targetModelId && session && session.config) {
         try { targetModelId = JSON.parse(session.config)?.modelId } catch {}
@@ -120,11 +121,17 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         const all = db.getAllModels()
         model = all[0]
       }
-      if (!model) return { ok: false, error: 'No model available' }
+      if (!model) {
+        sideAbortControllers.delete(sid)
+        return { ok: false, error: 'No model available' }
+      }
       const provider = db.getProvider(model.provider_id)
-      if (!provider) return { ok: false, error: 'No provider available' }
+      if (!provider) {
+        sideAbortControllers.delete(sid)
+        return { ok: false, error: 'No provider available' }
+      }
 
-      const msgs = db.getMessages(sessionId) || []
+      const msgs = db.getMessages(sid) || []
       const recent = msgs
         .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
         .slice(-20)
@@ -155,25 +162,26 @@ The user is asking a quick side question about the ongoing conversation.
       for await (const delta of stream) {
         if (delta) {
           fullAnswer += delta
-          try { wc?.send('chat:side-chunk', { sessionId, delta, done: false }) } catch {}
+          try { wc?.send('chat:side-chunk', { sessionId: sid, delta, done: false }) } catch {}
         }
       }
 
-      try { wc?.send('chat:side-chunk', { sessionId, delta: '', done: true, fullContent: fullAnswer }) } catch {}
-      sideAbortControllers.delete(sessionId)
+      try { wc?.send('chat:side-chunk', { sessionId: sid, delta: '', done: true, fullContent: fullAnswer }) } catch {}
+      sideAbortControllers.delete(sid)
       return { ok: true, answer: fullAnswer }
     } catch (err) {
-      sideAbortControllers.delete(sessionId)
+      sideAbortControllers.delete(sid)
       const errMsg = err.name === 'AbortError' ? '已取消' : (err.message || String(err))
-      try { wc?.send('chat:side-chunk', { sessionId, delta: '', done: true, error: errMsg }) } catch {}
+      try { wc?.send('chat:side-chunk', { sessionId: sid, delta: '', done: true, error: errMsg }) } catch {}
       return { ok: false, error: errMsg }
     }
   })
 
   ipcMain.handle('chat:stop-side', (_e, sessionId) => {
-    if (sessionId && sideAbortControllers.has(sessionId)) {
-      try { sideAbortControllers.get(sessionId).abort() } catch {}
-      sideAbortControllers.delete(sessionId)
+    const sid = Number(sessionId) || sessionId
+    if (sid && sideAbortControllers.has(sid)) {
+      try { sideAbortControllers.get(sid).abort() } catch {}
+      sideAbortControllers.delete(sid)
     }
     return { ok: true }
   })
@@ -236,16 +244,18 @@ The user is asking a quick side question about the ongoing conversation.
     }
   })
 
-  // Renderer replies to a permission-request via this invoke. We just forward
-  // the reply as an event so the waiting requestPermission closure (which uses
-  // wc.on('chat:permission-reply')) picks it up.
+  // Renderer replies to a permission-request via this invoke. We forward the reply
+  // to the webContents EventEmitter so toolLoopCallbacks (safeWc.on('chat:permission-reply'))
+  // picks it up, as well as sending it to the renderer if subscribed.
   ipcMain.handle('chat:permission-reply', (event, payload) => {
-    event.sender.send('chat:permission-reply', payload)
+    try { event.sender.emit('chat:permission-reply', event, payload) } catch {}
+    try { event.sender.send('chat:permission-reply', payload) } catch {}
     return true
   })
   // Same forwarding pattern for AskUserQuestion replies.
   ipcMain.handle('chat:question-reply', (event, payload) => {
-    event.sender.send('chat:question-reply', payload)
+    try { event.sender.emit('chat:question-reply', event, payload) } catch {}
+    try { event.sender.send('chat:question-reply', payload) } catch {}
     return true
   })
 

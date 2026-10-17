@@ -1,4 +1,4 @@
-import { X, FileText, ShieldAlert } from 'lucide-react'
+import { X, FileText, ShieldAlert, AlertTriangle } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 export type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
@@ -70,7 +70,12 @@ export default function AttachmentBar({
         </div>
       )}
 
-      {fileError && <p className="text-xs mb-2" role="alert" style={{ color: 'var(--error)' }}>⚠ {fileError}</p>}
+      {fileError && (
+        <p className="text-xs mb-2 flex items-center gap-1" role="alert" style={{ color: 'var(--error)' }}>
+          <AlertTriangle size={12} className="shrink-0" />
+          <span>{fileError}</span>
+        </p>
+      )}
 
       {snippets.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">

@@ -274,8 +274,8 @@ export interface AppState {
   resolveHabit: (key: string, accept: boolean) => void
   // Message queue: when the user sends while a turn is streaming, the message
   // is queued (not lost, not interrupting) and auto-sent after the current turn.
-  queuedMessages: { id: number; content: string }[]
-  enqueueMessage: (content: string) => void
+  queuedMessages: { id: number; content: string; sessionId?: number }[]
+  enqueueMessage: (content: string, sessionId?: number) => void
   removeQueued: (id: number) => void
   reorderQueued: (fromIndex: number, toIndex: number) => void
   updateQueued: (id: number, content: string) => void

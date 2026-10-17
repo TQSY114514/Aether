@@ -1054,6 +1054,7 @@
   "btw.empty": "No side questions yet. Ask anything about the active session without interrupting the agent.",
   "btw.btn_tooltip": "Side Question (Alt+B)",
   "btw.sending": "Thinking...",
+  "btw.badge_in_memory": "In-Memory",
   "queue.dock_title": "Message Queue",
   "queue.dock_hint": "Auto-sends sequentially after the active turn finishes",
   "queue.clear_all": "Clear Queue",
@@ -1063,5 +1064,8 @@
   "queue.move_up": "Move up",
   "queue.move_down": "Move down",
   "queue.add_button": "Queue",
+  "queue.add_tooltip": "Enqueue instruction",
+  "queue.toggle_dock": "Toggle queue dock",
+  "queue.overwrite_draft_confirm": "Replace current draft with queued message?",
   "queue.inject_button": "Inject"
 }

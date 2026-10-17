@@ -262,6 +262,10 @@ export default function App() {
       when: () => !shortcutsOpenRef.current, // ShortcutOverlay handles its own ESC
       run: () => {
         const s = useStore.getState()
+        if (s.btwOpen) {
+          // If BTW drawer is open, Escape closes the drawer, do not stop main generation
+          return
+        }
         if (s.sending) {
           s.stopGeneration()
           window.dispatchEvent(new CustomEvent('aether:generation-stopped'))

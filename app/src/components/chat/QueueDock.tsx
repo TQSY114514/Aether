@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 
 interface QueueDockProps {
-  onEditInComposer?: (content: string) => void
+  onEditInComposer?: (content: string) => boolean | void
 }
 
 export default function QueueDock({ onEditInComposer }: QueueDockProps) {
@@ -35,7 +35,7 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
 
   return (
     <div
-      className="mb-2 rounded-lg border overflow-hidden transition-all shadow-sm animate-fade-in"
+      className="mb-2 rounded-lg border overflow-hidden transition-all shadow-sm page-fade-in"
       style={{
         backgroundColor: 'var(--bg-secondary)',
         borderColor: 'var(--border)',
@@ -43,8 +43,17 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
     >
       {/* Header bar */}
       <div
-        className="px-3 py-1.5 flex items-center justify-between text-xs cursor-pointer select-none border-b border-[var(--border)]"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        className="px-3 py-1.5 flex items-center justify-between text-xs cursor-pointer select-none border-b border-[var(--border)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setExpanded(!expanded)
+          }
+        }}
       >
         <div className="flex items-center gap-2 min-w-0">
           <ListOrdered size={14} style={{ color: 'var(--accent)' }} className="shrink-0" />
@@ -52,10 +61,10 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
             {t('queue.dock_title', '待发消息队列')}
           </span>
           <span
-            className="text-[10px] px-1.5 py-0.2 rounded-full font-mono font-medium"
+            className="text-[10px] px-1.5 py-0.5 rounded-md font-mono font-medium"
             style={{
               backgroundColor: 'var(--accent)',
-              color: '#fff',
+              color: 'var(--text-on-accent, var(--content-bg))',
             }}
           >
             {queuedMessages.length}
@@ -69,7 +78,7 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
           <button
             type="button"
             onClick={clearQueued}
-            className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors"
+            className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
             title={t('queue.clear_all', '清空队列')}
           >
             <Trash2 size={11} />
@@ -78,8 +87,9 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors"
-            aria-label="Toggle queue dock"
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+            aria-label={t('queue.toggle_dock', '展开/折叠队列')}
+            aria-expanded={expanded}
           >
             {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
@@ -108,7 +118,7 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
                     className="text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold"
                     style={{
                       backgroundColor: isFirst ? 'var(--accent)' : 'var(--border)',
-                      color: isFirst ? '#fff' : 'var(--text-secondary)',
+                      color: isFirst ? 'var(--text-on-accent, var(--content-bg))' : 'var(--text-secondary)',
                     }}
                   >
                     #{idx + 1}
@@ -135,7 +145,7 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
                     type="button"
                     disabled={isFirst}
                     onClick={() => reorderQueued(idx, idx - 1)}
-                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] disabled:opacity-20 transition-colors"
+                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                     title={t('queue.move_up', '上移')}
                     aria-label={t('queue.move_up', '上移')}
                   >
@@ -145,7 +155,7 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
                     type="button"
                     disabled={isLast}
                     onClick={() => reorderQueued(idx, idx + 1)}
-                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] disabled:opacity-20 transition-colors"
+                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] disabled:opacity-20 disabled:cursor-not-allowed transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                     title={t('queue.move_down', '下移')}
                     aria-label={t('queue.move_down', '下移')}
                   >
@@ -157,10 +167,12 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
                     <button
                       type="button"
                       onClick={() => {
-                        onEditInComposer(item.content)
-                        removeQueued(item.id)
+                        const ok = onEditInComposer(item.content)
+                        if (ok !== false) {
+                          removeQueued(item.id)
+                        }
                       }}
-                      className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors"
+                      className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                       title={t('queue.edit_in_input', '回填编辑')}
                       aria-label={t('queue.edit_in_input', '回填编辑')}
                     >
@@ -172,7 +184,7 @@ export default function QueueDock({ onEditInComposer }: QueueDockProps) {
                   <button
                     type="button"
                     onClick={() => removeQueued(item.id)}
-                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--border)] transition-colors"
+                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--error)] hover:bg-[var(--border)] transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
                     title={t('queue.remove_item', '移出队列')}
                     aria-label={t('queue.remove_item', '移出队列')}
                   >

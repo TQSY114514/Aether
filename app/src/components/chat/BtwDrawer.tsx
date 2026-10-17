@@ -36,9 +36,12 @@ export default function BtwDrawer() {
   const currentSessionId = useStore((s) => s.currentSessionId)
 
   const [input, setInput] = useState('')
-  const [turns, setTurns] = useState<BtwTurn[]>([])
-  const [isStreaming, setIsStreaming] = useState(false)
+  const [turnsBySession, setTurnsBySession] = useState<Record<number, BtwTurn[]>>({})
+  const [streamingBySession, setStreamingBySession] = useState<Record<number, boolean>>({})
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const turns = (currentSessionId && turnsBySession[currentSessionId]) || []
+  const isStreaming = Boolean(currentSessionId && streamingBySession[currentSessionId])
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -54,14 +57,14 @@ export default function BtwDrawer() {
   // Listen to streaming deltas from IPC
   useEffect(() => {
     const unsub = window.electronAPI.chat.onSideChunk((payload) => {
-      if (!payload || payload.sessionId !== currentSessionId) return
+      if (!payload || !payload.sessionId) return
+      const targetSid = payload.sessionId
 
-      const activeId = activeTurnIdRef.current
-      if (!activeId) return
-
-      setTurns((prev) =>
-        prev.map((turn) => {
-          if (turn.id !== activeId) return turn
+      setTurnsBySession((prev) => {
+        const sessionTurns = prev[targetSid] || []
+        const activeId = activeTurnIdRef.current
+        const updated = sessionTurns.map((turn) => {
+          if (turn.id !== activeId && !turn.streaming) return turn
           if (payload.done) {
             return {
               ...turn,
@@ -76,13 +79,18 @@ export default function BtwDrawer() {
             streaming: true,
           }
         })
-      )
+        return { ...prev, [targetSid]: updated }
+      })
 
       if (payload.done) {
-        setIsStreaming(false)
-        activeTurnIdRef.current = null
+        setStreamingBySession((prev) => ({ ...prev, [targetSid]: false }))
+        if (targetSid === currentSessionId) {
+          activeTurnIdRef.current = null
+        }
       }
-      scrollToBottom()
+      if (targetSid === currentSessionId) {
+        scrollToBottom()
+      }
     })
 
     return () => {
@@ -93,7 +101,8 @@ export default function BtwDrawer() {
   // Focus textarea when opened
   useEffect(() => {
     if (open) {
-      setTimeout(() => textareaRef.current?.focus(), 80)
+      const timer = setTimeout(() => textareaRef.current?.focus(), 80)
+      return () => clearTimeout(timer)
     }
   }, [open])
 
@@ -112,6 +121,7 @@ export default function BtwDrawer() {
   const handleSend = async () => {
     const q = input.trim()
     if (!q || isStreaming || !currentSessionId) return
+    const targetSid = currentSessionId
 
     const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const newTurn: BtwTurn = {
@@ -122,50 +132,60 @@ export default function BtwDrawer() {
       createdAt: Date.now(),
     }
 
-    setTurns((prev) => [...prev, newTurn])
+    setTurnsBySession((prev) => ({
+      ...prev,
+      [targetSid]: [...(prev[targetSid] || []), newTurn],
+    }))
     setInput('')
-    setIsStreaming(true)
+    setStreamingBySession((prev) => ({ ...prev, [targetSid]: true }))
     activeTurnIdRef.current = turnId
     scrollToBottom()
 
     try {
       const res = await window.electronAPI.chat.askSide({
-        sessionId: currentSessionId,
+        sessionId: targetSid,
         question: q,
       })
       if (!res.ok) {
-        setTurns((prev) =>
-          prev.map((t) =>
+        setTurnsBySession((prev) => ({
+          ...prev,
+          [targetSid]: (prev[targetSid] || []).map((t) =>
             t.id === turnId ? { ...t, streaming: false, error: res.error || 'Failed' } : t
-          )
-        )
-        setIsStreaming(false)
-        activeTurnIdRef.current = null
+          ),
+        }))
+        setStreamingBySession((prev) => ({ ...prev, [targetSid]: false }))
+        if (activeTurnIdRef.current === turnId) {
+          activeTurnIdRef.current = null
+        }
       }
     } catch (err: any) {
-      setTurns((prev) =>
-        prev.map((t) =>
+      setTurnsBySession((prev) => ({
+        ...prev,
+        [targetSid]: (prev[targetSid] || []).map((t) =>
           t.id === turnId ? { ...t, streaming: false, error: err.message || String(err) } : t
-        )
-      )
-      setIsStreaming(false)
-      activeTurnIdRef.current = null
+        ),
+      }))
+      setStreamingBySession((prev) => ({ ...prev, [targetSid]: false }))
+      if (activeTurnIdRef.current === turnId) {
+        activeTurnIdRef.current = null
+      }
     }
   }
 
   const handleStop = async () => {
     if (!currentSessionId) return
+    const targetSid = currentSessionId
     try {
-      await window.electronAPI.chat.stopSide(currentSessionId)
+      await window.electronAPI.chat.stopSide(targetSid)
     } catch {}
-    setIsStreaming(false)
-    if (activeTurnIdRef.current) {
-      const activeId = activeTurnIdRef.current
-      setTurns((prev) =>
-        prev.map((t) => (t.id === activeId ? { ...t, streaming: false } : t))
-      )
-      activeTurnIdRef.current = null
-    }
+    setStreamingBySession((prev) => ({ ...prev, [targetSid]: false }))
+    setTurnsBySession((prev) => ({
+      ...prev,
+      [targetSid]: (prev[targetSid] || []).map((t) =>
+        t.streaming ? { ...t, streaming: false } : t
+      ),
+    }))
+    activeTurnIdRef.current = null
   }
 
   const handleCopy = (id: string, text: string) => {
@@ -177,8 +197,9 @@ export default function BtwDrawer() {
   }
 
   const handleClear = () => {
+    if (!currentSessionId) return
     if (isStreaming) handleStop()
-    setTurns([])
+    setTurnsBySession((prev) => ({ ...prev, [currentSessionId]: [] }))
   }
 
   if (!open) return null
@@ -188,7 +209,7 @@ export default function BtwDrawer() {
       role="dialog"
       aria-modal="true"
       aria-label={t('btw.title', '旁支提问 (BTW)')}
-      className="fixed top-0 bottom-0 end-0 w-[440px] max-w-full z-[110] flex flex-col animate-blur-fade shadow-2xl"
+      className="fixed top-0 bottom-0 end-0 w-[440px] max-w-full z-[110] flex flex-col animate-blur-fade shadow-[var(--shadow-modal,var(--shadow-lg))]"
       style={{
         backgroundColor: 'var(--bg-primary)',
         borderInlineStart: '1px solid var(--border)',
@@ -207,10 +228,10 @@ export default function BtwDrawer() {
                 {t('btw.title', '旁支提问 (BTW)')}
               </span>
               <span
-                className="text-[9px] px-1.5 py-0.2 rounded font-mono uppercase tracking-wider text-[var(--text-muted)] border"
+                className="text-[9px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider text-[var(--text-muted)] border"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
               >
-                In-Memory
+                {t('btw.badge_in_memory', 'In-Memory')}
               </span>
             </div>
           </div>
@@ -253,7 +274,7 @@ export default function BtwDrawer() {
         {turns.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[var(--text-muted)]">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center mb-3 border"
+              className="w-10 h-10 rounded-md flex items-center justify-center mb-3 border"
               style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
             >
               <HelpCircle size={20} style={{ color: 'var(--accent)' }} />
@@ -267,7 +288,7 @@ export default function BtwDrawer() {
           </div>
         ) : (
           turns.map((turn) => (
-            <div key={turn.id} className="space-y-2 animate-fade-in">
+            <div key={turn.id} className="space-y-2 page-fade-in">
               {/* Question */}
               <div className="flex justify-end">
                 <div
@@ -354,6 +375,7 @@ export default function BtwDrawer() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 handleSend()
@@ -369,7 +391,7 @@ export default function BtwDrawer() {
             <button
               type="button"
               onClick={handleStop}
-              className="shrink-0 p-1.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale"
+              className="shrink-0 p-1.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
               title={t('chat.stop', '停止')}
               aria-label={t('chat.stop', '停止')}
             >
@@ -380,7 +402,7 @@ export default function BtwDrawer() {
               type="button"
               onClick={handleSend}
               disabled={!input.trim() || !currentSessionId}
-              className="shrink-0 p-1.5 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale disabled:opacity-30"
+              className="shrink-0 p-1.5 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
               title={t('chat.send', '发送')}
               aria-label={t('chat.send', '发送')}
             >

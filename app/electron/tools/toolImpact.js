@@ -148,7 +148,7 @@ function truncate(s, max) {
 function buildUnifiedDiff(oldLines, newLines) {
   const parts = []
   let oi = 0, ni = 0
-  const LOOKAHEAD = 100
+  const LOOKAHEAD = Math.min(1000, Math.max(200, Math.max(oldLines.length, newLines.length)))
   while (oi < oldLines.length || ni < newLines.length) {
     const ol = oi < oldLines.length ? oldLines[oi] : null
     const nl = ni < newLines.length ? newLines[ni] : null
@@ -318,6 +318,7 @@ function cleanDiffLines(rawDiff) {
     const isNewFileBoundary =
       l.startsWith('diff --git') ||
       (!hunkActive &&
+        (i === 0 || (i > 0 && isGitMeta(lines[i - 1]))) &&
         isFileHeaderMinus(l) &&
         lines[i + 1] != null &&
         isFileHeaderPlus(lines[i + 1]))

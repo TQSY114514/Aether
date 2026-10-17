@@ -78,6 +78,9 @@ const LEAN_MCP_TOOLS = [
       if (!tool) {
         throw new Error(`MCP tool "${tool_name}" not found. Call mcp_list_tools to see available tools.`)
       }
+      if (!isMcpTool(tool)) {
+        throw new Error(`Tool "${tool_name}" is a built-in tool and cannot be executed via mcp_call_tool. Use the tool directly.`)
+      }
       if (typeof tool.run !== 'function') {
         throw new Error(`Tool "${tool_name}" does not have a run function`)
       }
@@ -210,8 +213,20 @@ function registerTools(tools) {
   return n
 }
 
+function unregisterTools(toolsOrNames) {
+  let n = 0
+  for (const item of toolsOrNames || []) {
+    const name = typeof item === 'string' ? item : item?.name
+    if (name && mergedTools.has(name)) {
+      mergedTools.delete(name)
+      n++
+    }
+  }
+  return n
+}
+
 module.exports = {
   connectServer, connectAll, disconnectServer, disconnectAll,
   getMergedTool, getMergedToolsPayload, connectedServers,
-  registerTools,
+  registerTools, unregisterTools,
 }

@@ -44,23 +44,28 @@ function findChildPids(parentPid) {
   const queue = [parentPid]
   while (queue.length > 0) {
     const current = queue.shift()
+    let stdout = ''
     try {
-      const stdout = execSync(
+      stdout = execSync(
         `powershell.exe -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ParentProcessId = ${current}').ProcessId"`,
         { encoding: 'utf8', windowsHide: true, timeout: 5000 }
       )
-      const pids = stdout
-        .trim()
-        .split(/\r?\n/)
-        .map((s) => parseInt(s.trim(), 10))
-        .filter((n) => Number.isInteger(n) && n > 0)
-      for (const pid of pids) {
-        if (!allDescendants.has(pid)) {
-          allDescendants.add(pid)
-          queue.push(pid)
-        }
+    } catch (err) {
+      if (isPidAlive(current)) {
+        throw new Error(`Failed to query child processes of PID ${current}: ${err.message}`)
       }
-    } catch {}
+    }
+    const pids = stdout
+      .trim()
+      .split(/\r?\n/)
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n > 0)
+    for (const pid of pids) {
+      if (!allDescendants.has(pid)) {
+        allDescendants.add(pid)
+        queue.push(pid)
+      }
+    }
   }
   return Array.from(allDescendants)
 }
@@ -130,7 +135,10 @@ async function main() {
   // Allow cmd.exe time to launch the powershell grandchild
   await sleep(1000)
   const descendants = findChildPids(child.pid)
-  console.log(`  -> Discovered child process tree: cmd.exe [${child.pid}] -> descendants [${descendants.join(', ')}]`)
+  if (descendants.length === 0) {
+    try { child.kill() } catch {}
+    throw new Error(`Expected at least one descendant process for child ${child.pid}, but none found`)
+  }
 
   if (!isPidAlive(child.pid)) {
     throw new Error(`Child process ${child.pid} exited prematurely`)

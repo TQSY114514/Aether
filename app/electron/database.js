@@ -369,11 +369,11 @@ function initDatabase() {
   addCol("session", "parent_session_id", "INTEGER");
   addCol("session", "session_kind", "TEXT NOT NULL DEFAULT 'chat'");
   addCol("agent_task", "parent_session_id", "INTEGER");
-  try { target.prepare("UPDATE agent_task SET parent_session_id = session_id WHERE parent_session_id IS NULL AND session_id IS NOT NULL").run() } catch {}
+  try { db.prepare("UPDATE agent_task SET parent_session_id = session_id WHERE parent_session_id IS NULL AND session_id IS NOT NULL").run() } catch {}
   // Migrate pre-2.0 internal child sessions out of the normal chat list.
   try {
-    target.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
-    target.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND title LIKE 'subagent%'" ).run();
+    db.prepare("UPDATE session SET session_kind = 'task' WHERE id IN (SELECT session_id FROM agent_task)").run();
+    db.prepare("UPDATE session SET session_kind = 'subagent' WHERE session_kind = 'chat' AND title LIKE 'subagent%'" ).run();
   } catch {}
   addCol("session", "status", "TEXT NOT NULL DEFAULT 'active'");
   addCol("provider_credential", "disable_reason", "TEXT");

@@ -602,8 +602,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     set((s) => ({ proposedHabits: s.proposedHabits.filter((h) => h.key !== key) }))
   },
 
-  enqueueMessage: (content) => {
-    set((s) => ({ queuedMessages: [...s.queuedMessages, { id: Date.now() + Math.random(), content }] }))
+  enqueueMessage: (content, sessionId) => {
+    const targetSid = sessionId ?? get().currentSessionId ?? undefined
+    set((s) => ({ queuedMessages: [...s.queuedMessages, { id: Date.now() + Math.random(), content, sessionId: targetSid }] }))
     get().triggerHint("first_queue", t("hint.first_queue"))
   },
 

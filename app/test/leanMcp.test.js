@@ -2,7 +2,7 @@
 // test/leanMcp.test.js — Tests for Lean MCP Bridge (agent.leanMcp)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createRequire } from 'module'
 
 const require = createRequire(import.meta.url)
@@ -10,6 +10,19 @@ const mcpManager = require('../electron/mcp/manager')
 const featureFlags = require('../electron/featureFlags')
 
 describe('Lean MCP Bridge', () => {
+  const mockTools = [
+    { name: 'mock_server__search', description: 'search docs', risk: 'safe', parameters: { type: 'object' }, run: async () => 'search result' },
+    { name: 'mock_server__create', description: 'create doc', risk: 'dangerous', parameters: { type: 'object' }, run: async (args) => `created ${args.title}` },
+  ]
+
+  beforeAll(() => {
+    mcpManager.registerTools(mockTools)
+  })
+
+  afterAll(() => {
+    mcpManager.unregisterTools(mockTools.map((t) => t.name))
+  })
+
   it('registers agent.leanMcp feature flag with default false', () => {
     expect(featureFlags.has('agent.leanMcp')).toBe(true)
     expect(featureFlags.isEnabled(null, 'agent.leanMcp')).toBe(false)
@@ -29,12 +42,6 @@ describe('Lean MCP Bridge', () => {
   })
 
   it('filters MCP tools according to leanMcp flag in getMergedToolsPayload', () => {
-    // Register temporary synthetic MCP tools
-    mcpManager.registerTools([
-      { name: 'mock_server__search', description: 'search docs', risk: 'safe', parameters: { type: 'object' }, run: async () => 'search result' },
-      { name: 'mock_server__create', description: 'create doc', risk: 'dangerous', parameters: { type: 'object' }, run: async (args) => `created ${args.title}` },
-    ])
-
     // Non-lean mode (default): individual MCP tools appear in payload, lean gateway tools are hidden
     const nonLeanPayload = mcpManager.getMergedToolsPayload('auto', { leanMcp: false })
     const nonLeanNames = nonLeanPayload.map((t) => t.function.name)
@@ -66,5 +73,12 @@ describe('Lean MCP Bridge', () => {
       arguments: { title: 'Architecture.md' },
     })
     expect(callResult).toBe('created Architecture.md')
+  })
+
+  it('blocks executing built-in tools via mcp_call_tool', async () => {
+    const callTool = mcpManager.getMergedTool('mcp_call_tool')
+    await expect(
+      callTool.run({ tool_name: 'run_command', arguments: { command: 'echo evil' } })
+    ).rejects.toThrow(/built-in tool/)
   })
 })

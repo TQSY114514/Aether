@@ -103,7 +103,17 @@ function readAsarFileContent(asarPath, asarInfo, filePath) {
       return null
     }
     if (fs.existsSync(unpackedPath)) {
-      return fs.readFileSync(unpackedPath)
+      try {
+        const realUnpackedDir = fs.existsSync(unpackedDir) ? fs.realpathSync(unpackedDir) : unpackedDir
+        const realFilePath = fs.realpathSync(unpackedPath)
+        const realRel = path.relative(realUnpackedDir, realFilePath)
+        if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
+          return null
+        }
+        return fs.readFileSync(realFilePath)
+      } catch {
+        return null
+      }
     }
     return null
   }

@@ -67,17 +67,6 @@ export default function ChatInput() {
     if (scores.length === 0) loadScores()
   }, [])
 
-  // Alt+B toggle for Side Questions (BTW drawer)
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && (e.key === 'b' || e.key === 'B')) {
-        e.preventDefault()
-        useStore.getState().toggleBtw()
-      }
-    }
-    window.addEventListener('keydown', handleGlobalKeyDown)
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [])
 
   // Per-session draft: each conversation has its own input draft persisted to localStorage.
   const [input, setInput] = useState(() => {
@@ -293,7 +282,7 @@ export default function ChatInput() {
 
     if (!overrides || overrides.agentMode !== 'plan') {
       if (isArenaRunning) {
-        if (content) { enqueueMessage(content); setInput('') }
+        if (content) { enqueueMessage(content, currentSessionId ?? undefined); setInput('') }
         return
       }
       if (isStreaming) {
@@ -502,6 +491,17 @@ export default function ChatInput() {
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
   }, [input, isStreaming, showSlash, pending.length, snippets.length])
 
+  const handleEditQueuedInComposer = (text: string) => {
+    if (input.trim() && input.trim() !== text) {
+      if (!window.confirm(t('queue.overwrite_draft_confirm', '当前输入框已有草稿，是否替换为队列消息？'))) {
+        return false
+      }
+    }
+    setInput(text)
+    setTimeout(() => textareaRef.current?.focus(), 50)
+    return true
+  }
+
   return (
     <div
       className="border-t border-[var(--border)] bg-[var(--content-bg)]/85 backdrop-blur-md px-4 py-2.5"
@@ -520,7 +520,7 @@ export default function ChatInput() {
           </div>
         )}
 
-        <QueueDock onEditInComposer={(text) => setInput(text)} />
+        <QueueDock onEditInComposer={handleEditQueuedInComposer} />
 
         <AttachmentBar
           pending={pending}
@@ -555,9 +555,9 @@ export default function ChatInput() {
             disabled={isStreaming}
             title={t('chat.upload')}
             aria-label={t('chat.upload')}
-            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky disabled:opacity-30"
+            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky disabled:opacity-30 focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
           >
-            <Paperclip size={15} className="text-gray-400" />
+            <Paperclip size={15} className="text-[var(--text-muted)]" />
           </button>
 
           <button
@@ -565,7 +565,7 @@ export default function ChatInput() {
             onClick={toggleBtw}
             title={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
             aria-label={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
-            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky text-gray-400 hover:text-[var(--text-primary)] transition-colors"
+            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
           >
             <HelpCircle size={15} />
           </button>
@@ -598,13 +598,13 @@ export default function ChatInput() {
                 type="button"
                 onClick={() => {
                   if (input.trim()) {
-                    enqueueMessage(input.trim())
+                    enqueueMessage(input.trim(), currentSessionId ?? undefined)
                     setInput('')
                   }
                 }}
-                className="p-1.5 px-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale text-xs flex items-center gap-1 font-medium"
-                title={t('queue.dock_title', '加入队列')}
-                aria-label={t('queue.dock_title', '加入队列')}
+                className="p-1.5 px-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale text-xs flex items-center gap-1 font-medium focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                title={t('queue.add_tooltip', '加入排队队列')}
+                aria-label={t('queue.add_tooltip', '加入排队队列')}
               >
                 <ListPlus size={13} />
                 <span className="hidden sm:inline">{t('queue.add_button', '排队')}</span>

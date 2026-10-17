@@ -524,16 +524,23 @@ async function runAuditPipeline(targetInput, options = {}) {
     // Stable composite SHA-256 of all directory file relative paths and contents
     const sortedFiles = [...filesToScan].sort((a, b) => a.relPath.localeCompare(b.relPath));
     const hasher = crypto.createHash('sha256');
+    const unreadableFiles = [];
     for (const f of sortedFiles) {
       hasher.update(f.relPath + '\0');
       try {
         const buf = fs.readFileSync(f.fullPath);
         hasher.update(buf);
       } catch {
-        // Fallback for unreadable files
+        unreadableFiles.push(f.relPath);
       }
     }
-    artifactIdentity.sha256 = hasher.digest('hex');
+    if (unreadableFiles.length > 0) {
+      artifactIdentity.sha256 = `${hasher.digest('hex')} (incomplete - ${unreadableFiles.length} unreadable)`;
+      artifactIdentity.incomplete = true;
+      artifactIdentity.unreadableFiles = unreadableFiles;
+    } else {
+      artifactIdentity.sha256 = hasher.digest('hex');
+    }
 
     addEvidence({
       category: 'ART',

@@ -111,33 +111,34 @@ describe('createTurnFileTracker', () => {
   it('tracks changes made by run_command using turn-start baseline for pre-dirty files', () => {
     // Initialize git repo in tmpDir
     const { execSync } = require('child_process')
+    const dirtyFile = path.join(tmpDir, 'dirty.txt')
     try {
       execSync('git init && git config user.name "Test" && git config user.email "test@example.com"', { cwd: tmpDir })
-      const dirtyFile = path.join(tmpDir, 'dirty.txt')
       fs.writeFileSync(dirtyFile, 'line 1\nline 2\n', 'utf-8')
       execSync('git add dirty.txt && git commit -m "initial commit"', { cwd: tmpDir })
-
-      // Pre-turn modification: add line 3 before tracker is created
-      fs.writeFileSync(dirtyFile, 'line 1\nline 2\nline 3\n', 'utf-8')
-
-      // Create tracker (captures baseline snapshot with line 3)
-      const tracker = createTurnFileTracker(tmpDir)
-
-      // Turn action: run_command appends line 4
-      tracker.beforeTool('run_command', { command: 'echo line 4 >> dirty.txt' })
-      fs.writeFileSync(dirtyFile, 'line 1\nline 2\nline 3\nline 4\n', 'utf-8')
-      tracker.afterTool('run_command', { command: 'echo line 4 >> dirty.txt' })
-
-      const summary = tracker.getSummary()
-      expect(summary).not.toBeNull()
-      expect(summary.fileCount).toBe(1)
-      expect(summary.files[0].path).toBe('dirty.txt')
-      // Only line 4 was added in THIS turn! (line 3 was added before turn start)
-      expect(summary.files[0].added).toBe(1)
-      expect(summary.files[0].removed).toBe(0)
-    } catch (e) {
+    } catch {
       // Git command might not be available or fail in minimal test environments
+      return
     }
+
+    // Pre-turn modification: add line 3 before tracker is created
+    fs.writeFileSync(dirtyFile, 'line 1\nline 2\nline 3\n', 'utf-8')
+
+    // Create tracker (captures baseline snapshot with line 3)
+    const tracker = createTurnFileTracker(tmpDir)
+
+    // Turn action: run_command appends line 4
+    tracker.beforeTool('run_command', { command: 'echo line 4 >> dirty.txt' })
+    fs.writeFileSync(dirtyFile, 'line 1\nline 2\nline 3\nline 4\n', 'utf-8')
+    tracker.afterTool('run_command', { command: 'echo line 4 >> dirty.txt' })
+
+    const summary = tracker.getSummary()
+    expect(summary).not.toBeNull()
+    expect(summary.fileCount).toBe(1)
+    expect(summary.files[0].path).toBe('dirty.txt')
+    // Only line 4 was added in THIS turn! (line 3 was added before turn start)
+    expect(summary.files[0].added).toBe(1)
+    expect(summary.files[0].removed).toBe(0)
   })
 
   it('preserves empty created and deleted files in summary', () => {

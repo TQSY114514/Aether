@@ -1147,6 +1147,7 @@ const translations: Record<string, Record<string, string>> = {
     "btw.empty": "No side questions yet. Ask anything about the active session without interrupting the agent.",
     "btw.btn_tooltip": "Side Question (Alt+B)",
     "btw.sending": "Thinking...",
+    "btw.badge_in_memory": "In-Memory",
     "queue.dock_title": "Message Queue",
     "queue.dock_hint": "Auto-sends sequentially after the active turn finishes",
     "queue.clear_all": "Clear Queue",
@@ -1156,6 +1157,9 @@ const translations: Record<string, Record<string, string>> = {
     "queue.move_up": "Move up",
     "queue.move_down": "Move down",
     "queue.add_button": "Queue",
+    "queue.add_tooltip": "Enqueue instruction",
+    "queue.toggle_dock": "Toggle queue dock",
+    "queue.overwrite_draft_confirm": "Replace current draft with queued message?",
     "queue.inject_button": "Inject"
   },
   "zh-CN": {
@@ -2214,6 +2218,7 @@ const translations: Record<string, Record<string, string>> = {
     "btw.empty": "暂无旁支提问。可在此针对当前会话内容进行提问，不会打断 Agent 运行，亦不污染历史记录。",
     "btw.btn_tooltip": "旁支提问 (Alt+B)",
     "btw.sending": "正在思考...",
+    "btw.badge_in_memory": "内存只读",
     "queue.dock_title": "待发消息队列",
     "queue.dock_hint": "当前回合结束后将依次自动发送",
     "queue.clear_all": "清空队列",
@@ -2223,6 +2228,9 @@ const translations: Record<string, Record<string, string>> = {
     "queue.move_up": "上移",
     "queue.move_down": "下移",
     "queue.add_button": "排队",
+    "queue.add_tooltip": "加入排队队列",
+    "queue.toggle_dock": "展开/折叠队列",
+    "queue.overwrite_draft_confirm": "当前输入框已有草稿，是否替换为队列消息？",
     "queue.inject_button": "插队"
   },
   "es": {
