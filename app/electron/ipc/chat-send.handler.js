@@ -319,7 +319,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     let compacted
     try {
       const folded = foldStaleToolOutputs(apiMsgs)
-      compacted = await maybeCompact({ provider, model, messages: folded, budget: ctxBudget, sessionId })
+      compacted = await maybeCompact({ provider, model, messages: folded, budget: ctxBudget, sessionId, db, wsRoot })
     } catch (e) {
       compacted = apiMsgs
     }
@@ -564,7 +564,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
                 const loopTail = (Array.isArray(toolMessages) && toolMessages.length > seedLen) ? toolMessages.slice(seedLen) : []
                 mergeBase = loopTail.length ? [...compacted, ...loopTail] : [...compacted]
               }
-              const forced = await maybeCompact({ provider, model, messages: mergeBase, budget: ctxBudget, sessionId, force: true })
+              const forced = await maybeCompact({ provider, model, messages: mergeBase, budget: ctxBudget, sessionId, force: true, db, wsRoot })
               if (!forced) throw err // 压缩无可压 → 原样抛给上层既有处理
               compacted.length = 0
               compacted.push(...forced)

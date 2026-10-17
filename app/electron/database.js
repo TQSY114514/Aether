@@ -257,6 +257,9 @@ function initDatabase() {
   try {
     db.exec("ALTER TABLE memory ADD COLUMN origin TEXT DEFAULT 'user'");
   } catch {}
+  try {
+    db.exec("ALTER TABLE memory ADD COLUMN source_trust_level TEXT DEFAULT 'user_direct'");
+  } catch {}
 
   // P0-4: Task / Checklist Runtime - persistent session plans
   try {
@@ -1505,6 +1508,7 @@ function addMemoryWithProvenance(
   origin,
   relationMeta,
   workspace,
+  sourceTrustLevel,
 ) {
   const t = String(type || "fact");
   const c = String(content || "").trim();
@@ -1529,7 +1533,7 @@ function addMemoryWithProvenance(
   if (t === "relation" && relationMeta) {
     info = db
       .prepare(
-        "INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, confidence, origin, content_norm, workspace) VALUES (?, ?, ?, ?, ?, ?, 1.0, ?, ?, ?)",
+        "INSERT INTO memory (content, type, relation_entity, relation_type, relation_target, source_session_id, confidence, origin, content_norm, workspace, source_trust_level) VALUES (?, ?, ?, ?, ?, ?, 1.0, ?, ?, ?, ?)",
       )
       .run(
         c,
@@ -1541,11 +1545,12 @@ function addMemoryWithProvenance(
         origin || "user",
         memNormalize(c),
         workspace || null,
+        sourceTrustLevel || "user_direct",
       );
   } else {
     info = db
       .prepare(
-        "INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm, workspace) VALUES (?, ?, ?, 1.0, ?, ?, ?)",
+        "INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm, workspace, source_trust_level) VALUES (?, ?, ?, 1.0, ?, ?, ?, ?)",
       )
       .run(
         c,
@@ -1554,6 +1559,7 @@ function addMemoryWithProvenance(
         origin || "user",
         memNormalize(c),
         workspace || null,
+        sourceTrustLevel || "user_direct",
       );
   }
   try {
@@ -2215,7 +2221,17 @@ function getSessionPlan(sessionId) {
   }
 }
 function saveSessionPlan(sessionId, planObj) {
-  const jsonStr = typeof planObj === 'string' ? planObj : JSON.stringify(planObj);
+  let jsonStr;
+  if (typeof planObj === 'string') {
+    try {
+      JSON.parse(planObj);
+      jsonStr = planObj;
+    } catch {
+      jsonStr = JSON.stringify(planObj);
+    }
+  } else {
+    jsonStr = JSON.stringify(planObj);
+  }
   db.prepare(
     "INSERT INTO session_plan (session_id, plan_json, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(session_id) DO UPDATE SET plan_json = excluded.plan_json, updated_at = excluded.updated_at",
   ).run(sessionId, jsonStr);

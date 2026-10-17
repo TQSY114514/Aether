@@ -157,8 +157,20 @@ function getActiveFileSnippets(sessionId, { maxFiles = 3, maxLinesPerFile = 80, 
       const stat = fs.statSync(resolved)
       if (stat.isDirectory()) continue
 
-      const content = fs.readFileSync(resolved, 'utf8')
-      const lines = content.split('\n').slice(0, maxLines)
+      const maxBytes = Math.min(stat.size, Math.max(4096, maxLines * 500))
+      let text = ''
+      if (maxBytes > 0) {
+        const buf = Buffer.alloc(maxBytes)
+        const fd = fs.openSync(resolved, 'r')
+        let bytesRead = 0
+        try {
+          bytesRead = fs.readSync(fd, buf, 0, maxBytes, 0)
+        } finally {
+          fs.closeSync(fd)
+        }
+        text = buf.toString('utf8', 0, bytesRead)
+      }
+      const lines = text.split(/\r?\n/).slice(0, maxLines)
       const snippet = lines.join('\n')
       snippets.push({
         path: filePath,

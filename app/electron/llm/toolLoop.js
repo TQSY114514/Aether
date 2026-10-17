@@ -864,6 +864,24 @@ Reply in this format:
           toolCtx.model = activeModel
           permissionCtx.provider = activeProvider
           permissionCtx.model = activeModel
+
+          // Rebuild tool payload adapted for the new model
+          try {
+            const { adaptToolsPayload } = require('./adaptivePatch')
+            toolPayload = adaptToolsPayload(rawToolPayload, activeModel)
+            if (stageState.fullPayload) stageState.fullPayload = toolPayload
+            routedPayload = toolPayload
+          } catch {}
+
+          // Rebuild reasoning params for the new model family
+          try {
+            const { buildReasoningParams } = require('./reasoning')
+            const effort = opts?.reasoningEffort || opts?.reasoning_effort || 'medium'
+            const thinkingOn = opts?.thinkingEnabled !== false && opts?.enable_thinking !== false
+            const newReasoning = buildReasoningParams(nextName, effort, thinkingOn, opts?.max_tokens || opts?.maxTokens)
+            Object.assign(opts, newReasoning)
+          } catch {}
+
           try {
             onStatus?.({
               kind: 'phase_route',
@@ -1185,7 +1203,7 @@ Reply in this format:
                 const lineCount = diffText ? diffText.split('\n').length : 0
                 if (lineCount > 20 || fn.name === 'run_command') {
                   const intent = db.classifyIntent ? db.classifyIntent(userText) : 'coding'
-                  const currentModelId = model?.id || model?.model_id
+                  const currentModelId = activeModel?.id || activeModel?.model_id || model?.id || model?.model_id
                   const runnerUp = db.getRunnerUpModel(intent, currentModelId)
                   if (runnerUp && runnerUp.provider_id) {
                     const ruProvider = db.getProviderDecrypted(runnerUp.provider_id)

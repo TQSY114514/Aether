@@ -449,6 +449,9 @@ The user is asking a quick side question about the ongoing conversation.
         ? Number(model.context_window)
         : 32000
 
+      let wsRoot = null
+      try { wsRoot = (session.config && JSON.parse(session.config).workspace) || null } catch {}
+
       const compacted = await maybeCompact({
         provider,
         model,
@@ -456,6 +459,8 @@ The user is asking a quick side question about the ongoing conversation.
         budget,
         sessionId,
         force: true,
+        db,
+        wsRoot,
       })
 
       if (!compacted || compacted.length >= beforeCount) {
@@ -478,7 +483,20 @@ The user is asking a quick side question about the ongoing conversation.
 
   // ─── Session Forking IPC ────────────────────────────────────────────────
   ipcMain.handle('chat:fork', async (_e, { sessionId, messageId, title } = {}) => {
-    return db.forkSession(sessionId, title, messageId);
+    const sId = Number(sessionId)
+    if (!Number.isInteger(sId) || sId <= 0) {
+      throw new Error(`chat:fork: sessionId must be a positive integer, got ${sessionId}`)
+    }
+    let mId = null
+    if (messageId !== undefined && messageId !== null) {
+      const parsedMid = Number(messageId)
+      if (!Number.isInteger(parsedMid) || parsedMid <= 0) {
+        throw new Error(`chat:fork: messageId must be a positive integer when provided, got ${messageId}`)
+      }
+      mId = parsedMid
+    }
+    const safeTitle = typeof title === 'string' && title.trim().length > 0 ? title.trim().slice(0, 255) : null
+    return db.forkSession(sId, safeTitle, mId)
   })
 
   // Surface the chat-send handler exports (e.g. handleChatComplete for the

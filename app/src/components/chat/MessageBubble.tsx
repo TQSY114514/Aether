@@ -338,10 +338,11 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
             {!isStreaming && (
               <button
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky"
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/50 icon-btn-silky disabled:opacity-30"
                 title={t('chat.fork')}
                 aria-label={t('chat.fork')}
                 onClick={() => forkSession(message.id)}
+                disabled={sending}
               >
                 <GitFork size={12} />
               </button>

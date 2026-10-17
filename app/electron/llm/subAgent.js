@@ -451,7 +451,7 @@ async function runParallel(tasks, shared = {}) {
  * Capture pre-execution snapshot of write paths for safety/rollback
  * @param {string[]} paths
  * @param {string} [wsRoot]
- * @returns {{ files: Array<{ path: string, existed: boolean, content: string | null }> }}
+ * @returns {{ files: Array<{ path: string, existed: boolean, content: Buffer | null }> }}
  */
 function captureBeforeSnapshot(paths, wsRoot) {
   if (!paths || !Array.isArray(paths)) return { files: [] }
@@ -464,7 +464,7 @@ function captureBeforeSnapshot(paths, wsRoot) {
     try {
       if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
         existed = true
-        content = fs.readFileSync(resolvedPath, 'utf8')
+        content = fs.readFileSync(resolvedPath)
       }
     } catch {}
     files.push({
@@ -478,7 +478,7 @@ function captureBeforeSnapshot(paths, wsRoot) {
 
 /**
  * Cleanly rollback modifications and created files based on pre-execution snapshot
- * @param {{ files?: Array<{ path: string, existed: boolean, content: string | null }> } | null} snapshot
+ * @param {{ files?: Array<{ path: string, existed: boolean, content: Buffer | string | null }> } | null} snapshot
  */
 function rollbackBeforeSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.files)) return
@@ -491,7 +491,7 @@ function rollbackBeforeSnapshot(snapshot) {
           if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true })
           }
-          fs.writeFileSync(entry.path, entry.content, 'utf8')
+          fs.writeFileSync(entry.path, entry.content)
         }
       } else {
         if (fs.existsSync(entry.path)) {

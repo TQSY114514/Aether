@@ -55,6 +55,7 @@ app/.electron-builder-cache/
 /Aether-acl-recovery/
 /Aether.git.backup/
 /*.png
+/.shots/
 
 # Release artifacts staging (local downloads, not for the repo)
 release-download/

@@ -278,6 +278,9 @@ describe('Tier 1: Feature Coverage', () => {
           content: `Subsequent discussion step ${i} `.repeat(15),
         })),
       ]
+      // Record max id before compaction
+      const maxBeforeRow = db.prepare('SELECT MAX(id) as max_id FROM memory').get()
+      const maxBefore = Number(maxBeforeRow?.max_id || 0)
 
       await compaction.maybeCompact({
         db,
@@ -290,7 +293,7 @@ describe('Tier 1: Feature Coverage', () => {
       })
 
       // Memory table should have at least one record persisted from decisions
-      const memories = db.prepare('SELECT * FROM memory').all()
+      const memories = db.prepare('SELECT * FROM memory WHERE id > ?').all(maxBefore)
       expect(memories.length).toBeGreaterThan(0)
       expect(memories.some(m => m.content.toLowerCase().includes('wal') || m.content.toLowerCase().includes('better-sqlite3') || m.content.toLowerCase().includes('architecture'))).toBe(true)
     })
@@ -298,6 +301,7 @@ describe('Tier 1: Feature Coverage', () => {
     it('T1-R3-03: sessionContext extracts top-3 active files sorted by read/edit activity score', () => {
       const sessionContext = require(SESSION_CONTEXT_PATH)
       expect(typeof sessionContext.getActiveFileSnippets, 'sessionContext.getActiveFileSnippets must be exported').toBe('function')
+      expect(typeof sessionContext.recordFileActivity, 'sessionContext.recordFileActivity must be exported').toBe('function')
 
       const wsDir = createTempWorkspace('r3-files-')
       // Create sample files
@@ -307,13 +311,11 @@ describe('Tier 1: Feature Coverage', () => {
       fs.writeFileSync(path.join(wsDir, 'fileD.js'), 'console.log("D")\n'.repeat(20), 'utf8')
 
       // Record activity in sessionContext
-      if (typeof sessionContext.recordFileActivity === 'function') {
-        sessionContext.recordFileActivity(101, path.join(wsDir, 'fileA.js'), 'edit')
-        sessionContext.recordFileActivity(101, path.join(wsDir, 'fileA.js'), 'edit')
-        sessionContext.recordFileActivity(101, path.join(wsDir, 'fileB.js'), 'edit')
-        sessionContext.recordFileActivity(101, path.join(wsDir, 'fileC.js'), 'read')
-        sessionContext.recordFileActivity(101, path.join(wsDir, 'fileD.js'), 'read')
-      }
+      sessionContext.recordFileActivity(101, path.join(wsDir, 'fileA.js'), 'edit')
+      sessionContext.recordFileActivity(101, path.join(wsDir, 'fileA.js'), 'edit')
+      sessionContext.recordFileActivity(101, path.join(wsDir, 'fileB.js'), 'edit')
+      sessionContext.recordFileActivity(101, path.join(wsDir, 'fileC.js'), 'read')
+      sessionContext.recordFileActivity(101, path.join(wsDir, 'fileD.js'), 'read')
 
       const snippets = sessionContext.getActiveFileSnippets(101, { maxFiles: 3, wsRoot: wsDir })
       expect(Array.isArray(snippets)).toBe(true)
@@ -322,46 +324,53 @@ describe('Tier 1: Feature Coverage', () => {
 
     it('T1-R3-04: Rehydrated file snippets clamp to 80 lines and appear in compacted handoff message', async () => {
       const compaction = require(COMPACTION_PATH)
+      const providerAdapter = require('../electron/llm/providerAdapter')
+      const origCompleteChat = providerAdapter.completeChat
+      providerAdapter.completeChat = async () => '## Goal\nRefactor\n## Constraints\nNone\n## Progress\n- [x] Step 1\n## Key Decisions\nNone\n## Next Steps\nContinue\n## Critical Context\nNone'
+
       const wsDir = createTempWorkspace('r3-rehydrate-')
       const db = database.getDatabase()
 
-      // Create a 150-line file
-      const bigFile = path.join(wsDir, 'bigFile.js')
-      const lines = Array.from({ length: 150 }, (_, i) => `const line${i + 1} = ${i + 1};`).join('\n')
-      fs.writeFileSync(bigFile, lines, 'utf8')
+      try {
+        // Create a 150-line file
+        const bigFile = path.join(wsDir, 'bigFile.js')
+        const lines = Array.from({ length: 150 }, (_, i) => `const line${i + 1} = ${i + 1};`).join('\n')
+        fs.writeFileSync(bigFile, lines, 'utf8')
 
-      const sessionContext = require(SESSION_CONTEXT_PATH)
-      if (typeof sessionContext.recordFileActivity === 'function') {
+        const sessionContext = require(SESSION_CONTEXT_PATH)
+        expect(typeof sessionContext.recordFileActivity, 'sessionContext.recordFileActivity must be exported').toBe('function')
         sessionContext.recordFileActivity(202, bigFile, 'edit')
+
+        const messages = [
+          { role: 'system', content: 'Init system' },
+          { role: 'user', content: 'Refactor bigFile.js to modular functions' },
+          { role: 'assistant', content: 'Working on refactor' },
+          ...Array.from({ length: 30 }, (_, i) => ({
+            role: 'assistant',
+            content: `Refactoring details ${i} `.repeat(100),
+          })),
+        ]
+
+        const compacted = await compaction.maybeCompact({
+          db,
+          sessionId: 202,
+          provider: { api_format: 'openai' },
+          model: { model_name: 'test-model' },
+          messages,
+          budget: 8000,
+          force: true,
+          wsRoot: wsDir,
+        })
+
+        expect(compacted).toBeDefined()
+        const handoffMsg = compacted.find(m => m.role === 'system' && m.content.includes('[context compaction]'))
+        expect(handoffMsg).toBeDefined()
+        expect(handoffMsg.content).toContain('[context compaction: rehydrated active files]')
+        // Verify snippet does not dump all 150 lines
+        expect(handoffMsg.content).not.toContain('const line140 = 140;')
+      } finally {
+        providerAdapter.completeChat = origCompleteChat
       }
-
-      const messages = [
-        { role: 'system', content: 'Init system' },
-        { role: 'user', content: 'Refactor bigFile.js to modular functions' },
-        { role: 'assistant', content: 'Working on refactor' },
-        ...Array.from({ length: 50 }, (_, i) => ({
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          content: `Refactoring details ${i} `.repeat(50),
-        })),
-      ]
-
-      const compacted = await compaction.maybeCompact({
-        db,
-        sessionId: 202,
-        provider: { api_format: 'openai' },
-        model: { model_name: 'test-model' },
-        messages,
-        budget: 8000,
-        force: true,
-        wsRoot: wsDir,
-      })
-
-      expect(compacted).toBeDefined()
-      const handoffMsg = compacted.find(m => m.role === 'system' && m.content.includes('[context compaction]'))
-      expect(handoffMsg).toBeDefined()
-      expect(handoffMsg.content).toContain('[context compaction: rehydrated active files]')
-      // Verify snippet does not dump all 150 lines
-      expect(handoffMsg.content).not.toContain('const line140 = 140;')
     })
 
     it('T1-R3-05: Compacted context appends active plan checklist and explicit resume instruction', async () => {
@@ -542,30 +551,38 @@ describe('Tier 1: Feature Coverage', () => {
       expect(trackerMod.isPathInsideWorkspace(wsDir, outsideFile)).toBe(false)
 
       // safeReadFile rejects outside file
-      if (typeof trackerMod.safeReadFile === 'function') {
-        const outsideContent = trackerMod.safeReadFile(outsideFile, wsDir)
-        expect(outsideContent).toBeNull()
-      }
+      expect(typeof trackerMod.safeReadFile, 'trackerMod.safeReadFile must be exported').toBe('function')
+      const outsideContent = trackerMod.safeReadFile(outsideFile, wsDir)
+      expect(outsideContent).toBeNull()
     })
 
-    it('T1-R5-03: Subagent streaming chunk events route strictly with subagentId', () => {
+    it('T1-R5-03: Subagent streaming chunk events route strictly with subagentId', async () => {
+      const subAgent = require(SUBAGENT_PATH)
+      expect(typeof subAgent.runParallel, 'subAgent.runParallel must be exported').toBe('function')
+
       const events = []
-      const mockCallbacks = {
-        onSubagentEvent: (evt) => events.push(evt),
+      const db = database.getDatabase()
+
+      await subAgent.runParallel(
+        [
+          { task: 'Analyze task 1', read_only: true },
+          { task: 'Analyze task 2', read_only: true },
+        ],
+        {
+          db,
+          provider: { api_format: 'openai' },
+          model: { model_name: 'test-model' },
+          onSubagentEvent: (evt) => events.push(evt),
+        }
+      )
+
+      expect(events.length).toBeGreaterThanOrEqual(2)
+      for (const evt of events) {
+        expect(evt.id).toMatch(/^sa_\d+_[a-z0-9-]+_\d+$/)
       }
-
-      // Simulate streaming from two subagents
-      const sa1Id = 'sa_101_worker'
-      const sa2Id = 'sa_102_researcher'
-
-      mockCallbacks.onSubagentEvent({ type: 'chunk', id: sa1Id, delta: 'Hello from 1' })
-      mockCallbacks.onSubagentEvent({ type: 'chunk', id: sa2Id, delta: 'Hello from 2' })
-
-      expect(events.length).toBe(2)
-      expect(events[0].id).toBe(sa1Id)
-      expect(events[0].delta).toBe('Hello from 1')
-      expect(events[1].id).toBe(sa2Id)
-      expect(events[1].delta).toBe('Hello from 2')
+      const startEvents = events.filter(e => e.type === 'start')
+      expect(startEvents.length).toBe(2)
+      expect(startEvents[0].id).not.toBe(startEvents[1].id)
     })
 
     it('T1-R5-04: Subagent captures pre-execution snapshot of write paths', () => {
@@ -584,7 +601,8 @@ describe('Tier 1: Feature Coverage', () => {
       const f1 = snapshot.files.find(f => f.path === existingFile)
       expect(f1).toBeDefined()
       expect(f1.existed).toBe(true)
-      expect(f1.content).toBe('Pre-existing content')
+      expect(Buffer.isBuffer(f1.content)).toBe(true)
+      expect(f1.content.toString('utf8')).toBe('Pre-existing content')
 
       const f2 = snapshot.files.find(f => f.path === newFile)
       expect(f2).toBeDefined()
@@ -624,46 +642,33 @@ describe('Tier 1: Feature Coverage', () => {
 describe('Tier 2: Boundary & Corner Cases', () => {
 
   describe('R1 Boundaries: Types & JSDoc', () => {
-    it('T2-R1-01: Session interface tolerates null/optional persona_id, parent_session_id, and config', () => {
-      const minimalSession = {
-        id: 1,
-        title: null,
-        persona_id: null,
-        parent_session_id: null,
-        pinned: 0,
-        config: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }
-      expect(minimalSession.id).toBe(1)
-      expect(minimalSession.persona_id).toBeNull()
+    it('T2-R1-01: domain.d.ts declares Session interface with optional/nullable persona_id, parent_session_id, and config', () => {
+      const dtsPath = path.resolve(__dirname, '../types/domain.d.ts')
+      expect(fs.existsSync(dtsPath)).toBe(true)
+      const content = fs.readFileSync(dtsPath, 'utf8')
+      expect(content).toContain('export interface Session')
+      expect(content).toContain('persona_id: number | null')
+      expect(content).toContain('parent_session_id?: number | null')
+      expect(content).toContain('config?: string | Record<string, unknown> | null')
     })
 
-    it('T2-R1-02: Message interface accommodates token_count: 0, extreme latencies, and fallback status', () => {
-      const edgeMessage = {
-        id: 999999999,
-        session_id: 1,
-        role: 'assistant',
-        content: '',
-        token_count: 0,
-        latency_ms: 1000000,
-        status: 'fallback',
-        error_message: null,
-      }
-      expect(edgeMessage.token_count).toBe(0)
-      expect(edgeMessage.status).toBe('fallback')
+    it('T2-R1-02: domain.d.ts declares Message interface with token_count, status, and role types', () => {
+      const dtsPath = path.resolve(__dirname, '../types/domain.d.ts')
+      const content = fs.readFileSync(dtsPath, 'utf8')
+      expect(content).toContain('export interface Message')
+      expect(content).toContain('export type MessageRole')
+      expect(content).toContain('export type MessageStatus')
+      expect(content).toContain('token_count?: number | null')
+      expect(content).toContain('latency_ms?: number | null')
     })
 
-    it('T2-R1-03: ToolResult preserves complex error objects, JSON strings, and ANSI codes verbatim', () => {
-      const errorContent = '\u001b[31mError:\u001b[0m SyntaxError: {"token": "unclosed", "pos": 42}\n\0'
-      const toolResult = {
-        tool_call_id: 'call_123',
-        name: 'run_command',
-        error: errorContent,
-        isError: true,
-      }
-      expect(toolResult.error).toBe(errorContent)
-      expect(toolResult.isError).toBe(true)
+    it('T2-R1-03: domain.d.ts declares ToolResult interface with error, isError, and tool_call_id', () => {
+      const dtsPath = path.resolve(__dirname, '../types/domain.d.ts')
+      const content = fs.readFileSync(dtsPath, 'utf8')
+      expect(content).toContain('export interface ToolResult')
+      expect(content).toContain('tool_call_id?: string')
+      expect(content).toContain('isError?: boolean')
+      expect(content).toContain('error?: string | null')
     })
 
     it('T2-R1-04: Requiring modelRouter in CommonJS does not throw even if ts-node is absent', () => {
@@ -679,35 +684,32 @@ describe('Tier 2: Boundary & Corner Cases', () => {
   describe('R2 Boundaries: ELO Routing', () => {
     it('T2-R2-01: inferToolLoopPhase defaults safely to spec when tool list is empty at depth 0', () => {
       const modelRouter = require(MODEL_ROUTER_PATH)
-      if (typeof modelRouter.inferToolLoopPhase === 'function') {
-        const phase = modelRouter.inferToolLoopPhase({ depth: 0, lastToolCalls: [] })
-        expect(phase).toBe('spec')
-      }
+      expect(typeof modelRouter.inferToolLoopPhase, 'modelRouter.inferToolLoopPhase must be exported').toBe('function')
+      const phase = modelRouter.inferToolLoopPhase({ depth: 0, lastToolCalls: [] })
+      expect(phase).toBe('spec')
     })
 
     it('T2-R2-02: inferToolLoopPhase gives worker priority when read and write tools are combined', () => {
       const modelRouter = require(MODEL_ROUTER_PATH)
-      if (typeof modelRouter.inferToolLoopPhase === 'function') {
-        const phase = modelRouter.inferToolLoopPhase({
-          depth: 2,
-          lastToolCalls: ['read_file', 'edit_file', 'grep_search'],
-        })
-        expect(phase).toBe('worker')
-      }
+      expect(typeof modelRouter.inferToolLoopPhase, 'modelRouter.inferToolLoopPhase must be exported').toBe('function')
+      const phase = modelRouter.inferToolLoopPhase({
+        depth: 2,
+        lastToolCalls: ['read_file', 'edit_file', 'grep_search'],
+      })
+      expect(phase).toBe('worker')
     })
 
     it('T2-R2-03: resolvePhaseTarget falls back to primary model when model_score table is empty', () => {
       const modelRouter = require(MODEL_ROUTER_PATH)
-      if (typeof modelRouter.resolvePhaseTarget === 'function') {
-        const db = database.getDatabase()
-        db.prepare("INSERT OR REPLACE INTO provider (id, name, api_url, enabled, api_format) VALUES (99, 'TestP', 'http://localhost', 1, 'openai')").run()
-        db.prepare("INSERT OR REPLACE INTO model (id, provider_id, model_name, is_primary) VALUES (990, 99, 'default-primary', 1)").run()
-        const allModels = db.prepare("SELECT m.*, p.name as provider_name, p.api_url, p.api_key, p.api_format FROM model m JOIN provider p ON m.provider_id = p.id").all()
+      expect(typeof modelRouter.resolvePhaseTarget, 'modelRouter.resolvePhaseTarget must be exported').toBe('function')
+      const db = database.getDatabase()
+      db.prepare("INSERT OR REPLACE INTO provider (id, name, api_url, enabled, api_format) VALUES (99, 'TestP', 'http://localhost', 1, 'openai')").run()
+      db.prepare("INSERT OR REPLACE INTO model (id, provider_id, model_name, is_primary) VALUES (990, 99, 'default-primary', 1)").run()
+      const allModels = db.prepare("SELECT m.*, p.name as provider_name, p.api_url, p.api_key, p.api_format FROM model m JOIN provider p ON m.provider_id = p.id").all()
 
-        const target = modelRouter.resolvePhaseTarget('worker', { db, allModels })
-        expect(target).toBeDefined()
-        expect(target.model).toBeDefined()
-      }
+      const target = modelRouter.resolvePhaseTarget('worker', { db, allModels })
+      expect(target).toBeDefined()
+      expect(target.model).toBeDefined()
     })
 
     it('T2-R2-04: resolvePhaseTarget ignores disabled providers even if model has highest ELO', () => {
@@ -731,102 +733,156 @@ describe('Tier 2: Boundary & Corner Cases', () => {
 
     it('T2-R2-05: inferToolLoopPhase handles extreme depth (>100) deterministically', () => {
       const modelRouter = require(MODEL_ROUTER_PATH)
-      if (typeof modelRouter.inferToolLoopPhase === 'function') {
-        const phase = modelRouter.inferToolLoopPhase({ depth: 150, lastToolCalls: ['read_file'] })
-        expect(['spec', 'worker', 'validator']).toContain(phase)
-      }
+      expect(typeof modelRouter.inferToolLoopPhase, 'modelRouter.inferToolLoopPhase must be exported').toBe('function')
+      const phase = modelRouter.inferToolLoopPhase({ depth: 150, lastToolCalls: ['read_file'] })
+      expect(['spec', 'worker', 'validator']).toContain(phase)
     })
   })
 
   describe('R3 Boundaries: Compaction & Rehydration', () => {
     it('T2-R3-01: Rehydration returns empty snippet list when session has zero file accesses', () => {
       const sessionContext = require(SESSION_CONTEXT_PATH)
-      if (typeof sessionContext.getActiveFileSnippets === 'function') {
-        const snippets = sessionContext.getActiveFileSnippets(99999, { maxFiles: 3 })
-        expect(snippets).toEqual([])
-      }
+      expect(typeof sessionContext.getActiveFileSnippets, 'sessionContext.getActiveFileSnippets must be exported').toBe('function')
+      const snippets = sessionContext.getActiveFileSnippets(99999, { maxFiles: 3 })
+      expect(snippets).toEqual([])
     })
 
     it('T2-R3-02: Rehydration tolerates active file that was deleted before compaction', () => {
       const sessionContext = require(SESSION_CONTEXT_PATH)
-      if (typeof sessionContext.getActiveFileSnippets === 'function' && typeof sessionContext.recordFileActivity === 'function') {
-        const wsDir = createTempWorkspace('r3-del-')
-        const ghostFile = path.join(wsDir, 'ghost.txt')
-        sessionContext.recordFileActivity(404, ghostFile, 'edit')
-        // File does not exist on disk
-        expect(() => {
-          const snippets = sessionContext.getActiveFileSnippets(404, { wsRoot: wsDir })
-          expect(Array.isArray(snippets)).toBe(true)
-        }).not.toThrow()
-      }
+      expect(typeof sessionContext.getActiveFileSnippets, 'sessionContext.getActiveFileSnippets must be exported').toBe('function')
+      expect(typeof sessionContext.recordFileActivity, 'sessionContext.recordFileActivity must be exported').toBe('function')
+      const wsDir = createTempWorkspace('r3-del-')
+      const ghostFile = path.join(wsDir, 'ghost.txt')
+      sessionContext.recordFileActivity(404, ghostFile, 'edit')
+      // File does not exist on disk
+      expect(() => {
+        const snippets = sessionContext.getActiveFileSnippets(404, { wsRoot: wsDir })
+        expect(Array.isArray(snippets)).toBe(true)
+      }).not.toThrow()
     })
 
     it('T2-R3-03: Rehydration strictly limits file snippet to 80 lines for files with 2000 lines', () => {
       const sessionContext = require(SESSION_CONTEXT_PATH)
-      if (typeof sessionContext.getActiveFileSnippets === 'function' && typeof sessionContext.recordFileActivity === 'function') {
-        const wsDir = createTempWorkspace('r3-giant-')
-        const giantFile = path.join(wsDir, 'giant.txt')
-        fs.writeFileSync(giantFile, 'x\n'.repeat(2000), 'utf8')
-        sessionContext.recordFileActivity(505, giantFile, 'edit')
+      expect(typeof sessionContext.getActiveFileSnippets, 'sessionContext.getActiveFileSnippets must be exported').toBe('function')
+      expect(typeof sessionContext.recordFileActivity, 'sessionContext.recordFileActivity must be exported').toBe('function')
+      const wsDir = createTempWorkspace('r3-giant-')
+      const giantFile = path.join(wsDir, 'giant.txt')
+      fs.writeFileSync(giantFile, 'x\n'.repeat(2000), 'utf8')
+      sessionContext.recordFileActivity(505, giantFile, 'edit')
 
-        const snippets = sessionContext.getActiveFileSnippets(505, { wsRoot: wsDir, maxLinesPerFile: 80 })
-        const entry = snippets.find(s => s.path === giantFile || s.path.includes('giant.txt'))
-        if (entry) {
-          const lineCount = entry.snippet.split('\n').length
-          expect(lineCount).toBeLessThanOrEqual(85)
-        }
-      }
+      const snippets = sessionContext.getActiveFileSnippets(505, { wsRoot: wsDir, maxLinesPerFile: 80 })
+      const entry = snippets.find(s => s.path === giantFile || s.path.includes('giant.txt'))
+      expect(entry).toBeDefined()
+      const lineCount = entry.snippet.split('\n').length
+      expect(lineCount).toBeLessThanOrEqual(85)
     })
 
     it('T2-R3-04: Compaction handles session with null plan gracefully', async () => {
       const compaction = require(COMPACTION_PATH)
-      const db = database.getDatabase()
-      const big = 'x'.repeat(5000)
+      const providerAdapter = require('../electron/llm/providerAdapter')
+      const origCompleteChat = providerAdapter.completeChat
+      providerAdapter.completeChat = async () => '## Goal\nTest goal\n## Constraints\nNone\n## Progress\n- [x] Step 1\n## Key Decisions\nNone\n## Next Steps\nContinue\n## Critical Context\nNone'
 
-      const messages = [
-        { role: 'system', content: 'sys' },
-        ...Array.from({ length: 58 }, (_, i) => ({
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          content: `Payload msg ${i} ` + big,
-        })),
-      ]
+      try {
+        const db = database.getDatabase()
+        const big = 'x'.repeat(2000)
 
-      const compacted = await compaction.maybeCompact({
-        db,
-        sessionId: 606,
-        provider: { api_url: 'http://test', api_format: 'openai' },
-        model: { model_name: 'test' },
-        messages,
-        budget: 1_000_000,
-        force: true,
-      })
-      expect(Array.isArray(compacted)).toBe(true)
-      expect(compacted.length).toBeLessThan(messages.length)
+        const messages = [
+          { role: 'system', content: 'sys' },
+          { role: 'user', content: 'Perform refactor' },
+          ...Array.from({ length: 39 }, (_, i) => ({
+            role: 'assistant',
+            content: `Payload msg ${i} ` + big,
+          })),
+        ]
+
+        const compacted = await compaction.maybeCompact({
+          db,
+          sessionId: 606,
+          provider: { api_url: 'http://test', api_format: 'openai' },
+          model: { model_name: 'test' },
+          messages,
+          budget: 12000,
+          force: true,
+        })
+        expect(Array.isArray(compacted)).toBe(true)
+        expect(compacted.length).toBeLessThan(messages.length)
+      } finally {
+        providerAdapter.completeChat = origCompleteChat
+      }
     })
 
     it('T2-R3-05: Compaction with small budget enforces headroom and avoids token overflow', async () => {
       const compaction = require(COMPACTION_PATH)
-      const db = database.getDatabase()
-      const big = 'x'.repeat(5000)
+      const contextBudget = require(CONTEXT_BUDGET_PATH)
+      const providerAdapter = require('../electron/llm/providerAdapter')
+      const origCompleteChat = providerAdapter.completeChat
+      providerAdapter.completeChat = async () => '## Goal\nTest goal\n## Constraints\nNone\n## Progress\n- [x] Step 1\n## Key Decisions\nNone\n## Next Steps\nContinue\n## Critical Context\nNone'
 
-      const messages = [
-        { role: 'system', content: 'sys' },
-        ...Array.from({ length: 58 }, (_, i) => ({
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          content: `Message ${i} with substantial token payload ` + big,
-        })),
-      ]
-      const compacted = await compaction.maybeCompact({
-        db,
-        sessionId: 707,
-        provider: { api_url: 'http://test', api_format: 'openai' },
-        model: { model_name: 'test' },
-        messages,
-        budget: 1_000_000,
-        force: true,
-      })
-      expect(Array.isArray(compacted)).toBe(true)
-      expect(compacted.length).toBeLessThan(messages.length)
+      try {
+        const db = database.getDatabase()
+        const big = 'x'.repeat(2000)
+
+        const messages = [
+          { role: 'system', content: 'sys' },
+          { role: 'user', content: 'Start task' },
+          ...Array.from({ length: 39 }, (_, i) => ({
+            role: 'assistant',
+            content: `Message ${i} with substantial token payload ` + big,
+          })),
+        ]
+        const budget = 8000
+        const compacted = await compaction.maybeCompact({
+          db,
+          sessionId: 707,
+          provider: { api_url: 'http://test', api_format: 'openai' },
+          model: { model_name: 'test' },
+          messages,
+          budget,
+          force: true,
+        })
+        expect(Array.isArray(compacted)).toBe(true)
+        expect(compacted.length).toBeLessThan(messages.length)
+        const budgetCalc = contextBudget.calculateBudget(compacted)
+        expect(budgetCalc.totalTokens).toBeLessThanOrEqual(budget)
+      } finally {
+        providerAdapter.completeChat = origCompleteChat
+      }
+    })
+
+    it('T2-R3-06: Summarizer failure activates fallback truncation strictly shorter than input', async () => {
+      const compaction = require(COMPACTION_PATH)
+      const providerAdapter = require('../electron/llm/providerAdapter')
+      const origCompleteChat = providerAdapter.completeChat
+      providerAdapter.completeChat = async () => { throw new Error('Simulated LLM network failure') }
+
+      try {
+        const db = database.getDatabase()
+        const big = 'x'.repeat(1000)
+        const messages = [
+          { role: 'system', content: 'sys' },
+          { role: 'user', content: 'Execute tasks' },
+          ...Array.from({ length: 29 }, (_, i) => ({
+            role: 'assistant',
+            content: `Turn ${i} ` + big,
+          })),
+        ]
+        const compacted = await compaction.maybeCompact({
+          db,
+          sessionId: 708,
+          provider: { api_url: 'http://test', api_format: 'openai' },
+          model: { model_name: 'test' },
+          messages,
+          budget: 5000,
+          force: false,
+        })
+        expect(Array.isArray(compacted)).toBe(true)
+        expect(compacted.length).toBeLessThan(messages.length)
+        const sysMsg = compacted.find(m => m.role === 'system' && m.content.includes('could not be summarized'))
+        expect(sysMsg).toBeDefined()
+      } finally {
+        providerAdapter.completeChat = origCompleteChat
+      }
     })
   })
 
@@ -886,48 +942,47 @@ describe('Tier 2: Boundary & Corner Cases', () => {
   describe('R5 Boundaries: Hardening & Containment', () => {
     it('T2-R5-01: computeContentHash computes standard SHA-256 for empty string', () => {
       const trackerMod = require(TOOL_LOOP_TRACKER_PATH)
-      if (typeof trackerMod.computeContentHash === 'function') {
-        const hash = trackerMod.computeContentHash('')
-        expect(hash).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
-      }
+      expect(typeof trackerMod.computeContentHash, 'trackerMod.computeContentHash must be exported').toBe('function')
+      const hash = trackerMod.computeContentHash('')
+      expect(hash).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
     })
 
     it('T2-R5-02: computeContentHash handles binary Buffer input without encoding corruption', () => {
       const trackerMod = require(TOOL_LOOP_TRACKER_PATH)
-      if (typeof trackerMod.computeContentHash === 'function') {
-        const buf = Buffer.from([0x00, 0xff, 0x88, 0x12])
-        const hash = trackerMod.computeContentHash(buf)
-        const expected = crypto.createHash('sha256').update(buf).digest('hex')
-        expect(hash).toBe(expected)
-      }
+      expect(typeof trackerMod.computeContentHash, 'trackerMod.computeContentHash must be exported').toBe('function')
+      const buf = Buffer.from([0x00, 0xff, 0x88, 0x12])
+      const hash = trackerMod.computeContentHash(buf)
+      const expected = crypto.createHash('sha256').update(buf).digest('hex')
+      expect(hash).toBe(expected)
     })
 
     it('T2-R5-03: isPathInsideWorkspace rejects path traversal tricks (..\\..)', () => {
       const trackerMod = require(TOOL_LOOP_TRACKER_PATH)
-      if (typeof trackerMod.isPathInsideWorkspace === 'function') {
-        const ws = path.resolve('d:/Aether')
-        expect(trackerMod.isPathInsideWorkspace(ws, 'd:/Aether/app/src/index.ts')).toBe(true)
-        expect(trackerMod.isPathInsideWorkspace(ws, 'd:/Aether/../secret.txt')).toBe(false)
-        expect(trackerMod.isPathInsideWorkspace(ws, 'c:/windows/system32')).toBe(false)
-      }
+      expect(typeof trackerMod.isPathInsideWorkspace, 'trackerMod.isPathInsideWorkspace must be exported').toBe('function')
+      const wsDir = createTempWorkspace('r5-ws-')
+      const insideFile = path.join(wsDir, 'app', 'src', 'index.ts')
+      const outsideFile = path.join(wsDir, '..', 'secret.txt')
+      const outsideAbs = path.resolve(wsDir, '..', 'other-dir')
+      expect(trackerMod.isPathInsideWorkspace(wsDir, insideFile)).toBe(true)
+      expect(trackerMod.isPathInsideWorkspace(wsDir, outsideFile)).toBe(false)
+      expect(trackerMod.isPathInsideWorkspace(wsDir, outsideAbs)).toBe(false)
     })
 
     it('T2-R5-04: Subagent rollback handles empty snapshot safely without exceptions', () => {
       const subAgent = require(SUBAGENT_PATH)
-      if (typeof subAgent.rollbackBeforeSnapshot === 'function') {
-        expect(() => {
-          subAgent.rollbackBeforeSnapshot(null)
-          subAgent.rollbackBeforeSnapshot({ files: [] })
-        }).not.toThrow()
-      }
+      expect(typeof subAgent.rollbackBeforeSnapshot, 'subAgent.rollbackBeforeSnapshot must be exported').toBe('function')
+      expect(() => {
+        subAgent.rollbackBeforeSnapshot(null)
+        subAgent.rollbackBeforeSnapshot({ files: [] })
+      }).not.toThrow()
     })
 
     it('T2-R5-05: Subagent snapshot capture ignores null or undefined paths', () => {
       const subAgent = require(SUBAGENT_PATH)
-      if (typeof subAgent.captureBeforeSnapshot === 'function') {
-        const snap = subAgent.captureBeforeSnapshot([null, undefined, ''], 'd:/Aether')
-        expect(snap === null || snap.files.length === 0).toBe(true)
-      }
+      expect(typeof subAgent.captureBeforeSnapshot, 'subAgent.captureBeforeSnapshot must be exported').toBe('function')
+      const wsDir = createTempWorkspace('r5-snap-null-')
+      const snap = subAgent.captureBeforeSnapshot([null, undefined, ''], wsDir)
+      expect(snap === null || snap.files.length === 0).toBe(true)
     })
   })
 })
@@ -940,12 +995,13 @@ describe('Tier 3: Cross-Feature Combinations', () => {
   it('T3-INT-01: R2 (ELO Routing) + R5 (File Hash Tracking) across tool loop phases', () => {
     const modelRouter = require(MODEL_ROUTER_PATH)
     const trackerMod = require(TOOL_LOOP_TRACKER_PATH)
+    expect(typeof modelRouter.inferToolLoopPhase, 'modelRouter.inferToolLoopPhase must be exported').toBe('function')
 
     const wsDir = createTempWorkspace('t3-r2-r5-')
     const tracker = trackerMod.createTurnFileTracker(wsDir)
 
     // Phase 1: Spec exploration
-    let phase = modelRouter.inferToolLoopPhase ? modelRouter.inferToolLoopPhase({ depth: 0, lastToolCalls: ['read_file'] }) : 'spec'
+    let phase = modelRouter.inferToolLoopPhase({ depth: 0, lastToolCalls: ['read_file'] })
     expect(phase).toBe('spec')
 
     // Phase 2: Worker modification
@@ -955,11 +1011,11 @@ describe('Tier 3: Cross-Feature Combinations', () => {
     fs.writeFileSync(file, 'let v = 2;\n', 'utf8')
     tracker.afterTool('edit_file', { path: file })
 
-    phase = modelRouter.inferToolLoopPhase ? modelRouter.inferToolLoopPhase({ depth: 1, lastToolCalls: ['edit_file'] }) : 'worker'
+    phase = modelRouter.inferToolLoopPhase({ depth: 1, lastToolCalls: ['edit_file'] })
     expect(phase).toBe('worker')
 
     // Phase 3: Validator verification
-    phase = modelRouter.inferToolLoopPhase ? modelRouter.inferToolLoopPhase({ depth: 2, isVerifying: true }) : 'validator'
+    phase = modelRouter.inferToolLoopPhase({ depth: 2, isVerifying: true })
     expect(phase).toBe('validator')
 
     const summary = tracker.getSummary()
@@ -969,45 +1025,54 @@ describe('Tier 3: Cross-Feature Combinations', () => {
 
   it('T3-INT-02: R3 (Compaction) + R4 (Forking) - compacting a branched session preserves branch isolation', async () => {
     const compaction = require(COMPACTION_PATH)
+    const providerAdapter = require('../electron/llm/providerAdapter')
+    const origCompleteChat = providerAdapter.completeChat
+    providerAdapter.completeChat = async () => '## Goal\nFork goal\n## Constraints\nNone\n## Progress\n- [x] Done\n## Key Decisions\nNone\n## Next Steps\nNext\n## Critical Context\nNone'
 
-    // 1. Create parent session with 3 messages
-    const parent = database.createSession({ title: 'Parent' })
-    const pid = Number(parent.lastInsertRowid)
-    database.addMessage({ session_id: pid, role: 'user', content: 'Parent turn 1' })
-    database.addMessage({ session_id: pid, role: 'assistant', content: 'Parent turn 1 a' })
-    const mCutoff = database.addMessage({ session_id: pid, role: 'user', content: 'Parent turn 2 (Cutoff)' })
+    try {
+      // 1. Create parent session with 3 messages
+      const parent = database.createSession({ title: 'Parent' })
+      const pid = Number(parent.lastInsertRowid)
+      database.addMessage({ session_id: pid, role: 'user', content: 'Parent turn 1' })
+      database.addMessage({ session_id: pid, role: 'assistant', content: 'Parent turn 1 a' })
+      const mCutoff = database.addMessage({ session_id: pid, role: 'user', content: 'Parent turn 2 (Cutoff)' })
 
-    // 2. Fork at mCutoff
-    const fork = database.forkSession(pid, 'Child Branch', Number(mCutoff.lastInsertRowid))
-    const cid = fork.id
+      // 2. Fork at mCutoff
+      const fork = database.forkSession(pid, 'Child Branch', Number(mCutoff.lastInsertRowid))
+      const cid = fork.id
 
-    // 3. Child adds new messages and compacts
-    const big = 'x'.repeat(5000)
-    for (let i = 0; i < 58; i++) {
-      database.addMessage({ session_id: cid, role: i % 2 === 0 ? 'assistant' : 'user', content: `Child detailed turn ${i} ` + big })
+      // 3. Child adds new messages and compacts
+      const big = 'x'.repeat(2000)
+      for (let i = 0; i < 40; i++) {
+        database.addMessage({ session_id: cid, role: i % 2 === 0 ? 'assistant' : 'user', content: `Child detailed turn ${i} ` + big })
+      }
+
+      const childMsgs = database.getMessages(cid)
+      expect(childMsgs.length).toBeGreaterThan(10)
+
+      const compacted = await compaction.maybeCompact({
+        db: database.getDatabase(),
+        sessionId: cid,
+        provider: { api_url: 'http://test', api_format: 'openai' },
+        model: { model_name: 'test' },
+        messages: childMsgs,
+        budget: 1_000_000,
+        force: true,
+      })
+
+      expect(compacted).not.toBeNull()
+      expect(compacted.length).toBeLessThan(childMsgs.length)
+      const parentMsgsAfter = database.getMessages(pid)
+      expect(parentMsgsAfter.length).toBe(3) // Parent remains pristine
+    } finally {
+      providerAdapter.completeChat = origCompleteChat
     }
-
-    const childMsgs = database.getMessages(cid)
-    expect(childMsgs.length).toBeGreaterThan(10)
-
-    const compacted = await compaction.maybeCompact({
-      db: database.getDatabase(),
-      sessionId: cid,
-      provider: { api_url: 'http://test', api_format: 'openai' },
-      model: { model_name: 'test' },
-      messages: childMsgs,
-      budget: 1_000_000,
-      force: true,
-    })
-
-    expect(compacted).not.toBeNull()
-    expect(compacted.length).toBeLessThan(childMsgs.length)
-    const parentMsgsAfter = database.getMessages(pid)
-    expect(parentMsgsAfter.length).toBe(3) // Parent remains pristine
   })
 
   it('T3-INT-03: R4 (Forking) + R5 (Subagent Rollback) - subagent error rollback in branched session does not affect parent', () => {
     const subAgent = require(SUBAGENT_PATH)
+    expect(typeof subAgent.captureBeforeSnapshot, 'subAgent.captureBeforeSnapshot must be exported').toBe('function')
+    expect(typeof subAgent.rollbackBeforeSnapshot, 'subAgent.rollbackBeforeSnapshot must be exported').toBe('function')
     const wsDir = createTempWorkspace('t3-r4-r5-')
 
     const parent = database.createSession({ title: 'Parent Workspace Session' })
@@ -1017,14 +1082,12 @@ describe('Tier 3: Cross-Feature Combinations', () => {
     fs.writeFileSync(sharedFile, 'export const version = 1;\n', 'utf8')
 
     // Child subagent captures snapshot and corrupts
-    if (typeof subAgent.captureBeforeSnapshot === 'function' && typeof subAgent.rollbackBeforeSnapshot === 'function') {
-      const snap = subAgent.captureBeforeSnapshot([sharedFile], wsDir)
-      fs.writeFileSync(sharedFile, 'syntax error: broken code\n', 'utf8')
+    const snap = subAgent.captureBeforeSnapshot([sharedFile], wsDir)
+    fs.writeFileSync(sharedFile, 'syntax error: broken code\n', 'utf8')
 
-      // Error triggers rollback
-      subAgent.rollbackBeforeSnapshot(snap)
-      expect(fs.readFileSync(sharedFile, 'utf8')).toBe('export const version = 1;\n')
-    }
+    // Error triggers rollback
+    subAgent.rollbackBeforeSnapshot(snap)
+    expect(fs.readFileSync(sharedFile, 'utf8')).toBe('export const version = 1;\n')
   })
 })
 
@@ -1040,54 +1103,64 @@ describe('Tier 4: Real-World Application Scenarios', () => {
     const modelRouter = require(MODEL_ROUTER_PATH)
     const compaction = require(COMPACTION_PATH)
     const trackerMod = require(TOOL_LOOP_TRACKER_PATH)
+    const providerAdapter = require('../electron/llm/providerAdapter')
+    const origCompleteChat = providerAdapter.completeChat
+    providerAdapter.completeChat = async () => '## Goal\nWorkflow goal\n## Constraints\nNone\n## Progress\n- [x] Step 1\n## Key Decisions\nNone\n## Next Steps\nNext\n## Critical Context\nNone'
 
-    const sessionId = 888
-    const tracker = trackerMod.createTurnFileTracker(wsDir)
+    try {
+      expect(typeof modelRouter.inferToolLoopPhase, 'modelRouter.inferToolLoopPhase must be exported').toBe('function')
 
-    // Turn 1: Spec Phase (Exploration)
-    const p1 = modelRouter.inferToolLoopPhase ? modelRouter.inferToolLoopPhase({ depth: 0, lastToolCalls: ['read_file', 'grep_search'], isPlanning: true }) : 'spec'
-    expect(p1).toBe('spec')
+      const sessionId = 888
+      const tracker = trackerMod.createTurnFileTracker(wsDir)
 
-    // Turn 2: Worker Phase (Modify file)
-    const targetSource = path.join(wsDir, 'feature.js')
-    fs.writeFileSync(targetSource, 'function run() { return 1; }\n', 'utf8')
-    tracker.beforeTool('edit_file', { path: targetSource })
-    fs.writeFileSync(targetSource, 'function run() { return 2; }\n', 'utf8')
-    tracker.afterTool('edit_file', { path: targetSource })
+      // Turn 1: Spec Phase (Exploration)
+      const p1 = modelRouter.inferToolLoopPhase({ depth: 0, lastToolCalls: ['read_file', 'grep_search'], isPlanning: true })
+      expect(p1).toBe('spec')
 
-    const p2 = modelRouter.inferToolLoopPhase ? modelRouter.inferToolLoopPhase({ depth: 1, lastToolCalls: ['edit_file'] }) : 'worker'
-    expect(p2).toBe('worker')
+      // Turn 2: Worker Phase (Modify file)
+      const targetSource = path.join(wsDir, 'feature.js')
+      fs.writeFileSync(targetSource, 'function run() { return 1; }\n', 'utf8')
+      tracker.beforeTool('edit_file', { path: targetSource })
+      fs.writeFileSync(targetSource, 'function run() { return 2; }\n', 'utf8')
+      tracker.afterTool('edit_file', { path: targetSource })
 
-    // Context overflow -> Compaction with rehydration
-    const big = 'x'.repeat(5000)
-    const convo = [
-      { role: 'system', content: 'system' },
-      ...Array.from({ length: 58 }, (_, i) => ({
-        role: i % 2 === 0 ? 'user' : 'assistant',
-        content: `Implementation conversation turn ${i} ` + big,
-      })),
-    ]
+      const p2 = modelRouter.inferToolLoopPhase({ depth: 1, lastToolCalls: ['edit_file'] })
+      expect(p2).toBe('worker')
 
-    const compacted = await compaction.maybeCompact({
-      db,
-      sessionId,
-      provider: { api_url: 'http://test', api_format: 'openai' },
-      model: { model_name: 'test' },
-      messages: convo,
-      budget: 1_000_000,
-      force: true,
-      wsRoot: wsDir,
-    })
-    expect(compacted).not.toBeNull()
-    expect(compacted.length).toBeLessThan(convo.length)
+      // Context overflow -> Compaction with rehydration
+      const big = 'x'.repeat(2000)
+      const convo = [
+        { role: 'system', content: 'system' },
+        { role: 'user', content: 'Start implementation' },
+        ...Array.from({ length: 39 }, (_, i) => ({
+          role: 'assistant',
+          content: `Implementation conversation turn ${i} ` + big,
+        })),
+      ]
 
-    // Turn 3: Validator Phase (Testing)
-    const p3 = modelRouter.inferToolLoopPhase ? modelRouter.inferToolLoopPhase({ depth: 2, isVerifying: true }) : 'validator'
-    expect(p3).toBe('validator')
+      const compacted = await compaction.maybeCompact({
+        db,
+        sessionId,
+        provider: { api_url: 'http://test', api_format: 'openai' },
+        model: { model_name: 'test' },
+        messages: convo,
+        budget: 12000,
+        force: true,
+        wsRoot: wsDir,
+      })
+      expect(compacted).not.toBeNull()
+      expect(compacted.length).toBeLessThan(convo.length)
 
-    // Turn Summary verifies exact file diffs
-    const summary = tracker.getSummary()
-    expect(summary.fileCount).toBe(1)
+      // Turn 3: Validator Phase (Testing)
+      const p3 = modelRouter.inferToolLoopPhase({ depth: 2, isVerifying: true })
+      expect(p3).toBe('validator')
+
+      // Turn Summary verifies exact file diffs
+      const summary = tracker.getSummary()
+      expect(summary.fileCount).toBe(1)
+    } finally {
+      providerAdapter.completeChat = origCompleteChat
+    }
   })
 
   it('T4-SCN-02: Exploratory Branching via /fork preserving prefix cache', () => {
@@ -1116,6 +1189,8 @@ describe('Tier 4: Real-World Application Scenarios', () => {
 
   it('T4-SCN-03: Resilient Subagent Refactoring with Crash Isolation and Rollback', () => {
     const subAgent = require(SUBAGENT_PATH)
+    expect(typeof subAgent.captureBeforeSnapshot, 'subAgent.captureBeforeSnapshot must be exported').toBe('function')
+    expect(typeof subAgent.rollbackBeforeSnapshot, 'subAgent.rollbackBeforeSnapshot must be exported').toBe('function')
     const wsDir = createTempWorkspace('t4-scenario3-')
 
     const fileA = path.join(wsDir, 'moduleA.js')
@@ -1123,21 +1198,19 @@ describe('Tier 4: Real-World Application Scenarios', () => {
     fs.writeFileSync(fileA, '// Module A stable\n', 'utf8')
     fs.writeFileSync(fileB, '// Module B stable\n', 'utf8')
 
-    if (typeof subAgent.captureBeforeSnapshot === 'function' && typeof subAgent.rollbackBeforeSnapshot === 'function') {
-      // Subagent 1 succeeds on Module A
-      const snapA = subAgent.captureBeforeSnapshot([fileA], wsDir)
-      fs.writeFileSync(fileA, '// Module A upgraded\n', 'utf8')
+    // Subagent 1 succeeds on Module A
+    const snapA = subAgent.captureBeforeSnapshot([fileA], wsDir)
+    fs.writeFileSync(fileA, '// Module A upgraded\n', 'utf8')
 
-      // Subagent 2 starts on Module B, crashes midway
-      const snapB = subAgent.captureBeforeSnapshot([fileB], wsDir)
-      fs.writeFileSync(fileB, '// Incomplete broken write\n', 'utf8')
+    // Subagent 2 starts on Module B, crashes midway
+    const snapB = subAgent.captureBeforeSnapshot([fileB], wsDir)
+    fs.writeFileSync(fileB, '// Incomplete broken write\n', 'utf8')
 
-      // Error handler catches subagent 2 crash and rolls back Module B only
-      subAgent.rollbackBeforeSnapshot(snapB)
+    // Error handler catches subagent 2 crash and rolls back Module B only
+    subAgent.rollbackBeforeSnapshot(snapB)
 
-      // Module A remains upgraded, Module B is safely restored
-      expect(fs.readFileSync(fileA, 'utf8')).toBe('// Module A upgraded\n')
-      expect(fs.readFileSync(fileB, 'utf8')).toBe('// Module B stable\n')
-    }
+    // Module A remains upgraded, Module B is safely restored
+    expect(fs.readFileSync(fileA, 'utf8')).toBe('// Module A upgraded\n')
+    expect(fs.readFileSync(fileB, 'utf8')).toBe('// Module B stable\n')
   })
 })

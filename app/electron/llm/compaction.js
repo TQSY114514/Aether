@@ -28,7 +28,7 @@
 // can still go out rather than 400-ing on context length.
 // ───────────────────────────────────────────────────────────────────────────
 
-const { completeChat } = require('./providerAdapter')
+const providerAdapter = require('./providerAdapter')
 const hooks = require('./hooks')
 const tokenizer = require('./tokenizer')
 const { pruneOlderBlock, applyTieredTruncation } = require('./contextBudget')
@@ -210,6 +210,16 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
     } catch {}
   }
 
+  function fitBlockToBudget(text, tokenBudget) {
+    if (!text) return ''
+    if (!tokenBudget || tokenBudget <= 0) return ''
+    const est = estimateTextTokens(text)
+    if (est <= tokenBudget) return text
+    const maxChars = Math.floor(tokenBudget * 3)
+    if (maxChars < 50) return ''
+    return text.slice(0, maxChars) + '\n... [truncated to fit context budget]'
+  }
+
   // Helper to build post-compaction rehydration and active plan blocks
   function buildRehydrationAndPlanBlocks() {
     let rehydrationBlock = ''
@@ -312,10 +322,14 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
       const keep = nonSystemOlder.slice(dropCount)
       const dropped = dropCount
       const note = dropped > 0 ? ` (${dropped} orphaned messages dropped to preserve tool pairs)` : ''
-      const truncated =
+      const baseTruncated =
         '[context compaction] Earlier messages could not be summarized (the summarizer failed) and were dropped from the window. ' +
-        `Anything referenced there may be missing — re-read files before editing and continue from the most recent user request.[${keep.length} of ${nonSystemOlder.length} older messages retained${note}]` +
-        rehydrationBlock + planBlock
+        `Anything referenced there may be missing — re-read files before editing and continue from the most recent user request.[${keep.length} of ${nonSystemOlder.length} older messages retained${note}]`
+
+      const usedSoFar = estimateMessagesTokens(systemMsgs) + estimateMessagesTokens(recent) + estimateMessagesTokens(keep) + estimateTextTokens(baseTruncated + (planBlock || ''))
+      const safeFbRehydration = fitBlockToBudget(rehydrationBlock, budget - usedSoFar)
+      const truncated = baseTruncated + safeFbRehydration + (planBlock || '')
+
       let fbResult = [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
       if (fbResult.length >= messages.length) {
         const forcedKeep = keep.slice(Math.max(0, keep.length - Math.max(1, messages.length - systemMsgs.length - 2)))
@@ -334,9 +348,18 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
   }
 
   const { rehydrationBlock, planBlock } = buildRehydrationAndPlanBlocks()
-  const summaryMsg = { role: 'system', content: `${COMPACTION_HANDOFF_PREFIX}\n\nSummary of earlier conversation:\n${summary}${rehydrationBlock}${planBlock}` }
-  const result = [...systemMsgs, summaryMsg, ...recent]
-  if (force && result.length >= messages.length) return null
+  const baseSummaryText = `${COMPACTION_HANDOFF_PREFIX}\n\nSummary of earlier conversation:\n${summary}`
+  const usedSoFar = estimateMessagesTokens(systemMsgs) + estimateMessagesTokens(recent) + estimateTextTokens(baseSummaryText + (planBlock || ''))
+  const safeRehydration = fitBlockToBudget(rehydrationBlock, budget - usedSoFar)
+  const summaryMsg = { role: 'system', content: `${baseSummaryText}${safeRehydration}${planBlock || ''}` }
+  let result = [...systemMsgs, summaryMsg, ...recent]
+
+  if (estimateMessagesTokens(result) > budget && safeRehydration) {
+    summaryMsg.content = `${baseSummaryText}${planBlock || ''}`
+    result = [...systemMsgs, summaryMsg, ...recent]
+  }
+
+  if (force && (result.length >= messages.length || estimateMessagesTokens(result) > budget)) return null
 
   // Hooks: PostCompact
   try { await hooks.runHooks('PostCompact', { ...ctx, summary, olderCount: older.length, recentCount: recent.length }) } catch {}
@@ -417,7 +440,7 @@ async function summarizeHistory({ provider, model, history, signal, prevSummary,
   async function invokeWithTarget(targetProvider, targetModel) {
     const ctrl = new AbortController()
     const guard = setTimeout(() => ctrl.abort(), SUMMARIZATION_TIMEOUT_MS)
-    const fetchPromise = completeChat({
+    const fetchPromise = providerAdapter.completeChat({
       provider: targetProvider,
       model: targetModel,
       messages: msgs,

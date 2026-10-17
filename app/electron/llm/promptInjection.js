@@ -24,11 +24,15 @@
 // Tools that produce untrusted external content. H4: read_file joins the set —
 // local file reads feed model-visible content the user did not type (a checked
 //-out repo can carry prompt injection in a README just like a web page can).
-const EXTERNAL_TOOLS = new Set(['web_fetch', 'web_search', 'read_file'])
+// MCP: mcp_call_tool bridges to arbitrary third-party MCP servers — their output
+// is untrusted external content by definition (OWASP MCP Top 10 — Tool Poisoning
+// & Indirect Prompt Injection). The server__tool pattern is handled downstream
+// in toolResultMiddleware via isExternalBySource().
+const EXTERNAL_TOOLS = new Set(['web_fetch', 'web_search', 'read_file', 'mcp_call_tool'])
 
 // Markers the external tools prepend to their output (kept in the cache). These
 // are stripped and replaced by the canonical <external> wrapper on injection.
-const EXTERNAL_MARKERS = ['<!-- EXTERNAL_WEB_FETCH -->', '<!-- EXTERNAL_WEB_SEARCH -->']
+const EXTERNAL_MARKERS = ['<!-- EXTERNAL_WEB_FETCH -->', '<!-- EXTERNAL_WEB_SEARCH -->', '<!-- EXTERNAL_MCP -->']
 
 // Cap on external content length after sanitization — smaller than the general
 // tool-result cap (16000) to shrink the injection surface.

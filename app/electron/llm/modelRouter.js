@@ -463,22 +463,43 @@ function resolvePhaseTarget(phase, opts = {}) {
 
   function buildResolution(pickedModel, tier, reason) {
     if (!pickedModel) return null
-    let pickedProvider = currentProvider || {
-      id: pickedModel.provider_id,
-      name: pickedModel.provider_name || 'default',
-      api_url: pickedModel.api_url || 'http://localhost',
-      api_key: pickedModel.api_key || '',
-      api_format: pickedModel.api_format || 'openai',
-    }
-    if (Array.isArray(providers) && providers.length > 0) {
+    let pickedProvider = null
+
+    if (currentProvider && currentProvider.id === pickedModel.provider_id) {
+      pickedProvider = currentProvider
+    } else if (Array.isArray(providers) && providers.length > 0) {
       const matchProv = providers.find(p => p.id === pickedModel.provider_id)
       if (matchProv) pickedProvider = matchProv
-    } else if (db && pickedModel.provider_id && typeof db.prepare === 'function') {
+    }
+
+    if (!pickedProvider && db && pickedModel.provider_id) {
       try {
-        const prov = db.prepare("SELECT * FROM provider WHERE id = ?").get(pickedModel.provider_id)
-        if (prov) pickedProvider = prov
+        if (typeof db.getProviderDecrypted === 'function') {
+          pickedProvider = db.getProviderDecrypted(pickedModel.provider_id)
+        } else if (typeof db.getProvider === 'function') {
+          pickedProvider = db.getProvider(pickedModel.provider_id)
+        } else if (typeof db.prepare === 'function') {
+          pickedProvider = db.prepare("SELECT * FROM provider WHERE id = ?").get(pickedModel.provider_id)
+        }
       } catch {}
     }
+
+    if (!pickedProvider && pickedModel.provider_id && pickedModel.api_url) {
+      pickedProvider = {
+        id: pickedModel.provider_id,
+        name: pickedModel.provider_name || 'default',
+        api_url: pickedModel.api_url,
+        api_key: pickedModel.api_key || '',
+        api_format: pickedModel.api_format || 'openai',
+      }
+    }
+
+    if (!pickedProvider && currentProvider && !pickedModel.provider_id) {
+      pickedProvider = currentProvider
+    }
+
+    if (!pickedProvider) return null
+
     return {
       provider: pickedProvider,
       model: pickedModel,

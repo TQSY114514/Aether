@@ -50,6 +50,13 @@ function safeReadFile(targetPath, wsRoot) {
   try {
     const resolved = path.isAbsolute(targetPath) ? targetPath : path.resolve(wsRoot, targetPath)
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return null
+    try {
+      const realTarget = fs.realpathSync(resolved)
+      const realWs = fs.realpathSync(wsRoot)
+      if (!isPathInsideWorkspace(realWs, realTarget)) return null
+    } catch {
+      return null
+    }
     return fs.readFileSync(resolved, 'utf8')
   } catch {
     return null
