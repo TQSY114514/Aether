@@ -8,9 +8,9 @@
 
 # Aether
 
-### 本地优先的多模型 Agent 工作台 · 内置竞技场 · 默认安全
+### 本地优先的多模型桌面 Agent 工作台 · 内置竞技场 · 默认安全
 
-在本地真实任务上并行评测不同模型，基于实测表现路由工作流；桌面 GUI 与终端 TUI 共享同一套 SQLite 存储、长期记忆与权限沙箱。
+在本地真实任务上并行评测不同模型，基于实测表现路由工作流。所有会话、密钥与记忆图谱 100% 保存在本地 SQLite 数据库中，零云端遥测。
 
 [![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
@@ -28,14 +28,14 @@
 
 ## 项目概述
 
-Aether 是一个面向开发者与重度 AI 用户的本地工作台（Electron + React/TypeScript + better-sqlite3 + Ink v5）。它不绑定单一模型厂商，也不依赖云端账号中转，所有会话、API 密钥、记忆图谱与评测数据均保存在本机 `%APPDATA%/aetherai/aetherai.db` 中。
+Aether 是一个专注于开发者与重度 AI 用户的**本地桌面工作台（Electron + React/TypeScript + better-sqlite3 WAL 模式）**。它不绑定单一模型厂商，不收集云端遥测，所有会话、系统级加密 API 密钥、记忆图谱与评测数据均完整保存在本机 `%APPDATA%/aetherai/aetherai.db`。
 
-它主要解决四个具体问题：
+它核心解决四个工程问题：
 
-1. **多模型实测对比（Arena）**：不同模型在编程、数理推理、长文处理上的实际表现差异很大。Aether 支持将同一任务并发发送给多个模型（或不同参数配置），通过盲测投票维护本地按意图分类的 ELO 排行榜。
-2. **文件与命令执行可控（Permission System）**：Agent 具备读写代码库与执行终端命令的能力，但默认处于受控状态。所有高风险变更在落盘前均提供行内 Diff 预览与分级确认机制。
-3. **跨会话结构化记忆（AutoMemory & Knowledge Graph）**：对话结束后后台自动提取事实与实体关系写入本地数据库，按项目工作区（Workspace）隔离作用域，并在后续会话中毫秒级预取注入。
-4. **桌面端为主、终端端协同（Desktop-First Unified Runtime）**：**项目开发重心在 Windows 桌面图形版（GUI）**，完整承载可视化竞技场、知识图谱管理、行内 Diff 审阅与配置中心；同时提供轻量级终端版（`aether tui` / CLI）作为命令行延伸，两端共享同一个本地 SQLite 数据库。
+1. **实证多模型评测（Arena 竞技场）**：拒绝纸面 Benchmarks 幻觉。Aether 支持将同一任务并发发送给 2–4 个模型（或不同温度/参数），以盲测投票构建本地按意图分类的 ELO 排行榜。
+2. **细粒度权限门与行内 Diff 审阅（Permission System）**：Agent 执行读写与终端命令受 6 轴权限模型（`READ`、`WRITE`、`EXECUTE`、`NETWORK`、`GIT`、`EXTERNAL`）与 Win32 Job Object 内核进程树监管，高危变更在落盘前均提供交互式行内 Diff 预览。
+3. **低延迟结构化长期记忆（AutoMemory & Project Brain）**：会话结束后后台异步提取事实、技术决策与实体关系落盘至 SQLite FTS5，并在后续回合中 `< 2ms` 预取注入，无需额外消耗大模型工具轮次。
+4. **桌面为主的工作台体验与无头自动化（Desktop-First & Headless Automation）**：**研发重心 100% 聚焦于 Windows 桌面端（GUI）**，完整提供实时思考流可视化、BTW 只读追问抽屉、任务队列、多模型对战与配置中心；同时在 npm 发布轻量无头命令行工具（`aether run "prompt"` / `--eval`）与免 Electron 的 Node SDK，专用于本地自动化与 CI 批处理。
 
 ---
 
@@ -52,24 +52,21 @@ Aether 是一个面向开发者与重度 AI 用户的本地工作台（Electron 
 
 > **关于 Windows SmartScreen 提示**：本项目由独立开发者维护，未购买商业代码签名证书。首次运行若遇到系统弹窗提示「Windows 已保护你的电脑」，点击 **更多信息 → 仍要运行** 即可。
 
-### 2. 终端伴侣与命令行工具（辅助延伸 · 跨平台）
+### 2. 无头命令行与 Node SDK（辅助脚本与自动化 · 需 Node.js ≥ 22）
 
-终端交互界面（TUI）、命令行工具（CLI）及无头 SDK 支持 Windows、macOS 与 Linux（需 **Node.js ≥ 22**）：
+Aether 在 npm 上发布轻量纯净的无头运行时与独立 SDK（`aetherai`）：
 
 ```bash
-# 全局安装
+# 全局安装无头命令行
 npm install -g aetherai
 
-# 启动交互式终端界面 (Ink v5)
-aether tui
-
-# 在指定会话上继续工作（可接续桌面端创建的会话）
-aether tui --session <session_id>
-
-# 单次执行指令
+# 单次命令执行任务
 aether "运行测试套件并修复失败的单元测试" --model deepseek
 
-# 启动 JSONL RPC 守护进程（供外部脚本或子 Agent 调用）
+# 跨模型快速打分评测
+aether eval "用 Rust 写一个二分查找" --models claude-3-7-sonnet,deepseek-reasoner
+
+# 启动供外部脚本或子 Agent 接入的 JSONL RPC 守护服务
 aether --mode rpc
 ```
 
@@ -187,7 +184,7 @@ flowchart LR
 
 ## 客观能力定位（对比 20 款主流 Agent）
 
-Aether 拒绝“八边形全满”的宣传式打分。我们的优势集中在**本地 SQLite 数据主权 (`9.4/10`)** 与 **多模型自由切换 + 内置 Arena 评测 (`9.2/10`)**；在 **安全与权限门 (`8.4/10`)** 上具备 6 轴门禁与可选 Docker 沙箱，但由于 Windows 默认本地后端运行在用户态而非 OS 内核级沙箱，客观低于 Codex CLI (`9.8`) 与 Claude Code (`9.0`)；在 **单一编程深度 (`6.8/10`)** 与 **早期社区生态 (`6.5/10`)** 上，我们如实画出与 Cursor、Claude Code 等成熟商业产品的代差（下方雷达图由 `node app/scripts/gen-radar.cjs` 生成）：
+Aether 拒绝“八边形全满”的宣传式打分。我们的优势集中在**本地 SQLite 数据主权 (`9.4/10`)** 与 **多模型自由切换 + 内置 Arena 盲测 (`9.2/10`)**；在 **安全与权限门 (`8.4/10`)** 上具备 6 轴门禁、Win32 Job Object 与可选 Docker 沙箱，但由于 Windows 默认本地后端运行在用户态而非 OS 内核级沙箱，客观低于 Codex CLI (`9.8`) 与 Claude Code (`9.0`)；在 **桌面工作台交互 (`8.0/10`)** 上具备实时思考流/BTW抽屉/队列等专用工作台体验，但不及 Cursor (`9.8`)、Windsurf (`9.6`) 的深度 IDE 编辑器集成；在 **单一编程深度 (`6.8/10`)** 与 **早期社区生态 (`6.5/10`)** 上，我们如实画出与商业大厂及成熟开源生态的客观代差（下方雷达图由 `node app/scripts/gen-radar.cjs` 生成）：
 
 <div align="center">
   <img src="./assets/agent-radar-2026.zh-CN.svg" width="88%" alt="Aether · Agent 能力与架构客观自评雷达" />

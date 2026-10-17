@@ -8,9 +8,9 @@
 
 # Aether
 
-### Local-first Agent Workbench · Built-in Arena · Safe by Default
+### Local-first Multi-Model Desktop AI Workbench · Built-in Arena · Safe by Default
 
-Benchmark multiple models concurrently on your actual tasks and route work based on empirical performance. Desktop GUI and Terminal TUI share the exact same local SQLite database, long-term memory graph, and permission sandbox.
+Benchmark multiple models concurrently on your actual code and route tasks based on empirical performance. 100% local SQLite storage, encrypted API keys, and capability-gated execution with zero telemetry.
 
 [![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
@@ -28,14 +28,14 @@ Benchmark multiple models concurrently on your actual tasks and route work based
 
 ## Overview
 
-Aether is a local-first AI workbench built with Electron, React/TypeScript, better-sqlite3 (WAL mode), and Ink v5. It treats LLM providers as pluggable compute backends without requiring cloud accounts or telemetry servers. All sessions, encrypted API keys, memories, and evaluation metrics reside locally in `%APPDATA%/aetherai/aetherai.db`.
+Aether is a local-first desktop AI workbench built with Electron, React/TypeScript, and better-sqlite3 (WAL mode). It treats LLM providers as pluggable compute backends without requiring cloud accounts or remote servers. All sessions, encrypted API keys, memories, and evaluation metrics reside locally in `%APPDATA%/aetherai/aetherai.db`.
 
 It is designed around four engineering requirements:
 
-1. **Empirical Model Evaluation (Arena)**: Public benchmarks rarely reflect your specific codebase or workflow. Aether lets you send the same task to multiple models concurrently, vote on blind outputs, and maintain local intent-categorized ELO ratings.
-2. **Capability-Gated Execution (Permission System)**: The agent can inspect files and execute shell commands, but mutations are gated by a 6-axis permission model (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) with inline Diff previews before changes land on disk.
-3. **Structured Long-Term Memory (AutoMemory & Knowledge Graph)**: Facts, architectural decisions, and entity relationships are asynchronously extracted into SQLite + FTS5 tables, scoped per workspace, and prefetched in `< 2ms` without wasting extra LLM tool-call turns.
-4. **Desktop-First Runtime with Terminal Continuity**: **Development focus is centered on the Windows Desktop Workbench (GUI)**, which hosts the full visual Model Arena, Knowledge Graph manager, inline Diff reviewer, and provider hub. A lightweight Terminal UI (`aether tui` / CLI) is provided as a companion extension sharing the same SQLite database.
+1. **Empirical Multi-Model Evaluation (Arena)**: Public benchmarks rarely reflect your specific codebase or workflow. Aether lets you dispatch the same task to 2–4 models concurrently, vote on blind outputs, and maintain local intent-categorized ELO ratings.
+2. **Capability-Gated Execution (6-Axis Permission System)**: The agent can inspect files and execute shell commands, but mutations are strictly gated by a 6-axis permission model (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) with inline Diff previews before changes land on disk.
+3. **Structured Long-Term Memory (AutoMemory & Project Brain)**: Facts, architectural decisions, and entity relationships are asynchronously extracted into SQLite + FTS5 tables, scoped per workspace, and prefetched in `< 2ms` without wasting extra LLM tool-call turns.
+4. **Desktop-First Workbench with Headless Automation**: Engineering focus is **100% centered on the Windows Desktop Workbench (GUI)**, featuring real-time streaming reasoning, BTW side questions, task queue dock, multi-model Arena, and local gateway. A lightweight Headless CLI (`aether run "prompt"` / `--eval`) and Electron-free SDK are published on npm for scripts and CI automation.
 
 ---
 
@@ -52,24 +52,21 @@ Download the latest release from [GitHub Releases](https://github.com/TQSY114514
 
 > **Note on Windows SmartScreen**: Aether is maintained by an independent developer without a commercial code-signing certificate. If Windows Defender displays *"Windows protected your PC"* on first launch, click **More info → Run anyway**.
 
-### 2. Terminal Companion & CLI (Companion Extension · Cross-Platform)
+### 2. Headless CLI & SDK (Companion Automation · Node.js ≥ 22)
 
-The headless agent runtime, interactive TUI, and SDK run on Windows, macOS, and Linux (requires **Node.js ≥ 22**):
+Aether distributes a clean, headless runtime and Electron-free SDK via npm (`aetherai`):
 
 ```bash
-# Install globally
+# Install headless CLI globally
 npm install -g aetherai
-
-# Launch interactive terminal UI (Ink v5)
-aether tui
-
-# Resume an existing session (including sessions created in the Desktop GUI)
-aether tui --session <session_id>
 
 # Execute a one-shot task from the command line
 aether "run test suite and fix failing unit tests" --model deepseek
 
-# Start headless JSONL RPC server for scripts and subagents
+# Evaluate a prompt across models
+aether eval "write a binary search in rust" --models claude-3-7-sonnet,deepseek-reasoner
+
+# Start headless JSONL RPC server for external scripts and subagents
 aether --mode rpc
 ```
 
@@ -187,7 +184,7 @@ Permissions are evaluated independently across six axes (`READ`, `WRITE`, `EXECU
 
 ## Honest Positioning (20-Peer Radar Comparison)
 
-Aether avoids inflated "all-10/10" marketing charts. Our genuine strengths are **Local SQLite Data Ownership (`9.4/10`)** and **Multi-Model BYOK + Built-in ELO Arena (`9.2/10`)**. On **Permission Safety (`8.4/10`)**, Aether enforces a 6-axis permission gate and optional Docker container sandboxing, but trails OS-kernel-sandboxed tools like Codex CLI (`9.8`) and Claude Code (`9.0`) when running in default Windows user-space (`localBackend`). On **Single-Model Coding Depth (`6.8/10`)** and **Early-Stage Ecosystem (`6.5/10`)**, the chart candidly shows our gap behind commercial giants like Cursor and Claude Code (generated via `node app/scripts/gen-radar.cjs`):
+Aether avoids inflated "all-10/10" marketing charts. Our genuine strengths are **Local SQLite Data Ownership (`9.4/10`)** and **Multi-Model BYOK + Built-in ELO Arena (`9.2/10`)**. On **Permission Safety (`8.4/10`)**, Aether enforces a 6-axis permission gate, Win32 Job Object process governance, and optional Docker container sandboxing, but trails OS-kernel-sandboxed tools like Codex CLI (`9.8`) and Claude Code (`9.0`) when running in default Windows user-space (`localBackend`). On **Desktop Workbench UX (`8.0/10`)**, Aether provides an intentional visual workspace (live streaming reasoning, BTW side questions, task queue dock), but trails full-fledged IDE editor integrations like Cursor (`9.8`) and Windsurf (`9.6`). On **Single-Model Coding Depth (`6.8/10`)** and **Early-Stage Community Ecosystem (`6.5/10`)**, the chart candidly depicts our honest gap behind commercial giants (generated via `node app/scripts/gen-radar.cjs`):
 
 <div align="center">
   <img src="./assets/agent-radar-2026.en.svg" width="88%" alt="Aether · Candid Capability & Architecture Self-Assessment Radar" />

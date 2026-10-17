@@ -26,11 +26,12 @@ const path = require('path');
 
 // ─── 20 Competitor Benchmark Scores (2026-09 严格去水分客观校准) ─────────────
 const SCORES = {
-  // Aether (2026-09 v0.9.1 严格客观自评：拒绝宣传虚高。
-  // 真实优势仅在「本地SQLite零遥测(9.4)」与「多模型+内置Arena评测(9.2)」；
-  // 安全(8.4)具备6轴权限门与可选Docker，但默认Windows本地执行无OS内核级沙箱，故低于Codex(9.8)/Claude Code(9.0)；
-  // 纯编程(6.8)、通用任务(7.0)、扩展与生态(6.5)、多Agent(7.2)坦然承认与商业大厂及成熟社区的客观代差)
-  'Aether':             [6.8, 7.0, 9.2, 6.5, 7.2, 8.4, 9.4, 8.2],
+  // Aether (2026-10 v0.9.2 严格客观自评：拒绝宣传虚高。
+  // 真实优势仅在「本地SQLite零遥测(9.4)」与「多模型+内置Arena盲测(9.2)」；
+  // 安全(8.4)具备6轴权限门、Win32 Job Object与可选Docker，但默认Windows本地执行非OS内核级沙箱，故低于Codex(9.8)/Claude Code(9.0)；
+  // 桌面工作台交互(8.0)具备实时思考流/BTW抽屉/队列，但不及Cursor/Windsurf深度IDE嵌入；
+  // 纯编程深度(6.8)、通用任务(7.0)、扩展与生态(6.5)、多Agent(7.2)坦然承认与商业大厂及成熟开源社区的客观代差)
+  'Aether':             [6.8, 7.0, 9.2, 6.5, 7.2, 8.4, 9.4, 8.0],
 
   // 终端与混合编程 Agent (Terminal & Hybrid Coding Agents)
   'Claude Code':        [9.8, 6.5, 7.0, 9.8, 9.5,  9.0, 7.5, 8.0],
@@ -66,9 +67,9 @@ const PEERS = Object.keys(SCORES).filter((k) => k !== SELF);
 const I18N = {
   'zh-CN': {
     title: 'Aether · Agent 能力与架构客观自评雷达',
-    titleTag: '(2026-09 去水分严苛校准 · 定性评估)',
+    titleTag: '(2026-10 去水分严苛校准 · 定性评估)',
     subtitle: '对照 20 款主流 Agent 工具 · 真实反映优势与短板（拒绝宣传虚高）',
-    legendAether: 'Aether 客观自评 (v0.9.1)',
+    legendAether: 'Aether 客观自评 (v0.9.2)',
     legendPeerBest: '同类最佳包络 (20 款竞品峰值)',
     legendClaude: 'Claude Code (终端标杆)',
     legendCursor: 'Cursor (IDE 标杆)',
@@ -78,23 +79,23 @@ const I18N = {
       { primary: '编程 Agent', secondary: 'Coding (-3.0 差距)' },
       { primary: '通用任务', secondary: 'General (-2.8 差距)' },
       { primary: '多模型与竞技场', secondary: 'BYOK & ELO Arena' },
-      { primary: '扩展与社区生态', secondary: 'MCP / Skills / Eco' },
-      { primary: '多 Agent 编排', secondary: 'Sub-agents' },
+      { primary: '扩展与社区生态', secondary: 'MCP / Skills (-3.3)' },
+      { primary: '多 Agent 编排', secondary: 'Sub-agents (-2.3)' },
       { primary: '安全与权限门', secondary: '6-Axis (非OS内核沙箱)' },
       { primary: '本地优先与隐私', secondary: 'SQLite & Zero-Telemetry' },
-      { primary: '桌面/终端双形态', secondary: 'GUI + TUI Shared DB' },
+      { primary: '桌面工作台交互', secondary: 'Workbench vs IDE (-1.8)' },
     ],
     matrixLabel: '对比竞品矩阵（20款）：',
     catTerminal: '终端/混合',
     catIde: 'IDE/评审',
     catAuto: '自主平台',
-    footnote: '严苛去水分自评：Aether 仅在「本地SQLite零遥测(9.4)」与「多模型+Arena盲测(9.2)」占优；安全(8.4)低于内核级沙箱 Codex/Claude Code；纯编程(6.8)与生态(6.5)如实画出凹陷代差。',
+    footnote: '严苛去水分自评：Aether 仅在「本地SQLite零遥测(9.4)」与「多模型+Arena盲测(9.2)」占优；安全(8.4)低于内核级沙箱 Codex/Claude Code；工作台交互(8.0)不及 Cursor 深度嵌入；纯编程(6.8)与生态(6.5)如实画出凹陷代差。',
   },
   'en': {
     title: 'Aether · Candid Capability & Architecture Radar',
-    titleTag: '(2026-09 Uninflated Engineering Calibration)',
+    titleTag: '(2026-10 Uninflated Engineering Calibration)',
     subtitle: 'Compared Against 20 Peer Agents · True Strengths & Honest Gaps',
-    legendAether: 'Aether Candid Score (v0.9.1)',
+    legendAether: 'Aether Candid Score (v0.9.2)',
     legendPeerBest: 'Peer-Best Envelope (20 Peers Peak)',
     legendClaude: 'Claude Code (Terminal Benchmark)',
     legendCursor: 'Cursor (IDE Benchmark)',
@@ -108,13 +109,13 @@ const I18N = {
       { primary: 'Multi-Agent', secondary: 'Local Sub-Agents' },
       { primary: 'Permission Safety', secondary: '6-Axis (User-Space)' },
       { primary: 'Local & Privacy', secondary: 'SQLite & Zero-Telemetry' },
-      { primary: 'Desktop & TUI Sync', secondary: 'Shared SQLite Runtime' },
+      { primary: 'Desktop Workbench', secondary: 'Workbench vs IDE (-1.8)' },
     ],
     matrixLabel: 'Peer Benchmark Matrix (20 Tools):',
     catTerminal: 'Terminal / Hybrid',
     catIde: 'IDE / Review',
     catAuto: 'Autonomous',
-    footnote: 'Uninflated Self-Assessment: Aether leads only in Local SQLite Privacy (9.4) and Multi-Model Arena (9.2); Safety (8.4) trails kernel-sandboxed Codex/Claude Code; Coding (6.8) & Ecosystem (6.5) candidly show gaps.',
+    footnote: 'Uninflated Self-Assessment: Aether leads only in Local SQLite Privacy (9.4) and Multi-Model Arena (9.2); Safety (8.4) trails kernel-sandboxed Codex/Claude Code; Desktop UX (8.0) trails deep IDEs; Coding (6.8) & Ecosystem (6.5) candidly show gaps.',
   },
   'zh-TW': {
     title: 'Aether · Agent 能力與架構自評雷達',
@@ -170,29 +171,29 @@ const I18N = {
   },
   'ja': {
     title: 'Aether · Agent 正直な自己評価レーダー',
-    titleTag: '(2026-09 定性評価 · 非ベンチマーク実測)',
+    titleTag: '(2026-10 定性評価 · 非ベンチマーク実測)',
     subtitle: '主要エージェント20種との徹底比較 · 8大コア能力プロファイル',
-    legendAether: 'Aether 自己評価 (v0.9.0)',
+    legendAether: 'Aether 自己評価 (v0.9.2)',
     legendPeerBest: '同種ベスト包絡線 (20種競合の最高値)',
     legendClaude: 'Claude Code (ターミナル基準)',
     legendCursor: 'Cursor (IDE 基準)',
     leadBadge: '★リード',
     peakLabel: 'Peak',
     axes: [
-      { primary: 'コーディング Agent', secondary: 'Coding' },
+      { primary: 'コーディング Agent', secondary: 'Coding (-3.0)' },
       { primary: '汎用タスク', secondary: 'General' },
-      { primary: '複数モデル / プロバイダー', secondary: 'Multi-provider' },
-      { primary: '拡張アーキテクチャ', secondary: 'MCP & Skills' },
-      { primary: 'マルチ Agent 編成', secondary: 'Multi-agent' },
-      { primary: 'セキュリティ / 権限管理', secondary: 'Safety' },
-      { primary: 'ローカル優先 / プライバシー', secondary: 'Local & private' },
-      { primary: 'デスクトップ & TUI 両立', secondary: 'Desktop & TUI UX' },
+      { primary: '複数モデル / プロバイダー', secondary: 'BYOK & Arena' },
+      { primary: '拡張アーキテクチャ', secondary: 'MCP & Skills (-3.3)' },
+      { primary: 'マルチ Agent 編成', secondary: 'Sub-agents' },
+      { primary: 'セキュリティ / 権限管理', secondary: '6-Axis (非カーネル)' },
+      { primary: 'ローカル優先 / プライバシー', secondary: 'SQLite & ゼロテレメトリ' },
+      { primary: 'デスクトップ・ワークベンチ', secondary: 'Workbench vs IDE (-1.8)' },
     ],
     matrixLabel: '比較対象エージェント（20種）：',
     catTerminal: 'ターミナル/ハイブリッド',
     catIde: 'IDE/レビュー',
     catAuto: '自律型プラットフォーム',
-    footnote: '客観的自己評価 · 形状こそが位置づけ: Aetherは「ローカル・プライバシー」「3層サンドボックス」「複数モデル切替」でリード。過度な美化を排し、単一コーディングでのClaude Code/Cursorとの差を率直に提示。',
+    footnote: '客観的自己評価 · 形状こそが位置づけ: Aetherは「ローカル・プライバシー」「複数モデル切替&Arena」でリード。過度な美化を排し、単一コーディングでのClaude Code/Cursorとの差やエコシステムの未成熟を率直に提示。',
   },
   'ko': {
     title: 'Aether · Agent 솔직한 자체 평가 레이더',

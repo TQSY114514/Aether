@@ -8,9 +8,9 @@
 
 # Aether
 
-### ローカルファースト Agent ワークベンチ · 内蔵アリーナ · デフォルトで安全
+### ローカルファースト・マルチモデルデスクトップ AI ワークベンチ · 内蔵アリーナ · デフォルトで安全
 
-実際のタスクで複数のモデルを並行比較し、実測データに基づいて最適なモデルを選定。デスクトップ GUI とターミナル TUI は同一のローカル SQLite データベース、長期記憶グラフ、権限サンドボックスを共有します。
+実際のタスクで複数のモデルを並行比較し、実測データに基づいて最適なモデルを選定。100% ローカル SQLite ストレージ、暗号化 API キー、ゼロテレメトリで安全に動作します。
 
 [![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
@@ -32,17 +32,8 @@
 
 1. **実際のタスクで実測（Arena）。** 内蔵の**アリーナ (Arena)** を開き、1つのプロンプトを複数のモデルに並行して送信し、最良の回答に投票。タスク種別（コーディング、推論、翻訳）ごとにローカル ELO レーティングがリアルタイムに更新されます。
 2. **6軸権限ゲートによる安全な委託。** **Ask（問い合わせ）モード** で Aether をプロジェクトに向けます。提案されたファイル変更はインライン差分（Diff）として表示され、リスクのあるコマンドは実行前に承認を求めます。
-3. **構造化長期記憶（AutoMemory & Knowledge Graph）。** API キー、チャット履歴、知識グラフはすべてローカルの SQLite データベース（`%APPDATA%/aetherai/aetherai.db`）に保存され、ワークスペース単位で分離されます。
-4. **デスクトップ中心・ターミナル連携。** **開発の主軸は Windows デスクトップ版 (GUI)** に置かれており、ビジュアルなモデルアリーナ、記憶グラフ管理、Diff レビューの全機能を提供します。軽量なターミナル版（`aether tui`）は同じ SQLite ストアを共有する補助インターフェースとして機能します。
-
----
-
-## 2 つのインターフェース、1 つの統合ランタイム
-
-- 🖥️ **Aether Desktop (GUI · 主力エディション)** — Electron + React によるワークベンチ。リッチな Markdown ストリーミング、ビジュアルなモデルアリーナ、知識グラフ管理、リアルタイム推論トレース、設定センターをすべて搭載しています。
-- ⌨️ **Aether Terminal (TUI / CLI / SDK · 補助ツール)** — Node.js 22+ と Ink v5 によるインタラクティブターミナル（`aether tui`）。キーボード操作、行番号付き Diff 承認、ヘッドレス CI モード（`--mode json|rpc`）、Electron-free SDK（`require('aetherai/sdk')`）を搭載。
-
-> 💡 **シームレスな継続性**: デスクトップアプリで開始したセッションを、ターミナルで `aether tui --session <id>` を使ってそのまま再開できます（その逆も同様）。
+3. **構造化長期記憶（AutoMemory & Project Brain）。** API キー、チャット履歴、知識グラフはすべてローカルの SQLite データベース（`%APPDATA%/aetherai/aetherai.db`）に保存され、ワークスペース単位で分離されます。
+4. **デスクトップ中心ワークベンチとヘッドレス自動化。** **開発の主軸は 100% Windows デスクトップ版 (GUI)** に置かれており、ビジュアルなモデルアリーナ、リアルタイム推論トレース、BTW追問ドロワー、Diff レビューの全機能を提供します。軽量なヘッドレス CLI（`aether run "prompt"` / `--eval`）と SDK は npm から提供されます。
 
 ---
 
@@ -54,7 +45,7 @@
   <img src="./assets/agent-radar-2026.ja.svg" width="88%" alt="Aether 主要エージェント20種との誠実な自己評価レーダーチャート" />
 </p>
 
-Aether の客観的な優位性は **ローカルファーストのプライバシー (`9.4/10`)、マルチモデル・ブラインド Arena (`9.2/10`)、および権限安全ゲート (`8.4/10`)** にあります。一方で、単一モデルの純粋なコーディング能力（`6.8/10`、AST リポジトリインデックスや独自 Fast-Apply モデルの未搭載）やエコシステム成熟度（`6.5/10`、個人開発段階）においては、Claude Code や Cursor などの大規模商用ツールとの客観的な差を率直に認めています（詳細な減点根拠は [docs/competitive-analysis.md](./docs/competitive-analysis.md) を参照）。
+Aether の客観的な優位性は **ローカルファーストのプライバシー (`9.4/10`)、マルチモデル・ブラインド Arena (`9.2/10`)、および権限安全ゲート (`8.4/10`)** にあります。一方で、デスクトップワークベンチ体験（`8.0/10`、Cursor などのフル IDE 統合には及ばない）、単一モデルの純粋なコーディング能力（`6.8/10`、AST リポジトリインデックスや独自 Fast-Apply モデルの未搭載）やエコシステム成熟度（`6.5/10`、個人開発段階）においては、大規模商用ツールとの客観的な差を率直に認めています（詳細な減点根拠は [docs/competitive-analysis.md](./docs/competitive-analysis.md) を参照）。
 
 ---
 

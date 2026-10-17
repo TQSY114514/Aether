@@ -677,22 +677,50 @@ export default function SettingPage() {
               <div className="flex items-start gap-3 mb-3">
                 <Info size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.about')}</h2>
-                    <a
-                      href="https://github.com/TQSY114514/Aether/issues/new"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-                      style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      title="GitHub Issues"
-                    >
-                      <Bug size={12} className="shrink-0 text-[var(--text-secondary)]" />
-                      <span>{t('settings.report_issue')}</span>
-                    </a>
+                  <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.about')}</h2>
+                      <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--text-secondary)] bg-[var(--bg-secondary)]">
+                        v0.9.2
+                      </span>
+                      <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded text-[var(--text-muted)] bg-[var(--bg-secondary)] border border-[var(--border)] hidden sm:inline">
+                        Apache-2.0
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href="https://github.com/TQSY114514/Aether/releases"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98] text-[var(--text-secondary)]"
+                        style={{ borderColor: 'var(--border)' }}
+                      >
+                        <span>Releases</span>
+                      </a>
+                      <a
+                        href="https://github.com/TQSY114514/Aether#readme"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98] text-[var(--text-secondary)]"
+                        style={{ borderColor: 'var(--border)' }}
+                      >
+                        <span>Docs</span>
+                      </a>
+                      <a
+                        href="https://github.com/TQSY114514/Aether/issues/new"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                        style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        title="GitHub Issues"
+                      >
+                        <Bug size={12} className="shrink-0 text-[var(--text-secondary)]" />
+                        <span>{t('settings.report_issue')}</span>
+                      </a>
+                    </div>
                   </div>
                   <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    {t('settings.about_desc', 'v0.9.0')}
+                    {t('settings.about_desc')}
                   </p>
                 </div>
               </div>
