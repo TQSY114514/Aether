@@ -1,8 +1,14 @@
 {
   "name": "aetherai",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Aether headless agent — CLI, TUI, and Electron-free SDK. Pairs with the Aether Desktop GUI (separate installer) sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
+  "contributors": [
+    "TQSY114514 <tqishengyan@gmail.com> (https://github.com/TQSY114514)",
+    "google-labs-jules[bot] (https://github.com/apps/google-labs-jules)",
+    "gemini-code-assist[bot] (https://github.com/apps/gemini-code-assist)",
+    "factory-droid[bot] (https://github.com/apps/factory-droid)"
+  ],
   "license": "Apache-2.0",
   "homepage": "https://github.com/TQSY114514/Aether#readme",
   "repository": {

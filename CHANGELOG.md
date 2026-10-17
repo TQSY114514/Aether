@@ -2,7 +2,23 @@
 
 All notable changes to AetherAI are documented here.
 
-## [Unreleased]
+## [0.9.2] - 2026-10-17
+
+### Added
+
+- **Inline Subagent Loop & Live Observability (内联子代理执行流与实时推理):**
+  - 在聊天消息中以内联卡片形式直接呈现子代理执行进度与结果，可折叠展开并实时反馈执行详情。
+  - 实时推理思考耗时追踪（`Thought for X.Xs`），基于 `requestAnimationFrame` 的流式 Markdown 渲染。
+  - 工具调用文件变更徽章（`+X −Y`）与清晰统一的 Unified Diff 预览。
+- **Autonomous Self-Evolution & Strategy Memory (自进化策略持久化):**
+  - 整合自主学习流至 `STRATEGY.md` 反思机制，新增记忆页面「策略」Tab 管理自进化策略。
+  - 沉淀至持久化规则库，并在设置页提供统一学习状态大屏。
+- **Lean MCP & Progressive Skills (按需加载与渐进式发现):**
+  - 支持按需加载 MCP 工具以节约 Context Window 消耗，引入渐进式技能引用与稳定的 Prompt Cache 桶排序。
+- **Interactive UI & Workflow Enhancements:**
+  - 旁支提问抽屉（BTW Drawer）、可调控排队队列（QueueDock）、本地 Gateway 配置面板支持外部 IDE 集成。
+- **Localization (多语言 100% 覆盖):**
+  - 14 种受支持语言全量 100% 键覆盖同步。
 
 ### Changed
 
