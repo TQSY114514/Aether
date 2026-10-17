@@ -44,6 +44,8 @@ const TOOL_TRUNCATION = {
   task: 16000,
   run_agent: 16000,
   review_code: 16000,
+  history_search: 16000,
+  ask_user: 8000,
 
   // Write tools: usually short confirmations
   write_file: 4000,

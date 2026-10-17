@@ -24,7 +24,7 @@ const { classifyError } = require('./errorClassify')
 const toolCache = require('./toolCache')
 const toolMetrics = require('./toolLoopMetrics')
 const checkpointMgr = require('./checkpointManager')
-const { generateDiff, generateAfterSnapshot } = require('../tools/toolImpact')
+const { generateDiff, generateAfterSnapshot, countDiffLines } = require('../tools/toolImpact')
 const { buildProjectContextMessage, invalidateCache } = require('./projectInstructions')
 const { buildRepoMapMessage } = require('../context/repoMap')
 const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox')
@@ -76,7 +76,7 @@ try {
 }
 
 const planning = require('./planning')
-const { reasoningFamily } = require('./reasoning')
+const { reasoningFamily, buildReasoningParams } = require('./reasoning')
 const hooks = require('./hooks')
 const { stream: eventStream } = require('./agentEvents')
 const skillSelfCreate = require('./skillSelfCreate')
@@ -88,179 +88,7 @@ const checkpoints = require('./checkpoints')
 const lintTestRepair = require('./lintTestRepair')
 const toolCallRepair = require('./toolCallRepair')
 
-// Track files modified during a turn for Git-like change summary (Claude Code / Cursor style)
-function createTurnFileTracker(wsRoot) {
-  const files = new Map() // absPath -> { absPath, path: relPath, initialExisted: boolean, initialContent: string|null, finalContent: string|null }
-  let commandRan = false
-
-  function resolvePath(args) {
-    const raw = args?.path || args?.targetPath || args?.filePath || args?.file
-    if (!raw || typeof raw !== 'string') return null
-    return path.isAbsolute(raw) ? path.resolve(raw) : (wsRoot ? path.resolve(wsRoot, raw) : path.resolve(raw))
-  }
-
-  return {
-    beforeTool(name, args) {
-      if (name === 'run_command') {
-        commandRan = true
-        return
-      }
-      if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return
-      const absPath = resolvePath(args)
-      if (!absPath) return
-      if (!files.has(absPath)) {
-        let existed = false
-        let content = null
-        try {
-          if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
-            existed = true
-            content = fs.readFileSync(absPath, 'utf-8')
-          }
-        } catch {}
-        const rel = wsRoot ? path.relative(wsRoot, absPath).replace(/\\/g, '/') : path.basename(absPath)
-        files.set(absPath, {
-          absPath,
-          path: rel,
-          initialExisted: existed,
-          initialContent: content,
-          finalContent: content,
-        })
-      }
-    },
-
-    afterTool(name, args) {
-      if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return
-      const absPath = resolvePath(args)
-      if (!absPath || !files.has(absPath)) return
-      const record = files.get(absPath)
-      try {
-        if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
-          record.finalContent = fs.readFileSync(absPath, 'utf-8')
-        } else {
-          record.finalContent = null
-        }
-      } catch {}
-    },
-
-    getSummary() {
-      const summary = []
-      const { buildUnifiedDiff } = require('../tools/toolImpact')
-      for (const [absPath, record] of files.entries()) {
-        try {
-          if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
-            record.finalContent = fs.readFileSync(absPath, 'utf-8')
-          } else {
-            record.finalContent = null
-          }
-        } catch {}
-        const { path: relPath, initialExisted, initialContent, finalContent } = record
-        if (initialContent === finalContent) continue
-
-        let added = 0
-        let removed = 0
-        let status = 'modified'
-
-        let diff = ''
-
-        if (!initialExisted && finalContent !== null) {
-          status = 'created'
-          const lines = finalContent.split('\n')
-          added = lines.length
-          diff = lines.map(l => '+' + l).join('\n')
-        } else if (initialExisted && finalContent === null) {
-          status = 'deleted'
-          const lines = (initialContent || '').split('\n')
-          removed = lines.length
-          diff = lines.map(l => '-' + l).join('\n')
-        } else if (initialContent !== null && finalContent !== null) {
-          status = 'modified'
-          diff = buildUnifiedDiff(initialContent.split('\n'), finalContent.split('\n'))
-          for (const line of diff.split('\n')) {
-            if (line.startsWith('+') && !line.startsWith('+++')) added++
-            else if (line.startsWith('-') && !line.startsWith('---')) removed++
-          }
-        }
-
-        summary.push({
-          path: relPath,
-          absPath,
-          added,
-          removed,
-          status,
-          diff,
-        })
-      }
-
-      // If CLI commands ran during the turn, check git status to discover command-driven file changes
-      if (commandRan && wsRoot) {
-        try {
-          const { runCommandSync } = require('../tools/exec')
-          const st = runCommandSync('git', ['status', '--porcelain', '-uall'], { cwd: wsRoot })
-          if (st.exitCode === 0 && st.stdout) {
-            const lines = st.stdout.split('\n').filter(Boolean)
-            for (const line of lines) {
-              const m = line.match(/^.{2}\s+(.+)$/)
-              if (!m) continue
-              const relRaw = m[1].includes('->') ? m[1].split('->')[1].trim() : m[1].trim()
-              const absPath = path.resolve(wsRoot, relRaw)
-              if (!files.has(absPath)) {
-                const code = line.slice(0, 2).trim()
-                let status = 'modified'
-                if (code === '??' || code === 'A') status = 'created'
-                else if (code === 'D') status = 'deleted'
-
-                let diff = ''
-                let added = 0
-                let removed = 0
-                const diffRes = runCommandSync('git', ['diff', 'HEAD', '--', relRaw], { cwd: wsRoot })
-                if (diffRes.exitCode === 0 && diffRes.stdout) {
-                  diff = diffRes.stdout
-                  for (const dl of diff.split('\n')) {
-                    if (dl.startsWith('+') && !dl.startsWith('+++')) added++
-                    else if (dl.startsWith('-') && !dl.startsWith('---')) removed++
-                  }
-                } else if (status === 'created') {
-                  try {
-                    if (fs.existsSync(absPath)) {
-                      const c = fs.readFileSync(absPath, 'utf8')
-                      const clines = c.split('\n')
-                      added = clines.length
-                      diff = clines.map(l => '+' + l).join('\n')
-                    }
-                  } catch {}
-                }
-                summary.push({
-                  path: relRaw.replace(/\\/g, '/'),
-                  absPath,
-                  status,
-                  added,
-                  removed,
-                  diff,
-                })
-              }
-            }
-          }
-        } catch {}
-      }
-
-      if (summary.length === 0) return null
-
-      let totalAdded = 0
-      let totalRemoved = 0
-      for (const item of summary) {
-        totalAdded += item.added
-        totalRemoved += item.removed
-      }
-
-      return {
-        files: summary,
-        fileCount: summary.length,
-        totalAdded,
-        totalRemoved,
-      }
-    }
-  }
-}
+const { createTurnFileTracker } = require('./toolLoopTracker')
 
 // System prompt: Plan→Act→Observe rhythm (coding-agent style).
 // References `plan_progress` when the model has an active plan.
@@ -369,7 +197,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   })()
   const rawToolPayload = Array.isArray(tools)
     ? tools
-    : (tools ? toolsPayload(agentMode, { cacheStable: cachePrefixStable }) : [])
+    : (tools ? toolsPayload(agentMode, { cacheStable: cachePrefixStable, db }) : [])
   let toolPayload = (cachePrefixStable && rawToolPayload.length > 1)
     ? (() => { try { return require('./toolRouter').sortToolsForCacheStability(rawToolPayload) } catch { return rawToolPayload } })()
     : rawToolPayload
@@ -428,15 +256,41 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     } catch {}
   }
 
-  // Poor Mode: aggressive token and compute conservation (max 8 iterations, tighter microcompact)
+  // Poor Mode: genuine token and compute conservation (low reasoning effort, tighter tool payloads, max 15 iterations)
   const isPoorMode = (() => {
     try { return db && require('../featureFlags').isEnabled(db, 'agent.poorMode') === true } catch { return false }
   })()
   const effectiveMaxIterations = isPoorMode
-    ? Math.min(Number(maxIterations) || 25, 8)
+    ? Math.min(Number(maxIterations) || 25, 15)
     : maxIterations
   if (isPoorMode) {
-    try { onStatus?.({ kind: 'poor_mode', text: '💸 穷鬼省流模式已启用：循环预算严格压制为 8 轮，激进压缩 Token' }) } catch {}
+    if (options) {
+      // Clamp reasoning effort to 'low' and update model-specific thinking budgets only if reasoning was requested
+      const thinkingDisabled = options.enable_thinking === false ||
+        options.thinking?.type === 'disabled' ||
+        options.thinking_config?.thinking_budget === 0 ||
+        options.reasoning?.effort === 'none'
+      const thinkingRequested = options.reasoning_effort ||
+        options.reasoningEffort ||
+        options.enable_thinking === true ||
+        options.thinking?.type === 'enabled' ||
+        (options.thinking_config?.thinking_budget && options.thinking_config.thinking_budget > 0) ||
+        (options.reasoning && options.reasoning.effort && options.reasoning.effort !== 'none')
+      if (!thinkingDisabled && thinkingRequested) {
+        const modelName = model?.model_name || model?.id || (typeof model === 'string' ? model : '')
+        try {
+          const lowReasoning = buildReasoningParams(modelName, 'low', true, options.max_tokens || options.maxTokens)
+          Object.assign(options, lowReasoning)
+        } catch {}
+        options.reasoning_effort = 'low'
+      }
+      options.reasoningEffort = 'low'
+    }
+    const isZh = (db && typeof db.getSetting === 'function' ? (db.getSetting('language') || '') : '').startsWith('zh')
+    const noticeText = isZh
+      ? '穷鬼省流模式已启用：低推理预算 + 激进工具截断 + 强化上下文压缩'
+      : 'Poor mode enabled: low reasoning budget + aggressive tool truncation + enhanced context compaction'
+    try { onStatus?.({ kind: 'poor_mode', text: noticeText }) } catch {}
   }
 
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
@@ -774,10 +628,10 @@ Reply in this format:
   // onSubagentEvent flows through toolCtx so delegate_task / run_agent (registry) can push
   // live per-subagent progress up to the renderer's deck.
   const callbacks = {
-    onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
+    requestPermission, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
     onPlanStep, onPlanSnapshot, onStatus, onThinkingStart, onThinkingEnd, onThinkingDelta, onToolCall,
   }
-  const toolCtx = { sessionId, provider, model, signal, agentMode, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
+  const toolCtx = { sessionId, provider, model, signal, agentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
   const permissionCtx = { provider, model, agentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
@@ -1448,6 +1302,9 @@ Reply ONLY with JSON:
                 }
               }
               turnFileTracker.afterTool(fn.name, args)
+              if (['write_file', 'edit_file', 'apply_patch'].includes(fn.name)) {
+                emitFileSummary()
+              }
               // Tool lifecycle: afterToolCall can modify the result (OpenClaw pattern).
               try {
                 if (typeof tool.afterToolCall === 'function') {
@@ -1459,7 +1316,12 @@ Reply ONLY with JSON:
               // Diff preview: generate unified diff for file-touching tools.
               try {
                 const diffResult = generateDiff(fn.name, args)
-                if (diffResult) entry.diff = diffResult.diff
+                if (diffResult) {
+                  entry.diff = diffResult.diff
+                  const counts = countDiffLines(diffResult.diff)
+                  entry.added = counts.added
+                  entry.removed = counts.removed
+                }
                 const snapshot = generateAfterSnapshot(fn.name, args)
                 if (snapshot) entry.afterSnapshot = snapshot
               } catch {}
@@ -1556,7 +1418,7 @@ Reply ONLY with JSON:
           rawContent = `${rawContent}\n[recovery: ${rh.kind || rh.action || 'unknown'}${hintText}]`
         }
         // Middleware chain (redact, truncate) — never let it break the loop.
-        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args }) } catch {}
+        try { rawContent = applyMiddleware(rawContent, { tool: (tc.function||{}).name, args: entry.args, isPoorMode }) } catch {}
         // Enrich structured results with a summary line (OpenClaw-inspired).
         try { rawContent = enrichWithSummary(rawContent, (tc.function||{}).name) } catch {}
         // Collect evidence for verification (Codex-inspired).

@@ -3,7 +3,13 @@
 // tool loop), and normalizeUsage (cross-provider usage normalization).
 
 import { describe, it, expect } from 'vitest'
-import { parseSSELine, normalizeMessages, normalizeUsage } from '../electron/llm/openaiAdapter'
+import {
+  parseSSELine,
+  normalizeMessages,
+  normalizeUsage,
+  ThinkTagExtractor,
+  extractThinkTags,
+} from '../electron/llm/openaiAdapter'
 
 const SSE = (obj) => `data: ${JSON.stringify(obj)}`
 
@@ -84,5 +90,70 @@ describe('openai normalizeUsage', () => {
   it('returns null for empty/undefined input', () => {
     expect(normalizeUsage(null)).toBeNull()
     expect(normalizeUsage(undefined)).toBeNull()
+  })
+})
+
+describe('extractThinkTags', () => {
+  it('extracts <think> tags correctly', () => {
+    const res = extractThinkTags('Prefix <think>internal reasoning</think> Answer')
+    expect(res.reasoning).toBe('internal reasoning')
+    expect(res.content).toBe('Prefix  Answer')
+  })
+
+  it('extracts <thought> tags correctly (Hermes 3 format)', () => {
+    const res = extractThinkTags('<thought>deliberation here</thought>Final solution')
+    expect(res.reasoning).toBe('deliberation here')
+    expect(res.content).toBe('Final solution')
+  })
+
+  it('extracts <scratchpad> tags correctly (Hermes scratchpad format)', () => {
+    const res = extractThinkTags('<scratchpad>planning step 1</scratchpad>Result')
+    expect(res.reasoning).toBe('planning step 1')
+    expect(res.content).toBe('Result')
+  })
+
+  it('returns original content when no thinking tags exist', () => {
+    const res = extractThinkTags('Just plain text')
+    expect(res.reasoning).toBe('')
+    expect(res.content).toBe('Just plain text')
+  })
+})
+
+describe('ThinkTagExtractor streaming', () => {
+  it('streams <think> tags split across chunks', () => {
+    const ext = new ThinkTagExtractor()
+    const r1 = ext.process('Hello <thi')
+    expect(r1.content).toBe('Hello ')
+    expect(r1.reasoning).toBe('')
+
+    const r2 = ext.process('nk>deep thought</thi')
+    expect(r2.content).toBe('')
+    expect(r2.reasoning).toBe('deep thought')
+
+    const r3 = ext.process('nk> World')
+    expect(r3.content).toBe(' World')
+    expect(r3.reasoning).toBe('')
+  })
+
+  it('streams <thought> tags split across chunks (Hermes 3)', () => {
+    const ext = new ThinkTagExtractor()
+    const r1 = ext.process('<thou')
+    expect(r1.content).toBe('')
+
+    const r2 = ext.process('ght>Hermes deliberation</thou')
+    expect(r2.reasoning).toBe('Hermes deliberation')
+
+    const r3 = ext.process('ght>Done')
+    expect(r3.content).toBe('Done')
+  })
+
+  it('streams <scratchpad> tags split across chunks', () => {
+    const ext = new ThinkTagExtractor()
+    const r1 = ext.process('<scratch')
+    expect(r1.content).toBe('')
+
+    const r2 = ext.process('pad>Scratchpad notes</scratchpad>Ready')
+    expect(r2.reasoning).toBe('Scratchpad notes')
+    expect(r2.content).toBe('Ready')
   })
 })

@@ -125,5 +125,5 @@ export function downloadText(filename: string, content: string, mime = 'text/pla
   document.body.appendChild(a)
   a.click()
   a.remove()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
 }

@@ -9,6 +9,7 @@ function ensureAllChatListeners() {
   ensureThinkingListener()
   ensureLoopStateListener()
   ensureUsageListener()
+  ensureTurnSummaryListener()
 }
 
 import type { StateCreator } from "zustand"
@@ -17,7 +18,7 @@ import type { AppState } from "./types"
 import { decodeDataUrlText } from "./types"
 import { t } from "@/utils/i18n"
 import log from "@/utils/logger"
-import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensurePlanSnapshotListener, ensureStatusListener, ensureTodoListener, ensureSubagentListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, setStoppingSessionId } from "./listeners"
+import { ensureChunkListener, ensureToolCallListener, ensurePlanStepListener, ensurePlanSnapshotListener, ensureStatusListener, ensureTodoListener, ensureSubagentListener, ensureThinkingListener, ensureLoopStateListener, ensureUsageListener, ensureTurnSummaryListener, setStoppingSessionId } from "./listeners"
 
 interface ChatUndoSnapshot {
   sessionId: number
@@ -28,6 +29,9 @@ interface ChatUndoSnapshot {
   planSnapshotsByMessage: Record<number, any>
   subagentsByMessage: Record<number, any>
   thinkingBlocksByMessage: Record<number, any>
+  thinkingDurationsByMessage: Record<number, any>
+  thinkingStartsByMessage: Record<number, any>
+  thinkingActiveByMessage: Record<number, any>
   statusLinesByMessage: Record<number, any>
   fileSummariesByMessage: Record<number, any>
 }
@@ -47,6 +51,9 @@ function pushUndo(sessionId: number, messages: Message[], clearRedo = true, extr
     planSnapshotsByMessage: { ...(extra?.planSnapshotsByMessage || {}) },
     subagentsByMessage: { ...(extra?.subagentsByMessage || {}) },
     thinkingBlocksByMessage: { ...(extra?.thinkingBlocksByMessage || {}) },
+    thinkingDurationsByMessage: { ...(extra?.thinkingDurationsByMessage || {}) },
+    thinkingStartsByMessage: { ...(extra?.thinkingStartsByMessage || {}) },
+    thinkingActiveByMessage: { ...(extra?.thinkingActiveByMessage || {}) },
     statusLinesByMessage: { ...(extra?.statusLinesByMessage || {}) },
     fileSummariesByMessage: { ...(extra?.fileSummariesByMessage || {}) },
   })
@@ -57,8 +64,15 @@ function pushUndo(sessionId: number, messages: Message[], clearRedo = true, extr
 function clearStreaming(sid: number | null) {
   return (s: AppState): Partial<AppState> => {
     const next = { ...s.streamingBySession }
+    const mid = sid != null ? next[sid]?.messageId : null
     if (sid != null) delete next[sid]
-    return { streamingBySession: next, sending: Object.keys(next).length > 0 }
+    const nextThinkingActive = { ...s.thinkingActiveByMessage }
+    if (mid != null) delete nextThinkingActive[mid]
+    return {
+      streamingBySession: next,
+      sending: Object.keys(next).length > 0,
+      thinkingActiveByMessage: nextThinkingActive,
+    }
   }
 }
 
@@ -71,6 +85,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   planSnapshotsByMessage: {},
   subagentsByMessage: {},
   thinkingBlocksByMessage: {},
+  thinkingDurationsByMessage: {},
+  thinkingStartsByMessage: {},
+  thinkingActiveByMessage: {},
   statusLinesByMessage: {},
   fileSummariesByMessage: {},
   setFileSummaryForMessage: (messageId, summary) => {
@@ -222,6 +239,14 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     const sid0 = st0.currentSessionId
     const preservedContent = (sid0 ? st0.streamingBySession[sid0]?.content : "") ?? ""
     const preservedMsgId = sid0 ? st0.streamingBySession[sid0]?.messageId : null
+    if (preservedMsgId != null) {
+      set((s) => {
+        if (!s.thinkingActiveByMessage?.[preservedMsgId]) return s
+        const next = { ...s.thinkingActiveByMessage }
+        delete next[preservedMsgId]
+        return { thinkingActiveByMessage: next }
+      })
+    }
     setStoppingSessionId(sid0)
     try {
       if (sid0) await window.electronAPI.chat.stop(sid0)
@@ -296,6 +321,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         const { [regeneratedMsgId]: __, ...restPS } = s.planStepsByMessage
         const { [regeneratedMsgId]: ___, ...restTB } = s.todosByMessage
         const { [regeneratedMsgId]: ____, ...restTIB } = s.thinkingBlocksByMessage
+        const { [regeneratedMsgId]: ____D, ...restTDB } = s.thinkingDurationsByMessage
+        const { [regeneratedMsgId]: ____S, ...restTSB } = s.thinkingStartsByMessage
+        const { [regeneratedMsgId]: ____A, ...restTAB } = s.thinkingActiveByMessage
         const { [regeneratedMsgId]: _____, ...restSIB } = s.statusLinesByMessage
         const { [regeneratedMsgId]: ______, ...restSNAP } = s.planSnapshotsByMessage
         const { [regeneratedMsgId]: _______, ...restSA } = s.subagentsByMessage
@@ -304,6 +332,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         next.planStepsByMessage = restPS
         next.todosByMessage = restTB
         next.thinkingBlocksByMessage = restTIB
+        next.thinkingDurationsByMessage = restTDB
+        next.thinkingStartsByMessage = restTSB
+        next.thinkingActiveByMessage = restTAB
         next.statusLinesByMessage = restSIB
         next.planSnapshotsByMessage = restSNAP
         next.subagentsByMessage = restSA
@@ -360,6 +391,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           planSnapshotsByMessage: { ...get().planSnapshotsByMessage },
           subagentsByMessage: { ...get().subagentsByMessage },
           thinkingBlocksByMessage: { ...get().thinkingBlocksByMessage },
+          thinkingDurationsByMessage: { ...get().thinkingDurationsByMessage },
+          thinkingStartsByMessage: { ...get().thinkingStartsByMessage },
+          thinkingActiveByMessage: { ...get().thinkingActiveByMessage },
           statusLinesByMessage: { ...get().statusLinesByMessage },
           fileSummariesByMessage: { ...get().fileSummariesByMessage },
         })
@@ -372,6 +406,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           planSnapshotsByMessage: entry.planSnapshotsByMessage,
           subagentsByMessage: entry.subagentsByMessage,
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
+          thinkingDurationsByMessage: entry.thinkingDurationsByMessage || {},
+          thinkingStartsByMessage: entry.thinkingStartsByMessage || {},
+          thinkingActiveByMessage: entry.thinkingActiveByMessage || {},
           statusLinesByMessage: entry.statusLinesByMessage,
           fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })
@@ -396,6 +433,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
           planSnapshotsByMessage: entry.planSnapshotsByMessage,
           subagentsByMessage: entry.subagentsByMessage,
           thinkingBlocksByMessage: entry.thinkingBlocksByMessage,
+          thinkingDurationsByMessage: entry.thinkingDurationsByMessage || {},
+          thinkingStartsByMessage: entry.thinkingStartsByMessage || {},
+          thinkingActiveByMessage: entry.thinkingActiveByMessage || {},
           statusLinesByMessage: entry.statusLinesByMessage,
           fileSummariesByMessage: entry.fileSummariesByMessage || {},
         })
@@ -562,8 +602,9 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     set((s) => ({ proposedHabits: s.proposedHabits.filter((h) => h.key !== key) }))
   },
 
-  enqueueMessage: (content) => {
-    set((s) => ({ queuedMessages: [...s.queuedMessages, { id: Date.now() + Math.random(), content }] }))
+  enqueueMessage: (content, sessionId) => {
+    const targetSid = sessionId ?? get().currentSessionId ?? undefined
+    set((s) => ({ queuedMessages: [...s.queuedMessages, { id: Date.now() + Math.random(), content, sessionId: targetSid }] }))
     get().triggerHint("first_queue", t("hint.first_queue"))
   },
 
@@ -571,10 +612,31 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     set((s) => ({ queuedMessages: s.queuedMessages.filter((m) => m.id !== id) }))
   },
 
+  reorderQueued: (fromIndex, toIndex) => {
+    set((s) => {
+      if (fromIndex < 0 || fromIndex >= s.queuedMessages.length) return {}
+      if (toIndex < 0 || toIndex >= s.queuedMessages.length) return {}
+      const next = [...s.queuedMessages]
+      const [item] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, item)
+      return { queuedMessages: next }
+    })
+  },
+
+  updateQueued: (id, content) => {
+    set((s) => ({
+      queuedMessages: s.queuedMessages.map((m) => m.id === id ? { ...m, content } : m)
+    }))
+  },
+
+  clearQueued: () => {
+    set({ queuedMessages: [] })
+  },
+
   appendArenaResult: (sessionId, result) => {
     set((s) => {
       if (s.arenaResultsSessionId !== sessionId) return {}
-      const exists = s.arenaResults.some(r => r.model_id === result.model_id)
+      const exists = s.arenaResults.some(r => r.model_id === result.model_id && (r.variant || '') === (result.variant || ''))
       return {
         arenaResults: exists ? s.arenaResults : [...s.arenaResults, result],
         arenaPending: Math.max(0, s.arenaPending - (exists ? 0 : 1)),

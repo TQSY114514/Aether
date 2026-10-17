@@ -136,6 +136,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     compact: (sessionId) => ipcRenderer.invoke('chat:compact', sessionId),
     test: (opts) => ipcRenderer.invoke('chat:test', opts),
     lint: (opts) => ipcRenderer.invoke('chat:lint', opts),
+    askSide: (params) => ipcRenderer.invoke('chat:ask-side', params),
+    stopSide: (sessionId) => ipcRenderer.invoke('chat:stop-side', sessionId),
+    onSideChunk: (cb) => subscribe('chat:side-chunk', cb),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),

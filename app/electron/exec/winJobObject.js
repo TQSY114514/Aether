@@ -21,10 +21,16 @@ let supervisorProcess = null
 let supervisorRl = null
 let isReady = false
 let initPromise = null
+let initResolve = null
+let startupTimer = null
 const pendingAssigns = new Map()
 
 function isSupported() {
   return IS_WINDOWS
+}
+
+function getSupervisorProcess() {
+  return supervisorProcess
 }
 
 async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
@@ -33,9 +39,10 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
   if (initPromise) return initPromise
 
   initPromise = new Promise((resolve) => {
+    initResolve = resolve
     try {
       const scriptPath = path.join(__dirname, 'jobSupervisor.ps1')
-      supervisorProcess = spawn(
+      const proc = spawn(
         'powershell.exe',
         [
           '-NoProfile',
@@ -48,9 +55,10 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
           stdio: ['pipe', 'pipe', 'pipe'],
         }
       )
+      supervisorProcess = proc
 
       supervisorRl = readline.createInterface({
-        input: supervisorProcess.stdout,
+        input: proc.stdout,
         crlfDelay: Infinity,
       })
 
@@ -58,7 +66,13 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
         const text = line.trim()
         if (text === 'READY') {
           isReady = true
-          resolve(true)
+          if (startupTimer) {
+            clearTimeout(startupTimer)
+            startupTimer = null
+          }
+          const resolveFn = initResolve
+          initResolve = null
+          if (resolveFn) resolveFn(true)
           return
         }
 
@@ -85,36 +99,41 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
         }
       })
 
-      supervisorProcess.stderr?.on('data', (d) => {
-        log.warn?.('[winJobObject] Supervisor stderr:', d.toString().trim())
+      proc.stderr?.on('data', (d) => {
+        if (supervisorProcess === proc) {
+          log.warn?.('[winJobObject] Supervisor stderr:', d.toString().trim())
+        }
       })
 
-      supervisorProcess.on('error', (err) => {
+      proc.on('error', (err) => {
         log.warn?.('[winJobObject] Supervisor spawn error:', err.message)
-        cleanup()
-        resolve(false)
+        if (supervisorProcess === proc) {
+          cleanup()
+        }
       })
 
-      supervisorProcess.on('exit', (code) => {
+      proc.on('exit', (code) => {
         if (code !== 0 && code !== null) {
           log.warn?.(`[winJobObject] Supervisor exited with code ${code}`)
         }
-        cleanup()
+        if (supervisorProcess === proc) {
+          cleanup()
+        }
       })
 
-      // Timeout for startup readiness (5 seconds)
-      setTimeout(() => {
-        if (!isReady) {
+      // Timeout for startup readiness (20 seconds to tolerate CI runner compilation load)
+      startupTimer = setTimeout(() => {
+        startupTimer = null
+        if (!isReady && supervisorProcess === proc) {
           log.warn?.('[winJobObject] Supervisor initialization timed out')
           cleanup()
-          resolve(false)
         }
-      }, 5000).unref?.()
+      }, 20000)
+      startupTimer.unref?.()
 
     } catch (err) {
       log.warn?.('[winJobObject] Exception starting supervisor:', err.message)
       cleanup()
-      resolve(false)
     }
   })
 
@@ -122,6 +141,15 @@ async function ensureSupervisor(memoryLimit = DEFAULT_MEMORY_LIMIT) {
 }
 
 function cleanup() {
+  if (initResolve) {
+    const resolveFn = initResolve
+    initResolve = null
+    resolveFn(false)
+  }
+  if (startupTimer) {
+    clearTimeout(startupTimer)
+    startupTimer = null
+  }
   isReady = false
   initPromise = null
   for (const [pid, handler] of pendingAssigns.entries()) {
@@ -174,6 +202,29 @@ async function assignProcess(pid, timeoutMs = 3000) {
   })
 }
 
+/**
+ * Forcefully terminate a specific Windows process tree.
+ * @param {number} pid - Target Process ID
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+async function terminateProcess(pid) {
+  if (!IS_WINDOWS) {
+    return { ok: false, error: 'Windows process termination only supported on Win32' }
+  }
+  if (!pid || typeof pid !== 'number') {
+    return { ok: false, error: 'Invalid PID' }
+  }
+  return new Promise((resolve) => {
+    const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true })
+    killer.on('exit', (code) => {
+      resolve({ ok: code === 0 || code === 128 })
+    })
+    killer.on('error', (err) => {
+      resolve({ ok: false, error: err.message })
+    })
+  })
+}
+
 function shutdown() {
   if (supervisorProcess && !supervisorProcess.killed) {
     try {
@@ -193,5 +244,8 @@ module.exports = {
   isSupported,
   ensureSupervisor,
   assignProcess,
+  terminateProcess,
+  getSupervisorProcess,
   shutdown,
 }
+

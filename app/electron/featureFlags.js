@@ -49,7 +49,8 @@ const FLAG_DEFS = [
   { key: 'agent.toolRouter.staged', default: false, category: 'agent',   description: 'Stage-aware tool routing: re-estimate the task stage (explore/build/verify/deliver) each round and merge in its tool categories (additive only)' },
   { key: 'agent.cachePrefixStability', default: true, category: 'agent', description: 'Prefix cache stability invariant: order always-on/MCP tools before staged categories, append-only stage routing, and preserve sent message prefix across rounds' },
   { key: 'agent.shrinkRetry',    default: false, category: 'agent',      description: 'Auto scope-reduction retry: when the iteration budget runs out or a loop guard blocks, shrink to one completable increment and add a few rounds (fires at most once per run)' },
-  { key: 'agent.poorMode',       default: false, category: 'agent',      description: 'Poor Mode: aggressive token and compute conservation (max 8 iterations, tighter context compaction, minimal tool payloads)' },
+  { key: 'agent.poorMode',       default: false, category: 'agent',      description: 'Poor Mode (Frugal): token & cost conservation without sacrificing task completion (low reasoning effort, aggressive tool truncation, tight context compaction, max 15 iterations)' },
+  { key: 'agent.leanMcp',        default: false, category: 'agent',      description: 'Lean MCP Bridge: expose MCP tools via lightweight on-demand gateway (mcp_list_tools, mcp_call_tool) to preserve prompt cache' },
   // Phase 3 — code understanding + orchestration
   { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
   { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },
@@ -57,7 +58,7 @@ const FLAG_DEFS = [
   { key: 'network.policy',        default: false, category: 'agent',      description: 'Network allowlist policy for agent web tools (web_fetch/web_search)' },
   // Phase 4 — self-evolving memory
   { key: 'memory.experienceReplay', default: false, category: 'learning', description: 'Trajectory experience replay into the loop' },
-  { key: 'skills.selfEvolution', default: false, category: 'learning',    description: 'Agent-created skill drafts (skill evolution)' },
+  { key: 'skills.selfEvolution', default: true,  category: 'learning',    description: 'Autonomous strategy reflection from execution traces into STRATEGY.md' },
   // Phase 5 — LLM routing & resilience
   { key: 'llm.autoFallback',     default: false, category: 'agent',       description: 'Enable transparent provider fallback on 429/5xx errors' },
   { key: 'llm.smartPool',        default: false, category: 'agent',       description: 'Enable load balancing across multiple free-tier providers' },

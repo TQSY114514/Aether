@@ -26,6 +26,7 @@ import {
   Sparkles,
   HardDrive,
   Layers,
+  Trophy,
 } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
 import McpSettings from '@/components/settings/McpSettings'
@@ -37,99 +38,21 @@ import SkillsSettings from '@/components/settings/SkillsSettings'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
 import FeatureFlagsSettings from '@/components/settings/FeatureFlagsSettings'
 import TokenPage from '@/pages/TokenPage'
-import EvolutionPage from '@/pages/EvolutionPage'
-import LearningGraphPage from '@/pages/LearningGraphPage'
+import ScoresPage from '@/pages/ScoresPage'
 import SkillsPage from '@/pages/SkillsPage'
+import GatewayCard from '@/components/settings/GatewayCard'
 import ChatBackgroundPattern from '@/components/chat/ChatBackgroundPattern'
 
 // Sub-panels reachable from the "Data & tools" card.
-type ToolsPanel = 'tokens' | 'evolution' | 'learning' | 'skills' | null
+type ToolsPanel = 'skills' | 'tokens' | 'scores' | null
 
 type SettingsTab = 'general' | 'agent' | 'extensions' | 'advanced'
 
 const TOOLS_ENTRIES: { key: Exclude<ToolsPanel, null>; icon: any; titleKey: string; descKey: string }[] = [
-  { key: 'tokens', icon: DollarSign, titleKey: 'settings.tools.tokens', descKey: 'settings.tools.tokens_desc' },
-  { key: 'evolution', icon: GitBranch, titleKey: 'settings.tools.evolution', descKey: 'settings.tools.evolution_desc' },
-  { key: 'learning', icon: NetworkIcon, titleKey: 'settings.tools.learning', descKey: 'settings.tools.learning_desc' },
   { key: 'skills', icon: BookOpen, titleKey: 'settings.tools.skills', descKey: 'settings.tools.skills_desc' },
+  { key: 'tokens', icon: DollarSign, titleKey: 'settings.tools.tokens', descKey: 'settings.tools.tokens_desc' },
+  { key: 'scores', icon: Trophy, titleKey: 'sidebar.nav.arena', descKey: 'arena.bench.title' },
 ]
-
-// "Local Gateway" card — connection info for VS Code / external tools
-function GatewayCard() {
-  const { toast } = useUI()
-  const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string | null; running: boolean } | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const refresh = async () => {
-    try { setInfo(await window.electronAPI?.gateway?.info?.()) } catch { setInfo(null) }
-  }
-  useEffect(() => { refresh() }, [])
-
-  const toggle = async () => {
-    if (!info) return
-    setBusy(true)
-    try { await window.electronAPI?.gateway?.setEnabled?.(!info.enabled); await refresh() } catch {}
-    setBusy(false)
-  }
-
-  const copy = async (text: string, label: string) => {
-    try { await navigator.clipboard.writeText(text); toast(`${label} 已复制`, { type: 'success' }) } catch { toast('复制失败', { type: 'error' }) }
-  }
-
-  return (
-    <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Plug size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
-          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Local Gateway / VS Code 集成</h2>
-        </div>
-        <button
-          onClick={toggle}
-          disabled={busy || !info}
-          className={`px-3 py-1 text-xs rounded-md font-medium transition-all active:scale-[0.98] ${
-            info?.enabled ? 'text-white' : 'border'
-          }`}
-          style={info?.enabled ? { backgroundColor: 'var(--accent)' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-        >
-          {info?.enabled ? '已启用' : '已停用'} · {busy ? '…' : '切换'}
-        </button>
-      </div>
-      <p className="text-xs mb-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-        在 VS Code 里安装 Aether 扩展后，填入下面的地址与 Token 即可连接当前桌面 App，复用已配置的模型/记忆/技能。
-      </p>
-      {info ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span style={{ color: 'var(--text-muted)' }}>服务地址</span>
-            <button
-              onClick={() => copy(`http://127.0.0.1:${info.port}`, '地址')}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono active:scale-[0.98]"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-            >
-              http://127.0.0.1:{info.port} <Copy size={11} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span style={{ color: 'var(--text-muted)' }}>访问 Token</span>
-            <button
-              onClick={() => info.token && copy(info.token, 'Token')}
-              disabled={!info.token}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border hover:bg-[var(--bg-secondary)] transition-colors font-mono disabled:opacity-40 active:scale-[0.98]"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-            >
-              {info.token ? `${info.token.slice(0, 12)}…` : '—'} <Copy size={11} />
-            </button>
-          </div>
-          <div className="text-[11px] font-medium pt-1" style={{ color: info.running ? 'var(--success)' : '#dc2626' }}>
-            {info.running ? '● 运行中（仅本机可访问）' : '● 未运行（启用后生效）'}
-          </div>
-        </div>
-      ) : (
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>加载中…</p>
-      )}
-    </div>
-  )
-}
 
 // "Check for updates" card
 function UpdateCard() {
@@ -293,10 +216,9 @@ export default function SettingPage() {
         </div>
         {/* Full page view */}
         <div className="flex-1 min-h-0 flex flex-col">
-          {toolsPanel === 'tokens' && <TokenPage />}
-          {toolsPanel === 'evolution' && <EvolutionPage />}
-          {toolsPanel === 'learning' && <LearningGraphPage />}
           {toolsPanel === 'skills' && <SkillsPage />}
+          {toolsPanel === 'tokens' && <TokenPage />}
+          {toolsPanel === 'scores' && <ScoresPage />}
         </div>
       </div>
     )

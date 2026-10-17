@@ -142,6 +142,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
       return {
         streamingBySession: nextStream,
         sessionConfigs: nextConfigs,
+        queuedMessages: s.queuedMessages.filter(m => m.sessionId !== id),
         toolCallsByMessage: cleanMap(s.toolCallsByMessage),
         planStepsByMessage: cleanMap(s.planStepsByMessage),
         todosByMessage: cleanMap(s.todosByMessage),

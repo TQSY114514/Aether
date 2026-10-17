@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
+import { t } from '@/utils/i18n'
 import { Brain, Wand2, GitBranch, ListChecks, Repeat, ArrowUpRight } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,9 +48,9 @@ export default function LearningStatusPage() {
       sub: '从重复工具序列自动 draft 的 SKILL.md',
     },
     {
-      key: 'evolution', label: '进化胶囊', icon: GitBranch, view: 'evolution' as const,
+      key: 'evolution', label: t('learning_status.evolution_label'), icon: GitBranch, view: 'memory' as const,
       value: data?.evolution ?? 0,
-      sub: 'GEP 自进化引擎产出的策略胶囊',
+      sub: t('learning_status.evolution_sub'),
     },
     {
       key: 'habits', label: '习惯', icon: ListChecks, view: 'memory' as const,
@@ -93,7 +94,14 @@ export default function LearningStatusPage() {
             {cards.map((c) => (
               <button
                 key={c.key}
-                onClick={() => setCurrentView(c.view)}
+                onClick={() => {
+                  if (c.key === 'evolution') {
+                    useStore.getState().setMemoryActiveTab('strategies')
+                  } else if (c.view === 'memory') {
+                    useStore.getState().setMemoryActiveTab('memories')
+                  }
+                  setCurrentView(c.view)
+                }}
                 className="group text-left rounded-lg border p-4 transition-colors hover:bg-[var(--bg-secondary)]"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
               >

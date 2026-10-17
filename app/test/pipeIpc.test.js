@@ -41,8 +41,11 @@ describe('Windows Named Pipe Cluster IPC & A2A (P2-3)', () => {
 
     client1.send({ type: 'ping', payload: 'hello pipe' })
 
-    // Wait for message transmission
-    await new Promise(r => setTimeout(r, 50))
+    // Wait for message transmission with resilient polling
+    const deadline = Date.now() + 2000
+    while (received.length === 0 && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 20))
+    }
 
     expect(received.length).toBe(1)
     expect(received[0].type).toBe('ping')
@@ -121,7 +124,10 @@ describe('Windows Named Pipe Cluster IPC & A2A (P2-3)', () => {
 
     server.broadcast({ event: 'agent_status_update', activeCount: 3 })
 
-    await new Promise(r => setTimeout(r, 50))
+    const deadline = Date.now() + 2000
+    while ((client1Msgs.length === 0 || client2Msgs.length === 0) && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 20))
+    }
 
     expect(client1Msgs.length).toBe(1)
     expect(client1Msgs[0].event).toBe('agent_status_update')

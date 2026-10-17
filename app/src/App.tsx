@@ -12,7 +12,6 @@ import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
 import LearningGraphPage from '@/pages/LearningGraphPage'
 import SkillsPage from '@/pages/SkillsPage'
-import EvolutionPage from '@/pages/EvolutionPage'
 import LearningStatusPage from '@/pages/LearningStatusPage'
 import SecurityPage from '@/pages/SecurityPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
@@ -24,6 +23,7 @@ import { useUI } from '@/components/ui/feedback'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import TaskPanel from '@/components/tasks/TaskPanel'
 import CheckpointTimelineDrawer from '@/components/chat/CheckpointTimelineDrawer'
+import BtwDrawer from '@/components/chat/BtwDrawer'
 import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
 import { useFeatureFlag } from '@/utils/featureFlags'
 import { PanelLeft, ChevronLeft } from 'lucide-react'
@@ -36,7 +36,6 @@ const VIEW_TITLES: Record<string, string> = {
   memory: 'sidebar.nav.memory',
   settings: 'sidebar.nav.settings',
   tokens: 'settings.tools.tokens',
-  evolution: 'settings.tools.evolution',
   learning: 'settings.tools.learning',
   skills: 'settings.tools.skills',
   security: 'settings.nav.security',
@@ -263,14 +262,23 @@ export default function App() {
       when: () => !shortcutsOpenRef.current, // ShortcutOverlay handles its own ESC
       run: () => {
         const s = useStore.getState()
-        if (s.sending) s.stopGeneration()
-        else if (s.currentView !== 'chat') s.setCurrentView('chat')
+        if (s.btwOpen) {
+          // If BTW drawer is open, Escape closes the drawer, do not stop main generation
+          return
+        }
+        if (s.sending) {
+          s.stopGeneration()
+          window.dispatchEvent(new CustomEvent('aether:generation-stopped'))
+        } else if (s.currentView !== 'chat') {
+          s.setCurrentView('chat')
+        }
       },
     },
     { id: 'history-back', run: () => useStore.getState().goBack() },
     { id: 'history-forward', run: () => useStore.getState().goForward() },
     { id: 'undo', skipWhenEditable: true, run: () => useStore.getState().undoLastEdit() },
     { id: 'redo', skipWhenEditable: true, run: () => useStore.getState().redo() },
+    { id: 'toggle-btw', run: () => useStore.getState().toggleBtw() },
   ])
 
   const renderPage = () => {
@@ -284,7 +292,6 @@ export default function App() {
       case 'memory': return <MemoryPage />
       case 'learning': return <LearningGraphPage />
       case 'skills': return <SkillsPage />
-      case 'evolution': return <EvolutionPage />
       case 'learningStatus': return <LearningStatusPage />
       case 'security': return <SecurityPage />
     }
@@ -332,6 +339,7 @@ export default function App() {
         </main>
         <TaskPanel />
         <CheckpointTimelineDrawer />
+        <BtwDrawer />
         <PermissionDialog />
         <QuestionDialog />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

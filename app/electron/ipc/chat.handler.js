@@ -20,6 +20,7 @@ const pendingInjections = new Map() // sessionId -> string[] of pending injectio
 
 // Per-session message tracking for abortControllers cleanup on session delete.
 let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
+const sideAbortControllers = new Map() // sessionId -> AbortController
 function registerSessionMessages(sessionId, messageIds) {
   if (!sessionMessagesMap.has(sessionId)) sessionMessagesMap.set(sessionId, new Set())
   const set = sessionMessagesMap.get(sessionId)
@@ -33,6 +34,10 @@ function cleanupSessionControllers(sessionId) {
       if (ctrl) { ctrl.abort(); abortControllers.delete(mid) }
     }
     sessionMessagesMap.delete(sessionId)
+  }
+  if (sideAbortControllers.has(sessionId)) {
+    try { sideAbortControllers.get(sessionId).abort() } catch {}
+    sideAbortControllers.delete(sessionId)
   }
 }
 
@@ -89,6 +94,96 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     } catch {
       return { queued: false }
     }
+  })
+
+  // Side Questions (BTW / 旁支提问): read-only query over current session context without interrupting agent
+  ipcMain.handle('chat:ask-side', async (_e, { sessionId, question, modelId } = {}) => {
+    if (!sessionId || typeof question !== 'string' || !question.trim()) {
+      return { ok: false, error: 'sessionId and non-empty question are required' }
+    }
+    const sid = Number(sessionId) || sessionId
+    if (sideAbortControllers.has(sid)) {
+      try { sideAbortControllers.get(sid).abort() } catch {}
+      sideAbortControllers.delete(sid)
+    }
+    const controller = new AbortController()
+    sideAbortControllers.set(sid, controller)
+
+    const wc = getWebContents()
+    try {
+      const session = db.getSession(sid)
+      let targetModelId = modelId
+      if (!targetModelId && session && session.config) {
+        try { targetModelId = JSON.parse(session.config)?.modelId } catch {}
+      }
+      let model = targetModelId ? db.getModel(targetModelId) : null
+      if (!model) {
+        const all = db.getAllModels()
+        model = all[0]
+      }
+      if (!model) {
+        sideAbortControllers.delete(sid)
+        return { ok: false, error: 'No model available' }
+      }
+      const provider = db.getProvider(model.provider_id)
+      if (!provider) {
+        sideAbortControllers.delete(sid)
+        return { ok: false, error: 'No provider available' }
+      }
+
+      const msgs = db.getMessages(sid) || []
+      const recent = msgs
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content)
+        .slice(-20)
+        .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }))
+
+      const sideSystemPrompt = `You are Aether's Side Assistant (BTW mode).
+The user is asking a quick side question about the ongoing conversation.
+- Answer directly, concisely, and accurately based on the conversation context.
+- You do NOT have tool access. Do not attempt to run tools or commands.
+- Do NOT repeat or modify the main conversation task.
+- Be helpful, clear, and direct.`
+
+      const sideMessages = [
+        { role: 'system', content: sideSystemPrompt },
+        ...recent,
+        { role: 'user', content: question.trim() },
+      ]
+
+      let fullAnswer = ''
+      const { streamChat } = require('../llm/providerAdapter')
+      const stream = streamChat({
+        provider,
+        model,
+        messages: sideMessages,
+        signal: controller.signal,
+      })
+
+      for await (const delta of stream) {
+        if (delta) {
+          fullAnswer += delta
+          try { wc?.send('chat:side-chunk', { sessionId: sid, delta, done: false }) } catch {}
+        }
+      }
+
+      try { wc?.send('chat:side-chunk', { sessionId: sid, delta: '', done: true, fullContent: fullAnswer }) } catch {}
+      sideAbortControllers.delete(sid)
+      return { ok: true, answer: fullAnswer }
+    } catch (err) {
+      sideAbortControllers.delete(sid)
+      const errMsg = err.name === 'AbortError' ? '已取消' : (err.message || String(err))
+      try { wc?.send('chat:side-chunk', { sessionId: sid, delta: '', done: true, error: errMsg }) } catch {}
+      return { ok: false, error: errMsg }
+    }
+  })
+
+  ipcMain.handle('chat:stop-side', (_e, sessionId) => {
+    const sid = Number(sessionId) || sessionId
+    if (sid && sideAbortControllers.has(sid)) {
+      try { sideAbortControllers.get(sid).abort() } catch {}
+      sideAbortControllers.delete(sid)
+    }
+    return { ok: true }
   })
 
   // Habit-confirmation flow: the renderer asks us to confirm (promote now) or
@@ -149,16 +244,18 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     }
   })
 
-  // Renderer replies to a permission-request via this invoke. We just forward
-  // the reply as an event so the waiting requestPermission closure (which uses
-  // wc.on('chat:permission-reply')) picks it up.
+  // Renderer replies to a permission-request via this invoke. We forward the reply
+  // to the webContents EventEmitter so toolLoopCallbacks (safeWc.on('chat:permission-reply'))
+  // picks it up, as well as sending it to the renderer if subscribed.
   ipcMain.handle('chat:permission-reply', (event, payload) => {
-    event.sender.send('chat:permission-reply', payload)
+    try { event.sender.emit('chat:permission-reply', event, payload) } catch {}
+    try { event.sender.send('chat:permission-reply', payload) } catch {}
     return true
   })
   // Same forwarding pattern for AskUserQuestion replies.
   ipcMain.handle('chat:question-reply', (event, payload) => {
-    event.sender.send('chat:question-reply', payload)
+    try { event.sender.emit('chat:question-reply', event, payload) } catch {}
+    try { event.sender.send('chat:question-reply', payload) } catch {}
     return true
   })
 

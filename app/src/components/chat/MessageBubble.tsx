@@ -11,6 +11,7 @@ import TaskCard from './TaskCard'
 import ThinkingBlock from './ThinkingBlock'
 import AgentTimeline from './AgentTimeline'
 import FileSummaryDeck from './FileSummaryDeck'
+import SubagentDeck from './SubagentDeck'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
@@ -25,7 +26,10 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const toolCalls = useStore(s => s.toolCallsByMessage[message.id])
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
   const todos = useStore(s => s.todosByMessage[message.id])
+  const subagents = useStore(s => s.subagentsByMessage[message.id])
   const thinkingBlocks = useStore(s => s.thinkingBlocksByMessage[message.id])
+  const thinkingDuration = useStore(s => s.thinkingDurationsByMessage[message.id])
+  const thinkingStartedAt = useStore(s => s.thinkingStartsByMessage[message.id])
   const statusLines = useStore(s => s.statusLinesByMessage[message.id])
   const fileSummary = useStore(s => s.fileSummariesByMessage[message.id])
 
@@ -36,13 +40,20 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const isUser = message.role === 'user'
   // An assistant turn with a live todo checklist renders as a task card.
   const hasTask = !!todos && todos.length > 0
-  // A message is "streaming" when it's the last message (assistant, empty content)
-  // and the session has an active stream buffer.
-  const streamingBySession = useStore(s => s.streamingBySession)
-  const isStreaming = !isUser && message.content === '' && streamingBySession[message.session_id]
   const isError = message.status === 'error'
   const isFallback = message.status === 'fallback'
   const isAborted = message.status === 'aborted'
+  // A message is "streaming" when it's the last message (assistant, empty content)
+  // and the session has an active stream buffer. Scoped selector prevents historical
+  // messages from re-rendering on every stream token.
+  const isStreamingCandidate = !isUser && message.content === ''
+  const isStreaming = useStore(s => isStreamingCandidate && s.streamingBySession[message.session_id]?.messageId === message.id)
+  const isAnswerStreaming = useStore(s => isStreaming && Boolean(s.streamingBySession[message.session_id]?.content))
+  const hasActiveTool = Boolean(toolCalls && toolCalls.some(t => t.result === null && !t.error))
+  const isThinkingActive = useStore(s => Boolean(s.thinkingActiveByMessage?.[message.id]))
+  const isThinkingStreaming = !isAborted && !isError && Boolean(
+    isStreaming && (isThinkingActive || (!isAnswerStreaming && !hasActiveTool && thinkingBlocks && !thinkingDuration))
+  )
 
   const hlRe = useMemo(() => searchHighlight ? new RegExp(`(${escapeRegex(searchHighlight)})`, 'gi') : null, [searchHighlight])
 
@@ -230,9 +241,15 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             {(thinkingBlocks || (toolCalls && toolCalls.length > 0) || (planSteps && planSteps.length > 0)) && (
               <AgentTimeline
                 thinkingText={thinkingBlocks || undefined}
+                thinkingStreaming={isThinkingStreaming}
+                thinkingDuration={thinkingDuration}
+                thinkingStartedAt={thinkingStartedAt}
                 toolCalls={toolCalls && toolCalls.length > 0 ? toolCalls : undefined}
                 planSteps={planSteps || undefined}
               />
+            )}
+            {subagents && subagents.length > 0 && (
+              <SubagentDeck items={subagents} />
             )}
             {message.attachment && message.attachment.kind === 'image' && (
               <div className="mb-2 rounded-md overflow-hidden border max-w-sm" style={{ borderColor: 'var(--border)' }}>

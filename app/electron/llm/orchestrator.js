@@ -116,42 +116,35 @@ async function orchestrate(opts = {}) {
   const sharedCallbacks = opts.callbacks || {}
   const parentSessionId = opts.parentSessionId ?? null
   const aggregatedFiles = new Map()
-  let totalAdded = 0
-  let totalRemoved = 0
+
+  const emitAggregatedSummary = () => {
+    if (aggregatedFiles.size > 0 && typeof sharedCallbacks.onFileSummary === 'function') {
+      const files = Array.from(aggregatedFiles.values())
+      const totalAdded = files.reduce((sum, f) => sum + (f.added || 0), 0)
+      const totalRemoved = files.reduce((sum, f) => sum + (f.removed || 0), 0)
+      try {
+        sharedCallbacks.onFileSummary({
+          fileCount: files.length,
+          totalAdded,
+          totalRemoved,
+          files,
+        })
+      } catch {}
+    }
+  }
 
   const handleChildFileSummary = (childSummary) => {
     if (!childSummary || !Array.isArray(childSummary.files)) return
     for (const f of childSummary.files) {
-      if (aggregatedFiles.has(f.path)) {
-        const existing = aggregatedFiles.get(f.path)
-        existing.additions = (existing.additions || 0) + (f.additions || 0)
-        existing.deletions = (existing.deletions || 0) + (f.deletions || 0)
-        if (f.deleted) existing.deleted = true
-        if (f.created) existing.created = true
-      } else {
-        aggregatedFiles.set(f.path, { ...f })
-      }
+      if (!f || !f.path) continue
+      aggregatedFiles.set(f.path, { ...f })
     }
-    totalAdded += childSummary.totalAdded || 0
-    totalRemoved += childSummary.totalRemoved || 0
+    emitAggregatedSummary()
   }
 
   const childCallbacks = {
     ...sharedCallbacks,
     onFileSummary: handleChildFileSummary,
-  }
-
-  const emitAggregatedSummary = () => {
-    if (aggregatedFiles.size > 0 && typeof sharedCallbacks.onFileSummary === 'function') {
-      try {
-        sharedCallbacks.onFileSummary({
-          fileCount: aggregatedFiles.size,
-          totalAdded,
-          totalRemoved,
-          files: Array.from(aggregatedFiles.values()),
-        })
-      } catch {}
-    }
   }
 
   // Decide whether to invest in a plan.

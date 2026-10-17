@@ -31,6 +31,8 @@ let _toolCallListenerInstalled = false
 let _arenaListenerInstalled = false
 let _streamRaf = 0
 let _pendingDeltas: Record<number, string> = {}
+let _thinkingStreamRaf = 0
+let _pendingThinkingDeltas: Record<number, string> = {}
 let _statusListenerInstalled = false
 let _habitSuggestionInstalled = false
 let _todoListenerInstalled = false
@@ -44,6 +46,20 @@ let _toolStreamListenerInstalled = false
 let _turnSummaryListenerInstalled = false
 let _memorySavedListenerInstalled = false
 let _skillPatchedListenerInstalled = false
+
+function flushThinkingUpdates() {
+  const deltas = _pendingThinkingDeltas
+  _pendingThinkingDeltas = {}
+  if (Object.keys(deltas).length === 0) return
+  getStore().setState((s) => {
+    const next = { ...s.thinkingBlocksByMessage }
+    for (const [mid, delta] of Object.entries(deltas)) {
+      const n = Number(mid)
+      next[n] = (next[n] || "") + delta
+    }
+    return { thinkingBlocksByMessage: next }
+  })
+}
 
 // Chunk listener
 
@@ -85,10 +101,21 @@ export function ensureChunkListener() {
     }
     if (done) {
       flushStreamUpdates()
+      flushThinkingUpdates()
       if (_streamRaf) { cancelAnimationFrame(_streamRaf); _streamRaf = 0 }
+      if (_thinkingStreamRaf) { cancelAnimationFrame(_thinkingStreamRaf); _thinkingStreamRaf = 0 }
       _pendingDeltas = {}
+      _pendingThinkingDeltas = {}
       const sid = sessionId
       const finishedMsgId = messageId || (buf && buf.messageId) || null
+      if (finishedMsgId != null) {
+        getStore().setState((s) => {
+          if (!s.thinkingActiveByMessage?.[finishedMsgId]) return s
+          const next = { ...s.thinkingActiveByMessage }
+          delete next[finishedMsgId]
+          return { thinkingActiveByMessage: next }
+        })
+      }
       requestAnimationFrame(() => {
         const st = getStore().getState()
         const isStopping = _stoppingSessionId === sid
@@ -152,12 +179,23 @@ export function ensureChunkListener() {
         getStore().getState().loadSessions()
         const st2 = getStore().getState()
         if (st2.queuedMessages.length > 0 && Object.keys(st2.streamingBySession).length === 0) {
-          const q = st2.queuedMessages[0]
-          getStore().setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
-          setTimeout(() => {
-            const st3 = getStore().getState()
-            if (st3.chatMode === "arena") st3.runArena(q.content)
-            else st3.sendMessage(q.content)
+          setTimeout(async function processNextQueued() {
+            const st = getStore().getState()
+            if (st.queuedMessages.length === 0 || Object.keys(st.streamingBySession).length > 0) return
+            const q = st.queuedMessages[0]
+            getStore().setState((s) => ({ queuedMessages: s.queuedMessages.slice(1) }))
+            const targetSid = q.sessionId ?? st.currentSessionId
+            if (!targetSid) return processNextQueued()
+            const exists = st.sessions.some((s) => s.id === targetSid)
+            if (!exists) {
+              return processNextQueued()
+            }
+            if (st.currentSessionId !== targetSid) {
+              await st.selectSession(targetSid)
+            }
+            const st4 = getStore().getState()
+            if (st4.chatMode === "arena") st4.runArena(q.content)
+            else st4.sendMessage(q.content)
           }, 50)
         }
       })
@@ -247,14 +285,15 @@ export function ensureStatusListener() {
   _statusListenerInstalled = true
   window.electronAPI.chat.onStatus(({ messageId, text, kind }) => {
     if (!messageId || !text) return
+    const displayText = kind === 'poor_mode' ? t('status.poor_mode') : text
     getStore().setState((s) => {
       const existing = s.statusLinesByMessage[messageId] || []
-      if (existing.some(l => l === text || (l.includes(text.slice(0, 30)) && kind === "context_budget"))) return s
-      const next = [...existing.slice(-4), text]
+      if (existing.some(l => l === displayText || (l.includes(displayText.slice(0, 30)) && kind === "context_budget"))) return s
+      const next = [...existing.slice(-4), displayText]
       return { statusLinesByMessage: { ...s.statusLinesByMessage, [messageId]: next } }
     })
     if (kind === "context_budget") {
-      getStore().setState({ contextBudgetText: text })
+      getStore().setState({ contextBudgetText: displayText })
     }
   })
 }
@@ -343,24 +382,9 @@ export function ensureThinkingListener() {
   if (_thinkingListenerInstalled) return
   _thinkingListenerInstalled = true
 
-  window.electronAPI.chat.onThinkingStart?.(({ messageId, sessionId }) => {
+  window.electronAPI.chat.onThinkingStart?.(({ messageId, sessionId, startedAt }) => {
     if (!messageId) return
-    getStore().setState((s) => {
-      const sid = sessionId || s.currentSessionId
-      const nextStreaming = { ...s.streamingBySession }
-      if (sid) {
-        if (!nextStreaming[sid]) {
-          nextStreaming[sid] = { content: "", messageId }
-        } else if (nextStreaming[sid].messageId !== messageId) {
-          nextStreaming[sid] = { ...nextStreaming[sid], messageId }
-        }
-      }
-      return { streamingBySession: nextStreaming }
-    })
-  })
-
-  window.electronAPI.chat.onThinkingChunk?.(({ messageId, sessionId, delta }) => {
-    if (!messageId || !delta) return
+    const now = startedAt || Date.now()
     getStore().setState((s) => {
       const sid = sessionId || s.currentSessionId
       const nextStreaming = { ...s.streamingBySession }
@@ -373,9 +397,62 @@ export function ensureThinkingListener() {
       }
       return {
         streamingBySession: nextStreaming,
-        thinkingBlocksByMessage: {
-          ...s.thinkingBlocksByMessage,
-          [messageId]: (s.thinkingBlocksByMessage[messageId] || "") + delta,
+        thinkingStartsByMessage: {
+          ...s.thinkingStartsByMessage,
+          [messageId]: now,
+        },
+        thinkingActiveByMessage: {
+          ...s.thinkingActiveByMessage,
+          [messageId]: true,
+        },
+      }
+    })
+  })
+
+  window.electronAPI.chat.onThinkingChunk?.(({ messageId, sessionId, delta }) => {
+    if (!messageId || !delta) return
+    _pendingThinkingDeltas[messageId] = (_pendingThinkingDeltas[messageId] || "") + delta
+    const sid = sessionId || getStore().getState().currentSessionId
+    if (sid) {
+      const st = getStore().getState()
+      const buf = st.streamingBySession[sid]
+      if (!buf || buf.messageId !== messageId) {
+        getStore().setState((s) => ({
+          streamingBySession: {
+            ...s.streamingBySession,
+            [sid]: { content: buf?.content || "", messageId },
+          },
+        }))
+      }
+    }
+    if (!_thinkingStreamRaf) {
+      _thinkingStreamRaf = requestAnimationFrame(() => {
+        _thinkingStreamRaf = 0
+        flushThinkingUpdates()
+      })
+    }
+  })
+
+  window.electronAPI.chat.onThinkingEnd?.(({ messageId, durationMs }) => {
+    if (!messageId) return
+    flushThinkingUpdates()
+    if (_thinkingStreamRaf) {
+      cancelAnimationFrame(_thinkingStreamRaf)
+      _thinkingStreamRaf = 0
+    }
+    getStore().setState((s) => {
+      const start = s.thinkingStartsByMessage[messageId]
+      const durationSec = durationMs != null && durationMs > 0
+        ? durationMs / 1000
+        : (start ? (Date.now() - start) / 1000 : 0)
+      return {
+        thinkingDurationsByMessage: {
+          ...s.thinkingDurationsByMessage,
+          [messageId]: (s.thinkingDurationsByMessage[messageId] || 0) + durationSec,
+        },
+        thinkingActiveByMessage: {
+          ...s.thinkingActiveByMessage,
+          [messageId]: false,
         },
       }
     })
@@ -511,6 +588,24 @@ export function ensureSkillPatchedListener() {
   })
 }
 
+let _questionListenerInstalled = false
+export function ensureQuestionListener() {
+  if (_questionListenerInstalled) return
+  _questionListenerInstalled = true
+  window.electronAPI.chat.onQuestion?.((payload: any) => {
+    if (!payload || !payload.reqId) return
+    getStore().setState((s) => ({
+      pendingQuestions: [...s.pendingQuestions, payload],
+    }))
+  })
+  window.electronAPI.chat.onQuestionExpired?.(({ reqId }: { reqId: string }) => {
+    if (!reqId) return
+    getStore().setState((s) => ({
+      pendingQuestions: s.pendingQuestions.filter((q) => q.reqId !== reqId),
+    }))
+  })
+}
+
 // All listeners
 
 export function ensureAllListeners() {
@@ -530,4 +625,5 @@ export function ensureAllListeners() {
   ensureMemorySavedListener()
   ensureSkillPatchedListener()
   ensureTaskListeners()
+  ensureQuestionListener()
 }

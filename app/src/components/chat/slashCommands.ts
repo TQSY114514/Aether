@@ -233,16 +233,16 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     action: async () => {
       try {
         const res = await useStore.getState().undoLastAction()
-        if (!res.ok) window.alert(`撤销失败：${res.error || '未知错误'}`)
+        if (!res.ok) window.alert(t('chat.undo_failed', res.error || t('chat.unknown_error')))
       } catch {
-        window.alert('撤销失败')
+        window.alert(t('chat.undo_failed', t('chat.unknown_error')))
       }
     },
   },
   {
     id: 'clear',
-    name: '清空对话',
-    description: '清空当前对话历史',
+    name: t('slash.clear', '清空对话'),
+    description: t('slash.clear_desc', '清空当前对话历史'),
     action: async () => {
       const sid = useStore.getState().currentSessionId
       if (sid) {
@@ -253,8 +253,8 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
   },
   {
     id: 'regenerate',
-    name: '重新生成',
-    description: '撤销最后一条回复并重新生成',
+    name: t('slash.regenerate', '重新生成'),
+    description: t('slash.regenerate_desc', '撤销最后一条回复并重新生成'),
     action: () => {
       useStore.getState().regenerate()
     },

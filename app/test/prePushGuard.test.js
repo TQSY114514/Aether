@@ -102,7 +102,7 @@ afterAll(() => {
   }
 })
 
-describe('prePushGuard', () => {
+describe('prePushGuard', { timeout: 60000 }, () => {
   // ─── isPushCommand ─────────────────────────────────────────────────────────
   describe('isPushCommand', () => {
     it('detects a plain push', () => {

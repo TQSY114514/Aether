@@ -88,34 +88,34 @@ export default function SecurityPage() {
     try {
       const res = await window.electronAPI.chat.savePermissionRule(newTool, k, 'allow')
       if (res && (res as any).ok === false) {
-        toast((res as any).error || '添加规则失败', { type: 'error' })
+        toast((res as any).error || t('security.add_rule_failed', '添加规则失败'), { type: 'error' })
         return
       }
       setNewRuleKey('')
-      toast(`已添加自动允许规则: ${newTool} (${k})`, { type: 'success' })
+      toast(t('security.rule_added', newTool, k), { type: 'success' })
       await loadRules()
     } catch (e: any) {
-      toast(`添加规则失败: ${e?.message || e}`, { type: 'error' })
+      toast(t('security.add_rule_failed_with', e?.message || e), { type: 'error' })
     }
   }
 
   const handleRemoveRule = async (tool: string, rKey: string) => {
     try {
       await window.electronAPI.chat.removePermissionRule(tool, rKey)
-      toast(`已移除规则: ${tool} (${rKey})`, { type: 'info' })
+      toast(t('security.rule_removed', tool, rKey), { type: 'info' })
       await loadRules()
     } catch {
-      toast('移除规则失败', { type: 'error' })
+      toast(t('security.remove_rule_failed', '移除规则失败'), { type: 'error' })
     }
   }
 
   const handleApplyPreset = async (preset: 'safe_git' | 'test_runners' | 'read_tools') => {
     try {
       const res = await window.electronAPI.chat.applyPermissionPreset(preset)
-      toast(`已启用预设，添加了 ${res?.added ?? 0} 条安全规则`, { type: 'success' })
+      toast(t('security.preset_applied', res?.added ?? 0), { type: 'success' })
       await loadRules()
     } catch {
-      toast('启用预设失败', { type: 'error' })
+      toast(t('security.preset_failed', '启用预设失败'), { type: 'error' })
     }
   }
 
@@ -152,7 +152,7 @@ export default function SecurityPage() {
     try {
       await window.electronAPI.settings.set(key, value)
     } catch {
-      toast('保存失败', { type: 'error' })
+      toast(t('security.save_failed', '保存失败'), { type: 'error' })
       loadCapabilities()
     }
   }
@@ -161,9 +161,9 @@ export default function SecurityPage() {
     setBusy(true)
     try {
       const res = await window.electronAPI.flags.safeMode()
-      toast(`已写入安全默认，关闭 ${res?.written?.length ?? 0} 项实验能力`, { type: 'success' })
+      toast(t('security.safe_mode_success', res?.written?.length ?? 0), { type: 'success' })
       await load()
-    } catch { toast('safe mode 执行失败', { type: 'error' }) }
+    } catch { toast(t('security.safe_mode_failed', 'safe mode 执行失败'), { type: 'error' }) }
     finally { setBusy(false) }
   }
 
@@ -171,7 +171,7 @@ export default function SecurityPage() {
     try {
       await window.electronAPI.flags.set(key, next)
       await load()
-    } catch { toast('切换失败', { type: 'error' }) }
+    } catch { toast(t('security.toggle_failed', '切换失败'), { type: 'error' }) }
   }
 
   return (
@@ -355,7 +355,7 @@ export default function SecurityPage() {
           <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
             <div className="flex items-center gap-1.5 mb-3">
               <ShieldAlert size={15} style={{ color: 'var(--warning)' }} />
-              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>安全开关（可调）</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('security.flags_title', '安全开关（可调）')}</span>
             </div>
             <div className="space-y-1.5">
               {flags.map((f) => (
@@ -379,13 +379,13 @@ export default function SecurityPage() {
         <div>
           <div className="flex items-center gap-1.5 mb-3">
             <Activity size={15} style={{ color: 'var(--text-secondary)' }} />
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>最近 agent 活动</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('security.recent_activity', '最近 agent 活动')}</span>
           </div>
           {loading ? (
-            <div className="text-center py-10 text-sm" style={{ color: 'var(--text-muted)' }}>加载中…</div>
+            <div className="text-center py-10 text-sm" style={{ color: 'var(--text-muted)' }}>{t('common.loading', '加载中…')}</div>
           ) : audit.length === 0 ? (
             <div className="rounded-lg border px-4 py-8 text-center text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-              还没有 agent 活动记录。开个工具循环任务后这里会显示每次调用。
+              {t('security.activity_empty', '还没有 agent 活动记录。开个工具循环任务后这里会显示每次调用。')}
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -394,7 +394,7 @@ export default function SecurityPage() {
                 return (
                   <div key={a.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                     <div className="min-w-0">
-                      <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>会话 #{a.session_id}</span>
+                      <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('security.session_n', a.session_id)}</span>
                       <span className="text-[10px] ml-2" style={{ color: 'var(--text-muted)' }}>{(a.created_at || '').slice(0, 16)}</span>
                     </div>
                     <div className="flex items-center gap-1 flex-wrap justify-end max-w-[60%]">

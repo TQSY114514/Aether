@@ -43,7 +43,7 @@ const CORE_TOOLS = new Set([
   'read_file', 'list_dir', 'glob_find', 'grep_search',
   'web_search', 'web_fetch',
   'write_file', 'edit_file', 'apply_patch', 'run_command',
-  'use_skill', 'ask_user', 'todo_write',
+  'use_skill', 'ask_user', 'todo_write', 'history_search',
   'get_project_context',
 ])
 
@@ -193,7 +193,9 @@ const TOOL_TO_BUCKET = new Map()
 for (const c of CORE_TOOLS) TOOL_TO_BUCKET.set(c, 0)
 CATEGORY_BUCKET_ORDER.forEach((cat, idx) => {
   for (const t of CATEGORY_TOOLS[cat] || []) {
-    TOOL_TO_BUCKET.set(t, 2 + idx)
+    if (!TOOL_TO_BUCKET.has(t)) {
+      TOOL_TO_BUCKET.set(t, 2 + idx)
+    }
   }
 })
 

@@ -200,8 +200,8 @@ interface Window {
       onToolLoopEnd: (callback: (payload: { sessionId: number }) => void) => () => void
       onUsage: (callback: (payload: { sessionId: number; messageId: number; inputTokens: number; outputTokens: number; costUsd: number }) => void) => () => void
       compact: (sessionId: number) => Promise<{ ok: boolean; beforeCount?: number; afterCount?: number; beforeTokens?: number; afterTokens?: number; error?: string }>
-      onThinkingStart: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
-      onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number }) => void) => () => void
+      onThinkingStart: (callback: (payload: { messageId: number; sessionId: number; startedAt?: number }) => void) => () => void
+      onThinkingEnd: (callback: (payload: { messageId: number; sessionId: number; durationMs?: number }) => void) => () => void
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean; sessionId?: number }) => void) => () => void
       onTurnSummary: (callback: (payload: { messageId: number; sessionId: number; fileSummary: TurnFileSummary | null }) => void) => () => void
       onMemorySaved: (callback: (payload: { sessionId: number; added: number; solidified: number; total: number; text: string; previews: string[] }) => void) => () => void
@@ -230,6 +230,9 @@ interface Window {
         suggestedRepairPrompt?: string | null
         error?: string
       }>
+      askSide: (params: { sessionId: number; question: string; modelId?: number | string }) => Promise<{ ok: boolean; answer?: string; error?: string }>
+      stopSide: (sessionId: number) => Promise<{ ok: boolean }>
+      onSideChunk: (callback: (payload: { sessionId: number; delta: string; done: boolean; fullContent?: string; error?: string }) => void) => () => void
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>

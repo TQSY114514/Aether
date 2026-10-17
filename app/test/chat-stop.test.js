@@ -63,7 +63,13 @@ function installStubs() {
             return 'final tool answer'
           },
         },
-        '../llm/reasoning': { buildReasoningParams: () => ({}) },
+        '../llm/reasoning': {
+          buildReasoningParams: () => ({}),
+          reasoningFamily: () => 'none',
+          supportsReasoning: () => false,
+          isBinaryReasoning: () => false,
+          normalizeEffort: (e) => e,
+        },
         '../llm/compaction': { maybeCompact: async (x) => x.messages, estimateMessagesTokens: () => 0, estimateTextTokens: () => 0 },
         '../llm/errorClassify': { classifyError: () => ({}) },
         '../llm/autoMemory': { prefetch: () => '', sync: () => {}, search: () => [] },

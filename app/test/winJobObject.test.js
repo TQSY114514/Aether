@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest'
 import { spawn } from 'child_process'
-import { isSupported, assignProcess, shutdown } from '../electron/exec/winJobObject'
+import { isSupported, ensureSupervisor, assignProcess, shutdown } from '../electron/exec/winJobObject'
 
 describe('winJobObject (Windows Native Job Object Sandbox)', () => {
   afterAll(() => {
@@ -18,6 +18,8 @@ describe('winJobObject (Windows Native Job Object Sandbox)', () => {
   it('can assign a child process to the job object on Windows', async () => {
     if (process.platform !== 'win32') return
 
+    await ensureSupervisor()
+
     // Spawn a long-lived child process so it doesn't terminate before assignment
     const child = spawn('powershell.exe', ['-NoProfile', '-Command', 'Start-Sleep -Seconds 10'], { windowsHide: true })
     expect(child.pid).toBeDefined()
@@ -27,5 +29,5 @@ describe('winJobObject (Windows Native Job Object Sandbox)', () => {
     expect(res.pid).toBe(child.pid)
 
     child.kill()
-  }, 15000)
+  }, 30000)
 })

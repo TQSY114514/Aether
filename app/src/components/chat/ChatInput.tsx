@@ -1,11 +1,10 @@
-import { useState, useMemo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
-import Tooltip from '@/components/Tooltip'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, X, FileText, Brain, Shield, RotateCcw, Zap, Sparkles, ShieldAlert, Trophy, Leaf } from 'lucide-react'
+import { Send, Square, Paperclip, Zap, Leaf, HelpCircle, ListPlus } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
-import { useUI } from '@/components/ui/feedback'
+import QueueDock from './QueueDock'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
@@ -14,9 +13,12 @@ import { useShallow } from 'zustand/react/shallow'
 import { useFeatureFlag } from '@/utils/featureFlags'
 
 import { DEFAULT_COMMANDS, executeTypedSlashCommand, type SlashCommand, type AgentMode } from './slashCommands'
-
-type PendingAttachment = { name: string; mime: string; kind: 'text' | 'image'; dataUrl: string }
-type Snippet = { id: number; content: string; preview: string }
+import ModelSelector from './input/ModelSelector'
+import EffortControl from './input/EffortControl'
+import AgentModeSelector from './input/AgentModeSelector'
+import StreamingStatusBar from './input/StreamingStatusBar'
+import SlashCommandMenu from './input/SlashCommandMenu'
+import AttachmentBar, { type PendingAttachment, type Snippet, SENSITIVE_FILE_PATTERN } from './input/AttachmentBar'
 
 function classifyFile(file: File): 'text' | 'image' {
   if (file.type.startsWith('image/')) return 'image'
@@ -25,16 +27,13 @@ function classifyFile(file: File): 'text' | 'image' {
   return 'text'
 }
 
-// Sensitive credential/secret file regex (P1-11 Credential Guard)
-const SENSITIVE_FILE_PATTERN = /(\.env(\..+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.pkcs12|credentials\.json|service-account.*\.json)$/i
-
-
 /** Render the chat composer, quick commands, and model controls. */
 export default function ChatInput() {
   // Slash commands loaded from IPC (scan CMD.md files). Falls back to defaults.
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(DEFAULT_COMMANDS)
   // Cursor position in the textarea, tracked for the @/#/! reference popup.
   const [refCursor, setRefCursor] = useState(0)
+
   useEffect(() => {
     let cancelled = false
     Promise.all([
@@ -46,7 +45,7 @@ export default function ChatInput() {
       const baseCmds = (cmds && cmds.length > 0) ? cmds : DEFAULT_COMMANDS.filter(c => !c.action)
       const recipeCmds: SlashCommand[] = (recipes || []).map((r: any) => ({
         id: `recipe:${r.id}`,
-        name: `[配方] ${r.title}`,
+        name: `[${t('recipe.title', '配方')}] ${r.title}`,
         description: r.description,
         prompt: r.prompt,
       }))
@@ -61,14 +60,15 @@ export default function ChatInput() {
     })
     return () => { cancelled = true }
   }, [])
+
   // Load arena scores on mount so model selector shows ratings.
   useEffect(() => {
     const { scores, loadScores } = useStore.getState()
     if (scores.length === 0) loadScores()
   }, [])
-  // Per-session draft: each conversation has its own input draft persisted to
-  // localStorage. Switching sessions loads that session's draft; the input no
-  // longer leaks across chats. useState initializer reads once on mount.
+
+
+  // Per-session draft: each conversation has its own input draft persisted to localStorage.
   const [input, setInput] = useState(() => {
     try {
       const sid = useStore.getState().currentSessionId
@@ -83,11 +83,11 @@ export default function ChatInput() {
   const [pending, setPending] = useState<PendingAttachment[]>([])
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
+  const [stoppedHint, setStoppedHint] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
-
 
   // Batch store selectors with shallow comparison to reduce re-render triggers.
   const {
@@ -97,7 +97,7 @@ export default function ChatInput() {
     thinkingEnabled, setThinkingEnabled,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
-    loopingSessions,
+    loopingSessions, toggleBtw,
   } = useStore(useShallow((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -112,6 +112,7 @@ export default function ChatInput() {
     modelSuggestion: s.modelSuggestion, agentMode: s.agentMode, setAgentMode: s.setAgentMode,
     sessionConfigs: s.sessionConfigs, scores: s.scores,
     loopingSessions: s.loopingSessions,
+    toggleBtw: s.toggleBtw,
   })))
 
   // ELO score map for model selector display
@@ -121,13 +122,8 @@ export default function ChatInput() {
     return map
   }, [scores])
 
-  // Per-session streaming check — NOT a global flag, so one session's stream
-  // never blocks another session's input. Arena is also per-session: runArena
-  // writes a streaming buffer entry for the session that started the run, so
-  // another session's arena stays usable while this one is generating.
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
   const isArenaRunning = chatMode === 'arena' && isStreaming
-  // Feature B: true when the current session has an active tool loop (can accept injections).
   const isLooping = isStreaming && loopingSessions.has(currentSessionId ?? -1)
 
   // Rotating placeholder hints when idle
@@ -140,6 +136,17 @@ export default function ChatInput() {
     return () => clearInterval(timer)
   }, [chatMode, isStreaming, isLooping, input])
 
+  // Listen for stop generation event to show stopped hint even after unmount of StreamingStatusBar
+  useEffect(() => {
+    const handler = () => setStoppedHint(true)
+    window.addEventListener('aether:generation-stopped', handler)
+    return () => window.removeEventListener('aether:generation-stopped', handler)
+  }, [])
+
+  useEffect(() => {
+    if (isStreaming) setStoppedHint(false)
+  }, [isStreaming])
+
   const currentPlaceholder = useMemo(() => {
     if (chatMode === 'arena') return t('chat.arena.placeholder')
     if (isLooping) return t('inject.placeholder')
@@ -149,31 +156,27 @@ export default function ChatInput() {
     return t('chat.placeholder')
   }, [chatMode, isStreaming, isLooping, hintIndex])
 
-  // Active model for the current session. When switching chats, useMemo re-derives
-  // from sessionConfigs. For the blank chat page (no session yet), falls back to
-  // the global default model so the selector always shows a pre-selected model name.
   const activeModelId = useMemo(() => {
     if (currentSessionId) {
       const cfgModelId = sessionConfigs[currentSessionId]?.modelId
       if (cfgModelId) return cfgModelId
     }
-    // Fall back: find the primary model across all enabled providers.
     const primary = allModels.find(m => m.is_primary)
     if (primary) return primary.id
     if (allModels.length > 0) return allModels[0].id
     return null
   }, [currentSessionId, sessionConfigs, allModels])
 
-  // Keep a ref of the current session id so the save effect below can read the
-  // latest id WITHOUT depending on it. This is the key fix: if the save effect
-  // depended on currentSessionId, then at the instant of a session switch it
-  // would run with the OLD input value but the NEW session id — overwriting
-  // the new session's draft with the previous session's text. By depending
-  // only on `input`, the save fires on keystrokes (correct) but not on switch.
+  const isBinaryReasoning = useMemo(() => {
+    if (!activeModelId) return false
+    const m = allModels.find(x => x.id === activeModelId)
+    const name = (m?.model_name || '').toLowerCase()
+    return /deepseek[_-](r\d|reasoner)/i.test(name) || /deephermes/i.test(name)
+  }, [activeModelId, allModels])
+
   const sessionIdRef = useRef(currentSessionId)
   useEffect(() => { sessionIdRef.current = currentSessionId }, [currentSessionId])
 
-  // Save draft to localStorage on every keystroke. Per-session key via ref.
   useEffect(() => {
     try {
       const sid = sessionIdRef.current
@@ -183,7 +186,6 @@ export default function ChatInput() {
     } catch {}
   }, [input])
 
-  // Listen for Ctrl+E → edit last user message
   useEffect(() => {
     const handler = (e: Event) => {
       const { content } = (e as CustomEvent).detail
@@ -194,7 +196,6 @@ export default function ChatInput() {
     return () => window.removeEventListener('aether:edit-last-user', handler)
   }, [])
 
-  // Load draft when switching sessions — each conversation has its own draft.
   useEffect(() => {
     if (prevSessionRef.current === currentSessionId) return
     prevSessionRef.current = currentSessionId
@@ -207,18 +208,14 @@ export default function ChatInput() {
         setInput('')
       }
     } catch { setInput('') }
-    // Refresh the model suggestion (badge on the model selector) for the
-    // newly opened session without waiting for the next send.
     useStore.getState().refreshModelSuggestion()
   }, [currentSessionId])
 
-  // Token estimation for the current input.
   const inputTokens = useMemo(() => estimateTextTokens(input), [input])
   const snippetText = useMemo(() => snippets.map(s => s.content).join('\n'), [snippets])
   const snippetTokens = useMemo(() => estimateTextTokens(snippetText), [snippetText])
   const totalInputTokens = inputTokens + snippetTokens
 
-  // Slash-command lookup: memoize to avoid re-filtering on every keystroke.
   const slashResults = useMemo(() => {
     if (!showSlash) return []
     const q = slashQuery.trim().toLowerCase()
@@ -242,18 +239,18 @@ export default function ChatInput() {
     if (slashIndex >= slashResults.length) setSlashIndex(Math.max(0, slashResults.length - 1))
   }, [slashIndex, slashResults.length])
 
-  // Drag-and-drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (e.dataTransfer.types.includes('Files')) setDragOver(true)
   }, [])
+
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    // Only clear if leaving the outermost container
     if (e.currentTarget === e.target) setDragOver(false)
   }, [])
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -276,15 +273,16 @@ export default function ChatInput() {
     const content = input.trim()
     if (!content && pending.length === 0 && snippets.length === 0) return
 
-    // Intercept slash commands for TUI/GUI shortcut alignment
     if (content.startsWith('/')) {
       const handled = await executeTypedSlashCommand(content, setInput)
       if (handled) return
     }
 
+    setStoppedHint(false)
+
     if (!overrides || overrides.agentMode !== 'plan') {
       if (isArenaRunning) {
-        if (content) { enqueueMessage(content); setInput('') }
+        if (content) { enqueueMessage(content, currentSessionId ?? undefined); setInput('') }
         return
       }
       if (isStreaming) {
@@ -306,7 +304,7 @@ export default function ChatInput() {
 
     const atts = pending
     setPending([])
-    const snippetBlocks = snippets.map((s, i) => `\n📎 粘贴片段 ${i + 1}:\n\`\`\`\n${s.content}\n\`\`\``).join('\n')
+    const snippetBlocks = snippets.map((s, i) => `\n📎 ${t('paste.snippet_n', i + 1)}:\n\`\`\`\n${s.content}\n\`\`\``).join('\n')
     setSnippets([])
     const finalContent = snippetBlocks ? (content ? content + '\n' + snippetBlocks : snippetBlocks) : content
 
@@ -333,13 +331,11 @@ export default function ChatInput() {
     e.target.value = ''
   }
 
-  // Collapse long pastes into a chip instead of flooding the textarea. Short
-  // pastes go straight into the input as normal text. (ChatGPT-style.)
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData('text')
     if (!text) return
     const lines = text.split('\n').length
-    if (lines < PASTE_COLLAPSE_LINES && text.length < PASTE_COLLAPSE_CHARS) return // short → normal insert
+    if (lines < PASTE_COLLAPSE_LINES && text.length < PASTE_COLLAPSE_CHARS) return
     e.preventDefault()
     const preview = text.replace(/\s+/g, ' ').trim().slice(0, 40)
     setSnippets(prev => [...prev, { id: Date.now() + Math.random(), content: text, preview: preview + (text.length > 40 ? '…' : '') }])
@@ -357,7 +353,6 @@ export default function ChatInput() {
   }
 
   const handleSlashSelect = (cmd: SlashCommand) => {
-    // Action commands execute directly without inserting a prompt.
     if (cmd.action) {
       setShowSlash(false)
       cmd.action()
@@ -370,8 +365,6 @@ export default function ChatInput() {
     textareaRef.current?.focus()
   }
 
-  // Insert an @skill / #tool / !command reference at the cursor, replacing the
-  // partially-typed token (Phase 3.4 input-box references).
   const handleReferenceSelect = ({ prefix, replacement }: { prefix: string; query: string; replacement: string }) => {
     const before = input.slice(0, refCursor)
     const match = before.match(/([@#!])[\w\u4e00-\u9fff_-]*$/)
@@ -389,7 +382,6 @@ export default function ChatInput() {
     })
   }
 
-  // Sidebar file tree: insert an @file reference at the cursor position.
   useEffect(() => {
     const onOpenFile = (e: Event) => {
       const p = (e as CustomEvent<string>).detail
@@ -459,27 +451,23 @@ export default function ChatInput() {
       }
       if (key === 'enter') { e.preventDefault(); handleSubmit(); return }
       if (key === 'a') return
-      // Ctrl+E: edit last user message (readline-style)
       if (key === 'e') {
         e.preventDefault()
         useStore.getState().editLastUserMessage()
         return
       }
-      // Ctrl+Z: undo last edit
       if (key === 'z') {
         e.preventDefault()
         useStore.getState().undoLastEdit()
         return
       }
     }
-    // Ctrl+Shift+C: copy code block when cursor is inside one
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
       e.preventDefault()
       const textarea = textareaRef.current
       if (!textarea) return
       const val = textarea.value
       const pos = textarea.selectionStart
-      // Find the nearest code block boundaries around cursor
       const before = val.slice(0, pos)
       const after = val.slice(pos)
       const codeBlockMatch = before.match(/```[\s\S]*?$/)
@@ -503,12 +491,25 @@ export default function ChatInput() {
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
   }, [input, isStreaming, showSlash, pending.length, snippets.length])
 
+  const handleEditQueuedInComposer = (text: string) => {
+    if (input.trim() && input.trim() !== text) {
+      if (!window.confirm(t('queue.overwrite_draft_confirm', '当前输入框已有草稿，是否替换为队列消息？'))) {
+        return false
+      }
+    }
+    setInput(text)
+    setTimeout(() => textareaRef.current?.focus(), 50)
+    return true
+  }
+
   return (
-    <div className="border-t border-[var(--border)] bg-[var(--content-bg)]/85 backdrop-blur-md px-4 py-2.5"
+    <div
+      className="border-t border-[var(--border)] bg-[var(--content-bg)]/85 backdrop-blur-md px-4 py-2.5"
       ref={dropZoneRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onDrop={handleDrop}>
+      onDrop={handleDrop}
+    >
       <div className="max-w-3xl mx-auto">
         {dragOver && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-blur-fade pointer-events-none">
@@ -518,88 +519,57 @@ export default function ChatInput() {
             </div>
           </div>
         )}
-        {queuedMessages.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 mb-2">
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>{t('chat.queue', String(queuedMessages.length))}</span>
-            {queuedMessages.map((q) => (
-              <span key={q.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-                <span className="truncate max-w-[200px]">{q.content}</span>
-                <button onClick={() => removeQueued(q.id)} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
-              </span>
-            ))}
-          </div>
-        )}
-        {/* Sensitive Credential File Guard (P1-11) */}
-        {pending.some(a => SENSITIVE_FILE_PATTERN.test(a.name)) && (
-          <div className="flex items-center gap-2 px-3 py-1.5 mb-2 rounded-lg border text-xs animate-blur-fade"
-            style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.35)', color: 'var(--error)' }}>
-            <ShieldAlert size={14} className="shrink-0 text-red-500" />
-            <span className="flex-1 font-medium text-[11px]">
-              {t('chat.sensitive_file_warning', '检测到包含私密密钥或配置的文件 (.env / .pem / 密钥)。发送前请确认内容不含明文生产凭据！')}
-            </span>
-            <button
-              onClick={() => setPending(prev => prev.filter(a => !SENSITIVE_FILE_PATTERN.test(a.name)))}
-              className="text-[10px] px-2 py-0.5 rounded border border-red-300 hover:bg-red-100 dark:hover:bg-red-950 transition-colors font-medium shrink-0"
-            >
-              一键移除敏感文件
-            </button>
-          </div>
-        )}
-        {pending.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {pending.map((a, i) => (
-              <span key={i} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-                {a.kind === 'image' && a.dataUrl
-                  ? <img src={a.dataUrl} alt="" className="w-6 h-6 rounded object-cover border" style={{ borderColor: 'var(--border)' }} />
-                  : <FileText size={12} className="text-gray-400 shrink-0" />}
-                <span className="truncate max-w-[160px]">{a.name}</span>
-                <button onClick={() => setPending(prev => prev.filter((_, j) => j !== i))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
-              </span>
-            ))}
-          </div>
-        )}
-        {fileError && <p className="text-xs mb-2" role="alert" style={{ color: 'var(--error)' }}>⚠ {fileError}</p>}
-        {snippets.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {snippets.map((s, i) => (
-              <span key={s.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-                <FileText size={11} className="text-gray-400" />
-                {t('paste.snippet_n', i + 1)} · {s.preview}
-                <button onClick={() => setSnippets(prev => prev.filter((_, j) => j !== i))} className="hover:bg-[var(--border)] rounded p-0.5"><X size={10} /></button>
-              </span>
-            ))}
-          </div>
-        )}
+
+        <QueueDock onEditInComposer={handleEditQueuedInComposer} />
+
+        <AttachmentBar
+          pending={pending}
+          onRemovePending={(idx) => setPending(prev => prev.filter((_, j) => j !== idx))}
+          onRemoveSensitive={() => setPending(prev => prev.filter(a => !SENSITIVE_FILE_PATTERN.test(a.name)))}
+          snippets={snippets}
+          onRemoveSnippet={(idx) => setSnippets(prev => prev.filter((_, j) => j !== idx))}
+          fileError={fileError}
+        />
+
         <AgentTaskDeck sessionId={currentSessionId} />
-        <div className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}>
-          {showSlash && slashResults.length > 0 && (
-            <div className="slash-menu" role="listbox" aria-label="Slash commands">
-              {slashResults.map((cmd, idx) => {
-                const active = idx === slashIndex
-                return (
-                  <div key={cmd.id} role="option" aria-selected={active}
-                    className={cn('slash-item', active && 'active')}
-                    onMouseEnter={() => setSlashIndex(idx)} onClick={() => handleSlashSelect(cmd)}>
-                    <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-mono text-[11px] font-semibold text-[var(--accent)] shrink-0">/{cmd.id}</span>
-                        <span className="text-[11px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>{cmd.name}</span>
-                      </div>
-                    </div>
-                    {cmd.description && (
-                      <div className="text-[10px] truncate leading-tight" style={{ color: 'var(--text-muted)' }}>{cmd.description}</div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+
+        <div
+          className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
+          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}
+        >
+          {showSlash && (
+            <SlashCommandMenu
+              commands={slashResults}
+              selectedIndex={slashIndex}
+              onSelectIndex={setSlashIndex}
+              onSelectCommand={handleSlashSelect}
+            />
           )}
+
           <InputReference value={input} cursorPos={refCursor} visible onSelect={handleReferenceSelect} />
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={isStreaming} title={t('chat.upload')} aria-label={t('chat.upload')} className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky disabled:opacity-30">
-            <Paperclip size={15} className="text-gray-400" />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            title={t('chat.upload')}
+            aria-label={t('chat.upload')}
+            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky disabled:opacity-30 focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          >
+            <Paperclip size={15} className="text-[var(--text-muted)]" />
           </button>
+
+          <button
+            type="button"
+            onClick={toggleBtw}
+            title={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+            aria-label={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          >
+            <HelpCircle size={15} />
+          </button>
+
           <textarea
             ref={textareaRef}
             value={input}
@@ -612,18 +582,52 @@ export default function ChatInput() {
             className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
             disabled={isArenaRunning}
           />
+
           {isArenaRunning || (isStreaming && !input.trim()) ? (
-            <button onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }} className="shrink-0 p-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale" title={t('chat.stop')} aria-label={t('chat.stop')}>
+            <button
+              onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }}
+              className="shrink-0 p-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale"
+              title={t('chat.stop')}
+              aria-label={t('chat.stop')}
+            >
               <Square size={13} fill="currentColor" />
             </button>
           ) : isStreaming && input.trim() ? (
-            <button onClick={() => handleSubmit()}
-              className="shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale shadow-sm" title={t('inject.send_hint')} aria-label={t('inject.send_hint')}>
-              <Zap size={13} />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (input.trim()) {
+                    enqueueMessage(input.trim(), currentSessionId ?? undefined)
+                    setInput('')
+                  }
+                }}
+                className="p-1.5 px-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale text-xs flex items-center gap-1 font-medium focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                title={t('queue.add_tooltip', '加入排队队列')}
+                aria-label={t('queue.add_tooltip', '加入排队队列')}
+              >
+                <ListPlus size={13} />
+                <span className="hidden sm:inline">{t('queue.add_button', '排队')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit()}
+                className="p-1.5 px-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale shadow-sm text-xs flex items-center gap-1 font-medium"
+                title={t('inject.send_hint', '立即插队到当前回合')}
+                aria-label={t('inject.send_hint', '立即插队到当前回合')}
+              >
+                <Zap size={13} />
+                <span className="hidden sm:inline">{t('queue.inject_button', '插队')}</span>
+              </button>
+            </div>
           ) : (
-            <button onClick={() => handleSubmit()} disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale hover-lift', 'disabled:opacity-30')} title={t('chat.send')} aria-label={t('chat.send')}>
+            <button
+              onClick={() => handleSubmit()}
+              disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
+              className={cn('shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale hover-lift', 'disabled:opacity-30')}
+              title={t('chat.send')}
+              aria-label={t('chat.send')}
+            >
               <Send size={13} />
             </button>
           )}
@@ -632,8 +636,16 @@ export default function ChatInput() {
         <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-nowrap min-w-0">
           <div className="flex items-center gap-1.5 flex-nowrap min-w-0 shrink">
             <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
-            <EffortControl thinkingEnabled={thinkingEnabled} onToggleThinking={setThinkingEnabled} level={effortLevel} onLevelChange={setEffortLevel} />
-            <ModelSelector providers={providers} allModels={allModels}
+            <EffortControl
+              thinkingEnabled={thinkingEnabled}
+              onToggleThinking={setThinkingEnabled}
+              level={effortLevel}
+              onLevelChange={setEffortLevel}
+              isBinary={isBinaryReasoning}
+            />
+            <ModelSelector
+              providers={providers}
+              allModels={allModels}
               activeModelId={activeModelId}
               modelSuggestion={modelSuggestion}
               scoreByModel={scoreByModel}
@@ -642,10 +654,10 @@ export default function ChatInput() {
                 if (currentSessionId) {
                   saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
                 } else {
-                  // Blank page: set default for new sessions
                   useStore.getState().setDefaultModel(mid)
                 }
-              }} />
+              }}
+            />
           </div>
 
           <div className="flex items-center gap-1.5 min-w-0 shrink ml-auto flex-nowrap">
@@ -653,6 +665,15 @@ export default function ChatInput() {
               <StreamingStatusBar sessionId={currentSessionId} />
             ) : (
               <>
+                {stoppedHint && (
+                  <span
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-mono border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0"
+                    title={t('chat.generation_stopped_hint')}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                    <span className="hidden sm:inline">{t('chat.generation_stopped_hint')}</span>
+                  </span>
+                )}
                 {poorMode && (
                   <span
                     className="flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono text-emerald-500 border-emerald-500/30 bg-emerald-500/10 cursor-help shrink-0"
@@ -673,260 +694,6 @@ export default function ChatInput() {
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-// Thinking-effort control: toggle switch + 3-detent slider (Claude-Code-style
-// Tab + /effort pattern). Toggle controls whether extended thinking is on;
-// slider picks depth (low/medium/high). Slider is disabled when thinking is off.
-const EFFORT_LEVELS = [
-  { value: 'low' as const, labelKey: 'effort.low' },
-  { value: 'medium' as const, labelKey: 'effort.medium' },
-  { value: 'high' as const, labelKey: 'effort.high' },
-]
-function EffortControl({ thinkingEnabled, onToggleThinking, level, onLevelChange }: {
-  thinkingEnabled: boolean; onToggleThinking: (v: boolean) => void
-  level: 'low' | 'medium' | 'high'; onLevelChange: (v: 'low' | 'medium' | 'high') => void
-}) {
-  const idx = EFFORT_LEVELS.findIndex(l => l.value === level)
-  const fill = (idx / (EFFORT_LEVELS.length - 1)) * 100
-  return (
-    <div className="flex items-center gap-1.5" title={t('effort.tooltip')}>
-      <button
-        onClick={() => onToggleThinking(!thinkingEnabled)}
-        className={`thinking-toggle ${thinkingEnabled ? 'is-on' : 'is-off'}`}
-      >
-        <Brain size={13} />
-      </button>
-      <input type="range" min={0} max={2} step={1} value={idx}
-        onChange={(e) => onLevelChange(EFFORT_LEVELS[parseInt(e.target.value, 10)].value)}
-        className="effort-slider w-14 sm:w-16" disabled={!thinkingEnabled}
-        style={{ ['--fill' as string]: `${fill}%` }} />
-      <span className="text-[10px] w-6 tabular-nums" style={{ color: 'var(--text-muted)' }}>{t(EFFORT_LEVELS[idx].labelKey)}</span>
-    </div>
-  )
-}
-
-// Agent mode selector (Claude Code / Cline-style): a compact toggle group in
-// the input bar showing the current permission level. Each mode has a distinct
-// color so the user always knows how much freedom the agent has.
-function AgentModeSelector({ mode, onChange }: { mode: AgentMode; onChange: (v: AgentMode) => void }) {
-  // Subscribe to language so t() re-evaluates when the user switches language.
-  const language = useStore((s) => s.language)
-  const AGENT_MODES: { value: AgentMode; label: string; color: string; tooltip: string }[] = useMemo(() => [
-    { value: 'ask', label: t('agent.mode.ask'), color: 'var(--accent)', tooltip: t('agent.mode.ask.desc') },
-    { value: 'auto', label: t('agent.mode.auto'), color: '#f97316', tooltip: t('agent.mode.auto.desc') },
-    { value: 'yolo', label: t('agent.mode.yolo'), color: 'var(--error)', tooltip: t('agent.mode.yolo.desc') },
-    { value: 'custom', label: t('agent.mode.custom', 'Custom'), color: '#8b5cf6', tooltip: t('agent.mode.custom.desc', 'Custom policy: configure per-tool permissions in settings') },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [language, t])
-  const active = AGENT_MODES.find(m => m.value === mode) || AGENT_MODES[0]
-  return (
-    <div className="flex items-center gap-0.5">
-      <Shield size={13} className="text-gray-400 shrink-0" />
-      {AGENT_MODES.map(m => (
-        <Tooltip key={m.value} text={m.tooltip}>
-          <button onClick={() => onChange(m.value)}
-            className="text-[10px] font-medium px-1.5 py-0.5 rounded-md transition-all duration-150"
-            style={m.value === active.value
-              ? { backgroundColor: m.color + '20', color: m.color, boxShadow: `0 0 0 1px ${m.color}40` }
-              : { color: 'var(--text-muted)', opacity: 0.6 }}>
-            {m.label}
-          </button>
-        </Tooltip>
-      ))}
-    </div>
-  )
-}
-
-// Budget-warning presentation is owned by usageSlice.recordUsage (status line
-// for AgentStatusBar + one 'warning' toast). The former <BudgetWarningToast />
-// component here double-fired the same notification and was removed.
-
-function StreamingStatusBar({ sessionId }: { sessionId: number | null }) {
-  const statusLines = useStore((s) => s.statusLinesByMessage)
-  const turnUsage = useStore((s) => (sessionId ? s.turnUsageBySession[sessionId] : null))
-  const cumUsage = useStore((s) => (sessionId ? s.usageBySession[sessionId] : null))
-  const [status, setStatus] = useState('')
-  const [stopped, setStopped] = useState(false)
-
-  useEffect(() => {
-    if (!sessionId) return
-    let latest = ''
-    for (const [, lines] of Object.entries(statusLines)) {
-      if (lines.length > 0 && lines[lines.length - 1].length > latest.length) {
-        latest = lines[lines.length - 1]
-      }
-    }
-    setStatus(latest)
-  }, [statusLines, sessionId])
-
-  // Listen for stop generation event
-  useEffect(() => {
-    const handler = () => setStopped(true)
-    window.addEventListener('aether:generation-stopped', handler)
-    return () => window.removeEventListener('aether:generation-stopped', handler)
-  }, [])
-
-  // Reset stopped state when streaming resumes
-  useEffect(() => {
-    if (status) setStopped(false)
-  }, [status])
-
-  if (!status && !stopped) return null
-  const turnCost = turnUsage?.costUsd || 0
-  const cumCost = cumUsage?.costUsd || 0
-  const showCost = turnCost > 0 || cumCost > 0
-  return (
-    <div className="px-0.5 mt-1.5 min-w-0 animate-blur-fade">
-      <div className="flex items-center gap-1.5 text-[11px] min-w-0" style={{ color: 'var(--text-muted)' }}>
-        {stopped ? (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            <span>生成已停止 · 按 Continue 继续</span>
-          </>
-        ) : (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse shrink-0" />
-            <span className="min-w-0 truncate" title={status}>{status}</span>
-          </>
-        )}
-        {showCost && (
-          <span className="tabular-nums shrink-0 ml-auto">
-            {t('usage.cost_line', `$${turnCost.toFixed(4)}`, `$${cumCost.toFixed(3)}`)}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Build a multi-line, i18n-localized tooltip from the structured reasonParts
-// returned by model:suggest. Falls back to the raw `reason` string when the
-// parts are missing (older main process) or when there was no match at all.
-function formatSuggestionReason(modelSuggestion: ModelSuggestion | null): string {
-  if (!modelSuggestion) return t('chat.model_switch')
-  const rp = modelSuggestion.reasonParts
-  if (!rp || rp.noMatch) return t('model.suggest.no_match')
-
-  const lines: string[] = []
-  const taskKey = rp.task ? `model.suggest.task.${rp.task}` : null
-  lines.push(t('model.suggest.task', taskKey ? t(taskKey) : rp.taskLabel || ''))
-
-  lines.push(t('model.suggest.heuristic', rp.heuristic ?? 0, rp.family || ''))
-
-  if (rp.eloScore != null) {
-    const elo = Number(rp.eloScore).toFixed(1)
-    lines.push(rp.eloReliable
-      ? t('model.suggest.elo', elo, rp.eloWins ?? 0, rp.eloTotal ?? 0)
-      : t('model.suggest.elo_insufficient', elo))
-  }
-
-  if (rp.useTools) {
-    lines.push(rp.reasonPickUsed ? t('model.suggest.reason_pick') : t('model.suggest.tools'))
-  }
-
-  if (rp.closeRace && rp.gap != null && rp.runnerUpName) {
-    lines.push(t('model.suggest.close_race', rp.gap, rp.runnerUpName))
-  }
-
-  if (rp.secondary && rp.secondary.length) {
-    const labels = rp.secondary
-      .map(s => t(`model.suggest.task.${s.type}`))
-      .filter(l => !l.startsWith('model.suggest.task.'))
-    if (labels.length) lines.push(t('model.suggest.secondary', labels.join(', ')))
-  }
-
-  if (rp.confidence != null) lines.push(t('model.suggest.confidence', rp.confidence))
-
-  return lines.join('\n')
-}
-
-/** Render the searchable model chooser and routing recommendation. */
-function ModelSelector({ providers, allModels, activeModelId, onSelect, modelSuggestion, scoreByModel, currentPrompt }: {
-  providers: { id: number; name: string }[]
-  allModels: { id: number; provider_id: number; model_name: string; display_name?: string | null }[]
-  activeModelId: number | null
-  onSelect: (modelId: number, providerId: number) => void
-  modelSuggestion: ModelSuggestion | null
-  scoreByModel: Record<number, number>
-  currentPrompt?: string
-}) {
-  const groups = useMemo(() => providers.map(p => {
-    const ms = allModels.filter(m => m.provider_id === p.id)
-    return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null
-  }).filter(Boolean) as { providerId: number; providerName: string; models: typeof allModels }[], [providers, allModels])
-
-  const handleAutoRoute = async () => {
-    try {
-      const route = await window.electronAPI.arena.autoRoute({ prompt: currentPrompt })
-      if (route && route.model_id) {
-        onSelect(route.model_id, route.provider_id)
-        useStore.getState().triggerToast(
-          t('chat.model_routed').replace('{0}', route.model_name).replace('{1}', route.route_reason),
-          'success'
-        )
-      } else {
-        useStore.getState().triggerToast(t('model.suggest.no_match'), 'info')
-      }
-    } catch {
-      useStore.getState().triggerToast('自动路由失败', 'warning')
-    }
-  }
-
-  if (groups.length === 0) return null
-
-  const reasonTitle = formatSuggestionReason(modelSuggestion)
-  const arenaElo = modelSuggestion?.reasonParts?.arenaElo ?? (modelSuggestion?.reasonParts?.eloTotal && modelSuggestion?.reasonParts?.eloTotal > 0 && modelSuggestion?.reasonParts?.eloScore ? Math.round(modelSuggestion.reasonParts.eloScore) : null)
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="relative shrink-0" title={reasonTitle}>
-        <select value={String(activeModelId ?? '')}
-          onChange={(e) => {
-            const mid = Number(e.target.value)
-            const model = allModels.find(m => m.id === mid)
-            if (model) onSelect(mid, model.provider_id)
-          }}
-          className="text-[11px] rounded-lg border px-1.5 sm:px-2 py-1 outline-none max-w-[125px] sm:max-w-[155px] truncate bg-[var(--content-bg)]"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-          <option value="" disabled>{t('chat.select_model')}</option>
-          {groups.map(g => (
-            <optgroup key={g.providerId} label={g.providerName}>
-              {g.models.map(m => (
-                <option key={m.id} value={m.id}>{m.display_name || m.model_name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
-
-      {arenaElo != null && (
-        <span
-          className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] shrink-0 select-none shadow-2xs font-mono"
-          style={{
-            borderColor: 'var(--border)',
-            backgroundColor: 'var(--bg-secondary)',
-            color: 'var(--text-secondary)'
-          }}
-          title={reasonTitle || `Arena ELO ${arenaElo}`}
-        >
-          <Trophy size={10} className="text-amber-500 shrink-0" />
-          <span>ELO {arenaElo}</span>
-        </span>
-      )}
-
-      <button
-        onClick={handleAutoRoute}
-        className="p-1 px-1.5 sm:px-2 rounded-lg border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer shadow-2xs"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-        title={t('chat.model_auto_route_desc')}
-        aria-label={t('chat.model_auto_route')}
-      >
-        <Sparkles size={11} className="text-amber-500 shrink-0" />
-        <span className="hidden md:inline font-medium">{t('chat.model_auto_route')}</span>
-      </button>
     </div>
   )
 }

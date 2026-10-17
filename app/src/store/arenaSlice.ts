@@ -19,7 +19,7 @@ export const createArenaSlice: StateCreator<AppState, [], [], Partial<AppState>>
   setArenaModelIds: (ids) => set({ arenaModelIds: ids }),
 
   runArena: async (content) => {
-    const { currentSessionId, arenaModelIds, sessionConfigs, defaultPersonaId, streamingBySession } = get()
+    const { currentSessionId, arenaModelIds, arenaTemperatures, sessionConfigs, defaultPersonaId, streamingBySession } = get()
     if (!currentSessionId || arenaModelIds.length < 2) {
       set({ arenaError: "请先选择至少 2 个模型" }); return
     }
@@ -31,7 +31,8 @@ export const createArenaSlice: StateCreator<AppState, [], [], Partial<AppState>>
       token_count: null, latency_ms: null, status: "success", error_message: null,
       created_at: new Date().toISOString(), attachment: null,
     }
-    set({ sending: true, arenaResults: [], arenaError: null, arenaVoted: false, arenaVoteWinnerId: null, arenaResultsSessionId: currentSessionId, arenaPending: arenaModelIds.length, messages: [...get().messages, tempUserMsg] })
+    const tempCount = (arenaTemperatures && arenaTemperatures.length > 0) ? arenaTemperatures.length : 1
+    set({ sending: true, arenaResults: [], arenaError: null, arenaVoted: false, arenaVoteWinnerId: null, arenaResultsSessionId: currentSessionId, arenaPending: arenaModelIds.length * tempCount, messages: [...get().messages, tempUserMsg] })
     set((s) => ({ streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: "", messageId: null } } }))
     get().loadSessions()
     ensureArenaListener()

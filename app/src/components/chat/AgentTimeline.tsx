@@ -33,6 +33,8 @@ type PlanStep = {
 type AgentTimelineProps = {
   thinkingText?: string
   thinkingStreaming?: boolean
+  thinkingDuration?: number | null
+  thinkingStartedAt?: number | null
   toolCalls?: ToolEntry[]
   planSteps?: PlanStep[]
   streaming?: boolean
@@ -155,7 +157,7 @@ function buildTimelineNodes(planSteps?: PlanStep[], toolCalls?: ToolEntry[]): Ti
 
 // Unified timeline that interleaves thinking, tool calls, and commentary
 // in a connected vertical flow — replacing the old disconnected card blocks.
-function AgentTimeline({ thinkingText, thinkingStreaming, toolCalls, planSteps, streaming }: AgentTimelineProps) {
+function AgentTimeline({ thinkingText, thinkingStreaming, thinkingDuration, thinkingStartedAt, toolCalls, planSteps, streaming }: AgentTimelineProps) {
   const hasThinking = !!thinkingText
   const hasTools = !!toolCalls && toolCalls.length > 0
   const hasSteps = !!planSteps && planSteps.length > 0
@@ -172,7 +174,9 @@ function AgentTimeline({ thinkingText, thinkingStreaming, toolCalls, planSteps, 
         <ThinkingBlock
           text={thinkingText!}
           streaming={thinkingStreaming}
-          collapsed={false}
+          collapsed={!thinkingStreaming}
+          duration={thinkingDuration}
+          startedAt={thinkingStartedAt}
         />
       )}
 

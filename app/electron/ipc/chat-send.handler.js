@@ -8,7 +8,7 @@
 
 const { streamChat, completeChat, normalizeUsage } = require('../llm/providerAdapter')
 const { runToolLoop } = require('../llm/toolLoop')
-const { buildReasoningParams } = require('../llm/reasoning')
+const { buildReasoningParams, reasoningFamily } = require('../llm/reasoning')
 const { maybeCompact, estimateMessagesTokens, estimateTextTokens, foldStaleToolOutputs } = require('../llm/compaction')
 const { classifyError } = require('../llm/errorClassify')
 const autoMemory = require('../llm/autoMemory')
@@ -334,12 +334,37 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // not a summary). Leaving a neutral default until the summary is generated.
 
     // Merge reasoning params (effort) with advanced generation params from settings.
-    const reasoningOpts = buildReasoningParams(model.model_name, effortLevel, thinkingEnabled)
+    const reasoningOpts = buildReasoningParams(model.model_name, effortLevel, thinkingEnabled, genParams.maxTokens)
     const genOpts = {}
     if (genParams.maxTokens && genParams.maxTokens > 0) genOpts.max_tokens = genParams.maxTokens
     if (genParams.temperature && genParams.temperature > 0) genOpts.temperature = genParams.temperature
     if (genParams.topP && genParams.topP > 0) genOpts.top_p = genParams.topP
     const mergedOpts = { ...genOpts, ...reasoningOpts }
+
+    // If Hermes family and thinking is enabled, lift token limit so reasoning does not truncate
+    const modelFam = (typeof reasoningFamily === 'function' && model?.model_name) ? reasoningFamily(model.model_name) : 'none'
+    if (modelFam === 'hermes' && thinkingEnabled) {
+      if (!mergedOpts.max_tokens || mergedOpts.max_tokens < 8192) {
+        mergedOpts.max_tokens = 8192
+      }
+    }
+
+    // DeepHermes prompt injection for dual-mode thinking models
+    if (modelFam === 'hermes' && /deephermes/i.test(model?.model_name || '')) {
+      const hasThinkPrompt = compacted.some(m => m.role === 'system' && (m.content.includes('<think>') || m.content.includes('deep thinking')))
+      if (thinkingEnabled && !hasThinkPrompt) {
+        compacted.unshift({
+          role: 'system',
+          content: 'You are a deep thinking AI, you may use extremely long chains of thought to deeply reason about problems. Enclose your chain of thought inside <think> and </think> tags.',
+        })
+      } else if (!thinkingEnabled && !hasThinkPrompt) {
+        compacted.unshift({
+          role: 'system',
+          content: 'Respond directly and concisely. Do not use <think> tags or chain-of-thought.',
+        })
+      }
+    }
+
     // Prepend a custom system prefix if set (advanced users). Done after compaction
     // so the prefix is never summarized away.
     if (systemPrefix && systemPrefix.trim()) {
@@ -465,31 +490,17 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         // Orchestration:复杂请求走编排器(并行子代理),简单请求走单循环。
         // 任何失败一律回落单循环,聊天主线永不因编排出错而崩溃。
-        const mergeFileSummary = (incoming) => {
+        let runCount = 0
+        const runSummaries = new Map()
+
+        const mergeFileSummary = (incoming, runIdx = 0) => {
           if (!incoming || !Array.isArray(incoming.files)) return
-          if (!turnFileSummary) {
-            turnFileSummary = {
-              totalAdded: incoming.totalAdded || 0,
-              totalRemoved: incoming.totalRemoved || 0,
-              fileCount: incoming.files.length,
-              files: [...incoming.files],
-            }
-            return
-          }
+          runSummaries.set(runIdx, incoming)
+
           const fileMap = new Map()
-          for (const f of (turnFileSummary.files || [])) {
-            if (f && f.path) fileMap.set(f.path, { ...f })
-          }
-          for (const f of incoming.files) {
-            if (!f || !f.path) continue
-            if (fileMap.has(f.path)) {
-              const existing = fileMap.get(f.path)
-              existing.added = (existing.added || 0) + (f.added || 0)
-              existing.removed = (existing.removed || 0) + (f.removed || 0)
-              if (f.status === 'deleted') existing.status = 'deleted'
-              else if (f.status) existing.status = f.status
-              if (f.diff) existing.diff = f.diff
-            } else {
+          for (const s of runSummaries.values()) {
+            for (const f of s.files) {
+              if (!f || !f.path) continue
               fileMap.set(f.path, { ...f })
             }
           }
@@ -500,20 +511,30 @@ ipcMain.handle('chat:complete', handleChatComplete)
             fileCount: mergedFiles.length,
             files: mergedFiles,
           }
+          try {
+            wc?.send('chat:turn-summary', {
+              messageId: msgId,
+              sessionId,
+              fileSummary: turnFileSummary,
+            })
+          } catch {}
         }
 
-        const runSingleLoop = () => runToolLoop({
-          provider, model, messages: toolMessages, signal: controller.signal,
-          options: mergedOpts,
-          agentMode: agentMode || 'ask',
-          maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
-          sessionId, messageId: msgId, db,
-          autoCommit: true,
-          onFileSummary: (summary) => { mergeFileSummary(summary) },
-          ...cb,
-          getPendingInjections: () => pendingInjections.get(sessionId) || [],
-          clearPendingInjections: () => pendingInjections.delete(sessionId),
-        })
+        const runSingleLoop = () => {
+          const runIdx = runCount++
+          return runToolLoop({
+            provider, model, messages: toolMessages, signal: controller.signal,
+            options: mergedOpts,
+            agentMode: agentMode || 'ask',
+            maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
+            sessionId, messageId: msgId, db,
+            autoCommit: true,
+            onFileSummary: (summary) => { mergeFileSummary(summary, runIdx) },
+            ...cb,
+            getPendingInjections: () => pendingInjections.get(sessionId) || [],
+            clearPendingInjections: () => pendingInjections.delete(sessionId),
+          })
+        }
         // ── Overflow self-heal（P0）：compact → retry，三重防误触 ──────────
         // ①分类器只认 context_length；②每会话 10s 冷却；③force 压缩无效即放弃；
         // 外加 OVERFLOW_MAX_RETRIES 有界。
@@ -690,10 +711,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
       // content accumulated before the stream stopped (scoping bug: referencing
       // a try-local variable in catch threw ReferenceError, breaking chat:stop).
       let fullContent = ''
+      let hasThinking = false
+      let thinkingEnded = false
+      let thinkingStartedAt = null
       try {
         const wc = getWebContents()
-        let hasThinking = false
-        let thinkingEnded = false
         const stream = streamChat({
           provider: p,
           model: m,
@@ -705,7 +727,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
               if (delta) {
                 if (!hasThinking) {
                   hasThinking = true
-                  try { wc?.send('chat:thinking-start', { messageId: msgId, sessionId }) } catch {}
+                  thinkingStartedAt = Date.now()
+                  try { wc?.send('chat:thinking-start', { messageId: msgId, sessionId, startedAt: thinkingStartedAt }) } catch {}
                 }
                 try { wc?.send('chat:thinking-chunk', { messageId: msgId, sessionId, delta, done: false }) } catch {}
               }
@@ -719,14 +742,16 @@ ipcMain.handle('chat:complete', handleChatComplete)
             // Signal thinking is complete as soon as main content tokens start flowing
             if (hasThinking && !thinkingEnded) {
               thinkingEnded = true
-              try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
+              const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+              try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
             }
             try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
           }
         }
         if (hasThinking && !thinkingEnded) {
           thinkingEnded = true
-          try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId }) } catch {}
+          const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+          try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
         }
         clearTimeout(timeout)
         abortControllers.delete(msgId)
@@ -795,6 +820,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
         providerHealth.recordResult(p.id, false)
         if (err.status === 429) providerHealth.setCooldown(p.id)
         providerHealth.recordError(p.id, err.message)
+        if (hasThinking && !thinkingEnded) {
+          thinkingEnded = true
+          const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+          try { getWebContents()?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
+        }
         if (err.name === 'AbortError') {
           // Preserve accumulated content so the user sees what was produced before stop.
           // Update the message with whatever fullContent was accumulated.

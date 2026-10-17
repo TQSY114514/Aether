@@ -31,7 +31,7 @@ const DEFAULT_SUBAGENT_CONFIG = {
   maxIterations: 15,
   timeoutMs: 5 * 60 * 1000,  // 5 minutes default
   maxOutputChars: 16000,      // summarize if output exceeds this
-  cleanup: 'keep',            // 'keep' | 'delete' | 'keep-if-error'
+  cleanup: 'keep',            // retain child session for auditing and review
   inheritPermissions: true,   // inherit parent's agentMode
   allowedTools: null,         // null = all tools
 }
@@ -45,7 +45,7 @@ async function _runSubagent({
   model,
   prompt,
   signal,
-  agentMode = 'plan',
+  agentMode = 'auto',
   callbacks = {},
   config = {},
 }) {
@@ -85,10 +85,8 @@ async function _runSubagent({
     { role: 'user', content: prompt },
   ]
 
-  // Permission derivation: child can be more restrictive than parent
-  const childAgentMode = cfg.inheritPermissions
-    ? (agentMode === 'yolo' ? 'auto' : (agentMode || 'plan'))
-    : 'plan'  // forced plan if not inheriting
+  // Permission derivation: child mode inherits or defaults to effectiveMode
+  const childAgentMode = agentMode === 'yolo' ? 'auto' : (agentMode || 'auto')
 
   const reasoningOpts = buildReasoningParams(model.model_name, 'medium')
   const opts = { ...reasoningOpts, max_tokens: 4096 }
@@ -167,6 +165,17 @@ async function _runSubagent({
 
   // Cleanup policy
   if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && !hasError && finalContent && !finalContent.startsWith('['))) {
+    // Reassign child checkpoints to parent session so rollback records are never lost
+    if (parentSessionId) {
+      try {
+        if (typeof db.reassignCheckpoints === 'function') {
+          db.reassignCheckpoints(childSessionId, parentSessionId)
+        } else if (db.db && typeof db.db.prepare === 'function') {
+          db.db.prepare('UPDATE agent_checkpoint SET session_id = ? WHERE session_id = ?').run(parentSessionId, childSessionId)
+          db.db.prepare('UPDATE agent_turn_checkpoint SET session_id = ? WHERE session_id = ?').run(parentSessionId, childSessionId)
+        }
+      } catch {}
+    }
     try { db.deleteSession(childSessionId) } catch {}
   }
 

@@ -19,12 +19,13 @@ const MAX_TOOL_RESULT_CHARS = 16000 // cap a single tool result ~16k chars
 
 // Truncate a single tool result so one verbose tool (e.g. reading a huge file,
 // or a web_search that dumped a page) can't dominate the context window.
-function truncateMiddleware(content) {
+function truncateMiddleware(content, ctx) {
   if (typeof content !== 'string') content = String(content ?? '')
-  if (content.length <= MAX_TOOL_RESULT_CHARS) return content
+  const maxChars = (ctx && ctx.isPoorMode) ? 4000 : MAX_TOOL_RESULT_CHARS
+  if (content.length <= maxChars) return content
 
-  const HEAD_CHARS = 4000
-  const TAIL_CHARS = 6000
+  const HEAD_CHARS = (ctx && ctx.isPoorMode) ? 1200 : 4000
+  const TAIL_CHARS = (ctx && ctx.isPoorMode) ? 1800 : 6000
   const head = content.slice(0, HEAD_CHARS)
   const tail = content.slice(-TAIL_CHARS)
   const middle = content.slice(HEAD_CHARS, content.length - TAIL_CHARS)

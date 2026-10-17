@@ -29,6 +29,7 @@ const TOOL_AXIS = {
   lsp_diagnostics: AXES.FILESYSTEM, lsp_code_actions: AXES.FILESYSTEM,
   lsp_rename: AXES.FILESYSTEM, find_symbol: AXES.FILESYSTEM,
   sandbox_init: AXES.FILESYSTEM, sandbox_apply: AXES.FILESYSTEM, generate_repo_map: AXES.FILESYSTEM,
+  inspect_app_bundle: AXES.FILESYSTEM, extract_asar: AXES.FILESYSTEM, audit_agent_bundle: AXES.FILESYSTEM, extract_asar: AXES.FILESYSTEM, audit_agent_bundle: AXES.FILESYSTEM,
   // shell: 命令执行
   run_command: AXES.SHELL, debug_loop: AXES.SHELL, test_first: AXES.SHELL,
   // network: 网络访问
@@ -41,6 +42,7 @@ const TOOL_AXIS = {
   git_commit: AXES.FILESYSTEM, git_push: AXES.FILESYSTEM, git_create_branch: AXES.FILESYSTEM,
   // agent meta: 工具自身（ask_user/todo/use_skill/memory/delegate）→ filesystem 兜底宽松
   use_skill: AXES.FILESYSTEM, ask_user: AXES.FILESYSTEM, todo_write: AXES.FILESYSTEM,
+  history_search: AXES.FILESYSTEM,
   memory_save: AXES.FILESYSTEM, memory_list: AXES.FILESYSTEM, memory_search: AXES.FILESYSTEM,
   delegate_task: AXES.FILESYSTEM, run_agent: AXES.FILESYSTEM,
   run_workflow: AXES.FILESYSTEM, run_arena: AXES.FILESYSTEM,

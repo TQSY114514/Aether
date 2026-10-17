@@ -5,6 +5,7 @@ import { t } from '@/utils/i18n'
 import { useUI } from '@/components/ui/feedback'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { parseMemoryImport } from '@/utils/memoryImport'
+import StrategyTab from '@/components/memory/StrategyTab'
 
 const TYPE_COLORS: Record<string, string> = {
   entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#9333EA', project: '#7C3AED',
@@ -19,6 +20,8 @@ const ORIGIN_META: Record<string, { label: string; color: string }> = {
 }
 
 export default function MemoryPage() {
+  const activeTab = useStore((s) => s.memoryActiveTab)
+  const setActiveTab = useStore((s) => s.setMemoryActiveTab)
   const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string; workspace?: string | null }[]>([])
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState('fact')
@@ -245,6 +248,32 @@ export default function MemoryPage() {
           </div>
         </div>
 
+        {/* Tab Switcher: Memories vs Strategies */}
+        <div className="flex items-center gap-1 mb-5 p-1 rounded-lg border bg-[var(--bg-secondary)] border-[var(--border)] max-w-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('memories')}
+            className={`flex-1 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${
+              activeTab === 'memories' ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-xs' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            {t('memory.tabs.memories', '知识记忆')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('strategies')}
+            className={`flex-1 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${
+              activeTab === 'strategies' ? 'bg-[var(--content-bg)] text-[var(--text-primary)] shadow-xs' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            {t('memory.tabs.strategies', '自进化策略 (STRATEGY.md)')}
+          </button>
+        </div>
+
+        {activeTab === 'strategies' ? (
+          <StrategyTab />
+        ) : (
+          <>
         {/* Workspace MEMORY.md Banner */}
         {activeWorkspace && (
           <div className="mb-4 p-3 rounded-lg border flex items-center justify-between gap-3 text-xs"
@@ -481,6 +510,8 @@ export default function MemoryPage() {
             </div>
           ))}
         </div>
+        </>
+      )}
       </div>
       )}
     </div>

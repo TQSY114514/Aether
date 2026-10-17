@@ -5,6 +5,7 @@ import log from "@/utils/logger"
 
 export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = (set, get) => ({
   currentView: "chat",
+  memoryActiveTab: 'memories',
   sidebarOpen: true,
   completionToasts: [],
   activeHints: [],
@@ -12,10 +13,12 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
   tasks: [],
   tasksOpen: false,
   checkpointsOpen: false,
+  btwOpen: false,
   scores: [],
   toasts: [],
 
   setCurrentView: (view) => set({ currentView: view }),
+  setMemoryActiveTab: (tab) => set({ memoryActiveTab: tab }),
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 
@@ -77,6 +80,8 @@ export const createUiSlice: StateCreator<AppState, [], [], Partial<AppState>> = 
 
   setTasksOpen: (v) => set({ tasksOpen: v }),
   setCheckpointsOpen: (v) => set({ checkpointsOpen: v }),
+  setBtwOpen: (v) => set({ btwOpen: v }),
+  toggleBtw: () => set((s) => ({ btwOpen: !s.btwOpen })),
 
   loadScores: async () => {
     const scores = await window.electronAPI.arena.scores()

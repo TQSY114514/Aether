@@ -165,6 +165,8 @@ export interface AppState {
   // Navigation
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
+  memoryActiveTab: 'memories' | 'strategies'
+  setMemoryActiveTab: (tab: 'memories' | 'strategies') => void
   newChat: () => Promise<number | null>
   // Chat mode
   sessions: Session[]
@@ -236,6 +238,12 @@ export interface AppState {
   // extended thinking, OpenAI o-series reasoning_content). Accumulated as
   // deltas arrive during streaming; cleared when the stream ends.
   thinkingBlocksByMessage: Record<number, string>
+  // Per-message duration of thinking in seconds (persisted & calculated accurately from stream).
+  thinkingDurationsByMessage: Record<number, number>
+  // Per-message start timestamp in ms (to compute real elapsed time during and across streams).
+  thinkingStartsByMessage: Record<number, number>
+  // Per-message flag indicating active thinking phase (set on thinking-start, cleared on thinking-end).
+  thinkingActiveByMessage: Record<number, boolean>
   // Inline status lines per message (compaction notice, budget-exhausted, etc.).
   statusLinesByMessage: Record<number, string[]>
   // Per-message file modification summary for Git-like change deck.
@@ -266,9 +274,12 @@ export interface AppState {
   resolveHabit: (key: string, accept: boolean) => void
   // Message queue: when the user sends while a turn is streaming, the message
   // is queued (not lost, not interrupting) and auto-sent after the current turn.
-  queuedMessages: { id: number; content: string }[]
-  enqueueMessage: (content: string) => void
+  queuedMessages: { id: number; content: string; sessionId?: number }[]
+  enqueueMessage: (content: string, sessionId?: number) => void
   removeQueued: (id: number) => void
+  reorderQueued: (fromIndex: number, toIndex: number) => void
+  updateQueued: (id: number, content: string) => void
+  clearQueued: () => void
   // Session navigation history (browser-style back/forward). selectSession pushes;
   // goBack/goForward move the pointer without pushing.
   sessionHistory: number[]
@@ -317,6 +328,9 @@ export interface AppState {
   setTasksOpen: (v: boolean) => void
   checkpointsOpen: boolean
   setCheckpointsOpen: (v: boolean) => void
+  btwOpen: boolean
+  setBtwOpen: (v: boolean) => void
+  toggleBtw: () => void
   stopGeneration: () => Promise<void>
   continueMessage: () => Promise<void>
 

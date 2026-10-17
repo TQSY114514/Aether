@@ -1,9 +1,10 @@
 const { apiLimit } = require('./concurrency')
 
-// Stream/batch helper to separate <think>...</think> tags from model content
+// Stream/batch helper to separate <think>...</think>, <thought>...</thought>, and <scratchpad>...</scratchpad> tags from model content
 class ThinkTagExtractor {
   constructor() {
     this.inThink = false
+    this.currentTag = ''
     this.buf = ''
   }
   process(chunk) {
@@ -12,9 +13,9 @@ class ThinkTagExtractor {
     this.buf += chunk
     while (this.buf.length > 0) {
       if (!this.inThink) {
-        const startIdx = this.buf.indexOf('<think>')
-        if (startIdx === -1) {
-          const m = this.buf.match(/<t?h?i?n?k?$/i)
+        const match = this.buf.match(/<(think|thought|scratchpad)>/i)
+        if (!match) {
+          const m = this.buf.match(/<[a-z]{0,10}$/i)
           if (m && m.index > 0) {
             content += this.buf.slice(0, m.index)
             this.buf = this.buf.slice(m.index)
@@ -24,14 +25,17 @@ class ThinkTagExtractor {
           }
           break
         } else {
+          const startIdx = match.index
           content += this.buf.slice(0, startIdx)
-          this.buf = this.buf.slice(startIdx + 7)
+          this.buf = this.buf.slice(startIdx + match[0].length)
           this.inThink = true
+          this.currentTag = match[1].toLowerCase()
         }
       } else {
-        const endIdx = this.buf.indexOf('</think>')
+        const closeTag = `</${this.currentTag}>`
+        const endIdx = this.buf.toLowerCase().indexOf(closeTag)
         if (endIdx === -1) {
-          const m = this.buf.match(/<\/?t?h?i?n?k?>?$/i)
+          const m = this.buf.match(/<\/[a-z]{0,10}$/i)
           if (m && m.index > 0) {
             reasoning += this.buf.slice(0, m.index)
             this.buf = this.buf.slice(m.index)
@@ -42,8 +46,9 @@ class ThinkTagExtractor {
           break
         } else {
           reasoning += this.buf.slice(0, endIdx)
-          this.buf = this.buf.slice(endIdx + 8)
+          this.buf = this.buf.slice(endIdx + closeTag.length)
           this.inThink = false
+          this.currentTag = ''
         }
       }
     }
@@ -63,10 +68,10 @@ class ThinkTagExtractor {
 
 function extractThinkTags(text) {
   if (!text || typeof text !== 'string') return { content: '', reasoning: '' }
-  const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/i)
+  const thinkMatch = text.match(/<(think|thought|scratchpad)>([\s\S]*?)<\/\1>/i)
   if (thinkMatch) {
-    const reasoning = thinkMatch[1].trim()
-    const content = text.replace(/<think>[\s\S]*?<\/think>/i, '').trim()
+    const reasoning = thinkMatch[2].trim()
+    const content = text.replace(/<(think|thought|scratchpad)>[\s\S]*?<\/\1>/i, '').trim()
     return { content, reasoning }
   }
   return { content: text, reasoning: '' }
@@ -312,7 +317,7 @@ async function _completeChatMessage({ provider, model, messages, signal, options
     const msg = data.choices?.[0]?.message || {}
     let content = msg.content || ''
     let reasoning = msg.reasoning_content || msg.reasoning || ''
-    if (!reasoning && content.includes('<think>')) {
+    if (!reasoning && /<(think|thought|scratchpad)>/i.test(content)) {
       const ext = extractThinkTags(content)
       content = ext.content
       reasoning = ext.reasoning
@@ -378,7 +383,7 @@ async function _completeChatMessage({ provider, model, messages, signal, options
       const finish_reason = data.choices?.[0]?.finish_reason || undefined
       let content = msg.content || ''
       let reasoning = msg.reasoning_content || msg.reasoning || ''
-      if (!reasoning && content.includes('<think>')) {
+      if (!reasoning && /<(think|thought|scratchpad)>/i.test(content)) {
         const ext = extractThinkTags(content)
         content = ext.content
         reasoning = ext.reasoning
@@ -580,6 +585,6 @@ async function streamChatMessage(args) { return apiLimit.run(() => _streamChatMe
 async function completeChatMessage(args) { return apiLimit.run(() => _completeChatMessage(args)) }
 module.exports = {
   streamChat, completeChat, completeChatMessage, listModels, testConnection, normalizeUsage,
-  normalizeMessages, parseSSELine,
+  normalizeMessages, parseSSELine, ThinkTagExtractor, extractThinkTags,
   streamChatWithRetry, completeChatWithRetry, completeChatMessageWithRetry,
 }

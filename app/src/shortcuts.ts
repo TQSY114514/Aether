@@ -27,6 +27,7 @@ export const SHORTCUTS: ShortcutMeta[] = [
   { id: 'send', group: 'chat', desc: 'Send message', combos: ['Enter'] },
   { id: 'newline', group: 'chat', desc: 'New line in input', combos: ['Shift+Enter'] },
   { id: 'slashes', group: 'chat', desc: 'Slash commands', combos: ['/'] },
+  { id: 'toggle-btw', group: 'chat', desc: 'Side questions (BTW drawer)', combos: ['Alt+B'] },
 ]
 
 // Strict match: every required modifier present, no unexpected extra modifiers

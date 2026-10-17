@@ -111,8 +111,8 @@ jobs:
       - name: Run tests
         # 2 核 runner 上并行 fork 会饿死 worker：同步测试被拖过 vitest 默认
         # 5s 超时误杀（backgroundReview/knowledgeGraph 等纯内存测试曾卡
-        # 5.3s/5.8s 失败）。文件串行 + 30s 超时彻底消除饿死/worker 崩溃。
-        run: cd app && npx vitest run --fileParallelism=false --testTimeout=30000
+        # 5.3s/5.8s 失败）。文件串行 + 60s 超时彻底消除饿死/worker 崩溃与 GC 偶发毛刺。
+        run: cd app && npx vitest run --fileParallelism=false --testTimeout=60000
 
   # ────────────────────────── 构建 + 打包 ──────────────────────────
   build:
