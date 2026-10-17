@@ -157,3 +157,42 @@ describe('ThinkTagExtractor streaming', () => {
     expect(r2.content).toBe('Ready')
   })
 })
+
+// `<|channel>thought … <channel|>` is the native channel-marker form (DeepSeek
+// and compatibles). It must never be persisted as visible answer text.
+describe('native channel markers', () => {
+  it('extracts an empty thought channel and keeps the answer', () => {
+    const res = extractThinkTags('<|channel>thought\n<channel|>Hello there')
+    expect(res.reasoning).toBe('')
+    expect(res.content).toBe('Hello there')
+  })
+
+  it('extracts a non-empty thought channel body', () => {
+    const res = extractThinkTags('<|channel>thought\nlook at the code\n<channel|>The bug is on line 3')
+    expect(res.reasoning).toBe('look at the code')
+    expect(res.content).toBe('The bug is on line 3')
+  })
+
+  it('drops a leading marker pair in streaming, split across chunks', () => {
+    const ext = new ThinkTagExtractor()
+    const seen = { content: '', reasoning: '' }
+    for (const chunk of ['<|chan', 'nel>thought', '\n', '<channel|>', 'Hello', ' world']) {
+      const r = ext.process(chunk)
+      seen.content += r.content
+      seen.reasoning += r.reasoning
+    }
+    const tail = ext.flush()
+    seen.content += tail.content
+    seen.reasoning += tail.reasoning
+    expect(seen.content).toBe('Hello world')
+    expect(seen.reasoning).toBe('\n')
+  })
+
+  it('does not leak a half-written marker into content', () => {
+    const ext = new ThinkTagExtractor()
+    const r1 = ext.process('Answer <|channel>thou')
+    expect(r1.content).toBe('Answer ')
+    const r2 = ext.process('ght\n<channel|>!')
+    expect(r2.content).toBe('!')
+  })
+})

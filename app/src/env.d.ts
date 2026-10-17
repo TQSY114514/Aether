@@ -233,6 +233,7 @@ interface Window {
       askSide: (params: { sessionId: number; question: string; modelId?: number | string }) => Promise<{ ok: boolean; answer?: string; error?: string }>
       stopSide: (sessionId: number) => Promise<{ ok: boolean }>
       onSideChunk: (callback: (payload: { sessionId: number; delta: string; done: boolean; fullContent?: string; error?: string }) => void) => () => void
+      fork: (params: { sessionId: number; messageId?: number | null; title?: string }) => Promise<{ id: number; title: string }>
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>

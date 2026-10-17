@@ -2,8 +2,10 @@ import type { StateCreator } from "zustand"
 import type { Message } from "@/types"
 import type { AppState } from "./types"
 import log from "@/utils/logger"
+import { t } from "@/utils/i18n"
 
 let _navigating = false
+let _isForking = false
 
 export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState>> = (set, get) => ({
   sessions: [],
@@ -156,6 +158,38 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
       await get().loadWorkspaceSoul(null)
     }
     await get().loadSessions()
+  },
+
+  forkSession: async (messageId?: number) => {
+    if (_isForking) return null
+    const { currentSessionId, triggerToast } = get()
+    if (!currentSessionId) return null
+    _isForking = true
+    let forkRes: { id?: number } | null = null
+    try {
+      forkRes = await window.electronAPI.chat.fork({ sessionId: currentSessionId, messageId })
+    } catch (e: any) {
+      log.warn('forkSession IPC failed:', e)
+      triggerToast(t('common.error') || 'Fork failed', 'error')
+      _isForking = false
+      return null
+    }
+
+    if (!forkRes || !forkRes.id) {
+      _isForking = false
+      return null
+    }
+
+    const newId = forkRes.id
+    try {
+      await get().loadSessions()
+      await get().selectSession(newId)
+    } catch (e) {
+      log.warn('forkSession post-action failed:', e)
+    } finally {
+      _isForking = false
+    }
+    return newId
   },
 
   goBack: () => {

@@ -1,5 +1,67 @@
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
+
+/**
+ * Compute SHA-256 content hash for string or Buffer
+ * @param {string | Buffer} content
+ * @returns {string}
+ */
+function computeContentHash(content) {
+  if (content == null) return crypto.createHash('sha256').update('').digest('hex')
+  const hash = crypto.createHash('sha256')
+  if (Buffer.isBuffer(content)) {
+    hash.update(content)
+  } else {
+    hash.update(String(content), 'utf8')
+  }
+  return hash.digest('hex')
+}
+
+/**
+ * Check if targetPath is contained within wsRoot (rejecting path traversal outside)
+ * @param {string} wsRoot
+ * @param {string} targetPath
+ * @returns {boolean}
+ */
+function isPathInsideWorkspace(wsRoot, targetPath) {
+  if (!wsRoot || !targetPath) return false
+  try {
+    const resolvedWs = path.resolve(wsRoot)
+    const resolvedTarget = path.isAbsolute(targetPath) ? path.resolve(targetPath) : path.resolve(resolvedWs, targetPath)
+    const normWs = process.platform === 'win32' ? resolvedWs.toLowerCase() : resolvedWs
+    const normTarget = process.platform === 'win32' ? resolvedTarget.toLowerCase() : resolvedTarget
+
+    if (normTarget === normWs) return true
+    return normTarget.startsWith(normWs + path.sep)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Safely read a file only if it is contained within the workspace root
+ * @param {string} targetPath
+ * @param {string} wsRoot
+ * @returns {string | null}
+ */
+function safeReadFile(targetPath, wsRoot) {
+  if (!isPathInsideWorkspace(wsRoot, targetPath)) return null
+  try {
+    const resolved = path.isAbsolute(targetPath) ? targetPath : path.resolve(wsRoot, targetPath)
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return null
+    try {
+      const realTarget = fs.realpathSync(resolved)
+      const realWs = fs.realpathSync(wsRoot)
+      if (!isPathInsideWorkspace(realWs, realTarget)) return null
+    } catch {
+      return null
+    }
+    return fs.readFileSync(resolved, 'utf8')
+  } catch {
+    return null
+  }
+}
 
 /**
  * Track files modified during a turn for Git-like change summary (Claude Code / Cursor style)
@@ -43,8 +105,10 @@ function createTurnFileTracker(wsRoot) {
     } catch {}
   }
 
+  const MUTATION_TOOLS = ['write_file', 'edit_file', 'apply_patch', 'replace_file_content', 'write_to_file', 'patch']
+
   function resolvePath(args) {
-    const raw = args?.path || args?.targetPath || args?.filePath || args?.file
+    const raw = args?.path || args?.targetPath || args?.filePath || args?.file || args?.TargetFile || args?.targetFile
     if (!raw || typeof raw !== 'string') return null
     return path.isAbsolute(raw) ? path.resolve(raw) : (wsRoot ? path.resolve(wsRoot, raw) : path.resolve(raw))
   }
@@ -55,7 +119,7 @@ function createTurnFileTracker(wsRoot) {
         commandRan = true
         return
       }
-      if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return
+      if (!MUTATION_TOOLS.includes(name)) return
       const absPath = resolvePath(args)
       if (!absPath) return
       if (!files.has(absPath)) {
@@ -79,7 +143,7 @@ function createTurnFileTracker(wsRoot) {
     },
 
     afterTool(name, args) {
-      if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return
+      if (!MUTATION_TOOLS.includes(name)) return
       const absPath = resolvePath(args)
       if (!absPath || !files.has(absPath)) return
       const record = files.get(absPath)
@@ -105,7 +169,10 @@ function createTurnFileTracker(wsRoot) {
           }
         } catch {}
         const { path: relPath, initialExisted, initialContent, finalContent } = record
-        if (initialContent === finalContent) continue
+        if (!initialExisted && finalContent === null) continue
+        if (initialExisted && finalContent !== null) {
+          if (initialContent === finalContent || computeContentHash(initialContent) === computeContentHash(finalContent)) continue
+        }
 
         let added = 0
         let removed = 0
@@ -238,7 +305,10 @@ function createTurnFileTracker(wsRoot) {
                   }
                 }
 
-                if (initialContent === currentContent) continue
+                if (!initialExisted && !currentExisted) continue
+                if (initialExisted && currentExisted) {
+                  if (initialContent === currentContent || computeContentHash(initialContent) === computeContentHash(currentContent)) continue
+                }
 
                 let status = 'modified'
                 let diff = ''
@@ -359,4 +429,7 @@ function createTurnFileTracker(wsRoot) {
 
 module.exports = {
   createTurnFileTracker,
+  computeContentHash,
+  isPathInsideWorkspace,
+  safeReadFile,
 }

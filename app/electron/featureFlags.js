@@ -51,6 +51,7 @@ const FLAG_DEFS = [
   { key: 'agent.shrinkRetry',    default: false, category: 'agent',      description: 'Auto scope-reduction retry: when the iteration budget runs out or a loop guard blocks, shrink to one completable increment and add a few rounds (fires at most once per run)' },
   { key: 'agent.poorMode',       default: false, category: 'agent',      description: 'Poor Mode (Frugal): token & cost conservation without sacrificing task completion (low reasoning effort, aggressive tool truncation, tight context compaction, max 15 iterations)' },
   { key: 'agent.leanMcp',        default: false, category: 'agent',      description: 'Lean MCP Bridge: expose MCP tools via lightweight on-demand gateway (mcp_list_tools, mcp_call_tool) to preserve prompt cache' },
+  { key: 'agent.phaseRouting',   default: false, category: 'agent',      description: 'Dynamic ELO-driven phase and role model routing across tool turns' },
   // Phase 3 — code understanding + orchestration
   { key: 'memory.codeUnderstanding', default: false, category: 'code-intel', description: 'Persist repo structure into the knowledge graph (kg_nodes/kg_edges)' },
   { key: 'agent.orchestrator',    default: false, category: 'agent',      description: 'Manager orchestration: plan → parallel sub-agents → summary' },
@@ -86,7 +87,7 @@ const DEF_BY_KEY = new Map(DEFS.map(d => [d.key, d]))
 
 // Accept any of the app's truthy/falsy storage spellings.
 function normalizeValue(value) {
-  if (value === true || value === 1 || value === '1' || value === 'true' || value === 'on' || value === 'yes') return '1'
+  if (value === true || value === 1 || value === '1' || value === 'true' || value === 'on' || value === 'yes' || value === 'arena_elo') return '1'
   if (value === false || value === 0 || value === '0' || value === 'false' || value === 'off' || value === 'no' || value === null || value === undefined || value === '') return '0'
   return null // unparseable → caller decides (treat as unset)
 }

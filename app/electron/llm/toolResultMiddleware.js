@@ -80,6 +80,10 @@ const SECRET_WHOLE_PATTERNS = [
   /\bsk-ant-[A-Za-z0-9_\-]{16,}/g,                                              // Anthropic keys
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,         // 完整 JWT（三段）
   /\beyJ[A-Za-z0-9_-]{20,}\b/g,                                                 // 裸 JWT header / 长 eyJ 串
+  /\bAIza[0-9A-Za-z_\-]{30,40}\b/g,                                             // Google API key (typically 39 chars total)
+  /\bxoxb-[0-9A-Za-z\-]{50,}\b/g,                                              // Slack Bot token
+  /\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b/g,                           // SendGrid API key
+  /\b(?:xapp|xoxp|xoxa|xoxr)-[0-9A-Za-z\-]{50,}\b/g,                          // Slack OAuth tokens
 ]
 function redactMiddleware(content) {
   if (typeof content !== 'string') content = String(content ?? '')
