@@ -270,7 +270,7 @@ function extractTargetFilePath(line) {
   if (trimmed.startsWith('```')) return null
 
   // 1. HTML comments: <!-- file: src/foo.ts --> or <!-- src/foo.ts -->
-  let cleaned = trimmed.replace(/^<!--\s*(?:file:\s*)?/i, '').replace(/\s*-->$/, '').trim()
+  let cleaned = trimmed.replace(/^<!--\s*(?:file:\s*)?/i, '').replace(/\s*--!?>$/, '').trim()
 
   // 2. Markdown headers: ###, ##, #
   cleaned = cleaned.replace(/^#{1,6}\s+/, '').trim()
