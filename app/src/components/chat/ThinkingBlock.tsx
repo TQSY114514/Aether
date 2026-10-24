@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Brain, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Brain, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { t } from '@/utils/i18n'
 
 type ThinkingBlockProps = {
@@ -15,10 +16,18 @@ type ThinkingBlockProps = {
   startedAt?: number | null
 }
 
+const GLUED_HEADING_RUN = /(?<!\*)\*{4}(?!\*)/g
+const GLUED_AFTER_PROSE = /(?<=[^\s*])(\*\*(?=[^\s*])[^*\n]*\*\*)(?=\s*$)/gm
+
+function separateGluedReasoningBlocks(raw: string): string {
+  if (!raw) return ''
+  return raw.replace(GLUED_HEADING_RUN, '**\n\n**').replace(GLUED_AFTER_PROSE, '\n\n$1')
+}
+
 /**
  * Collapsible extended-thinking / reasoning block (Hermes & Claude Code style).
  * Supports real-time elapsed timer, non-intrusive auto-following scroll,
- * and clear duration reporting upon completion.
+ * clean heading separation, and clear duration reporting upon completion.
  */
 export default function ThinkingBlock({
   text,
@@ -86,14 +95,16 @@ export default function ThinkingBlock({
     followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 36
   }, [])
 
+  const cleanText = useMemo(() => separateGluedReasoningBlocks(text), [text])
+
   // Auto-scroll to bottom only if user hasn't scrolled up to read earlier thoughts
   useEffect(() => {
     if (streaming && open && followingRef.current && contentRef.current) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight
     }
-  }, [text, streaming, open])
+  }, [cleanText, streaming, open])
 
-  if (!text || !text.trim()) return null
+  if (!cleanText || !cleanText.trim()) return null
 
   // Format header status label
   const finalDuration = propDuration != null && propDuration > 0 ? propDuration : duration
@@ -108,8 +119,8 @@ export default function ThinkingBlock({
     statusLabel = open ? t('thinking.full', '思考过程') : t('thinking.collapsed', '思考过程')
   }
 
-  const lines = text.split('\n')
-  const previewText = preview && !open ? lines.slice(0, 3).join('\n') + (lines.length > 3 ? '\n…' : '') : text
+  const lines = cleanText.split('\n')
+  const previewText = preview && !open ? lines.slice(0, 3).join('\n') + (lines.length > 3 ? '\n…' : '') : cleanText
   const showPreview = preview && !open && lines.length > 3
 
   return (
@@ -127,24 +138,24 @@ export default function ThinkingBlock({
         className="w-full flex items-center gap-1.5 py-1 text-xs hover:opacity-85 transition-opacity select-none text-left"
         aria-expanded={open}
       >
-        {open ? (
-          <ChevronDown size={12} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
-        ) : (
-          <ChevronRight size={12} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
-        )}
+        <ChevronRight
+          size={12}
+          className={cn('shrink-0 transition-transform duration-200', open && 'rotate-90')}
+          style={{ color: 'var(--text-muted)' }}
+        />
         <Brain
           size={12}
-          className={`shrink-0 ${streaming ? 'animate-pulse' : ''}`}
-          style={{ color: streaming ? 'var(--accent)' : 'var(--text-muted)' }}
+          className={cn('shrink-0', streaming && 'animate-pulse text-[var(--accent)]')}
+          style={!streaming ? { color: 'var(--text-muted)' } : {}}
         />
         <span
-          className={`font-medium text-[11px] truncate ${streaming ? 'animate-pulse' : ''}`}
+          className={cn('font-medium text-[11px] truncate', streaming && 'animate-pulse')}
           style={{ color: streaming ? 'var(--text-primary)' : 'var(--text-secondary)' }}
         >
           {statusLabel}
         </span>
         <span className="ml-auto text-[10px] font-mono tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
-          {text.length.toLocaleString()} {t('tool.chars', 'chars')}
+          {cleanText.length.toLocaleString()} {t('tool.chars', 'chars')}
         </span>
       </button>
 
@@ -168,7 +179,7 @@ export default function ThinkingBlock({
               transition: 'max-height 0.2s ease-out',
             }}
           >
-            {open ? text : previewText}
+            {open ? cleanText : previewText}
             {streaming && <span className="animate-pulse font-bold ml-0.5" style={{ color: 'var(--accent)' }}>▋</span>}
           </pre>
           {showPreview && (

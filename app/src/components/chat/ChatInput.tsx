@@ -353,13 +353,21 @@ export default function ChatInput() {
   }
 
   const handleSlashSelect = (cmd: SlashCommand) => {
+    if (cmd.requiresArg || (!cmd.action && !cmd.prompt)) {
+      const lines = input.split('\n')
+      lines[lines.length - 1] = `/${cmd.id} `
+      setInput(lines.join('\n'))
+      setShowSlash(false)
+      textareaRef.current?.focus()
+      return
+    }
     if (cmd.action) {
       setShowSlash(false)
       cmd.action()
       return
     }
     const lines = input.split('\n')
-    lines[lines.length - 1] = cmd.prompt!
+    lines[lines.length - 1] = cmd.prompt || `/${cmd.id}`
     setInput(lines.join('\n'))
     setShowSlash(false)
     textareaRef.current?.focus()
@@ -417,7 +425,19 @@ export default function ChatInput() {
         setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length)
         return
       }
-      if (e.key === 'Tab' || e.key === 'Enter') {
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        const selected = slashResults[slashIndex] || slashResults[0]
+        if (selected) {
+          const lines = input.split('\n')
+          lines[lines.length - 1] = `/${selected.id} `
+          setInput(lines.join('\n'))
+          setShowSlash(false)
+          textareaRef.current?.focus()
+        }
+        return
+      }
+      if (e.key === 'Enter') {
         e.preventDefault()
         handleSlashSelect(slashResults[slashIndex] || slashResults[0])
         return
@@ -635,13 +655,14 @@ export default function ChatInput() {
 
         <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-nowrap min-w-0">
           <div className="flex items-center gap-1.5 flex-nowrap min-w-0 shrink">
-            <AgentModeSelector mode={agentMode} onChange={setAgentMode} />
+            <AgentModeSelector mode={agentMode} onChange={setAgentMode} compact />
             <EffortControl
               thinkingEnabled={thinkingEnabled}
               onToggleThinking={setThinkingEnabled}
               level={effortLevel}
               onLevelChange={setEffortLevel}
               isBinary={isBinaryReasoning}
+              compact
             />
             <ModelSelector
               providers={providers}

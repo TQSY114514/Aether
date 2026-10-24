@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { Shield } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Shield, ChevronDown, Check } from 'lucide-react'
 import Tooltip from '@/components/Tooltip'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
@@ -9,6 +9,7 @@ export interface AgentModeSelectorProps {
   mode: AgentMode
   onChange: (v: AgentMode) => void
   disabled?: boolean
+  compact?: boolean
 }
 
 type CanonicalMode = 'explore' | 'workspace' | 'auto_review' | 'unrestricted'
@@ -36,9 +37,23 @@ function toCanonicalMode(m: AgentMode | string): CanonicalMode {
   }
 }
 
-export default function AgentModeSelector({ mode, onChange, disabled = false }: AgentModeSelectorProps) {
+export default function AgentModeSelector({ mode, onChange, disabled = false, compact = false }: AgentModeSelectorProps) {
   const language = useStore((s) => s.language)
   const isZh = language.startsWith('zh')
+
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!dropdownOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [dropdownOpen])
 
   const AGENT_MODES: {
     value: CanonicalMode
@@ -69,6 +84,65 @@ export default function AgentModeSelector({ mode, onChange, disabled = false }: 
   ], [language, isZh, t])
 
   const activeCanonical = toCanonicalMode(mode)
+
+  if (compact) {
+    const activeItem = AGENT_MODES.find((m) => m.value === activeCanonical) || AGENT_MODES[1]
+    return (
+      <div ref={dropdownRef} className="relative inline-block">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded-[6px] border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          style={{ borderColor: 'var(--border)' }}
+          title={activeItem.tooltip}
+          aria-label={activeItem.tooltip}
+        >
+          <Shield size={11} className="text-[var(--accent)] shrink-0" />
+          <span className="truncate max-w-[80px]" style={{ color: 'var(--text-primary)' }}>
+            {activeItem.label}
+          </span>
+          <ChevronDown size={10} className="text-[var(--text-muted)] shrink-0 opacity-70" />
+        </button>
+
+        {dropdownOpen && (
+          <div
+            className="absolute bottom-full left-0 mb-1 w-56 rounded-lg border shadow-lg p-1.5 z-50 animate-spring-up space-y-1 text-xs"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+          >
+            <span className="text-[10px] font-semibold px-1 text-[var(--text-muted)] block">
+              {t('quickdeck.agent_mode_label', 'Agent 权限模式 (4 档)')}
+            </span>
+            {AGENT_MODES.map((m) => {
+              const isSelected = m.value === activeCanonical
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(m.value)
+                    setDropdownOpen(false)
+                  }}
+                  className="w-full text-left p-1.5 rounded-md transition-colors hover:bg-[var(--bg-secondary)] block"
+                  style={isSelected ? { backgroundColor: 'var(--content-bg)' } : {}}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-xs" style={{ color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>
+                      {m.label}
+                    </span>
+                    {isSelected && <Check size={11} className="text-emerald-500" />}
+                  </div>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    {m.tooltip}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
