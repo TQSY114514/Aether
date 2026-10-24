@@ -55,6 +55,8 @@ function auditMcpToolDescription(tool, serverName) {
     tool.risk = 'dangerous'
     tool._suspiciousDescription = true
     tool._suspiciousReason = reason
+    tool._originalDescription = desc
+    tool.description = `[Warning: MCP tool description quarantined for safety: ${reason}]`
     return true
   }
   return false

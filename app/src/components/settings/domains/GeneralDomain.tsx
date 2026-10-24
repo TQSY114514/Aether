@@ -9,6 +9,7 @@ import {
   Upload,
   Palette,
   Sparkles,
+  HardDrive,
 } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
 
@@ -256,6 +257,68 @@ export default function GeneralDomain() {
               <span>{t('settings.bg_remove')}</span>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Configuration Backup & Restore */}
+      <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <HardDrive size={15} style={{ color: 'var(--accent)' }} />
+          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.backup_title', '配置备份与恢复')}</h2>
+        </div>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.backup_desc', '备份或导入模型提供商、自定义模型与智能体人设配置')}</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const data = await window.electronAPI.config.export({ includeSecrets: false })
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `aether-config-${new Date().toISOString().slice(0, 10)}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+                useStore.getState().triggerToast(t('settings.export_success', '配置导出成功'), 'success')
+              } catch (e: any) {
+                useStore.getState().triggerToast(t('settings.export_failed', '导出失败') + ': ' + (e?.message || e), 'error')
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border font-medium hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98]"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+          >
+            <Download size={13} />
+            <span>{t('settings.export_config', '导出配置 (JSON)')}</span>
+          </button>
+          <label
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border font-medium cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98]"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          >
+            <Upload size={13} />
+            <span>{t('settings.import_config', '导入配置…')}</span>
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                try {
+                  const text = await file.text()
+                  const json = JSON.parse(text)
+                  const res = await window.electronAPI.config.import(json)
+                  if (res?.success) {
+                    useStore.getState().triggerToast(t('settings.import_success', '配置导入成功'), 'success')
+                  } else {
+                    useStore.getState().triggerToast(t('settings.import_failed', '导入失败') + ': ' + (res?.error || '未知错误'), 'error')
+                  }
+                } catch (err: any) {
+                  useStore.getState().triggerToast(t('settings.import_failed', '导入失败') + ': ' + (err?.message || err), 'error')
+                }
+              }}
+              className="hidden"
+            />
+          </label>
         </div>
       </div>
     </div>

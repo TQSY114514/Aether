@@ -140,8 +140,7 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   for all `app/src` UI).
 - Before changing DB schema → read `database.js` `initDatabase` (CREATE TABLE)
   AND the `addCol` migration block. Add new columns there so old DBs upgrade.
-- Before reviewing any change (自审或评审别人的改动) → load the `review-design`
-  skill AND read `docs/review-checklist.md`. The checklist lists the complexity
+- Before reviewing any change (自审或评审别人的改动) → read `docs/review-checklist.md`. The checklist lists the complexity
   in this repo that is deliberate, so a generic reviewer does not propose
   deleting it.
 
@@ -155,7 +154,7 @@ artifact.
   `check-deps` (main-process externals declared) → `check-ui-tokens`
   (anti-AI-slop gradients, legacy `hsl(var())`, 650-line component ratchet) →
   `tsc --noEmit`.
-- **Full build** `cd app && npm run build` runs those same three gates, then
+- **Full build** `cd app && npm run build` runs those same four gates, then
   `vite build` + `build-icons.js` + `electron-builder` (it produces an
   installer — minutes, not seconds; do not reach for it to check a type error).
 - **Unit / smoke:** `npm test` (vitest), `npm run smoke:boot`, `npm run smoke:rpc`,

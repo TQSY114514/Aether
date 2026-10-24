@@ -1123,7 +1123,22 @@
       "slash.compact_desc": "压缩上下文历史以节省 Token 预算",
       "thinking.running_elapsed": "思考中 ({0}s)…",
       "thinking.thought_for_sec": "思考耗时 {0}s",
-      "thinking.thought_done": "已完成思考"
+      "thinking.thought_done": "已完成思考",
+      "settings.tab.providers": "模型与路由",
+      "settings.tab.memory": "记忆与自进化",
+      "settings.typography": "排版与显示",
+      "agent.mode.explore": "仅查看",
+      "agent.mode.workspace": "工作区",
+      "agent.mode.auto_review": "自动审查",
+      "agent.mode.unrestricted": "完全权限",
+      "agent.mode.group_label": "Agent 权限模式",
+      "sidebar.project_scope.project": "项目",
+      "sidebar.project_scope.all": "全部",
+      "sidebar.project_scope.tooltip": "切换项目会话筛选",
+      "settings.agent.session_budget_usd": "单会话费用上限（USD）",
+      "settings.agent.session_budget_desc": "设定单次网络请求超时上限与单会话费用上限（USD）",
+      "quickdeck.projects": "项目工作区",
+      "quickdeck.pick_folder": "打开本地项目文件夹..."
     }
   },
   {
@@ -8814,7 +8829,7 @@
       "agent.mode.off.desc": "關閉 — 純對話，不調用工具",
       "agent.mode.plan": "計畫",
       "agent.mode.plan.desc": "規劃 — 只讀工具，危險操作需確認",
-      "agent.mode.custom": "自訂",
+      "agent.mode.custom": "自定义",
       "agent.mode.custom.desc": "自訂策略：在設定中設定每個工具的權限",
       "settings.custom_mode": "自訂模式策略",
       "settings.custom_mode_desc": "為自訂模式設定每個工具類別的權限。從聊天欄的 Agent 模式選擇器切換到自訂模式以啟用。",
@@ -9890,7 +9905,22 @@
       "slash.compact_desc": "压缩上下文历史以节省 Token 预算",
       "thinking.running_elapsed": "思考中 ({0}s)…",
       "thinking.thought_for_sec": "思考耗时 {0}s",
-      "thinking.thought_done": "已完成思考"
+      "thinking.thought_done": "已完成思考",
+      "settings.tab.providers": "模型与路由",
+      "settings.tab.memory": "记忆与自进化",
+      "settings.typography": "排版与显示",
+      "agent.mode.explore": "仅查看",
+      "agent.mode.workspace": "工作区",
+      "agent.mode.auto_review": "自动审查",
+      "agent.mode.unrestricted": "完全权限",
+      "agent.mode.group_label": "Agent 权限模式",
+      "sidebar.project_scope.project": "项目",
+      "sidebar.project_scope.all": "全部",
+      "sidebar.project_scope.tooltip": "切换项目会话筛选",
+      "settings.agent.session_budget_usd": "单会话费用上限（USD）",
+      "settings.agent.session_budget_desc": "设定单次网络请求超时上限与单会话费用上限（USD）",
+      "quickdeck.projects": "项目工作区",
+      "quickdeck.pick_folder": "打开本地项目文件夹..."
     }
   },
   {

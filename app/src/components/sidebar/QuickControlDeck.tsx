@@ -19,6 +19,7 @@ export const hasReasoningDial = true
 export const hasDoctorHealthBadge = true
 
 export default function QuickControlDeck() {
+  const language = useStore((s) => s.language)
   const activeProject = useStore((s) => s.activeProject)
   const projects = useStore((s) => s.projects)
   const loadProjects = useStore((s) => s.loadProjects)
@@ -40,9 +41,14 @@ export default function QuickControlDeck() {
   const [effortOpen, setEffortOpen] = useState(false)
   const [doctorOpen, setDoctorOpen] = useState(false)
 
-  const [healthStatus, setHealthStatus] = useState({
-    db: 'healthy',
+  const [healthStatus, setHealthStatus] = useState<{
+    gateway: string
+    gatewayPort: number | null
+    mcpActiveCount: number
+    overallStatus: string
+  }>({
     gateway: 'idle',
+    gatewayPort: null,
     mcpActiveCount: 0,
     overallStatus: 'ok',
   })
@@ -58,11 +64,11 @@ export default function QuickControlDeck() {
     const checkHealth = async () => {
       try {
         const mcps = await window.electronAPI?.mcp?.list?.().catch(() => [])
-        const gw = await window.electronAPI?.gateway?.info?.().catch(() => ({ running: false }))
+        const gw = await window.electronAPI?.gateway?.info?.().catch(() => ({ running: false, port: null }))
         const activeMcp = (mcps || []).filter((s: any) => s.enabled).length
         setHealthStatus({
-          db: 'healthy',
           gateway: gw?.running ? 'online' : 'idle',
+          gatewayPort: gw?.port ?? null,
           mcpActiveCount: activeMcp,
           overallStatus: 'ok',
         })
@@ -108,7 +114,7 @@ export default function QuickControlDeck() {
       value: 'auto_review',
       label: t('agent.mode.auto_review', '自动审查'),
       badge: t('agent.mode.auto_review.badge', 'TDD'),
-      color: '#f59e0b',
+      color: 'var(--warning, #f59e0b)',
       desc: t('agent.mode.auto_review.desc', '监督式 TDD 闭环，改写代码后自动运行单测并自愈'),
     },
     {
@@ -118,7 +124,7 @@ export default function QuickControlDeck() {
       color: 'var(--error, #ef4444)',
       desc: t('agent.mode.unrestricted.desc', '沙箱内自主运行，零弹窗确认，后台安全守卫'),
     },
-  ], [])
+  ], [language])
 
   const reasoningLevels = useMemo<{ value: EffortLevel; label: string; tokens: string }[]>(() => [
     { value: 'minimal', label: t('thinking.minimal', '极速'), tokens: '1k' },
@@ -126,7 +132,7 @@ export default function QuickControlDeck() {
     { value: 'medium', label: t('thinking.medium', '均衡'), tokens: '8k' },
     { value: 'high', label: t('thinking.high', '深度'), tokens: '16k' },
     { value: 'max', label: t('thinking.max', '极限'), tokens: '32k' },
-  ], [])
+  ], [language])
 
   const currentModeInfo = useMemo(() => {
     return agentModeOptions.find((m) => m.value === agentMode) || agentModeOptions[1]
@@ -134,24 +140,16 @@ export default function QuickControlDeck() {
 
   const handlePickNewFolder = async () => {
     try {
-      const input = document.createElement('input')
-      input.type = 'file'
-      ;(input as HTMLInputElement & { webkitdirectory?: boolean }).webkitdirectory = true
-      input.onchange = async () => {
-        // @ts-expect-error .path
-        const first = input.files?.[0]?.path || ''
-        const dir = first ? first.replace(/[/\\][^/\\\\]*$/, '') : ''
-        if (dir) {
-          const parts = dir.replace(/[\\/]+$/, '').split(/[\\/]/)
-          const name = parts[parts.length - 1] || 'New Project'
-          const proj = await createProject({ name, root_path: dir })
-          if (proj?.id) {
-            await openProject(proj.id)
-            setProjectOpen(false)
-          }
+      const dir = await window.electronAPI.project.pickDirectory()
+      if (dir) {
+        const parts = dir.replace(/[\\/]+$/, '').split(/[\\/]/)
+        const name = parts[parts.length - 1] || 'New Project'
+        const proj = await createProject({ name, root_path: dir })
+        if (proj?.id) {
+          await openProject(proj.id)
+          setProjectOpen(false)
         }
       }
-      input.click()
     } catch (e) {
       console.error('Pick folder error:', e)
     }
@@ -196,7 +194,7 @@ export default function QuickControlDeck() {
           {/* Project Switcher Popover */}
           {projectOpen && (
             <div
-              className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border shadow-lg p-2 z-50 animate-spring-up"
+              className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border shadow-lg p-2 z-50 animate-spring-up motion-reduce:animate-none"
               style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
             >
               <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -239,7 +237,7 @@ export default function QuickControlDeck() {
                             {p.name}
                           </span>
                         </div>
-                        {isCurrent && <Check size={12} className="text-emerald-500 shrink-0" />}
+                        {isCurrent && <Check size={12} className="text-[var(--success,#16a34a)] shrink-0" />}
                       </button>
                     )
                   })
@@ -276,7 +274,7 @@ export default function QuickControlDeck() {
           >
             <span
               className="w-1.5 h-1.5 rounded-full shrink-0"
-              style={{ backgroundColor: healthStatus.overallStatus === 'ok' ? '#16a34a' : '#f59e0b' }}
+              style={{ backgroundColor: healthStatus.overallStatus === 'ok' ? 'var(--success, #16a34a)' : 'var(--warning, #f59e0b)' }}
             />
             <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
               MCP:{healthStatus.mcpActiveCount}
@@ -308,7 +306,7 @@ export default function QuickControlDeck() {
                 <div className="flex justify-between">
                   <span>{t('quickdeck.gateway', '本地网关 (Gateway)')}:</span>
                   <span className="font-mono">
-                    {healthStatus.gateway === 'online' ? t('quickdeck.gateway_online', '已上线') : t('quickdeck.gateway_idle', '待机')}
+                    {healthStatus.gateway === 'online' ? (healthStatus.gatewayPort ? `:${healthStatus.gatewayPort}` : t('quickdeck.gateway_online', '已上线')) : t('quickdeck.gateway_idle', '待机')}
                   </span>
                 </div>
               </div>

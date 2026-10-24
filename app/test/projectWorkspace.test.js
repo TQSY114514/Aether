@@ -219,26 +219,27 @@ describe('Milestone 1: Project-Based Multi-Workspace Architecture', () => {
 
   describe('3. Sandbox Path Resolution & Security Boundaries', () => {
     it('isDangerousRoot correctly identifies dangerous and safe paths', () => {
-      expect(isDangerousRoot('C:\\')).toBe(true)
-      expect(isDangerousRoot('c:/')).toBe(true)
+      if (process.platform === 'win32') {
+        expect(isDangerousRoot('C:\\')).toBe(true)
+        expect(isDangerousRoot('c:/')).toBe(true)
+        const winDir = process.env.WINDIR || 'C:\\Windows'
+        expect(isDangerousRoot(winDir)).toBe(true)
+        expect(isDangerousRoot(path.join(winDir, 'System32'))).toBe(true)
+
+        const progFiles = process.env.ProgramFiles || 'C:\\Program Files'
+        expect(isDangerousRoot(progFiles)).toBe(true)
+        expect(isDangerousRoot(path.join(progFiles, 'Common Files'))).toBe(true)
+
+        const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)'
+        expect(isDangerousRoot(progFilesX86)).toBe(true)
+
+        // UNC and \\?\ device prefix verification
+        expect(isDangerousRoot('\\\\?\\C:\\Windows')).toBe(true)
+        expect(isDangerousRoot('\\\\192.168.1.1\\share')).toBe(true)
+        expect(isDangerousRoot('\\\\?\\C:\\')).toBe(true)
+      }
       expect(isDangerousRoot('/')).toBe(true)
       expect(isDangerousRoot('\\')).toBe(true)
-
-      const winDir = process.env.WINDIR || 'C:\\Windows'
-      expect(isDangerousRoot(winDir)).toBe(true)
-      expect(isDangerousRoot(path.join(winDir, 'System32'))).toBe(true)
-
-      const progFiles = process.env.ProgramFiles || 'C:\\Program Files'
-      expect(isDangerousRoot(progFiles)).toBe(true)
-      expect(isDangerousRoot(path.join(progFiles, 'Common Files'))).toBe(true)
-
-      const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)'
-      expect(isDangerousRoot(progFilesX86)).toBe(true)
-
-      // UNC and \\?\ device prefix verification
-      expect(isDangerousRoot('\\\\?\\C:\\Windows')).toBe(true)
-      expect(isDangerousRoot('\\\\192.168.1.1\\share')).toBe(true)
-      expect(isDangerousRoot('\\\\?\\C:\\')).toBe(true)
 
       expect(isDangerousRoot(tmpDir)).toBe(false)
       expect(isDangerousRoot(path.join(tmpDir, 'project'))).toBe(false)

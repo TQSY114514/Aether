@@ -57,20 +57,21 @@ export default function ProvidersRoutingDomain() {
               {t('settings.default_effort', '默认思考深度 (Thinking Tier)')}
             </h2>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <div className="flex items-center gap-2 select-none">
             <span className="text-xs font-medium" style={{ color: defaultThinkingEnabled ? 'var(--text-primary)' : 'var(--text-muted)' }}>
               {defaultThinkingEnabled ? t('effort.on', '思考模式开启') : t('effort.off', '思考模式关闭')}
             </span>
-            <div className={`relative inline-flex h-4 w-8 shrink-0 rounded-full transition-colors duration-200 ease-in-out ${defaultThinkingEnabled ? 'bg-zinc-900 dark:bg-zinc-100' : 'bg-zinc-300 dark:bg-zinc-700'}`}>
-              <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white dark:bg-zinc-900 shadow transition duration-200 ease-in-out mt-[2px] ml-[2px] ${defaultThinkingEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-            </div>
-            <input
-              type="checkbox"
-              checked={defaultThinkingEnabled}
-              onChange={(e) => setDefaultThinkingEnabled(e.target.checked)}
-              className="hidden"
-            />
-          </label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={defaultThinkingEnabled}
+              onClick={() => setDefaultThinkingEnabled(!defaultThinkingEnabled)}
+              className="relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+              style={{ backgroundColor: defaultThinkingEnabled ? 'var(--accent)' : 'var(--border)' }}
+            >
+              <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow transition duration-200 ease-in-out mt-[2px] ml-[2px] ${defaultThinkingEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+          </div>
         </div>
         <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
           {t('settings.default_effort_desc', '设置新建会话时默认使用的推理 Token 预算等级，适配 Hermes、OpenAI o-series、Claude 3.7 与 Gemini。')}
@@ -97,8 +98,8 @@ export default function ProvidersRoutingDomain() {
                   {t(opt.labelKey as any, opt.value)}
                 </span>
                 {defaultEffort === opt.value && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-medium" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
-                    当前
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+                    {t('common.current', '当前')}
                   </span>
                 )}
               </div>

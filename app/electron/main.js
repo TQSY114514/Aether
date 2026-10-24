@@ -104,7 +104,7 @@ const { registerProjectHandlers } = require('./ipc/project.handler')
 const { initScheduler } = require('./cron/scheduler')
 
 const mcpManager = require('./mcp/manager')
-const { setWorkspaceRoot } = require('./tools/sandbox')
+const { setWorkspaceRoot, setActiveProjectRoot } = require('./tools/sandbox')
 const localGateway = require('./llm/localGateway')
 const featureFlags = require('./featureFlags')
 
@@ -430,6 +430,10 @@ app.whenReady().then(async () => {
     (async () => {
       try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) }
       catch (e) { log.warn('workspace root init failed:', e.message) }
+    })(),
+    (async () => {
+      try { const proj = typeof db.getActiveProject === 'function' ? db.getActiveProject() : null; if (proj?.root_path) setActiveProjectRoot(proj.root_path) }
+      catch (e) { log.warn('active project root init failed:', e.message) }
     })(),
     (async () => {
       try { const { scanSkills } = require('./llm/skills'); scanSkills() }

@@ -12,8 +12,7 @@ export default function MemoryEvolutionDomain() {
 
   const loadStrategy = async () => {
     try {
-      // @ts-expect-error strategy electron API
-      const res = await window.electronAPI?.strategy?.get?.()
+      const res = await (window.electronAPI as any)?.evolution?.strategy?.get?.()
       if (res) {
         setStrategyStats({
           total: res.total || res.count || (res.entries?.length ?? 0),
@@ -43,8 +42,7 @@ export default function MemoryEvolutionDomain() {
   const handleManualReflect = async () => {
     setReflecting(true)
     try {
-      // @ts-expect-error strategy electron API
-      await window.electronAPI?.strategy?.reflect?.()
+      await (window.electronAPI as any)?.evolution?.strategy?.reflectNow?.()
       await loadStrategy()
     } catch {} finally {
       setReflecting(false)

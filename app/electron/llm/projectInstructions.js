@@ -52,15 +52,21 @@ function loadModularRules(workspaceRoot) {
       _cacheRulesTime = Date.now()
       return []
     }
-    const files = fs.readdirSync(rulesDir).filter(f => f.endsWith('.md') || f.endsWith('.mdc'))
+    const files = fs.readdirSync(rulesDir).filter(f => f.endsWith('.md') || f.endsWith('.mdc')).sort()
     const rules = []
     for (const f of files) {
       if (rules.length >= MAX_RULES_COUNT) break
       try {
         const fp = path.join(rulesDir, f)
         const lstat = fs.lstatSync(fp)
-        if (lstat.isSymbolicLink()) continue
-        const raw = fs.readFileSync(fp, 'utf-8')
+        if (lstat.isSymbolicLink() || !lstat.isFile()) continue
+        const fd = fs.openSync(fp, 'r')
+        let raw
+        try {
+          const buf = Buffer.alloc(Math.min(lstat.size, MAX_RULE_SIZE * 4))
+          const n = fs.readSync(fd, buf, 0, buf.length, 0)
+          raw = buf.subarray(0, n).toString('utf-8')
+        } finally { fs.closeSync(fd) }
         const content = raw.slice(0, MAX_RULE_SIZE).trim()
         if (content.length > 0) {
           rules.push({ name: f, path: fp, content })

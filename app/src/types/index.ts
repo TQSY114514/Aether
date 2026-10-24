@@ -46,6 +46,7 @@ export interface Persona {
 
 export interface Session {
   id: number
+  project_id?: number | null
   title: string | null
   persona_id: number | null
   created_at: string

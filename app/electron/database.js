@@ -893,7 +893,12 @@ function createSession({
     ? null
     : (typeof config === "string" ? config : JSON.stringify(config));
   let effectiveProjectId = project_id;
-  if (effectiveProjectId === undefined || effectiveProjectId === null) {
+  let parentSession = null;
+  if ((effectiveProjectId === undefined || effectiveProjectId === null) && parentSessionId != null) {
+    parentSession = db.prepare("SELECT project_id FROM session WHERE id = ?").get(parentSessionId);
+    if (parentSession) effectiveProjectId = parentSession.project_id;
+  }
+  if ((effectiveProjectId === undefined || effectiveProjectId === null) && !parentSession) {
     const activeSetting = getSetting("active_project_id");
     if (activeSetting) {
       const pid = Number(activeSetting);
@@ -1177,12 +1182,14 @@ function createAgentTask({
   agent_mode = "ask",
   priority = 0,
   max_retry = 2,
+  kind = "task",
+  status = "pending",
 }) {
   const info = db
     .prepare(
-      "INSERT INTO agent_task (session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO agent_task (session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry, kind, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .run(session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry);
+    .run(session_id, parent_session_id, title, content, model_id, agent_mode, priority, max_retry, kind, status);
   return Number(info.lastInsertRowid);
 }
 function getAgentTask(id) {

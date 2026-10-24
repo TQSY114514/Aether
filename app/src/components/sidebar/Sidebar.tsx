@@ -97,7 +97,7 @@ export default function Sidebar() {
     // so hiding them would make the chat disappear mid-conversation.
     let list = sessions
     if (projectScopeFilter && activeProject) {
-      list = list.filter((s) => (s as any).project_id === activeProject.id)
+      list = list.filter((s) => s.project_id === activeProject.id)
     }
     const withMessages = list.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingBySession[s.id])
     if (!lowerQuery) return withMessages
@@ -247,11 +247,11 @@ export default function Sidebar() {
                   ? 'text-[var(--accent)] bg-[var(--content-bg)] border border-[var(--border)] shadow-xs hover:bg-[var(--bg-secondary)]'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/60'
               }`}
-              title={projectScopeFilter ? 'Scoped to current project (click to show all)' : 'Showing all sessions (click to scope to project)'}
-              aria-label="Toggle session project scope"
+              title={t('sidebar.project_scope.tooltip', projectScopeFilter ? '当前项目会话（点击显示全部）' : '全部会话（点击仅显示当前项目）')}
+              aria-label={t('sidebar.project_scope.tooltip', '切换项目会话筛选')}
             >
               <Filter size={11} />
-              <span className="text-[10px] font-mono">{projectScopeFilter ? 'Project' : 'All'}</span>
+              <span className="text-[10px] font-mono">{projectScopeFilter ? t('sidebar.project_scope.project', 'Project') : t('sidebar.project_scope.all', 'All')}</span>
             </button>
           </div>
         </div>

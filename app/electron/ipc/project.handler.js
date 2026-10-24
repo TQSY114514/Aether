@@ -8,6 +8,7 @@
 
 const path = require('path')
 const fs = require('fs')
+const { dialog } = require('electron')
 const log = require('../logger')
 const { isDangerousRoot, setWorkspaceRoot, setActiveProjectRoot, hasUnsafeWindowsPrefix } = require('../tools/sandbox')
 
@@ -45,31 +46,15 @@ function registerProjectHandlers(ipcMain, db, getWebContents) {
     if (!fs.existsSync(resolvedPath)) {
       fs.mkdirSync(resolvedPath, { recursive: true })
     }
-    if (typeof db.createProject === 'function') {
-      return db.createProject({
-        name: data.name,
-        root_path: resolvedPath,
-        icon: data.icon,
-        color: data.color,
-        default_model_id: data.default_model_id,
-        default_agent_mode: data.default_agent_mode,
-        is_favorite: data.is_favorite,
-      })
-    }
-    const stmt = db.prepare(`
-      INSERT INTO project (name, root_path, icon, color, default_model_id, default_agent_mode, is_favorite, last_opened_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `)
-    const res = stmt.run(
-      String(data.name).trim(),
-      resolvedPath,
-      data.icon || null,
-      data.color || null,
-      default_model_id != null ? Number(data.default_model_id) : null,
-      data.default_agent_mode || 'workspace',
-      data.is_favorite ? 1 : 0
-    )
-    return db.prepare('SELECT * FROM project WHERE id = ?').get(Number(res.lastInsertRowid))
+    return db.createProject({
+      name: data.name,
+      root_path: resolvedPath,
+      icon: data.icon,
+      color: data.color,
+      default_model_id: data.default_model_id,
+      default_agent_mode: data.default_agent_mode,
+      is_favorite: data.is_favorite,
+    })
   })
 
   // 3. project:open — Activate a project, update last_opened_at, set active_project_id setting, and set sandbox root
@@ -125,53 +110,33 @@ function registerProjectHandlers(ipcMain, db, getWebContents) {
         throw new Error(`Forbidden workspace root: ${resolvedPath}`)
       }
     }
-    if (typeof db.updateProject === 'function') {
-      return db.updateProject(numId, data)
-    }
-    const proj = db.prepare('SELECT * FROM project WHERE id = ?').get(numId)
-    if (!proj) throw new Error(`Project ${id} not found`)
-    const fields = []
-    const values = []
-    const allowed = ['name', 'root_path', 'icon', 'color', 'default_model_id', 'default_agent_mode', 'is_favorite', 'last_opened_at']
-    for (const key of allowed) {
-      if (data[key] !== undefined) {
-        if (key === 'root_path') {
-          const resolved = path.resolve(String(data[key]))
-          fields.push('root_path = ?')
-          values.push(resolved)
-        } else {
-          fields.push(`${key} = ?`)
-          values.push(key === 'is_favorite' ? (data[key] ? 1 : 0) : data[key])
-        }
+    const updated = db.updateProject(numId, data)
+    if (updated) {
+      const activeId = db.getSetting('active_project_id')
+      if (activeId === String(numId) && data?.root_path) {
+        const newRoot = path.resolve(String(data.root_path))
+        setWorkspaceRoot(newRoot)
+        setActiveProjectRoot(newRoot)
+        try {
+          require('../config/projectConfig').invalidateProjectConfigCache(newRoot)
+          require('../llm/projectInstructions').invalidateCache()
+        } catch {}
       }
     }
-    if (fields.length > 0) {
-      values.push(numId)
-      db.prepare(`UPDATE project SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-    }
-    return db.prepare('SELECT * FROM project WHERE id = ?').get(numId)
+    return updated
   })
 
   // 5. project:delete — Delete a project (unlink associated sessions by default)
   ipcMain.handle('project:delete', (_e, id) => {
     const numId = Number(id)
-    if (typeof db.deleteProject === 'function') {
-      return db.deleteProject(numId)
+    const wasActive = db.getSetting('active_project_id') === String(numId)
+    const res = db.deleteProject(numId)
+    if (res?.ok && wasActive) {
+      setWorkspaceRoot(null)
+      setActiveProjectRoot(null)
+      try { require('../llm/projectInstructions').invalidateCache() } catch {}
     }
-    const proj = db.prepare('SELECT * FROM project WHERE id = ?').get(numId)
-    if (!proj) return { ok: false, success: false, error: 'Project not found' }
-
-    db.transaction(() => {
-      db.prepare('UPDATE session SET project_id = NULL WHERE project_id = ?').run(numId)
-      db.prepare('DELETE FROM project WHERE id = ?').run(numId)
-      if (typeof db.getSetting === 'function' && typeof db.setSetting === 'function') {
-        const currentActive = db.getSetting('active_project_id')
-        if (currentActive === String(numId)) {
-          db.setSetting('active_project_id', '')
-        }
-      }
-    })()
-    return { ok: true, success: true }
+    return res
   })
 
   // 6. project:current — Return the currently active project or null
@@ -185,6 +150,18 @@ function registerProjectHandlers(ipcMain, db, getWebContents) {
       return db.prepare('SELECT * FROM project WHERE id = ?').get(Number(activeId)) || null
     }
     return null
+  })
+
+  // 7. project:pickDirectory — Native folder picker dialog
+  ipcMain.handle('project:pickDirectory', async () => {
+    try {
+      const res = await dialog.showOpenDialog({ properties: ['openDirectory'], title: '选择本地项目工作区' })
+      if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null
+      return res.filePaths[0]
+    } catch (err) {
+      log.warn('project:pickDirectory error:', err?.message)
+      return null
+    }
   })
 }
 

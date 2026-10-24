@@ -34,8 +34,11 @@ function isDestructiveCommand(cmd) {
   return DESTRUCTIVE_COMMAND_REGEX.test(String(cmd || ''))
 }
 
+const SHELL_CHAIN_REGEX = /[;&|<>\`\r\n]|\$\(/
+
 function isBenignCommand(cmd) {
-  return BENIGN_SHELL_REGEX.test(String(cmd || '').trim())
+  const c = String(cmd || '').trim()
+  return BENIGN_SHELL_REGEX.test(c) && !SHELL_CHAIN_REGEX.test(c)
 }
 
 function isCriticalSystemWipe(cmd) {

@@ -120,8 +120,9 @@ async function runDebugLoop({ provider, model, signal, sessionId, userMessage, o
     }
     if (!analysis.fix) return { success: false, cycles: cycle, finalError: errorOutput.slice(0, 200), cycleResults, analysis }
     try { onFix?.({ cycle, description: analysis.description, files: analysis.files }) } catch {}
-    // Break immediately after onFix: single-step analysis per round to avoid runaway redundant test executions on unedited code.
-    return { success: false, cycles: cycle, summary: analysis.description || `调试分析完成 (第 ${cycle} 轮)`, cycleResults, analysis }
+    if (cycle >= effectiveMaxCycles) {
+      return { success: false, cycles: cycle, summary: analysis.description || `调试分析完成 (第 ${cycle} 轮)`, cycleResults, analysis }
+    }
   }
 
   return { success: false, cycles: effectiveMaxCycles, finalError: `达到最大调试轮数 (${effectiveMaxCycles})`, cycleResults }

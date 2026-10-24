@@ -138,7 +138,6 @@ function getReasoningBudget(level) {
 
 beforeAll(() => {
   database.initDatabase()
-  ensureV2Schema(database.getDatabase())
 })
 
 afterAll(() => {
@@ -428,9 +427,7 @@ describe('Tier 1: Feature Coverage (R1–R6)', () => {
 
       // Score adjusts on approvals and errors
       const afterApprove = trustEngine.adjustTrust(db, sId, 5, 'write_file')
-      if (afterApprove !== undefined) {
-        expect(afterApprove).toBe(55)
-      }
+      expect(afterApprove).toBe(55)
     })
 
     it('T1-R2-06: unrestricted mode allows direct execution without prompt gates', () => {
@@ -715,17 +712,15 @@ describe('Tier 1: Feature Coverage (R1–R6)', () => {
       }
       reflect.noteTrace(rawSecretTrace)
 
-      const tracesFile = path.join(REPO_ROOT, 'data/strategy/traces.jsonl')
-      if (fs.existsSync(tracesFile)) {
-        const lines = fs.readFileSync(tracesFile, 'utf8').split('\n').filter(Boolean)
-        const lastLine = JSON.parse(lines[lines.length - 1])
-        if (lastLine.error) {
-          expect(lastLine.error).not.toContain('sk-1234567890abcdef12345678')
-          expect(lastLine.error).toContain('[REDACTED]')
-          expect(lastLine.error).not.toContain('\r\n')
-          expect(lastLine.error).not.toContain('\u0085')
-        }
-      }
+      const tracesFile = reflect.getTracesFile()
+      expect(fs.existsSync(tracesFile)).toBe(true)
+      const lines = fs.readFileSync(tracesFile, 'utf8').split('\n').filter(Boolean)
+      const lastLine = JSON.parse(lines[lines.length - 1])
+      expect(lastLine.error).toBeDefined()
+      expect(lastLine.error).not.toContain('sk-1234567890abcdef12345678')
+      expect(lastLine.error).toContain('[REDACTED]')
+      expect(lastLine.error).not.toContain('\r\n')
+      expect(lastLine.error).not.toContain('\u0085')
     })
   })
 
@@ -978,8 +973,12 @@ describe('Tier 2: Boundary & Corner Cases (R1–R6)', () => {
         expect(testRunCount).toBe(3)
         expect(debugAgentCallCount).toBe(3)
       } finally {
+        activeMock = null
         providerAdapter.completeChatMessage = origCompleteChatMessage
         delete require.cache[require.resolve('../electron/llm/toolLoop')]
+        delete require.cache[require.resolve('../electron/llm/toolLoop/stateMachine')]
+        delete require.cache[require.resolve('../electron/llm/toolLoop/runtime')]
+        sandbox.setWorkspaceRootForSession(sessionId, null)
         lintTestRepair.runProjectTest = origRunProjectTest
         debugAgent.runDebugLoop = origRunDebugLoop
       }

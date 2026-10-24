@@ -39,7 +39,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     requiresArg: true,
     action: (arg) => {
       if (!arg) return
-      const validModes: AgentMode[] = ['explore', 'workspace', 'auto_review', 'unrestricted', 'plan', 'ask', 'auto', 'yolo']
+      const validModes: AgentMode[] = ['explore', 'workspace', 'auto_review', 'unrestricted', 'plan', 'ask', 'auto', 'yolo', 'off', 'auto_confirm', 'custom']
       const lower = arg.toLowerCase().trim() as AgentMode
       if (validModes.includes(lower)) {
         useStore.getState().setAgentMode(lower)
@@ -382,6 +382,15 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    id: 'history',
+    name: t('slash.checkpoints', '历史快照'),
+    description: t('slash.checkpoints_desc', '打开历史回滚快照与检查点抽屉'),
+    category: 'session',
+    action: () => {
+      useStore.getState().setCheckpointsOpen(true)
+    },
+  },
+  {
     id: 'btw',
     name: t('slash.btw', '旁支提问'),
     description: t('slash.btw_desc', '打开只读旁支提问抽屉，不污染会话主历史'),
@@ -406,16 +415,16 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     category: 'session',
     action: () => {
       const msg = [
-        '### ⌨️ Aether 快捷指令指南',
+        '### Aether 快捷指令指南',
         '',
-        '#### ⚡ 智能体与控制 (Agent & Control)',
+        '#### 智能体与控制 (Agent & Control)',
         '- `/mode [explore|workspace|auto_review|unrestricted]` — 切换 Agent 运行权限模式',
         '- `/effort [minimal|low|medium|high|max|off]` — 调整模型思考深度预算',
         '- `/model [name]` — 快速切换模型',
         '- `/project [name]` — 快速切换或打开项目工作区',
         '- `/poor` — 开关穷鬼省流模式',
         '',
-        '#### 🛠️ 开发与验证 (Dev & Verification)',
+        '#### 开发与验证 (Dev & Verification)',
         '- `/doctor` — 运行系统运行环境与工具链全面自检',
         '- `/review` — 审查工作区 Git Diff 代码修改',
         '- `/test [args]` — 执行项目测试套件',
@@ -423,12 +432,13 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
         '- `/commit [msg]` — 智能语义化 Git Commit',
         '- `/undo` — 撤销上一步操作并恢复检查点',
         '',
-        '#### 💬 会话与工作流 (Session & Workflow)',
+        '#### 会话与工作流 (Session & Workflow)',
         '- `/compact` — 智能压缩上下文历史以节省 Token',
         '- `/clear` — 清空当前会话历史',
         '- `/fork` — 分叉当前会话到新分支',
         '- `/tasks` — 打开后台任务与子代理监控抽屉',
         '- `/checkpoints` — 打开时间旅行历史快照抽屉',
+        '- `/history` — 打开时间旅行历史快照抽屉',
         '- `/btw` — 打开只读旁支提问抽屉 (Alt+B)',
         '- `/help` — 查看本帮助',
       ].join('\n')

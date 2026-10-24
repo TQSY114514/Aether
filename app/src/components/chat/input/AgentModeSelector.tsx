@@ -12,7 +12,7 @@ export interface AgentModeSelectorProps {
   compact?: boolean
 }
 
-type CanonicalMode = 'explore' | 'workspace' | 'auto_review' | 'unrestricted'
+type CanonicalMode = 'explore' | 'workspace' | 'auto_review' | 'unrestricted' | 'custom'
 
 function toCanonicalMode(m: AgentMode | string): CanonicalMode {
   const norm = String(m || '').trim().toLowerCase()
@@ -29,6 +29,8 @@ function toCanonicalMode(m: AgentMode | string): CanonicalMode {
     case 'unrestricted':
     case 'yolo':
       return 'unrestricted'
+    case 'custom':
+      return 'custom'
     case 'workspace':
     case 'ask':
     case 'manual':
@@ -79,6 +81,11 @@ export default function AgentModeSelector({ mode, onChange, disabled = false, co
       value: 'unrestricted',
       label: t('agent.mode.unrestricted', isZh ? '完全权限' : 'Unrestricted'),
       tooltip: t('agent.mode.unrestricted.desc', isZh ? '完全权限 — 沙箱内自主运行，零弹窗确认，后台安全守卫' : 'Unrestricted — Autonomous execution in sandbox with zero popups and safety guards'),
+    },
+    {
+      value: 'custom',
+      label: t('agent.mode.custom', isZh ? '自定义' : 'Custom'),
+      tooltip: t('agent.mode.custom.desc', isZh ? '自定义模式 — 独立配置细粒度权限矩阵' : 'Custom — Custom capability and permission matrix'),
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [language, isZh, t])

@@ -45,8 +45,24 @@ class ThinkTagExtractor {
         const lower = this.buf.toLowerCase()
         let best = null
         for (const pair of REASONING_PAIRS) {
-          const idx = lower.indexOf(pair.open)
-          if (idx !== -1 && (best === null || idx < best.idx)) best = { idx, pair }
+          let searchFrom = 0
+          while (searchFrom < lower.length) {
+            const idx = lower.indexOf(pair.open, searchFrom)
+            if (idx === -1) break
+            const afterIdx = idx + pair.open.length
+            if (pair.open.startsWith('<|channel>')) {
+              if (afterIdx >= lower.length) {
+                break
+              }
+              const nextChar = lower[afterIdx]
+              if (/[a-z0-9_]/i.test(nextChar)) {
+                searchFrom = afterIdx
+                continue
+              }
+            }
+            if (best === null || idx < best.idx) best = { idx, pair }
+            break
+          }
         }
         if (!best) {
           const hold = partialTailLen(this.buf, REASONING_PAIRS.map((p) => p.open))

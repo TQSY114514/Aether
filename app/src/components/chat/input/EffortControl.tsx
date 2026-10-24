@@ -47,6 +47,28 @@ export default function EffortControl({
   const fill = (idx / (EFFORT_LEVELS.length - 1)) * 100
 
   if (compact) {
+    if (isBinary) {
+      return (
+        <button
+          type="button"
+          onClick={() => onToggleThinking(!thinkingEnabled)}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded-[6px] border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          style={{ borderColor: 'var(--border)' }}
+          title={t('effort.tooltip')}
+          aria-label={t('effort.tooltip')}
+        >
+          <Brain
+            size={11}
+            className="shrink-0"
+            style={{ color: thinkingEnabled ? 'var(--accent)' : 'var(--text-muted)' }}
+          />
+          <span className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--text-primary)' }}>
+            {thinkingEnabled ? t('thinking.on', 'On') : t('thinking.off', 'Off')}
+          </span>
+        </button>
+      )
+    }
+
     const curTokens = thinkingEnabled ? EFFORT_LEVELS[idx]?.tokens || '8k' : t('thinking.off', 'Off')
     return (
       <div ref={dropdownRef} className="relative inline-block">

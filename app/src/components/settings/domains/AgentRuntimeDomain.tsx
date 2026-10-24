@@ -70,7 +70,7 @@ export default function AgentRuntimeDomain() {
           </h2>
         </div>
         <p className="text-xs mb-4" style={{ color: 'var(--text-secondary)' }}>
-          设定单次网络请求超时上限与单会话代币消费警戒线
+          {t('settings.agent.session_budget_desc', '设定单次网络请求超时上限与单会话费用上限（USD）')}
         </p>
         <div className="space-y-4">
           <div>

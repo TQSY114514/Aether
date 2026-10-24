@@ -203,9 +203,10 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   const rawToolPayload = Array.isArray(tools)
     ? tools
     : (tools ? toolsPayload(normalizedAgentMode === 'explore' ? 'plan' : normalizedAgentMode, { cacheStable: cachePrefixStable, db }) : [])
-  let toolPayload = (cachePrefixStable && rawToolPayload.length > 1)
+  const sortedBasePayload = (cachePrefixStable && rawToolPayload.length > 1)
     ? (() => { try { return require('./toolRouter').sortToolsForCacheStability(rawToolPayload) } catch { return rawToolPayload } })()
     : rawToolPayload
+  let toolPayload = sortedBasePayload
   try {
     const { adaptToolsPayload } = require('./adaptivePatch')
     toolPayload = adaptToolsPayload(toolPayload, model)
@@ -367,7 +368,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
 
   // Inject project instructions (CLAUDE.md / .aetherai.md) as an early system
   // message so the agent knows project conventions from the first turn.
-  const projectCtx = buildProjectContextMessage()
+  const projectCtx = buildProjectContextMessage(sessionId)
   if (projectCtx) {
     // Insert after the main system prompt if present, otherwise at the top.
     const sysIdx = convo.findIndex(m => m.role === 'system')
@@ -879,18 +880,10 @@ Reply in this format:
           // Rebuild tool payload adapted for the new model
           try {
             const { adaptToolsPayload } = require('./adaptivePatch')
-            toolPayload = adaptToolsPayload(rawToolPayload, activeModel)
+            const routedNames = new Set((routedPayload || []).map(p => p.function.name))
+            toolPayload = adaptToolsPayload(sortedBasePayload, activeModel)
             if (stageState.fullPayload) stageState.fullPayload = toolPayload
-            routedPayload = toolPayload
-          } catch {}
-
-          // Rebuild reasoning params for the new model family
-          try {
-            const { buildReasoningParams } = require('./reasoning')
-            const effort = opts?.reasoningEffort || opts?.reasoning_effort || 'medium'
-            const thinkingOn = opts?.thinkingEnabled !== false && opts?.enable_thinking !== false
-            const newReasoning = buildReasoningParams(nextName, effort, thinkingOn, opts?.max_tokens || opts?.maxTokens)
-            Object.assign(opts, newReasoning)
+            routedPayload = toolPayload.filter(p => routedNames.has(p.function.name))
           } catch {}
 
           try {
@@ -904,6 +897,23 @@ Reply in this format:
       } catch (err) {
         log.warn(`[toolLoop] Phase routing error: ${err && err.message}`)
       }
+    }
+
+    if (activeModel !== model) {
+      for (const k of ['reasoning_effort', 'thinking', 'thinking_config', 'enable_thinking', 'thinking_budget', 'reasoning']) delete opts[k]
+      try {
+        const { buildReasoningParams } = require('./reasoning')
+        const effort = options?.reasoningEffort || options?.reasoning_effort || 'medium'
+        const thinkingOn = options?.thinkingEnabled !== false &&
+          options?.enable_thinking !== false &&
+          options?.thinking?.type !== 'disabled'
+        Object.assign(opts, buildReasoningParams(
+          activeModel?.model_name || String(activeModel),
+          effort,
+          thinkingOn,
+          opts.max_tokens || opts.maxTokens,
+        ))
+      } catch {}
     }
 
     let msg
@@ -1263,7 +1273,8 @@ Reply ONLY with JSON:
 
           let userDecision = null
           let preDiff = null
-          const shouldPromptForPermission = (tool.risk === 'dangerous' && (effectiveMode === 'ask' || effectiveMode === 'workspace' || isTainted)) || axisAskReason || runnerUpObjection
+          const isAutoReviewPrompt = (effectiveMode === 'auto_review' && tool.risk === 'dangerous' && (!WRITE_TOOLS.has(fn.name) || fn.name === 'run_command' || fn.name === 'exec'))
+          const shouldPromptForPermission = (tool.risk === 'dangerous' && (effectiveMode === 'ask' || effectiveMode === 'workspace' || isTainted)) || isAutoReviewPrompt || axisAskReason || runnerUpObjection
           if (runnerUpObjection && !axisAskReason) {
             axisAskReason = runnerUpObjection
           }
@@ -1615,8 +1626,11 @@ Reply ONLY with JSON:
               })
             } catch {}
 
-            const testResult = await lintTestRepair.runProjectTest(db, { cwd: wsRoot, sessionId, timeoutMs: 30000 })
-            if (testResult && !testResult.ok && !testResult.passed) {
+            const currentCwd = getWorkspaceRoot(sessionId) || wsRoot
+            const testResult = await lintTestRepair.runProjectTest(db, { cwd: currentCwd, sessionId, timeoutMs: 30000 })
+            if (testResult && testResult.error && !testResult.command) {
+              try { onStatus?.({ kind: 'info', text: `🧪 [自动审查 TDD] 跳过：${testResult.error}` }) } catch {}
+            } else if (testResult && !testResult.ok && !testResult.passed) {
               try {
                 onStatus?.({
                   kind: 'tdd_failure',

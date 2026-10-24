@@ -122,6 +122,7 @@ function createTurnFileTracker(wsRoot) {
       if (!MUTATION_TOOLS.includes(name)) return
       const absPath = resolvePath(args)
       if (!absPath) return
+      if (wsRoot && !isPathInsideWorkspace(wsRoot, absPath)) return
       if (!files.has(absPath)) {
         let existed = false
         let content = null
@@ -146,6 +147,7 @@ function createTurnFileTracker(wsRoot) {
       if (!MUTATION_TOOLS.includes(name)) return
       const absPath = resolvePath(args)
       if (!absPath || !files.has(absPath)) return
+      if (wsRoot && !isPathInsideWorkspace(wsRoot, absPath)) return
       const record = files.get(absPath)
       try {
         if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {

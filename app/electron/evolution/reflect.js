@@ -342,4 +342,4 @@ async function _reflectInner(db, opts = {}) {
   return result
 }
 
-module.exports = { noteTrace, pendingTraceCount, reflectNow, resolveProvider, getStatus, canAutoReflect, AUTO_REFLECT_MIN_MS, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES }
+module.exports = { noteTrace, pendingTraceCount, reflectNow, resolveProvider, getStatus, canAutoReflect, AUTO_REFLECT_MIN_MS, parseOps, digestTrace, buildUserPrompt, REFLECT_EVERY_N_TRACES, getTracesFile }

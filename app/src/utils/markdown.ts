@@ -63,7 +63,7 @@ const CHANNEL_MARKER_RE = /<\|channel>\s*[a-zA-Z]*|<channel\|>/gi
 
 export function stripChannelMarkers(text: string): string {
   if (!text) return text
-  if (text.indexOf('<|channel>') === -1 && text.indexOf('<channel|>') === -1) return text
+  if (!/<\|channel>|<channel\|>/i.test(text)) return text
   return text.replace(CHANNEL_PAIR_RE, '').replace(CHANNEL_MARKER_RE, '')
 }
 

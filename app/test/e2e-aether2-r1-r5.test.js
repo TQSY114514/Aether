@@ -365,7 +365,8 @@ describe('Tier 1: Feature Coverage', () => {
         expect(compacted).toBeDefined()
         const handoffMsg = compacted.find(m => m.role === 'system' && m.content.includes('[context compaction]'))
         expect(handoffMsg).toBeDefined()
-        expect(handoffMsg.content).toContain('[context compaction: rehydrated active files]')
+        expect(handoffMsg.content).toContain('[context compaction: rehydrated active files')
+        expect(handoffMsg.content).toContain('## Goal')
         // Verify snippet does not dump all 150 lines
         expect(handoffMsg.content).not.toContain('const line140 = 140;')
       } finally {

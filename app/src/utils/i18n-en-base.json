@@ -1120,5 +1120,20 @@
   "slash.compact_desc": "Compress context history to free token budget",
   "thinking.running_elapsed": "Thinking ({0}s)…",
   "thinking.thought_for_sec": "Thought for {0}s",
-  "thinking.thought_done": "Thought"
+  "thinking.thought_done": "Thought",
+  "settings.tab.providers": "Models & Routing",
+  "settings.tab.memory": "Memory & Evolution",
+  "settings.typography": "Typography & Display",
+  "agent.mode.explore": "Explore",
+  "agent.mode.workspace": "Workspace",
+  "agent.mode.auto_review": "Auto Review",
+  "agent.mode.unrestricted": "Unrestricted",
+  "agent.mode.group_label": "Agent Mode",
+  "sidebar.project_scope.project": "Project",
+  "sidebar.project_scope.all": "All",
+  "sidebar.project_scope.tooltip": "Toggle session project scope filter",
+  "settings.agent.session_budget_usd": "Session Cost Limit (USD)",
+  "settings.agent.session_budget_desc": "Set network request timeout and per-session cost limit (USD)",
+  "quickdeck.projects": "Projects",
+  "quickdeck.pick_folder": "Open local project folder..."
 }

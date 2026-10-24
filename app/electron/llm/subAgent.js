@@ -102,6 +102,7 @@ async function _runSubagent({
         model_id: model?.id || null,
         agent_mode: childAgentMode,
         kind: 'subagent',
+        status: 'running',
       })
     }
   } catch (err) {
@@ -182,6 +183,16 @@ async function _runSubagent({
       status: wasTimeout ? 'timeout' : hasError ? 'failed' : 'completed',
     })
   } catch {}
+
+  if (taskId && typeof db.updateAgentTask === 'function') {
+    try {
+      db.updateAgentTask(taskId, {
+        status: wasTimeout ? 'timeout' : hasError ? 'error' : 'done',
+        result: finalContent || '',
+        error: errorMessage || (wasTimeout ? 'Timed out' : null),
+      })
+    } catch {}
+  }
 
   // Cleanup policy
   if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && !hasError && finalContent && !finalContent.startsWith('['))) {
@@ -402,6 +413,9 @@ async function runParallel(tasks, shared = {}) {
           isWriter: normTask.isWriter,
         })
       } catch {}
+      const beforeSnapshot = normTask.writePaths?.length
+        ? captureBeforeSnapshot(normTask.writePaths, shared.workspaceRoot || null)
+        : null
       const iterations = 0
       try {
         const result = await runSubagent({
@@ -417,6 +431,7 @@ async function runParallel(tasks, shared = {}) {
         })
         const latencyMs = Date.now() - startTime
         if (result?.wasTimeout || result?.hasError) {
+          if (beforeSnapshot) rollbackBeforeSnapshot(beforeSnapshot)
           const errText = result?.error || (result?.wasTimeout ? 'Timed out' : 'Sub-agent error')
           try {
             shared.onSubagentEvent?.({
@@ -445,6 +460,7 @@ async function runParallel(tasks, shared = {}) {
         } catch {}
         return { success: true, output: result.content, iterations, childSessionId: result.childSessionId, latencyMs }
       } catch (e) {
+        if (beforeSnapshot) rollbackBeforeSnapshot(beforeSnapshot)
         const latencyMs = Date.now() - startTime
         try {
           shared.onSubagentEvent?.({
