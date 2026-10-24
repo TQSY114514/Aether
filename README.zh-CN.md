@@ -220,7 +220,8 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 - **[Continue](https://github.com/continuedev/continue)** — 声明式配置即代码规范（`.aether/config.json`）。
 - **[Grok Build](https://x.ai) & [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — 专门化子 Agent 角色划分（`agentRoles.js`）、长程任务执行状态机（`longRunningTask.js`）与运行时间线抽屉灵感。
 - **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — 本地网关回环绑定与 HTTP Host 头安全校验实践（QVD-2026-57410 防御参考）及 README 徽章视觉规范。
-- **[Qwen Code / Qwen 2.5 Coder](https://github.com/QwenLM/Qwen2.5-Coder) (Alibaba Cloud)** — 思考参数自适应（`enable_thinking` 融入 `reasoning.js`）、长程编程代码基准与系统提示词结构。
+- **[Qwen Code](https://github.com/QwenLM/qwen-code) (Alibaba Cloud)** — Agent Arena 多模型并行竞技场与 Git Worktree 隔离执行机制（`/arena` 启发 `shadowGit.js` 影子工作区隔离、多模型并行分发与 `arena:apply-patch` 胜者补丁落盘）、思考参数自适应（`enable_thinking` 融入 `reasoning.js`）及长程代码基准规范。
+- **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — 微内核架构不变量守卫与无头隔离规范（借鉴 `architecture.rs` 静态分析思想落地 `check-architecture.js` 5 重架构门禁、无头模式下 `database.js` Electron 依赖解耦及基于真值裁决器的有界树搜索验证）。
 - **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — 内置本地模型双盲竞技场（`arena.handler.js`）、成对盲测 ELO 积分排名与代码能力自动化基准体系。
 - **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — 多执行后端抽象（`backend.js`、`dockerBackend.js`、`sshBackend.js`）与全自主 Sandbox 隔离执行工作流。
 - **[Kiro](https://aws.amazon.com/q/developer/)** — 推理深度多档位自适应控制（`reasoning.js` / `EffortControl.tsx`）与行内子代理执行视图（`SubagentDeck.tsx`）。

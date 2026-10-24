@@ -114,7 +114,8 @@ Aether 在研发过程中研究了上述 20+ 款工具的源码与设计文档�
 | **Cline / Roo Code** | 上下文冗余输出折叠裁剪（`compaction.js`）与可见子步骤任务追踪心智。 |
 | **Gemini CLI & aichat** | 令牌预算估算（`contextBudget.js`）、审批模式循环切换及 `aichat` 50ms 事件流聚合防闪烁机制（`runSession.js`）。 |
 | **DeepSeek Harness (DSH)** | 吸取其本地监听安全教训（QVD-2026-57410），严格绑定 `127.0.0.1` 回环地址并校验 HTTP Host 头防御 DNS Rebinding。 |
-| **Qwen Code / Qwen 2.5 Coder** | 思考参数自适应（`enable_thinking` 融入 `reasoning.js`）、长程编程代码基准与系统提示词结构。 |
+| **Qwen Code** | Agent Arena 多模型并行竞技场与 Git Worktree 隔离执行机制（`/arena` 启发 `shadowGit.js` 影子工作区隔离、多模型并行分发与 `arena:apply-patch` 胜者补丁落盘）、思考参数自适应（`enable_thinking` 融入 `reasoning.js`）及长程代码基准规范。 |
+| **Open Math Harness** | 微内核架构不变量守卫与无头隔离规范（借鉴 `architecture.rs` 静态分析思想落地 `check-architecture.js` 5 重架构门禁、无头模式下 `database.js` Electron 依赖解耦及基于真值裁决器的有界树搜索验证）。 |
 | **LMSYS Chatbot Arena & SWE-bench** | 本地双盲竞技场（`arena.handler.js`）、动态 ELO 积分排名与代码能力自动化基准体系。 |
 | **OpenHands** | 多执行后端抽象（`backend.js`、`dockerBackend.js`、`sshBackend.js`）与全自主 Sandbox 隔离执行工作流。 |
 | **Kiro** | 推理深度多档位自适应控制（`reasoning.js` / `EffortControl.tsx`）与行内子代理执行视图（`SubagentDeck.tsx`）。 |
