@@ -630,6 +630,7 @@ async function runObjectiveEvaluation({
           latencyMs: genLatency + verifyRes.durationMs,
           cost,
           tokens,
+          rawResponse: answer,
           patchApplied: patchRes.ok,
           filesModified: patchRes.filesModified,
         }
@@ -644,6 +645,7 @@ async function runObjectiveEvaluation({
         baselineAlreadyPassed,
         winnerId: null,
         winnerName: null,
+        winnerPatch: null,
         isTie: false,
         models: roundResults,
         eloUpdated: false,
@@ -714,6 +716,7 @@ async function runObjectiveEvaluation({
       baselineAlreadyPassed,
       winnerId: winner?.modelId || null,
       winnerName: winner?.modelName || null,
+      winnerPatch: winner?.rawResponse || null,
       isTie,
       models: roundResults,
       eloUpdated,

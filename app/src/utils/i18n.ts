@@ -1233,7 +1233,18 @@ const translations: Record<string, Record<string, string>> = {
     "settings.agent.session_budget_usd": "Session Cost Limit (USD)",
     "settings.agent.session_budget_desc": "Set network request timeout and per-session cost limit (USD)",
     "quickdeck.projects": "Projects",
-    "quickdeck.pick_folder": "Open local project folder..."
+    "quickdeck.pick_folder": "Open local project folder...",
+    "arena.bench.starter_suites": "Starter Suites",
+    "arena.bench.load_starter": "Load Starter Suite",
+    "arena.bench.starter_hint": "Quick-load a pre-built benchmark suite for TypeScript repair, unit test self-healing, or refactoring.",
+    "arena.objective.apply_winner_patch": "Apply Winner Patch to Workspace",
+    "arena.objective.apply_patch": "Apply Patch",
+    "arena.objective.patch_applied": "Winner patch applied to workspace",
+    "arena.objective.patch_applying": "Applying patch...",
+    "arena.objective.patch_failed": "Failed to apply patch: {0}",
+    "arena.objective.view_diff": "View Patch Diff",
+    "settings.language_primary": "Primary Languages (Tier 1 Official)",
+    "settings.language_more": "More Languages (Community / Auto-generated)"
   },
   "zh-CN": {
     "agent.ask": "询问 — 危险操作前确认",
@@ -2377,7 +2388,18 @@ const translations: Record<string, Record<string, string>> = {
     "settings.agent.session_budget_usd": "单会话费用上限（USD）",
     "settings.agent.session_budget_desc": "设定单次网络请求超时上限与单会话费用上限（USD）",
     "quickdeck.projects": "项目工作区",
-    "quickdeck.pick_folder": "打开本地项目文件夹..."
+    "quickdeck.pick_folder": "打开本地项目文件夹...",
+    "arena.bench.starter_suites": "Starter 基准套件",
+    "arena.bench.load_starter": "加载 Starter 套件",
+    "arena.bench.starter_hint": "一键加载官方预设基准：TypeScript严格修复、测试自愈、架构重构与算法优化",
+    "arena.objective.apply_winner_patch": "应用胜者补丁到工作区",
+    "arena.objective.apply_patch": "应用补丁",
+    "arena.objective.patch_applied": "胜者补丁已成功应用到工作区",
+    "arena.objective.patch_applying": "正在应用补丁...",
+    "arena.objective.patch_failed": "应用补丁失败: {0}",
+    "arena.objective.view_diff": "查看补丁差异",
+    "settings.language_primary": "主要语言 (Tier 1 官方维护)",
+    "settings.language_more": "更多语言 (社区 / 自动生成)"
   },
   "es": {
     "app.name": "Aether",

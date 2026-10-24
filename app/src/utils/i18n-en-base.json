@@ -1140,5 +1140,16 @@
   "settings.agent.session_budget_usd": "Session Cost Limit (USD)",
   "settings.agent.session_budget_desc": "Set network request timeout and per-session cost limit (USD)",
   "quickdeck.projects": "Projects",
-  "quickdeck.pick_folder": "Open local project folder..."
+  "quickdeck.pick_folder": "Open local project folder...",
+  "arena.bench.starter_suites": "Starter Suites",
+  "arena.bench.load_starter": "Load Starter Suite",
+  "arena.bench.starter_hint": "Quick-load a pre-built benchmark suite for TypeScript repair, unit test self-healing, or refactoring.",
+  "arena.objective.apply_winner_patch": "Apply Winner Patch to Workspace",
+  "arena.objective.apply_patch": "Apply Patch",
+  "arena.objective.patch_applied": "Winner patch applied to workspace",
+  "arena.objective.patch_applying": "Applying patch...",
+  "arena.objective.patch_failed": "Failed to apply patch: {0}",
+  "arena.objective.view_diff": "View Patch Diff",
+  "settings.language_primary": "Primary Languages (Tier 1 Official)",
+  "settings.language_more": "More Languages (Community / Auto-generated)"
 }

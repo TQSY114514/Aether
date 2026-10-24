@@ -10,6 +10,7 @@ import {
   Palette,
   Sparkles,
   HardDrive,
+  ChevronDown,
 } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
 
@@ -129,6 +130,7 @@ export default function GeneralDomain() {
   const setFontScale = useStore((s) => s.setFontScale)
   const setBubbleWidth = useStore((s) => s.setBubbleWidth)
 
+  const [showAllLangs, setShowAllLangs] = useState(language !== 'zh-CN' && language !== 'en')
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -150,21 +152,57 @@ export default function GeneralDomain() {
       <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
         <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>{t('settings.language')}</h2>
         <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.language_desc')}</p>
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-          {LANGS.map((l) => (
-            <button
-              key={l.code}
-              onClick={() => setLanguage(l.code as any)}
-              className={`px-3 py-2 text-xs rounded-md border text-center transition-all active:scale-[0.98] ${
-                language === l.code
-                  ? 'border-[var(--accent)] bg-[var(--accent)] text-white font-medium shadow-xs'
-                  : 'hover:bg-[var(--bg-secondary)]'
-              }`}
-              style={language !== l.code ? { borderColor: 'var(--border)', color: 'var(--text-primary)' } : {}}
-            >
-              {l.label}
-            </button>
-          ))}
+        
+        {/* Tier 1 Primary Languages */}
+        <div className="mb-3">
+          <p className="text-[11px] font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>{t('settings.language_primary')}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {LANGS.filter(l => (l.code as string) === 'zh-CN' || (l.code as string) === 'en').map((l) => (
+              <button
+                key={l.code}
+                onClick={() => setLanguage(l.code as any)}
+                className={`px-3 py-2 text-xs rounded-md border text-center transition-all active:scale-[0.98] ${
+                  language === l.code
+                    ? 'border-[var(--accent)] bg-[var(--accent)] text-white font-medium shadow-xs'
+                    : 'hover:bg-[var(--bg-secondary)]'
+                }`}
+                style={language !== l.code ? { borderColor: 'var(--border)', color: 'var(--text-primary)' } : {}}
+              >
+                <span className="font-semibold block">{l.native}</span>
+                <span className="text-[10px] block opacity-80">{l.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* More Languages (Community / Auto-generated) */}
+        <div>
+          <button
+            onClick={() => setShowAllLangs(v => !v)}
+            className="flex items-center gap-1 text-[11px] hover:underline mb-1.5"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <span>{t('settings.language_more')}</span>
+            <ChevronDown size={12} className={`transition-transform ${showAllLangs ? 'rotate-180' : ''}`} />
+          </button>
+          {showAllLangs && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-1">
+              {LANGS.filter(l => (l.code as string) !== 'zh-CN' && (l.code as string) !== 'en').map((l) => (
+                <button
+                  key={l.code}
+                  onClick={() => setLanguage(l.code as any)}
+                  className={`px-2 py-1.5 text-xs rounded-md border text-center transition-all ${
+                    language === l.code
+                      ? 'border-[var(--accent)] bg-[var(--accent)] text-white font-medium shadow-xs'
+                      : 'hover:bg-[var(--bg-secondary)]'
+                  }`}
+                  style={language !== l.code ? { borderColor: 'var(--border)', color: 'var(--text-secondary)' } : {}}
+                >
+                  {l.native}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

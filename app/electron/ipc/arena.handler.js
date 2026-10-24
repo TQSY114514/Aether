@@ -413,14 +413,49 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     if (c) { c.abort(); abortControllers.delete(`bench:${id}`) }
   })
 
-  // P1-09: SWE-bench 官方与个人基准模板预设
+  // P1-09: SWE-bench & Starter Benchmark 预设套件
   ipcMain.handle('arena:benchmark-templates', () => {
     return [
+      {
+        id: 'starter-ts-repair',
+        name: 'Starter: TypeScript 严格类型修复基准 (TS Strict Repair)',
+        description: '评测模型对复杂泛型、联合类型收窄与严格 Null 检查的精确修复能力',
+        tasks: [
+          '修复泛型异步函数中的 PromiseSettledResult 类型收窄与 undefined 属性访问报错',
+          '为未导出的嵌套 API 响应推断严格的只读深度不可变接口并消除 any 隐式逃逸',
+          '修复复合组件中 ForwardRefRenderFunction 与自定义泛型 Props 的类型重载冲突',
+        ],
+      },
+      {
+        id: 'starter-pytest-healing',
+        name: 'Starter: 单元测试自愈基准 (Unit Test Self-Healing)',
+        description: '评测模型在面对失败断言与边界异常时，能否定位最小修复点并保证向后兼容',
+        tasks: [
+          '分析测试套件中的边界超时与跨时区时间格式断言失败，进行向后兼容修复',
+          '处理并发写入时的临时竞态条件与空指针异常，保证幂等恢复',
+          '修补参数校验逻辑中的零值与空字符串边界，使失败断言全部转绿',
+        ],
+      },
+      {
+        id: 'starter-refactor-perf',
+        name: 'Starter: 架构重构与算法优化基准 (Refactor & Optimization)',
+        description: '评测模型在大函数策略模式解耦与降低计算时间复杂度上的代码质量',
+        tasks: [
+          '将 300 行嵌套 if-else 分支重构为可扩展的策略模式字典映射，保持入参与返回值契约不变',
+          '消除遍历过滤中的高频多次重复反序列化，引入惰性缓存将时间复杂度从 O(n^2) 降至 O(n)',
+          '将紧耦合的全局单例事件监听重构为按会话作用域隔离的事件总线，杜绝内存泄漏隐患',
+        ],
+      },
       {
         id: 'swe-bench-core',
         name: 'SWE-bench 本地核心代码基准 (SWE-bench Local)',
         description: '真实代码修复与测试驱动评估，自动执行测试命令校验 Pass/Fail 率',
+        verifyCommand: 'npx vitest run test/securityRegression.test.js',
         tasks: [
+          '请分析当前项目中的单元测试，定位并修复问题',
+          '检查项目安全边界防范与路径规范',
+        ],
+        objectiveTasks: [
           {
             name: '修测试与功能验证',
             prompt: '请分析当前项目中的单元测试，定位并修复问题',
@@ -431,21 +466,6 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
             prompt: '检查项目安全边界防范与路径规范',
             verifyCommand: 'npx vitest run test/securityRegression.test.js',
           },
-          {
-            name: '项目配置解析',
-            prompt: '验证项目级配置文件解析正确性',
-            verifyCommand: 'npx vitest run test/projectConfig.test.js',
-          },
-        ],
-      },
-      {
-        id: 'coding-general',
-        name: '通用编程与算法问答 (Coding Q&A)',
-        description: '基础代码生成、算法解释与结构化输出基准',
-        tasks: [
-          '用 TypeScript 实现一个支持 TTL 和 LRU 淘汰策略的高性能内存缓存类',
-          '分析并解释快速排序与三向切分快速排序在大规模重复元素下的复杂度差异',
-          '编写一段防范 SQL 注入与路径穿越的代码示例并给出审计要点',
         ],
       },
     ]
