@@ -329,7 +329,26 @@ function initDatabase() {
     skill_patterns: getTableColumns("skill_patterns"),
     memory: getTableColumns("memory"),
     agent_task: getTableColumns("agent_task"),
+    project: getTableColumns("project"),
   };
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS project (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        root_path TEXT NOT NULL UNIQUE,
+        icon TEXT,
+        color TEXT,
+        default_model_id INTEGER,
+        default_agent_mode TEXT NOT NULL DEFAULT 'workspace',
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_opened_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_last_opened ON project(last_opened_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_project_favorite ON project(is_favorite DESC, last_opened_at DESC);
+    `);
+  } catch {}
   const addCol = (table, col, def) => {
     if (!cols[table]) {
       cols[table] = getTableColumns(table);
@@ -341,6 +360,10 @@ function initDatabase() {
       } catch {}
     }
   };
+  addCol("session", "project_id", "INTEGER");
+  try {
+    db.exec("CREATE INDEX IF NOT EXISTS idx_session_project ON session(project_id, updated_at DESC)");
+  } catch {}
   addCol("provider", "api_format", "TEXT NOT NULL DEFAULT 'openai'");
   addCol("provider", "enabled", "INTEGER NOT NULL DEFAULT 1");
   addCol("provider", "created_at", "DATETIME");
@@ -387,6 +410,7 @@ function initDatabase() {
   // 仅注入到该 workspace 的会话。注入侧只对 type='project' 做作用域过滤。
   addCol("memory", "workspace", "TEXT");
   addCol("agent_task", "tool_journal", "TEXT");
+  addCol("agent_task", "kind", "TEXT NOT NULL DEFAULT 'task'");
 
   // agent_task status CHECK 迁移：旧库 CHECK 只允许 5 态 (pending/running/
   // done/cancelled/error)，Phase 0 状态机扩为 7 态 (queued/plan/paused)。
@@ -695,6 +719,152 @@ function deletePersona(id) {
   db.prepare("DELETE FROM persona WHERE id = ?").run(id);
 }
 
+// ===== Project CRUD =====
+function listProjects() {
+  if (!db) return [];
+  return db
+    .prepare(
+      "SELECT * FROM project ORDER BY is_favorite DESC, last_opened_at DESC, created_at DESC",
+    )
+    .all();
+}
+
+function getProject(id) {
+  if (!db || id == null) return null;
+  return db.prepare("SELECT * FROM project WHERE id = ?").get(Number(id)) || null;
+}
+
+function getProjectByPath(rootPath) {
+  if (!db || !rootPath) return null;
+  const resolved = path.resolve(String(rootPath));
+  return db.prepare("SELECT * FROM project WHERE root_path = ?").get(resolved) || null;
+}
+
+function createProject({
+  name,
+  root_path,
+  icon = null,
+  color = null,
+  default_model_id = null,
+  default_agent_mode = "workspace",
+  is_favorite = 0,
+}) {
+  if (!name || !root_path) {
+    throw new Error("Project name and root_path are required");
+  }
+  const rawPath = String(root_path);
+  const { isDangerousRoot, hasUnsafeWindowsPrefix } = require("./tools/sandbox");
+  if (hasUnsafeWindowsPrefix(rawPath) || isDangerousRoot(rawPath)) {
+    throw new Error(`Forbidden workspace root: ${rawPath} is a system-critical directory`);
+  }
+  const resolvedPath = path.resolve(rawPath);
+  if (hasUnsafeWindowsPrefix(resolvedPath) || isDangerousRoot(resolvedPath)) {
+    throw new Error(`Forbidden workspace root: ${resolvedPath} is a system-critical directory`);
+  }
+  const stmt = db.prepare(`
+    INSERT INTO project (name, root_path, icon, color, default_model_id, default_agent_mode, is_favorite, last_opened_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `);
+  const res = stmt.run(
+    String(name).trim(),
+    resolvedPath,
+    icon || null,
+    color || null,
+    default_model_id != null ? Number(default_model_id) : null,
+    default_agent_mode || "workspace",
+    is_favorite ? 1 : 0,
+  );
+  return getProject(Number(res.lastInsertRowid));
+}
+
+function updateProject(id, data = {}) {
+  const proj = getProject(id);
+  if (!proj) throw new Error(`Project ${id} not found`);
+
+  const fields = [];
+  const values = [];
+  const allowed = [
+    "name",
+    "root_path",
+    "icon",
+    "color",
+    "default_model_id",
+    "default_agent_mode",
+    "is_favorite",
+    "last_opened_at",
+  ];
+
+  for (const key of allowed) {
+    if (data[key] !== undefined) {
+      if (key === "root_path") {
+        const raw = String(data[key]);
+        const { isDangerousRoot, hasUnsafeWindowsPrefix } = require("./tools/sandbox");
+        if (hasUnsafeWindowsPrefix(raw) || isDangerousRoot(raw)) {
+          throw new Error(`Forbidden workspace root: ${raw} is a system-critical directory`);
+        }
+        const resolved = path.resolve(raw);
+        if (hasUnsafeWindowsPrefix(resolved) || isDangerousRoot(resolved)) {
+          throw new Error(`Forbidden workspace root: ${resolved} is a system-critical directory`);
+        }
+        fields.push("root_path = ?");
+        values.push(resolved);
+      } else if (key === "is_favorite") {
+        fields.push("is_favorite = ?");
+        values.push(data[key] ? 1 : 0);
+      } else if (key === "name") {
+        fields.push("name = ?");
+        values.push(String(data[key]).trim());
+      } else {
+        fields.push(`${key} = ?`);
+        values.push(data[key]);
+      }
+    }
+  }
+
+  if (fields.length > 0) {
+    values.push(Number(id));
+    db.prepare(`UPDATE project SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+  }
+  return getProject(id);
+}
+
+function deleteProject(id) {
+  const proj = getProject(id);
+  if (!proj) return { ok: false, success: false, error: "Project not found" };
+
+  db.transaction(() => {
+    db.prepare("UPDATE session SET project_id = NULL WHERE project_id = ?").run(Number(id));
+    db.prepare("DELETE FROM project WHERE id = ?").run(Number(id));
+    const currentActive = getSetting("active_project_id");
+    if (currentActive === String(id)) {
+      setSetting("active_project_id", "");
+    }
+  })();
+  return { ok: true, success: true };
+}
+
+function getActiveProject() {
+  const activeId = getSetting("active_project_id");
+  if (!activeId) return null;
+  return getProject(Number(activeId));
+}
+
+function setActiveProject(id) {
+  if (id == null || id === "") {
+    setSetting("active_project_id", "");
+    return null;
+  }
+  const proj = getProject(id);
+  if (!proj) throw new Error(`Project ${id} not found`);
+  const { isDangerousRoot, hasUnsafeWindowsPrefix } = require("./tools/sandbox");
+  if (hasUnsafeWindowsPrefix(proj.root_path) || isDangerousRoot(proj.root_path)) {
+    throw new Error(`Forbidden workspace root: ${proj.root_path} is a system-critical directory`);
+  }
+  db.prepare("UPDATE project SET last_opened_at = CURRENT_TIMESTAMP WHERE id = ?").run(Number(id));
+  setSetting("active_project_id", String(id));
+  return getProject(id);
+}
+
 // ===== Session CRUD =====
 function getSessions() {
   return db
@@ -717,15 +887,26 @@ function createSession({
   parentSessionId = null,
   config = null,
   session_kind = "chat",
+  project_id = null,
 }) {
   const normalizedConfig = config == null
     ? null
     : (typeof config === "string" ? config : JSON.stringify(config));
+  let effectiveProjectId = project_id;
+  if (effectiveProjectId === undefined || effectiveProjectId === null) {
+    const activeSetting = getSetting("active_project_id");
+    if (activeSetting) {
+      const pid = Number(activeSetting);
+      if (Number.isInteger(pid) && pid > 0) {
+        effectiveProjectId = pid;
+      }
+    }
+  }
   const info = db
     .prepare(
-      "INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, 1)",
+      "INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, project_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
     )
-    .run(title, persona_id, parentSessionId, normalizedConfig, String(session_kind || "chat"), localNow());
+    .run(title, persona_id, parentSessionId, normalizedConfig, String(session_kind || "chat"), effectiveProjectId || null, localNow());
   return { lastInsertRowid: Number(info.lastInsertRowid) };
 }
 
@@ -746,10 +927,11 @@ function forkSession(parentSessionId, title, messageIdCutoff = null) {
     const personaId = parent.persona_id || null;
     const config = parent.config || null;
     const sessionKind = parent.session_kind || 'chat';
+    const projectId = parent.project_id || null;
 
     const info = db.prepare(
-      'INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, 0)'
-    ).run(newTitle, personaId, parentSessionId, config, sessionKind, localNow());
+      'INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, project_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, 0)'
+    ).run(newTitle, personaId, parentSessionId, config, sessionKind, projectId, localNow());
     const newSessionId = Number(info.lastInsertRowid);
 
     const parentMsgs = messageIdCutoff != null
@@ -2477,6 +2659,9 @@ module.exports = {
     }
   },
   getDatabase: () => db,
+  setDatabase: (newDb) => {
+    db = newDb;
+  },
   getDatabasePath: () => dbPath,
   encryptKey,
   decryptKey,
@@ -2486,4 +2671,12 @@ module.exports = {
   migrateUp: (target) => (db ? require("./migrations").migrateUp(db, target) : { appliedCount: 0, currentVersion: 0 }),
   migrateDown: (target) => (db ? require("./migrations").migrateDown(db, target) : { rolledBackCount: 0, currentVersion: 0 }),
   getMigrationStatus: () => (db ? require("./migrations").getMigrationStatus(db) : null),
+  listProjects,
+  getProject,
+  getProjectByPath,
+  createProject,
+  updateProject,
+  deleteProject,
+  getActiveProject,
+  setActiveProject,
 };

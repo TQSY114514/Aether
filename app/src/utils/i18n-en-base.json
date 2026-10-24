@@ -1072,5 +1072,7 @@
   "queue.add_tooltip": "Enqueue instruction",
   "queue.toggle_dock": "Toggle queue dock",
   "queue.overwrite_draft_confirm": "Replace current draft with queued message?",
-  "queue.inject_button": "Inject"
+  "queue.inject_button": "Inject",
+  "effort.minimal": "min",
+  "effort.max": "max"
 }

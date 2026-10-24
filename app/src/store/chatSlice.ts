@@ -14,7 +14,7 @@ function ensureAllChatListeners() {
 
 import type { StateCreator } from "zustand"
 import type { Message } from "@/types"
-import type { AppState } from "./types"
+import type { AppState, AgentMode } from "./types"
 import { decodeDataUrlText } from "./types"
 import { t } from "@/utils/i18n"
 import log from "@/utils/logger"
@@ -108,7 +108,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   loopingSessions: new Set<number>(),
   thinkingEnabled: true,
   effortLevel: 'medium',
-  agentMode: 'auto',
+  agentMode: 'workspace',
   modelSuggestion: null as ModelSuggestion | null,
   messageSearchQuery: "",
 
@@ -145,7 +145,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
   },
 
-  sendMessage: async (content, attachments, overrides?: { agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom' }) => {
+  sendMessage: async (content, attachments, overrides?: { agentMode?: AgentMode }) => {
     const { currentSessionId, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
     const effMode = overrides?.agentMode ?? agentMode
     const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
@@ -216,7 +216,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         personaId: cfg?.personaId ?? null,
         attachments: imageAttachments,
         useTools: effMode !== "off",
-        agentMode: effMode === "off" ? "ask" : effMode,
+        agentMode: (effMode === "off" ? "workspace" : effMode) as any,
         effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
@@ -348,7 +348,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
-        agentMode: agentMode === "off" ? "ask" : agentMode,
+        agentMode: (agentMode === "off" ? "workspace" : agentMode) as any,
         effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
@@ -468,7 +468,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
-        agentMode: agentMode === "off" ? "ask" : agentMode,
+        agentMode: (agentMode === "off" ? "workspace" : agentMode) as any,
         effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,

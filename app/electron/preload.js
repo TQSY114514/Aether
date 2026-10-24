@@ -34,6 +34,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fs: {
     listDir: (dir, sessionId) => ipcRenderer.invoke('fs:list-dir', dir, sessionId),
   },
+  project: {
+    list: () => ipcRenderer.invoke('project:list'),
+    create: (data) => ipcRenderer.invoke('project:create', data),
+    open: (id) => ipcRenderer.invoke('project:open', id),
+    update: (id, data) => ipcRenderer.invoke('project:update', id, data),
+    delete: (id) => ipcRenderer.invoke('project:delete', id),
+    current: () => ipcRenderer.invoke('project:current'),
+    onOpened: (callback) => subscribe('project:opened', callback),
+  },
   agent: {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
     setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', typeof opts === 'string' ? { dir: opts } : opts),

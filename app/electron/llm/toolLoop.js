@@ -54,7 +54,9 @@ const {
   maybeAutoCommitAfterTool,
   SemanticLoopDetector,
   IterationBudget,
+  normalizeAgentMode,
   agentModeToPermissionMode,
+  MAX_AUTO_REVIEW_TDD,
   planToTodos,
   accountToolLoopUsage,
   sleep,
@@ -176,6 +178,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
 async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry }) {
   let activeProvider = provider
   let activeModel = model
+  const normalizedAgentMode = normalizeAgentMode(agentMode)
   const wsRoot = getWorkspaceRoot(sessionId) || process.cwd()
   const turnFileTracker = createTurnFileTracker(wsRoot)
   const emitFileSummary = () => {
@@ -199,7 +202,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   })()
   const rawToolPayload = Array.isArray(tools)
     ? tools
-    : (tools ? toolsPayload(agentMode, { cacheStable: cachePrefixStable, db }) : [])
+    : (tools ? toolsPayload(normalizedAgentMode === 'explore' ? 'plan' : normalizedAgentMode, { cacheStable: cachePrefixStable, db }) : [])
   let toolPayload = (cachePrefixStable && rawToolPayload.length > 1)
     ? (() => { try { return require('./toolRouter').sortToolsForCacheStability(rawToolPayload) } catch { return rawToolPayload } })()
     : rawToolPayload
@@ -238,7 +241,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
         const { routeTools, routerEnabled } = require('./toolRouter')
         if (routerEnabled(routerOn)) {
           const want = routeTools({
-            mode: agentMode === 'plan' ? 'plan' : undefined,
+            mode: (normalizedAgentMode === 'explore' || normalizedAgentMode === 'plan') ? 'plan' : undefined,
             prompt: userText,
             allToolNames: stageState.allNames,
             safeNames: stageState.safeNames, // plan 已过滤
@@ -313,7 +316,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
 
   // Phase 4: Initialize permission policy from agent mode.
   let permissionPolicy
-  if (agentMode === 'custom' && db) {
+  if (normalizedAgentMode === 'custom' && db) {
     // Custom mode: build policy from user settings (custom_mode.* keys)
     try {
       const customMode = require('./customMode')
@@ -325,9 +328,11 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
       permissionPolicy = new permissions.PermissionPolicy(permissions.PermissionMode.Prompt)
     }
   } else {
-    permissionPolicy = new permissions.PermissionPolicy(
-      permissions.PermissionMode[agentModeToPermissionMode(agentMode) || 'Prompt']
-    )
+    const rawMode = agentModeToPermissionMode(normalizedAgentMode)
+    const initialMode = typeof rawMode === 'number'
+      ? rawMode
+      : (permissions.PermissionMode[rawMode] ?? permissions.PermissionMode.Prompt)
+    permissionPolicy = new permissions.PermissionPolicy(initialMode)
   }
   // C1 修复: 按各工具 risk 填充权限需求档位 —— safe → ReadOnly（任何模式
   // 直接放行）, dangerous → DangerFullAccess（plan/auto 拒绝, ask 走下方
@@ -338,12 +343,15 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     try {
       const t = getTool(p.function.name)
       if (t) {
-        permissionPolicy.withToolRequirement(
-          p.function.name,
-          t.risk === 'dangerous'
-            ? permissions.PermissionMode.DangerFullAccess
-            : permissions.PermissionMode.ReadOnly
-        )
+        let reqMode = permissions.PermissionMode.ReadOnly
+        if (t.risk === 'dangerous') {
+          const isShellOrExternal = p.function.name === 'run_command' || p.function.name === 'exec'
+          const isAutoReview = normalizedAgentMode === 'auto_review' && agentMode !== 'auto'
+          reqMode = (isAutoReview && WRITE_TOOLS.has(p.function.name) && !isShellOrExternal)
+            ? permissions.PermissionMode.WorkspaceWrite
+            : permissions.PermissionMode.DangerFullAccess
+        }
+        permissionPolicy.withToolRequirement(p.function.name, reqMode)
       }
     } catch {}
   }
@@ -439,7 +447,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   let shadowWorktree = null
   let origRoot = null
   let shadowSuccess = false
-  const shadowEnabled = (agentMode === 'auto') && (() => {
+  const shadowEnabled = (normalizedAgentMode === 'auto_review' || agentMode === 'auto') && (() => {
     try {
       if (db && require('../featureFlags').isEnabled(db, 'agent.shadowWorkspace') === true) return true
       const pc = require('../config/projectConfig').loadProjectConfig(getWorkspaceRoot(sessionId))
@@ -486,6 +494,9 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Lint/test auto-repair: tracks how many repair rounds have been injected so
   // the model gets a chance to fix errors without looping forever.
   let repairRounds = 0
+
+  // Supervised TDD loop attempts for auto_review mode (bounded to max 3 attempts)
+  let autoReviewTddAttempts = 0
 
   // 自动缩围重试（'agent.shrinkRetry'，默认关）：任务中途撞上迭代预算或循环
   // 守卫时不再直接终止——清空各循环检测状态、注入一条"缩小范围"指令，只求
@@ -633,8 +644,8 @@ Reply in this format:
     requestPermission, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
     onPlanStep, onPlanSnapshot, onStatus, onThinkingStart, onThinkingEnd, onThinkingDelta, onToolCall,
   }
-  const toolCtx = { sessionId, provider: activeProvider, model: activeModel, signal, agentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
-  const permissionCtx = { provider: activeProvider, model: activeModel, agentMode, sessionId, signal }
+  const toolCtx = { sessionId, provider: activeProvider, model: activeModel, signal, agentMode: normalizedAgentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
+  const permissionCtx = { provider: activeProvider, model: activeModel, agentMode: normalizedAgentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
   while (!loopStateMachine.state.isDone) {
@@ -1087,6 +1098,14 @@ Reply in this format:
           } catch {}
         }
 
+        // Tier 1 (explore mode): strictly block mutating tools and shell execution
+        if (!entry.error && (normalizedAgentMode === 'explore' || normalizedAgentMode === 'plan')) {
+          if (WRITE_TOOLS.has(fn.name) || tool?.risk === 'dangerous' || fn.name === 'run_command' || fn.name === 'exec') {
+            entry.error = `Permission denied: write operations and dangerous tool '${fn.name}' are forbidden in read-only explore mode`
+            entry.failure_kind = 'permission_denied'
+          }
+        }
+
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
           entry.failure_kind = 'model_invalid_args'
@@ -1153,16 +1172,17 @@ Reply in this format:
             } catch {}
           }
 
-          // ── C1: effectiveMode（auto_confirm 拆分 + 信任引擎自适应）────────
-          let effectiveMode = agentMode === 'auto_confirm'
-            ? (tool.risk === 'safe' ? 'auto' : 'ask')
-            : agentMode
+          // ── C1: effectiveMode（4-tier + 信任引擎自适应）────────
+          let effectiveMode = normalizedAgentMode
           let trustAutoApproved = false
-          if (!entry.error && sessionId && db && effectiveMode === 'ask' && tool.risk === 'dangerous') {
+          if (!entry.error && sessionId && db && (effectiveMode === 'workspace' || effectiveMode === 'ask') && tool.risk === 'dangerous') {
             try {
-              const trustEngine = require('./trustEngine')
-              effectiveMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
-              if (effectiveMode !== 'ask') trustAutoApproved = true
+              const trustEngine = require('../tools/trustEngine')
+              const permMode = trustEngine.getPermissionMode(db, sessionId, fn.name)
+              if (permMode === 'auto' || permMode === 'yolo') {
+                effectiveMode = permMode === 'yolo' ? 'unrestricted' : 'auto_review'
+                trustAutoApproved = true
+              }
             } catch {}
           }
 
@@ -1191,10 +1211,10 @@ Reply in this format:
           }
 
           // ── P0-MM: 第二名复核 (Runner-Up Dual-Model Review) ──────────────
-          // 在 auto 模式下，若开启 'agent.runnerUpReview' 且工具属于 dangerous 级别
+          // 在 auto / auto_review 模式下，若开启 'agent.runnerUpReview' 且工具属于 dangerous 级别
           // （如修改代码行数超过 20 行或 shell 命令），调用 Arena 排位第二的模型交叉审查。
           let runnerUpObjection = null
-          if (!entry.error && effectiveMode === 'auto' && tool.risk === 'dangerous' && db) {
+          if (!entry.error && (effectiveMode === 'auto' || effectiveMode === 'auto_review') && tool.risk === 'dangerous' && db) {
             try {
               const ff = require('../featureFlags')
               if (ff.isEnabled(db, 'agent.runnerUpReview')) {
@@ -1243,7 +1263,7 @@ Reply ONLY with JSON:
 
           let userDecision = null
           let preDiff = null
-          const shouldPromptForPermission = (tool.risk === 'dangerous' && (effectiveMode === 'ask' || isTainted)) || axisAskReason || runnerUpObjection
+          const shouldPromptForPermission = (tool.risk === 'dangerous' && (effectiveMode === 'ask' || effectiveMode === 'workspace' || isTainted)) || axisAskReason || runnerUpObjection
           if (runnerUpObjection && !axisAskReason) {
             axisAskReason = runnerUpObjection
           }
@@ -1568,7 +1588,8 @@ Reply ONLY with JSON:
       // user-configured lint_command / test_command. On errors, inject the
       // error context into the conversation so the model fixes them — up to
       // MAX_REPAIR_ROUNDS. Best-effort: never blocks or breaks the loop.
-      if (repairRounds < lintTestRepair.MAX_REPAIR_ROUNDS) {
+      // Guarded: skip in auto_review mode so generic lint repair does not collide with the supervised TDD loop.
+      if ((normalizedAgentMode !== 'auto_review') && repairRounds < lintTestRepair.MAX_REPAIR_ROUNDS) {
         try {
           const touchedFiles = allExecuted.some(e => e.entry && lintTestRepair.shouldRunOnTool(e.entry.name) && !e.entry.error)
           if (touchedFiles) {
@@ -1579,6 +1600,71 @@ Reply ONLY with JSON:
             }
           }
         } catch {}
+      }
+
+      // Supervised TDD loop for auto_review mode (Aether v2.0 R2)
+      if ((normalizedAgentMode === 'auto_review') && autoReviewTddAttempts < MAX_AUTO_REVIEW_TDD) {
+        try {
+          const touchedFiles = allExecuted.some(e => e.entry && lintTestRepair.shouldRunOnTool(e.entry.name) && !e.entry.error)
+          if (touchedFiles) {
+            autoReviewTddAttempts++
+            try {
+              onStatus?.({
+                kind: 'tdd_check',
+                text: `🧪 [自动审查 TDD] 正在执行项目测试验证 (第 ${autoReviewTddAttempts}/${MAX_AUTO_REVIEW_TDD} 轮)...`,
+              })
+            } catch {}
+
+            const testResult = await lintTestRepair.runProjectTest(db, { cwd: wsRoot, sessionId, timeoutMs: 30000 })
+            if (testResult && !testResult.ok && !testResult.passed) {
+              try {
+                onStatus?.({
+                  kind: 'tdd_failure',
+                  text: `🧪 [自动审查 TDD] 测试未通过 (${testResult.command || 'test'}): 启动 debugAgent 自动分析与自愈修复...`,
+                })
+              } catch {}
+
+              let fixPrompt = testResult.suggestedRepairPrompt
+              try {
+                const debugAgent = require('./debugAgent')
+                const debugRes = await debugAgent.runDebugLoop({
+                  provider: activeProvider,
+                  model: activeModel,
+                  signal,
+                  sessionId,
+                  maxCycles: 1,
+                  onStatus: (st) => { try { onStatus?.(st) } catch {} },
+                  onFix: (fix) => {
+                    if (fix?.description) {
+                      fixPrompt = `[自动审查 TDD 自愈] 测试失败：\n${testResult.output || testResult.error}\n\n建议修复方案 (${fix.cycle}轮)：\n${fix.description}\n涉及文件: ${(fix.files || []).join(', ')}\n请立即应用修复。`
+                    }
+                  }
+                })
+                if (debugRes && debugRes.summary) {
+                  try { onStatus?.({ kind: 'info', text: `🧪 [TDD] ${debugRes.summary}` }) } catch {}
+                }
+              } catch (debugErr) {
+                log.warn('[toolLoop] debugAgent auto-review error:', debugErr?.message)
+              }
+
+              if (fixPrompt) {
+                convo.push({
+                  role: 'user',
+                  content: fixPrompt,
+                })
+              }
+            } else if (testResult && (testResult.ok || testResult.passed)) {
+              try {
+                onStatus?.({
+                  kind: 'tdd_pass',
+                  text: `✅ [自动审查 TDD] 测试通过 (${testResult.command || 'test'})`,
+                })
+              } catch {}
+            }
+          }
+        } catch (tddErr) {
+          log.warn('[toolLoop] auto_review TDD error:', tddErr?.message)
+        }
       }
 
       // Auto-checkpoint: snapshot after this round so the user can roll back
@@ -1863,6 +1949,7 @@ module.exports = {
   planToTodos,
   accountToolLoopUsage,
   IterationBudget,
+  MAX_AUTO_REVIEW_TDD,
   isComplexRequest: planning.isComplexRequest,
   generatePlan: planning.generatePlan,
   MAX_CONCURRENT_TOOLS,

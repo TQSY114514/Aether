@@ -983,7 +983,8 @@ TOOLS.push(
 // ── Exports ──────────────────────────────────────────────────────────────
 function getTool(name) { return TOOLS.find(t => t.name === name) }
 function toolsPayload(mode, opts = {}) {
-  const list = mode === 'plan' ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
+  const isExplore = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
+  const list = isExplore ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
   const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
   if (opts && opts.cacheStable === false) return raw
   try {

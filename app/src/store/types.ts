@@ -8,6 +8,24 @@ export function applyLangDir(code: LangCode) {
 
 export const LANGS_CODES = LANGS.map(l => l.code)
 
+// ── Unified 5-Tier Reasoning Scale (R3: Hermes-Aligned) ───────────────────
+export type EffortLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'
+
+// ── Agent Operating Modes (R2: 4-Tier Developer-Centric Ladder) ───────────
+export type AgentMode =
+  | 'explore'
+  | 'workspace'
+  | 'auto_review'
+  | 'unrestricted'
+  // Backward compatibility legacy aliases
+  | 'off'
+  | 'plan'
+  | 'ask'
+  | 'auto_confirm'
+  | 'auto'
+  | 'yolo'
+  | 'custom'
+
 export interface SessionConfig {
   providerId: number | null
   modelId: number | null
@@ -255,17 +273,14 @@ export interface AppState {
   // Pending AskUserQuestion dialogs awaiting a user answer.
   pendingQuestions: { reqId: string; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
   resolveQuestion: (reqId: string, answers: { question: string; answer: string }[]) => void
-  // Agent permission mode, in increasing order of risk:
-  //   'off'          — no tools at all (plain chat)
-  //   'plan'         — read-only tools only (read_file/list_dir/grep/web_search…); no writes/commands
-  //   'ask'          — dangerous tools require a confirm dialog (recommended)
-  //   'auto_confirm' — safe tools auto-allowed, dangerous tools still need confirm
-  //   'auto'         — run everything, no confirms (still inside the workspace sandbox)
-  //   'yolo'         — FULL permission: skip the workspace path guard AND the command blocklist.
-  //                    DANGER: the model can write any file and run any command. Only for
-  //                    trusted models + throwaway VMs. Warned on enable.
-  agentMode: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
-  setAgentMode: (v: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom') => void
+  // ── Agent Operating Modes (R2: 4-Tier Developer-Centric Ladder) ───────────
+  // Canonical 4 tiers:
+  //   'explore'      — Read-only exploration and inspection; strictly blocks file edits and destructive shell commands.
+  //   'workspace'    — Controlled workspace mutations with inline Diff preview and explicit confirmation on external shell commands (default).
+  //   'auto_review'  — Supervised TDD loop; automatically mutates code, runs tests/checks, and triggers debugAgent self-healing on failure.
+  //   'unrestricted' — Autonomous execution in sandbox with background safety boundaries and zero popups.
+  agentMode: AgentMode
+  setAgentMode: (v: AgentMode) => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).
   permissionRequests: { reqId: string; messageId: number; sessionId: number; name: string; args: unknown; risk: 'safe' | 'dangerous'; impact?: { summary: string; severity: string; affectedFiles: string[]; command?: string } | null }[]
   resolvePermission: (reqId: string, allowed: boolean, remember?: boolean | 'session' | 'remember') => void
@@ -301,8 +316,8 @@ export interface AppState {
   //                      OpenAI o-series, thinking.budget_tokens for Claude.
   thinkingEnabled: boolean
   setThinkingEnabled: (v: boolean) => void
-  effortLevel: 'low' | 'medium' | 'high'
-  setEffortLevel: (v: 'low' | 'medium' | 'high') => void
+  effortLevel: EffortLevel
+  setEffortLevel: (v: EffortLevel) => void
   // Last model-suggestion rationale from modelAdvisor (shown in ModelSelector).
   modelSuggestion: ModelSuggestion | null
   // Refresh the suggestion on session open (based on the latest user message).
@@ -340,7 +355,7 @@ export interface AppState {
   undoLastEdit: () => void
   redo: () => void
   editMessage: (messageId: number, newContent: string) => Promise<void>
-  sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[], overrides?: { agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom' }) => Promise<void>
+  sendMessage: (content: string, attachments?: { name: string; mime: string; kind: 'text' | 'image'; dataUrl?: string; preview?: string }[], overrides?: { agentMode?: AgentMode }) => Promise<void>
   loadMessages: (sessionId: number) => Promise<void>
 
   // Arena
@@ -368,7 +383,7 @@ export interface AppState {
   fontScale: number            // 0.85–1.25, base font-size multiplier
   bubbleWidth: number          // 60–100 (%), max width of message bubbles
   defaultThinkingEnabled: boolean  // default thinking toggle for new sessions
-  defaultEffort: 'low' | 'medium' | 'high'  // default thinking effort for new sessions
+  defaultEffort: EffortLevel  // default thinking effort for new sessions
   defaultModelId: number | null   // default model for new sessions (null = first enabled)
   defaultPersonaId: number | null // default persona for new sessions (null = none)
   // Advanced generation params (advanced users). Empty/0 means "let the provider default".
@@ -397,7 +412,7 @@ export interface AppState {
   setAutoTitle: (v: boolean) => Promise<void>
   setTitleLanguage: (v: string) => Promise<void>
   setTitleModel: (id: number | null) => Promise<void>
-  setDefaultEffort: (v: 'low' | 'medium' | 'high') => Promise<void>
+  setDefaultEffort: (v: EffortLevel) => Promise<void>
   setDefaultThinkingEnabled: (v: boolean) => Promise<void>
   setDefaultModel: (id: number | null) => Promise<void>
   setDefaultPersona: (id: number | null) => Promise<void>

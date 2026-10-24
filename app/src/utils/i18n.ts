@@ -1165,7 +1165,9 @@ const translations: Record<string, Record<string, string>> = {
     "queue.add_tooltip": "Enqueue instruction",
     "queue.toggle_dock": "Toggle queue dock",
     "queue.overwrite_draft_confirm": "Replace current draft with queued message?",
-    "queue.inject_button": "Inject"
+    "queue.inject_button": "Inject",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "zh-CN": {
     "agent.ask": "询问 — 危险操作前确认",
@@ -2241,7 +2243,9 @@ const translations: Record<string, Record<string, string>> = {
     "queue.add_tooltip": "加入排队队列",
     "queue.toggle_dock": "展开/折叠队列",
     "queue.overwrite_draft_confirm": "当前输入框已有草稿，是否替换为队列消息？",
-    "queue.inject_button": "插队"
+    "queue.inject_button": "插队",
+    "effort.minimal": "极简",
+    "effort.max": "最大"
   },
   "es": {
     "app.name": "Aether",
@@ -3286,7 +3290,9 @@ const translations: Record<string, Record<string, string>> = {
     "usage.unpriced": "sin precio",
     "settings.encryption_status_unknown_title": "No se puede confirmar el estado de cifrado",
     "settings.encryption_status_unknown_desc": "No se pudo comprobar el estado de cifrado del sistema. Se desconoce la seguridad del almacenamiento de las claves de API.",
-    "settings.gateway.unknown": "Desconocido"
+    "settings.gateway.unknown": "Desconocido",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "ja": {
     "app.name": "Aether",
@@ -4331,7 +4337,9 @@ const translations: Record<string, Record<string, string>> = {
     "task.unavailable": "バックグラウンドタスクは利用できません",
     "task.untitled": "無題のタスク",
     "taskcard.completed": "完了",
-    "settings.gateway.unknown": "不明"
+    "settings.gateway.unknown": "不明",
+    "effort.minimal": "最小",
+    "effort.max": "最大"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -5376,7 +5384,9 @@ const translations: Record<string, Record<string, string>> = {
     "diff.expand_all_lines": "盡覽全數 {0} 行",
     "evolution.strategyLib.add_failed": "增補策論未遂: {0}",
     "evolution.strategyLib.toggle_failed": "變更自進之境未成",
-    "settings.gateway.unknown": "未知"
+    "settings.gateway.unknown": "未知",
+    "effort.minimal": "微",
+    "effort.max": "至極"
   },
   "fr": {
     "app.name": "Aether",
@@ -6421,7 +6431,9 @@ const translations: Record<string, Record<string, string>> = {
     "slash.review_no_session": "Veuillez sélectionner ou créer une session pour lancer la revue de code",
     "slash.summarize": "Résumer",
     "slash.test": "Exécuter les tests",
-    "settings.gateway.unknown": "Inconnu"
+    "settings.gateway.unknown": "Inconnu",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "de": {
     "app.name": "Aether",
@@ -7466,7 +7478,9 @@ const translations: Record<string, Record<string, string>> = {
     "usage.title": "Nutzungsstatistiken",
     "usage.total_cost": "Gesamtkosten",
     "usage.total_requests": "Anfragen insgesamt",
-    "settings.gateway.unknown": "Unbekannt"
+    "settings.gateway.unknown": "Unbekannt",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "pt": {
     "app.name": "Aether",
@@ -8511,7 +8525,9 @@ const translations: Record<string, Record<string, string>> = {
     "usage.unpriced": "sem preço",
     "settings.encryption_status_unknown_title": "Não foi possível confirmar o status de criptografia",
     "settings.encryption_status_unknown_desc": "Não foi possível verificar o status de criptografia do sistema. A segurança do armazenamento da chave de API é desconhecida.",
-    "settings.gateway.unknown": "Desconhecido"
+    "settings.gateway.unknown": "Desconhecido",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "ru": {
     "app.name": "Aether",
@@ -9556,7 +9572,9 @@ const translations: Record<string, Record<string, string>> = {
     "task.unavailable": "Background tasks unavailable",
     "task.untitled": "Untitled task",
     "taskcard.completed": "Completed",
-    "settings.gateway.unknown": "Неизвестно"
+    "settings.gateway.unknown": "Неизвестно",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -10600,7 +10618,9 @@ const translations: Record<string, Record<string, string>> = {
     "diff.expand_all_lines": "展開全部 {0} 行",
     "evolution.strategyLib.add_failed": "新增策略失敗: {0}",
     "evolution.strategyLib.toggle_failed": "切換自進化狀態失敗",
-    "settings.gateway.unknown": "未知"
+    "settings.gateway.unknown": "未知",
+    "effort.minimal": "極簡",
+    "effort.max": "最大"
   },
   "ar": {
     "app.name": "Aether",
@@ -11645,7 +11665,9 @@ const translations: Record<string, Record<string, string>> = {
     "settings.skills.drafted": "مهارة تمت صياغتها: {0}",
     "settings.skills.empty": "لم يتم العثور على مهارات. أفلت مجلدًا باسم <skill>/SKILL.md في .claude/skills/ داخل مساحة العمل.",
     "settings.skills.enable": "تمكين",
-    "settings.gateway.unknown": "غير معروف"
+    "settings.gateway.unknown": "غير معروف",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "uk": {
     "app.name": "Aether",
@@ -12690,7 +12712,9 @@ const translations: Record<string, Record<string, string>> = {
     "slash.review_no_session": "Будь ласка, виберіть або створіть сесію для початку рев'ю коду",
     "slash.summarize": "Підсумувати",
     "slash.test": "Запустити тести",
-    "settings.gateway.unknown": "Невідомо"
+    "settings.gateway.unknown": "Невідомо",
+    "effort.minimal": "min",
+    "effort.max": "max"
   },
   "ko": {
     "app.name": "Aether",
@@ -13735,7 +13759,9 @@ const translations: Record<string, Record<string, string>> = {
     "usage.unpriced": "가격 미정",
     "settings.encryption_status_unknown_title": "암호화 상태를 확인할 수 없음",
     "settings.encryption_status_unknown_desc": "시스템 암호화 상태를 확인할 수 없습니다. API 키 저장 안전성을 알 수 없습니다.",
-    "settings.gateway.unknown": "알 수 없음"
+    "settings.gateway.unknown": "알 수 없음",
+    "effort.minimal": "최소",
+    "effort.max": "최대"
   },
   "hi": {
     "app.name": "Aether",
@@ -14780,7 +14806,9 @@ const translations: Record<string, Record<string, string>> = {
     "slash.review_no_session": "कोड समीक्षा शुरू करने के लिए कृपया एक सत्र चुनें या बनाएँ",
     "slash.summarize": "सारांशित करें",
     "slash.test": "टेस्ट चलाएँ",
-    "settings.gateway.unknown": "अज्ञात"
+    "settings.gateway.unknown": "अज्ञात",
+    "effort.minimal": "min",
+    "effort.max": "max"
   }
 }
 

@@ -18,7 +18,7 @@ function localNow() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-const AGENT_TASK_PATCH_COLS = new Set(['status', 'error', 'result', 'attempts', 'priority', 'max_retry', 'tool_journal'])
+const AGENT_TASK_PATCH_COLS = new Set(['kind', 'status', 'error', 'result', 'attempts', 'priority', 'max_retry', 'tool_journal'])
 
 function taskDbAdapter(raw) {
   return {

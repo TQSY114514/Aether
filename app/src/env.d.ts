@@ -114,8 +114,30 @@ interface TurnFileSummary {
   fileCount: number
 }
 
+interface Project {
+  id: number
+  name: string
+  root_path: string
+  icon?: string | null
+  color?: string | null
+  default_model_id?: number | null
+  default_agent_mode?: string
+  is_favorite?: number
+  created_at: string
+  last_opened_at?: string | null
+}
+
 interface Window {
   electronAPI: {
+    project: {
+      list: () => Promise<Project[]>
+      create: (data: { name: string; root_path: string; icon?: string | null; color?: string | null; default_model_id?: number | null; default_agent_mode?: string; is_favorite?: boolean | number }) => Promise<Project>
+      open: (id: number) => Promise<Project>
+      update: (id: number, data: Partial<Project>) => Promise<Project>
+      delete: (id: number) => Promise<{ ok: boolean; success?: boolean; error?: string }>
+      current: () => Promise<Project | null>
+      onOpened: (callback: (project: Project) => void) => () => void
+    }
     provider: {
       list: () => Promise<Provider[]>
       get: (id: number) => Promise<Provider>
@@ -168,7 +190,7 @@ interface Window {
       addNormal: (msg: any) => Promise<{ lastInsertRowid: number }>
     }
     chat: {
-      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'; effortLevel?: 'low' | 'medium' | 'high'; thinkingEnabled?: boolean; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: ModelSuggestion | null; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number; model_name: string; provider_name: string } }>
+      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'; effortLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'; thinkingEnabled?: boolean; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: ModelSuggestion | null; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number; model_name: string; provider_name: string } }>
       complete: (params: { content: string; modelId?: number | null; sessionId?: number | null; context?: string; systemPrefix?: string }) => Promise<{ content?: string; sessionId?: number; messageId?: number; error?: string }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
       onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; after_snapshot?: { path: string; content: string; truncated: boolean } | null; exitCode?: number | null; commandFailed?: boolean; timedOut?: boolean } }) => void) => () => void

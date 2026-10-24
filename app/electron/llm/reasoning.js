@@ -50,18 +50,38 @@ function reasoningFamily(modelName = '') {
   return 'none'
 }
 
+const REASONING_BUDGET_MAP = Object.freeze({
+  off: 0,
+  minimal: 1024,
+  low: 2048,
+  medium: 8192,
+  high: 16384,
+  max: 32768,
+})
+
+function getReasoningBudget(level) {
+  const key = String(level || 'medium').toLowerCase()
+  return REASONING_BUDGET_MAP[key] ?? REASONING_BUDGET_MAP.medium
+}
+
 function normalizeEffort(effort) {
-  if (effort === 'low' || effort === 'medium' || effort === 'high') {
-    return effort
+  const e = String(effort || 'medium').toLowerCase()
+  if (e === 'minimal' || e === 'low' || e === 'medium' || e === 'high' || e === 'max') {
+    return e
   }
   return 'medium'
 }
 
-// The OpenAI effort vocabulary.
-const OPENAI_EFFORT = { low: 'low', medium: 'medium', high: 'high' }
+// Map 5-tier canonical effort to OpenAI 3-tier reasoning_effort
+function toOpenAIEffort(effort) {
+  const e = normalizeEffort(effort)
+  if (e === 'minimal' || e === 'low') return 'low'
+  if (e === 'medium') return 'medium'
+  return 'high'
+}
 
 // Build the reasoning params to spread into the request body.
-// `effort` is 'low' | 'medium' | 'high'. `thinkingEnabled` is boolean.
+// effort is 'minimal' | 'low' | 'medium' | 'high' | 'max'. thinkingEnabled is boolean.
 // Returns {} when thinking is off (OpenAI) or the model doesn't support reasoning.
 function buildReasoningParams(modelName, effort, thinkingEnabled, options) {
   const fam = reasoningFamily(modelName)
@@ -69,7 +89,7 @@ function buildReasoningParams(modelName, effort, thinkingEnabled, options) {
     // DeepSeek supports explicit on/off via thinking.type
     return thinkingEnabled ? { thinking: { type: 'enabled' } } : { thinking: { type: 'disabled' } }
   }
-  if (!thinkingEnabled) {
+  if (!thinkingEnabled || effort === 'off') {
     if (fam === 'qwen') return { enable_thinking: false }
     if (fam === 'gemini') return { thinking_config: { thinking_budget: 0 } }
     if (fam === 'hermes') return { enable_thinking: false, thinking: { type: 'disabled' }, reasoning: { effort: 'none' } }
@@ -77,46 +97,43 @@ function buildReasoningParams(modelName, effort, thinkingEnabled, options) {
   }
 
   const normEffort = normalizeEffort(effort)
+  const oaiEffort = toOpenAIEffort(normEffort)
   const maxTokens = typeof options === 'number' ? options : (options?.max_tokens || options?.maxTokens)
+  let budget = getReasoningBudget(normEffort)
+  if (typeof maxTokens === 'number' && maxTokens > 0 && budget >= maxTokens) {
+    budget = Math.max(1, maxTokens - 1)
+  }
 
   if (fam === 'openai') {
-    return { reasoning_effort: normEffort }
+    return { reasoning_effort: oaiEffort }
   }
   if (fam === 'claude') {
-    // Both reasoning_effort and Anthropic-native thinking budget are supplied
-    // so relays (OpenRouter / new-api / OneAPI) can pick the shape they need.
-    let budget = normEffort === 'low' ? 2048 : normEffort === 'medium' ? 8192 : 24576
-    if (typeof maxTokens === 'number' && maxTokens > 0 && budget >= maxTokens) {
-      budget = Math.max(1, maxTokens - 1)
-    }
     return {
-      reasoning_effort: normEffort,
+      reasoning_effort: oaiEffort,
       thinking: { type: 'enabled', budget_tokens: budget },
     }
   }
   if (fam === 'gemini') {
-    const budget = normEffort === 'low' ? 1024 : normEffort === 'medium' ? 4096 : 16384
+    const geminiBudget = normEffort === 'minimal' ? 1024 : normEffort === 'low' ? 2048 : normEffort === 'medium' ? 4096 : normEffort === 'high' ? 16384 : 32768
+    const clampedGemini = (typeof maxTokens === 'number' && maxTokens > 0 && geminiBudget >= maxTokens)
+      ? Math.max(1, maxTokens - 1)
+      : geminiBudget
     return {
-      thinking_config: { thinking_budget: budget },
-      reasoning_effort: normEffort,
+      thinking_config: { thinking_budget: clampedGemini },
+      reasoning_effort: oaiEffort,
     }
   }
   if (fam === 'qwen') {
-    const budget = normEffort === 'low' ? 2048 : normEffort === 'medium' ? 8192 : 16384
     return {
       enable_thinking: true,
       thinking_budget: budget,
     }
   }
   if (fam === 'hermes') {
-    let budget = normEffort === 'low' ? 2048 : normEffort === 'medium' ? 8192 : 16384
-    if (typeof maxTokens === 'number' && maxTokens > 0 && budget >= maxTokens) {
-      budget = Math.max(1, maxTokens - 1)
-    }
     return {
       enable_thinking: true,
       thinking_budget: budget,
-      reasoning: { effort: normEffort, max_tokens: budget },
+      reasoning: { effort: oaiEffort, max_tokens: budget },
     }
   }
   return {}
@@ -135,4 +152,12 @@ function isBinaryReasoning(modelName = '') {
   return false
 }
 
-module.exports = { reasoningFamily, buildReasoningParams, supportsReasoning, isBinaryReasoning, normalizeEffort }
+module.exports = {
+  reasoningFamily,
+  buildReasoningParams,
+  supportsReasoning,
+  isBinaryReasoning,
+  normalizeEffort,
+  getReasoningBudget,
+  REASONING_BUDGET_MAP,
+}

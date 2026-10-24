@@ -90,6 +90,24 @@ async function _runSubagent({
   // Permission derivation: child mode inherits or defaults to effectiveMode
   const childAgentMode = agentMode === 'yolo' ? 'auto' : (agentMode || 'auto')
 
+  // Register subagent task in agent_task for unified tracking
+  let taskId = null
+  try {
+    if (typeof db.createAgentTask === 'function') {
+      taskId = db.createAgentTask({
+        session_id: childSessionId,
+        parent_session_id: parentSessionId || null,
+        title: `subagent: ${String(prompt).slice(0, 60)}`,
+        content: prompt,
+        model_id: model?.id || null,
+        agent_mode: childAgentMode,
+        kind: 'subagent',
+      })
+    }
+  } catch (err) {
+    log.warn('Failed to record subagent task in agent_task:', err?.message)
+  }
+
   const reasoningOpts = buildReasoningParams(model.model_name, 'medium')
   const opts = { ...reasoningOpts, max_tokens: 4096 }
 
