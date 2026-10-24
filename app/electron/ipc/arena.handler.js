@@ -546,7 +546,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       const { extractAndApplyPatches } = require('../llm/objectiveArena')
       const result = extractAndApplyPatches(wsRoot, content)
       return {
-        ok: result.ok || result.appliedCount > 0,
+        ok: Boolean(result.ok && result.appliedCount > 0),
         appliedCount: result.appliedCount,
         filesModified: result.filesModified,
         conflicts: result.conflicts,

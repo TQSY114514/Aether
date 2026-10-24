@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Star, Check, Wrench, Loader2, FileText, AlertTriangle } from 'lucide-react'
+import { Star, Check, Wrench, Loader2, FileText, AlertTriangle, Swords } from 'lucide-react'
 import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
 import { t } from '@/utils/i18n'
 import { useUI } from '@/components/ui/feedback'
@@ -104,7 +104,10 @@ export default function ArenaResultsDeck({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-[var(--text-secondary)]">🏟 {t('chat.arena.result')}</div>
+        <div className="text-sm font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+          <Swords size={14} className="text-[var(--accent)]" />
+          <span>{t('chat.arena.result')}</span>
+        </div>
         {results.length > 0 && (
           <button
             onClick={() => {
@@ -140,7 +143,7 @@ export default function ArenaResultsDeck({
         const isRevealed = revealed.has(key)
         const isWinner = voted && r.model_id === winnerId
         const isLoser = voted && r.model_id !== winnerId
-        const hasPatch = /(?:^|\n)--- (?:a\/)?|\b<<<<<<< SEARCH\b/m.test(r.content)
+        const hasPatch = /(?:^|\n)--- (?:a\/)?|<<<<<<< SEARCH\b/m.test(r.content)
         const isApplying = !!applying[key]
         const appliedFiles = applied[key]
         const err = applyError[key]
