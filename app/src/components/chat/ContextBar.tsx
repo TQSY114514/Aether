@@ -1,9 +1,9 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
 import { DEFAULT_CONTEXT_WINDOW } from '@/utils/constants'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, AlertCircle, Sparkles } from 'lucide-react'
 
 const ROLE_COLORS: Record<string, string> = {
   system: 'var(--accent)',
@@ -19,7 +19,13 @@ function tokenFor(msg: { role: string; content: string }): number {
   return estimateTextTokens(text) + overhead
 }
 
-/** Display current context usage and compaction status. */
+function formatTokens(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+  return n.toString()
+}
+
+/** Display current context usage and compaction status when approaching limits. */
 export default function ContextBar() {
   const messages = useStore((s) => s.messages)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
@@ -50,37 +56,60 @@ export default function ContextBar() {
   const pct = Math.min(Math.round((used / contextWindow) * 100), 100)
   const remaining = contextWindow - used
 
-  if (messages.length === 0 && !contextBudgetText) return null
+  // Only display ContextBar when context usage is high (>= 60%) or when an active budget text exists,
+  // to avoid visual clutter and duplicate indicators during ordinary low-pressure chat turns.
+  // The persistent ContextMeterBadge in the bottom composer handles everyday non-intrusive monitoring.
+  if (messages.length === 0 || (pct < 60 && !contextBudgetText)) return null
 
   const compact = Object.entries(breakdown).map(([role, d]) => ({ role, ...d }))
     .sort((a, b) => b.tokens - a.tokens)
 
+  const isUrgent = pct >= 80
+
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--bg-secondary)]/50">
+    <div
+      className={`border-b transition-colors select-none ${
+        isUrgent
+          ? 'bg-red-500/10 border-red-500/25 text-red-600 dark:text-red-400'
+          : 'bg-amber-500/5 border-amber-500/20 text-amber-700 dark:text-amber-400'
+      }`}
+    >
       {/* Main bar */}
-      <div className="flex items-center gap-3 px-4 py-1.5 w-full text-left hover:bg-[var(--bg-secondary)] transition-colors">
-        <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => setExpanded(e => !e)}>
-          <div className="flex-1 flex rounded-full overflow-hidden h-1.5 gap-0.5 bg-[var(--border)] max-w-[200px]">
+      <div className="flex items-center gap-3 px-4 py-1.5 w-full text-left">
+        <div className="flex-1 flex items-center gap-2.5 cursor-pointer" onClick={() => setExpanded(e => !e)}>
+          {isUrgent ? (
+            <AlertCircle size={13} className="shrink-0 text-red-500 animate-pulse" />
+          ) : (
+            <Sparkles size={13} className="shrink-0 text-amber-500" />
+          )}
+          <div className="flex-1 flex rounded-full overflow-hidden h-1.5 gap-0.5 bg-black/10 dark:bg-white/10 max-w-[160px]">
             {compact.map(s => (
-              <div key={s.role} title={`${s.role}: ${formatTokens(s.tokens)} (${s.count} msgs)`}
+              <div
+                key={s.role}
+                title={`${s.role}: ${formatTokens(s.tokens)} (${s.count} msgs)`}
                 className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${(s.tokens / used) * 100}%`, backgroundColor: ROLE_COLORS[s.role] || 'var(--text-muted)', minWidth: s.tokens > 0 ? 3 : 0 }} />
+                style={{
+                  width: `${(s.tokens / used) * 100}%`,
+                  backgroundColor: ROLE_COLORS[s.role] || 'var(--text-muted)',
+                  minWidth: s.tokens > 0 ? 3 : 0,
+                }}
+              />
             ))}
           </div>
-          <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap tabular-nums">
+          <span className="text-[11px] font-mono whitespace-nowrap tabular-nums font-medium">
             {formatTokens(used)} / {formatTokens(contextWindow)} ({pct}%)
           </span>
-          {remaining < contextWindow * 0.3 && remaining > 0 && (
-            <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+          {remaining < contextWindow * 0.4 && remaining > 0 && (
+            <span className="text-[11px] opacity-80 whitespace-nowrap hidden sm:inline">
               {formatTokens(remaining)} left
             </span>
           )}
           {contextBudgetText && (
-            <span className="text-[11px] whitespace-nowrap" style={{ color: pct > 90 ? 'var(--error)' : pct > 70 ? 'var(--warning)' : 'var(--text-muted)' }}>
+            <span className="text-[11px] font-medium whitespace-nowrap">
               {contextBudgetText}
             </span>
           )}
-          <span className="text-[var(--text-muted)]">{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
+          <span className="opacity-70">{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
         </div>
         
         {/* Compact button */}
@@ -106,7 +135,7 @@ export default function ContextBar() {
             }
           }}
           title={t('chat.compact_hint')}
-          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+          className="text-[11px] font-medium px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors shrink-0"
         >
           {t('chat.compact')}
         </button>
@@ -125,7 +154,7 @@ export default function ContextBar() {
             }
           }}
           title={t('chat.fork_hint')}
-          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
         >
           {t('chat.fork')}
         </button>
@@ -133,34 +162,28 @@ export default function ContextBar() {
 
       {/* Expandable breakdown */}
       {expanded && (
-        <div className="px-4 pb-2 pt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+        <div className="px-4 pb-2 pt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px] bg-black/5 dark:bg-white/5">
           {compact.map(s => {
             const rolePct = Math.round((s.tokens / used) * 100)
             return (
               <div key={s.role} className="flex items-center gap-1.5 py-0.5">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ROLE_COLORS[s.role] || 'var(--text-muted)' }} />
-                <span className="text-[var(--text-secondary)] capitalize w-16">{s.role}</span>
-                <span className="text-[var(--text-muted)] tabular-nums">{formatTokens(s.tokens)} ({rolePct}%)</span>
-                <span className="text-[var(--text-muted)]">×{s.count}</span>
+                <span className="capitalize w-16">{s.role}</span>
+                <span className="tabular-nums opacity-80">{formatTokens(s.tokens)} ({rolePct}%)</span>
+                <span className="opacity-60">×{s.count}</span>
               </div>
             )
           })}
           <div className="col-span-2 border-t border-[var(--border)] mt-1 pt-1 flex justify-between">
-            <span className="text-[var(--text-secondary)]">Compaction threshold</span>
-            <span className="text-[var(--text-muted)] tabular-nums">{formatTokens(Math.floor(contextWindow * 0.8))} (80%)</span>
+            <span>Compaction threshold</span>
+            <span className="tabular-nums">{formatTokens(Math.floor(contextWindow * 0.8))} (80%)</span>
           </div>
           <div className="col-span-2 flex justify-between">
-            <span className="text-[var(--text-secondary)]">Warning threshold</span>
-            <span className="text-[var(--text-muted)] tabular-nums">{formatTokens(Math.floor(contextWindow * 0.7))} (70%)</span>
+            <span>Warning threshold</span>
+            <span className="tabular-nums">{formatTokens(Math.floor(contextWindow * 0.7))} (70%)</span>
           </div>
         </div>
       )}
     </div>
   )
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
-  return n.toString()
 }

@@ -688,7 +688,7 @@ export default function ChatInput() {
               <>
                 {stoppedHint && (
                   <span
-                    className="flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-mono border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0"
+                    className="flex items-center gap-1.5 h-6.5 px-2 rounded-[6px] border text-[10px] font-mono shrink-0 select-none shadow-2xs font-medium border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
                     title={t('chat.generation_stopped_hint')}
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
@@ -697,10 +697,10 @@ export default function ChatInput() {
                 )}
                 {poorMode && (
                   <span
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono text-emerald-500 border-emerald-500/30 bg-emerald-500/10 cursor-help shrink-0"
+                    className="flex items-center gap-1.5 h-6.5 px-2 rounded-[6px] border text-[10px] font-mono cursor-help shrink-0 select-none shadow-2xs font-medium border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
                     title={t('slash.poor_enabled', '穷鬼省流模式：最大循环限制为 8 轮，激进压缩 Token')}
                   >
-                    <Leaf size={10} className="shrink-0" />
+                    <Leaf size={11} className="text-emerald-500 shrink-0" />
                     <span className="hidden sm:inline">{t('slash.poor', '省流')}</span>
                   </span>
                 )}

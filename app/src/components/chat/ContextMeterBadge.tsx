@@ -115,7 +115,7 @@ export default function ContextMeterBadge() {
     <div className="relative inline-flex items-center shrink-0" ref={popoverRef}>
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-mono transition-all press-scale shrink-0 whitespace-nowrap ${
+        className={`flex items-center gap-1.5 h-6.5 px-2 rounded-[6px] border text-[10px] font-mono transition-all press-scale shrink-0 whitespace-nowrap ${
           isCritical
             ? 'bg-red-500/10 border-red-500/30 text-red-500 hover:bg-red-500/15'
             : isWarning

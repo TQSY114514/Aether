@@ -89,7 +89,7 @@ export default function ModelSelector({
   const arenaElo = modelSuggestion?.reasonParts?.arenaElo ?? (modelSuggestion?.reasonParts?.eloTotal && modelSuggestion?.reasonParts?.eloTotal > 0 && modelSuggestion?.reasonParts?.eloScore ? Math.round(modelSuggestion.reasonParts.eloScore) : null)
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 shrink-0">
       <div className="relative shrink-0" title={reasonTitle}>
         <select
           value={String(activeModelId ?? '')}
@@ -98,7 +98,7 @@ export default function ModelSelector({
             const model = allModels.find(m => m.id === mid)
             if (model) onSelect(mid, model.provider_id)
           }}
-          className="text-[11px] rounded-lg border px-1.5 sm:px-2 py-1 outline-none max-w-[125px] sm:max-w-[155px] truncate bg-[var(--content-bg)]"
+          className="h-6.5 text-[11px] font-medium rounded-[6px] border px-2 outline-none max-w-[130px] sm:max-w-[160px] truncate bg-[var(--content-bg)] transition-colors hover:bg-[var(--bg-secondary)] cursor-pointer"
           style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         >
           <option value="" disabled>{t('chat.select_model')}</option>
@@ -116,7 +116,7 @@ export default function ModelSelector({
 
       {arenaElo != null && (
         <span
-          className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] shrink-0 select-none shadow-2xs font-mono"
+          className="hidden md:inline-flex items-center gap-1 h-6.5 px-2 rounded-[6px] border text-[10px] shrink-0 select-none shadow-2xs font-mono font-medium"
           style={{
             borderColor: 'var(--border)',
             backgroundColor: 'var(--bg-secondary)',
@@ -131,7 +131,7 @@ export default function ModelSelector({
 
       <button
         onClick={handleAutoRoute}
-        className="p-1 px-1.5 sm:px-2 rounded-lg border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer shadow-2xs"
+        className="h-6.5 px-2 rounded-[6px] border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer shadow-2xs active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
         style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
         title={t('chat.model_auto_route_desc')}
         aria-label={t('chat.model_auto_route')}
