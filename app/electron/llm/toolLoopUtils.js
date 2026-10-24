@@ -13,6 +13,7 @@
 const { normalizeUsage } = require('./providerAdapter')
 const { computeCost } = require('../utils/cost')
 const { classifyError } = require('./errorClassify')
+const { PermissionMode } = require('./permissions')
 const IterationBudgetBase = require('./iterationBudget')
 const log = require('../logger')
 
@@ -184,17 +185,61 @@ class IterationBudget extends IterationBudgetBase {
   }
 }
 
-/** Translate the agent UI mode into the permission policy mode. */
-function agentModeToPermissionMode(agentMode) {
-  const map = {
-    'plan': 'ReadOnly',
-    'ask': 'Prompt',
-    'auto_confirm': 'WorkspaceWrite',
-    'auto': 'WorkspaceWrite',
-    'yolo': 'Allow',
-    'custom': 'Prompt',
+// Canonical 4-Tier Agent Operating Modes map with legacy aliases
+const TIER_CANONICAL_MAP = Object.freeze({
+  // Tier 1: Explore / Plan (Read-only)
+  'explore': 'explore',
+  'plan': 'explore',
+  'read_only': 'explore',
+  'readonly': 'explore',
+  'read-only': 'explore',
+  // Tier 2: Workspace / Ask (Controlled workspace mutations - Default)
+  'workspace': 'workspace',
+  'ask': 'workspace',
+  'manual': 'workspace',
+  // Tier 3: Auto-Review / Auto (Supervised TDD loop)
+  'auto_review': 'auto_review',
+  'auto': 'auto_review',
+  'auto_confirm': 'auto_review',
+  'tdd': 'auto_review',
+  // Tier 4: Unrestricted / YOLO (Autonomous sandbox execution)
+  'unrestricted': 'unrestricted',
+  'yolo': 'unrestricted',
+  // Special
+  'custom': 'custom',
+  'off': 'off',
+})
+
+const MAX_AUTO_REVIEW_TDD = 3
+
+/**
+ * Normalizes input mode string to one of the 4 canonical agent operating modes
+ * ('explore' | 'workspace' | 'auto_review' | 'unrestricted') or special modes ('custom' | 'off').
+ * Robust against empty, corrupted, or non-string values (defaults safely to 'workspace').
+ * Uses Object.hasOwn to prevent prototype property leakage ('constructor', '__proto__').
+ */
+function normalizeAgentMode(mode) {
+  if (mode === null || mode === undefined) return 'workspace'
+  if (typeof mode !== 'string') return 'workspace'
+  const trimmed = mode.toLowerCase().trim()
+  if (Object.hasOwn(TIER_CANONICAL_MAP, trimmed)) {
+    return TIER_CANONICAL_MAP[trimmed]
   }
-  return map[agentMode] || 'Prompt'
+  return 'workspace'
+}
+
+/** Translate the agent UI mode into the permission policy mode key name. */
+function agentModeToPermissionMode(agentMode) {
+  const canonical = normalizeAgentMode(agentMode)
+  switch (canonical) {
+    case 'explore':      return 'ReadOnly'
+    case 'workspace':    return 'Prompt'
+    case 'auto_review':  return 'WorkspaceWrite'
+    case 'unrestricted': return 'Allow'
+    case 'custom':       return 'Prompt'
+    case 'off':          return 'ReadOnly'
+    default:             return 'Prompt'
+  }
 }
 
 /** Convert a generated plan into the todo shape emitted to the renderer. */
@@ -323,7 +368,10 @@ module.exports = {
   maybeAutoCommitAfterTool,
   SemanticLoopDetector,
   IterationBudget,
+  normalizeAgentMode,
   agentModeToPermissionMode,
+  TIER_CANONICAL_MAP,
+  MAX_AUTO_REVIEW_TDD,
   planToTodos,
   accountToolLoopUsage,
   sleep,

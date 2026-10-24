@@ -145,11 +145,11 @@ export function applyTheme(theme: string, hasBackground = false, setCleanup?: (f
 
   let resolved = theme
   if (resolved === 'glass') resolved = 'dark'
-  if (theme === 'auto') {
+  if (theme === 'auto' || theme === 'system') {
     resolved = resolveAutoTheme()
     if (typeof window !== 'undefined' && window.matchMedia) {
       const mq = window.matchMedia('(prefers-color-scheme: dark)')
-      const handler = () => applyTheme('auto', hasBackground, setCleanup)
+      const handler = () => applyTheme(theme, hasBackground, setCleanup)
       mq.addEventListener('change', handler)
       _autoCleanup = () => mq.removeEventListener('change', handler)
       if (setCleanup) setCleanup(() => { _autoCleanup?.(); _autoCleanup = null })

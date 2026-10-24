@@ -1,33 +1,120 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // app/src/components/chat/slashCommands.ts — Slash commands registry & actions
 //
-// Aligns with Claude Code (/doctor, /compact, /review), Aider (/commit, /undo),
-// OpenHands (system diagnostics), and Cursor shortcuts.
+// Aligned with Hermes, Claude Code, Cursor, and OpenHands command architecture.
+// Categorized into Agent & Control, Dev & Verification, and Session & Workflow.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 import { getFeatureFlagFresh, setFeatureFlag } from '@/utils/featureFlags'
+import type { AgentMode, EffortLevel } from '@/store/types'
 
-export type AgentMode = 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom'
+export type { AgentMode }
 
 export interface SlashCommand {
   id: string
   name: string
   description: string
+  category: 'agent' | 'dev' | 'session'
+  paramHint?: string
   prompt?: string
   action?: (arg?: string) => Promise<void> | void
+  requiresArg?: boolean
 }
 
 /**
- * Built-in slash commands — used when no custom CMD.md files are discovered.
- * Commands with `action` execute directly without inserting a static prompt.
+ * Developer-centric slash commands catalog.
+ * Categorized and actionable: commands with action execute directly;
+ * commands with requiresArg auto-fill '/{id} ' so the user can supply parameters.
  */
 export const DEFAULT_COMMANDS: SlashCommand[] = [
+  // ── Agent & Control ────────────────────────────────────────────────────────
+  {
+    id: 'mode',
+    name: t('slash.mode', '运行模式'),
+    description: t('slash.mode_desc', '切换 Agent 权限模式（explore 只读、workspace 受控、auto_review TDD、unrestricted 完全）'),
+    category: 'agent',
+    paramHint: '[explore|workspace|auto_review|unrestricted]',
+    requiresArg: true,
+    action: (arg) => {
+      if (!arg) return
+      const validModes: AgentMode[] = ['explore', 'workspace', 'auto_review', 'unrestricted', 'plan', 'ask', 'auto', 'yolo', 'off', 'auto_confirm', 'custom']
+      const lower = arg.toLowerCase().trim() as AgentMode
+      if (validModes.includes(lower)) {
+        useStore.getState().setAgentMode(lower)
+        useStore.getState().triggerToast(t('cmd.set_mode') + ' ' + lower, 'success')
+      }
+    },
+  },
+  {
+    id: 'effort',
+    name: t('slash.effort', '思考预算'),
+    description: t('slash.effort_desc', '调整思考深度预算（minimal 极简, low 浅思, medium 标准, high 深度, max 满血, off 关闭）'),
+    category: 'agent',
+    paramHint: '[minimal|low|medium|high|max|off]',
+    requiresArg: true,
+    action: (arg) => {
+      if (!arg) return
+      const lower = arg.toLowerCase().trim()
+      const store = useStore.getState()
+      if (lower === 'off') {
+        store.setThinkingEnabled(false)
+        store.triggerToast(t('effort.off'), 'info')
+      } else if (['minimal', 'low', 'medium', 'high', 'max'].includes(lower)) {
+        store.setThinkingEnabled(true)
+        store.setEffortLevel(lower as EffortLevel)
+        store.triggerToast(t('cmd.set_effort') + ' ' + lower, 'success')
+      }
+    },
+  },
+  {
+    id: 'model',
+    name: t('slash.model', '切换模型'),
+    description: t('slash.model_desc', '按名称或关键词快速切换当前会话模型'),
+    category: 'agent',
+    paramHint: '[name]',
+    requiresArg: true,
+    action: (arg) => {
+      if (!arg) return
+      const store = useStore.getState()
+      const sid = store.currentSessionId
+      const lowerArg = arg.toLowerCase().trim()
+      const match = store.allModels.find(
+        (m) => m.model_name.toLowerCase().includes(lowerArg) || m.display_name?.toLowerCase().includes(lowerArg)
+      )
+      if (match && sid) {
+        store.saveSessionConfig(sid, { providerId: match.provider_id, modelId: match.id })
+        store.triggerToast(match.display_name || match.model_name, 'success')
+      }
+    },
+  },
+  {
+    id: 'project',
+    name: t('slash.project', '切换项目'),
+    description: t('slash.project_desc', '切换或打开独立项目工作区'),
+    category: 'agent',
+    paramHint: '[name]',
+    requiresArg: true,
+    action: async (arg) => {
+      const store = useStore.getState()
+      if (!arg) {
+        // Open project selection
+        return
+      }
+      const lower = arg.toLowerCase().trim()
+      const match = store.projects.find(p => p.name.toLowerCase().includes(lower) || p.root_path.toLowerCase().includes(lower))
+      if (match) {
+        await store.openProject(match.id)
+        store.triggerToast(match.name, 'success')
+      }
+    },
+  },
   {
     id: 'poor',
     name: t('slash.poor', '穷鬼省流模式'),
     description: t('slash.poor_desc', '切换穷鬼省流模式：严格压制思考轮数至 8 轮，激进压缩上下文节省 Token'),
+    category: 'agent',
     action: async () => {
       try {
         const current = await getFeatureFlagFresh('agent.poorMode', false)
@@ -42,21 +129,17 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
           next ? 'info' : 'success'
         )
       } catch {
-        // Reading the current value failed: abort rather than toggle blind.
         useStore.getState().triggerToast(t('slash.poor_failed', '切换穷鬼省流模式失败，请重试'), 'error')
       }
     },
   },
-  { id: 'summarize', name: t('slash.summarize', '总结对话'), description: '详细总结以上对话的要点', prompt: '请详细总结以上对话的要点，用中文回复。' },
-  { id: 'translate', name: t('slash.translate', '翻译'), description: '将以上内容翻译成中文', prompt: '请将以上内容翻译成中文。' },
-  { id: 'polish', name: t('slash.polish', '润色'), description: '润色文字，使其更流畅专业', prompt: '请润色以上文字，使其更加流畅、专业、简洁。' },
-  { id: 'explain', name: t('slash.explain', '解释'), description: '用简单语言解释内容', prompt: '请用简单的语言解释以上内容，让初学者也能理解。' },
-  { id: 'continue', name: t('slash.continue', '续写'), description: '基于内容自然续写', prompt: '请基于以上内容自然地继续写作。' },
-  { id: 'code', name: t('slash.code', '生成代码'), description: '根据需求生成实现代码', prompt: '请生成实现以上需求的代码。' },
+
+  // ── Dev & Verification ─────────────────────────────────────────────────────
   {
     id: 'doctor',
     name: t('slash.doctor', '系统自检'),
     description: t('slash.doctor_desc', '全面诊断系统运行环境、数据库、开发工具链与网络健康'),
+    category: 'dev',
     action: async () => {
       const sid = useStore.getState().currentSessionId
       useStore.getState().triggerToast(t('slash.doctor_running', '正在执行系统与工作区自检...'), 'info')
@@ -80,9 +163,36 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    id: 'review',
+    name: t('slash.review', '代码审查'),
+    description: t('slash.review_desc', '对工作区改动或指定提交进行资深工程架构与安全审查'),
+    category: 'dev',
+    paramHint: '[focus]',
+    action: async (arg?: string) => {
+      const sid = useStore.getState().currentSessionId
+      try {
+        useStore.getState().triggerToast(t('slash.review_extracting', '正在提取 Git 差异并构建审查提示词...'), 'info')
+        const res = await window.electronAPI.git.getDiffForReview({ focus: arg, sessionId: sid || undefined })
+        if (!res.success) {
+          useStore.getState().triggerToast(`提示：${res.error || '无法获取 Git 审查差异'}`, 'info')
+          return
+        }
+        if (sid && res.suggestedReviewPrompt) {
+          useStore.getState().sendMessage(res.suggestedReviewPrompt)
+        } else {
+          window.alert(t('slash.review_no_session', '请先选择或新建一个会话以发起代码审查'))
+        }
+      } catch (e: any) {
+        useStore.getState().triggerToast(t('slash.review_failed', e.message || e), 'error')
+      }
+    },
+  },
+  {
     id: 'test',
     name: t('slash.test', '运行测试'),
     description: t('slash.test_desc', '自动检测并执行项目测试套件，失败时可一键智能修复'),
+    category: 'dev',
+    paramHint: '[args]',
     action: async (arg?: string) => {
       const sid = useStore.getState().currentSessionId
       useStore.getState().triggerToast(t('slash.test_running', '正在执行项目测试套件...'), 'info')
@@ -118,6 +228,8 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     id: 'lint',
     name: t('slash.lint', '代码检查'),
     description: t('slash.lint_desc', '运行代码规范与类型检查器，失败时构建自动修复任务'),
+    category: 'dev',
+    paramHint: '[args]',
     action: async (arg?: string) => {
       const sid = useStore.getState().currentSessionId
       useStore.getState().triggerToast(t('slash.lint_running', '正在运行项目代码与类型检查...'), 'info')
@@ -150,43 +262,23 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
-    id: 'checkpoints',
-    name: t('slash.checkpoints', '时间旅行检查点'),
-    description: t('slash.checkpoints_desc', '打开时间旅行抽屉，查看并回滚文件修改历史快照'),
-    action: () => {
-      useStore.getState().setCheckpointsOpen(true)
-    },
-  },
-  {
-    id: 'review',
-    name: t('slash.review', '代码审查'),
-    description: t('slash.review_desc', '对工作区改动或指定提交进行资深工程架构与安全审查'),
-    action: async (arg?: string) => {
-      const sid = useStore.getState().currentSessionId
-      try {
-        useStore.getState().triggerToast(t('slash.review_extracting', '正在提取 Git 差异并构建审查提示词...'), 'info')
-        const res = await window.electronAPI.git.getDiffForReview({ focus: arg, sessionId: sid || undefined })
-        if (!res.success) {
-          useStore.getState().triggerToast(`提示：${res.error || '无法获取 Git 审查差异'}`, 'info')
-          return
-        }
-        if (sid && res.suggestedReviewPrompt) {
-          useStore.getState().sendMessage(res.suggestedReviewPrompt)
-        } else {
-          window.alert(t('slash.review_no_session', '请先选择或新建一个会话以发起代码审查'))
-        }
-      } catch (e: any) {
-        useStore.getState().triggerToast(t('slash.review_failed', e.message || e), 'error')
-      }
-    },
-  },
-  {
     id: 'commit',
     name: t('slash.commit', '提交改动'),
     description: t('slash.commit_desc', '基于当前修改生成语义化信息并提交 Git'),
-    action: async () => {
+    category: 'dev',
+    paramHint: '[msg]',
+    action: async (arg?: string) => {
       const sid = useStore.getState().currentSessionId
       try {
+        if (arg && arg.trim()) {
+          const commitRes = await window.electronAPI.git.commit({ message: arg.trim(), sessionId: sid || undefined })
+          if (commitRes.success) {
+            useStore.getState().triggerToast(t('slash.commit_success', commitRes.commitHash || '', commitRes.message || ''), 'success')
+          } else {
+            useStore.getState().triggerToast(t('slash.commit_failed', commitRes.error || '未知错误'), 'error')
+          }
+          return
+        }
         const res = await window.electronAPI.git.craftCommitMessage({ sessionId: sid || undefined })
         if (!res.success) {
           window.alert(t('slash.commit_no_changes', '工作区没有待提交的改动'))
@@ -207,9 +299,26 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    id: 'undo',
+    name: t('slash.undo', '撤销操作'),
+    description: t('slash.undo_desc', '按最近一次检查点恢复文件并生成撤销提交'),
+    category: 'dev',
+    action: async () => {
+      try {
+        const res = await useStore.getState().undoLastAction()
+        if (!res.ok) window.alert(t('chat.undo_failed', res.error || t('chat.unknown_error')))
+      } catch {
+        window.alert(t('chat.undo_failed', t('chat.unknown_error')))
+      }
+    },
+  },
+
+  // ── Session & Workflow ─────────────────────────────────────────────────────
+  {
     id: 'compact',
-    name: t('slash.compact_cmd', '压缩上下文'),
-    description: t('slash.compact_cmd_desc', '智能压缩对话历史节省 token'),
+    name: t('slash.compact', '压缩上下文'),
+    description: t('slash.compact_desc', '智能压缩对话历史以节省 Token 预算'),
+    category: 'session',
     action: async () => {
       const sid = useStore.getState().currentSessionId
       if (!sid) return
@@ -227,22 +336,10 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
-    id: 'undo',
-    name: t('slash.undo', '撤销修改'),
-    description: t('slash.undo_desc', '按最近一次检查点恢复文件并生成撤销提交'),
-    action: async () => {
-      try {
-        const res = await useStore.getState().undoLastAction()
-        if (!res.ok) window.alert(t('chat.undo_failed', res.error || t('chat.unknown_error')))
-      } catch {
-        window.alert(t('chat.undo_failed', t('chat.unknown_error')))
-      }
-    },
-  },
-  {
     id: 'clear',
-    name: t('slash.clear', '清空对话'),
-    description: t('slash.clear_desc', '清空当前对话历史'),
+    name: t('slash.clear', '清空历史'),
+    description: t('slash.clear_desc', '清空当前会话的所有历史消息'),
+    category: 'session',
     action: async () => {
       const sid = useStore.getState().currentSessionId
       if (sid) {
@@ -252,19 +349,117 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    id: 'fork',
+    name: t('slash.fork', '分叉会话'),
+    description: t('slash.fork_desc', '从当前节点分叉出独立会话分支'),
+    category: 'session',
+    action: async () => {
+      const store = useStore.getState()
+      const sid = store.currentSessionId
+      if (!sid) return
+      const newSid = await store.forkSession()
+      if (newSid) {
+        store.triggerToast(t('context_meter.fork_success', '会话分叉成功'), 'success')
+      }
+    },
+  },
+  {
+    id: 'tasks',
+    name: t('slash.tasks', '后台任务'),
+    description: t('slash.tasks_desc', '打开后台任务与子代理监控驾驶舱'),
+    category: 'session',
+    action: () => {
+      useStore.getState().setTasksOpen(true)
+    },
+  },
+  {
+    id: 'checkpoints',
+    name: t('slash.checkpoints', '历史快照'),
+    description: t('slash.checkpoints_desc', '打开历史回滚快照与检查点抽屉'),
+    category: 'session',
+    action: () => {
+      useStore.getState().setCheckpointsOpen(true)
+    },
+  },
+  {
+    id: 'history',
+    name: t('slash.checkpoints', '历史快照'),
+    description: t('slash.checkpoints_desc', '打开历史回滚快照与检查点抽屉'),
+    category: 'session',
+    action: () => {
+      useStore.getState().setCheckpointsOpen(true)
+    },
+  },
+  {
+    id: 'btw',
+    name: t('slash.btw', '旁支提问'),
+    description: t('slash.btw_desc', '打开只读旁支提问抽屉，不污染会话主历史'),
+    category: 'session',
+    action: () => {
+      useStore.getState().toggleBtw()
+    },
+  },
+  {
     id: 'regenerate',
     name: t('slash.regenerate', '重新生成'),
     description: t('slash.regenerate_desc', '撤销最后一条回复并重新生成'),
+    category: 'session',
     action: () => {
       useStore.getState().regenerate()
+    },
+  },
+  {
+    id: 'help',
+    name: t('slash.help', '指令帮助'),
+    description: t('slash.help_desc', '列出所有支持的斜杠命令与快捷键说明'),
+    category: 'session',
+    action: () => {
+      const msg = [
+        '### Aether 快捷指令指南',
+        '',
+        '#### 智能体与控制 (Agent & Control)',
+        '- `/mode [explore|workspace|auto_review|unrestricted]` — 切换 Agent 运行权限模式',
+        '- `/effort [minimal|low|medium|high|max|off]` — 调整模型思考深度预算',
+        '- `/model [name]` — 快速切换模型',
+        '- `/project [name]` — 快速切换或打开项目工作区',
+        '- `/poor` — 开关穷鬼省流模式',
+        '',
+        '#### 开发与验证 (Dev & Verification)',
+        '- `/doctor` — 运行系统运行环境与工具链全面自检',
+        '- `/review` — 审查工作区 Git Diff 代码修改',
+        '- `/test [args]` — 执行项目测试套件',
+        '- `/lint [args]` — 执行代码规范与类型检查',
+        '- `/commit [msg]` — 智能语义化 Git Commit',
+        '- `/undo` — 撤销上一步操作并恢复检查点',
+        '',
+        '#### 会话与工作流 (Session & Workflow)',
+        '- `/compact` — 智能压缩上下文历史以节省 Token',
+        '- `/clear` — 清空当前会话历史',
+        '- `/fork` — 分叉当前会话到新分支',
+        '- `/tasks` — 打开后台任务与子代理监控抽屉',
+        '- `/checkpoints` — 打开时间旅行历史快照抽屉',
+        '- `/history` — 打开时间旅行历史快照抽屉',
+        '- `/btw` — 打开只读旁支提问抽屉 (Alt+B)',
+        '- `/help` — 查看本帮助',
+      ].join('\n')
+
+      const sid = useStore.getState().currentSessionId
+      if (sid) {
+        window.electronAPI.message.addNormal({
+          session_id: sid,
+          role: 'assistant',
+          content: msg,
+          model_used: 'system:help',
+        }).then(() => {
+          useStore.getState().loadMessages(sid)
+        })
+      }
     },
   },
 ]
 
 /**
  * Intercept and execute typed slash commands from composer input.
- * Supports /doctor, /review, /commit, /compact, /undo, /clear, /mode, /effort, /model.
- * @returns true if intercepted and handled, false otherwise.
  */
 export async function executeTypedSlashCommand(
   rawInput: string,
@@ -274,109 +469,14 @@ export async function executeTypedSlashCommand(
   if (!trimmed.startsWith('/')) return false
 
   const parts = trimmed.split(/\s+/)
-  const cmd = parts[0].toLowerCase()
+  const cmdId = parts[0].slice(1).toLowerCase()
   const arg = parts.slice(1).join(' ').trim()
 
-  const store = useStore.getState()
-  const sid = store.currentSessionId
-
-  if (cmd === '/undo') {
+  const cmd = DEFAULT_COMMANDS.find((c) => c.id.toLowerCase() === cmdId)
+  if (cmd && cmd.action) {
     setInput('')
-    try { localStorage.removeItem(`draft:${sid ?? 'new'}`) } catch {}
-    await store.undoLastAction()
+    await cmd.action(arg)
     return true
-  }
-
-  if (cmd === '/clear') {
-    setInput('')
-    if (sid) {
-      await window.electronAPI.message.deleteAfter(sid, 0).catch(() => {})
-      store.loadMessages(sid)
-    }
-    return true
-  }
-
-  if (cmd === '/poor') {
-    setInput('')
-    const match = DEFAULT_COMMANDS.find(c => c.id === 'poor')
-    if (match && match.action) await match.action(arg)
-    return true
-  }
-
-  if (cmd === '/doctor') {
-    setInput('')
-    const match = DEFAULT_COMMANDS.find(c => c.id === 'doctor')
-    if (match && match.action) await match.action(arg)
-    return true
-  }
-
-  if (cmd === '/test') {
-    setInput('')
-    const match = DEFAULT_COMMANDS.find(c => c.id === 'test')
-    if (match && match.action) await match.action(arg)
-    return true
-  }
-
-  if (cmd === '/lint') {
-    setInput('')
-    const match = DEFAULT_COMMANDS.find(c => c.id === 'lint')
-    if (match && match.action) await match.action(arg)
-    return true
-  }
-
-  if (cmd === '/checkpoints' || cmd === '/history') {
-    setInput('')
-    store.setCheckpointsOpen(true)
-    return true
-  }
-
-  if (cmd === '/review') {
-    setInput('')
-    const match = DEFAULT_COMMANDS.find(c => c.id === 'review')
-    if (match && match.action) await match.action(arg)
-    return true
-  }
-
-  if (cmd === '/commit') {
-    setInput('')
-    const match = DEFAULT_COMMANDS.find(c => c.id === 'commit')
-    if (match && match.action) await match.action(arg)
-    return true
-  }
-
-  if (cmd === '/compact') {
-    setInput('')
-    const match = DEFAULT_COMMANDS.find(c => c.id === 'compact')
-    if (match && match.action) await match.action(arg)
-    return true
-  }
-
-  if (cmd === '/mode' && arg) {
-    if (['off', 'plan', 'ask', 'auto_confirm', 'auto', 'yolo', 'custom'].includes(arg)) {
-      store.setAgentMode(arg as AgentMode)
-      setInput('')
-      return true
-    }
-  }
-
-  if (cmd === '/effort' && arg) {
-    if (['low', 'medium', 'high'].includes(arg)) {
-      store.setThinkingEnabled(true)
-      store.setEffortLevel(arg as any)
-      setInput('')
-      return true
-    }
-  }
-
-  if (cmd === '/model' && arg) {
-    const lowerArg = arg.toLowerCase()
-    const all = store.allModels
-    const match = all.find(m => m.model_name.toLowerCase().includes(lowerArg) || m.display_name?.toLowerCase().includes(lowerArg))
-    if (match && sid) {
-      store.saveSessionConfig(sid, { providerId: match.provider_id, modelId: match.id })
-      setInput('')
-      return true
-    }
   }
 
   return false

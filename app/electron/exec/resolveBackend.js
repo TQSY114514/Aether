@@ -21,12 +21,12 @@ async function resolveBackendForMode(agentMode, opts = {}) {
   const mode = String(agentMode || '')
   // Checked before `configured`: YOLO must stay on the host even if
   // exec.backend is set to docker globally (CodeRabbit R2 finding).
-  if (mode === 'yolo') return 'local'
+  if (mode === 'yolo' || mode === 'unrestricted') return 'local'
 
   const configured = typeof opts.configured === 'string' ? opts.configured.trim() : ''
   if (configured) return configured
 
-  if (mode !== 'auto' && mode !== 'auto_confirm') return 'local'
+  if (mode !== 'auto' && mode !== 'auto_confirm' && mode !== 'auto_review') return 'local'
 
   let flagOn = false
   try {

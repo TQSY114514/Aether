@@ -11,6 +11,8 @@
 // 5. Result summarization — child output is summarized if too long
 // ───────────────────────────────────────────────────────────────────────────
 
+const path = require('path')
+const fs = require('fs')
 const { completeChatMessage } = require('./providerAdapter')
 const { runToolLoop } = require('./toolLoop')
 const { buildReasoningParams } = require('./reasoning')
@@ -88,6 +90,25 @@ async function _runSubagent({
   // Permission derivation: child mode inherits or defaults to effectiveMode
   const childAgentMode = agentMode === 'yolo' ? 'auto' : (agentMode || 'auto')
 
+  // Register subagent task in agent_task for unified tracking
+  let taskId = null
+  try {
+    if (typeof db.createAgentTask === 'function') {
+      taskId = db.createAgentTask({
+        session_id: childSessionId,
+        parent_session_id: parentSessionId || null,
+        title: `subagent: ${String(prompt).slice(0, 60)}`,
+        content: prompt,
+        model_id: model?.id || null,
+        agent_mode: childAgentMode,
+        kind: 'subagent',
+        status: 'running',
+      })
+    }
+  } catch (err) {
+    log.warn('Failed to record subagent task in agent_task:', err?.message)
+  }
+
   const reasoningOpts = buildReasoningParams(model.model_name, 'medium')
   const opts = { ...reasoningOpts, max_tokens: 4096 }
 
@@ -162,6 +183,16 @@ async function _runSubagent({
       status: wasTimeout ? 'timeout' : hasError ? 'failed' : 'completed',
     })
   } catch {}
+
+  if (taskId && typeof db.updateAgentTask === 'function') {
+    try {
+      db.updateAgentTask(taskId, {
+        status: wasTimeout ? 'timeout' : hasError ? 'error' : 'done',
+        result: finalContent || '',
+        error: errorMessage || (wasTimeout ? 'Timed out' : null),
+      })
+    } catch {}
+  }
 
   // Cleanup policy
   if (cfg.cleanup === 'delete' || (cfg.cleanup === 'keep-if-error' && !wasTimeout && !hasError && finalContent && !finalContent.startsWith('['))) {
@@ -382,6 +413,9 @@ async function runParallel(tasks, shared = {}) {
           isWriter: normTask.isWriter,
         })
       } catch {}
+      const beforeSnapshot = normTask.writePaths?.length
+        ? captureBeforeSnapshot(normTask.writePaths, shared.workspaceRoot || null)
+        : null
       const iterations = 0
       try {
         const result = await runSubagent({
@@ -397,6 +431,7 @@ async function runParallel(tasks, shared = {}) {
         })
         const latencyMs = Date.now() - startTime
         if (result?.wasTimeout || result?.hasError) {
+          if (beforeSnapshot) rollbackBeforeSnapshot(beforeSnapshot)
           const errText = result?.error || (result?.wasTimeout ? 'Timed out' : 'Sub-agent error')
           try {
             shared.onSubagentEvent?.({
@@ -425,6 +460,7 @@ async function runParallel(tasks, shared = {}) {
         } catch {}
         return { success: true, output: result.content, iterations, childSessionId: result.childSessionId, latencyMs }
       } catch (e) {
+        if (beforeSnapshot) rollbackBeforeSnapshot(beforeSnapshot)
         const latencyMs = Date.now() - startTime
         try {
           shared.onSubagentEvent?.({
@@ -445,7 +481,65 @@ async function runParallel(tasks, shared = {}) {
   return Promise.all(runners)
 }
 
+/**
+ * Capture pre-execution snapshot of write paths for safety/rollback
+ * @param {string[]} paths
+ * @param {string} [wsRoot]
+ * @returns {{ files: Array<{ path: string, existed: boolean, content: Buffer | null }> }}
+ */
+function captureBeforeSnapshot(paths, wsRoot) {
+  if (!paths || !Array.isArray(paths)) return { files: [] }
+  const files = []
+  for (const raw of paths) {
+    if (!raw || typeof raw !== 'string') continue
+    const resolvedPath = path.isAbsolute(raw) ? path.resolve(raw) : (wsRoot ? path.resolve(wsRoot, raw) : path.resolve(raw))
+    let existed = false
+    let content = null
+    try {
+      if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+        existed = true
+        content = fs.readFileSync(resolvedPath)
+      }
+    } catch {}
+    files.push({
+      path: resolvedPath,
+      existed,
+      content,
+    })
+  }
+  return { files }
+}
+
+/**
+ * Cleanly rollback modifications and created files based on pre-execution snapshot
+ * @param {{ files?: Array<{ path: string, existed: boolean, content: Buffer | string | null }> } | null} snapshot
+ */
+function rollbackBeforeSnapshot(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.files)) return
+  for (const entry of snapshot.files) {
+    if (!entry || !entry.path) continue
+    try {
+      if (entry.existed) {
+        if (entry.content !== null) {
+          const dir = path.dirname(entry.path)
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true })
+          }
+          fs.writeFileSync(entry.path, entry.content)
+        }
+      } else {
+        if (fs.existsSync(entry.path)) {
+          fs.unlinkSync(entry.path)
+        }
+      }
+    } catch (err) {
+      log.warn('[subAgent] rollbackBeforeSnapshot error for path:', entry.path, err.message)
+    }
+  }
+}
+
 async function runSubagent(args) { return subagentLimit.run(() => _runSubagent(args)) }
+
 module.exports = {
   runSubagent,
   runParallel,
@@ -455,4 +549,6 @@ module.exports = {
   MAX_PARALLEL_WRITERS,
   SUBAGENT_SYSTEM_PROMPT,
   DEFAULT_SUBAGENT_CONFIG,
+  captureBeforeSnapshot,
+  rollbackBeforeSnapshot,
 }

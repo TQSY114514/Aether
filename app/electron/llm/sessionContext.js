@@ -98,4 +98,94 @@ function buildSessionContext({ db, sessionId, personaId, userMessage } = {}) {
   return { prefix, memoryCount }
 }
 
-module.exports = { buildSessionContext }
+const fs = require('fs')
+const path = require('path')
+
+// Session file activity ledger: Map<sessionId, Map<filePath, { score: number, lastAccessed: number }>>
+const _sessionFileActivities = new Map()
+
+/**
+ * Record read/edit file activity in a session
+ * @param {string|number} sessionId
+ * @param {string} filePath
+ * @param {'read'|'edit'|string} type
+ */
+function recordFileActivity(sessionId, filePath, type = 'read') {
+  if (!sessionId || !filePath) return
+  const sid = String(sessionId)
+  if (!_sessionFileActivities.has(sid)) {
+    _sessionFileActivities.set(sid, new Map())
+  }
+  const fileMap = _sessionFileActivities.get(sid)
+  const normPath = path.normalize(filePath)
+  const current = fileMap.get(normPath) || { score: 0, lastAccessed: Date.now() }
+  const weight = (type === 'edit' || type === 'write') ? 2 : 1
+  current.score += weight
+  current.lastAccessed = Date.now()
+  fileMap.set(normPath, current)
+}
+
+/**
+ * Extract top-N active files for rehydration after compaction
+ * @param {string|number} sessionId
+ * @param {object} [opts]
+ * @param {number} [opts.maxFiles=3]
+ * @param {number} [opts.maxLinesPerFile=80]
+ * @param {string} [opts.wsRoot]
+ * @returns {Array<{ path: string, snippet: string }>}
+ */
+function getActiveFileSnippets(sessionId, { maxFiles = 3, maxLinesPerFile = 80, wsRoot } = {}) {
+  const sid = String(sessionId)
+  const fileMap = _sessionFileActivities.get(sid)
+  if (!fileMap || fileMap.size === 0) return []
+
+  const sortedFiles = Array.from(fileMap.entries())
+    .sort((a, b) => b[1].score - a[1].score || b[1].lastAccessed - a[1].lastAccessed)
+    .slice(0, maxFiles)
+
+  const maxLines = Math.min(Number(maxLinesPerFile) || 80, 80)
+  const snippets = []
+
+  for (const [filePath] of sortedFiles) {
+    try {
+      let resolved = filePath
+      if (wsRoot && !path.isAbsolute(resolved)) {
+        resolved = path.resolve(wsRoot, resolved)
+      }
+      if (!fs.existsSync(resolved)) continue
+
+      const stat = fs.statSync(resolved)
+      if (stat.isDirectory()) continue
+
+      const maxBytes = Math.min(stat.size, Math.max(4096, maxLines * 500))
+      let text = ''
+      if (maxBytes > 0) {
+        const buf = Buffer.alloc(maxBytes)
+        const fd = fs.openSync(resolved, 'r')
+        let bytesRead = 0
+        try {
+          bytesRead = fs.readSync(fd, buf, 0, maxBytes, 0)
+        } finally {
+          fs.closeSync(fd)
+        }
+        text = buf.toString('utf8', 0, bytesRead)
+      }
+      const lines = text.split(/\r?\n/).slice(0, maxLines)
+      const snippet = lines.join('\n')
+      snippets.push({
+        path: filePath,
+        snippet,
+      })
+    } catch {
+      // Tolerate file read errors gracefully
+    }
+  }
+
+  return snippets
+}
+
+module.exports = {
+  buildSessionContext,
+  recordFileActivity,
+  getActiveFileSnippets,
+}

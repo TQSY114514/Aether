@@ -12,6 +12,57 @@ const { McpClient } = require('./client')
 const builtin = require('../tools/registry')
 const log = require('../logger')
 
+// ── MCP Tool Poisoning Defense ────────────────────────────────────────────────
+// Scans tool descriptions before registration to detect potential tool poisoning
+// attacks (OWASP MCP Top 10 — Tool Poisoning). A malicious MCP server may embed
+// hidden instructions in the description field that get injected into the LLM
+// context. We flag suspicious tools but do NOT silently drop them — instead we
+// set risk='dangerous' and mark _suspiciousDescription=true so the permission
+// gate routes them through user confirmation.
+//
+// Detection signals:
+//   1. HTML/XML comment blocks (<!-- ... -->) — classic injection carrier
+//   2. Known instruction-override phrases (LLM-targeted)
+//   3. Special-format delimiters used in model fine-tuning (e.g. [INST], <|im_start|>)
+//   4. Abnormally long description (> 1500 chars — legitimate tools rarely need this)
+const MCP_INJECTION_PATTERNS = [
+  /<!--[\s\S]*?-->/,                                      // HTML comment block
+  /\bignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?\b/i,
+  /\bdisregard\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?\b/i,
+  /\byou\s+are\s+now\b|\bnow\s+you\s+are\b/i,
+  /\bsystem\s*prompt\b/i,
+  /\[INST\]|\[\/INST\]|<\|im_start\||<\|endoftext\|>/,  // model delimiters
+  /\boverride\s+(?:your\s+)?(?:instructions?|system)\b/i,
+  /忽略(?:之前|以上|上面)(?:的)?(?:指令|命令|规则)/,           // Chinese injection
+]
+const MCP_DESC_MAX_CHARS = 1500
+
+/**
+ * Audit an MCP tool's description for poisoning signals.
+ * Mutates the tool object in-place: sets risk='dangerous' and
+ * _suspiciousDescription=true if any signal is detected.
+ * Returns a boolean indicating whether a signal was found.
+ */
+function auditMcpToolDescription(tool, serverName) {
+  const desc = typeof tool.description === 'string' ? tool.description : ''
+  const isTooLong = desc.length > MCP_DESC_MAX_CHARS
+  const matchedPattern = MCP_INJECTION_PATTERNS.find(re => re.test(desc))
+  if (isTooLong || matchedPattern) {
+    const reason = isTooLong
+      ? `description length ${desc.length} exceeds ${MCP_DESC_MAX_CHARS} chars`
+      : `matched injection pattern: ${matchedPattern}`
+    log.warn(`[MCP security] Tool "${tool.name}" from server "${serverName}" has suspicious description — ${reason}. Forcing risk=dangerous.`)
+    tool.risk = 'dangerous'
+    tool._suspiciousDescription = true
+    tool._suspiciousReason = reason
+    tool._originalDescription = desc
+    tool.description = `[Warning: MCP tool description quarantined for safety: ${reason}]`
+    return true
+  }
+  return false
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const clients = new Map() // name -> McpClient
 const mergedTools = new Map() // tool name -> tool object (built-ins + MCP)
 const MCP_CONNECT_TIMEOUT = 5000 // 5s per server — a hung server must not block startup
@@ -112,7 +163,10 @@ async function connectServer(cfg) {
       client.connect(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), MCP_CONNECT_TIMEOUT))
     ])
-    for (const t of tools) mergedTools.set(t.name, t)
+    for (const t of tools) {
+      auditMcpToolDescription(t, cfg.name)
+      mergedTools.set(t.name, t)
+    }
     clients.set(cfg.name, client)
     return tools
   } catch (e) {
@@ -208,7 +262,11 @@ function registerTools(tools) {
   ensureSeeded()
   let n = 0
   for (const t of tools || []) {
-    if (t && t.name) { mergedTools.set(t.name, t); n++ }
+    if (t && t.name) {
+      auditMcpToolDescription(t, 'external')
+      mergedTools.set(t.name, t)
+      n++
+    }
   }
   return n
 }

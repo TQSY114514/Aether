@@ -34,6 +34,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fs: {
     listDir: (dir, sessionId) => ipcRenderer.invoke('fs:list-dir', dir, sessionId),
   },
+  project: {
+    list: () => ipcRenderer.invoke('project:list'),
+    create: (data) => ipcRenderer.invoke('project:create', data),
+    open: (id) => ipcRenderer.invoke('project:open', id),
+    update: (id, data) => ipcRenderer.invoke('project:update', id, data),
+    delete: (id) => ipcRenderer.invoke('project:delete', id),
+    current: () => ipcRenderer.invoke('project:current'),
+    pickDirectory: () => ipcRenderer.invoke('project:pickDirectory'),
+    onOpened: (callback) => subscribe('project:opened', callback),
+  },
   agent: {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
     setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', typeof opts === 'string' ? { dir: opts } : opts),
@@ -139,6 +149,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     askSide: (params) => ipcRenderer.invoke('chat:ask-side', params),
     stopSide: (sessionId) => ipcRenderer.invoke('chat:stop-side', sessionId),
     onSideChunk: (cb) => subscribe('chat:side-chunk', cb),
+    fork: (params) => ipcRenderer.invoke('chat:fork', params),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),
@@ -155,6 +166,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     objectiveRun: (data) => ipcRenderer.invoke('arena:objective-run', data),
     objectiveStop: (data) => ipcRenderer.invoke('arena:objective-stop', data),
     autoRoute: (params) => ipcRenderer.invoke('arena:auto-route', params),
+    applyPatch: (data) => ipcRenderer.invoke('arena:apply-patch', data),
     onModelDone: (cb) => subscribe('arena:model-done', cb),
   },
   mcp: {

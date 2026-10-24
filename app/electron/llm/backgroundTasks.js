@@ -963,6 +963,7 @@ function restorePendingTasks(db) {
   setDatabase(db)
   let resumed = 0
   for (const r of (db.listAgentTasks(200) || [])) {
+    if (r.kind === 'subagent') continue
     const st = normalizeTaskStatus(r.status)
     if (st !== 'queued' && st !== 'running' && st !== 'plan' && st !== 'paused') continue
     if (tasks.has(r.id)) continue

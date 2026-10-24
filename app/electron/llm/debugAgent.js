@@ -80,9 +80,9 @@ function runCommand(cmd, cwd, timeoutMs) {
 }
 
 // Main entry: run the debug loop.
-// Args: { provider, model, signal, sessionId, userMessage?, onStatus, onFix }
+// Args: { provider, model, signal, sessionId, userMessage?, onStatus, onFix, maxCycles? }
 // Returns: { success, cycles, finalError?, summary, cycleResults, analysis? }
-async function runDebugLoop({ provider, model, signal, sessionId, userMessage, onStatus, onFix }) {
+async function runDebugLoop({ provider, model, signal, sessionId, userMessage, onStatus, onFix, maxCycles }) {
   const { getWorkspaceRoot, checkCommand } = require('../tools/sandbox')
   const root = getWorkspaceRoot(sessionId)
   if (!root) return { success: false, cycles: 0, error: 'no workspace configured' }
@@ -96,9 +96,10 @@ async function runDebugLoop({ provider, model, signal, sessionId, userMessage, o
   if (!guard.ok) return { success: false, cycles: 0, error: guard.reason }
 
   const cycleResults = []
+  const effectiveMaxCycles = (typeof maxCycles === 'number' && maxCycles > 0) ? maxCycles : MAX_CYCLES
 
-  for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
-    try { onStatus?.({ kind: 'debug_cycle', text: `🔧 调试循环 ${cycle}/${MAX_CYCLES}: 运行 ${testCmd}...` }) } catch {}
+  for (let cycle = 1; cycle <= effectiveMaxCycles; cycle++) {
+    try { onStatus?.({ kind: 'debug_cycle', text: `🔧 调试循环 ${cycle}/${effectiveMaxCycles}: 运行 ${testCmd}...` }) } catch {}
 
     let result
     try { result = await runCommand(testCmd, root, TEST_TIMEOUT_MS) }
@@ -113,15 +114,18 @@ async function runDebugLoop({ provider, model, signal, sessionId, userMessage, o
     let analysis
     try {
       onStatus?.({ kind: 'debug_analyze', text: '🔍 分析错误...' })
-      analysis = await analyzeError({ provider, model, errorOutput, projectType, testCmd, cycle, maxCycles: MAX_CYCLES, signal })
+      analysis = await analyzeError({ provider, model, errorOutput, projectType, testCmd, cycle, maxCycles: effectiveMaxCycles, signal })
     } catch (e) {
       analysis = { description: `analysis failed: ${e.message}`, fix: null }
     }
     if (!analysis.fix) return { success: false, cycles: cycle, finalError: errorOutput.slice(0, 200), cycleResults, analysis }
     try { onFix?.({ cycle, description: analysis.description, files: analysis.files }) } catch {}
+    if (cycle >= effectiveMaxCycles) {
+      return { success: false, cycles: cycle, summary: analysis.description || `调试分析完成 (第 ${cycle} 轮)`, cycleResults, analysis }
+    }
   }
 
-  return { success: false, cycles: MAX_CYCLES, finalError: `达到最大调试轮数 (${MAX_CYCLES})`, cycleResults }
+  return { success: false, cycles: effectiveMaxCycles, finalError: `达到最大调试轮数 (${effectiveMaxCycles})`, cycleResults }
 }
 
 async function analyzeError({ provider, model, errorOutput, projectType, testCmd, cycle, maxCycles, signal }) {

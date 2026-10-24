@@ -390,7 +390,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
       )}
 
       {/* Files list */}
-      <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+      <div className="max-h-52 overflow-y-auto divide-y overscroll-y-contain" style={{ borderColor: 'var(--border)' }}>
         {files.map((file: FileChangeEntry) => {
           const isExpanded = !!expandedFiles[file.path]
           const { dir, fileName } = formatPath(file.path)

@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield, PanelLeft } from 'lucide-react'
+import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, FolderOpen, Loader2, History, ChevronDown, Wrench, CheckCircle2, XCircle, AlertTriangle, RotateCcw, TerminalSquare, Shield, PanelLeft, FolderKanban, Filter } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
+import { stripChannelMarkers } from '@/utils/markdown'
 import FileTree from './FileTree'
 import HoverMarquee from '@/components/ui/HoverMarquee'
+import QuickControlDeck from './QuickControlDeck'
 
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
@@ -73,6 +75,9 @@ export default function Sidebar() {
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const loadSessions = useStore((s) => s.loadSessions)
+  const activeProject = useStore((s) => s.activeProject)
+  const projectScopeFilter = useStore((s) => s.projectScopeFilter)
+  const toggleProjectScope = useStore((s) => s.toggleProjectScope)
   const { confirm } = useUI()
 
   const [renamingId, setRenamingId] = useState<number | null>(null)
@@ -81,15 +86,23 @@ export default function Sidebar() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; session: Session } | null>(null)
   const lowerQuery = searchQuery.toLowerCase()
 
+  useEffect(() => {
+    useStore.getState().loadProjects?.()
+  }, [])
+
   const filteredSessions = useMemo(() => {
     // Show sessions that have had at least one message.
     // Sessions with placeholder titles are kept visible if they have messages —
     // the auto-title generation happens asynchronously after the first response,
     // so hiding them would make the chat disappear mid-conversation.
-    const withMessages = sessions.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingBySession[s.id])
+    let list = sessions
+    if (projectScopeFilter && activeProject) {
+      list = list.filter((s) => s.project_id === activeProject.id)
+    }
+    const withMessages = list.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingBySession[s.id])
     if (!lowerQuery) return withMessages
     return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
-  }, [sessions, lowerQuery])
+  }, [sessions, lowerQuery, projectScopeFilter, activeProject, streamingBySession])
   const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
 
   const handleDoubleClick = (session: Session) => {
@@ -107,7 +120,7 @@ export default function Sidebar() {
     if (!title) return true
     return title === '新会话' || title === '新对话' || title === 'New Chat'
   }
-  const previewOf = (text: string) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
+  const previewOf = (text: string) => stripChannelMarkers(text || '').replace(/\s+/g, ' ').trim().slice(0, 32)
 
   // Close context menu on outside click
   useEffect(() => {
@@ -215,6 +228,34 @@ export default function Sidebar() {
           )}
         </div>
       </div>
+      {activeProject && (
+        <div className="px-2 pb-2 shrink-0">
+          <div
+            className="flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs bg-[var(--bg-secondary)]"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FolderKanban size={13} className="text-[var(--accent)] shrink-0" />
+              <span className="font-medium truncate text-[var(--text-primary)]" title={activeProject.root_path}>
+                {activeProject.name}
+              </span>
+            </div>
+            <button
+              onClick={toggleProjectScope}
+              className={`px-1.5 py-0.5 rounded-md transition-colors text-[11px] flex items-center gap-1 shrink-0 outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
+                projectScopeFilter
+                  ? 'text-[var(--accent)] bg-[var(--content-bg)] border border-[var(--border)] shadow-xs hover:bg-[var(--bg-secondary)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/60'
+              }`}
+              title={t('sidebar.project_scope.tooltip', projectScopeFilter ? '当前项目会话（点击显示全部）' : '全部会话（点击仅显示当前项目）')}
+              aria-label={t('sidebar.project_scope.tooltip', '切换项目会话筛选')}
+            >
+              <Filter size={11} />
+              <span className="text-[10px] font-mono">{projectScopeFilter ? t('sidebar.project_scope.project', 'Project') : t('sidebar.project_scope.all', 'All')}</span>
+            </button>
+          </div>
+        </div>
+      )}
       <FileTree />
       <div className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
         {groups.length === 0 && (
@@ -332,6 +373,7 @@ export default function Sidebar() {
         )}
         <AgentHistory />
       </div>
+      <QuickControlDeck />
       <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />

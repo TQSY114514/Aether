@@ -185,9 +185,12 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       controller.signal.addEventListener('abort', onOuterAbort, { once: true })
       try {
         const messages = [{ role: 'user', content }]
+        const patchGuideline = 'If your solution proposes file modifications, format them with explicit file paths and Aider-style SEARCH/REPLACE blocks (<<<<<<< SEARCH ... ======= ... >>>>>>> REPLACE) or unified diffs so the user can review and apply them directly.'
         if (personaId) {
           const p = db.getPersona(personaId)
-          if (p) messages.unshift({ role: 'system', content: p.prompt })
+          if (p) messages.unshift({ role: 'system', content: `${p.prompt}\n\n${patchGuideline}` })
+        } else {
+          messages.unshift({ role: 'system', content: patchGuideline })
         }
         const { content: answer, usage } = await completeChatMessage({
           provider: { id: m.provider_id, api_url: m.api_url, api_key: m.api_key, api_format: 'openai' },
@@ -518,6 +521,39 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       return { ok: true }
     }
     return { ok: false, error: 'Run not found or already completed' }
+  })
+  ipcMain.handle('arena:apply-patch', async (_e, data) => {
+    const content = data?.content
+    const sessionId = data?.sessionId
+    const cwd = data?.cwd
+    if (!content || typeof content !== 'string') {
+      return { ok: false, error: 'empty_content' }
+    }
+    const { getWorkspaceRoot } = require('../tools/sandbox')
+    let wsRoot = cwd
+    if (!wsRoot && sessionId != null) {
+      const cfg = db.getSessionConfig(sessionId)
+      if (cfg && cfg.workspace) wsRoot = cfg.workspace
+    }
+    if (!wsRoot) {
+      wsRoot = getWorkspaceRoot(sessionId) || getWorkspaceRoot()
+    }
+    if (!wsRoot || !require('fs').existsSync(wsRoot)) {
+      return { ok: false, error: 'no_workspace_found' }
+    }
+
+    try {
+      const { extractAndApplyPatches } = require('../llm/objectiveArena')
+      const result = extractAndApplyPatches(wsRoot, content)
+      return {
+        ok: Boolean(result.ok && result.appliedCount > 0),
+        appliedCount: result.appliedCount,
+        filesModified: result.filesModified,
+        conflicts: result.conflicts,
+      }
+    } catch (err) {
+      return { ok: false, error: err.message }
+    }
   })
 }
 

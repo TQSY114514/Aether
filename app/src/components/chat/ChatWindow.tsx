@@ -8,142 +8,13 @@ import MessageNav from './MessageNav'
 import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert, Star, Check } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { arenaRoundToMarkdown, downloadText } from '@/utils/arenaExport'
+import ArenaResultsDeck from '@/components/arena/ArenaResultsDeck'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCallBlock from './ToolCallBlock'
 import TaskCard from './TaskCard'
 import AgentRunTimeline from './AgentRunTimeline'
 import AgentTimeline from './AgentTimeline'
 import ChatBackgroundPattern from './ChatBackgroundPattern'
-
-// Arena results display component with streaming-like animation
-function ArenaResults({ results, voted, winnerId, onVote, t, renderMarkdown, prompt }: {
-  results: { model_id: number; model_name: string; provider_name: string; content: string; variant?: string | null; latency_ms?: number; usage?: { total_tokens: number; cost: number } }[]
-  voted: boolean
-  winnerId: number | null
-  onVote: (winner: { model_id: number; model_name: string }, losers: { model_id: number; model_name: string }[]) => Promise<void>
-  t: (key: string) => string
-  renderMarkdown: (md: string) => string
-  prompt: string
-}) {
-  const [revealed, setRevealed] = useState(new Set<string>())
-  const [done, setDone] = useState(false)
-
-  // 本轮对比摘要:最快 / 最便宜(基于每个结果的 latency_ms / usage.cost)
-  const withLatency = results.filter((r) => r.latency_ms != null)
-  const withCost = results.filter((r) => r.usage?.cost != null && r.usage.cost > 0)
-  const fastest = withLatency.length >= 2 ? withLatency.reduce((a, b) => (a.latency_ms! < b.latency_ms! ? a : b)) : null
-  const cheapest = withCost.length >= 2 ? withCost.reduce((a, b) => (a.usage!.cost < b.usage!.cost ? a : b)) : null
-
-  useEffect(() => {
-    // Reset when new results arrive
-    setRevealed(new Set())
-    setDone(false)
-  }, [results.length])
-
-  useEffect(() => {
-    if (results.length === 0) return
-    if (done) return
-
-    const modelIds = results.map(r => `${r.model_id}::${r.variant || 'default'}`)
-    const toReveal = modelIds.filter(id => !revealed.has(id))
-    if (toReveal.length === 0) {
-      setDone(true)
-      return
-    }
-
-    // Reveal one at a time with short delay
-    let idx = 0
-    const interval = setInterval(() => {
-      if (idx >= toReveal.length) {
-        clearInterval(interval)
-        setDone(true)
-        return
-      }
-      setRevealed(prev => new Set([...prev, toReveal[idx]]))
-      idx++
-    }, 200)
-
-    return () => clearInterval(interval)
-  }, [results.length, revealed, done])
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>🏟 {t('chat.arena.result')}</div>
-        {results.length > 0 && (
-          <button onClick={() => {
-            try {
-              // 导出本轮对比报告(Markdown)
-              const md = arenaRoundToMarkdown(prompt, results)
-              downloadText(`aether-arena-${Date.now()}.md`, md, 'text/markdown')
-            } catch {}
-          }}
-            className="text-[10px] px-2 py-1 rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-            📄 导出报告
-          </button>
-        )}
-      </div>
-      {(fastest || cheapest) && (
-        <div className="flex items-center flex-wrap gap-3 rounded-lg border px-3 py-1.5 text-[11px]" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)', color: 'var(--text-secondary)' }}>
-          {fastest && <span>最快 <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{fastest.model_name}</span> · {fastest.latency_ms}ms</span>}
-          {cheapest && <span>最便宜 <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{cheapest.model_name}</span> · ${cheapest.usage!.cost.toFixed(4)}</span>}
-        </div>
-      )}
-      {results.map((r) => {
-        // 多温度对比时同 model 有多个 variant, key 必须含 variant 否则 reveal 冲突
-        const key = `${r.model_id}::${r.variant || 'default'}`
-        const isRevealed = revealed.has(key)
-        const isWinner = voted && r.model_id === winnerId
-        const isLoser = voted && r.model_id !== winnerId
-        return (
-          <div key={key} className="border rounded-lg overflow-hidden animate-blur-fade"
-            style={{
-              borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
-              opacity: isLoser ? 0.5 : isRevealed ? 1 : 0,
-              backgroundColor: isLoser ? 'var(--bg-secondary)' : undefined,
-              maxHeight: isLoser ? 120 : undefined,
-              overflow: isLoser ? 'hidden' : undefined,
-              transform: isLoser ? 'scale(0.98)' : undefined,
-              filter: isLoser ? 'grayscale(0.3)' : undefined,
-            }}>
-            <div className="px-3 py-2 border-b flex items-center justify-between text-sm font-medium" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-              <span style={{ color: isWinner ? 'var(--success)' : isLoser ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                {r.model_name}{r.variant ? <span className="text-[10px] ml-1.5 font-normal" style={{ color: 'var(--text-muted)' }}>{r.variant}</span> : null}
-              </span>
-              <span className="text-[10px] flex items-center gap-1.5 shrink-0" style={{ color: 'var(--text-muted)' }}>
-                <span>{r.provider_name}</span>
-                {r.latency_ms != null && <span className="tabular-nums">{r.latency_ms}ms</span>}
-                {r.usage?.total_tokens != null && <span className="tabular-nums">{r.usage.total_tokens} tok</span>}
-                {r.usage?.cost != null && r.usage.cost > 0 && <span className="tabular-nums">${r.usage.cost.toFixed(4)}</span>}
-              </span>
-            </div>
-            <div className="p-3 text-sm leading-relaxed max-h-60 overflow-y-auto">
-              <div className="mc" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }} />
-            </div>
-            {!voted && (
-              <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                <button onClick={() => onVote(
-                  { model_id: r.model_id, model_name: r.model_name },
-                  results.filter(x => x.model_id !== r.model_id).map(x => ({ model_id: x.model_id, model_name: x.model_name }))
-                )}
-                  disabled={!done}
-                  title={done ? t('chat.arena.vote') : t('chat.arena.wait_all')}
-                  className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-lg border bg-[var(--content-bg)] hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--content-bg)] disabled:hover:border-[var(--border)]" style={{ borderColor: 'var(--border)' }}>
-                  <Star size={12} /> {t('chat.arena.vote')}
-                </button>
-              </div>
-            )}
-            {isWinner && voted && (
-              <div className="px-3 py-2 border-t text-xs flex items-center gap-1" style={{ borderColor: 'var(--success)', backgroundColor: 'rgba(34,197,94,0.08)', color: 'var(--success)' }}><Check size={12} /> {t('chat.arena.voted')}</div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 const EMPTY_ARRAY: any[] = []
 
@@ -665,15 +536,7 @@ export default function ChatWindow() {
             </div>
           ))}
           {arenaResults.length > 0 && arenaResultsSessionId === currentSessionId && (
-            <ArenaResults
-              results={arenaResults}
-              voted={arenaVoted}
-              winnerId={arenaVoteWinnerId}
-              onVote={arenaVote}
-              t={t}
-              renderMarkdown={renderMarkdown}
-              prompt={messages.filter(m => m.role === 'user').pop()?.content || ''}
-            />
+            <ArenaResultsDeck results={arenaResults} voted={arenaVoted} winnerId={arenaVoteWinnerId} onVote={arenaVote} renderMarkdown={renderMarkdown} prompt={messages.filter(m => m.role === 'user').pop()?.content || ''} sessionId={currentSessionId} />
           )}
           {arenaPending > 0 && arenaResultsSessionId === currentSessionId && (
             <div className="text-[11px] px-1 py-1 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>

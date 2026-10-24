@@ -1,10 +1,39 @@
 const { apiLimit } = require('./concurrency')
 
-// Stream/batch helper to separate <think>...</think>, <thought>...</thought>, and <scratchpad>...</scratchpad> tags from model content
+// Reasoning markers seen in the wild. Providers either wrap a leg of the answer
+// in an XML-ish tag (<think>/<thought>/<scratchpad>) or emit native channel
+// markers (`<|channel>thought … <channel|>`, DeepSeek-style). Both are split out
+// of the visible answer: a raw special token must never reach the store or the
+// DOM. Only *reasoning* channel names are listed — an unknown channel name is
+// left intact rather than risk swallowing real answer text.
+const REASONING_PAIRS = [
+  { open: '<|channel>thought', close: '<channel|>' },
+  { open: '<|channel>analysis', close: '<channel|>' },
+  { open: '<|channel>reasoning', close: '<channel|>' },
+  { open: '<|channel>commentary', close: '<channel|>' },
+  { open: '<think>', close: '</think>' },
+  { open: '<thought>', close: '</thought>' },
+  { open: '<scratchpad>', close: '</scratchpad>' },
+]
+const MAX_MARKER_LEN = REASONING_PAIRS.reduce((m, p) => Math.max(m, p.open.length), 0)
+
+// Longest tail of `buf` that is still a proper prefix of one of `candidates` —
+// those bytes are withheld so a marker split across chunk boundaries is not
+// emitted as visible text. Returns 0 when the tail cannot become a marker.
+function partialTailLen(buf, candidates) {
+  const lower = buf.toLowerCase()
+  const max = Math.min(MAX_MARKER_LEN, lower.length)
+  for (let len = max; len > 0; len--) {
+    const tail = lower.slice(lower.length - len)
+    if (candidates.some((c) => c.startsWith(tail))) return len
+  }
+  return 0
+}
+
 class ThinkTagExtractor {
   constructor() {
     this.inThink = false
-    this.currentTag = ''
+    this.currentClose = ''
     this.buf = ''
   }
   process(chunk) {
@@ -13,43 +42,50 @@ class ThinkTagExtractor {
     this.buf += chunk
     while (this.buf.length > 0) {
       if (!this.inThink) {
-        const match = this.buf.match(/<(think|thought|scratchpad)>/i)
-        if (!match) {
-          const m = this.buf.match(/<[a-z]{0,10}$/i)
-          if (m && m.index > 0) {
-            content += this.buf.slice(0, m.index)
-            this.buf = this.buf.slice(m.index)
-          } else if (!m) {
-            content += this.buf
-            this.buf = ''
+        const lower = this.buf.toLowerCase()
+        let best = null
+        for (const pair of REASONING_PAIRS) {
+          let searchFrom = 0
+          while (searchFrom < lower.length) {
+            const idx = lower.indexOf(pair.open, searchFrom)
+            if (idx === -1) break
+            const afterIdx = idx + pair.open.length
+            if (pair.open.startsWith('<|channel>')) {
+              if (afterIdx >= lower.length) {
+                break
+              }
+              const nextChar = lower[afterIdx]
+              if (/[a-z0-9_]/i.test(nextChar)) {
+                searchFrom = afterIdx
+                continue
+              }
+            }
+            if (best === null || idx < best.idx) best = { idx, pair }
+            break
           }
-          break
-        } else {
-          const startIdx = match.index
-          content += this.buf.slice(0, startIdx)
-          this.buf = this.buf.slice(startIdx + match[0].length)
-          this.inThink = true
-          this.currentTag = match[1].toLowerCase()
         }
+        if (!best) {
+          const hold = partialTailLen(this.buf, REASONING_PAIRS.map((p) => p.open))
+          content += this.buf.slice(0, this.buf.length - hold)
+          this.buf = hold ? this.buf.slice(this.buf.length - hold) : ''
+          break
+        }
+        content += this.buf.slice(0, best.idx)
+        this.buf = this.buf.slice(best.idx + best.pair.open.length)
+        this.inThink = true
+        this.currentClose = best.pair.close
       } else {
-        const closeTag = `</${this.currentTag}>`
-        const endIdx = this.buf.toLowerCase().indexOf(closeTag)
-        if (endIdx === -1) {
-          const m = this.buf.match(/<\/[a-z]{0,10}$/i)
-          if (m && m.index > 0) {
-            reasoning += this.buf.slice(0, m.index)
-            this.buf = this.buf.slice(m.index)
-          } else if (!m) {
-            reasoning += this.buf
-            this.buf = ''
-          }
+        const idx = this.buf.toLowerCase().indexOf(this.currentClose)
+        if (idx === -1) {
+          const hold = partialTailLen(this.buf, [this.currentClose])
+          reasoning += this.buf.slice(0, this.buf.length - hold)
+          this.buf = hold ? this.buf.slice(this.buf.length - hold) : ''
           break
-        } else {
-          reasoning += this.buf.slice(0, endIdx)
-          this.buf = this.buf.slice(endIdx + closeTag.length)
-          this.inThink = false
-          this.currentTag = ''
         }
+        reasoning += this.buf.slice(0, idx)
+        this.buf = this.buf.slice(idx + this.currentClose.length)
+        this.inThink = false
+        this.currentClose = ''
       }
     }
     return { content, reasoning }
@@ -73,6 +109,21 @@ function extractThinkTags(text) {
     const reasoning = thinkMatch[2].trim()
     const content = text.replace(/<(think|thought|scratchpad)>[\s\S]*?<\/\1>/i, '').trim()
     return { content, reasoning }
+  }
+  const channelMatch = text.match(/<\|channel>\s*(thought|analysis|reasoning|commentary)\b([\s\S]*?)<channel\|>/i)
+  if (channelMatch) {
+    const reasoning = channelMatch[2].trim()
+    const content = text.replace(/<\|channel>\s*(?:thought|analysis|reasoning|commentary)\b[\s\S]*?<channel\|>/gi, '').trim()
+    return { content, reasoning }
+  }
+  // An empty marker pair (`<|channel>thought<channel|>`) or a stray marker with no
+  // partner: drop the tokens, keep the answer text around them.
+  if (text.indexOf('<|channel>') !== -1 || text.indexOf('<channel|>') !== -1) {
+    const content = text
+      .replace(/<\|channel>\s*[a-zA-Z]*/gi, '')
+      .replace(/<channel\|>/gi, '')
+      .trim()
+    return { content, reasoning: '' }
   }
   return { content: text, reasoning: '' }
 }

@@ -139,6 +139,25 @@
 4. **Web 视觉与终端双重验证 (Autonomous Validation)**
    - 赋予 Agent 操作 headless 浏览器的能力（查看页面渲染与控制台报错），真正做到“写代码 -> 跑起来 -> 看结果 -> 自动修”的闭环。
 
+## 2026-10 外部战略评审（Kimi 吸收与攻坚规划）
+
+> 依据 2026-10-24 外部 AI 深度评审（Kimi），聚焦「传播信任、场景锋利度、生态冷启动」三大破局点。
+
+### 1. 核心定位与坐标锁定
+- **坚决不挤框架编排**（LangChain/Dify）：Aether 是桌面级 Workbench，非云端流式框架。
+- **坚决不追完整 IDE**（Cursor/Windsurf）：做独立 Workbench + Agent Runtime，不打劣势仗。
+- **差异化坐标**：**"多模型证据驱动 + 本地数据所有权 + Windows 可信 Agent 工作台"**。
+
+### 2. 优先级再校准（P0/P1/P2 重排）
+
+| 优先级 | 任务方向 | 具体落地项 | 状态 |
+|---|---|---|---|
+| **P0** | **竞技场评测闭环与证据路由** | ① 胜者补丁一键落盘（`ArenaResultsDeck` + `arena:apply-patch`）<br/>② 3 套开箱即用 Starter Benchmark（TS修复、单测自愈、重构基准）<br/>③ 置信度感知 ELO（`±σ (n=X)` 与证据不足回退提示）<br/>④ 报告与胜率卡片一键导出 | ①已落地<br/>②推进中<br/>③推进中<br/>④已落地 |
+| **P1** | **编码深度最短路径（从 P3 提升至 P1）** | ① 原 Roadmap P3-1 提前：Tree-sitter/AST Repo Map 项目骨架生成<br/>② 任务级改动 Patch Dry-run 预检与测试验证闭环（依托 4 层权限 `auto_review` TDD 自愈）<br/>③ 轻量 VS Code Bridge（基于 `aether --mode rpc` 暴露状态与审批） | 规划中 |
+| **P1** | **可信 Windows Agent 工作台** | ① 坚守 Windows 专注约束（不做跨平台，不买高昂签名）<br/>② “未签名但可验证”资产化：CI 自动生成 SHA-256、VirusTotal 报告链接、SLSA 出处证明<br/>③ Windows 本地沙箱智能引导：一键识别 Docker Desktop / WSL2 / Job Object 并提供无痛 Bootstrap 指引 | 规划中 |
+| **P2** | **生态冷启动：10 个开箱即用 Presets** | ① 内置 10 个工业级高水准预置单元（DeepSeek/OpenRouter/Ollama、Vitest/Jest 修复、Pytest 修复、Git 提交前秘密扫描、Playwright 页面审计等）<br/>② 附带权限声明、示例任务与基准成功率，避免空市场尴尬 | 规划中 |
+| **P2** | **可对外证明的质量指标与叙事** | ① 建立本地可复现效能指标（单改动成本、单测通过率、Diff 采纳率）<br/>② README 首屏重塑：从“功能超市”改为 45s 工作流证明（盲测 → 投票 → 报告 → 赢家一键修代码） | 规划中 |
+
 ## 明确不做（用户约束 + 评审共识）
 
 - ❌ 跨平台（macOS / Linux）— 只搞 Windows，官方定位不变

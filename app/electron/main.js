@@ -100,10 +100,11 @@ const { registerCronHandlers } = require('./ipc/cron.handler')
 const { registerFlagsHandlers } = require('./ipc/flags.handler')
 const { registerLearningHandlers } = require('./ipc/learning.handler')
 const { registerRecipeHandlers } = require('./ipc/recipe.handler')
+const { registerProjectHandlers } = require('./ipc/project.handler')
 const { initScheduler } = require('./cron/scheduler')
 
 const mcpManager = require('./mcp/manager')
-const { setWorkspaceRoot } = require('./tools/sandbox')
+const { setWorkspaceRoot, setActiveProjectRoot } = require('./tools/sandbox')
 const localGateway = require('./llm/localGateway')
 const featureFlags = require('./featureFlags')
 
@@ -361,6 +362,7 @@ function setupIpcHandlers() {
   registerFlagsHandlers(ipcMain, db)
   registerLearningHandlers(ipcMain, db)
   registerRecipeHandlers(ipcMain)
+  registerProjectHandlers(ipcMain, db, () => mainWindow?.webContents)
 
   // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──
   try {
@@ -428,6 +430,10 @@ app.whenReady().then(async () => {
     (async () => {
       try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) }
       catch (e) { log.warn('workspace root init failed:', e.message) }
+    })(),
+    (async () => {
+      try { const proj = typeof db.getActiveProject === 'function' ? db.getActiveProject() : null; if (proj?.root_path) setActiveProjectRoot(proj.root_path) }
+      catch (e) { log.warn('active project root init failed:', e.message) }
     })(),
     (async () => {
       try { const { scanSkills } = require('./llm/skills'); scanSkills() }

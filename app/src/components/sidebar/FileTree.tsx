@@ -19,6 +19,7 @@ function baseName(p: string): string {
 
 export default function FileTree() {
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const activeProject = useStore((s) => s.activeProject)
   const [open, setOpen] = useState(false)
   const [root, setRoot] = useState<string | null>(null)
   const [cache, setCache] = useState<Map<string, FsEntry[]>>(new Map())
@@ -51,27 +52,36 @@ export default function FileTree() {
     setLoading(false)
   }
 
-  // Follow the workspace root of the current session (repo-root tracking).
+  // Follow the workspace root of the active project or current session (repo-root tracking).
   useEffect(() => {
     let cancelled = false
     setRoot(null)
     setCache(new Map())
     setExpanded({})
     setError(null)
-    window.electronAPI?.agent
-      ?.getWorkspace(currentSessionId ?? undefined)
-      .then((r) => {
-        if (!cancelled && r) {
-          setRoot(r)
-          loadDir(r)
+    const resolveRoot = async () => {
+      try {
+        const r = await window.electronAPI?.agent?.getWorkspace(currentSessionId ?? undefined)
+        if (!cancelled) {
+          const finalRoot = r || activeProject?.root_path || null
+          if (finalRoot) {
+            setRoot(finalRoot)
+            loadDir(finalRoot)
+          }
         }
-      })
-      .catch(() => {})
+      } catch {
+        if (!cancelled && activeProject?.root_path) {
+          setRoot(activeProject.root_path)
+          loadDir(activeProject.root_path)
+        }
+      }
+    }
+    resolveRoot()
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSessionId])
+  }, [currentSessionId, activeProject?.root_path])
 
   // Close the context menu on any outside click.
   useEffect(() => {

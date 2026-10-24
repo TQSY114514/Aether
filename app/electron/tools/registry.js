@@ -4,6 +4,20 @@ const path = require('path')
 const { spawn, spawnSync } = require('child_process')
 const { runCommand, runCommandSync } = require('./exec')
 const { checkWritePath, checkCommand, isInsideWorkspace, getWorkspaceRoot } = require('./sandbox')
+const { normalizeAgentMode } = require('../llm/toolLoopUtils')
+
+function isWorkspaceAskMode(mode) {
+  const norm = normalizeAgentMode(mode)
+  return norm === 'workspace' || mode === 'ask'
+}
+function isUnrestrictedMode(mode) {
+  const norm = normalizeAgentMode(mode)
+  return norm === 'unrestricted' || mode === 'yolo'
+}
+function isReadOnlyMode(mode) {
+  const norm = normalizeAgentMode(mode)
+  return norm === 'explore' || mode === 'plan' || mode === 'review'
+}
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
 const { checkSSRF, checkSSRFHostname } = require('./ssrf')
 const { resolveBackendForMode } = require('../exec/resolveBackend')
@@ -50,9 +64,9 @@ async function globFiles(pattern, options = {}) {
 
 function guardWorkspaceRead(target, ctx, label) {
   const p = String(target || ''); if (!p) return
-  if (ctx?.agentMode !== 'ask') return
+  if (!isWorkspaceAskMode(ctx?.agentMode)) return
   if (isInsideWorkspace(p, ctx?.sessionId)) return
-  throw new Error(`读取被拒绝：${label} ${p} 位于工作区之外（当前为 ask 模式）。如确需读取该路径，请改用 ask_user 工具向用户说明并请求批准`)
+  throw new Error(`读取被拒绝：${label} ${p} 位于工作区之外（当前为 workspace 模式）。如确需读取该路径，请改用 ask_user 工具向用户说明并请求批准`)
 }
 
 function lspFullEnabled(ctx) {
@@ -319,7 +333,7 @@ const TOOLS = [
   // ── Write tools ─────────────────────────────────────────────────────
   { name: 'write_file', description: 'Write text to a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const c = String(args.content ?? ''); if (!p) throw new Error('path is required')
-    if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
+    if (!isUnrestrictedMode(ctx?.agentMode)) { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
     try {
       if (fs.existsSync(p)) {
         const stat = fs.statSync(p)
@@ -426,7 +440,7 @@ const TOOLS = [
   // ── Execution tools ─────────────────────────────────────────────────
   { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: async (args, ctx) => {
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
-    if (ctx?.agentMode !== 'yolo') { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
+    if (!isUnrestrictedMode(ctx?.agentMode)) { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
 
     // Pre-push gate: blocks a push that would carry credentials to a remote.
@@ -701,7 +715,7 @@ const TOOLS = [
       if (img.isEmpty()) return '[error: empty capture]'
       let filePath = null
       let allowDiskWrite = false
-      if (ctx?.agentMode !== 'plan' && ctx?.agentMode !== 'review') {
+      if (!isReadOnlyMode(ctx?.agentMode)) {
         if (ctx?.db && typeof ctx.db.getSetting === 'function') {
           try {
             if (ctx.db.getSetting('capability.filesystem') === 'allow') {
@@ -955,7 +969,7 @@ TOOLS.push(
     const asarPath = path.resolve(wsRoot, rawAsar)
     const outputDir = path.resolve(wsRoot, rawOut)
     guardWorkspaceRead(asarPath, ctx, 'asarPath')
-    if (ctx?.agentMode !== 'yolo') {
+    if (!isUnrestrictedMode(ctx?.agentMode)) {
       const g = checkWritePath(outputDir, ctx?.sessionId)
       if (!g.ok) throw new Error(g.reason)
     }
@@ -964,7 +978,7 @@ TOOLS.push(
       asarPath,
       outputDir,
       cwd: wsRoot,
-      checkDestination: ctx?.agentMode === 'yolo' ? null : (p) => checkWritePath(p, ctx?.sessionId),
+      checkDestination: isUnrestrictedMode(ctx?.agentMode) ? null : (p) => checkWritePath(p, ctx?.sessionId),
     })
     return res.formattedSummary || String(res)
   }},
@@ -983,7 +997,8 @@ TOOLS.push(
 // ── Exports ──────────────────────────────────────────────────────────────
 function getTool(name) { return TOOLS.find(t => t.name === name) }
 function toolsPayload(mode, opts = {}) {
-  const list = mode === 'plan' ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
+  const isExplore = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
+  const list = isExplore ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
   const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
   if (opts && opts.cacheStable === false) return raw
   try {

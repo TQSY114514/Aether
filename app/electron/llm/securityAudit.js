@@ -177,6 +177,30 @@ async function runHunterPass({ workspaceDir, ledger, hunterId = 'hunter_subagent
       re: /\b(eval|new\s+Function)\s*\(\s*([a-zA-Z0-9_$.]+)/,
       verification_method: 'execution',
     },
+    {
+      rule_id: 'AETHER-SEC-004',
+      category: 'prompt_injection_sink',
+      severity: 'medium',
+      title: 'User-controlled content appended to messages/prompt array without sanitization',
+      re: /(?:messages|prompt|context)\s*(?:\.push|\+=|=\s*\[\s*\.{3}|concat)\s*\(\s*(?:userInput|userMessage|userContent|req\.body|params\.|query\.)/,
+      verification_method: 'static_trace',
+    },
+    {
+      rule_id: 'AETHER-SEC-005',
+      category: 'mcp_tool_description_trust',
+      severity: 'medium',
+      title: 'MCP tool description passed into LLM context without poisoning check',
+      re: /tool\.description[\s\S]{0,120}(?:messages|prompt|context|push|content)/,
+      verification_method: 'static_trace',
+    },
+    {
+      rule_id: 'AETHER-SEC-006',
+      category: 'path_traversal',
+      severity: 'high',
+      title: 'Potential path traversal via unsanitized user-supplied path',
+      re: /(?:readFile|writeFile|readFileSync|writeFileSync|createReadStream|unlink)\s*\(\s*(?:path\.join|path\.resolve)?\s*\(?\s*(?:userPath|filePath|inputPath|req\.(?:body|params|query)|args\.[a-zA-Z_]+)\s*[+,)]/,
+      verification_method: 'static_trace',
+    },
   ]
 
   for (const entry of ledger.files_scanned || []) {

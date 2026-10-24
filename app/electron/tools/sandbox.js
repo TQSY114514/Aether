@@ -7,29 +7,44 @@ const electron = (() => { try { return require('electron') } catch { return null
 const app = (electron && typeof electron === 'object' && electron.app) ? electron.app : null
 
 let _workspaceRoot = null
+let _activeProjectRoot = null
 let _sessionWorkspaces = new Map()
 let _sessionShadowOrigins = new Map()
 
 function isDangerousRoot(p) {
   if (!p) return false
-  const norm = path.resolve(p).toLowerCase()
+  if (hasUnsafeWindowsPrefix(p)) return true
+  let clean = String(p)
+  if (clean.startsWith('\\\\?\\')) clean = clean.slice(4)
+  const norm = path.resolve(clean).toLowerCase()
   if (/^[a-z]:\\?$/i.test(norm) || norm === '/' || norm === '\\') return true
   const winDir = (process.env.WINDIR || 'C:\\Windows').toLowerCase()
   const progFiles = (process.env.ProgramFiles || 'C:\\Program Files').toLowerCase()
+  const progFilesX86 = (process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)').toLowerCase()
   if (norm === winDir || norm.startsWith(winDir + path.sep)) return true
   if (norm === progFiles || norm.startsWith(progFiles + path.sep)) return true
+  if (norm === progFilesX86 || norm.startsWith(progFilesX86 + path.sep)) return true
   return false
 }
 
 function setWorkspaceRoot(p) {
-  if (p && isDangerousRoot(p)) {
+  if (p && (hasUnsafeWindowsPrefix(p) || isDangerousRoot(p))) {
     throw new Error(`Forbidden workspace root: ${p} is a system-critical directory`)
   }
   _workspaceRoot = p ? path.resolve(p) : null
 }
+function setActiveProjectRoot(p) {
+  if (p && (hasUnsafeWindowsPrefix(p) || isDangerousRoot(p))) {
+    throw new Error(`Forbidden workspace root: ${p} is a system-critical directory`)
+  }
+  _activeProjectRoot = p ? path.resolve(p) : null
+}
+function getActiveProjectRoot() {
+  return _activeProjectRoot
+}
 function setWorkspaceRootForSession(sessionId, p) {
   if (p && String(p).trim()) {
-    if (isDangerousRoot(p)) {
+    if (hasUnsafeWindowsPrefix(p) || isDangerousRoot(p)) {
       throw new Error(`Forbidden workspace root: ${p} is a system-critical directory`)
     }
     _sessionWorkspaces.set(sessionId, path.resolve(p))
@@ -52,11 +67,26 @@ function setShadowOrigin(sessionId, origRoot) {
 function clearSessionWorkspaces() {
   _sessionWorkspaces.clear()
   _sessionShadowOrigins.clear()
+  _activeProjectRoot = null
 }
 
 function getWorkspaceRoot(sessionId) {
   if (sessionId && _sessionWorkspaces.has(sessionId)) return _sessionWorkspaces.get(sessionId)
-  return _workspaceRoot || defaultWorkspace()
+  if (sessionId) {
+    try {
+      const db = require('../database')
+      if (db && typeof db.getSession === 'function') {
+        const sess = db.getSession(sessionId)
+        if (sess && sess.project_id && typeof db.getProject === 'function') {
+          const proj = db.getProject(sess.project_id)
+          if (proj && proj.root_path && !isDangerousRoot(proj.root_path)) {
+            return path.resolve(proj.root_path)
+          }
+        }
+      }
+    } catch {}
+  }
+  return _activeProjectRoot || _workspaceRoot || defaultWorkspace()
 }
 
 /**
@@ -91,6 +121,7 @@ function isAuthorizedWorkspace(db, workspaceRoot) {
   for (const sw of _sessionWorkspaces.values()) {
     if (sw) allowed.add(path.resolve(sw))
   }
+  if (_activeProjectRoot) allowed.add(path.resolve(_activeProjectRoot))
   const settingWs = db && typeof db.getSetting === 'function' ? db.getSetting('agent_workspace_root') : null
   if (settingWs) allowed.add(path.resolve(settingWs))
   try {
@@ -101,6 +132,12 @@ function isAuthorizedWorkspace(db, workspaceRoot) {
           const cfg = JSON.parse(r.config)
           if (cfg && cfg.workspace) allowed.add(path.resolve(cfg.workspace))
         } catch {}
+      }
+      const projRows = db.prepare('SELECT root_path FROM project').all()
+      for (const p of projRows) {
+        if (p && p.root_path && !isDangerousRoot(p.root_path)) {
+          allowed.add(path.resolve(p.root_path))
+        }
       }
     }
   } catch {}
@@ -222,9 +259,9 @@ const DANGEROUS_EXTENSIONS = new Set([
 // \\?\ 原始路径前缀（绕过规范化）与 UNC \\server\share（本地工作区不含远程共享）。
 // 纯字符串判定，跨平台可用。
 function hasUnsafeWindowsPrefix(p) {
-  const s = String(p || '')
-  if (/^\\\\\?\\/.test(s)) return true
-  if (/^\\\\[^\\]+\\[^\\]+/.test(s)) return true
+  const s = String(p || '').replace(/\//g, '\\')
+  if (/^\\{2,}\?[\\/]/.test(s)) return true
+  if (/^\\{2,}[^\\]+/.test(s)) return true
   return false
 }
 
@@ -563,4 +600,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

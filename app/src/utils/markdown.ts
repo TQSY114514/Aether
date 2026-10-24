@@ -53,6 +53,20 @@ hljsCore.registerLanguage('ini', ini)
 hljsCore.registerLanguage('protobuf', proto)
 hljsCore.registerLanguage('lua', lua)
 
+// Some providers stream reasoning through native channel markers instead of the
+// <think> family seen below in the adapter: `<|channel>thought ... <channel|>`.
+// The adapter converts them during ingest for new turns; this strips leftovers
+// from already-stored history (and any marker that slips through a stream cut)
+// so the raw special tokens never reach the DOM.
+const CHANNEL_PAIR_RE = /<\|channel>\s*(?:thought|analysis|reasoning|commentary)\b[\s\S]*?<channel\|>/gi
+const CHANNEL_MARKER_RE = /<\|channel>\s*[a-zA-Z]*|<channel\|>/gi
+
+export function stripChannelMarkers(text: string): string {
+  if (!text) return text
+  if (!/<\|channel>|<channel\|>/i.test(text)) return text
+  return text.replace(CHANNEL_PAIR_RE, '').replace(CHANNEL_MARKER_RE, '')
+}
+
 let _hljs: typeof hljsCore | null = null
 let _hljsLoading: Promise<void> | null = null
 let _highlightVersion = 0
@@ -83,6 +97,8 @@ const _mdCache = new Map<string, { html: string; version: number }>()
 const MD_CACHE_SIZE = 16
 
 export function renderMarkdown(text: string): string {
+  if (!text) return ''
+  text = stripChannelMarkers(text)
   if (!text) return ''
   const cached = _mdCache.get(text)
   if (cached && cached.version === _highlightVersion) return cached.html

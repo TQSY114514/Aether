@@ -65,6 +65,9 @@ class HookRunResult {
 // In-memory cache of loaded hook modules: hookType -> Map(name -> fn)
 let _jsHooks = new Map()
 
+// Programmatic in-memory hooks: hookType -> Map(name -> fn)
+let _programmaticHooks = new Map()
+
 // Shell hook cache: hookType -> Map(name -> scriptPath)
 let _shellHooks = new Map()
 
@@ -113,13 +116,26 @@ function scanHooks() {
 // Run all JS hooks of a given type. If any throws, the error propagates (used by
 // PreToolUse to block execution). Non-PreToolUse hooks never block.
 async function runJsHooks(type, ctx) {
-  if (!_jsHooks.has(type)) return
-  for (const [name, fn] of _jsHooks.get(type)) {
-    try {
-      await fn(ctx)
-    } catch (e) {
-      log.warn(`hook ${type}.${name} threw: ${e.message}`)
-      if (type === 'PreToolUse') throw e // block on PreToolUse failure
+  const fileHooks = _jsHooks.get(type)
+  if (fileHooks) {
+    for (const [name, fn] of fileHooks) {
+      try {
+        await fn(ctx)
+      } catch (e) {
+        log.warn(`hook ${type}.${name} threw: ${e.message}`)
+        if (type === 'PreToolUse') throw e // block on PreToolUse failure
+      }
+    }
+  }
+  const progHooks = _programmaticHooks.get(type)
+  if (progHooks) {
+    for (const [name, fn] of progHooks) {
+      try {
+        await fn(ctx)
+      } catch (e) {
+        log.warn(`hook ${type}.${name} threw: ${e.message}`)
+        if (type === 'PreToolUse') throw e // block on PreToolUse failure
+      }
     }
   }
 }
@@ -393,6 +409,11 @@ function listHooks() {
       result.push({ type, name, kind: 'js' })
     }
   }
+  for (const [type, map] of _programmaticHooks) {
+    for (const [name] of map) {
+      result.push({ type, name, kind: 'js' })
+    }
+  }
   for (const [type, map] of _shellHooks) {
     for (const [name] of map) {
       result.push({ type, name, kind: 'sh' })
@@ -401,12 +422,26 @@ function listHooks() {
   return result
 }
 
+// Programmatically register an in-memory hook function. Returns an unhook cleanup function.
+function registerHook(type, fn, name) {
+  if (typeof fn !== 'function') return () => {}
+  const hookName = name || `reg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  if (!_programmaticHooks.has(type)) _programmaticHooks.set(type, new Map())
+  _programmaticHooks.get(type).set(hookName, fn)
+  return () => {
+    if (_programmaticHooks.has(type)) {
+      _programmaticHooks.get(type).delete(hookName)
+    }
+  }
+}
+
 module.exports = {
   scanHooks,
   runHooks,
   runJsHooks,
   runShellHook,
   runShellHooks,
+  registerHook,
   rescan,
   listHooks,
   HOOK_TYPES,

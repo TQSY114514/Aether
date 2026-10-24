@@ -25,7 +25,14 @@ function createEmptyDatabase(dbPath) {
     "CREATE TABLE IF NOT EXISTS persona (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, prompt TEXT NOT NULL, avatar TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)",
   );
   target.exec(
-    "CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, parent_session_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, session_kind TEXT NOT NULL DEFAULT 'chat', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)",
+    "CREATE TABLE IF NOT EXISTS project (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, root_path TEXT NOT NULL UNIQUE, icon TEXT, color TEXT, default_model_id INTEGER, default_agent_mode TEXT NOT NULL DEFAULT 'workspace', is_favorite INTEGER NOT NULL DEFAULT 0, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_opened_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+  );
+  try {
+    target.exec("CREATE INDEX IF NOT EXISTS idx_project_last_opened ON project(last_opened_at DESC)");
+    target.exec("CREATE INDEX IF NOT EXISTS idx_project_favorite ON project(is_favorite DESC, last_opened_at DESC)");
+  } catch {}
+  target.exec(
+    "CREATE TABLE IF NOT EXISTS session (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '新会话', persona_id INTEGER, parent_session_id INTEGER, pinned INTEGER NOT NULL DEFAULT 0, config TEXT, session_kind TEXT NOT NULL DEFAULT 'chat', project_id INTEGER, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_placeholder INTEGER NOT NULL DEFAULT 0)",
   );
   target.exec(
     "CREATE TABLE IF NOT EXISTS message (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), content TEXT NOT NULL, model_used TEXT, provider_used INTEGER, token_count INTEGER, latency_ms INTEGER, status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error','fallback','aborted')), error_message TEXT, arena_model TEXT, file_summary TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)",
@@ -65,6 +72,7 @@ function createEmptyDatabase(dbPath) {
     error TEXT,
     result TEXT,
     tool_journal TEXT,
+    kind TEXT NOT NULL DEFAULT 'task',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME
   )`);
@@ -221,6 +229,7 @@ function createEmptyDatabase(dbPath) {
   try {
     target.exec("CREATE INDEX IF NOT EXISTS idx_message_session_created ON message(session_id, created_at)");
     target.exec("CREATE INDEX IF NOT EXISTS idx_session_updated ON session(updated_at DESC)");
+    target.exec("CREATE INDEX IF NOT EXISTS idx_session_project ON session(project_id, updated_at DESC)");
   } catch {}
 
   return target;
