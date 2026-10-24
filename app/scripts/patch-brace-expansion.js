@@ -11,14 +11,24 @@ const fs = require('fs')
 const path = require('path')
 
 const MARKER = '// aetherai:brace-expansion-expand-patch'
+const EXPORT_LINE = 'module.exports.expand = expand;'
 
 function patchFile(targetPath) {
   try {
     if (!fs.existsSync(targetPath)) return false
-    let src = fs.readFileSync(targetPath, 'utf8')
-    if (src.includes(MARKER)) return false
-    src += `\n${MARKER}\nmodule.exports.expand = expand;\n`
-    fs.writeFileSync(targetPath, src)
+    const src = fs.readFileSync(targetPath, 'utf8')
+    // Both marker AND export line must be present to count as patched
+    if (src.includes(MARKER) && src.includes(EXPORT_LINE)) {
+      return false
+    }
+    // Clean any partial marker if previous write was interrupted
+    const cleaned = src.replace(new RegExp(`\\n?${MARKER}\\n?.*`, 'g'), '')
+    const patched = `${cleaned}\n${MARKER}\n${EXPORT_LINE}\n`
+
+    // Atomic write via temporary file
+    const tmpPath = `${targetPath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    fs.writeFileSync(tmpPath, patched, 'utf8')
+    fs.renameSync(tmpPath, targetPath)
     return true
   } catch (e) {
     console.warn('[patch-brace-expansion] failed on', targetPath, e && e.message ? e.message : e)
@@ -26,34 +36,41 @@ function patchFile(targetPath) {
   }
 }
 
-const rootNodeModules = path.join(__dirname, '..', 'node_modules')
-const mainTarget = path.join(rootNodeModules, 'brace-expansion', 'index.js')
-let count = 0
-if (patchFile(mainTarget)) count++
+// Recursively find and patch all brace-expansion/index.js under any node_modules
+function findAndPatchAll(dir, maxDepth = 6) {
+  let count = 0
+  if (maxDepth < 0 || !fs.existsSync(dir)) return 0
 
-// Also check any nested brace-expansion directories
-try {
-  if (fs.existsSync(rootNodeModules)) {
-    const entries = fs.readdirSync(rootNodeModules, { withFileTypes: true })
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
     for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('@')) {
-        const scopeDir = path.join(rootNodeModules, entry.name)
-        const subEntries = fs.readdirSync(scopeDir, { withFileTypes: true })
-        for (const sub of subEntries) {
-          if (sub.isDirectory()) {
-            const nested = path.join(scopeDir, sub.name, 'node_modules', 'brace-expansion', 'index.js')
-            if (patchFile(nested)) count++
-          }
+      if (!entry.isDirectory()) continue
+      const fullPath = path.join(dir, entry.name)
+
+      if (entry.name === 'brace-expansion') {
+        const target = path.join(fullPath, 'index.js')
+        if (patchFile(target)) count++
+      }
+
+      // Recurse into node_modules or scoped @org directories
+      if (entry.name === 'node_modules' || entry.name.startsWith('@') || entry.name === 'app') {
+        count += findAndPatchAll(fullPath, maxDepth - 1)
+      } else {
+        // If a package has its own nested node_modules, check inside
+        const nestedNm = path.join(fullPath, 'node_modules')
+        if (fs.existsSync(nestedNm)) {
+          count += findAndPatchAll(nestedNm, maxDepth - 1)
         }
-      } else if (entry.isDirectory()) {
-        const nested = path.join(rootNodeModules, entry.name, 'node_modules', 'brace-expansion', 'index.js')
-        if (patchFile(nested)) count++
       }
     }
+  } catch (e) {
+    // ignore access/read errors
   }
-} catch (e) {
-  // ignore scan errors
+  return count
 }
+
+const rootDir = path.join(__dirname, '..')
+const count = findAndPatchAll(rootDir)
 
 if (count > 0) {
   console.log(`[patch-brace-expansion] patched ${count} brace-expansion copies with named \`expand\` export`)
