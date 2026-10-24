@@ -11,18 +11,20 @@ const fs = require('fs')
 const path = require('path')
 
 const MARKER = '// aetherai:brace-expansion-expand-patch'
-const EXPORT_LINE = 'module.exports.expand = expand;'
+const EXPORT_LINE = "module.exports.expand = typeof expandTop !== 'undefined' ? expandTop : expand;"
 
 function patchFile(targetPath) {
   try {
     if (!fs.existsSync(targetPath)) return false
     const src = fs.readFileSync(targetPath, 'utf8')
-    // Both marker AND export line must be present to count as patched
+    // Both marker AND the updated export line must be present to count as patched
     if (src.includes(MARKER) && src.includes(EXPORT_LINE)) {
       return false
     }
-    // Clean any partial marker if previous write was interrupted
-    const cleaned = src.replace(new RegExp(`\\n?${MARKER}\\n?.*`, 'g'), '')
+    // Clean any prior patch or legacy export if present
+    const cleaned = src
+      .replace(new RegExp(`\\n?${MARKER}[\\s\\S]*$`, 'g'), '')
+      .replace(/\n?module\.exports\.expand\s*=\s*[^;\n]+;?/g, '')
     const patched = `${cleaned}\n${MARKER}\n${EXPORT_LINE}\n`
 
     // Atomic write via temporary file
@@ -41,9 +43,16 @@ function findAndPatchAll(dir, maxDepth = 6) {
   let count = 0
   if (maxDepth < 0 || !fs.existsSync(dir)) return 0
 
+  let entries = []
   try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true })
-    for (const entry of entries) {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch (e) {
+    console.warn('[patch-brace-expansion] cannot read directory', dir, e && e.message ? e.message : e)
+    return 0
+  }
+
+  for (const entry of entries) {
+    try {
       if (!entry.isDirectory()) continue
       const fullPath = path.join(dir, entry.name)
 
@@ -53,7 +62,7 @@ function findAndPatchAll(dir, maxDepth = 6) {
       }
 
       // Recurse into node_modules or scoped @org directories
-      if (entry.name === 'node_modules' || entry.name.startsWith('@') || entry.name === 'app') {
+      if (entry.name === 'node_modules' || entry.name.startsWith('@') || entry.name === 'app' || entry.name === 'tui') {
         count += findAndPatchAll(fullPath, maxDepth - 1)
       } else {
         // If a package has its own nested node_modules, check inside
@@ -62,9 +71,9 @@ function findAndPatchAll(dir, maxDepth = 6) {
           count += findAndPatchAll(nestedNm, maxDepth - 1)
         }
       }
+    } catch (err) {
+      console.warn('[patch-brace-expansion] scan error on entry', entry.name, err && err.message ? err.message : err)
     }
-  } catch (e) {
-    // ignore access/read errors
   }
   return count
 }
