@@ -1,34 +1,88 @@
 #!/usr/bin/env node
-// Idempotent postinstall patch: app-builder-lib (electron-builder) imports
-// `{ expand }` from brace-expansion (a v1-era named export), but upstream
-// 2.1.4 only sets the default export (module.exports = expandTop). Without
-// the named export, packaging crashes with "(0, brace_expansion_1.expand) is
-// not a function". We append the re-export to the installed copy.
+// Idempotent postinstall patch: app-builder-lib (electron-builder) and @electron/asar
+// import `{ expand }` from brace-expansion (a v1-era named export), but upstream
+// 2.1.x/BlueOak only sets the default export (module.exports = expandTop). Without
+// the named export, packaging crashes and Node ESM imports throw:
+// "SyntaxError: Named export 'expand' not found". We append the re-export to the installed copy.
 //
-// Runs on npm install / npm ci (when scripts are enabled). CI's ci.yml uses
-// --ignore-scripts but never packages, so it is unaffected; release.yml runs
-// plain `npm ci` and needs this patch.
-//
-// Never throws — packaging must not fail harder because the patch itself broke.
+// Runs on npm install / npm ci (when scripts are enabled), and explicitly in CI workflow
+// steps after npm ci --ignore-scripts.
 const fs = require('fs')
 const path = require('path')
 
 const MARKER = '// aetherai:brace-expansion-expand-patch'
-const TARGET = path.join(__dirname, '..', 'node_modules', 'brace-expansion', 'index.js')
+const EXPORT_LINE = "module.exports.expand = typeof expandTop !== 'undefined' ? expandTop : expand;"
 
-try {
-  if (!fs.existsSync(TARGET)) {
-    console.log('[patch-brace-expansion] node_modules/brace-expansion not found — skipped')
-    process.exit(0)
+function patchFile(targetPath) {
+  try {
+    if (!fs.existsSync(targetPath)) return false
+    const src = fs.readFileSync(targetPath, 'utf8')
+    // Both marker AND the updated export line must be present to count as patched
+    if (src.includes(MARKER) && src.includes(EXPORT_LINE)) {
+      return false
+    }
+    // Clean any prior patch or legacy export if present
+    const cleaned = src
+      .replace(new RegExp(`\\n?${MARKER}[\\s\\S]*$`, 'g'), '')
+      .replace(/\n?module\.exports\.expand\s*=\s*[^;\n]+;?/g, '')
+    const patched = `${cleaned}\n${MARKER}\n${EXPORT_LINE}\n`
+
+    // Atomic write via temporary file
+    const tmpPath = `${targetPath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    fs.writeFileSync(tmpPath, patched, 'utf8')
+    fs.renameSync(tmpPath, targetPath)
+    return true
+  } catch (e) {
+    console.warn('[patch-brace-expansion] failed on', targetPath, e && e.message ? e.message : e)
+    return false
   }
-  let src = fs.readFileSync(TARGET, 'utf8')
-  if (src.includes(MARKER)) {
-    console.log('[patch-brace-expansion] already patched — skipped')
-    process.exit(0)
+}
+
+// Recursively find and patch all brace-expansion/index.js under any node_modules
+function findAndPatchAll(dir, maxDepth = 6) {
+  let count = 0
+  if (maxDepth < 0 || !fs.existsSync(dir)) return 0
+
+  let entries = []
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch (e) {
+    console.warn('[patch-brace-expansion] cannot read directory', dir, e && e.message ? e.message : e)
+    return 0
   }
-  src += `\n${MARKER}\nmodule.exports.expand = expand;\n`
-  fs.writeFileSync(TARGET, src)
-  console.log('[patch-brace-expansion] patched brace-expansion with named `expand` export')
-} catch (e) {
-  console.warn('[patch-brace-expansion] failed:', e && e.message ? e.message : e)
+
+  for (const entry of entries) {
+    try {
+      if (!entry.isDirectory()) continue
+      const fullPath = path.join(dir, entry.name)
+
+      if (entry.name === 'brace-expansion') {
+        const target = path.join(fullPath, 'index.js')
+        if (patchFile(target)) count++
+      }
+
+      // Recurse into node_modules or scoped @org directories
+      if (entry.name === 'node_modules' || entry.name.startsWith('@') || entry.name === 'app' || entry.name === 'tui') {
+        count += findAndPatchAll(fullPath, maxDepth - 1)
+      } else {
+        // If a package has its own nested node_modules, check inside
+        const nestedNm = path.join(fullPath, 'node_modules')
+        if (fs.existsSync(nestedNm)) {
+          count += findAndPatchAll(nestedNm, maxDepth - 1)
+        }
+      }
+    } catch (err) {
+      console.warn('[patch-brace-expansion] scan error on entry', entry.name, err && err.message ? err.message : err)
+    }
+  }
+  return count
+}
+
+const rootDir = path.join(__dirname, '..')
+const count = findAndPatchAll(rootDir)
+
+if (count > 0) {
+  console.log(`[patch-brace-expansion] patched ${count} brace-expansion copies with named \`expand\` export`)
+} else {
+  console.log('[patch-brace-expansion] already patched or no unpatched copies found')
 }
