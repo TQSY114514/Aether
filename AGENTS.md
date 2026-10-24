@@ -151,8 +151,9 @@ artifact.
 
 - **Fast gate (~65 s, everything below passes today):** `cd app && npm run check`
   = `check-ipc` (handler / `preload.js` / `env.d.ts` three-file contract) →
-  `check-deps` (main-process externals declared) → `check-ui-tokens`
-  (anti-AI-slop gradients, legacy `hsl(var())`, 650-line component ratchet) →
+  `check-deps` (main-process externals declared) → `check-architecture`
+  (SDK/TUI Electron-free, mutating tool risks, middleware, SQLite storage, CJS purity) →
+  `check-ui-tokens` (anti-AI-slop gradients, legacy `hsl(var())`, 650-line component ratchet) →
   `tsc --noEmit`.
 - **Full build** `cd app && npm run build` runs those same four gates, then
   `vite build` + `build-icons.js` + `electron-builder` (it produces an

@@ -1,7 +1,9 @@
 const Database = require("better-sqlite3");
 const fs = require("fs");
 const path = require("path");
-const { app, safeStorage } = require("electron");
+const electron = (() => { try { return require("electron"); } catch { return null; } })();
+const app = (electron && typeof electron === 'object' && electron.app) ? electron.app : null;
+const safeStorage = (electron && typeof electron === 'object' && electron.safeStorage) ? electron.safeStorage : null;
 const log = require("./logger");
 // 写入层去重与 llm/autoMemory 共用同一套文本比较逻辑（单一来源，防止漂移）。
 const {
@@ -23,7 +25,7 @@ let _warnedNoEncryption = false;
 
 function encryptKey(plain) {
   if (!plain) return plain;
-  if (!safeStorage.isEncryptionAvailable()) {
+  if (!safeStorage || !safeStorage.isEncryptionAvailable()) {
     if (!_warnedNoEncryption) {
       _warnedNoEncryption = true;
       log.warn(
@@ -41,7 +43,7 @@ function encryptKey(plain) {
 
 function decryptKey(encoded) {
   if (!encoded) return encoded;
-  if (!safeStorage.isEncryptionAvailable()) return encoded;
+  if (!safeStorage || !safeStorage.isEncryptionAvailable()) return encoded;
   try {
     return safeStorage.decryptString(Buffer.from(encoded, "base64"));
   } catch {
