@@ -72,6 +72,9 @@ jobs:
         # 否则 test/tui/toolCards.test.js 等导入 ink 的测试找不到模块。
         run: cd app/tui && npm ci --ignore-scripts
 
+      - name: Patch brace-expansion (ESM named export)
+        run: cd app && node scripts/patch-brace-expansion.js
+
       - name: IPC contract check
         run: cd app && node scripts/check-ipc.js
 
@@ -108,6 +111,9 @@ jobs:
       - name: Install dependencies (app/tui)
         run: cd app/tui && npm ci --ignore-scripts
 
+      - name: Patch brace-expansion (ESM named export)
+        run: cd app && node scripts/patch-brace-expansion.js
+
       - name: Run tests
         # 2 核 runner 上并行 fork 会饿死 worker：同步测试被拖过 vitest 默认
         # 5s 超时误杀（backgroundReview/knowledgeGraph 等纯内存测试曾卡
@@ -141,6 +147,9 @@ jobs:
       - name: Install dependencies (app/tui)
         run: cd app/tui && npm ci --ignore-scripts
 
+      - name: Patch brace-expansion (ESM named export)
+        run: cd app && node scripts/patch-brace-expansion.js
+
       - name: Build renderer
         run: cd app && npx vite build
 
@@ -173,6 +182,9 @@ jobs:
 
       - name: Install dependencies (app/tui)
         run: cd app/tui && npm ci --ignore-scripts
+
+      - name: Patch brace-expansion (ESM named export)
+        run: cd app && node scripts/patch-brace-expansion.js
 
       - name: E2E launch smoke test
         # A real check, but kept non-blocking so a flaky environment (native
