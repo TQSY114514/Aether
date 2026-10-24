@@ -54,6 +54,7 @@ interface ModelSuggestionReasonParts {
   eloWins?: number
   eloTotal?: number
   eloReliable?: boolean
+  eloSigma?: number | null
   arenaElo?: number | null
   useTools?: boolean
   reasonPickUsed?: boolean

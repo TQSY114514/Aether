@@ -16,9 +16,10 @@ export function formatSuggestionReason(modelSuggestion: ModelSuggestion | null):
 
   if (rp.eloScore != null) {
     const elo = Number(rp.eloScore).toFixed(1)
+    const sigmaStr = rp.eloSigma ? ` ±${rp.eloSigma}` : ''
     lines.push(rp.eloReliable
-      ? t('model.suggest.elo', elo, rp.eloWins ?? 0, rp.eloTotal ?? 0)
-      : t('model.suggest.elo_insufficient', elo))
+      ? t('model.suggest.elo', `${elo}${sigmaStr}`, rp.eloWins ?? 0, rp.eloTotal ?? 0)
+      : t('model.suggest.elo_insufficient', `${elo}${sigmaStr}`))
   }
 
   if (rp.useTools) {

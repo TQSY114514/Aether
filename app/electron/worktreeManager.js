@@ -107,14 +107,28 @@ function createWorktree({ root, taskId }) {
     return { ok: true, dir, branch, reused: true }
   }
 
+  // If the directory already exists on disk but was not matched by porcelain:
+  if (fs.existsSync(dir)) {
+    const isInside = git(dir, ['rev-parse', '--is-inside-work-tree'])
+    const hasGitEntry = fs.existsSync(path.join(dir, '.git'))
+    if (hasGitEntry && isInside.ok) {
+      return { ok: true, dir, branch, reused: true }
+    }
+    // Orphaned or corrupted remnant directory — clean it up before creating worktree
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+      git(root, ['worktree', 'prune'])
+    } catch {}
+  }
+
   // -B force-checks out the branch (creating it when missing, re-pointing a
   // stale one), so a single command covers both the fresh and the stale case.
   const r = git(root, ['worktree', 'add', '-B', branch, dir])
   if (!r.ok) {
-    // `git worktree add -B` fails when the directory already exists (e.g. the
-    // porcelain list missed it due to path formatting differences on Windows
-    // runners). If the worktree dir is on disk, treat it as an existing reuse.
-    if (fs.existsSync(dir)) return { ok: true, dir, branch, reused: true }
+    if (fs.existsSync(dir) && fs.existsSync(path.join(dir, '.git'))) {
+      const isInside = git(dir, ['rev-parse', '--is-inside-work-tree'])
+      if (isInside.ok) return { ok: true, dir, branch, reused: true }
+    }
     return { ok: false, error: `worktree create failed: ${r.stderr || 'unknown git error'}` }
   }
   return { ok: true, dir, branch }
@@ -198,7 +212,13 @@ function mergeWorktree(root, taskId, { autoCommit = true, mergeMessage } = {}) {
 function removeWorktree(root, taskId, { pruneBranch = false } = {}) {
   const dir = worktreeDirFor(root, taskId)
   const r = git(root, ['worktree', 'remove', '--force', dir])
-  if (!r.ok) return { ok: false, error: r.stderr || 'worktree remove failed' }
+  if (!r.ok && fs.existsSync(dir)) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 })
+    } catch (e) {
+      return { ok: false, error: r.stderr || e.message }
+    }
+  }
   if (pruneBranch) git(root, ['branch', '-D', `aether-task-${taskId}`])
   // Clean stale admin files for good measure.
   git(root, ['worktree', 'prune'])
@@ -282,9 +302,26 @@ function createShadowWorkspace({ root, sessionId }) {
     return { ok: true, dir, branch, reused: true }
   }
 
+  // If the directory already exists on disk but was not matched by porcelain:
+  if (fs.existsSync(dir)) {
+    const isInside = git(dir, ['rev-parse', '--is-inside-work-tree'])
+    const hasGitEntry = fs.existsSync(path.join(dir, '.git'))
+    if (hasGitEntry && isInside.ok) {
+      return { ok: true, dir, branch, reused: true }
+    }
+    // Orphaned or corrupted remnant directory — clean it up before creating shadow worktree
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+      git(root, ['worktree', 'prune'])
+    } catch {}
+  }
+
   const r = git(root, ['worktree', 'add', '-B', branch, dir])
   if (!r.ok) {
-    if (fs.existsSync(dir)) return { ok: true, dir, branch, reused: true }
+    if (fs.existsSync(dir) && fs.existsSync(path.join(dir, '.git'))) {
+      const isInside = git(dir, ['rev-parse', '--is-inside-work-tree'])
+      if (isInside.ok) return { ok: true, dir, branch, reused: true }
+    }
     return { ok: false, error: `shadow worktree create failed: ${r.stderr || 'unknown git error'}` }
   }
   return { ok: true, dir, branch }
@@ -370,6 +407,11 @@ function removeShadowWorkspace({ root, sessionId, pruneBranch = true } = {}) {
     if (fs.existsSync(metaFile)) fs.unlinkSync(metaFile)
   } catch {}
   const r = git(root, ['worktree', 'remove', '--force', dir])
+  if (!r.ok && fs.existsSync(dir)) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 })
+    } catch {}
+  }
   if (pruneBranch) git(root, ['branch', '-D', `aether-shadow-${safeId}`])
   git(root, ['worktree', 'prune'])
   return { ok: true }

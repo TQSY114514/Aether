@@ -11,6 +11,8 @@ import {
   runVerifyCommandDetailed,
   extractAndApplyPatches,
   runObjectiveEvaluation,
+  cleanDiffHeaderPath,
+  extractTargetFilePath,
 } from '../electron/llm/objectiveArena'
 
 // Mock providerAdapter's completeChatMessage
@@ -120,6 +122,71 @@ describe('extractAndApplyPatches', () => {
     expect(res.appliedCount).toBe(1)
     const updated = fs.readFileSync(validFile, 'utf8')
     expect(updated).toBe('line1_ok\nline2\n')
+  })
+
+  it('extracts and applies patches with various markdown header styles (###, **File:**, etc.)', () => {
+    const targetFile = path.join(tmpDir, 'service.ts')
+    fs.writeFileSync(targetFile, 'export function run() { return 1 }\n', 'utf8')
+
+    const mdPatch = [
+      '### `service.ts`',
+      'Fix the return value in service.ts:',
+      SEARCH_HEAD,
+      'export function run() { return 1 }',
+      DIVIDER,
+      'export function run() { return 2 }',
+      REPLACE_TAIL,
+      '',
+      '**File:** `service.ts`',
+      SEARCH_HEAD,
+      'export function run() { return 2 }',
+      DIVIDER,
+      'export function run() { return 3 }',
+      REPLACE_TAIL,
+    ].join('\n')
+
+    const res = extractAndApplyPatches(tmpDir, mdPatch)
+    expect(res.appliedCount).toBe(2)
+    expect(res.filesModified).toContain('service.ts')
+    const updated = fs.readFileSync(targetFile, 'utf8')
+    expect(updated).toContain('return 3')
+  })
+
+  it('extracts and applies unified diffs with timestamps and revisions in headers', () => {
+    const targetFile = path.join(tmpDir, 'timestamped.txt')
+    fs.writeFileSync(targetFile, 'old content\n', 'utf8')
+
+    const diffWithTimestamp = [
+      '--- a/timestamped.txt\t2026-10-24 10:00:00.000000000 +0000',
+      '+++ b/timestamped.txt\t2026-10-24 10:05:00.000000000 +0000',
+      '@@ -1,1 +1,1 @@',
+      '-old content',
+      '+new content',
+    ].join('\n')
+
+    const res = extractAndApplyPatches(tmpDir, diffWithTimestamp)
+    expect(res.appliedCount).toBe(1)
+    const updated = fs.readFileSync(targetFile, 'utf8')
+    expect(updated).toContain('new content')
+  })
+
+  it('cleanDiffHeaderPath handles git prefixes, quotes, and timestamps', () => {
+    expect(cleanDiffHeaderPath('b/src/foo.ts\t2026-10-24 12:00:00')).toBe('src/foo.ts')
+    expect(cleanDiffHeaderPath('"b/src/foo.ts"')).toBe('src/foo.ts')
+    expect(cleanDiffHeaderPath('`a/src/foo.ts`')).toBe('src/foo.ts')
+    expect(cleanDiffHeaderPath('/dev/null')).toBe('')
+    expect(cleanDiffHeaderPath('b/src/foo.ts (revision 42)')).toBe('src/foo.ts')
+  })
+
+  it('extractTargetFilePath extracts valid paths and ignores non-path lines', () => {
+    expect(extractTargetFilePath('### `src/utils.js`')).toBe('src/utils.js')
+    expect(extractTargetFilePath('**File:** `src/utils.js`')).toBe('src/utils.js')
+    expect(extractTargetFilePath('**File: `src/utils.js`**')).toBe('src/utils.js')
+    expect(extractTargetFilePath('<!-- file: src/utils.js -->')).toBe('src/utils.js')
+    expect(extractTargetFilePath('// src/utils.js')).toBe('src/utils.js')
+    expect(extractTargetFilePath('/* src/utils.js */')).toBe('src/utils.js')
+    expect(extractTargetFilePath('Here is the change for `src/utils.js`')).toBeNull()
+    expect(extractTargetFilePath('```typescript')).toBeNull()
   })
 
   it('applies pure insertion hunks at start, middle, and end of file', () => {

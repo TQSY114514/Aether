@@ -239,6 +239,61 @@ function hasNewlyIntroducedUnsafeApi(origContent, newContent) {
   return false
 }
 
+/**
+ * Clean and extract a safe relative file path from a unified diff header line.
+ * Handles git a/ b/ prefixes, timestamps, tab delimiters, and revision labels.
+ */
+function cleanDiffHeaderPath(raw) {
+  if (!raw || typeof raw !== 'string') return ''
+  let cleaned = raw.trim()
+  if (cleaned === '/dev/null') return ''
+  const tabIdx = cleaned.indexOf('\t')
+  if (tabIdx !== -1) cleaned = cleaned.slice(0, tabIdx).trim()
+  cleaned = cleaned.replace(/\s+\([^)]+\)$/, '').trim()
+  cleaned = cleaned.replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '').trim()
+  cleaned = cleaned.replace(/^[`'"]+|[`'"]+$/g, '').trim()
+  if (cleaned.startsWith('a/') || cleaned.startsWith('b/')) {
+    cleaned = cleaned.slice(2)
+  }
+  return cleaned.trim()
+}
+
+/**
+ * Extract target file path from various markdown header styles, labels, or comments
+ * preceding SEARCH/REPLACE blocks (e.g. ### `file`, **File:** `file`, <!-- file: `...` -->).
+ */
+function extractTargetFilePath(line) {
+  if (!line || typeof line !== 'string') return null
+  const trimmed = line.trim()
+  if (!trimmed) return null
+  if (trimmed.includes('<<<<<<<') || trimmed.includes('>>>>>>>') || trimmed.includes('=======')) return null
+  if (trimmed.startsWith('```')) return null
+
+  // 1. HTML comments: <!-- file: src/foo.ts --> or <!-- src/foo.ts -->
+  let cleaned = trimmed.replace(/^<!--\s*(?:file:\s*)?/i, '').replace(/\s*-->$/, '').trim()
+
+  // 2. Markdown headers: ###, ##, #
+  cleaned = cleaned.replace(/^#{1,6}\s+/, '').trim()
+
+  // 3. Remove bold/italic markdown marks
+  cleaned = cleaned.replace(/\*\*/g, '').replace(/__/g, '').trim()
+
+  // 4. Prefix keywords: "File:", "Path:", or comments "//", "/*", "*", "#"
+  cleaned = cleaned.replace(/^(?:(?:file|path)\s*:\s*|\/\/\s*|\/\*\s*|\*\s*|#\s*)/i, '').replace(/\s*\*\/$/, '').trim()
+
+  // 5. Strip enclosing quotes or backticks
+  cleaned = cleaned.replace(/^[`'"]+|[`'"]+$/g, '').trim()
+
+  // 6. Must not contain whitespace, quotes, backticks, or control characters
+  if (/\s/.test(cleaned) || /[`'"]/.test(cleaned)) return null
+
+  // 7. Relative path pattern with file extension
+  const fileRegex = /^(?:[a-zA-Z0-9_\-.]+[\/\\])*[a-zA-Z0-9_\-.]+\.[a-zA-Z0-9_\-]{1,8}$/
+  if (!fileRegex.test(cleaned)) return null
+
+  return cleaned
+}
+
 /** Extract supported patch formats from a model response and apply them safely. */
 function extractAndApplyPatches(workspaceDir, responseText, protectedRelFiles = null) {
   const norm = String(responseText || '').replace(/\r\n/g, '\n')
@@ -251,7 +306,8 @@ function extractAndApplyPatches(workspaceDir, responseText, protectedRelFiles = 
   const diffFileRegex = /(?:^|\n)--- (?:a\/)?([^\r\n]+)\r?\n\+\+\+ (?:b\/)?([^\r\n]+)\r?\n(@@[\s\S]*?)(?=(?:\n--- (?:a\/)?|\n```|\s*$))/g
   let diffMatch
   while ((diffMatch = diffFileRegex.exec(norm)) !== null) {
-    const rawFile = (diffMatch[2] || diffMatch[1]).trim()
+    const rawFile = cleanDiffHeaderPath(diffMatch[2]) || cleanDiffHeaderPath(diffMatch[1])
+    if (!rawFile) continue
     const patchBlock = diffMatch[0].trim()
     const abs = path.resolve(baseDir, rawFile)
     if (isSafeSandboxTarget(baseDir, abs, protectedRelFiles)) {
@@ -283,9 +339,8 @@ function extractAndApplyPatches(workspaceDir, responseText, protectedRelFiles = 
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim()
-      const fileMatch = line.match(/^(?:#|\/\/|\/\*|\*|File:|Path:)?\s*([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)\s*(?:\*\/)?$/i)
-      if (fileMatch && !line.includes('<<<<<<<') && !line.includes('>>>>>>>') && !line.includes('=======')) {
-        const cand = fileMatch[1].trim()
+      const cand = extractTargetFilePath(line)
+      if (cand) {
         const candAbs = path.resolve(baseDir, cand)
         currentFile = null
         if (isSafeSandboxTarget(baseDir, candAbs, protectedRelFiles)) {
@@ -734,4 +789,6 @@ module.exports = {
   runObjectiveEvaluation,
   runVerifyCommandDetailed,
   extractAndApplyPatches,
+  cleanDiffHeaderPath,
+  extractTargetFilePath,
 }

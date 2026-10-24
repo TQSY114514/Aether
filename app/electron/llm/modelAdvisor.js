@@ -221,8 +221,11 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
     parts.push(`Task: ${taskLabel}${confidence < 0.5 ? ' (low confidence)' : ''}`)
     parts.push(`Heuristic: ${winner.hScore}/100 as ${winner.family}`)
 
+    let eloSigma = null
     if (winner.eloScore !== null && winner.eloTotal > 0) {
-      parts.push(`Arena ELO: ${winner.eloScore.toFixed(1)} (${winner.eloWins}/${winner.eloTotal})`)
+      eloSigma = Math.round(200 / Math.sqrt(1 + winner.eloTotal))
+      const evidenceTag = winner.eloTotal < 3 ? ' (insufficient evidence, heuristic weighted)' : ''
+      parts.push(`Arena ELO: ${winner.eloScore.toFixed(1)} ±${eloSigma} (n=${winner.eloTotal})${evidenceTag}`)
     }
 
     let reasoningPickUsed = false
@@ -257,7 +260,8 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
         eloScore: winner.eloScore,
         eloWins: winner.eloWins,
         eloTotal: winner.eloTotal,
-        eloReliable: winner.eloTotal >= 1,
+        eloSigma,
+        eloReliable: winner.eloTotal >= 3,
         arenaElo: (winner.eloTotal > 0 && winner.eloScore) ? Math.round(winner.eloScore) : null,
         useTools: !!useTools,
         reasonPickUsed: reasoningPickUsed,

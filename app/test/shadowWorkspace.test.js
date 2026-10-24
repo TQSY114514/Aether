@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
@@ -132,5 +132,21 @@ describe('P0-02 影子工作区隔离机制 (Cursor / OpenHands 战术)', { time
     // 切回原分支并清理
     execSync('git checkout -', { cwd: testRepoRoot, stdio: 'pipe' })
     worktreeMgr.removeShadowWorkspace({ root: testRepoRoot, sessionId: 'session-drift-789', pruneBranch: true })
+  })
+
+  it('孤儿残留目录清理: 目录存在但无 .git 链接时自动清理重建', () => {
+    const orphanDir = worktreeMgr.shadowDirFor(testRepoRoot, 'session-orphan-999')
+    mkdirSync(orphanDir, { recursive: true })
+    writeFileSync(join(orphanDir, 'orphan.txt'), 'stale leftover', 'utf8')
+    expect(existsSync(orphanDir)).toBe(true)
+    expect(existsSync(join(orphanDir, '.git'))).toBe(false)
+
+    const res = worktreeMgr.createShadowWorkspace({ root: testRepoRoot, sessionId: 'session-orphan-999' })
+    expect(res.ok).toBe(true)
+    expect(res.reused).toBeUndefined()
+    expect(existsSync(join(res.dir, '.git'))).toBe(true)
+    expect(existsSync(join(res.dir, 'orphan.txt'))).toBe(false)
+
+    worktreeMgr.removeShadowWorkspace({ root: testRepoRoot, sessionId: 'session-orphan-999', pruneBranch: true })
   })
 })

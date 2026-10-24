@@ -143,4 +143,21 @@ ok('worktree isolation', () => {
     // committed already → empty stats
     expect(Array.isArray(r.stats)).toBe(true)
   })
+
+  it('recovers from orphaned remnant directory without .git link', () => {
+    const orphanDir = worktree.worktreeDirFor(repoRoot, 99)
+    fs.mkdirSync(orphanDir, { recursive: true })
+    fs.writeFileSync(path.join(orphanDir, 'orphan.txt'), 'stale leftover')
+    expect(fs.existsSync(orphanDir)).toBe(true)
+    expect(fs.existsSync(path.join(orphanDir, '.git'))).toBe(false)
+
+    const r = worktree.createWorktree({ root: repoRoot, taskId: 99 })
+    expect(r.ok).toBe(true)
+    expect(r.reused).toBeUndefined()
+    expect(fs.existsSync(r.dir)).toBe(true)
+    expect(fs.existsSync(path.join(r.dir, '.git'))).toBe(true)
+    expect(fs.existsSync(path.join(r.dir, 'orphan.txt'))).toBe(false)
+
+    worktree.removeWorktree(repoRoot, 99, { pruneBranch: true })
+  })
 })

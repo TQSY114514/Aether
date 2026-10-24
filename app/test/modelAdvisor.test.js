@@ -106,4 +106,20 @@ describe('modelAdvisor Router Unification', () => {
     expect(winner1.id).toBe(winner2.id)
     expect(winner1.id).toBe(3)
   })
+
+  it('computes confidence-aware ELO with standard deviation and flags insufficient evidence when n < 3', () => {
+    const eloData = {
+      1: { score: 1050, win_count: 1, total_count: 1 },
+    }
+    const res = routeWithExplanation({
+      allModels: mockModels,
+      userMessage: '写一个 React 自定义 Hook 函数处理窗口大小',
+      useTools: false,
+      eloData,
+    })
+    expect(res).not.toBeNull()
+    expect(res.reasonParts.eloSigma).toBe(141) // 200 / sqrt(2) ≈ 141
+    expect(res.reasonParts.eloReliable).toBe(false) // n = 1 < 3
+    expect(res.reason).toContain('±141 (n=1) (insufficient evidence, heuristic weighted)')
+  })
 })
