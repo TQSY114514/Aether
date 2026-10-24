@@ -4,7 +4,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import asar from '@electron/asar'
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
+const asar = require('@electron/asar')
 
 import {
   inspectAppBundle,

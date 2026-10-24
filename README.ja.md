@@ -122,7 +122,10 @@ Aether の設計とコードベースは、以下のオープンソースプロ�
 - **[Continue](https://github.com/continuedev/continue)** — 宣言的設定スキーマ（`.aether/config.json`）。
 - **[Grok Build](https://x.ai) & [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — 特化型サブ Agent ロール定義（`agentRoles.js`）、長時間実行状態マシン（`longRunningTask.js`）、および実行タイムラインドロワーの設計着想。
 - **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — ローカルゲートウェイのループバックバインドおよび HTTP Host ヘッダー検証による DNS Rebinding 防御（QVD-2026-57410 防御実践）とバッジ行の視覚規約。
-- **[Qwen Code](https://github.com/QwenLM/qwen-code) (Alibaba Cloud)** — Agent Arena マルチモデル並行競合実行と Git Worktree 隔離実行アーキテクチャ（/arena に着想を得た shadowGit.js シャドウワークスペース、並行モデルディスパッチ、および arena:apply-patch 勝者パッチ反映）、思考パラメータ適応（reasoning.js の enable_thinking）、および長文コーディングベンチマーク。
+- **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena マルチモデル並行競合実行と Git Worktree 隔離実行アーキテクチャ（`/arena` に着想を得た `shadowGit.js` シャドウワークスペース、並行モデルディスパッチ、および `arena:apply-patch` 勝者パッチ反映）、`qwencoder-eval` 評価設計、思考パラメータ適応（`reasoning.js` の `enable_thinking`）、および長文コーディングベンチマーク。
+- **[Jules](https://jules.google.com)** (Google Labs) — 完全自律型の非同期バックグラウンドコーディングAgent、セキュアなクラウドサンドボックスによるIssue-to-PR自動化、およびマルチタスク並行管理設計。
+- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi)** — ターミナル AI コーディングハーネス、同時編集の竞合を防ぐハッシュアンカー編集（Hash-Anchored Edits）、LSP/DAP シンボル認識コードインテリジェンス、および分離されたマルチ Worktree サブエージェントオーケストレーション。
+- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自動 PR 行単位コードレビュー、AST 認識の高リスク API 遮断（`.coderabbit.yaml`）、およびリポジトリ全体のセマンティックグラフ回帰防御。
 - **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — マイクロカーネルアーキテクチャ不変条件とヘッドレス隔離（architecture.rs の静的解析に着想を得た 5 重の check-architecture.js ゲート、ヘッドレス環境での database.js の Electron 依存分離、および真値判定器に基づく検証設計）。
 - **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — 組み込みローカルモデルアリーナ（arena.handler.js）、ブラインドペア ELO ランキングシステム、およびコーディング能力評価ハーネス。
 - **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — マルチバックエンド実行抽象化（backend.js, dockerBackend.js, sshBackend.js）と永続的なサブエージェントサンドボックスワークフロー。
