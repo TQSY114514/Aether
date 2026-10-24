@@ -19,7 +19,7 @@ Aether 将模型评测、项目上下文与可审阅的 Agent 执行流程连接
 [![npm downloads](https://img.shields.io/npm/dt/aetherai.svg?style=flat-square&color=3fb950&labelColor=161b22&logo=npm&logoColor=white&label=downloads)](https://www.npmjs.com/package/aetherai)
 [![npm](https://img.shields.io/npm/v/aetherai.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white)](https://www.npmjs.com/package/aetherai)
 [![ci](https://img.shields.io/github/actions/workflow/status/TQSY114514/Aether/ci.yml?branch=master&event=push&style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white)](https://github.com/TQSY114514/Aether/actions/workflows/ci.yml)
-[![license](https://img.shields.io/badge/license-Apache--2.0-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#1-windows-桌面端安装主力形态--强烈推荐)
 
 [English](./README.md) · **[简体中文](./README.zh-CN.md)** · [日本語](./README.ja.md) · [20 款 Agent 竞品评估矩阵](./docs/competitive-analysis.md)
@@ -240,4 +240,4 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 
 - **问题反馈与功能建议**：请提交至 [GitHub Issues](https://github.com/TQSY114514/Aether/issues/new)。
 - **开发规范**：提交代码前请查阅 [CONTRIBUTING.md](./CONTRIBUTING.md)、[AGENTS.md](./AGENTS.md) 与 [docs/roadmap.md](./docs/roadmap.md)。
-- **开源协议**：[Apache-2.0](./LICENSE)（第三方开源组件声明见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)） © 2025-2026 Aether
+- **开源协议**：[MIT](./LICENSE)（第三方开源组件声明见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)） © 2025-2026 Aether
