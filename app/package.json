@@ -10,7 +10,16 @@
     "factory-droid[bot] (https://github.com/apps/factory-droid)",
     "Qwen-Coder <qwencoder> (https://github.com/qwencoder)",
     "coderabbitai[bot] (https://github.com/apps/coderabbitai)",
-    "greptile-apps[bot] (https://github.com/apps/greptile-apps)"
+    "greptile-apps[bot] (https://github.com/apps/greptile-apps)",
+    "kiro-agent[bot] (https://github.com/apps/kiro-agent)",
+    "sweepai[bot] (https://github.com/apps/sweepai)",
+    "amazon-q-developer[bot] (https://github.com/apps/amazon-q-developer)",
+    "ellipsis-dev[bot] (https://github.com/apps/ellipsis-dev)",
+    "github-copilot[bot] (https://github.com/apps/github-copilot)",
+    "renovate[bot] (https://github.com/apps/renovate)",
+    "step-security[bot] (https://github.com/apps/step-security)",
+    "gitguardian[bot] (https://github.com/apps/gitguardian)",
+    "roboomp (https://github.com/roboomp)"
   ],
   "license": "MIT",
   "homepage": "https://github.com/TQSY114514/Aether#readme",

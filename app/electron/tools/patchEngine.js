@@ -80,7 +80,7 @@ function parseSearchReplaceBlocks(text) {
     } else if (trimmed === '>>>>>>> REPLACE' && state === 'replace') {
       blocks.push({
         search: currentSearch.join('\n'),
-        replace: currentReplace.join('\n'),
+        replace: cleanReplaceLines(currentReplace),
       })
       state = 'outside'
       currentSearch = []
@@ -210,6 +210,191 @@ function applyHunks(original, hunks) {
  * @param {Array<{ search: string, replace: string }>} blocks
  * @returns {{ content: string, applied: number, conflicts: string[] }}
  */
+
+/**
+ * Compute a compact 4-character hex FNV-1a content hash for a line.
+ * Resilient to leading/trailing whitespace changes.
+ * @param {string} line
+ * @returns {string} 4-char hex hash
+ */
+function computeLineHash(line) {
+  const trimmed = String(line ?? '').trim()
+  if (!trimmed) return '0000'
+  let hash = 0x811c9dc5
+  for (let i = 0; i < trimmed.length; i++) {
+    hash ^= trimmed.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return ((hash >>> 0) & 0xffff).toString(16).padStart(4, '0')
+}
+
+/**
+ * Annotate each line with its stable [#hash] tag for model inspection.
+ * @param {string} content
+ * @returns {string}
+ */
+function formatWithHashlines(content) {
+  const lines = normalizeLineEndings(content).split('\n')
+  return lines.map((line) => `[#${computeLineHash(line)}] ${line}`).join('\n')
+}
+
+/**
+ * Parse oh-my-pi/omp-inspired hashline edit blocks.
+ * Formats:
+ *   <<<<<<< HASH startHash..endHash
+ *   replacement lines
+ *   >>>>>>>
+ *   or:
+ *   @@ #startHash..#endHash @@
+ *   replacement lines
+ *
+ * @param {string} text
+ * @returns {Array<{ startHash: string, endHash: string, replace: string }>}
+ */
+function cleanReplaceLines(lines) {
+  const copy = [...lines]
+  while (copy.length > 0 && copy[copy.length - 1] === '') {
+    copy.pop()
+  }
+  return copy.join('\n')
+}
+
+function parseHashlineBlocks(text) {
+  const norm = normalizeLineEndings(text)
+  const lines = norm.split('\n')
+  const blocks = []
+  let state = 'outside'
+  let currentStartHash = null
+  let currentEndHash = null
+  let currentReplace = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    // Pattern 1: <<<<<<< HASH [start] (optional ..[end])
+    const blockMatch = trimmed.match(/^<{7}\s*HASH\s+([0-9a-fA-F]{4,8})(?:\.\.([0-9a-fA-F]{4,8}))?/i)
+    if (blockMatch) {
+      if (state === 'replace') {
+        blocks.push({
+          startHash: currentStartHash.toLowerCase(),
+          endHash: (currentEndHash || currentStartHash).toLowerCase(),
+          replace: cleanReplaceLines(currentReplace),
+        })
+      }
+      currentStartHash = blockMatch[1]
+      currentEndHash = blockMatch[2] || null
+      currentReplace = []
+      state = 'replace'
+      continue
+    }
+
+    // Pattern 2: @@ #[start]..#[end] @@ or @@ #[start] @@
+    const hunkMatch = trimmed.match(/^@@\s*#([0-9a-fA-F]{4,8})(?:\.\.#?([0-9a-fA-F]{4,8}))?\s*@@/i)
+    if (hunkMatch) {
+      if (state === 'replace') {
+        blocks.push({
+          startHash: currentStartHash.toLowerCase(),
+          endHash: (currentEndHash || currentStartHash).toLowerCase(),
+          replace: cleanReplaceLines(currentReplace),
+        })
+      }
+      currentStartHash = hunkMatch[1]
+      currentEndHash = hunkMatch[2] || null
+      currentReplace = []
+      state = 'replace'
+      continue
+    }
+
+    if (state === 'replace') {
+      if (trimmed === '=======') {
+        currentReplace = []
+        continue
+      }
+      if (trimmed.startsWith('>>>>>>>')) {
+        blocks.push({
+          startHash: currentStartHash.toLowerCase(),
+          endHash: (currentEndHash || currentStartHash).toLowerCase(),
+          replace: cleanReplaceLines(currentReplace),
+        })
+        state = 'outside'
+        currentStartHash = null
+        currentEndHash = null
+        currentReplace = []
+        continue
+      }
+
+      if (line.startsWith('+')) {
+        currentReplace.push(line.slice(1))
+      } else if (line.startsWith('-')) {
+        // deleted line in unified-style hashline; omit from replace
+      } else {
+        currentReplace.push(line)
+      }
+    }
+  }
+
+  if (state === 'replace' && currentStartHash) {
+    blocks.push({
+      startHash: currentStartHash.toLowerCase(),
+      endHash: (currentEndHash || currentStartHash).toLowerCase(),
+      replace: cleanReplaceLines(currentReplace),
+    })
+  }
+
+  return blocks
+}
+
+/**
+ * Apply hashline edit blocks to file content.
+ * @param {string} content
+ * @param {Array<{ startHash: string, endHash: string, replace: string }>} blocks
+ * @returns {{ content: string, applied: number, conflicts: string[] }}
+ */
+function applyHashlinePatch(content, blocks) {
+  const norm = normalizeLineEndings(content)
+  let lines = norm.split('\n')
+  let applied = 0
+  const conflicts = []
+
+  for (const block of blocks) {
+    const sHash = block.startHash.toLowerCase()
+    const eHash = block.endHash ? block.endHash.toLowerCase() : sHash
+
+    let startIdx = -1
+    for (let i = 0; i < lines.length; i++) {
+      if (computeLineHash(lines[i]) === sHash) {
+        startIdx = i
+        break
+      }
+    }
+
+    if (startIdx === -1) {
+      conflicts.push(`Hashline start anchor [#${sHash}] not found in file.`)
+      continue
+    }
+
+    let endIdx = -1
+    for (let j = startIdx; j < lines.length; j++) {
+      if (computeLineHash(lines[j]) === eHash) {
+        endIdx = j
+        break
+      }
+    }
+
+    if (endIdx === -1) {
+      conflicts.push(`Hashline end anchor [#${eHash}] not found after start anchor [#${sHash}].`)
+      continue
+    }
+
+    const replacementLines = block.replace ? block.replace.split('\n') : []
+    lines.splice(startIdx, endIdx - startIdx + 1, ...replacementLines)
+    applied++
+  }
+
+  return { content: lines.join('\n'), applied, conflicts }
+}
+
 function applySearchReplace(content, blocks) {
   let cur = normalizeLineEndings(content)
   let applied = 0
@@ -248,6 +433,14 @@ function applySearchReplace(content, blocks) {
 function applyAnyPatch(originalContent, patchText) {
   const normPatch = normalizeLineEndings(patchText)
 
+  if (normPatch.includes('<<<<<<< HASH') || /@@\s*#[0-9a-fA-F]+/i.test(normPatch)) {
+    const blocks = parseHashlineBlocks(normPatch)
+    if (blocks.length > 0) {
+      const res = applyHashlinePatch(originalContent, blocks)
+      return { ...res, format: 'hashline' }
+    }
+  }
+
   if (normPatch.includes('<<<<<<< SEARCH')) {
     const blocks = parseSearchReplaceBlocks(normPatch)
     if (blocks.length > 0) {
@@ -262,6 +455,10 @@ function applyAnyPatch(originalContent, patchText) {
 }
 
 module.exports = {
+  computeLineHash,
+  formatWithHashlines,
+  parseHashlineBlocks,
+  applyHashlinePatch,
   parseUnifiedDiff,
   parseSearchReplaceBlocks,
   applyHunks,

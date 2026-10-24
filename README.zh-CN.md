@@ -222,7 +222,7 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 - **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — 本地网关回环绑定与 HTTP Host 头安全校验实践（QVD-2026-57410 防御参考）及 README 徽章视觉规范。
 - **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena 多模型并行竞技场与 Git Worktree 隔离执行机制（`/arena` 启发 `shadowGit.js` 影子工作区隔离、多模型并行分发与 `arena:apply-patch` 胜者补丁落盘）、`qwencoder-eval` 评测基准思想、思考参数自适应（`enable_thinking` 融入 `reasoning.js`）及长程代码基准规范。
 - **[Jules](https://jules.google.com)** (Google Labs) — 全自主异步后台编码 Agent、基于安全云沙箱的端到端 Issue-to-PR 闭环及多任务并发托管架构。
-- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi)** — 终端 AI 编程 Harness、哈希锚定代码编辑（Hash-Anchored Edits 防并发冲突）、LSP/DAP 符号级代码智能与多 Worktree 子代理并发编排。
+- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi) & [roboomp](https://github.com/roboomp)** — 终端 AI 编程 Harness、roboomp 自动化 Triage 与 PR 机器人、哈希锚定代码编辑（`patchEngine.js` 中的 Hashline Edits 防并发冲突与行号漂移）、LSP/DAP 符号级代码智能与多 Worktree 子代理并发编排。
 - **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自动化 PR 逐行代码审查、AST/上下文感知高危 API 拦截（`.coderabbit.yaml`）与全仓库架构级语义图谱回归防御。
 - **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — 微内核架构不变量守卫与无头隔离规范（借鉴 `architecture.rs` 静态分析思想落地 `check-architecture.js` 5 重架构门禁、无头模式下 `database.js` Electron 依赖解耦及基于真值裁决器的有界树搜索验证）。
 - **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — 内置本地模型双盲竞技场（`arena.handler.js`）、成对盲测 ELO 积分排名与代码能力自动化基准体系。
