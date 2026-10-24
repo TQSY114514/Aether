@@ -98,4 +98,29 @@ describe('arena', () => {
     const r3 = await p3
     expect(r3.results.every(x => x.content.includes('aborted'))).toBe(true)
   }, 10000)
+
+  it('applies patch to workspace via arena:apply-patch', async () => {
+    const fs = require('fs')
+    const os = require('os')
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-apply-test-'))
+    const testFile = path.join(testDir, 'sample.txt')
+    fs.writeFileSync(testFile, 'initial content\n', 'utf8')
+
+    const patchText = [
+      'File: sample.txt',
+      '<<<<<<< SEARCH',
+      'initial content',
+      '=======',
+      'fixed content by arena winner',
+      '>>>>>>> REPLACE',
+    ].join('\n')
+
+    const res = await handlers['arena:apply-patch']({}, { content: patchText, cwd: testDir })
+    expect(res.ok).toBe(true)
+    expect(res.appliedCount).toBe(1)
+    expect(res.filesModified).toContain('sample.txt')
+    expect(fs.readFileSync(testFile, 'utf8')).toContain('fixed content by arena winner')
+
+    fs.rmSync(testDir, { recursive: true, force: true })
+  })
 })

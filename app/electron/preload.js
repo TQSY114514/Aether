@@ -166,6 +166,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     objectiveRun: (data) => ipcRenderer.invoke('arena:objective-run', data),
     objectiveStop: (data) => ipcRenderer.invoke('arena:objective-stop', data),
     autoRoute: (params) => ipcRenderer.invoke('arena:auto-route', params),
+    applyPatch: (data) => ipcRenderer.invoke('arena:apply-patch', data),
     onModelDone: (cb) => subscribe('arena:model-done', cb),
   },
   mcp: {
