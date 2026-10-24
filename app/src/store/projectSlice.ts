@@ -20,7 +20,7 @@ declare module "./types" {
     activeProject: Project | null
     projectScopeFilter: boolean
     loadProjects: () => Promise<void>
-    openProject: (id: number) => Promise<Project | null>
+    openProject: (id: number | null) => Promise<Project | null>
     createProject: (data: {
       name: string
       root_path: string
@@ -42,7 +42,7 @@ export interface ProjectSlice {
   activeProject: Project | null
   projectScopeFilter: boolean
   loadProjects: () => Promise<void>
-  openProject: (id: number) => Promise<Project | null>
+  openProject: (id: number | null) => Promise<Project | null>
   createProject: (data: {
     name: string
     root_path: string
@@ -71,8 +71,18 @@ export const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = 
     } catch {}
   },
 
-  openProject: async (id: number) => {
+  openProject: async (id: number | null) => {
     try {
+      if (id === null) {
+        await window.electronAPI?.project?.open(null)
+        set({ activeProject: null })
+        const projects = (await window.electronAPI?.project?.list()) || []
+        set({ projects })
+        if (typeof get().loadSessions === "function") {
+          await get().loadSessions()
+        }
+        return null
+      }
       const proj = await window.electronAPI?.project?.open(id)
       if (proj) {
         set({ activeProject: proj })

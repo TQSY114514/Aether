@@ -3,7 +3,7 @@
 //
 // Project Lifecycle IPC Handlers (Aether v2.0 R1: Multi-Workspace Architecture)
 // Channels: project:list, project:create, project:open, project:update,
-//           project:delete, project:current
+//           project:delete, project:current, project:pickDirectory
 // ─────────────────────────────────────────────────────────────────────────────
 
 const path = require('path')
@@ -57,8 +57,30 @@ function registerProjectHandlers(ipcMain, db, getWebContents) {
     })
   })
 
-  // 3. project:open — Activate a project, update last_opened_at, set active_project_id setting, and set sandbox root
+  // 3. project:open — Activate a project, update last_opened_at, set active_project_id setting, and set sandbox root.
+  // Passing null / 0 / empty string deactivates the current project (switches to default workspace).
   ipcMain.handle('project:open', async (_e, id) => {
+    if (id == null || id === '' || id === 0) {
+      if (typeof db.setActiveProject === 'function') {
+        db.setActiveProject(null)
+      } else {
+        if (typeof db.setSetting === 'function') {
+          db.setSetting('active_project_id', '')
+        }
+      }
+      setWorkspaceRoot(null)
+      setActiveProjectRoot(null)
+      try {
+        require('../config/projectConfig').invalidateProjectConfigCache(null)
+        require('../llm/projectInstructions').invalidateCache()
+      } catch {}
+      const wc = getWebContents?.()
+      if (wc && !wc.isDestroyed()) {
+        wc.send('project:opened', null)
+      }
+      return null
+    }
+
     const numId = Number(id)
     const proj = typeof db.getProject === 'function'
       ? db.getProject(numId)

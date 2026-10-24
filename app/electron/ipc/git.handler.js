@@ -64,9 +64,14 @@ function registerGitHandlers(ipcMain, db) {
     const { runCommandSync } = require('../tools/exec')
     const status = runCommandSync('git', ['status', '--short'], { cwd: gitRoot })
     const log = runCommandSync('git', ['log', '--oneline', '-3'], { cwd: gitRoot })
+    const branchRes = runCommandSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: gitRoot })
+    const branch = (branchRes.stdout || '').trim()
+    const statusLines = (status.stdout || '').split('\n').map(s => s.trim()).filter(Boolean)
     return {
       success: true,
       root: gitRoot,
+      branch: branch || undefined,
+      dirtyCount: statusLines.length,
       status: status.stdout || '(clean)',
       recent: log.stdout || '(no commits)',
     }

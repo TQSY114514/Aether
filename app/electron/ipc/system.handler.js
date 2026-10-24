@@ -136,6 +136,35 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
     }
   })
 
+  // 打开外部路径 / 文件夹 / 资源管理器
+  ipcMain.handle('system:open-path', async (_e, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') return { ok: false, error: 'path required' }
+      const path = require('path')
+      const { shell } = require('electron')
+      const resolved = path.resolve(String(targetPath))
+      const errMsg = await shell.openPath(resolved)
+      if (errMsg) return { ok: false, error: errMsg }
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
+
+  // 在系统文件资源管理器中定位高亮指定文件或文件夹
+  ipcMain.handle('system:show-item-in-folder', (_e, targetPath) => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') return { ok: false, error: 'path required' }
+      const path = require('path')
+      const { shell } = require('electron')
+      const resolved = path.resolve(String(targetPath))
+      shell.showItemInFolder(resolved)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : String(e) }
+    }
+  })
+
   // 系统与工作区全面体检 (Claude Code / OpenHands 对齐)
   ipcMain.handle('system:doctor', async (_e, { cwd, sessionId } = {}) => {
     try {

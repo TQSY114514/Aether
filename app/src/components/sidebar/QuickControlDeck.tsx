@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
-  FolderOpen,
-  Folder,
   Shield,
   Brain,
   Activity,
-  ChevronUp,
-  Plus,
   Check,
 } from 'lucide-react'
 import { useStore } from '@/store'
@@ -20,13 +16,6 @@ export const hasDoctorHealthBadge = true
 
 export default function QuickControlDeck() {
   const language = useStore((s) => s.language)
-  const activeProject = useStore((s) => s.activeProject)
-  const projects = useStore((s) => s.projects)
-  const loadProjects = useStore((s) => s.loadProjects)
-  const openProject = useStore((s) => s.openProject)
-  const createProject = useStore((s) => s.createProject)
-  const projectScopeFilter = useStore((s) => s.projectScopeFilter)
-  const toggleProjectScope = useStore((s) => s.toggleProjectScope)
 
   const agentMode = useStore((s) => s.agentMode)
   const setAgentMode = useStore((s) => s.setAgentMode)
@@ -36,7 +25,6 @@ export default function QuickControlDeck() {
   const thinkingEnabled = useStore((s) => s.thinkingEnabled)
   const setThinkingEnabled = useStore((s) => s.setThinkingEnabled)
 
-  const [projectOpen, setProjectOpen] = useState(false)
   const [modeOpen, setModeOpen] = useState(false)
   const [effortOpen, setEffortOpen] = useState(false)
   const [doctorOpen, setDoctorOpen] = useState(false)
@@ -54,10 +42,6 @@ export default function QuickControlDeck() {
   })
 
   const deckRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    loadProjects?.()
-  }, [loadProjects])
 
   // Aggregate health status periodically
   useEffect(() => {
@@ -85,7 +69,6 @@ export default function QuickControlDeck() {
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (deckRef.current && !deckRef.current.contains(e.target as Node)) {
-        setProjectOpen(false)
         setModeOpen(false)
         setEffortOpen(false)
         setDoctorOpen(false)
@@ -138,121 +121,76 @@ export default function QuickControlDeck() {
     return agentModeOptions.find((m) => m.value === agentMode) || agentModeOptions[1]
   }, [agentMode, agentModeOptions])
 
-  const handlePickNewFolder = async () => {
-    try {
-      const dir = await window.electronAPI.project.pickDirectory()
-      if (dir) {
-        const parts = dir.replace(/[\\/]+$/, '').split(/[\\/]/)
-        const name = parts[parts.length - 1] || 'New Project'
-        const proj = await createProject({ name, root_path: dir })
-        if (proj?.id) {
-          await openProject(proj.id)
-          setProjectOpen(false)
-        }
-      }
-    } catch (e) {
-      console.error('Pick folder error:', e)
-    }
-  }
-
   return (
     <div
       ref={deckRef}
-      className="p-1.5 shrink-0 border-t space-y-1 relative text-xs select-none"
+      className="p-1.5 shrink-0 border-t space-y-1 relative text-xs select-none app-no-drag"
       style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
     >
-      {/* Row 1: Project Switcher & Doctor Health Pill */}
+      {/* Row 1: Agent Mode Selector & Doctor Health Badge */}
       <div className="flex items-center gap-1 relative">
-        {/* Project Switcher */}
+        {/* Agent Mode Pill */}
         <div className="relative flex-1 min-w-0">
           <button
             type="button"
             onClick={() => {
-              setProjectOpen(!projectOpen)
-              setModeOpen(false)
+              setModeOpen(!modeOpen)
               setEffortOpen(false)
               setDoctorOpen(false)
             }}
-            className="w-full flex items-center justify-between gap-1 px-1.5 py-1 rounded border text-left transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+            className="w-full flex items-center justify-between gap-1 px-1.5 py-1 rounded-[6px] border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
             style={{ borderColor: 'var(--border)' }}
-            title={activeProject ? activeProject.root_path : t('quickdeck.default_workspace', '默认工作区')}
-            aria-label="Project Switcher"
+            aria-label="Agent Mode Selector"
           >
             <div className="flex items-center gap-1 min-w-0">
-              <FolderOpen size={12} className="shrink-0" style={{ color: 'var(--accent)' }} />
-              <span className="font-medium text-[11px] truncate" style={{ color: 'var(--text-primary)' }}>
-                {activeProject ? activeProject.name : t('quickdeck.default_workspace', '默认工作区')}
+              <Shield size={11} className="shrink-0" style={{ color: currentModeInfo.color }} />
+              <span className="truncate" style={{ color: 'var(--text-primary)' }}>
+                {currentModeInfo.label}
               </span>
             </div>
-            <ChevronUp
-              size={11}
-              className={`shrink-0 transition-transform ${projectOpen ? 'rotate-180' : ''}`}
-              style={{ color: 'var(--text-muted)' }}
-            />
+            <span
+              className="text-[9px] px-1 rounded tabular-nums font-mono"
+              style={{ backgroundColor: currentModeInfo.color + '20', color: currentModeInfo.color }}
+            >
+              {currentModeInfo.badge}
+            </span>
           </button>
 
-          {/* Project Switcher Popover */}
-          {projectOpen && (
+          {/* Mode Selector Popover */}
+          {modeOpen && (
             <div
-              className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border shadow-lg p-2 z-50 animate-spring-up motion-reduce:animate-none"
+              className="absolute bottom-full left-0 mb-1 w-56 rounded-[10px] border shadow-lg p-1.5 z-50 animate-spring-up space-y-1"
               style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
             >
-              <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b" style={{ borderColor: 'var(--border)' }}>
-                <span className="font-semibold text-[11px]" style={{ color: 'var(--text-primary)' }}>
-                  {t('quickdeck.projects', '项目工作区 (Projects)')}
-                </span>
-                <button
-                  type="button"
-                  onClick={toggleProjectScope}
-                  className="text-[10px] px-1.5 py-0.5 rounded border transition-colors hover:bg-[var(--bg-secondary)]"
-                  style={{ borderColor: 'var(--border)', color: projectScopeFilter ? 'var(--accent)' : 'var(--text-muted)' }}
-                  title={t('quickdeck.switch_project_filter', '是否仅展示当前项目的会话')}
-                >
-                  {projectScopeFilter ? t('quickdeck.current_project_only', '当前项目会话') : t('quickdeck.all_sessions', '全部会话')}
-                </button>
-              </div>
-
-              <div className="max-h-40 overflow-y-auto space-y-1 mb-2">
-                {projects.length === 0 ? (
-                  <div className="text-[11px] py-2 text-center" style={{ color: 'var(--text-muted)' }}>
-                    {t('quickdeck.no_projects', '暂未添加独立项目')}
-                  </div>
-                ) : (
-                  projects.map((p) => {
-                    const isCurrent = activeProject?.id === p.id
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => {
-                          openProject(p.id)
-                          setProjectOpen(false)
-                        }}
-                        className="w-full flex items-center justify-between gap-1.5 p-1.5 rounded-md text-left transition-colors hover:bg-[var(--bg-secondary)]"
-                        style={isCurrent ? { backgroundColor: 'var(--content-bg)' } : {}}
-                      >
-                        <div className="min-w-0 flex items-center gap-1.5">
-                          <Folder size={12} className="shrink-0 text-[var(--accent)]" />
-                          <span className="truncate font-medium text-[11px]" style={{ color: 'var(--text-primary)' }}>
-                            {p.name}
-                          </span>
-                        </div>
-                        {isCurrent && <Check size={12} className="text-[var(--success,#16a34a)] shrink-0" />}
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={handlePickNewFolder}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] rounded-md border font-medium hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98]"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-              >
-                <Plus size={12} />
-                <span>{t('quickdeck.open_project_folder', '打开本地项目文件夹…')}</span>
-              </button>
+              <span className="text-[10px] font-semibold px-1 text-[var(--text-muted)] block">
+                {t('quickdeck.agent_mode_label', 'Agent 权限模式 (4 档)')}
+              </span>
+              {agentModeOptions.map((m) => {
+                const isSelected = agentMode === m.value
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => {
+                      setAgentMode(m.value)
+                      setModeOpen(false)
+                    }}
+                    className="w-full text-left p-1.5 rounded-[6px] transition-colors hover:bg-[var(--bg-secondary)] block"
+                    style={isSelected ? { backgroundColor: 'var(--content-bg)' } : {}}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-medium text-xs" style={{ color: 'var(--text-primary)' }}>
+                        <Shield size={11} style={{ color: m.color }} />
+                        <span>{m.label}</span>
+                      </div>
+                      {isSelected && <Check size={11} className="text-emerald-500" />}
+                    </div>
+                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {m.desc}
+                    </p>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
@@ -263,11 +201,10 @@ export default function QuickControlDeck() {
             type="button"
             onClick={() => {
               setDoctorOpen(!doctorOpen)
-              setProjectOpen(false)
               setModeOpen(false)
               setEffortOpen(false)
             }}
-            className="flex items-center gap-1 px-1.5 py-1 rounded border text-[10px] transition-colors hover:bg-[var(--bg-secondary)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+            className="flex items-center gap-1 px-1.5 py-1 rounded-[6px] border text-[10px] transition-colors hover:bg-[var(--bg-secondary)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
             style={{ borderColor: 'var(--border)' }}
             title={t('quickdeck.doctor_status', '系统就绪状态 (Doctor)')}
             aria-label="Doctor Health Badge"
@@ -284,7 +221,7 @@ export default function QuickControlDeck() {
           {/* Doctor Details Popover */}
           {doctorOpen && (
             <div
-              className="absolute bottom-full right-0 mb-1 w-56 rounded-lg border shadow-lg p-2.5 z-50 animate-spring-up text-xs space-y-1.5"
+              className="absolute bottom-full right-0 mb-1 w-56 rounded-[10px] border shadow-lg p-2.5 z-50 animate-spring-up text-xs space-y-1.5"
               style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
             >
               <div className="flex items-center justify-between font-semibold pb-1 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -315,148 +252,82 @@ export default function QuickControlDeck() {
         </div>
       </div>
 
-      {/* Row 2: Mode Pill & Reasoning Quick Dial */}
-      <div className="flex items-center gap-1 relative">
-        {/* Agent Mode Pill */}
-        <div className="relative flex-1 min-w-0">
-          <button
-            type="button"
-            onClick={() => {
-              setModeOpen(!modeOpen)
-              setProjectOpen(false)
-              setEffortOpen(false)
-              setDoctorOpen(false)
-            }}
-            className="w-full flex items-center justify-between gap-1 px-1.5 py-1 rounded border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-            style={{ borderColor: 'var(--border)' }}
-            aria-label="Agent Mode Selector"
-          >
-            <div className="flex items-center gap-1 min-w-0">
-              <Shield size={11} className="shrink-0" style={{ color: currentModeInfo.color }} />
-              <span className="truncate" style={{ color: 'var(--text-primary)' }}>
-                {currentModeInfo.label}
-              </span>
-            </div>
-            <span
-              className="text-[9px] px-1 rounded tabular-nums font-mono"
-              style={{ backgroundColor: currentModeInfo.color + '20', color: currentModeInfo.color }}
-            >
-              {currentModeInfo.badge}
-            </span>
-          </button>
-
-          {/* Mode Selector Popover */}
-          {modeOpen && (
-            <div
-              className="absolute bottom-full left-0 mb-1 w-56 rounded-lg border shadow-lg p-1.5 z-50 animate-spring-up space-y-1"
-              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
-            >
-              <span className="text-[10px] font-semibold px-1 text-[var(--text-muted)] block">
-                {t('quickdeck.agent_mode_label', 'Agent 权限模式 (4 档)')}
-              </span>
-              {agentModeOptions.map((m) => {
-                const isSelected = agentMode === m.value
-                return (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => {
-                      setAgentMode(m.value)
-                      setModeOpen(false)
-                    }}
-                    className="w-full text-left p-1.5 rounded-md transition-colors hover:bg-[var(--bg-secondary)] block"
-                    style={isSelected ? { backgroundColor: 'var(--content-bg)' } : {}}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 font-medium text-xs" style={{ color: 'var(--text-primary)' }}>
-                        <Shield size={11} style={{ color: m.color }} />
-                        <span>{m.label}</span>
-                      </div>
-                      {isSelected && <Check size={11} className="text-emerald-500" />}
-                    </div>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      {m.desc}
-                    </p>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Reasoning Level Pill */}
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setEffortOpen(!effortOpen)
-              setProjectOpen(false)
-              setModeOpen(false)
-              setDoctorOpen(false)
-            }}
-            className="flex items-center gap-1 px-1.5 py-1 rounded border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-            style={{ borderColor: 'var(--border)' }}
-            aria-label="Reasoning Dial"
-          >
+      {/* Row 2: Reasoning Level Quick Dial */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => {
+            setEffortOpen(!effortOpen)
+            setModeOpen(false)
+            setDoctorOpen(false)
+          }}
+          className="w-full flex items-center justify-between gap-1 px-1.5 py-1 rounded-[6px] border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+          style={{ borderColor: 'var(--border)' }}
+          aria-label="Reasoning Dial"
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
             <Brain
               size={11}
               className="shrink-0"
               style={{ color: thinkingEnabled ? 'var(--accent)' : 'var(--text-muted)' }}
             />
-            <span className="tabular-nums font-mono text-[10px]" style={{ color: 'var(--text-primary)' }}>
-              {thinkingEnabled ? (reasoningLevels.find((l) => l.value === effortLevel)?.tokens ?? '8k') : t('thinking.off', 'Off')}
+            <span className="truncate text-[11px]" style={{ color: 'var(--text-primary)' }}>
+              {t('thinking.depth', '思考深度')}
             </span>
-          </button>
+          </div>
+          <span className="tabular-nums font-mono text-[10px]" style={{ color: thinkingEnabled ? 'var(--accent)' : 'var(--text-muted)' }}>
+            {thinkingEnabled ? (reasoningLevels.find((l) => l.value === effortLevel)?.tokens ?? '8k') : t('thinking.off', 'Off')}
+          </span>
+        </button>
 
-          {/* Reasoning Dial Popover */}
-          {effortOpen && (
-            <div
-              className="absolute bottom-full right-0 mb-1 w-48 rounded-lg border shadow-lg p-2 z-50 animate-spring-up space-y-2"
-              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
-            >
-              <div className="flex items-center justify-between border-b pb-1" style={{ borderColor: 'var(--border)' }}>
-                <span className="text-[10px] font-semibold text-[var(--text-muted)]">
-                  {t('quickdeck.thinking_depth', '思考深度 (Thinking)')}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setThinkingEnabled(!thinkingEnabled)}
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                  style={{
-                    backgroundColor: thinkingEnabled ? 'var(--accent)' : 'var(--border)',
-                    color: thinkingEnabled ? '#fff' : 'var(--text-muted)',
-                  }}
-                >
-                  {thinkingEnabled ? t('thinking.on', '开启') : t('thinking.off', '关闭')}
-                </button>
-              </div>
-
-              <div className="space-y-1" style={{ opacity: thinkingEnabled ? 1 : 0.5 }}>
-                {reasoningLevels.map((lvl) => {
-                  const isCur = effortLevel === lvl.value
-                  return (
-                    <button
-                      key={lvl.value}
-                      type="button"
-                      disabled={!thinkingEnabled}
-                      onClick={() => {
-                        setEffortLevel(lvl.value)
-                        setEffortOpen(false)
-                      }}
-                      className="w-full flex items-center justify-between p-1 rounded-md text-[11px] hover:bg-[var(--bg-secondary)]"
-                      style={isCur ? { backgroundColor: 'var(--content-bg)' } : {}}
-                    >
-                      <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {lvl.label}
-                      </span>
-                      <span className="font-mono text-[10px] text-[var(--text-muted)]">{lvl.tokens}</span>
-                    </button>
-                  )
-                })}
-              </div>
+        {/* Reasoning Dial Popover */}
+        {effortOpen && (
+          <div
+            className="absolute bottom-full left-0 right-0 mb-1 rounded-[10px] border shadow-lg p-2 z-50 animate-spring-up space-y-2"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-center justify-between border-b pb-1" style={{ borderColor: 'var(--border)' }}>
+              <span className="text-[10px] font-semibold text-[var(--text-muted)]">
+                {t('quickdeck.thinking_depth', '思考深度 (Thinking)')}
+              </span>
+              <button
+                type="button"
+                onClick={() => setThinkingEnabled(!thinkingEnabled)}
+                className="text-[10px] px-1.5 py-0.5 rounded-[5px] font-medium transition-colors"
+                style={{
+                  backgroundColor: thinkingEnabled ? 'var(--accent)' : 'var(--border)',
+                  color: thinkingEnabled ? '#fff' : 'var(--text-muted)',
+                }}
+              >
+                {thinkingEnabled ? t('thinking.on', '开启') : t('thinking.off', '关闭')}
+              </button>
             </div>
-          )}
-        </div>
+
+            <div className="space-y-1" style={{ opacity: thinkingEnabled ? 1 : 0.5 }}>
+              {reasoningLevels.map((lvl) => {
+                const isCur = effortLevel === lvl.value
+                return (
+                  <button
+                    key={lvl.value}
+                    type="button"
+                    disabled={!thinkingEnabled}
+                    onClick={() => {
+                      setEffortLevel(lvl.value)
+                      setEffortOpen(false)
+                    }}
+                    className="w-full flex items-center justify-between p-1 rounded-[5px] text-[11px] hover:bg-[var(--bg-secondary)] transition-colors"
+                    style={isCur ? { backgroundColor: 'var(--content-bg)' } : {}}
+                  >
+                    <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {lvl.label}
+                    </span>
+                    <span className="font-mono text-[10px] text-[var(--text-muted)]">{lvl.tokens}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

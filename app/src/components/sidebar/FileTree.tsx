@@ -3,7 +3,7 @@
 // 'aether:open-file' CustomEvent with the absolute path — ChatInput listens
 // and inserts an @reference at the cursor.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Copy, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, ExternalLink, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 
@@ -226,6 +226,16 @@ export default function FileTree() {
             style={{ color: 'var(--text-primary)' }}
           >
             <Copy size={11} /> {t('filetree.copy_path')}
+          </button>
+          <button
+            onClick={async () => {
+              await window.electronAPI?.system?.showItemInFolder?.(ctxMenu.path)
+              setCtxMenu(null)
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-[var(--bg-secondary)] transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            <ExternalLink size={11} /> {t('workspace.reveal_explorer')}
           </button>
         </div>
       )}

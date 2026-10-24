@@ -1,6 +1,6 @@
 const { setWorkspaceRoot, setWorkspaceRootForSession, getWorkspaceRoot } = require('../tools/sandbox')
 const checkpointMgr = require('../llm/checkpointManager')
-const { invalidateCache, hasProjectInstructions, loadProjectInstructions } = require('../llm/projectInstructions')
+const { invalidateCache, hasProjectInstructions, loadProjectInstructions, loadModularRules } = require('../llm/projectInstructions')
 
 function registerAgentHandlers(ipcMain, db) {
   // Get the current agent workspace root.
@@ -42,11 +42,18 @@ function registerAgentHandlers(ipcMain, db) {
     return { success: true, root: getWorkspaceRoot() }
   })
 
-  // Check whether the current workspace has project instructions (CLAUDE.md etc.).
-  ipcMain.handle('agent:has-project-instructions', () => {
-    const has = hasProjectInstructions()
-    const info = loadProjectInstructions()
-    return { has, fileName: info?.fileName || null }
+  // Check whether the current workspace has project instructions (CLAUDE.md etc.) and modular rules (.aether/rules).
+  ipcMain.handle('agent:has-project-instructions', (_e, sessionId) => {
+    const has = hasProjectInstructions(sessionId)
+    const info = loadProjectInstructions(sessionId)
+    const ws = getWorkspaceRoot(sessionId)
+    const rules = loadModularRules(ws) || []
+    return {
+      has,
+      fileName: info?.fileName || null,
+      rulesCount: rules.length,
+      rules: rules.map(r => r.name),
+    }
   })
 
   // Manually re-index the project context graph and repo map.

@@ -133,12 +133,12 @@ interface Window {
     project: {
       list: () => Promise<Project[]>
       create: (data: { name: string; root_path: string; icon?: string | null; color?: string | null; default_model_id?: number | null; default_agent_mode?: string; is_favorite?: boolean | number }) => Promise<Project>
-      open: (id: number) => Promise<Project>
+      open: (id: number | null) => Promise<Project | null>
       update: (id: number, data: Partial<Project>) => Promise<Project>
       delete: (id: number) => Promise<{ ok: boolean; success?: boolean; error?: string }>
       current: () => Promise<Project | null>
       pickDirectory: () => Promise<string | null>
-      onOpened: (callback: (project: Project) => void) => () => void
+      onOpened: (callback: (project: Project | null) => void) => () => void
     }
     provider: {
       list: () => Promise<Provider[]>
@@ -369,6 +369,8 @@ interface Window {
         error?: string
       }>
       encryptionStatus: () => Promise<{ ok: boolean; available: boolean; error?: string }>
+      openPath: (targetPath: string) => Promise<{ ok: boolean; error?: string }>
+      showItemInFolder: (targetPath: string) => Promise<{ ok: boolean; error?: string }>
     }
     config: {
       export: (opts?: { includeSecrets?: boolean }) => Promise<{ success: boolean; bundle?: any; error?: string }>
@@ -386,7 +388,7 @@ interface Window {
     agent: {
       getWorkspace: (sessionId?: number) => Promise<string>
       setWorkspace: (opts: { dir?: string | null; sessionId?: number }) => Promise<{ success: boolean; root: string }>
-      hasProjectInstructions: () => Promise<{ has: boolean; fileName: string | null }>
+      hasProjectInstructions: (sessionId?: string | number) => Promise<{ has: boolean; fileName: string | null; rulesCount?: number; rules?: string[] }>
       reindexProject: () => Promise<{ ok: boolean; stats?: { totalFiles: number; totalEdges: number; languages: string[] }; error?: string }>
       listCheckpoints: (sessionId: number) => Promise<{ id: number; sessionId: number; turnId: number; stepIndex: number; meta: Record<string, unknown>; createdAt: string }[]>
       getCheckpoint: (id: number) => Promise<{ id: number; sessionId: number; turnId: number; stepIndex: number; messages: unknown[]; toolTrace: unknown[]; meta: Record<string, unknown>; createdAt: string } | null>
@@ -396,7 +398,7 @@ interface Window {
     }
     git: {
       undo: (opts?: string | { cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; message?: string; undoneCommit?: string | null; error?: string }>
-      status: (opts?: string | { cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; root?: string | null; status?: string; recent?: string; error?: string }>
+      status: (opts?: string | { cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; root?: string | null; branch?: string; dirtyCount?: number; status?: string; recent?: string; error?: string }>
       setAutoCommit: (enabled: boolean) => Promise<{ success: boolean; enabled: boolean }>
       getAutoCommit: () => Promise<{ enabled: boolean }>
       craftCommitMessage: (opts?: string | { cwd?: string; sessionId?: string | number }) => Promise<{ success: boolean; suggestedMessage?: string; files?: string[]; error?: string }>

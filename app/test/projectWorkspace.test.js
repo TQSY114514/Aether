@@ -476,5 +476,63 @@ describe('Milestone 1: Project-Based Multi-Workspace Architecture', () => {
         root_path: '\\\\?\\C:\\Windows',
       })).toThrow(/Forbidden workspace root/)
     })
+
+    it('project:open(null) deactivates project and switches cleanly to default workspace', async () => {
+      const handlers = new Map()
+      const mockIpcMain = {
+        handle: (channel, fn) => {
+          handlers.set(channel, fn)
+        },
+      }
+      const dbModule = require('../electron/database.js')
+      registerProjectHandlers(mockIpcMain, dbModule)
+
+      const safeDir = path.join(tmpDir, 'deactivate-proj')
+      fs.mkdirSync(safeDir, { recursive: true })
+      const safeProj = handlers.get('project:create')(null, {
+        name: 'Deactivate Proj',
+        root_path: safeDir,
+      })
+
+      // Open project
+      await handlers.get('project:open')(null, safeProj.id)
+      const current = await handlers.get('project:current')(null)
+      expect(current.id).toBe(safeProj.id)
+      expect(getActiveProjectRoot()).toBe(safeDir)
+
+      // Open with null (deactivate)
+      const deactivated = await handlers.get('project:open')(null, null)
+      expect(deactivated).toBeNull()
+      const currentAfter = await handlers.get('project:current')(null)
+      expect(currentAfter).toBeNull()
+      expect(getActiveProjectRoot()).toBeNull()
+    })
+
+    it('agent:has-project-instructions returns rule count and rule names', async () => {
+      const handlers = new Map()
+      const mockIpcMain = {
+        handle: (channel, fn) => {
+          handlers.set(channel, fn)
+        },
+      }
+      const dbModule = require('../electron/database.js')
+      const { registerAgentHandlers } = require('../electron/ipc/agent.handler.js')
+      registerAgentHandlers(mockIpcMain, dbModule)
+
+      const safeDir = path.join(tmpDir, 'rules-proj')
+      const rulesDir = path.join(safeDir, '.aether', 'rules')
+      fs.mkdirSync(rulesDir, { recursive: true })
+      fs.writeFileSync(path.join(safeDir, 'AGENTS.md'), '# Agents Guide')
+      fs.writeFileSync(path.join(rulesDir, 'code-style.md'), 'Prefer TypeScript')
+
+      setWorkspaceRoot(safeDir)
+      invalidateCache()
+
+      const res = await handlers.get('agent:has-project-instructions')(null)
+      expect(res.has).toBe(true)
+      expect(res.fileName).toBe('AGENTS.md')
+      expect(res.rulesCount).toBe(1)
+      expect(res.rules).toContain('code-style.md')
+    })
   })
 })

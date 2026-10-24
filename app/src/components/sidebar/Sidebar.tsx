@@ -8,6 +8,7 @@ import { stripChannelMarkers } from '@/utils/markdown'
 import FileTree from './FileTree'
 import HoverMarquee from '@/components/ui/HoverMarquee'
 import QuickControlDeck from './QuickControlDeck'
+import WorkspaceHeader from './WorkspaceHeader'
 
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
@@ -184,6 +185,13 @@ export default function Sidebar() {
           >
             <Plus size={16} />
           </button>
+          <button
+            onClick={toggleSidebar}
+            className="p-2 rounded-md hover:bg-[var(--border)]/60 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors active:scale-[0.95]"
+            title={activeProject ? `${activeProject.name} (${activeProject.root_path})` : t('workspace.default')}
+          >
+            <FolderKanban size={16} className={activeProject ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+          </button>
           <div className="w-5 my-1.5 border-t border-[var(--border)]" />
           <div className="mt-auto flex flex-col items-center gap-1 w-full pb-2">
             {([
@@ -211,16 +219,26 @@ export default function Sidebar() {
         </div>
       ) : (
     <div className="flex-1 flex flex-col min-h-0 w-[250px] tab-fade-in">
-      <div className="p-2 shrink-0">
-        <button onClick={() => useStore.getState().newChat()} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-all hover:shadow-sm press-scale hover-lift" style={{ borderColor: 'var(--border)' }}>
-          <Plus size={16} className="text-[var(--text-secondary)] transition-transform group-hover:rotate-90" />{t('chat.new')}
+      <WorkspaceHeader />
+      <div className="px-2 pb-1.5 shrink-0 flex items-center gap-1.5">
+        <button
+          onClick={() => useStore.getState().newChat()}
+          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[6px] border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-all hover:shadow-2xs active:scale-[0.99]"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+        >
+          <Plus size={14} className="text-[var(--accent)]" />
+          <span>{t('chat.new')}</span>
         </button>
       </div>
       <div className="px-2 pb-2 shrink-0">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-[var(--content-bg)] text-sm transition-colors input-ring" style={{ borderColor: 'var(--border)' }}>
-          <Search size={14} className="text-[var(--text-muted)] shrink-0" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('sidebar.search')} className="w-full bg-transparent outline-none text-sm" />
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-[6px] border bg-[var(--content-bg)] text-xs transition-colors input-ring" style={{ borderColor: 'var(--border)' }}>
+          <Search size={13} className="text-[var(--text-muted)] shrink-0" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('sidebar.search')}
+            className="w-full bg-transparent outline-none text-xs text-[var(--text-primary)]"
+          />
           {searchQuery && (
             <span className="text-[10px] shrink-0 px-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
               {filteredSessions.length}
@@ -228,34 +246,6 @@ export default function Sidebar() {
           )}
         </div>
       </div>
-      {activeProject && (
-        <div className="px-2 pb-2 shrink-0">
-          <div
-            className="flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs bg-[var(--bg-secondary)]"
-            style={{ borderColor: 'var(--border)' }}
-          >
-            <div className="flex items-center gap-1.5 min-w-0">
-              <FolderKanban size={13} className="text-[var(--accent)] shrink-0" />
-              <span className="font-medium truncate text-[var(--text-primary)]" title={activeProject.root_path}>
-                {activeProject.name}
-              </span>
-            </div>
-            <button
-              onClick={toggleProjectScope}
-              className={`px-1.5 py-0.5 rounded-md transition-colors text-[11px] flex items-center gap-1 shrink-0 outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
-                projectScopeFilter
-                  ? 'text-[var(--accent)] bg-[var(--content-bg)] border border-[var(--border)] shadow-xs hover:bg-[var(--bg-secondary)]'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border)]/60'
-              }`}
-              title={t('sidebar.project_scope.tooltip', projectScopeFilter ? '当前项目会话（点击显示全部）' : '全部会话（点击仅显示当前项目）')}
-              aria-label={t('sidebar.project_scope.tooltip', '切换项目会话筛选')}
-            >
-              <Filter size={11} />
-              <span className="text-[10px] font-mono">{projectScopeFilter ? t('sidebar.project_scope.project', 'Project') : t('sidebar.project_scope.all', 'All')}</span>
-            </button>
-          </div>
-        </div>
-      )}
       <FileTree />
       <div className="flex-1 overflow-y-auto px-2 pb-1 scroll-bounce">
         {groups.length === 0 && (

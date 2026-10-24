@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
     setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', typeof opts === 'string' ? { dir: opts } : opts),
     reindexProject: () => ipcRenderer.invoke('agent:project:reindex'),
-    hasProjectInstructions: () => ipcRenderer.invoke('agent:has-project-instructions'),
+    hasProjectInstructions: (sessionId) => ipcRenderer.invoke('agent:has-project-instructions', sessionId),
     listCheckpoints: (sessionId) => ipcRenderer.invoke('agent:checkpoint:list', sessionId),
     getCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:get', id),
     deleteCheckpoint: (id) => ipcRenderer.invoke('agent:checkpoint:delete', id),
@@ -238,6 +238,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setTitleBarOverlay: (opts) => ipcRenderer.invoke('system:set-title-bar-overlay', opts),
     doctor: (opts) => ipcRenderer.invoke('system:doctor', opts),
     encryptionStatus: () => ipcRenderer.invoke('system:encryption-status'),
+    openPath: (targetPath) => ipcRenderer.invoke('system:open-path', targetPath),
+    showItemInFolder: (targetPath) => ipcRenderer.invoke('system:show-item-in-folder', targetPath),
     onSwitchSession: (cb) => subscribe('session:switch-requested', cb),
   },
   config: {
