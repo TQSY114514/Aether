@@ -452,8 +452,16 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
         description: '真实代码修复与测试驱动评估，自动执行测试命令校验 Pass/Fail 率',
         verifyCommand: 'npx vitest run test/securityRegression.test.js',
         tasks: [
-          '请分析当前项目中的单元测试，定位并修复问题',
-          '检查项目安全边界防范与路径规范',
+          {
+            name: '修测试与功能验证',
+            prompt: '请分析当前项目中的单元测试，定位并修复问题',
+            verifyCommand: 'npx vitest run test/recipes.test.js',
+          },
+          {
+            name: '安全回归防线',
+            prompt: '检查项目安全边界防范与路径规范',
+            verifyCommand: 'npx vitest run test/securityRegression.test.js',
+          },
         ],
         objectiveTasks: [
           {

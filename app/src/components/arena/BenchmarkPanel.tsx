@@ -35,7 +35,7 @@ interface BenchmarkTemplate {
   id: string
   name: string
   description: string
-  tasks: string[]
+  tasks: any[]
   verifyCommand?: string
   objectiveTasks?: Array<{ name: string; prompt: string; verifyCommand: string }>
 }
@@ -74,15 +74,24 @@ export default function BenchmarkPanel() {
 
   const loadStarterTemplate = (tpl: BenchmarkTemplate) => {
     if (objOpen) {
-      const firstTask = tpl.objectiveTasks?.[0]?.prompt || tpl.tasks[0] || tpl.description
-      const cmd = tpl.objectiveTasks?.[0]?.verifyCommand || tpl.verifyCommand || 'npm test'
+      const firstTask = tpl.objectiveTasks?.[0]?.prompt
+        || (typeof tpl.tasks[0] === 'string' ? tpl.tasks[0] : tpl.tasks[0]?.prompt)
+        || tpl.description
+      const cmd = tpl.objectiveTasks?.[0]?.verifyCommand
+        || (typeof tpl.tasks[0] === 'object' && tpl.tasks[0]?.verifyCommand)
+        || tpl.verifyCommand
+        || 'npm test'
       setObjPrompt(firstTask)
       setObjVerifyCmd(cmd)
       toast(t('arena.bench.load_starter') + ': ' + tpl.name, { type: 'info' })
     } else {
       setEditing(true)
       setName(tpl.name)
-      setTasksText(tpl.tasks.join('\n'))
+      const tasksStr = tpl.tasks
+        .map((t: any) => (typeof t === 'string' ? t : (t.prompt || t.name || '')))
+        .filter(Boolean)
+        .join('\n')
+      setTasksText(tasksStr)
       toast(t('arena.bench.load_starter') + ': ' + tpl.name, { type: 'info' })
     }
   }
