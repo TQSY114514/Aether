@@ -46,6 +46,7 @@ export default function ChatPage() {
   const sessionConfigs = useStore((s) => s.sessionConfigs)
   const saveSessionConfig = useStore((s) => s.saveSessionConfig)
   const allModels = useStore((s) => s.allModels)
+  const sidebarOpen = useStore((s) => s.sidebarOpen)
 
   const activeProject = useStore((s) => s.activeProject)
   const [headerGit, setHeaderGit] = useState<{ branch?: string; isClean?: boolean } | null>(null)
@@ -212,47 +213,53 @@ export default function ChatPage() {
         </div>
       </Tooltip>
 
-      {/* Workspace Context Chip */}
-      <Tooltip
-        text={`${activeProject ? activeProject.name : t('workspace.default')}${headerGit?.branch ? ` (${headerGit.branch})` : ''} · ${activeProject?.root_path || '~/.aetherai'}${headerRule?.has ? ` · [${headerRule.fileName || 'Rules'}]` : ''}`}
-      >
-        <button
-          type="button"
-          onClick={async () => {
-            const target = activeProject?.root_path || (await window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined))
-            if (target) window.electronAPI?.system?.openPath?.(target)
-          }}
-          className="h-7.5 flex items-center gap-1.5 px-2 rounded-[6px] border text-xs font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] cursor-pointer"
-          style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-          aria-label="Workspace Info"
+      {/* Workspace Context Chip: Full project badge when sidebar is collapsed; concise Git/Rule chip when expanded */}
+      {(!sidebarOpen || headerRule?.has || headerGit?.branch) && (
+        <Tooltip
+          text={`${activeProject ? activeProject.name : t('workspace.default')}${headerGit?.branch ? ` (${headerGit.branch})` : ''} · ${activeProject?.root_path || '~/.aetherai'}${headerRule?.has ? ` · [${headerRule.fileName || 'Rules'}]` : ''}`}
         >
-          {headerGit ? (
-            <FolderGit2 size={12} className="text-[var(--accent)] shrink-0" />
-          ) : (
-            <FolderKanban size={12} className="text-[var(--accent)] shrink-0" />
-          )}
-          <span className="truncate max-w-[90px] text-[11px] font-semibold">
-            {activeProject ? activeProject.name : t('workspace.default')}
-          </span>
-          {headerGit?.branch && (
-            <span className="font-mono text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+          <button
+            type="button"
+            onClick={async () => {
+              const target = activeProject?.root_path || (await window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined))
+              if (target) window.electronAPI?.system?.openPath?.(target)
+            }}
+            className="h-7.5 flex items-center gap-1.5 px-2 rounded-[6px] border text-xs font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] cursor-pointer"
+            style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            aria-label="Workspace Info"
+          >
+            {!sidebarOpen ? (
+              <>
+                {headerGit ? (
+                  <FolderGit2 size={12} className="text-[var(--accent)] shrink-0" />
+                ) : (
+                  <FolderKanban size={12} className="text-[var(--accent)] shrink-0" />
+                )}
+                <span className="truncate max-w-[90px] text-[11px] font-semibold">
+                  {activeProject ? activeProject.name : t('workspace.default')}
+                </span>
+              </>
+            ) : null}
+            {headerGit?.branch && (
+              <span className="font-mono text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ backgroundColor: headerGit.isClean ? 'var(--success, #16a34a)' : 'var(--warning, #f59e0b)' }}
+                />
+                <span className="truncate max-w-[55px]">{headerGit.branch}</span>
+              </span>
+            )}
+            {headerRule?.has && (
               <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ backgroundColor: headerGit.isClean ? 'var(--success, #16a34a)' : 'var(--warning, #f59e0b)' }}
-              />
-              <span className="truncate max-w-[55px]">{headerGit.branch}</span>
-            </span>
-          )}
-          {headerRule?.has && (
-            <span
-              className="px-1 py-0.2 rounded-[4px] border font-mono text-[9px] text-[var(--accent)] bg-[var(--bg-secondary)] shrink-0"
-              style={{ borderColor: 'var(--border)' }}
-            >
-              {headerRule.fileName || 'Rules'}
-            </span>
-          )}
-        </button>
-      </Tooltip>
+                className="px-1 py-0.2 rounded-[4px] border font-mono text-[9px] text-[var(--accent)] bg-[var(--bg-secondary)] shrink-0"
+                style={{ borderColor: 'var(--border)' }}
+              >
+                {headerRule.fileName || 'Rules'}
+              </span>
+            )}
+          </button>
+        </Tooltip>
+      )}
 
       {/* Modern Persona Selector Dropdown */}
       <PersonaSelector

@@ -301,18 +301,6 @@ export default function Sidebar() {
                 <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 -mr-1">
                   <button onClick={async (e) => {
                     e.stopPropagation()
-                    const cmd = `aether tui --session ${session.id}`
-                    try {
-                      await window.electronAPI?.system?.clipboardWrite?.(cmd)
-                      await window.electronAPI?.system?.notify?.({ title: '已复制终端命令', body: cmd })
-                    } catch {}
-                  }}
-                    className="p-1 rounded hover:bg-[var(--border)] shrink-0 icon-btn-silky"
-                    title="在终端继续此会话(复制命令)">
-                    <TerminalSquare size={12} className="text-[var(--text-muted)]" />
-                  </button>
-                  <button onClick={async (e) => {
-                    e.stopPropagation()
                     const pinned = session.pinned ? 0 : 1
                     await window.electronAPI?.session?.pin?.(session.id, pinned)
                     loadSessions()
@@ -351,6 +339,17 @@ export default function Sidebar() {
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
               <Download size={11} /> Export conversation
             </button>
+            <button onClick={async () => {
+              setCtxMenu(null)
+              const cmd = `aether tui --session ${ctxMenu.session.id}`
+              try {
+                await window.electronAPI?.system?.clipboardWrite?.(cmd)
+                await window.electronAPI?.system?.notify?.({ title: t('session.tui_copied', '已复制终端命令'), body: cmd })
+              } catch {}
+            }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <TerminalSquare size={11} /> {t('session.continue_in_tui', '在终端继续 (复制命令)')}
+            </button>
             <div className="my-0.5" style={{ borderTop: '1px solid var(--border)' }} />
             <button onClick={async () => {
               setCtxMenu(null)
@@ -367,6 +366,7 @@ export default function Sidebar() {
       <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
+        <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
         <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>

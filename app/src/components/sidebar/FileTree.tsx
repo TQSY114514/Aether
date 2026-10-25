@@ -171,7 +171,7 @@ export default function FileTree() {
       >
         <FolderOpen size={13} className="shrink-0" style={{ color: 'var(--accent)' }} />
         <span className="flex-1 text-left truncate text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {root ? baseName(root) : t('filetree.workspace')}
+          {t('filetree.files', '项目文件')}
         </span>
         <button
           className="p-1 rounded hover:bg-[var(--border)] shrink-0"
