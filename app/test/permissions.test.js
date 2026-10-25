@@ -15,6 +15,25 @@ import Module from 'module'
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+const origLoad = Module._load
+let fakeLlm = null
+
+beforeAll(() => {
+  Module._load = function (request, ...args) {
+    if (request === 'electron') {
+      return { app: { getPath: () => join(tmpdir(), 'aether-perm-test-userdata') } }
+    }
+    if (request.endsWith('providerAdapter')) {
+      return { completeChatMessage: (opts) => fakeLlm(opts) }
+    }
+    return origLoad.apply(this, [request, ...args])
+  }
+})
+
+afterAll(() => {
+  Module._load = origLoad
+})
+
 import permissions from '../electron/llm/permissions'
 import trustEngine from '../electron/llm/trustEngine'
 
@@ -244,27 +263,9 @@ describe('trustEngine score read/write (prepare().get/all/run)', () => {
 // workspace. write_file (dangerous) / read_file (safe) come from the real
 // registry, so the risk wiring and policy requirements are exercised end to end.
 describe('runToolLoop permission gate wiring (P0-C1)', () => {
-  const origLoad = Module._load
-  let fakeLlm = null
   let toolLoop = null
   let wsRoot = null
   let sandbox = null
-
-  beforeAll(() => {
-    Module._load = function (request, ...args) {
-      if (request === 'electron') {
-        return { app: { getPath: () => join(tmpdir(), 'aether-perm-test-userdata') } }
-      }
-      if (request.endsWith('providerAdapter')) {
-        return { completeChatMessage: (opts) => fakeLlm(opts) }
-      }
-      return origLoad.apply(this, [request, ...args])
-    }
-  })
-
-  afterAll(() => {
-    Module._load = origLoad
-  })
 
   beforeEach(async () => {
     delete require.cache[require.resolve('../electron/llm/toolLoop')]
@@ -500,12 +501,7 @@ describe('approveAlways / sessionApproved', () => {
     policy.authorize('exec', JSON.stringify({ command: 'rm -rf /' }), p)
     expect(p.asks).toBe(2)
   })
-})
-  const { PermissionMode } = permissions // 本块在共用 describe 之外，需自行解构
-  function countingPrompter() {
-    let asks = 0
-    return { get asks() { return asks }, decide() { asks++; return permissions.PermissionPromptDecision.AllowAlways } }
-  }
+
   it('capability axis deny beats session-approved rules', () => {
     const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
     policy.approveAlways('run_command(npm test)')
@@ -545,3 +541,4 @@ describe('approveAlways / sessionApproved', () => {
     expect(p.asks).toBe(2)
     expect(r2.allowed).toBe(true)
   })
+})
