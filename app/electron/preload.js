@@ -365,4 +365,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   trust: {
     badge: (params) => ipcRenderer.invoke('trust:badge', params),
   },
+  browser: {
+    status: (sessionId) => ipcRenderer.invoke('browser:status', sessionId),
+    close: (sessionId) => ipcRenderer.invoke('browser:close', sessionId),
+    action: (payload) => ipcRenderer.invoke('browser:action', payload),
+  },
 })

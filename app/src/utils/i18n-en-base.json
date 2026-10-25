@@ -935,6 +935,7 @@
   "tool.status.failed": "failed",
   "tool.status.running": "running",
   "tool.todo_write": "Update todo list",
+  "tool.agent_browser": "Browser",
   "tool.unknown": "Unknown tool",
   "tool.use_skill": "Use skill",
   "tool.web_fetch": "Fetch URL",

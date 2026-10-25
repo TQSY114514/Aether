@@ -36,6 +36,7 @@ const CATEGORY_TOOLS = {
   ],
   memory: ['memory_save', 'memory_list', 'memory_search'],
   git: ['git_status', 'git_diff', 'git_log', 'git_commit', 'git_push', 'git_create_branch'],
+  browser: ['agent_browser', 'web_visualize'],
 }
 
 // 核心工具（永远注入）——模型完成通用任务的基本盘
@@ -54,6 +55,7 @@ const CATEGORY_PATTERNS = [
   { category: 'agent', re: /\b(delegate|sub.?agent|parallel|run.?agent|workflow|arena|background.?task|debug|test.first|review|agent)\b|子代理|并行|编排|竞技场|后台任务|调试|审查|测试/i },
   { category: 'memory', re: /\b(memory|remember|recall|记住|回忆|记忆)\b/i },
   { category: 'git', re: /\b(git|commit|push|branch|diff|提交|分支|推送)\b/i },
+  { category: 'browser', re: /\b(browser|webpage|page|navigate|click|snapshot|dom|localhost|html|ui|url|网页|页面|浏览器|点击|前端|打开网页)\b/i },
 ]
 
 // 路由「认识」的全部工具名（CORE + 各类别）。认识之外的一律走保守兜底：
@@ -83,7 +85,7 @@ const GIT_SIGNAL_TOOLS = new Set([
 const STAGE_CATEGORIES = {
   explore: [],
   build: ['lsp'],            // 动手改代码：定义/引用/重命名辅助
-  verify: ['lsp', 'agent'],  // 验证修复：diagnostics + test_first/debug_loop/review_code
+  verify: ['lsp', 'agent', 'browser'],  // 验证修复：diagnostics + test_first/debug_loop/review_code + browser
   deliver: ['git'],          // 收尾：提交/分支/推送
 }
 

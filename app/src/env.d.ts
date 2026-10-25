@@ -482,6 +482,11 @@ interface Window {
     trust: {
       badge: (params: { sessionId?: number; modelId?: number }) => Promise<{ level: string; score: number; reason: string } | null>
     }
+    browser: {
+      status: (sessionId?: number | string) => Promise<{ active: boolean; url?: string; title?: string; lastActivity?: number; hasThumbnail?: boolean; thumbnailBase64?: string | null; consoleWarningErrorCount?: number }>
+      close: (sessionId?: number | string) => Promise<{ success: boolean }>
+      action: (payload: { sessionId?: number | string; args: Record<string, unknown> }) => Promise<{ success: boolean; result?: unknown; error?: string }>
+    }
     task: {
       start: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
       list: () => Promise<{ id: number; sessionId: number; parentSessionId?: number | null; status: TaskStatus7; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }[]>
