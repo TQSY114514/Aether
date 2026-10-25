@@ -190,7 +190,7 @@ function routerEnabled(flagEnabled) {
 //   Bucket 1: 未分类工具（!KNOWN_TOOLS，含未分类内置与 MCP 工具，routeTools 首轮起恒注入）
 //   Bucket 2..6: 按阶段推进顺序排列的按需类别（lsp -> agent -> git -> memory -> github）
 // 同桶内保持输入相对顺序（稳定排序），使阶段追加退化为尾部追加。
-const CATEGORY_BUCKET_ORDER = ['lsp', 'agent', 'git', 'memory', 'github']
+const CATEGORY_BUCKET_ORDER = ['lsp', 'agent', 'browser', 'git', 'memory', 'github']
 const TOOL_TO_BUCKET = new Map()
 for (const c of CORE_TOOLS) TOOL_TO_BUCKET.set(c, 0)
 CATEGORY_BUCKET_ORDER.forEach((cat, idx) => {
