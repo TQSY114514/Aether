@@ -936,6 +936,7 @@
   "tool.status.running": "running",
   "tool.todo_write": "Update todo list",
   "tool.agent_browser": "Browser",
+  "tool.browser_snapshot": "Browser snapshot",
   "tool.unknown": "Unknown tool",
   "tool.use_skill": "Use skill",
   "tool.web_fetch": "Fetch URL",

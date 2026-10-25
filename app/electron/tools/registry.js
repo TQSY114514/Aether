@@ -750,6 +750,12 @@ const TOOLS = [
 
   { name: 'agent_browser', description: 'Agent-dedicated controlled browser environment for web automation, SPA exploration, and UI verification. Actions: open, snapshot, click, type, scroll, console, close. Uses semantic accessibility references (e.g. @1, @2) for accurate and token-efficient interactions.', risk: 'safe', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['open', 'snapshot', 'click', 'type', 'scroll', 'console', 'close'], description: 'Action to perform in the agent browser session.' }, url: { type: 'string', description: 'URL to navigate to (required for action=\'open\'). Supports localhost and external http/https.' }, ref: { type: 'string', description: 'Interactive element reference from snapshot (e.g. \'@1\', \'1\') to click or type into.' }, selector: { type: 'string', description: 'Optional CSS selector to target an element directly.' }, text: { type: 'string', description: 'Text to enter (required for action=\'type\').' }, direction: { type: 'string', enum: ['up', 'down', 'top', 'bottom'], description: 'Scroll direction (for action=\'scroll\', default \'down\').' }, waitMs: { type: 'number', description: 'Time in ms to wait after action for DOM updates (default 1000).' }, captureScreenshot: { type: 'boolean', description: 'Whether to include an inline screenshot with the snapshot/result.' } }, required: ['action'] }, run: async (args, ctx) => {
     try {
+      if (ctx?.db) {
+        const featureFlags = require('../featureFlags')
+        if (!featureFlags.isEnabled(ctx.db, 'agent.browser')) {
+          return '[agent_browser is disabled by feature flag]'
+        }
+      }
       const browser = require('../browser/agentBrowser')
       const sessId = ctx?.sessionId || 'default'
       return await browser.executeBrowserAction(sessId, args, ctx)

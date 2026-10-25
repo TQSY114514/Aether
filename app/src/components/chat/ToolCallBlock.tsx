@@ -385,7 +385,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             )}
             {extractedImageUrl && (
               <div className="mt-2 rounded-[2px] border overflow-hidden max-w-lg" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-                <img src={extractedImageUrl} alt="Browser snapshot" className="w-full h-auto object-contain max-h-72" />
+                <img src={extractedImageUrl} alt={t('tool.browser_snapshot')} className="w-full h-auto object-contain max-h-72" />
               </div>
             )}
             {/* Diff preview — shown for write_file / edit_file / apply_patch (Claude Code-style) */}

@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url)
 const registry = require('../electron/tools/registry')
 const toolRouter = require('../electron/llm/toolRouter')
 const agentBrowser = require('../electron/browser/agentBrowser')
+const capabilityPolicy = require('../electron/llm/capabilityPolicy')
 
 function getTool(name) {
   const t = registry.getTool(name)
@@ -35,6 +36,10 @@ describe('agent_browser tool registration', () => {
     expect(props.waitMs).toBeDefined()
     expect(props.captureScreenshot).toBeDefined()
   })
+
+  it('is mapped to network capability axis', () => {
+    expect(capabilityPolicy.axisFor('agent_browser')).toBe(capabilityPolicy.AXES.NETWORK)
+  })
 })
 
 describe('agent_browser tool routing', () => {
@@ -43,7 +48,7 @@ describe('agent_browser tool routing', () => {
     expect(toolRouter._categories.browser).toContain('web_visualize')
   })
 
-  it('routes to browser category on web and UI keywords', () => {
+  it('routes to browser category on web and UI keywords (English and Chinese)', () => {
     const r1 = toolRouter.routeTools({
       prompt: '打开 localhost:3000 查看前端页面有没有报错',
       allToolNames: ['read_file', 'agent_browser', 'git_status'],
@@ -57,6 +62,13 @@ describe('agent_browser tool routing', () => {
       safeNames: new Set(['read_file', 'agent_browser', 'git_status']),
     })
     expect(r2.has('agent_browser')).toBe(true)
+
+    const r3 = toolRouter.routeTools({
+      prompt: '请访问网站并点击按钮',
+      allToolNames: ['read_file', 'agent_browser', 'git_status'],
+      safeNames: new Set(['read_file', 'agent_browser', 'git_status']),
+    })
+    expect(r3.has('agent_browser')).toBe(true)
   })
 
   it('injects browser tools in staged verify stage', () => {
@@ -71,6 +83,17 @@ describe('agent_browser navigation safety gates', () => {
 
     const res2 = await agentBrowser.isBrowserNavigationAllowed('http://127.0.0.1:5173/', {})
     expect(res2.ok).toBe(true)
+
+    const syncRes = agentBrowser.isBrowserNavigationAllowedSync('http://localhost:8080/', {})
+    expect(syncRes.ok).toBe(true)
+  })
+
+  it('blocks 0.0.0.0 explicitly (not treated as loopback)', async () => {
+    const res = await agentBrowser.isBrowserNavigationAllowed('http://0.0.0.0:8000/', {})
+    expect(res.ok).toBe(false)
+
+    const syncRes = agentBrowser.isBrowserNavigationAllowedSync('http://0.0.0.0:8000/', {})
+    expect(syncRes.ok).toBe(false)
   })
 
   it('blocks cloud metadata endpoints strictly', async () => {
@@ -95,9 +118,34 @@ describe('agent_browser navigation safety gates', () => {
     const res = await agentBrowser.isBrowserNavigationAllowed('http://10.0.0.1/admin', {})
     expect(res.ok).toBe(false)
   })
+
+  it('fails closed when network policy evaluation fails or blocks', async () => {
+    const fakeDbBlock = {
+      getSetting: (k) => {
+        if (k === 'feature_flag.network.policy') return 'true'
+        if (k === 'network.policy') return 'block'
+        return null
+      },
+    }
+    const resBlock = await agentBrowser.isBrowserNavigationAllowed('https://malicious.example.com/', { db: fakeDbBlock })
+    expect(resBlock.ok).toBe(false)
+
+    const fakeDbErr = {
+      getSetting: () => {
+        throw new Error('corrupt db settings')
+      },
+    }
+    const resErr = await agentBrowser.isBrowserNavigationAllowed('https://example.com/', { db: fakeDbErr })
+    expect(resErr.ok).toBe(false)
+    expect(resErr.reason).toMatch(/network policy evaluation failed/)
+  })
 })
 
-describe('agent_browser parameter validation and headless degradation', () => {
+describe('agent_browser parameter validation, plan mode and feature flags', () => {
+  afterEach(() => {
+    agentBrowser.closeAllSessions()
+  })
+
   it('requires action parameter', async () => {
     await expect(agentBrowser.executeBrowserAction('test-sess', {})).rejects.toThrow('Action required')
   })
@@ -118,6 +166,29 @@ describe('agent_browser parameter validation and headless degradation', () => {
     await expect(agentBrowser.executeBrowserAction('test-sess', { action: 'fly_to_moon' })).rejects.toThrow('Unknown action')
   })
 
+  it('blocks mutating actions in plan mode', async () => {
+    const resClick = await agentBrowser.executeBrowserAction('test-sess', { action: 'click', ref: '@1' }, { agentMode: 'plan' })
+    expect(resClick).toContain('blocked in plan mode')
+
+    const resType = await agentBrowser.executeBrowserAction('test-sess', { action: 'type', ref: '@1', text: 'hi' }, { agentMode: 'plan' })
+    expect(resType).toContain('blocked in plan mode')
+  })
+
+  it('respects feature flag when agent.browser is disabled', async () => {
+    const fakeDbDisabled = {
+      getSetting: (k) => {
+        if (k === 'feature_flag.agent.browser') return '0'
+        return null
+      },
+    }
+    const res = await agentBrowser.executeBrowserAction('test-sess', { action: 'open', url: 'http://localhost:3000' }, { db: fakeDbDisabled })
+    expect(res).toContain('disabled by feature flag')
+
+    const t = getTool('agent_browser')
+    const toolRes = await t.run({ action: 'open', url: 'http://localhost:3000' }, { db: fakeDbDisabled })
+    expect(toolRes).toContain('disabled by feature flag')
+  })
+
   it('degrades gracefully in headless Node environment without Electron', async () => {
     const t = getTool('agent_browser')
     const res = await t.run({ action: 'open', url: 'http://localhost:3000' }, { sessionId: 'test-sess' })
@@ -126,13 +197,17 @@ describe('agent_browser parameter validation and headless degradation', () => {
     expect(res).toContain('requires Electron desktop environment')
   })
 
-  it('supports close action even when no window exists', async () => {
-    const res = await agentBrowser.executeBrowserAction('test-sess', { action: 'close' })
-    expect(res).toBe('Agent browser session closed.')
+  it('supports close action without needlessly instantiating a session', async () => {
+    const res = await agentBrowser.executeBrowserAction('non-existent-session-123', { action: 'close' })
+    expect(res).toBe('No active browser session.')
   })
 })
 
 describe('agent_browser session status and lifecycle', () => {
+  afterEach(() => {
+    agentBrowser.closeAllSessions()
+  })
+
   it('reports inactive when no browser session is open', () => {
     const status = agentBrowser.getBrowserStatus('non-existent-session')
     expect(status.active).toBe(false)

@@ -37,10 +37,10 @@ const activeSessions = new Map()
 const SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000
 
 /**
- * Validate navigation destinations for the Agent Browser.
- * Distinguishes developer localhost testing from dangerous cloud metadata endpoints.
+ * Synchronous validation for initial URL sanity and synchronous event callbacks
+ * (Electron will-redirect / will-navigate require synchronous event.preventDefault()).
  */
-async function isBrowserNavigationAllowed(destUrl, ctx, { allowLocalhost = true } = {}) {
+function isBrowserNavigationAllowedSync(destUrl, ctx, { allowLocalhost = true } = {}) {
   let u
   try {
     u = new URL(destUrl)
@@ -65,11 +65,24 @@ async function isBrowserNavigationAllowed(destUrl, ctx, { allowLocalhost = true 
     return { ok: false, reason: 'blocked: cloud metadata endpoint' }
   }
 
-  // Developer localhost allowance
-  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0'
+  // Developer localhost allowance (strictly loopback, 0.0.0.0 is deliberately excluded)
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
   if (isLocal) {
-    if (allowLocalhost) return { ok: true }
-    return { ok: false, reason: 'blocked: localhost navigation disabled' }
+    if (!allowLocalhost) return { ok: false, reason: 'blocked: localhost navigation disabled' }
+
+    // If network policy is active in DB, verify if it permits localhost
+    if (ctx?.db) {
+      try {
+        const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
+        if (policyActive(ctx.db)) {
+          const pol = checkUrlPolicy(ctx.db, destUrl)
+          if (!pol.ok) return { ok: false, reason: `network policy: ${pol.reason || 'blocked'}` }
+        }
+      } catch (err) {
+        return { ok: false, reason: `network policy evaluation failed: ${err.message}` }
+      }
+    }
+    return { ok: true, isLocal: true }
   }
 
   // Check network policy if configured in DB
@@ -80,16 +93,29 @@ async function isBrowserNavigationAllowed(destUrl, ctx, { allowLocalhost = true 
         const pol = checkUrlPolicy(ctx.db, destUrl)
         if (!pol.ok) return { ok: false, reason: `network policy: ${pol.reason || 'blocked'}` }
       }
-    } catch {
-      // networkPolicy module optional
+    } catch (err) {
+      return { ok: false, reason: `network policy evaluation failed: ${err.message}` }
     }
   }
 
-  // Standard SSRF check for external hosts
+  // Standard static SSRF check for literal IPs / protocols
   const ssrf = checkSSRF(destUrl)
   if (!ssrf.ok) return ssrf
 
+  return { ok: true, isLocal: false, hostname }
+}
+
+/**
+ * Validate navigation destinations for the Agent Browser.
+ * Runs synchronous checks first, followed by asynchronous DNS resolution checks for external hosts.
+ */
+async function isBrowserNavigationAllowed(destUrl, ctx, { allowLocalhost = true } = {}) {
+  const syncRes = isBrowserNavigationAllowedSync(destUrl, ctx, { allowLocalhost })
+  if (!syncRes.ok) return syncRes
+  if (syncRes.isLocal) return { ok: true }
+
   try {
+    const u = new URL(destUrl)
     await checkSSRFHostname(u.hostname)
   } catch (err) {
     return { ok: false, reason: `dns check failed: ${err.message}` }
@@ -144,7 +170,7 @@ class AgentBrowserSession {
         offscreen: true,
         sandbox: true,
         backgroundThrottling: false,
-        contextIsolation: false, // enables evaluating DOM scripts and synthetic events
+        contextIsolation: true, // Primary isolation barrier enabled
       },
     })
 
@@ -166,14 +192,19 @@ class AgentBrowserSession {
       }
     })
 
-    // Intercept redirects and in-page navigation for security
-    this.win.webContents.on('will-redirect', async (event, navigationUrl) => {
-      const allowed = await isBrowserNavigationAllowed(navigationUrl, ctx)
+    // Intercept redirects and in-page navigation synchronously
+    this.win.webContents.on('will-redirect', (event, navigationUrl) => {
+      const allowed = isBrowserNavigationAllowedSync(navigationUrl, ctx)
       if (!allowed.ok) event.preventDefault()
     })
-    this.win.webContents.on('will-navigate', async (event, navigationUrl) => {
-      const allowed = await isBrowserNavigationAllowed(navigationUrl, ctx)
+    this.win.webContents.on('will-navigate', (event, navigationUrl) => {
+      const allowed = isBrowserNavigationAllowedSync(navigationUrl, ctx)
       if (!allowed.ok) event.preventDefault()
+    })
+
+    // Deny popup windows so they cannot bypass session navigation checks
+    this.win.webContents.setWindowOpenHandler(() => {
+      return { action: 'deny' }
     })
 
     return this.win
@@ -286,13 +317,18 @@ class AgentBrowserSession {
           window.__aether_refs[refId] = el;
 
           const tag = el.tagName.toLowerCase();
-          const type = el.getAttribute('type') || '';
+          const type = (el.getAttribute('type') || '').toLowerCase();
           const name = el.getAttribute('name') || '';
           const placeholder = el.getAttribute('placeholder') || '';
           const ariaLabel = el.getAttribute('aria-label') || '';
           const text = (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 50);
           const href = el.getAttribute('href') || '';
-          const value = (tag === 'input' || tag === 'textarea' || tag === 'select') ? String(el.value || '').slice(0, 50) : '';
+          
+          // Secure password value masking
+          const isPassword = tag === 'input' && type === 'password';
+          const value = (tag === 'input' || tag === 'textarea' || tag === 'select')
+            ? (isPassword ? '[REDACTED]' : String(el.value || '').slice(0, 50))
+            : '';
 
           let repr = '[@' + refId + '] <' + tag;
           if (type) repr += ' type="' + type + '"';
@@ -339,23 +375,25 @@ class AgentBrowserSession {
     this.currentUrl = domData.url || win.webContents.getURL()
     this.currentTitle = domData.title || win.webContents.getTitle()
 
-    // Capture screenshot if requested or available
+    // Capture screenshot if requested
     let b64Image = null
-    try {
-      const img = await win.webContents.capturePage()
-      if (!img.isEmpty()) {
-        const inlineSize = 640
-        const scale = Math.min(1, inlineSize / Math.max(img.getSize().width, img.getSize().height))
-        const thumb = scale < 1 ? img.resize({ width: Math.round(img.getSize().width * scale) }) : img
-        b64Image = thumb.toPNG().toString('base64')
-        this.lastThumbnail = b64Image
-      }
-    } catch {}
+    if (captureScreenshot) {
+      try {
+        const img = await win.webContents.capturePage()
+        if (!img.isEmpty()) {
+          const inlineSize = 640
+          const scale = Math.min(1, inlineSize / Math.max(img.getSize().width, img.getSize().height))
+          const thumb = scale < 1 ? img.resize({ width: Math.round(img.getSize().width * scale) }) : img
+          b64Image = thumb.toPNG().toString('base64')
+          this.lastThumbnail = b64Image
+        }
+      } catch {}
+    }
 
     return {
       domData,
       consoleLogs: [...this.consoleLogs],
-      screenshotBase64: captureScreenshot ? b64Image : null,
+      screenshotBase64: b64Image,
     }
   }
 
@@ -570,12 +608,30 @@ async function executeBrowserAction(sessionId, args = {}, ctx = {}) {
     throw new Error('Action required. Supported actions: open, snapshot, click, type, scroll, console, close')
   }
 
-  const session = getBrowserSession(sessionId)
-
+  // Handle close action before instantiating or starting an idle timer on non-existent session
   if (action === 'close') {
-    closeBrowserSession(sessionId)
-    return 'Agent browser session closed.'
+    const hadSession = closeBrowserSession(sessionId)
+    return hadSession ? 'Agent browser session closed.' : 'No active browser session.'
   }
+
+  // Feature flag check
+  if (ctx?.db) {
+    try {
+      const featureFlags = require('../featureFlags')
+      if (!featureFlags.isEnabled(ctx.db, 'agent.browser')) {
+        return '[agent_browser is disabled by feature flag]'
+      }
+    } catch {}
+  }
+
+  // Plan mode restriction: mutating actions are blocked in plan mode
+  if (ctx?.agentMode === 'plan') {
+    if (action === 'click' || action === 'type') {
+      return `[agent_browser: '${action}' action is mutating and blocked in plan mode; use 'snapshot' or 'console']`
+    }
+  }
+
+  const session = getBrowserSession(sessionId)
 
   if (action === 'open') {
     const url = String(args.url || '').trim()
@@ -689,4 +745,5 @@ module.exports = {
   executeBrowserAction,
   getBrowserStatus,
   isBrowserNavigationAllowed,
+  isBrowserNavigationAllowedSync,
 }

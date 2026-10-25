@@ -134,7 +134,8 @@ describe('routerEnabled', () => {
 
 describe('_categories', () => {
   it('has all five categories with tool lists', () => {
-    expect(Object.keys(_categories).sort()).toEqual(['agent', 'git', 'github', 'lsp', 'memory'])
+    expect(Object.keys(_categories).sort()).toEqual(['agent', 'browser', 'git', 'github', 'lsp', 'memory'])
+    expect(_categories.browser).toContain('agent_browser')
     expect(_categories.github.length).toBeGreaterThan(0)
     expect(_categories.lsp).toContain('lsp_diagnostics')
   })

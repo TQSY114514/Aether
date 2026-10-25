@@ -364,7 +364,7 @@ function setupIpcHandlers() {
   registerLearningHandlers(ipcMain, db)
   registerRecipeHandlers(ipcMain)
   registerProjectHandlers(ipcMain, db, () => mainWindow?.webContents)
-  registerBrowserHandlers(ipcMain)
+  registerBrowserHandlers(ipcMain, db)
 
   // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──
   try {

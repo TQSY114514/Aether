@@ -55,7 +55,7 @@ const CATEGORY_PATTERNS = [
   { category: 'agent', re: /\b(delegate|sub.?agent|parallel|run.?agent|workflow|arena|background.?task|debug|test.first|review|agent)\b|子代理|并行|编排|竞技场|后台任务|调试|审查|测试/i },
   { category: 'memory', re: /\b(memory|remember|recall|记住|回忆|记忆)\b/i },
   { category: 'git', re: /\b(git|commit|push|branch|diff|提交|分支|推送)\b/i },
-  { category: 'browser', re: /\b(browser|webpage|page|navigate|click|snapshot|dom|localhost|html|ui|url|网页|页面|浏览器|点击|前端|打开网页)\b/i },
+  { category: 'browser', re: /\b(browser|webpage|page|navigate|click|snapshot|dom|localhost|html|ui|url)\b|网页|页面|浏览器|点击|前端|打开网页|访问网站|查看页面/i },
 ]
 
 // 路由「认识」的全部工具名（CORE + 各类别）。认识之外的一律走保守兜底：
