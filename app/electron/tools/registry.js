@@ -748,7 +748,7 @@ const TOOLS = [
     } catch (e) { return `[error: ${e.message}]` } finally { if (win && !win.isDestroyed()) win.destroy() }
   }},
 
-  { name: 'agent_browser', description: 'Agent-dedicated controlled browser environment for web automation, SPA exploration, and UI verification. Actions: open, snapshot, click, type, scroll, console, close. Uses semantic accessibility references (e.g. @1, @2) for accurate and token-efficient interactions.', risk: 'safe', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['open', 'snapshot', 'click', 'type', 'scroll', 'console', 'close'], description: 'Action to perform in the agent browser session.' }, url: { type: 'string', description: 'URL to navigate to (required for action=\'open\'). Supports localhost and external http/https.' }, ref: { type: 'string', description: 'Interactive element reference from snapshot (e.g. \'@1\', \'1\') to click or type into.' }, selector: { type: 'string', description: 'Optional CSS selector to target an element directly.' }, text: { type: 'string', description: 'Text to enter (required for action=\'type\').' }, direction: { type: 'string', enum: ['up', 'down', 'top', 'bottom'], description: 'Scroll direction (for action=\'scroll\', default \'down\').' }, waitMs: { type: 'number', description: 'Time in ms to wait after action for DOM updates (default 1000).' }, captureScreenshot: { type: 'boolean', description: 'Whether to include an inline screenshot with the snapshot/result.' } }, required: ['action'] }, run: async (args, ctx) => {
+  { name: 'agent_browser', description: 'Agent-dedicated controlled browser environment for web automation, SPA exploration, and UI verification. Actions: open, snapshot, click, type, scroll, console, close. Uses semantic accessibility references (e.g. @1, @2) for accurate and token-efficient interactions.', risk: 'dangerous', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['open', 'snapshot', 'click', 'type', 'scroll', 'console', 'close'], description: 'Action to perform in the agent browser session.' }, url: { type: 'string', description: 'URL to navigate to (required for action=\'open\'). Supports localhost and external http/https.' }, ref: { type: 'string', description: 'Interactive element reference from snapshot (e.g. \'@1\', \'1\') to click or type into.' }, selector: { type: 'string', description: 'Optional CSS selector to target an element directly.' }, text: { type: 'string', description: 'Text to enter (required for action=\'type\').' }, direction: { type: 'string', enum: ['up', 'down', 'top', 'bottom'], description: 'Scroll direction (for action=\'scroll\', default \'down\').' }, waitMs: { type: 'number', description: 'Time in ms to wait after action for DOM updates (default 1000).' }, captureScreenshot: { type: 'boolean', description: 'Whether to include an inline screenshot with the snapshot/result.' } }, required: ['action'] }, run: async (args, ctx) => {
     try {
       if (ctx?.db) {
         const featureFlags = require('../featureFlags')
@@ -1014,7 +1014,15 @@ TOOLS.push(
 function getTool(name) { return TOOLS.find(t => t.name === name) }
 function toolsPayload(mode, opts = {}) {
   const isExplore = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
-  const list = isExplore ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
+  let list = isExplore ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
+  if (opts?.db) {
+    try {
+      const featureFlags = require('../featureFlags')
+      if (!featureFlags.isEnabled(opts.db, 'agent.browser')) {
+        list = list.filter(t => t.name !== 'agent_browser')
+      }
+    } catch {}
+  }
   const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
   if (opts && opts.cacheStable === false) return raw
   try {

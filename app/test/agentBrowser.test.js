@@ -17,7 +17,7 @@ function getTool(name) {
 describe('agent_browser tool registration', () => {
   it('is registered as safe tool with required action parameter', () => {
     const t = getTool('agent_browser')
-    expect(t.risk).toBe('safe')
+    expect(t.risk).toBe('dangerous')
     expect(t.parameters.properties.action.type).toBe('string')
     expect(t.parameters.properties.action.enum).toEqual([
       'open', 'snapshot', 'click', 'type', 'scroll', 'console', 'close'
@@ -119,6 +119,14 @@ describe('agent_browser navigation safety gates', () => {
     expect(res.ok).toBe(false)
   })
 
+  it('blocks IPv6 private and unique local ranges (fc00::/7 and fe80::/10)', async () => {
+    const res1 = await agentBrowser.isBrowserNavigationAllowed('http://[fc00::1]:8080/', {})
+    expect(res1.ok).toBe(false)
+
+    const res2 = await agentBrowser.isBrowserNavigationAllowed('http://[fe80::1]:8080/', {})
+    expect(res2.ok).toBe(false)
+  })
+
   it('fails closed when network policy evaluation fails or blocks', async () => {
     const fakeDbBlock = {
       getSetting: (k) => {
@@ -200,6 +208,23 @@ describe('agent_browser parameter validation, plan mode and feature flags', () =
   it('supports close action without needlessly instantiating a session', async () => {
     const res = await agentBrowser.executeBrowserAction('non-existent-session-123', { action: 'close' })
     expect(res).toBe('No active browser session.')
+  })
+
+  it('excludes agent_browser from plan mode toolsPayload and when disabled', () => {
+    const { toolsPayload } = require('../electron/tools/registry')
+    const planPayload = toolsPayload('plan')
+    const planNames = planPayload.map(p => p.function.name)
+    expect(planNames).not.toContain('agent_browser')
+
+    const fakeDbDisabled = {
+      getSetting: (k) => {
+        if (k === 'feature_flag.agent.browser') return '0'
+        return null
+      },
+    }
+    const disabledPayload = toolsPayload('auto', { db: fakeDbDisabled })
+    const disabledNames = disabledPayload.map(p => p.function.name)
+    expect(disabledNames).not.toContain('agent_browser')
   })
 })
 

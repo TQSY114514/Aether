@@ -181,7 +181,7 @@ class AgentBrowserSession {
         ? (['debug', 'info', 'warning', 'error'][d.level] || 'info')
         : typeof d.level === 'string' ? d.level : 'info'
       const message = String(d.message || '').slice(0, 500)
-      if (message && this.consoleLogs.length < 50) {
+      if (message) {
         this.consoleLogs.push({
           level,
           message,
@@ -189,6 +189,9 @@ class AgentBrowserSession {
           url: String(d.sourceId || ''),
           timestamp: Date.now(),
         })
+        if (this.consoleLogs.length > 100) {
+          this.consoleLogs.shift()
+        }
       }
     })
 
@@ -469,10 +472,33 @@ class AgentBrowserSession {
         el.scrollIntoView({ block: 'center', inline: 'center' });
         el.focus();
 
-        if (shouldClear) {
-          el.value = '';
+        if (el.isContentEditable) {
+          if (shouldClear) {
+            el.textContent = '';
+          }
+          el.textContent = (shouldClear ? '' : (el.textContent || '')) + textVal;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return {
+            success: true,
+            tagName: el.tagName,
+            value: el.textContent
+          };
         }
-        el.value = (shouldClear ? '' : (el.value || '')) + textVal;
+
+        var nextVal = (shouldClear ? '' : (el.value || '')) + textVal;
+        var nativeProto = (typeof HTMLTextAreaElement !== 'undefined' && el instanceof HTMLTextAreaElement)
+          ? HTMLTextAreaElement.prototype
+          : (typeof HTMLInputElement !== 'undefined' ? HTMLInputElement.prototype : null);
+        var descriptor = nativeProto
+          ? Object.getOwnPropertyDescriptor(nativeProto, 'value')
+          : Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el) || {}, 'value');
+
+        if (descriptor && descriptor.set) {
+          descriptor.set.call(el, nextVal);
+        } else {
+          el.value = nextVal;
+        }
 
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -481,7 +507,13 @@ class AgentBrowserSession {
           el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
           el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
           if (el.form) {
-            try { el.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); } catch {}
+            try {
+              if (typeof el.form.requestSubmit === 'function') {
+                el.form.requestSubmit();
+              } else {
+                el.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+              }
+            } catch {}
           }
         }
 
