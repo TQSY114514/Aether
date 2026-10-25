@@ -137,6 +137,7 @@ describe('agent_browser navigation safety gates', () => {
     }
     const resBlock = await agentBrowser.isBrowserNavigationAllowed('https://malicious.example.com/', { db: fakeDbBlock })
     expect(resBlock.ok).toBe(false)
+    expect(resBlock.reason).toMatch(/^network policy:/)
 
     const fakeDbErr = {
       getSetting: () => {
@@ -208,6 +209,18 @@ describe('agent_browser parameter validation, plan mode and feature flags', () =
   it('supports close action without needlessly instantiating a session', async () => {
     const res = await agentBrowser.executeBrowserAction('non-existent-session-123', { action: 'close' })
     expect(res).toBe('No active browser session.')
+  })
+
+  it('allows close action even when agent.browser feature flag is disabled', async () => {
+    const fakeDbDisabled = {
+      getSetting: (k) => {
+        if (k === 'feature_flag.agent.browser') return '0'
+        return null
+      },
+    }
+    const t = getTool('agent_browser')
+    const toolRes = await t.run({ action: 'close' }, { sessionId: 'non-existent-session-close', db: fakeDbDisabled })
+    expect(toolRes).toBe('No active browser session.')
   })
 
   it('excludes agent_browser from plan mode toolsPayload and when disabled', () => {

@@ -37,6 +37,23 @@ const activeSessions = new Map()
 const SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000
 
 /**
+ * Helper to check network policy against active configuration in ctx.db.
+ */
+function checkNetworkPolicy(ctx, destUrl) {
+  if (!ctx?.db) return { ok: true }
+  try {
+    const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
+    if (policyActive(ctx.db)) {
+      const pol = checkUrlPolicy(ctx.db, destUrl)
+      if (!pol.ok) return { ok: false, reason: `network policy: ${pol.reason || 'blocked'}` }
+    }
+  } catch (err) {
+    return { ok: false, reason: `network policy evaluation failed: ${err.message}` }
+  }
+  return { ok: true }
+}
+
+/**
  * Synchronous validation for initial URL sanity and synchronous event callbacks
  * (Electron will-redirect / will-navigate require synchronous event.preventDefault()).
  */
@@ -69,34 +86,14 @@ function isBrowserNavigationAllowedSync(destUrl, ctx, { allowLocalhost = true } 
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
   if (isLocal) {
     if (!allowLocalhost) return { ok: false, reason: 'blocked: localhost navigation disabled' }
-
-    // If network policy is active in DB, verify if it permits localhost
-    if (ctx?.db) {
-      try {
-        const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
-        if (policyActive(ctx.db)) {
-          const pol = checkUrlPolicy(ctx.db, destUrl)
-          if (!pol.ok) return { ok: false, reason: `network policy: ${pol.reason || 'blocked'}` }
-        }
-      } catch (err) {
-        return { ok: false, reason: `network policy evaluation failed: ${err.message}` }
-      }
-    }
+    const pol = checkNetworkPolicy(ctx, destUrl)
+    if (!pol.ok) return pol
     return { ok: true, isLocal: true }
   }
 
   // Check network policy if configured in DB
-  if (ctx?.db) {
-    try {
-      const { policyActive, checkUrlPolicy } = require('../llm/networkPolicy')
-      if (policyActive(ctx.db)) {
-        const pol = checkUrlPolicy(ctx.db, destUrl)
-        if (!pol.ok) return { ok: false, reason: `network policy: ${pol.reason || 'blocked'}` }
-      }
-    } catch (err) {
-      return { ok: false, reason: `network policy evaluation failed: ${err.message}` }
-    }
-  }
+  const pol = checkNetworkPolicy(ctx, destUrl)
+  if (!pol.ok) return pol
 
   // Standard static SSRF check for literal IPs / protocols
   const ssrf = checkSSRF(destUrl)
@@ -134,6 +131,7 @@ class AgentBrowserSession {
     this.consoleLogs = []
     this.currentUrl = ''
     this.currentTitle = ''
+    this.isCurrentLocal = true // initial default allows localhost navigation on first open
     this.lastActivity = Date.now()
     this.lastThumbnail = null
     this.idleTimer = null
@@ -195,14 +193,40 @@ class AgentBrowserSession {
       }
     })
 
+    // Filter subresource requests on partition session against private / metadata endpoints
+    try {
+      const ses = this.win.webContents.session
+      if (ses && ses.webRequest && typeof ses.webRequest.onBeforeRequest === 'function') {
+        ses.webRequest.onBeforeRequest((details, callback) => {
+          if (!details.url.startsWith('http://') && !details.url.startsWith('https://')) {
+            return callback({ cancel: true })
+          }
+          const syncRes = isBrowserNavigationAllowedSync(details.url, ctx, { allowLocalhost: this.isCurrentLocal })
+          if (!syncRes.ok) {
+            return callback({ cancel: true })
+          }
+          callback({ cancel: false })
+        })
+      }
+    } catch {}
+
     // Intercept redirects and in-page navigation synchronously
     this.win.webContents.on('will-redirect', (event, navigationUrl) => {
-      const allowed = isBrowserNavigationAllowedSync(navigationUrl, ctx)
+      const allowed = isBrowserNavigationAllowedSync(navigationUrl, ctx, { allowLocalhost: this.isCurrentLocal })
       if (!allowed.ok) event.preventDefault()
     })
     this.win.webContents.on('will-navigate', (event, navigationUrl) => {
-      const allowed = isBrowserNavigationAllowedSync(navigationUrl, ctx)
+      const allowed = isBrowserNavigationAllowedSync(navigationUrl, ctx, { allowLocalhost: this.isCurrentLocal })
       if (!allowed.ok) event.preventDefault()
+    })
+
+    this.win.webContents.on('did-finish-load', () => {
+      try {
+        const curUrl = this.win.webContents.getURL()
+        const u = new URL(curUrl)
+        const hostname = stripIpBrackets(u.hostname).toLowerCase()
+        this.isCurrentLocal = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]')
+      } catch {}
     })
 
     // Deny popup windows so they cannot bypass session navigation checks
@@ -215,6 +239,11 @@ class AgentBrowserSession {
 
   async navigate(url, waitMs = 1500, ctx) {
     this.touch()
+    try {
+      const u = new URL(url)
+      const hostname = stripIpBrackets(u.hostname).toLowerCase()
+      this.isCurrentLocal = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]')
+    } catch {}
     const allowed = await isBrowserNavigationAllowed(url, ctx)
     if (!allowed.ok) {
       throw new Error(`Navigation blocked: ${allowed.reason}`)

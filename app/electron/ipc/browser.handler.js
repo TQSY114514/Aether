@@ -21,7 +21,7 @@ function registerBrowserHandlers(ipcMain, db) {
   ipcMain.handle('browser:action', async (_e, payload = {}) => {
     const sessionId = payload.sessionId || 'default'
     const args = payload.args || {}
-    if (db && !featureFlags.isEnabled(db, 'agent.browser')) {
+    if (db && args?.action !== 'close' && !featureFlags.isEnabled(db, 'agent.browser')) {
       return { success: false, error: 'agent.browser feature is disabled in settings' }
     }
     try {
