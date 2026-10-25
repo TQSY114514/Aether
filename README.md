@@ -10,7 +10,7 @@
 
 ### Test models on your work. Put the results to work.
 
-An evidence-driven AI development workbench connecting model evaluation, project context, and controlled agent execution.
+An evidence-driven AI development workbench connecting model evaluation, project workspace context, and controlled agent execution.
 
 Compare models on real coding tasks, inspect the results, and use that evidence to inform your workflow. Local-first storage, provider flexibility, and capability-gated execution help keep your work under your control.
 
@@ -30,14 +30,15 @@ Compare models on real coding tasks, inspect the results, and use that evidence 
 
 ## Overview
 
-Aether is a desktop AI development workbench built with Electron, React/TypeScript, and SQLite. Its central idea is to connect three parts of AI-assisted development: evaluating models on real tasks, carrying project context across sessions, and executing work through a reviewable agent workflow.
+Aether is a local-first desktop AI development workbench built with Electron, React/TypeScript, and SQLite. Its central idea is to connect the critical stages of AI-assisted engineering: evaluating models on real tasks, carrying project context across sessions, and executing work through a reviewable, capability-gated agent workflow.
 
-It is built around four complementary capabilities:
+It is built around five complementary capabilities:
 
-1. **Task-based model evaluation (Arena)**: Compare multiple models on the same coding task, inspect their outputs, and collect preference or evaluation signals. Results are useful evidence for a workflow—not a universal ranking of model intelligence.
-2. **Evidence-informed model selection**: Model advice and routing can use task categories and available Arena scores. Recommendations are still affected by cold-start priors and the amount and quality of evaluation data, so they should be treated as guidance rather than a guarantee of the best model.
-3. **Project context and long-term memory**: AutoMemory, Project Brain, and repository mapping help preserve relevant facts and architectural context across sessions.
-4. **Controlled agent execution**: A six-axis permission system (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) and reviewable diffs help users inspect and control agent actions.
+1. **Task-based model evaluation (Arena 2.0)**: Compare multiple models on identical coding tasks, inspect streaming outputs, and gather preference or evaluation signals. Winner patches can be applied directly to your working tree in one click.
+2. **Workspace Hub**: First-class project workspace management with Git branch tracking, project instructions discovery (`AGENTS.md` / `AETHER.md`), system-native file explorer integration, and project-scoped session filtering.
+3. **Evidence-informed model selection & adaptive reasoning**: Model advice and routing use task categories and available Arena scores; 5-tier adaptive thinking budgets (`1k` to `32k` tokens) provide granular control over reasoning depth.
+4. **Project context and long-term memory**: AutoMemory, Project Brain, and repository mapping preserve relevant facts and architectural context across sessions with `< 2ms` zero-roundtrip prefetching.
+5. **Controlled agent execution & Hashline edits**: Four explicit operating modes (`explore`, `workspace`, `auto_review`, `unrestricted`) backed by a six-axis permission gate (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`), content-hash-anchored editing against line drift, and supervised TDD self-healing loops.
 
 Aether is local-first: sessions, memories, evaluation data, and encrypted provider credentials are stored in the local SQLite database. When you use a hosted model provider, prompts, code, or context sent to that provider are still subject to its data-handling policies.
 
@@ -56,13 +57,19 @@ Download the latest release from [GitHub Releases](https://github.com/TQSY114514
 
 > **Note on Windows SmartScreen**: Aether is maintained by an independent developer without a commercial code-signing certificate. If Windows Defender displays *"Windows protected your PC"* on first launch, click **More info → Run anyway**.
 
-### 2. Headless CLI & SDK (Companion Automation · Node.js ≥ 22)
+### 2. Terminal TUI, Headless CLI & SDK (Companion Automation · Node.js ≥ 22)
 
-Aether distributes a clean, headless runtime and Electron-free SDK via npm (`aetherai`):
+Aether distributes a clean headless runtime, Ink v5 terminal TUI, and Electron-free SDK via npm (`aetherai`):
 
 ```bash
-# Install headless CLI globally
+# Install CLI and TUI globally
 npm install -g aetherai
+
+# Launch interactive terminal TUI workbench (with history, diff previews & rollbacks)
+aether tui
+
+# Resume an existing conversation in the terminal
+aether tui --session 42
 
 # Execute a one-shot task from the command line
 aether "run test suite and fix failing unit tests" --model deepseek
@@ -129,56 +136,70 @@ Instead of storing memories in a flat YAML/JSON file that requires full-file rew
 
 ---
 
-### 2. Arena 2.0 · Empirical Multi-Model Evaluation
+### 2. Workspace Hub & Decluttered Desktop Workbench
 
-The built-in Arena allows side-by-side evaluation on your actual workload:
+Aether 2.0 establishes the Workspace as a first-class citizen, decoupling cross-project context and eliminating interface redundancy:
+
+- **Sidebar Workspace Hub (`WorkspaceHeader.tsx`)**: Mounted prominently at the top of the sidebar, providing instant project switching, favorites (`⭐`), one-click Reveal in File Explorer, and terminal `cd` command copying.
+- **Live Git & Rules Telemetry**: Automatically tracks the active Git branch and dirty working-tree state, and surfaces active project governance rules (`AGENTS.md`).
+- **Project Scope Filter**: One-click toggling between "Current Project Sessions" and "All Sessions", keeping chat histories organized and unpolluted across separate codebases.
+- **Single Authoritative Home Layout**: Per-turn execution controls (Model selector, Agent mode, Thinking depth) live strictly in the prompt composer toolbar; system-wide diagnostic readiness (SQLite WAL, active MCP servers, local gateway port) is unified into a sleek, non-intrusive status capsule at the sidebar footer.
+
+---
+
+### 3. Arena 2.0 · Empirical Multi-Model Evaluation & Winner Patch Apply
+
+The built-in Arena allows side-by-side evaluation on your actual workload, closing the loop from blind comparison to production disk apply:
 
 | Feature | Mechanism |
 | :--- | :--- |
 | **Concurrent Blind Streaming** | Dispatch a single prompt to 2–4 models (or compare different temperatures / system prompts on the same model) with real-time side-by-side streaming. |
 | **Intent-Categorized ELO** | Prompts are classified by intent (`Coding`, `Reasoning`, `Translation`). Votes update separate local ELO leaderboards per category. |
-| **Personal Benchmark Suites** | Save recurring tasks as a local benchmark suite; re-run the suite in one click when evaluating a new model release to measure accuracy, latency, token cost, and tool success rate. |
+| **Starter Benchmark Suite** | Built-in automated evaluation suite (`arenaStarterBenchmark.js`) covering algorithmic reasoning, system design, and debugging tasks to systematically score latency, token costs, and accuracy. |
+| **Winner Patch Disk Apply** | After evaluating candidates in blind competition, click once to apply the winning model's diff cleanly into your local repository (`arena:apply-patch`). |
 | **Report Export** | Export side-by-side comparison results as structured Markdown reports or summary cards. |
 
 ---
 
-### 3. 6-Axis Permission System & Fault-Tolerant Tool Loop
+### 4. 4-Tier Operating Modes & 6 Capability Axes
 
-To prevent unintended file deletions, secret leaks, or broken sessions caused by unhandled tool exceptions, the agent runtime enforces a multi-stage execution pipeline:
+Permissions are evaluated independently across six axes (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) under four explicit operating modes:
+
+| Mode | Enforcement Behavior | Typical Scenario |
+| :--- | :--- | :--- |
+| **`explore` (Read-Only)** | Blocks all file writes and mutating shell commands; the agent inspects, searches, and analyzes code safely. | Architecture review, codebase exploration, impact analysis |
+| **`workspace` (Default)** | Read tools run automatically; file edits display an inline red/green Diff and commands outside the workspace require confirmation. | Daily pair programming, refactoring, and feature work |
+| **`auto_review` (TDD Loop)** | Supervised test-driven development: automatically runs test suites after editing code and self-heals failures (up to 3 bounded repair loops). | Automated unit testing and self-healing bug fixes |
+| **`unrestricted` (Full Sandbox)** | Approves all operations automatically with background security guards (recommended with the Docker execution backend). | Sandboxed autonomous long-running tasks |
 
 ```mermaid
 flowchart LR
   Input["User Input"] --> Router["Staged Tool Router<br/>(Loads stage-relevant tool schemas)"]
   Router --> Loop["Agent Loop<br/>(Plan → Inspect → Act → Verify)"]
-  Loop --> Gate{"6-Axis Permission Gate<br/>+ Dynamic Risk Check"}
+  Loop --> Gate{"6-Axis Permission Gate<br/>+ 4 Mode Policies"}
   Gate -- "Safe Read Tools" --> Backend["Execution Backend (Local / Docker / SSH)"]
   Gate -- "File Write / High-Risk Shell" --> Review["Inline Diff Preview<br/>+ Manual Confirmation Card"]
   Review -- "Approved" --> Backend
   Backend --> Sanitize["toolResultMiddleware<br/>(Secret Redaction + Smart Truncation)"]
+  Backend -- "auto_review mode" --> TDD["Automated TDD Self-Healing<br/>(Max 3 iterations)"]
+  TDD --> Sanitize
   Sanitize --> Recovery["Self-Healing & Budget Guard<br/>(Orphan Repair / Shrink-Retry / Cost Cap)"]
   Recovery --> Loop
 ```
 
-#### 4-Tier Operating Modes & 6 Capability Axes
+---
 
-Permissions are evaluated independently across six axes (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) under four operating modes:
+### 5. Adaptive Thinking Depth, Hashline Edits & Runtime Resilience
 
-| Mode | Enforcement Behavior | Typical Scenario |
-| :--- | :--- | :--- |
-| **`Plan` (Read-Only)** | Blocks all file writes and shell commands; the agent inspects files and persists a structured checklist (`session_plan`). | Architecture review, codebase exploration, impact analysis |
-| **`Ask` (Default)** | Read tools run automatically; file edits display an inline red/green Diff and shell commands require explicit approval. | Daily pair programming, refactoring, and debugging |
-| **`Auto` (Guarded Autonomy)** | Whitelisted build/test commands execute automatically, but high-risk operations (deleting files, editing `.env`, running `npm install`) dynamically escalate to `ALWAYS_ASK`. | Iterative test-driven development |
-| **`Yolo` (Unattended Sandbox)** | Approves all operations automatically (designed to be paired with the **Docker execution backend** or an isolated branch). | Sandboxed autonomous tasks |
-
-#### Runtime Resilience & Cost Visibility
-
+- **5-Tier Adaptive Thinking Depth (Thinking Budget)**: Per-turn control over reasoning budgets (`minimal 1k`, `low 2k`, `medium 8k`, `high 16k`, `max 32k tokens`), natively supporting token-budget models (Claude 3.7 Sonnet, DeepSeek R1, Qwen-Reasoner) and boolean-toggle models (`enable_thinking`).
+- **Hashline Hash-Anchored Code Editing**: Incorporates content-hash line anchoring into `patchEngine.js`, preventing line drift and merge collisions across concurrently edited files.
 - **Staged Tool Router**: Dynamically injects only the tool schemas relevant to the current task phase (`Diagnose → Search → Edit → Verify`) out of 42+ built-in and MCP tools, reducing prompt token overhead by ~40%.
 - **Orphan Tool-Call Self-Healing**: Automatically sanitizes unclosed `tool_calls` on session reload so a previously interrupted tool execution never poisons subsequent turns with HTTP 400 errors.
 - **Live Cost & Iteration Circuit Breaker**: The status bar displays current iteration count, estimated turn tokens, cumulative USD cost, and stops execution automatically if a user-defined budget cap is reached.
 
 ---
 
-### 4. Extensibility: Skills, MCP, and Execution Backends
+### 6. Extensibility: Skills, MCP, and Execution Backends
 
 - **Skills (`SKILL.md`)**: Import or author modular skills with declarative `permissions:` frontmatter (`filesystem`, `network`, `shell`) enforced by the permission engine.
 - **MCP (Model Context Protocol)**: Connect external stdio MCP servers with automatic `server__tool` namespacing to prevent tool name collisions. All MCP outputs pass through `toolResultMiddleware`.
@@ -188,7 +209,7 @@ Permissions are evaluated independently across six axes (`READ`, `WRITE`, `EXECU
 
 ## Honest Positioning (20-Peer Radar Comparison)
 
-Aether avoids inflated "all-10/10" marketing charts. Our genuine strengths are **Local SQLite Data Ownership (`9.4/10`)** and **Multi-Model BYOK + Built-in ELO Arena (`9.2/10`)**. On **Permission Safety (`8.4/10`)**, Aether enforces a 6-axis permission gate, Win32 Job Object process governance, and optional Docker container sandboxing, but trails OS-kernel-sandboxed tools like Codex CLI (`9.8`) and Claude Code (`9.0`) when running in default Windows user-space (`localBackend`). On **Desktop Workbench UX (`8.0/10`)**, Aether provides an intentional visual workspace (live streaming reasoning, BTW side questions, task queue dock), but trails full-fledged IDE editor integrations like Cursor (`9.8`) and Windsurf (`9.6`). On **Single-Model Coding Depth (`6.8/10`)** and **Early-Stage Community Ecosystem (`6.5/10`)**, the chart candidly depicts our honest gap behind commercial giants (generated via `node app/scripts/gen-radar.cjs`):
+Aether avoids inflated "all-10/10" marketing charts. Our genuine strengths are **Local SQLite Data Ownership (`9.6/10`)** and **Multi-Model BYOK + Built-in ELO Arena & Winner Patch Apply (`9.4/10`)**. On **Desktop Workbench UX (`8.4/10`)**, Aether provides a focused, decluttered workspace (Workspace Hub, live streaming reasoning, BTW side questions, Ink v5 terminal TUI, and Single Authoritative Home layout), while candidly trailing deep editor forks like Cursor (`9.8`) and Windsurf (`9.6`). On **Permission Safety (`8.6/10`)**, Aether enforces 4 agent modes, a 6-axis permission gate, Win32 Job Object process governance, and optional Docker sandboxing, but trails OS-kernel-sandboxed tools like Codex CLI (`9.8`) and Claude Code (`9.0`) when running in default Windows user-space (`localBackend`). On **Multi-Agent Orchestration (`7.6/10`)**, Aether provides task-journal subagents, crash recovery, and an Electron-free SDK. On **Single-Model Coding Depth (`7.2/10`)** (reinforced by Hashline hash-anchored editing and TDD auto-review) and **Early-Stage Community Ecosystem (`6.5/10`)**, the chart candidly depicts our honest gap behind commercial giants (generated via `node app/scripts/gen-radar.cjs`):
 
 <div align="center">
   <img src="./assets/agent-radar-2026.en.svg" width="88%" alt="Aether · Candid Capability & Architecture Self-Assessment Radar" />
