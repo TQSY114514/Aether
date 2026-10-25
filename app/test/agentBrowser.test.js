@@ -32,6 +32,8 @@ describe('agent_browser tool registration', () => {
     expect(props.ref).toBeDefined()
     expect(props.selector).toBeDefined()
     expect(props.text).toBeDefined()
+    expect(props.clear).toBeDefined()
+    expect(props.pressEnter).toBeDefined()
     expect(props.direction).toBeDefined()
     expect(props.waitMs).toBeDefined()
     expect(props.captureScreenshot).toBeDefined()
@@ -239,6 +241,26 @@ describe('agent_browser parameter validation, plan mode and feature flags', () =
     const disabledNames = disabledPayload.map(p => p.function.name)
     expect(disabledNames).not.toContain('agent_browser')
   })
+
+  it('rejects invalid action or missing parameters before instantiating session', async () => {
+    await expect(agentBrowser.executeBrowserAction('sess-preval-1', { action: 'open' }))
+      .rejects.toThrow('url parameter is required')
+
+    await expect(agentBrowser.executeBrowserAction('sess-preval-2', { action: 'click' }))
+      .rejects.toThrow('ref (e.g. "@1") or selector is required')
+
+    await expect(agentBrowser.executeBrowserAction('sess-preval-3', { action: 'type', text: 'hi' }))
+      .rejects.toThrow('ref (e.g. "@1") or selector is required')
+
+    await expect(agentBrowser.executeBrowserAction('sess-preval-4', { action: 'invalid_action' }))
+      .rejects.toThrow('Unknown action')
+
+    // None of these failed pre-validation calls should have created a session
+    expect(agentBrowser.getBrowserStatus('sess-preval-1').active).toBe(false)
+    expect(agentBrowser.getBrowserStatus('sess-preval-2').active).toBe(false)
+    expect(agentBrowser.getBrowserStatus('sess-preval-3').active).toBe(false)
+    expect(agentBrowser.getBrowserStatus('sess-preval-4').active).toBe(false)
+  })
 })
 
 describe('agent_browser session status and lifecycle', () => {
@@ -253,6 +275,25 @@ describe('agent_browser session status and lifecycle', () => {
 
   it('closes session and cleans up correctly', () => {
     expect(agentBrowser.closeBrowserSession('non-existent-session')).toBe(false)
+    expect(agentBrowser.closeBrowserSession('non-existent-session', { clearStorage: true })).toBe(false)
     agentBrowser.closeAllSessions()
+  })
+
+  it('serializes concurrent operations in session queue', async () => {
+    const sess = agentBrowser.getBrowserSession('test-queue-session')
+    const order = []
+    const p1 = sess.enqueue(async () => {
+      await new Promise(r => setTimeout(r, 20))
+      order.push('first')
+      return 1
+    })
+    const p2 = sess.enqueue(async () => {
+      order.push('second')
+      return 2
+    })
+    const results = await Promise.all([p1, p2])
+    expect(results).toEqual([1, 2])
+    expect(order).toEqual(['first', 'second'])
+    agentBrowser.closeBrowserSession('test-queue-session')
   })
 })

@@ -169,7 +169,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
   const handleCleanCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
-    const fullText = (tool.error || tool.result || tool.liveOutput || '').trim()
+    const fullText = (tool.error || resultText || tool.liveOutput || '').trim()
     const clean = stripAnsi(fullText)
     navigator.clipboard.writeText(clean)
     setCopied(true)
@@ -179,7 +179,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const handleExplain = (e: React.MouseEvent) => {
     e.stopPropagation()
     const cmd = cmdString || tool.name
-    const fullText = stripAnsi((tool.error || tool.result || tool.liveOutput || '').trim())
+    const fullText = stripAnsi((tool.error || resultText || tool.liveOutput || '').trim())
     const lines = fullText.split('\n')
     const snippet = lines.length > 25 ? lines.slice(-25).join('\n') : fullText
     const exitReason = cmdFailure.reason ? `(${cmdFailure.reason})` : ''
@@ -191,7 +191,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const handleQuickFix = () => {
     const a = (tool.args && typeof tool.args === 'object' ? tool.args : {}) as any
     const cmd = a.command ? String(a.command) : tool.name
-    const fullText = stripAnsi((tool.error || tool.result || tool.liveOutput || '').trim())
+    const fullText = stripAnsi((tool.error || resultText || tool.liveOutput || '').trim())
     const lines = fullText.split('\n')
     const snippet = lines.length > 25 ? lines.slice(-25).join('\n') : fullText
     const exitReason = cmdFailure.reason ? `(${cmdFailure.reason})` : ''

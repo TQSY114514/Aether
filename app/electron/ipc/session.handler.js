@@ -33,6 +33,7 @@ function registerSessionHandlers(ipcMain, db) {
       try { require('../llm/backgroundTasks').bumpBranchGeneration(targetId) } catch {}
       try { clearAllowRules(targetId) } catch {}
       try { cleanupSessionControllers(targetId) } catch {}
+      try { require('../browser/agentBrowser').closeBrowserSession(String(targetId), { clearStorage: true }) } catch {}
     }
     // deleteShadowRepo returns false when the removal itself failed (locked or
     // unreadable path) — surface it instead of reporting a clean delete.

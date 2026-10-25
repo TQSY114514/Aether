@@ -121,6 +121,20 @@ async function isBrowserNavigationAllowed(destUrl, ctx, { allowLocalhost = true 
   return { ok: true }
 }
 
+function waitWithSignal(ms, signal) {
+  if (ms <= 0) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new Error('aborted'))
+    const t = setTimeout(resolve, Math.min(ms, 15000))
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        clearTimeout(t)
+        reject(new Error('aborted'))
+      }, { once: true })
+    }
+  })
+}
+
 /**
  * AgentBrowserSession manages a single BrowserWindow and its interactive DOM state.
  */
@@ -135,19 +149,44 @@ class AgentBrowserSession {
     this.lastActivity = Date.now()
     this.lastThumbnail = null
     this.idleTimer = null
+    this.isExecuting = false
+    this._actionChain = Promise.resolve()
     this._resetIdleTimer()
   }
 
   _resetIdleTimer() {
     if (this.idleTimer) clearTimeout(this.idleTimer)
     this.idleTimer = setTimeout(() => {
+      if (this.isExecuting) {
+        this._resetIdleTimer()
+        return
+      }
       this.close()
     }, SESSION_IDLE_TIMEOUT_MS)
+    if (typeof this.idleTimer?.unref === 'function') {
+      this.idleTimer.unref()
+    }
   }
 
   touch() {
     this.lastActivity = Date.now()
     this._resetIdleTimer()
+  }
+
+  enqueue(actionFn) {
+    const run = async () => {
+      this.isExecuting = true
+      this.touch()
+      try {
+        return await actionFn()
+      } finally {
+        this.isExecuting = false
+        this.touch()
+      }
+    }
+    const next = this._actionChain.then(run, run)
+    this._actionChain = next.catch(() => {})
+    return next
   }
 
   ensureWindow(ctx) {
@@ -193,11 +232,11 @@ class AgentBrowserSession {
       }
     })
 
-    // Filter subresource requests on partition session against private / metadata endpoints
+    // Filter subresource requests on partition session against private / metadata endpoints & DNS rebinding
     try {
       const ses = this.win.webContents.session
       if (ses && ses.webRequest && typeof ses.webRequest.onBeforeRequest === 'function') {
-        ses.webRequest.onBeforeRequest((details, callback) => {
+        ses.webRequest.onBeforeRequest(async (details, callback) => {
           if (!details.url.startsWith('http://') && !details.url.startsWith('https://')) {
             return callback({ cancel: true })
           }
@@ -205,6 +244,21 @@ class AgentBrowserSession {
           if (!syncRes.ok) {
             return callback({ cancel: true })
           }
+          // DNS rebinding protection: resolve external hosts via Chromium network service and block private endpoints
+          try {
+            const u = new URL(details.url)
+            const host = stripIpBrackets(u.hostname).toLowerCase()
+            const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]'
+            if (!isLocal && typeof ses.resolveHost === 'function') {
+              const res = await ses.resolveHost(u.hostname)
+              const endpoints = res?.endpoints || []
+              for (const ep of endpoints) {
+                if (ep.address && isPrivateIP(ep.address)) {
+                  return callback({ cancel: true })
+                }
+              }
+            }
+          } catch {}
           callback({ cancel: false })
         })
       }
@@ -249,6 +303,9 @@ class AgentBrowserSession {
       throw new Error(`Navigation blocked: ${allowed.reason}`)
     }
 
+    // Reset console buffer on navigation so new page doesn't retain old page diagnostics
+    this.consoleLogs = []
+
     const win = this.ensureWindow(ctx)
 
     // Abort controller integration
@@ -266,15 +323,7 @@ class AgentBrowserSession {
       })
 
       if (waitMs > 0) {
-        await new Promise((resolve, reject) => {
-          const t = setTimeout(resolve, Math.min(waitMs, 15000))
-          if (ctx?.signal) {
-            ctx.signal.addEventListener('abort', () => {
-              clearTimeout(t)
-              reject(new Error('aborted'))
-            }, { once: true })
-          }
-        })
+        await waitWithSignal(waitMs, ctx?.signal)
       }
     } finally {
       if (ctx?.signal) ctx.signal.removeEventListener('abort', abortHandler)
@@ -294,6 +343,9 @@ class AgentBrowserSession {
       (() => {
         window.__aether_refs = window.__aether_refs || {};
         window.__aether_refs = {};
+        try {
+          document.querySelectorAll('[data-aether-ref]').forEach(e => e.removeAttribute('data-aether-ref'));
+        } catch {}
 
         function isVisible(el) {
           if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
@@ -442,6 +494,7 @@ class AgentBrowserSession {
 
         if (refId) {
           el = window.__aether_refs ? window.__aether_refs[refId] : null;
+          if (el && !el.isConnected) el = null;
           if (!el) el = document.querySelector('[data-aether-ref="' + refId + '"]');
         }
         if (!el && sel) {
@@ -466,7 +519,7 @@ class AgentBrowserSession {
 
     const res = await win.webContents.executeJavaScript(clickScript)
     if (waitMs > 0) {
-      await new Promise(r => setTimeout(r, Math.min(waitMs, 5000)))
+      await waitWithSignal(waitMs, ctx?.signal)
     }
 
     this.currentUrl = win.webContents.getURL()
@@ -490,6 +543,7 @@ class AgentBrowserSession {
 
         if (refId) {
           el = window.__aether_refs ? window.__aether_refs[refId] : null;
+          if (el && !el.isConnected) el = null;
           if (!el) el = document.querySelector('[data-aether-ref="' + refId + '"]');
         }
         if (!el && sel) {
@@ -556,7 +610,7 @@ class AgentBrowserSession {
 
     const res = await win.webContents.executeJavaScript(typeScript)
     if (waitMs > 0) {
-      await new Promise(r => setTimeout(r, Math.min(waitMs, 5000)))
+      await waitWithSignal(waitMs, ctx?.signal)
     }
 
     this.currentUrl = win.webContents.getURL()
@@ -574,13 +628,13 @@ class AgentBrowserSession {
         const amt = ${Number(amount) || 500};
 
         if (dir === 'top') {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          window.scrollTo({ top: 0, behavior: 'instant' });
         } else if (dir === 'bottom') {
-          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
         } else if (dir === 'up') {
-          window.scrollBy({ top: -amt, behavior: 'smooth' });
+          window.scrollBy({ top: -amt, behavior: 'instant' });
         } else {
-          window.scrollBy({ top: amt, behavior: 'smooth' });
+          window.scrollBy({ top: amt, behavior: 'instant' });
         }
 
         return {
@@ -604,6 +658,7 @@ class AgentBrowserSession {
       clearTimeout(this.idleTimer)
       this.idleTimer = null
     }
+    this.isExecuting = false
     if (this.win && !this.win.isDestroyed()) {
       try {
         this.win.destroy()
@@ -627,13 +682,23 @@ function getBrowserSession(sessionId = 'default') {
 
 /**
  * Close an active session if one exists.
+ * Optionally clears persistent storage (cookies, storage partitions) for deleted sessions.
  */
-function closeBrowserSession(sessionId = 'default') {
-  if (activeSessions.has(sessionId)) {
-    activeSessions.get(sessionId).close()
-    return true
+function closeBrowserSession(sessionId = 'default', { clearStorage = false } = {}) {
+  const session = activeSessions.get(sessionId)
+  if (session) {
+    session.close()
   }
-  return false
+  if (clearStorage && electron?.session) {
+    try {
+      const partition = `persist:agent_browser_${sessionId || 'default'}`
+      const ses = electron.session.fromPartition(partition)
+      if (ses && typeof ses.clearStorageData === 'function') {
+        ses.clearStorageData().catch(() => {})
+      }
+    } catch {}
+  }
+  return Boolean(session)
 }
 
 /**
@@ -692,92 +757,103 @@ async function executeBrowserAction(sessionId, args = {}, ctx = {}) {
     }
   }
 
-  const session = getBrowserSession(sessionId)
-
+  // Validate action and required parameters before instantiating session or starting idle timer
   if (action === 'open') {
     const url = String(args.url || '').trim()
     if (!url) throw new Error('url parameter is required for action: open')
-    const navResult = await session.navigate(url, args.waitMs || 1500, ctx)
-    const snap = await session.getSnapshot({ captureScreenshot: Boolean(args.captureScreenshot) }, ctx)
-
-    const headingsText = snap.domData.headings.length ? '\nHeadings:\n  ' + snap.domData.headings.join('\n  ') : ''
-    const elementsText = snap.domData.elements.length
-      ? '\nInteractive Elements (' + snap.domData.elements.length + '):\n  ' + snap.domData.elements.join('\n  ')
-      : '\nNo interactive elements found.'
-    const consoleText = formatConsoleLogsSummary(snap.consoleLogs)
-
-    const textOutput = `Opened ${navResult.url}\nTitle: "${navResult.title}"${headingsText}${elementsText}${consoleText}`
-
-    if (snap.screenshotBase64) {
-      return [
-        { type: 'text', text: textOutput },
-        { type: 'image_url', image_url: { url: `data:image/png;base64,${snap.screenshotBase64}` } },
-      ]
-    }
-    return textOutput
-  }
-
-  if (action === 'snapshot') {
-    const snap = await session.getSnapshot({ captureScreenshot: Boolean(args.captureScreenshot) }, ctx)
-    const headingsText = snap.domData.headings.length ? '\nHeadings:\n  ' + snap.domData.headings.join('\n  ') : ''
-    const elementsText = snap.domData.elements.length
-      ? '\nInteractive Elements (' + snap.domData.elements.length + '):\n  ' + snap.domData.elements.join('\n  ')
-      : '\nNo interactive elements found.'
-    const consoleText = formatConsoleLogsSummary(snap.consoleLogs)
-
-    const textOutput = `Page Snapshot: ${snap.domData.url}\nTitle: "${snap.domData.title}"${headingsText}${elementsText}${consoleText}`
-
-    if (snap.screenshotBase64) {
-      return [
-        { type: 'text', text: textOutput },
-        { type: 'image_url', image_url: { url: `data:image/png;base64,${snap.screenshotBase64}` } },
-      ]
-    }
-    return textOutput
-  }
-
-  if (action === 'click') {
+  } else if (action === 'click') {
     if (!args.ref && !args.selector) {
       throw new Error('ref (e.g. "@1") or selector is required for action: click')
     }
-    const res = await session.click({ ref: args.ref, selector: args.selector, waitMs: args.waitMs || 500 }, ctx)
-    if (!res.success) {
-      return `[click failed: ${res.error}]`
-    }
-    return `Clicked <${res.tagName}> "${res.text}". Current URL: ${session.currentUrl} ("${session.currentTitle}")`
-  }
-
-  if (action === 'type') {
+  } else if (action === 'type') {
     if (!args.ref && !args.selector) {
       throw new Error('ref (e.g. "@1") or selector is required for action: type')
     }
-    const res = await session.type({
-      ref: args.ref,
-      selector: args.selector,
-      text: args.text || '',
-      clear: args.clear !== false,
-      pressEnter: Boolean(args.pressEnter),
-      waitMs: args.waitMs || 500,
-    }, ctx)
-    if (!res.success) {
-      return `[type failed: ${res.error}]`
+  } else if (!['snapshot', 'scroll', 'console'].includes(action)) {
+    throw new Error(`Unknown action: "${action}". Supported actions: open, snapshot, click, type, scroll, console, close`)
+  }
+
+  const session = getBrowserSession(sessionId)
+
+  return session.enqueue(async () => {
+    if (action === 'open') {
+      const url = String(args.url || '').trim()
+      const navResult = await session.navigate(url, args.waitMs || 1500, ctx)
+      const snap = await session.getSnapshot({ captureScreenshot: Boolean(args.captureScreenshot) }, ctx)
+
+      const headingsText = snap.domData.headings.length ? '\nHeadings:\n  ' + snap.domData.headings.join('\n  ') : ''
+      const elementsText = snap.domData.elements.length
+        ? '\nInteractive Elements (' + snap.domData.elements.length + '):\n  ' + snap.domData.elements.join('\n  ')
+        : '\nNo interactive elements found.'
+      const consoleText = formatConsoleLogsSummary(snap.consoleLogs)
+
+      const textOutput = `Opened ${navResult.url}\nTitle: "${navResult.title}"${headingsText}${elementsText}${consoleText}`
+
+      if (snap.screenshotBase64) {
+        return [
+          { type: 'text', text: textOutput },
+          { type: 'image_url', image_url: { url: `data:image/png;base64,${snap.screenshotBase64}` } },
+        ]
+      }
+      return textOutput
     }
-    return `Typed into <${res.tagName}> (value: "${res.value}"). Current URL: ${session.currentUrl}`
-  }
 
-  if (action === 'scroll') {
-    const res = await session.scroll({ direction: args.direction || 'down', amount: args.amount || 500 }, ctx)
-    return `Scrolled ${args.direction || 'down'} (scrollY: ${res.scrollY}px / max: ${res.maxScrollY}px)`
-  }
+    if (action === 'snapshot') {
+      const snap = await session.getSnapshot({ captureScreenshot: Boolean(args.captureScreenshot) }, ctx)
+      const headingsText = snap.domData.headings.length ? '\nHeadings:\n  ' + snap.domData.headings.join('\n  ') : ''
+      const elementsText = snap.domData.elements.length
+        ? '\nInteractive Elements (' + snap.domData.elements.length + '):\n  ' + snap.domData.elements.join('\n  ')
+        : '\nNo interactive elements found.'
+      const consoleText = formatConsoleLogsSummary(snap.consoleLogs)
 
-  if (action === 'console') {
-    const logs = session.getConsoleLogs()
-    if (!logs.length) return 'No console logs captured.'
-    const summary = logs.map(l => `[${l.level.toUpperCase()}] ${l.message} (${l.url}:${l.line})`).join('\n')
-    return `Console logs (${logs.length} entries):\n${summary}`
-  }
+      const textOutput = `Page Snapshot: ${snap.domData.url}\nTitle: "${snap.domData.title}"${headingsText}${elementsText}${consoleText}`
 
-  throw new Error(`Unknown action: "${action}". Supported actions: open, snapshot, click, type, scroll, console, close`)
+      if (snap.screenshotBase64) {
+        return [
+          { type: 'text', text: textOutput },
+          { type: 'image_url', image_url: { url: `data:image/png;base64,${snap.screenshotBase64}` } },
+        ]
+      }
+      return textOutput
+    }
+
+    if (action === 'click') {
+      const res = await session.click({ ref: args.ref, selector: args.selector, waitMs: args.waitMs || 500 }, ctx)
+      if (!res.success) {
+        return `[click failed: ${res.error}]`
+      }
+      return `Clicked <${res.tagName}> "${res.text}". Current URL: ${session.currentUrl} ("${session.currentTitle}")`
+    }
+
+    if (action === 'type') {
+      const res = await session.type({
+        ref: args.ref,
+        selector: args.selector,
+        text: args.text || '',
+        clear: args.clear !== false,
+        pressEnter: Boolean(args.pressEnter),
+        waitMs: args.waitMs || 500,
+      }, ctx)
+      if (!res.success) {
+        return `[type failed: ${res.error}]`
+      }
+      return `Typed into <${res.tagName}> (value: "${res.value}"). Current URL: ${session.currentUrl}`
+    }
+
+    if (action === 'scroll') {
+      const res = await session.scroll({ direction: args.direction || 'down', amount: args.amount || 500 }, ctx)
+      return `Scrolled ${args.direction || 'down'} (scrollY: ${res.scrollY}px / max: ${res.maxScrollY}px)`
+    }
+
+    if (action === 'console') {
+      const logs = session.getConsoleLogs()
+      if (!logs.length) return 'No console logs captured.'
+      const summary = logs.map(l => `[${l.level.toUpperCase()}] ${l.message} (${l.url}:${l.line})`).join('\n')
+      return `Console logs (${logs.length} entries):\n${summary}`
+    }
+
+    throw new Error(`Unknown action: "${action}". Supported actions: open, snapshot, click, type, scroll, console, close`)
+  })
 }
 
 /**
