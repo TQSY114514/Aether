@@ -254,6 +254,15 @@ function start(db, port = DEFAULT_PORT) {
     })
   })
 
+  _server.on('error', (err) => {
+    try {
+      const log = require('../logger')
+      log.warn('[localGateway] Failed to listen on port ' + port + ': ' + (err?.message || err))
+    } catch {
+      console.warn('[localGateway] Failed to listen on port ' + port + ': ' + (err?.message || err))
+    }
+  })
+
   _server.listen(port, '127.0.0.1', () => {
     _ensureToken(_db)
     return { started: true, port: _server.address()?.port, token: _token }
