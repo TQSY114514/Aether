@@ -101,6 +101,7 @@ const { registerFlagsHandlers } = require('./ipc/flags.handler')
 const { registerLearningHandlers } = require('./ipc/learning.handler')
 const { registerRecipeHandlers } = require('./ipc/recipe.handler')
 const { registerProjectHandlers } = require('./ipc/project.handler')
+const { registerBrowserHandlers } = require('./ipc/browser.handler')
 const { initScheduler } = require('./cron/scheduler')
 
 const mcpManager = require('./mcp/manager')
@@ -363,6 +364,7 @@ function setupIpcHandlers() {
   registerLearningHandlers(ipcMain, db)
   registerRecipeHandlers(ipcMain)
   registerProjectHandlers(ipcMain, db, () => mainWindow?.webContents)
+  registerBrowserHandlers(ipcMain, db)
 
   // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──
   try {
@@ -534,6 +536,7 @@ app.on('window-all-closed', () => {
 // Ensure debounced DB writes are flushed before the process exits, otherwise
 // the last ~200ms of changes (a streaming chunk, a vote) would be lost.
 app.on('before-quit', async () => {
+  try { require('./browser/agentBrowser').closeAllSessions() } catch {}
   if (typeof db.flushDatabase === 'function') {
     try { await db.flushDatabase() } catch {}
   }

@@ -33,7 +33,7 @@ const TOOL_AXIS = {
   // shell: 命令执行
   run_command: AXES.SHELL, debug_loop: AXES.SHELL, test_first: AXES.SHELL,
   // network: 网络访问
-  web_search: AXES.NETWORK, web_fetch: AXES.NETWORK, web_visualize: AXES.NETWORK, gateway: AXES.NETWORK,
+  web_search: AXES.NETWORK, web_fetch: AXES.NETWORK, web_visualize: AXES.NETWORK, agent_browser: AXES.NETWORK, gateway: AXES.NETWORK,
   github_pr_create: AXES.NETWORK, github_pr_list: AXES.NETWORK, github_pr_merge: AXES.NETWORK,
   github_pr_review: AXES.NETWORK, github_issue_create: AXES.NETWORK, github_issue_list: AXES.NETWORK,
   github_release_create: AXES.NETWORK, github_actions_status: AXES.NETWORK,

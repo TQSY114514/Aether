@@ -136,8 +136,8 @@
 3. **影子工作区 (Shadow Workspace) / 安全沙盒执行**
    - 复杂修改先在 `.aether/shadow/` 或 Docker 沙盒中运行与编译测试，验证通过（无报错）后再整体应用 (Apply) 到主工作区，避免弄脏开发环境。
 
-4. **Web 视觉与终端双重验证 (Autonomous Validation)**
-   - 赋予 Agent 操作 headless 浏览器的能力（查看页面渲染与控制台报错），真正做到“写代码 -> 跑起来 -> 看结果 -> 自动修”的闭环。
+4. **Web 视觉与终端双重验证 (Autonomous Validation)** ✅ 已完成
+   - 落地 Agent 专用受控浏览器环境（Web ACI `agent_browser`，基于 Electron 内部 Chromium）：支持 open/snapshot/click/type/scroll/console/close，配合 Set-of-Marks 语义化交互与控制台诊断，真正做到“写代码 -> 跑起来 -> 看结果 -> 自动修”的闭环。
 
 ## 2026-10 外部战略评审（Kimi 吸收与攻坚规划）
 

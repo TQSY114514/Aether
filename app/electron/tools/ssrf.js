@@ -67,9 +67,12 @@ function isPrivateIP(ip) {
   if (family === 4) return isPrivateV4(s)
   if (family === 6) {
     const lower = s.toLowerCase()
-    // ::1 (loopback), :: (unspecified), fd00::/8 (unique local), fe80::/10 (link-local)
+    // ::1 (loopback), :: (unspecified)
     if (lower === '::1' || lower === '::') return true
-    if (lower.startsWith('fd') || lower.startsWith('fe80')) return true
+    // fc00::/7 (unique local addresses — fc00..fdff)
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true
+    // fe80::/10 (link-local unicast — fe80..febf)
+    if (/^fe[89ab]/i.test(lower)) return true
     // ::ffff:127.0.0.1 / ::ffff:169.254.169.254 …（P2-M7）
     const mapped = unwrapIpv4Mapped(lower)
     if (mapped && isPrivateV4(mapped)) return true

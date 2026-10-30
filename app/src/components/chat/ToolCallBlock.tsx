@@ -81,6 +81,11 @@ function toolLabel(tool: ToolCall): string {
     case 'grep_search': return a.pattern ? `${t('tool.grep_search')} ${first(a.pattern, 30)}` : t('tool.grep_search')
     case 'web_search': return a.query ? `${t('tool.web_search')} ${first(a.query)}` : t('tool.web_search')
     case 'web_fetch': return a.url ? `${t('tool.web_fetch')} ${first(a.url, 40)}` : t('tool.web_fetch')
+    case 'agent_browser': {
+      const act = a.action ? `[${a.action}]` : ''
+      const target = a.url ? ` ${first(a.url, 35)}` : (a.ref ? ` ${a.ref}` : (a.selector ? ` ${first(a.selector, 25)}` : ''))
+      return `${t('tool.agent_browser') || 'Browser'} ${act}${target}`.trim()
+    }
     case 'write_file': return a.path ? `${t('tool.write_file')} ${basename(a.path)}` : t('tool.write_file')
     case 'edit_file': return a.path ? `${t('tool.edit_file')} ${basename(a.path)}` : t('tool.edit_file')
     case 'run_command': return a.command ? `${t('tool.run_command')} ${first((a.command + '').split(' ').slice(0, 3).join(' '), 30)}` : t('tool.run_command')
@@ -123,7 +128,17 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   // Long results default to a collapsed single line with a click-to-expand
   // toggle (Feature C2). Short results render fully as before.
   const [collapsed, setCollapsed] = useState(true)
-  const resultText = tool.result ?? ''
+  const rawRes = tool.result as any
+  let extractedImageUrl: string | null = null
+  let resultText = ''
+  if (Array.isArray(rawRes)) {
+    for (const part of rawRes) {
+      if (part?.type === 'text' && part.text) resultText += part.text
+      if (part?.type === 'image_url' && part.image_url?.url) extractedImageUrl = part.image_url.url
+    }
+  } else {
+    resultText = typeof rawRes === 'string' ? rawRes : String(rawRes ?? '')
+  }
   const isLongResult = resultText.length > 300 || resultText.split('\n').length > 6
   const cmdFailure = detectCommandFailure(tool)
   const isFailed = !!tool.error || cmdFailure.failed
@@ -154,7 +169,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
   const handleCleanCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
-    const fullText = (tool.error || tool.result || tool.liveOutput || '').trim()
+    const fullText = (tool.error || resultText || tool.liveOutput || '').trim()
     const clean = stripAnsi(fullText)
     navigator.clipboard.writeText(clean)
     setCopied(true)
@@ -164,7 +179,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const handleExplain = (e: React.MouseEvent) => {
     e.stopPropagation()
     const cmd = cmdString || tool.name
-    const fullText = stripAnsi((tool.error || tool.result || tool.liveOutput || '').trim())
+    const fullText = stripAnsi((tool.error || resultText || tool.liveOutput || '').trim())
     const lines = fullText.split('\n')
     const snippet = lines.length > 25 ? lines.slice(-25).join('\n') : fullText
     const exitReason = cmdFailure.reason ? `(${cmdFailure.reason})` : ''
@@ -176,7 +191,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const handleQuickFix = () => {
     const a = (tool.args && typeof tool.args === 'object' ? tool.args : {}) as any
     const cmd = a.command ? String(a.command) : tool.name
-    const fullText = stripAnsi((tool.error || tool.result || tool.liveOutput || '').trim())
+    const fullText = stripAnsi((tool.error || resultText || tool.liveOutput || '').trim())
     const lines = fullText.split('\n')
     const snippet = lines.length > 25 ? lines.slice(-25).join('\n') : fullText
     const exitReason = cmdFailure.reason ? `(${cmdFailure.reason})` : ''
@@ -353,7 +368,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                   </>
                 ) : (
                   <>
-                    <pre className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto" style={{ color: 'var(--text-secondary)' }}>{tool.result}</pre>
+                    <pre className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto" style={{ color: 'var(--text-secondary)' }}>{resultText}</pre>
                     {isLongResult && (
                       <button
                         type="button"
@@ -366,6 +381,11 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                     )}
                   </>
                 )}
+              </div>
+            )}
+            {extractedImageUrl && (
+              <div className="mt-2 rounded-[2px] border overflow-hidden max-w-lg" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                <img src={extractedImageUrl} alt={t('tool.browser_snapshot')} className="w-full h-auto object-contain max-h-72" />
               </div>
             )}
             {/* Diff preview — shown for write_file / edit_file / apply_patch (Claude Code-style) */}

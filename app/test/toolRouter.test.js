@@ -5,7 +5,7 @@
 // plan 模式只读过滤; 路由失败 ≠ 任务失败(过滤只是 payload 层)。
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from 'vitest'
-import { routeTools, routerEnabled, _categories } from '../electron/llm/toolRouter'
+import { routeTools, routerEnabled, _categories, getToolPrefixBucket } from '../electron/llm/toolRouter'
 
 // 全量工具名(模拟 registry + MCP 合并)
 const ALL = [
@@ -134,7 +134,11 @@ describe('routerEnabled', () => {
 
 describe('_categories', () => {
   it('has all five categories with tool lists', () => {
-    expect(Object.keys(_categories).sort()).toEqual(['agent', 'git', 'github', 'lsp', 'memory'])
+    expect(Object.keys(_categories).sort()).toEqual(['agent', 'browser', 'git', 'github', 'lsp', 'memory'])
+    expect(_categories.browser).toContain('agent_browser')
+    expect(_categories.browser).toContain('web_visualize')
+    expect(getToolPrefixBucket('agent_browser')).toBeGreaterThan(1)
+    expect(getToolPrefixBucket('web_visualize')).toBeGreaterThan(1)
     expect(_categories.github.length).toBeGreaterThan(0)
     expect(_categories.lsp).toContain('lsp_diagnostics')
   })

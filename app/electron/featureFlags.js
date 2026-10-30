@@ -42,6 +42,7 @@ const FLAG_DEFS = [
   { key: 'agent.shadowWorkspace',   default: false, category: 'agent',    description: 'Auto mode shadow workspace: execute changes in isolated worktree and verify before applying' },
   { key: 'agent.runnerUpReview',    default: false, category: 'agent',    description: 'Runner-up dual-model review: 2nd-ranked ELO model cross-checks destructive diffs before auto-apply' },
   { key: 'agent.visualVerification', default: false, category: 'agent',    description: 'Visual self-healing loop: offscreen render & screenshot verification after frontend UI modifications' },
+  { key: 'agent.browser',            default: true,  category: 'agent',    description: 'Agent-dedicated browser environment: interactive web ACI (navigate, click, type, snapshot, console) for automated verification and SPA exploration' },
   // Phase 2 — background code intelligence
   { key: 'agent.backgroundReview', default: false, category: 'agent',     description: 'Background code review after file-touching tools' },
   // Phase 2 — agent quality (external review P0-1)
