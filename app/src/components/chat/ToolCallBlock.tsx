@@ -207,7 +207,14 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
   return (
     <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-      <div role="button" tabIndex={0} onClick={() => setOpen(!open)} onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } }} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-90" title={cmdString || tool.name}>
+      <div className="w-full flex items-center justify-between gap-2 px-1 text-xs">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="flex-1 flex items-center gap-2 min-w-0 px-1.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-90 rounded-[2px] text-left"
+          title={cmdString || tool.name}
+        >
         {open ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />}
         {isCommand ? (
           <Terminal size={12} className={isFailed ? "text-red-500 shrink-0" : running ? "text-amber-500 shrink-0" : "text-emerald-500 shrink-0"} />
@@ -253,7 +260,8 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             )}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        </button>
+        <div className="flex items-center gap-1.5 shrink-0 pr-1.5 py-1">
           {isCommand && (
             <button
               type="button"
@@ -278,7 +286,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
               </button>
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); handleQuickFix() }}
+                onClick={handleQuickFix}
                 title={t('tool.quick_fix.tooltip')}
                 className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
               >
