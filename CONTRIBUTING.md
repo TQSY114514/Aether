@@ -56,22 +56,44 @@ Before opening a Pull Request, verify that the build and relevant checks pass fr
 ```bash
 cd app
 
-# 1. Frontend TypeScript & Vite bundle build
-npm run build
+# 1. Fast static verification gate (~65s)
+npm run check
+# Runs: check-ipc -> check-deps -> check-architecture -> check-ui-tokens -> tsc --noEmit
 
-# 2. Static IPC contract & UI token verification
-node scripts/check-ipc.js
-node scripts/check-ui-tokens.js
-
-# 3. Run unit & integration tests
+# 2. Run unit & integration tests
 npm test
 
-# 4. Smoke-check TUI & headless RPC (if touching TUI/CLI/SDK)
+# 3. Smoke-check TUI & headless RPC (if touching TUI/CLI/SDK)
 node cli.js tui --smoke
 node scripts/smoke-rpc.js
 ```
 
-### 5. Commit Messages & Reporting Bugs
+### 5. Pull Request Guidelines & PR Discipline
+
+To protect maintainer bandwidth and keep the review process smooth, all PRs must adhere to the following principles:
+
+1. **Single Responsibility**: One PR should solve exactly one issue or feature. Do not bundle unrelated refactorings with feature implementations.
+2. **Granularity & Scope Limit**: Keep PRs focused. Pull requests modifying > 1,000 lines (excluding auto-generated artifacts) should be decomposed into smaller, sequential PRs.
+3. **Align New Features Upfront**: Before writing code for significant new features, check [`docs/roadmap.md`](./docs/roadmap.md) or open an Issue to confirm alignment with current project goals, preventing unnecessary rejection.
+4. **Dependency Defense (Think Three Times)**:
+   - *Can this be implemented cleanly with standard Web/Node.js APIs?*
+   - *Will this dependency bloat desktop installer size or slow cold boot?*
+   - *Does it violate architectural boundaries?* (e.g. `app/tui/` and `app/electron/sdk/` must remain strictly Electron-free).
+5. **Clean Logging & Outputs**: Strip out temporary `console.log` statements before submitting. Raw unmanaged stdout outputs disrupt Ink TUI terminal layouts and corrupt the `--mode rpc` JSONL streaming protocol.
+6. **Constructive Review & Rejection Policy**: If a PR is closed or declined, it is usually due to performance overhead, architectural non-conformance, security/privacy risks, or misalignment with the roadmap. It is never a dismissal of your effort—we sincerely value every contributor's time.
+
+### 6. AI-Assisted Contribution & Anti-AI Slop Policy
+
+We welcome contributors leveraging modern AI tools (including Aether, Claude, Cursor, Copilot, etc.) to enhance productivity. However, **dumping unvetted AI-generated code (Vibe Coding -> AI Slop) is strictly prohibited.**
+
+1. **Transparency**: If AI was used to assist in authoring the PR, disclose the tool and exact model in the PR description (e.g., `AI Assistant: Claude 3.7 Sonnet` or `OpenAI o3-mini`).
+2. **Complete Ownership**: You must personally understand every single line of code submitted and be capable of answering reviewer questions regarding design trade-offs and edge cases.
+3. **Human-Authored PR Descriptions**: The PR summary, rationale, and notes must be written by you. AI may be used to polish phrasing, but do not rely on LLMs to hallucinate the entire description.
+4. **No Blind Retry Loops**: Avoid submitting code shaped by uninspected `AI generate -> error -> ask AI again -> commit` cycles. Test locally and verify the root cause yourself before submitting.
+
+PRs that violate these principles and shift AI review burdens onto maintainers will be deferred or closed.
+
+### 7. Commit Messages & Reporting Bugs
 
 - **Commit Format**: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`). Keep the subject line ≤ 72 characters and explain *why* in the commit body.
 - **Bug Reports**: Open a [GitHub Issue](https://github.com/TQSY114514/Aether/issues/new) including Aether version, OS, reproduction steps, and error logs (redact any sensitive tokens or private paths).
@@ -129,17 +151,44 @@ Windows 用户也可直接双击或运行仓库根目录的 `start.bat`。
 ```bash
 cd app
 
-# 1. 前端构建门禁
-npm run build
+# 1. 运行快速静态门禁 (~65秒)
+npm run check
+# 依次执行：IPC契约检查 -> 依赖引用检查 -> 架构纯洁性检查 -> UI反AI套话令牌检查 -> TypeScript静态类型检查
 
-# 2. IPC 契约与 UI 设计令牌静态检查
-node scripts/check-ipc.js
-node scripts/check-ui-tokens.js
-
-# 3. 运行单元测试与集成测试套件
+# 2. 运行单元测试与集成测试套件
 npm test
 
-# 4. 终端 TUI 与 RPC 冒烟测试
+# 3. 终端 TUI 与 RPC 冒烟测试（若涉及 CLI/TUI/SDK 变动）
 node cli.js tui --smoke
 node scripts/smoke-rpc.js
 ```
+
+### 5. PR 提交纪律与质量边界
+
+为保障审阅效率与软件演进秩序，所有提交的 PR 须遵守以下协作纪律：
+
+1. **单 PR 单职责**：一个 PR 只解决一件事；严禁在“代码重构”中夹带新功能，也请避免在新功能 PR 中包含大面积无关联格式化。
+2. **体量与行数控制**：除自动化生成的代码/本地化文件外，建议单 PR 变更代码行数控制在合理范围（原则上不超过 1000 行），更提倡拆分成独立小 PR 渐进提交。
+3. **新特性前置对齐**：开发重大新功能前，请先查阅 [`docs/roadmap.md`](./docs/roadmap.md) 或提前发起 Issue 探讨，避免因不符合当前规划路线而被婉拒。
+4. **依赖引入“防御三问”**：
+   - *是否可以通过原生 Web/Node.js API 简洁实现？*
+   - *是否会导致打包体积暴增或显著拖慢冷启动？*
+   - *是否破坏了架构纯洁性？*（例如 `app/tui/` 和 `app/electron/sdk/` 绝对严禁引入 Electron 依赖）。
+5. **日志与输出清理**：提交前务必清理所有临时 `console.log`。原生裸露的标准输出会扰乱 Ink TUI 终端渲染排版，更会导致 `--mode rpc` 模式下的 JSONL 协议流解析损毁。
+6. **理性看待 PR 评审与关闭**：若 PR 未被合并，通常是由于性能开销、架构不符、安全隐私顾虑或未在路线图中。这绝非否定您的付出，维护者真诚感谢每一位贡献者的劳动与支持。
+
+### 6. AI 辅助开发与反 AI Slop 规范
+
+Aether 欢迎开发者借助现代 AI 工具（包括 Aether 本身、Claude、Cursor 等）提升开发效率。但我们**坚决抵制不加思考、盲目生成的垃圾代码堆砌（Vibe Coding -> AI Slop）**：
+
+1. **透明声明**：若在开发中使用了 AI 辅助，请在 PR 描述中如实注明所使用的工具与具体模型（例如 `AI 辅助模型: Claude 3.7 Sonnet`）。
+2. **完全理解与答辩责任**：您必须彻底理解提交代码中的每一行逻辑与潜在副作用。当审阅者询问某处改动的考量时，您需要能作出合理解释，不可推脱为“这是 AI 生成的”。
+3. **人类主笔 PR 描述**：PR 的修改背景、核心意图与测试说明必须由您亲自撰写。可以使用 AI 润色文字，但严禁直接复制 AI 虚构的假大空套话。
+4. **严禁死循环盲修**：禁止在本地出现多次 `AI 生成 -> 报错 -> 让 AI 盲猜修复 -> 再报错` 且未经人工理解就直接提交的行为。必须在本地明确根因并自测通过后再行提交。
+
+违反上述规则、将 AI 审查与调试成本转嫁给社区维护者的 PR，将被延后处理或直接关闭。
+
+### 7. Commit 规范与 Bug 反馈
+
+- **Commit 规范**：使用 Conventional Commits 标准（`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`），保持首行简洁（≤ 72 字符），并在 Body 中详细解释改动原因。
+- **Bug 报告**：请提交 [GitHub Issue](https://github.com/TQSY114514/Aether/issues/new)，附带 Aether 版本、操作系统环境、复现步骤及错误日志（注意遮蔽敏感 Token 与私密路径）。
