@@ -167,28 +167,30 @@ async function _runSubagent({
     }
     const childCallbacks = {
       ...(callbacks || {}),
-      onToolCall: (entry) => {
-        try {
-          callbacks?.onSubagentEvent?.({
-            type: 'tool_call',
-            id: taskId || childSessionId,
-            taskId,
-            tool: entry,
-          })
-        } catch {}
-        callbacks?.onToolCall?.(entry)
-      },
-      onStatus: (statusObj) => {
-        try {
-          callbacks?.onSubagentEvent?.({
-            type: 'status',
-            id: taskId || childSessionId,
-            taskId,
-            text: statusObj?.text || (typeof statusObj === 'string' ? statusObj : ''),
-          })
-        } catch {}
-        callbacks?.onStatus?.(statusObj)
-      },
+      ...(callbacks?.onSubagentEvent ? {
+        onToolCall: (entry) => {
+          try {
+            callbacks.onSubagentEvent({
+              type: 'tool_call',
+              id: taskId || childSessionId,
+              taskId,
+              tool: entry,
+            })
+          } catch {}
+          callbacks?.onToolCall?.(entry)
+        },
+        onStatus: (statusObj) => {
+          try {
+            callbacks.onSubagentEvent({
+              type: 'status',
+              id: taskId || childSessionId,
+              taskId,
+              text: statusObj?.text || (typeof statusObj === 'string' ? statusObj : ''),
+            })
+          } catch {}
+          callbacks?.onStatus?.(statusObj)
+        },
+      } : {}),
     }
     finalContent = await runToolLoop({
       provider,
@@ -244,7 +246,7 @@ async function _runSubagent({
   } catch {}
 
   const isCancelled = !timedOut && (mergedSignal.aborted || timeoutCtrl.signal.aborted)
-  const taskStatus = isCancelled ? 'cancelled' : (wasTimeout || hasError) ? 'error' : 'done'
+  const taskStatus = isCancelled ? 'cancelled' : wasTimeout ? 'timeout' : hasError ? 'error' : 'done'
 
   if (taskId && typeof db.updateAgentTask === 'function') {
     try {
