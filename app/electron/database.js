@@ -86,7 +86,7 @@ function isPlaintextKey(stored) {
 // system-level encryption (safeStorage) is available. Returns how many were
 // migrated. Safe to call repeatedly.
 function migrateLegacyPlaintextKeys() {
-  if (!db || !safeStorage.isEncryptionAvailable()) return 0;
+  if (!db || !safeStorage || !safeStorage.isEncryptionAvailable()) return 0;
   const rows = db.prepare("SELECT id, api_key FROM provider").all();
   let migrated = 0;
   for (const r of rows) {
@@ -140,10 +140,6 @@ function lastId() {
     id = m ? m.max_id : 0;
   }
   return Number(id) || 0;
-}
-
-function allRows(stmt) {
-  return stmt.all();
 }
 
 const { createEmptyDatabase } = require('./db/schema');
@@ -389,6 +385,8 @@ function initDatabase() {
   addCol("message", "error_message", "TEXT");
   addCol("message", "arena_model", "TEXT");
   addCol("message", "file_summary", "TEXT");
+  addCol("message", "thinking_content", "TEXT");
+  addCol("message", "thinking_duration_ms", "INTEGER");
   addCol("user_habit", "proposed", "INTEGER NOT NULL DEFAULT 0");
   addCol("agent_checkpoint", "rolled_back_at", "DATETIME");
   addCol("skill_patterns", "params_json", "TEXT");
@@ -1096,6 +1094,9 @@ function getMessages(sessionId) {
     .prepare("SELECT * FROM message WHERE session_id = ? ORDER BY id ASC")
     .all(sessionId);
 }
+function getMessage(id) {
+  return db.prepare("SELECT * FROM message WHERE id = ?").get(id) || null;
+}
 function addMessage({
   session_id,
   role,
@@ -1107,10 +1108,12 @@ function addMessage({
   status = "success",
   error_message = null,
   arena_model = null,
+  thinking_content = null,
+  thinking_duration_ms = null,
 }) {
   const info = db
     .prepare(
-      "INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model, thinking_content, thinking_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       session_id,
@@ -1123,6 +1126,8 @@ function addMessage({
       status,
       error_message,
       arena_model,
+      thinking_content,
+      thinking_duration_ms,
     );
   try {
     db.prepare(
@@ -2546,6 +2551,7 @@ module.exports = {
   touchSession,
   updateSession,
   getMessages,
+  getMessage,
   addMessage,
   updateMessage,
   getSetting,

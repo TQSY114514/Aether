@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Bot, CheckCircle2, ChevronDown, ChevronRight, Loader2, AlertCircle } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import { taskApi } from '@/store'
 
 export type SubagentItem = {
   id: string
@@ -11,6 +12,9 @@ export type SubagentItem = {
   startedAt?: number
   output?: string
   error?: string
+  taskId?: number
+  currentTool?: string
+  currentStatus?: string
 }
 
 export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
@@ -44,7 +48,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)]/40 transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)]/40 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.99]"
       >
         {open ? <ChevronDown size={12} style={{ color: accentColor }} /> : <ChevronRight size={12} style={{ color: accentColor }} />}
         <Bot size={13} style={{ color: accentColor }} />
@@ -82,12 +86,41 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                       {item.task}
                     </span>
                   </div>
-                  {item.latencyMs != null && (
-                    <span className="font-mono text-[10px] text-[var(--text-muted)] tabular-nums shrink-0">
-                      {(item.latencyMs / 1000).toFixed(1)}s
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isRunning && item.currentTool && (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--accent)] bg-[var(--bg-secondary)] shrink-0">
+                        Running: {item.currentTool}
+                      </span>
+                    )}
+                    {isRunning && item.taskId != null && (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const api = taskApi()
+                          if (api && item.taskId != null) {
+                            await api.cancel(item.taskId).catch(() => {})
+                          }
+                        }}
+                        className="px-2 py-0.5 text-[10px] rounded border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 active:scale-95 transition-all shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500/50"
+                        title={t('chat.cancel', '取消')}
+                      >
+                        {t('chat.cancel', '取消')}
+                      </button>
+                    )}
+                    {item.latencyMs != null && (
+                      <span className="font-mono text-[10px] text-[var(--text-muted)] tabular-nums shrink-0">
+                        {(item.latencyMs / 1000).toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {isRunning && item.currentStatus && (
+                  <div className="text-[10px] text-[var(--text-muted)] italic truncate pl-5">
+                    {item.currentStatus}
+                  </div>
+                )}
 
                 {isItemError && item.error && (
                   <div className="text-[11px] text-red-500 bg-red-50 dark:bg-red-950/20 p-1.5 rounded font-mono break-all">
@@ -100,7 +133,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                     <button
                       type="button"
                       onClick={() => setExpandedIndex(isOutputExpanded ? null : idx)}
-                      className="text-[10px] text-[var(--accent)] hover:underline flex items-center gap-1 mt-0.5"
+                      className="text-[10px] text-[var(--accent)] hover:underline flex items-center gap-1 mt-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] rounded-xs"
                     >
                       {isOutputExpanded ? t('chat.subagent_hide_output', '收起详情') : t('chat.subagent_view_output', '查看执行结果')}
                     </button>

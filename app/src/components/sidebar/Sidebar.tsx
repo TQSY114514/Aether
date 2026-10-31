@@ -67,7 +67,10 @@ export default function Sidebar() {
   const sessions = useStore((s) => s.sessions)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const language = useStore((s) => s.language)
-  const streamingBySession = useStore((s) => s.streamingBySession)
+  const activeStreamingIds = useStore((s) => {
+    const keys = Object.keys(s.streamingBySession)
+    return keys.length > 0 ? keys.filter(id => Boolean(s.streamingBySession[Number(id)])).join(',') : ''
+  })
   const currentView = useStore((s) => s.currentView)
   const setCurrentView = useStore((s) => s.setCurrentView)
   const selectSession = useStore((s) => s.selectSession)
@@ -100,10 +103,11 @@ export default function Sidebar() {
     if (projectScopeFilter && activeProject) {
       list = list.filter((s) => s.project_id === activeProject.id)
     }
-    const withMessages = list.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingBySession[s.id])
+    const streamingSet = new Set(activeStreamingIds ? activeStreamingIds.split(',') : [])
+    const withMessages = list.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingSet.has(String(s.id)))
     if (!lowerQuery) return withMessages
     return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
-  }, [sessions, lowerQuery, projectScopeFilter, activeProject, streamingBySession])
+  }, [sessions, lowerQuery, projectScopeFilter, activeProject, activeStreamingIds])
   const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
 
   const handleDoubleClick = (session: Session) => {
@@ -268,7 +272,7 @@ export default function Sidebar() {
                 style={currentSessionId === session.id ? { background: 'var(--content-bg)', boxShadow: 'inset 2px 0 0 var(--accent), 0 1px 3px rgba(0,0,0,0.06)' } : {}}>
                 {session.pinned ? <Pin size={12} className="text-amber-500 shrink-0" fill="currentColor" />
                   : <MessageSquare size={14} className="text-[var(--text-muted)] shrink-0" />}
-                {streamingBySession[session.id] && (
+                {Boolean(activeStreamingIds && activeStreamingIds.split(',').includes(String(session.id))) && (
                   <Loader2 size={11} className="shrink-0 animate-spin" style={{ color: 'var(--accent)' }} />
                 )}
                 {renamingId === session.id ? (
@@ -439,7 +443,7 @@ const AGENT_STATUS_STYLE: Record<string, { color: string; bg: string; icon: any 
   success: { color: '#16a34a', bg: 'rgba(22,163,74,0.12)', icon: CheckCircle2 },
   budget_exhausted: { color: '#d97706', bg: 'rgba(217,119,6,0.12)', icon: AlertTriangle },
   error: { color: '#dc2626', bg: 'rgba(220,38,38,0.12)', icon: XCircle },
-  loop_detected: { color: '#7c3aed', bg: 'rgba(124,58,237,0.12)', icon: RotateCcw },
+  loop_detected: { color: 'var(--accent)', bg: 'color-mix(in srgb, var(--accent) 12%, transparent)', icon: RotateCcw },
 }
 
 function AgentTurnRow({ row }: { row: AgentExecutionTurn }) {

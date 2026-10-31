@@ -88,7 +88,23 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     }
     let msgs: Message[] = []
     try { msgs = await window.electronAPI.message.list(id) } catch (e) { log.error("preload", e) }
-    set({ currentSessionId: id, messages: msgs, arenaResults: [] })
+    const thinkingBlocks: Record<number, string> = {}
+    const thinkingDurations: Record<number, number> = {}
+    for (const m of msgs) {
+      if (m.thinking_content) {
+        thinkingBlocks[m.id] = m.thinking_content
+      }
+      if (m.thinking_duration_ms != null) {
+        thinkingDurations[m.id] = m.thinking_duration_ms / 1000
+      }
+    }
+    set((s) => ({
+      currentSessionId: id,
+      messages: msgs,
+      arenaResults: [],
+      thinkingBlocksByMessage: { ...s.thinkingBlocksByMessage, ...thinkingBlocks },
+      thinkingDurationsByMessage: { ...s.thinkingDurationsByMessage, ...thinkingDurations },
+    }))
     try {
       let cfg = await window.electronAPI.session.getConfig(id)
       if (!cfg || !cfg.modelId) {

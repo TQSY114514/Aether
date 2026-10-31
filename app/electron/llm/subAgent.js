@@ -118,6 +118,22 @@ async function _runSubagent({
   // Wall-clock timeout
   const timeoutCtrl = new AbortController()
   const timeout = setTimeout(() => timeoutCtrl.abort(), cfg.timeoutMs)
+  if (taskId) {
+    try {
+      const bg = require('./backgroundTasks')
+      if (typeof bg.registerSubagentController === 'function') {
+        bg.registerSubagentController(taskId, timeoutCtrl)
+      }
+    } catch {}
+    try {
+      callbacks?.onSubagentEvent?.({
+        type: 'start',
+        id: taskId,
+        taskId,
+        status: 'running',
+      })
+    } catch {}
+  }
 
   // Merge signals so parent cancellation propagates
   const mergedSignal = signal
@@ -145,6 +161,31 @@ async function _runSubagent({
         }
       }
     }
+    const childCallbacks = {
+      ...(callbacks || {}),
+      onToolCall: (entry) => {
+        try {
+          callbacks?.onSubagentEvent?.({
+            type: 'tool_call',
+            id: taskId || childSessionId,
+            taskId,
+            tool: entry,
+          })
+        } catch {}
+        callbacks?.onToolCall?.(entry)
+      },
+      onStatus: (statusObj) => {
+        try {
+          callbacks?.onSubagentEvent?.({
+            type: 'status',
+            id: taskId || childSessionId,
+            taskId,
+            text: statusObj?.text || (typeof statusObj === 'string' ? statusObj : ''),
+          })
+        } catch {}
+        callbacks?.onStatus?.(statusObj)
+      },
+    }
     finalContent = await runToolLoop({
       provider,
       model,
@@ -159,7 +200,7 @@ async function _runSubagent({
       messageId: 0,
       db,
       autoCommit: false,
-      ...(callbacks || {}),
+      ...childCallbacks,
     })
   } catch (e) {
     if (e?.name === 'AbortError' || e?.message?.includes('abort')) {
@@ -173,6 +214,14 @@ async function _runSubagent({
     }
   } finally {
     clearTimeout(timeout)
+    if (taskId) {
+      try {
+        const bg = require('./backgroundTasks')
+        if (typeof bg.unregisterSubagentController === 'function') {
+          bg.unregisterSubagentController(taskId)
+        }
+      } catch {}
+    }
   }
 
   // Update child session with result
@@ -218,6 +267,7 @@ async function _runSubagent({
   return {
     content: finalContent || '(sub-agent returned no content)',
     childSessionId,
+    taskId,
     wasTimeout,
     hasError,
     error: errorMessage || (wasTimeout ? 'Timed out' : null),
@@ -417,6 +467,23 @@ async function runParallel(tasks, shared = {}) {
         ? captureBeforeSnapshot(normTask.writePaths, shared.workspaceRoot || null)
         : null
       const iterations = 0
+      let liveTaskId = null
+      const subagentCallbacks = {
+        ...(shared.callbacks || {}),
+        onSubagentEvent: (evt) => {
+          if (evt?.taskId) liveTaskId = evt.taskId
+          try {
+            shared.onSubagentEvent?.({
+              ...evt,
+              id: subagentId,
+              index: i,
+              task: String(task).slice(0, 80),
+              taskId: evt.taskId || liveTaskId,
+            })
+          } catch {}
+          shared.callbacks?.onSubagentEvent?.(evt)
+        },
+      }
       try {
         const result = await runSubagent({
           db: shared.db,
@@ -426,7 +493,7 @@ async function runParallel(tasks, shared = {}) {
           prompt: task,
           signal: shared.signal,
           agentMode: normTask.effectiveMode || shared.agentMode || 'plan',
-          callbacks: shared.callbacks || {},
+          callbacks: subagentCallbacks,
           config: shared.subagentConfig || {},
         })
         const latencyMs = Date.now() - startTime
@@ -441,6 +508,7 @@ async function runParallel(tasks, shared = {}) {
               task: String(task).slice(0, 80),
               status: 'error',
               latencyMs,
+              taskId: result?.taskId || liveTaskId,
               error: errText,
             })
           } catch {}
@@ -456,6 +524,7 @@ async function runParallel(tasks, shared = {}) {
             latencyMs,
             output: result.content,
             childSessionId: result.childSessionId,
+            taskId: result?.taskId || liveTaskId,
           })
         } catch {}
         return { success: true, output: result.content, iterations, childSessionId: result.childSessionId, latencyMs }
@@ -471,6 +540,7 @@ async function runParallel(tasks, shared = {}) {
             status: 'error',
             latencyMs,
             error: e.message || 'unknown',
+            taskId: liveTaskId,
           })
         } catch {}
         return { success: false, error: e.message || 'unknown', iterations, latencyMs }

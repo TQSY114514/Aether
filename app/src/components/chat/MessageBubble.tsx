@@ -27,8 +27,8 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const planSteps = useStore(s => s.planStepsByMessage[message.id])
   const todos = useStore(s => s.todosByMessage[message.id])
   const subagents = useStore(s => s.subagentsByMessage[message.id])
-  const thinkingBlocks = useStore(s => s.thinkingBlocksByMessage[message.id])
-  const thinkingDuration = useStore(s => s.thinkingDurationsByMessage[message.id])
+  const thinkingBlocks = useStore(s => s.thinkingBlocksByMessage[message.id]) || message.thinking_content
+  const thinkingDuration = useStore(s => s.thinkingDurationsByMessage[message.id]) ?? (message.thinking_duration_ms != null ? message.thinking_duration_ms / 1000 : undefined)
   const thinkingStartedAt = useStore(s => s.thinkingStartsByMessage[message.id])
   const statusLines = useStore(s => s.statusLinesByMessage[message.id])
   const fileSummary = useStore(s => s.fileSummariesByMessage[message.id])
@@ -125,6 +125,11 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
     return <div className="mc" dangerouslySetInnerHTML={{ __html: html }} />
   }, [searchHighlight, isUser, hlRe])
 
+  const renderedContent = useMemo(() => {
+    return renderContent(message.content)
+  }, [renderContent, message.content])
+
+
   return (
     <div id={`msg-${message.id}`} className={`w-full flex flex-col message-enter group py-2.5 ${active ? 'msg-anchor-flash' : ''}`}>
       {isUser ? (
@@ -173,7 +178,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                 </div>
               </div>
             ) : (
-              renderContent(message.content)
+              renderedContent
             )}
           </div>
           <div className="flex items-center gap-1 px-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -272,7 +277,7 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                 />
               </div>
             )}
-            {renderContent(message.content)}
+            {renderedContent}
             {fileSummary && (
               <FileSummaryDeck
                 summary={fileSummary}

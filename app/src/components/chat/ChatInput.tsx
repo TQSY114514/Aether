@@ -524,7 +524,7 @@ export default function ChatInput() {
 
   return (
     <div
-      className="border-t border-[var(--border)] bg-[var(--content-bg)]/85 backdrop-blur-md px-4 py-2.5"
+      className="border-t border-[var(--border)] bg-[var(--content-bg)] px-4 py-2.5"
       ref={dropZoneRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -533,7 +533,7 @@ export default function ChatInput() {
       <div className="max-w-3xl mx-auto">
         {dragOver && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-blur-fade pointer-events-none">
-            <div className="rounded-lg border-2 border-dashed border-white/50 bg-white/10 backdrop-blur-md px-8 py-6 text-center">
+            <div className="rounded-lg border-2 border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-8 py-6 text-center">
               <Paperclip size={32} className="text-white/80 mx-auto mb-2" />
               <p className="text-white text-sm font-medium">{t('chat.drag_drop_hint')}</p>
             </div>

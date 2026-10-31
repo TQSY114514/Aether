@@ -182,14 +182,15 @@ export default function ChatWindow() {
   // Batch selectors with shallow comparison: only re-renders when selected
   // values actually change, not on every store update.
   const {
-    messages, currentSessionId, streamingBySession, chatMode,
+    messages, currentSessionId, isCurrentStreaming, currentStreamingMessageId, chatMode,
     toolCallsByMessage, arenaResults, arenaResultsSessionId, arenaPending, arenaError,
     proposedHabits, activeHints, loadMessages,
     resolveHabit, dismissHint, arenaVote, arenaVoted, arenaVoteWinnerId, theme, backgroundImage,
   } = useStore(useShallow((s) => ({
     messages: s.messages,
     currentSessionId: s.currentSessionId,
-    streamingBySession: s.streamingBySession,
+    isCurrentStreaming: Boolean(s.currentSessionId && s.streamingBySession[s.currentSessionId]),
+    currentStreamingMessageId: s.currentSessionId ? (s.streamingBySession[s.currentSessionId]?.messageId ?? null) : null,
     chatMode: s.chatMode,
     toolCallsByMessage: s.toolCallsByMessage,
     arenaResults: s.arenaResults,
@@ -222,23 +223,16 @@ export default function ChatWindow() {
   // content instead. Without this filter, switching away and back during a stream
   // shows TWO bubbles: an empty one (DB placeholder) + the streaming one.
   const virtualMessages = useMemo(() => {
-    const buf = currentSessionId ? streamingBySession[currentSessionId] : null
-    if (!buf) return messages
-    // Filter out the assistant placeholder that the main process writes to the
-    // DB before streaming starts. We have two cases:
-    //   1. buf.messageId is set (first chunk arrived): filter by id.
-    //   2. buf.messageId is null (chunk not yet arrived): filter the last
-    //      assistant message if it has empty content — that's the placeholder.
-    if (buf.messageId != null) {
-      return messages.filter(m => m.id !== buf.messageId)
+    if (!isCurrentStreaming) return messages
+    if (currentStreamingMessageId != null) {
+      return messages.filter(m => m.id !== currentStreamingMessageId)
     }
-    // No messageId yet — drop a trailing empty assistant message if present.
     const last = messages[messages.length - 1]
     if (last && last.role === 'assistant' && (last.content == null || last.content === '')) {
       return messages.slice(0, -1)
     }
     return messages
-  }, [messages, currentSessionId, streamingBySession])
+  }, [messages, isCurrentStreaming, currentStreamingMessageId])
 
   // Virtual scroller: only renders visible message rows (+ overscan) instead
   // of the full list. Mounted on the existing scrollRef container. Uses
@@ -268,15 +262,13 @@ export default function ChatWindow() {
   // Compute streaming status for the header bar — derive from specific keys
   // so the memo only invalidates when tool-call state actually changes.
   const streamingStatus = useMemo(() => {
-    if (!currentSessionId) return ''
-    const buf = streamingBySession[currentSessionId]
-    if (!buf) return ''
+    if (!currentSessionId || !isCurrentStreaming) return ''
     const hasToolCalls = Object.values(toolCallsByMessage).some(tcs =>
       tcs.some(tc => tc.result === null && tc.error === null)
     )
     if (hasToolCalls) return t('status.using_tools')
     return t('status.thinking')
-  }, [currentSessionId, toolCallsByMessage])
+  }, [currentSessionId, isCurrentStreaming, toolCallsByMessage])
 
   // Session taint state (QVD-2026-57410 / untrusted external input defense)
   const isSessionTainted = useMemo(() => {
@@ -383,12 +375,12 @@ export default function ChatWindow() {
   // Empty chat: render EmptyState safely centered via flex + my-auto.
   // When the window is short, my-auto prevents negative scroll / top clipping,
   // keeping the hero icon completely in view while allowing scroll if needed.
-  const isEmptyChat = messages.length === 0 && !(currentSessionId && streamingBySession[currentSessionId]) && arenaResults.length === 0
+  const isEmptyChat = messages.length === 0 && !isCurrentStreaming && arenaResults.length === 0
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
       {/* Search HUD bar */}
-      <div className="px-4 py-1.5 shrink-0 flex items-center gap-2 relative z-[2]" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--content-bg-trans, var(--bg-primary))', backdropFilter: 'blur(8px)' }}>
+      <div className="px-4 py-1.5 shrink-0 flex items-center gap-2 relative z-[2]" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--content-bg, var(--bg-primary))' }}>
         <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
           <Search size={12} className="text-gray-400 shrink-0" />
           <input value={messageSearchQuery} onChange={handleSearchChange}
@@ -453,7 +445,7 @@ export default function ChatWindow() {
       )}
 
       {/* Streaming status bar */}
-      {(currentSessionId && streamingBySession[currentSessionId]) && streamingStatus && (
+      {isCurrentStreaming && streamingStatus && (
         <div className="px-4 py-1 shrink-0 animate-blur-fade" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
           <div className="max-w-3xl mx-auto flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
@@ -503,7 +495,7 @@ export default function ChatWindow() {
           {/* Streaming bubble — render ONLY for the current session. Other
               sessions keep streaming in the background but their output is not
               shown here, preventing double-output when switching chats. */}
-          {chatMode !== 'arena' && currentSessionId && streamingBySession[currentSessionId] && (
+          {chatMode !== 'arena' && isCurrentStreaming && currentSessionId != null && (
             <StreamingBubble sessionId={currentSessionId} isAtBottom={isAtBottom} />
           )}
 

@@ -122,7 +122,7 @@ function checkToolPermissions() {
 
       // Check if a tool with mutating name is incorrectly marked as safe
       if (tool.risk === 'safe') {
-        if (MUTATING_RE.test(tool.name) && !['create_canvas', 'create_notebook_stub'].includes(tool.name)) {
+        if (MUTATING_RE.test(tool.name)) {
           violations.push(`Mutating tool "${tool.name}" is declared as risk: "safe", violating permission gate.`)
         }
       }

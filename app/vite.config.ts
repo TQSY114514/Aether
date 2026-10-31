@@ -17,8 +17,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/sql.js')) return 'sqljs'
-          if (id.includes('node_modules/highlight.js')) return 'highlight'
+                    if (id.includes('node_modules/highlight.js')) return 'highlight'
         },
       },
     },

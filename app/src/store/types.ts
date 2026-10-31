@@ -252,7 +252,7 @@ export interface AppState {
   // Per-message plan snapshot (from hierarchical planner).
   planSnapshotsByMessage: Record<number, { id: string; description: string; tasks: { id: string; description: string; status: string; result?: string | null }[] }>
   // Per-message subagents parallel state (from delegate_task).
-  subagentsByMessage: Record<number, { id: string; name: string; task: string; status: 'running' | 'done' | 'error'; latencyMs?: number; startedAt?: number; output?: string; error?: string }[]>
+  subagentsByMessage: Record<number, { id: string; name: string; task: string; status: 'running' | 'done' | 'error'; latencyMs?: number; startedAt?: number; output?: string; error?: string; taskId?: number; currentTool?: string; currentStatus?: string }[]>
   // Per-message thinking/reasoning blocks from extended-thinking models (Claude
   // extended thinking, OpenAI o-series reasoning_content). Accumulated as
   // deltas arrive during streaming; cleared when the stream ends.

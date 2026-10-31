@@ -128,7 +128,7 @@ export default function SkillsSettings() {
                 const stat = statsMap.get(s.name)
                 return (
                   <div key={s.name} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                    <span className="text-base leading-none mt-0.5">✨</span>
+                    <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: "var(--accent)" }} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="text-xs font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
@@ -210,7 +210,7 @@ export default function SkillsSettings() {
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
                         <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                          {s.totalUses} 次使用 · {s.successes} 成功 · {s.lastResult ? '✅' : '❌'} 最近
+                          {s.totalUses} 次使用 · {s.successes} 成功 · {s.lastResult ? '成功' : '失败'} 最近
                         </div>
                         <div className="mt-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
                           <div className="h-full rounded-full transition-all" style={{ width: `${barW}%`, backgroundColor: barColor }} />

@@ -350,15 +350,21 @@ export function ensureSubagentListener() {
     getStore().setState((s) => {
       const existing = s.subagentsByMessage[messageId] || []
       const idx = existing.findIndex((sa) => sa.id === event.id)
+      const prev = idx >= 0 ? existing[idx] : null
+      const currentTool = event.tool ? (event.tool.name || event.tool) : (event.status === 'done' || event.status === 'error' ? undefined : prev?.currentTool)
+      const currentStatus = event.text || prev?.currentStatus
       const entry = {
         id: event.id,
-        name: `子代理 ${event.index + 1}`,
-        task: event.task,
-        status: event.status,
+        name: event.name || (event.index != null ? `子代理 ${event.index + 1}` : prev?.name || '子代理'),
+        task: event.task || prev?.task || '',
+        status: event.status || prev?.status || 'running',
         latencyMs: event.latencyMs,
         startedAt: event.startedAt,
         output: event.output,
         error: event.error,
+        taskId: event.taskId ?? prev?.taskId,
+        currentTool,
+        currentStatus,
       }
       let nextList = [...existing]
       if (idx >= 0) {

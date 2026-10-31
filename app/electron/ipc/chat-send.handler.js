@@ -600,7 +600,14 @@ ipcMain.handle('chat:complete', handleChatComplete)
           try { wc?.send('chat:status', { messageId: msgId, sessionId, text: `⚠️ 上下文使用 ${pctAfter}% (≈${budgetAfter} / ${ctxBudget} tokens)`, kind: 'context_budget' }) } catch {}
         }
         const tokens = estimateTokens(finalContent)
-        db.updateMessage(msgId, { content: finalContent, status: 'success', token_count: tokens })
+        const _thinking = cb.getThinkingData ? cb.getThinkingData() : null
+        db.updateMessage(msgId, {
+          content: finalContent,
+          status: 'success',
+          token_count: tokens,
+          thinking_content: _thinking?.content || null,
+          thinking_duration_ms: _thinking?.durationMs || null,
+        })
         if (needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
@@ -673,7 +680,14 @@ ipcMain.handle('chat:complete', handleChatComplete)
         const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
         // Preserve accumulated content and file summary on abort (tool-loop path)
         const preserved = streamedContent || finalContent || ''
-        const updatePayload = { content: preserved, status: 'aborted', error_message: errMsg }
+        const _errThinking = cb?.getThinkingData ? cb.getThinkingData() : null
+        const updatePayload = {
+          content: preserved,
+          status: 'aborted',
+          error_message: errMsg,
+          thinking_content: _errThinking?.content || null,
+          thinking_duration_ms: _errThinking?.durationMs || null,
+        }
         if (turnFileSummary?.fileCount > 0) {
           updatePayload.file_summary = JSON.stringify(turnFileSummary)
           try {
@@ -714,6 +728,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
       let hasThinking = false
       let thinkingEnded = false
       let thinkingStartedAt = null
+      let streamThinkingContent = ''
+      let streamThinkingDurationMs = 0
       try {
         const wc = getWebContents()
         const stream = streamChat({
@@ -725,6 +741,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             ...mergedOpts,
             onThinkingDelta: (delta) => {
               if (delta) {
+                streamThinkingContent += delta
                 if (!hasThinking) {
                   hasThinking = true
                   thinkingStartedAt = Date.now()
@@ -742,7 +759,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             // Signal thinking is complete as soon as main content tokens start flowing
             if (hasThinking && !thinkingEnded) {
               thinkingEnded = true
-              const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+              const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0; streamThinkingDurationMs += durationMs
               try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
             }
             try { wc?.send('chat:stream-chunk', { messageId: msgId, delta, done: false, sessionId }) } catch {}
@@ -750,7 +767,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         if (hasThinking && !thinkingEnded) {
           thinkingEnded = true
-          const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+          const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0; streamThinkingDurationMs += durationMs
           try { wc?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
         }
         clearTimeout(timeout)
@@ -782,6 +799,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
           content: fullContent,
           status: isFallback ? 'fallback' : 'success',
           token_count: tokens,
+          thinking_content: streamThinkingContent || null,
+          thinking_duration_ms: streamThinkingDurationMs || null,
         })
         // Auto-title: summarize the first exchange instead of copy-pasting raw input.
         // 条件用 needsAiSummary（首条占位符 或 仍是 quick 截断形态）——
@@ -828,12 +847,24 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (err.name === 'AbortError') {
           // Preserve accumulated content so the user sees what was produced before stop.
           // Update the message with whatever fullContent was accumulated.
-          db.updateMessage(msgId, { content: fullContent, status: 'aborted', error_message: '已中止' })
+          db.updateMessage(msgId, {
+            content: fullContent,
+            status: 'aborted',
+            error_message: '已中止',
+            thinking_content: streamThinkingContent || null,
+            thinking_duration_ms: streamThinkingDurationMs || null,
+          })
           getWebContents()?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
           return { messageId: msgId }
         }
         lastError = err.message
-        db.updateMessage(msgId, { content: '', status: 'error', error_message: lastError })
+        db.updateMessage(msgId, {
+          content: '',
+          status: 'error',
+          error_message: lastError,
+          thinking_content: streamThinkingContent || null,
+          thinking_duration_ms: streamThinkingDurationMs || null,
+        })
         // Centralized error classification (auth/rate-limit/network/content-filter etc.)
         const eclass = classifyError(err)
         if (eclass.recover && eclass.recover.hint) {
