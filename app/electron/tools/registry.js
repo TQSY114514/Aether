@@ -253,6 +253,40 @@ async function runInDocker(cmd, timeoutMs, db) {
   }
 }
 
+function maybeInvalidateRuleCaches(filePath, sessionId) {
+  if (!filePath || typeof filePath !== 'string') return
+  const norm = filePath.replace(/\\/g, '/').toLowerCase()
+  const base = path.basename(filePath).toLowerCase()
+  const ruleFiles = new Set(['agents.md', 'aether.md', '.aetherai.md', 'claude.md', 'agent.md', 'gemini.md', 'config.json', '.aether.json', 'opencode.json'])
+  const isRuleOrConfig = ruleFiles.has(base) ||
+    norm.includes('/.aether/rules/') ||
+    norm.startsWith('.aether/rules/') ||
+    norm.includes('/.aether/config.json') ||
+    norm.startsWith('.aether/config.json')
+
+  if (isRuleOrConfig) {
+    try {
+      const { invalidateCache } = require('../llm/projectInstructions')
+      invalidateCache()
+    } catch {}
+    try {
+      const { invalidateProjectConfigCache } = require('../config/projectConfig')
+      let targetWs = getWorkspaceRoot(sessionId)
+      if (path.isAbsolute(filePath)) {
+        let cur = path.dirname(path.resolve(filePath))
+        while (cur && cur !== path.dirname(cur)) {
+          if (fs.existsSync(path.join(cur, '.aether')) || fs.existsSync(path.join(cur, 'AGENTS.md'))) {
+            targetWs = cur
+            break
+          }
+          cur = path.dirname(cur)
+        }
+      }
+      invalidateProjectConfigCache(targetWs || undefined)
+    } catch {}
+  }
+}
+
 // ──  ─────────────────────────────────────────────────────────
 const TOOLS = [
   // ──  ─────────────────────────────────────────────────────────
@@ -264,6 +298,10 @@ const TOOLS = [
       const stat = fs.statSync(p)
       const { recordReadFileState } = require('./editMatchers')
       recordReadFileState(ctx?.sessionId, p, { offset: offset || 1, limit: limit || undefined, mtimeMs: stat.mtimeMs })
+    } catch {}
+    try {
+      const { recordFileActivity } = require('../llm/sessionContext')
+      recordFileActivity(ctx?.sessionId, p, 'read')
     } catch {}
     if (offset > 1 || limit > 0) { const lines = text.split('\n'); const start = Math.max(0, (offset ? offset - 1 : 0)); text = (limit > 0 ? lines.slice(start, start + limit) : lines.slice(start)).join('\n') }
     return text + (buf.length > MAX_READ_BYTES ? `\n\n[truncated, ${buf.length} bytes total]` : '')
@@ -350,6 +388,11 @@ const TOOLS = [
       const { recordReadFileState } = require('./editMatchers')
       recordReadFileState(ctx?.sessionId, p, { offset: 1, mtimeMs: stat.mtimeMs })
     } catch {}
+    try {
+      const { recordFileActivity } = require('../llm/sessionContext')
+      recordFileActivity(ctx?.sessionId, p, 'write')
+    } catch {}
+    maybeInvalidateRuleCaches(p, ctx?.sessionId)
     return `wrote ${c.length} chars to ${p}`
   }},
   { name: 'edit_file', description: 'Replace text in a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, old_string: { type: 'string' }, new_string: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['path', 'old_string', 'new_string'] }, run: async (args, ctx) => {
@@ -415,6 +458,11 @@ const TOOLS = [
       const { recordReadFileState } = require('./editMatchers')
       recordReadFileState(ctx?.sessionId, p, { offset: 1, mtimeMs: stat.mtimeMs })
     } catch {}
+    try {
+      const { recordFileActivity } = require('../llm/sessionContext')
+      recordFileActivity(ctx?.sessionId, p, 'edit')
+    } catch {}
+    maybeInvalidateRuleCaches(p, ctx?.sessionId)
     return `edited ${p}`
   }},
   { name: 'apply_patch', description: 'Apply a unified diff patch or Aider-style SEARCH/REPLACE blocks. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, patch: { type: 'string' } }, required: ['path', 'patch'] }, run: async (args, ctx) => {
@@ -434,6 +482,11 @@ const TOOLS = [
       throw new Error(`No valid patch hunks or SEARCH/REPLACE blocks were applied to ${p}. Verify the patch syntax and target lines.`)
     }
     await fs.promises.writeFile(p, r.content, 'utf-8')
+    try {
+      const { recordFileActivity } = require('../llm/sessionContext')
+      recordFileActivity(ctx?.sessionId, p, 'edit')
+    } catch {}
+    maybeInvalidateRuleCaches(p, ctx?.sessionId)
     return `patched ${p} (${r.applied} changes applied via ${r.format})`
   }},
 

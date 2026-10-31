@@ -11,6 +11,9 @@ import {
   Sparkles,
   HardDrive,
   ChevronDown,
+  Power,
+  Bell,
+  Rocket,
 } from 'lucide-react'
 import { t, LANGS } from '@/utils/i18n'
 
@@ -298,6 +301,9 @@ export default function GeneralDomain() {
         </div>
       </div>
 
+      {/* Windows Native Integration */}
+      <WindowsIntegrationCard />
+
       {/* Configuration Backup & Restore */}
       <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
         <div className="flex items-center gap-1.5 mb-1">
@@ -357,6 +363,113 @@ export default function GeneralDomain() {
               className="hidden"
             />
           </label>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function WindowsIntegrationCard() {
+  const { toast } = useUI()
+  const [autoLaunch, setAutoLaunch] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    try {
+      window.electronAPI?.system?.getAutoLaunch?.().then((r) => {
+        setAutoLaunch(!!r?.enabled)
+        setLoaded(true)
+      }).catch(() => { setLoaded(true) })
+    } catch { setLoaded(true) }
+  }, [])
+
+  const toggleAutoLaunch = async () => {
+    setBusy(true)
+    try {
+      const r = await window.electronAPI?.system?.setAutoLaunch?.(!autoLaunch)
+      if (r?.ok) {
+        setAutoLaunch(!!r.enabled)
+        toast(r.enabled ? t('settings.auto_launch_enabled', '已开启开机自启') : t('settings.auto_launch_disabled', '已关闭开机自启'), { type: 'success' })
+      } else {
+        toast(`${t('settings.set_failed', '设置失败')}: ${r?.error || ''}`, { type: 'error' })
+      }
+    } catch { toast(t('settings.set_failed', '设置失败'), { type: 'error' }) }
+    finally { setBusy(false) }
+  }
+
+  const testNotify = async () => {
+    try {
+      const r = await window.electronAPI?.system?.notify?.({
+        title: 'Aether',
+        body: t('settings.notify_sample', '这是一条测试通知 —— 任务完成/新消息提醒将在这里出现。')
+      })
+      if (r?.ok) toast(t('settings.notify_sent', '已发送测试通知'), { type: 'success' })
+      else toast(`${t('settings.notify_unavailable', '通知不可用')}: ${r?.error || ''}`, { type: 'error' })
+    } catch { toast(t('settings.notify_unavailable', '通知不可用'), { type: 'error' }) }
+  }
+
+  return (
+    <div className="rounded-lg p-4 border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Rocket size={15} style={{ color: 'var(--accent)' }} />
+        <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          {t('settings.windows_integration', '系统集成')}
+        </h2>
+      </div>
+      <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+        {t('settings.windows_integration_desc', 'Windows 原生能力：开机自启、系统通知。仅桌面形态可用。')}
+      </p>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <Power size={13} className="text-gray-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                {t('settings.auto_launch', '开机自启')}
+              </p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                {t('settings.auto_launch_desc', '登录 Windows 时后台启动（隐藏到托盘），随时通过快捷键唤起')}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoLaunch}
+            onClick={toggleAutoLaunch}
+            disabled={!loaded || busy}
+            className="relative w-10 h-5 rounded-full transition-colors shrink-0 disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+            style={{ backgroundColor: autoLaunch ? 'var(--accent)' : 'var(--border)' }}
+          >
+            <span
+              className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-xs"
+              style={{ left: autoLaunch ? '22px' : '2px' }}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 pt-2.5 border-t" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-start gap-2">
+            <Bell size={13} className="text-gray-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                {t('settings.notify_test', '系统通知测试')}
+              </p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                {t('settings.notify_test_desc', '向 Windows 桌面发送一条原生通知，验证通知中心集成')}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={testNotify}
+            className="px-2.5 py-1 text-xs rounded-md border font-medium hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+          >
+            {t('settings.send_test', '发送测试')}
+          </button>
         </div>
       </div>
     </div>

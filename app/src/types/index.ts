@@ -70,9 +70,11 @@ export interface Message {
   arena_model?: string | null
   attachment?: { name: string; mime: string; kind: 'text' | 'image'; preview?: string } | null
   file_summary?: string | null
+  thinking_content?: string | null
+  thinking_duration_ms?: number | null
 }
 
-export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'tokens' | 'memory' | 'learning' | 'skills' | 'learningStatus' | 'security'
+export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'memory' | 'skills'
 
 export interface TestConnectionResult {
   success: boolean

@@ -8,12 +8,8 @@ import ModelPage from '@/pages/ModelPage'
 import PersonaPage from '@/pages/PersonaPage'
 import SettingPage from '@/pages/SettingPage'
 import ScoresPage from '@/pages/ScoresPage'
-import TokenPage from '@/pages/TokenPage'
 import MemoryPage from '@/pages/MemoryPage'
-import LearningGraphPage from '@/pages/LearningGraphPage'
 import SkillsPage from '@/pages/SkillsPage'
-import LearningStatusPage from '@/pages/LearningStatusPage'
-import SecurityPage from '@/pages/SecurityPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
@@ -35,11 +31,7 @@ const VIEW_TITLES: Record<string, string> = {
   scores: 'sidebar.nav.arena',
   memory: 'sidebar.nav.memory',
   settings: 'sidebar.nav.settings',
-  tokens: 'settings.tools.tokens',
-  learning: 'settings.tools.learning',
   skills: 'settings.tools.skills',
-  security: 'settings.nav.security',
-  learningStatus: 'sidebar.nav.learning',
 }
 /** Render the application shell and route the active workspace page. */
 export default function App() {
@@ -288,12 +280,9 @@ export default function App() {
       case 'agents': return <PersonaPage />
       case 'settings': return <SettingPage />
       case 'scores': return <ScoresPage />
-      case 'tokens': return <TokenPage />
       case 'memory': return <MemoryPage />
-      case 'learning': return <LearningGraphPage />
       case 'skills': return <SkillsPage />
-      case 'learningStatus': return <LearningStatusPage />
-      case 'security': return <SecurityPage />
+      default: return <ChatPage />
     }
   }
 

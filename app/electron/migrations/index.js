@@ -14,6 +14,7 @@ const MIGRATIONS = [
   require('./004_turn_checkpoint_index'),
   require('./005_deepwiki_kg_relations'),
   require('./006_project_multi_workspace'),
+  require('./007_message_thinking_content'),
 ].sort((a, b) => a.version - b.version)
 
 /**

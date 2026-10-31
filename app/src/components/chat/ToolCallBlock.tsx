@@ -207,7 +207,14 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
   return (
     <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors" title={cmdString || tool.name}>
+      <div className="w-full flex items-center justify-between gap-2 px-1 text-xs">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="flex-1 flex items-center gap-2 min-w-0 px-1.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-90 rounded-[2px] text-left"
+          title={cmdString || tool.name}
+        >
         {open ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />}
         {isCommand ? (
           <Terminal size={12} className={isFailed ? "text-red-500 shrink-0" : running ? "text-amber-500 shrink-0" : "text-emerald-500 shrink-0"} />
@@ -253,7 +260,8 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             )}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        </button>
+        <div className="flex items-center gap-1.5 shrink-0 pr-1.5 py-1">
           {isCommand && (
             <button
               type="button"
@@ -278,7 +286,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
               </button>
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); handleQuickFix() }}
+                onClick={handleQuickFix}
                 title={t('tool.quick_fix.tooltip')}
                 className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors"
               >
@@ -297,7 +305,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             <StatusIcon size={11} />{status.label}
           </span>
         </div>
-      </button>
+      </div>
       <div
         className="transition-[grid-template-rows] duration-250 ease-out"
         style={{
@@ -315,24 +323,24 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
             ) : null}
             {/* Warp Terminal Block Drawer */}
             {isCommand && (
-              <div className="rounded-[2px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: '#0d1117' }}>
-                <div className="flex items-center justify-between px-2 py-1 text-[10px] font-mono border-b" style={{ borderColor: '#30363d', backgroundColor: '#161b22', color: '#8b949e' }}>
+              <div className="rounded-[2px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
+                <div className="flex items-center justify-between px-2 py-1 text-[10px] font-mono border-b" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
                   <span className="flex items-center gap-1.5 truncate">
                     <Terminal size={10} className="text-emerald-400" />
                     <span className="font-semibold text-emerald-400">$</span>
-                    <span className="truncate text-[#e6edf3]">{cmdString || tool.name}</span>
+                    <span className="truncate text-[var(--text-primary)]">{cmdString || tool.name}</span>
                   </span>
                   <button
                     type="button"
                     onClick={handleCleanCopy}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[#c9d1d9] hover:bg-[#30363d] transition-colors"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[var(--text-secondary)] hover:bg-[var(--border)] transition-colors"
                     title={t('tool.clean_copy')}
                   >
                     {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
                     <span>{copied ? t('tool.clean_copied') : t('tool.clean_copy')}</span>
                   </button>
                 </div>
-                <pre className="text-[11px] font-mono p-2.5 whitespace-pre-wrap break-all max-h-56 overflow-y-auto leading-relaxed text-[#c9d1d9]">
+                <pre className="text-[11px] font-mono p-2.5 whitespace-pre-wrap break-all max-h-56 overflow-y-auto leading-relaxed text-[var(--text-primary)]">
                   {stripAnsi(running && !tool.liveOutputDone
                     ? (tool.liveOutput || tool.result || tool.error || '')
                     : (tool.error || tool.result || tool.liveOutput || ''))}
@@ -348,7 +356,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                   <span>stdout</span>
                   {running && !tool.liveOutputDone && <span className="animate-pulse" style={{ color: 'var(--accent)' }}>▋</span>}
                 </div>
-                <pre className="text-[11px] font-mono p-2 rounded-[2px] border whitespace-pre-wrap break-all max-h-48 overflow-y-auto leading-relaxed" style={{ backgroundColor: '#0d1117', color: '#e6edf3', borderColor: 'var(--border)' }}>{tool.liveOutput}{running && !tool.liveOutputDone && <span className="animate-pulse" style={{ color: 'var(--accent)' }}>▋</span>}</pre>
+                <pre className="text-[11px] font-mono p-2 rounded-[2px] border whitespace-pre-wrap break-all max-h-48 overflow-y-auto leading-relaxed" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}>{tool.liveOutput}{running && !tool.liveOutputDone && <span className="animate-pulse" style={{ color: 'var(--accent)' }}>▋</span>}</pre>
               </div>
             )}
             {!isCommand && tool.result != null && (

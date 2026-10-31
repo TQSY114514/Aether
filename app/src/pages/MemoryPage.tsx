@@ -8,7 +8,7 @@ import { parseMemoryImport } from '@/utils/memoryImport'
 import StrategyTab from '@/components/memory/StrategyTab'
 
 const TYPE_COLORS: Record<string, string> = {
-  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#9333EA', project: '#7C3AED',
+  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#0284C7', project: '#0D9488',
 }
 
 // 记忆来源 → 展示标签/颜色。origin 由自动记忆链路写入：user=手动添加、

@@ -217,7 +217,7 @@ export default function BtwDrawer() {
     >
       {/* Header */}
       <div
-        className="h-12 flex items-center justify-between px-3.5 shrink-0"
+        className="h-12 flex items-center justify-between px-3.5 shrink-0 wco-pr app-drag"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -237,7 +237,7 @@ export default function BtwDrawer() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 app-no-drag">
           {turns.length > 0 && (
             <button
               type="button"

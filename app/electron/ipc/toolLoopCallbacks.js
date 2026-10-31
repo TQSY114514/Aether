@@ -291,17 +291,23 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   const callbacks = {}
 
   let thinkingStartedAt = null
+  let accumulatedThinking = ''
+  let thinkingDurationMs = 0
   // Always hook up thinking start/end/delta for all models so any model with reasoning or <think> tags streams live
   callbacks.onThinkingStart = () => {
     thinkingStartedAt = Date.now()
     safeSend('chat:thinking-start', { messageId: msgId, sessionId, startedAt: thinkingStartedAt })
   }
   callbacks.onThinkingEnd   = () => {
-    const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+    const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0; thinkingDurationMs += durationMs
     thinkingStartedAt = null
     safeSend('chat:thinking-end',   { messageId: msgId, sessionId, durationMs })
   }
-  callbacks.onThinkingDelta = (text) => safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text, done: false })
+  callbacks.onThinkingDelta = (text) => { if (text) accumulatedThinking += text; safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text, done: false }) }
+  callbacks.getThinkingData = () => ({
+    content: accumulatedThinking,
+    durationMs: thinkingDurationMs + (thinkingStartedAt ? Date.now() - thinkingStartedAt : 0),
+  })
   callbacks.onStreamDelta = (delta) => safeSend('chat:stream-chunk', { messageId: msgId, sessionId, delta, done: false })
 
   callbacks.onToolCall = (entry) =>

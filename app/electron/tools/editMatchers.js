@@ -439,6 +439,7 @@ function recordReadFileState(sessionId, filePath, { offset = 1, limit, mtimeMs, 
     mtimeMs: normalizeMtimeMs(mtimeMs),
     readAt: readAt instanceof Date ? readAt : new Date(readAt || Date.now()),
   })
+  // File activity is recorded by individual tools (read_file, write_file, edit_file)
 }
 
 function findLatestReadFileState(sessionId, filePath, platform = process.platform) {

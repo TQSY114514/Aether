@@ -78,16 +78,16 @@ body {
    delegate). Colors use theme vars so they adapt to light/dark/glass/etc. */
 /* Code blocks with syntax highlighting — dark background for contrast */
 pre.code-block { margin: 0.6em 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: #282c34; }
-pre.code-block .code-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.08); }
-pre.code-block .code-lang { font-size: 10px; font-family: var(--font-sans); color: #abb2bf; text-transform: lowercase; letter-spacing: 0.03em; }
-pre.code-block .code-copy { font-size: 10px; padding: 2px 8px; border-radius: 5px; color: #abb2bf; cursor: pointer; background: transparent; border: 1px solid transparent; transition: all .15s; }
-pre.code-block .code-copy:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+pre.code-block .code-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 14px; background: rgba(0,0,0,0.35); border-bottom: 1px solid rgba(255,255,255,0.12); }
+pre.code-block .code-lang { font-size: 11px; font-weight: 600; font-family: "JetBrains Mono", Consolas, monospace; color: #f3f4f6; text-transform: uppercase; letter-spacing: 0.05em; }
+pre.code-block .code-copy { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 5px; color: #e5e7eb; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); transition: all .15s; }
+pre.code-block .code-copy:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.3); color: #ffffff; }
 pre.code-block .code-copy.copied { color: #98c379; }
-pre.code-block .code-fold { font-size: 10px; padding: 2px 6px; border-radius: 5px; color: #abb2bf; cursor: pointer; background: transparent; border: 1px solid transparent; margin-right: auto; transition: all .15s; }
+pre.code-block .code-fold { font-size: 11px; padding: 2px 6px; border-radius: 5px; color: #e5e7eb; cursor: pointer; background: transparent; border: 1px solid transparent; margin-right: auto; transition: all .15s; }
 pre.code-block .code-fold:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
 pre.code-block.collapsed code { display: none; }
 pre.code-block.collapsed .code-fold::after { content: " … " attr(data-lines) " lines"; color: #5c6370; font-size: 10px; margin-left: 4px; }
-pre.code-block code { display: block; padding: 12px 14px; font-family: 'JetBrains Mono', 'Consolas', var(--font-sans); font-size: 12px; line-height: 1.6; overflow-x: auto; color: #abb2bf; }
+pre.code-block code { display: block; padding: 12px 14px; font-family: 'JetBrains Mono', 'Consolas', var(--font-sans); font-size: 12.5px; line-height: 1.6; overflow-x: auto; color: #e5e7eb; }
 /* highlight.js token colors work on top of the dark bg */
 pre.code-block code.hljs { background: transparent; padding: 12px 14px; }
 .mc code:not([class*="language-"]) { background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px; font-family: 'JetBrains Mono','Consolas',monospace; font-size: 0.88em; }
@@ -348,8 +348,9 @@ textarea, input {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  width: 290px;
-  max-height: 200px;
+  width: 440px;
+  max-width: min(440px, calc(100vw - 32px));
+  max-height: 320px;
   overflow-y: auto;
   z-index: 100;
   background-color: var(--bg-primary) !important;

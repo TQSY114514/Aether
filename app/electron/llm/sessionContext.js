@@ -139,6 +139,14 @@ function getActiveFileSnippets(sessionId, { maxFiles = 3, maxLinesPerFile = 80, 
   const fileMap = _sessionFileActivities.get(sid)
   if (!fileMap || fileMap.size === 0) return []
 
+  let effectiveWsRoot = wsRoot
+  if (!effectiveWsRoot) {
+    try {
+      const { getWorkspaceRoot } = require('../tools/sandbox')
+      effectiveWsRoot = getWorkspaceRoot(sessionId)
+    } catch {}
+  }
+
   const sortedFiles = Array.from(fileMap.entries())
     .sort((a, b) => b[1].score - a[1].score || b[1].lastAccessed - a[1].lastAccessed)
     .slice(0, maxFiles)
@@ -149,8 +157,8 @@ function getActiveFileSnippets(sessionId, { maxFiles = 3, maxLinesPerFile = 80, 
   for (const [filePath] of sortedFiles) {
     try {
       let resolved = filePath
-      if (wsRoot && !path.isAbsolute(resolved)) {
-        resolved = path.resolve(wsRoot, resolved)
+      if (effectiveWsRoot && !path.isAbsolute(resolved)) {
+        resolved = path.resolve(effectiveWsRoot, resolved)
       }
       if (!fs.existsSync(resolved)) continue
 
@@ -184,8 +192,17 @@ function getActiveFileSnippets(sessionId, { maxFiles = 3, maxLinesPerFile = 80, 
   return snippets
 }
 
+function clearFileActivities(sessionId) {
+  if (sessionId === undefined) {
+    _sessionFileActivities.clear()
+  } else {
+    _sessionFileActivities.delete(String(sessionId))
+  }
+}
+
 module.exports = {
   buildSessionContext,
   recordFileActivity,
   getActiveFileSnippets,
+  clearFileActivities,
 }

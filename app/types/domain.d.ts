@@ -47,6 +47,8 @@ export interface Message {
   error_message?: string | null
   arena_model?: string | null
   file_summary?: string | null
+  thinking_content?: string | null
+  thinking_duration_ms?: number | null
   tool_calls?: ToolCall[]
   tool_call_id?: string
   attachment?: MessageAttachment | null

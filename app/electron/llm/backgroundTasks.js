@@ -803,11 +803,32 @@ async function startTask({ db, parentSessionId, content, modelId, agentMode = 'a
  * The running task's catch block handles status update and the
  * 'cancelled' emit. Also fails any open pause gate so a paused task unwinds.
  */
+const _subagentControllers = new Map()
+
+function registerSubagentController(taskId, controller) {
+  if (taskId && controller) _subagentControllers.set(taskId, controller)
+}
+
+function unregisterSubagentController(taskId) {
+  if (taskId) _subagentControllers.delete(taskId)
+}
+
 function cancelTask(taskId) {
+  let handled = false
+  const subCtrl = _subagentControllers.get(taskId)
+  if (subCtrl) {
+    try { subCtrl.abort() } catch {}
+    _subagentControllers.delete(taskId)
+    if (_db && typeof _db.updateAgentTask === 'function') {
+      try { _db.updateAgentTask(taskId, { status: 'cancelled' }) } catch {}
+    }
+    handled = true
+  }
   const t = tasks.get(taskId)
-  if (!t) return
+  if (!t) return handled
   if (t.status === 'running' && t.controller) {
     try { t.controller.abort(); if (t.gate) t.gate.abort() } catch {}
+    handled = true
   } else if (t.status === 'queued' || t.status === 'pending' || t.status === 'plan' || t.status === 'paused') {
     const wasPaused = t.status === 'paused'
     // Pause only takes effect at the next loop boundary, so a paused task's
@@ -820,7 +841,9 @@ function cancelTask(taskId) {
     persist(t)
     try { t.emit(taskId, { type: 'cancelled', payload: { taskId } }) } catch {}
     if (!wasPaused) notifySlotFree()
+    handled = true
   }
+  return handled
 }
 
 /**
@@ -980,6 +1003,8 @@ function restorePendingTasks(db) {
 module.exports = {
   startTask,
   cancelTask,
+  registerSubagentController,
+  unregisterSubagentController,
   pauseTask,
   resumeTask,
   listTasks,

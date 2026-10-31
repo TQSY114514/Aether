@@ -27,15 +27,8 @@ const LINE_COUNT_RATCHET_BASELINE = {
   'src/components/chat/MessageItem.tsx': 1050,
   'src/components/sidebar/Sidebar.tsx': 950,
   'src/pages/SettingPage.tsx': 810,
-  'src/pages/settings/SettingsPage.tsx': 1600,
-  'src/pages/model/ModelPage.tsx': 1100,
-  'src/pages/skill/SkillPage.tsx': 900,
-  'src/pages/arena/ArenaPage.tsx': 900,
-  'src/pages/mcp/McpPage.tsx': 850,
-  'src/pages/memory/MemoryPage.tsx': 850,
-  'src/pages/persona/PersonaPage.tsx': 800,
-  'src/pages/token/TokenPage.tsx': 800,
-  'src/pages/security/SecurityPage.tsx': 800,
+  'src/pages/ModelPage.tsx': 1100,
+
 }
 
 // Allowlist for specific files if needed

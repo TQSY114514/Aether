@@ -69,7 +69,7 @@ describe('Reversible Database Schema Migrations (P2-4)', () => {
 
     const status = getMigrationStatus(db)
     expect(status.currentVersion).toBe(3)
-    expect(status.pending.map(p => p.version)).toEqual([4, 5, 6])
+    expect(status.pending.map(p => p.version)).toEqual(MIGRATIONS.filter(m => m.version > 3).map(m => m.version))
 
     // v6 (project), v5 (kg_nodes) and v4 (agent_turn_checkpoint) should be dropped
     const projectTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project'").get()
