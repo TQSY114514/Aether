@@ -276,6 +276,9 @@ function initDatabase() {
   } catch {}
   try {
     db.exec("CREATE INDEX IF NOT EXISTS idx_message_session_created ON message(session_id, created_at)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_message_session_id_desc ON message(session_id, id DESC)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_agent_task_status_prio ON agent_task(status, priority DESC)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_agent_task_session ON agent_task(session_id, parent_session_id)");
     db.exec("CREATE INDEX IF NOT EXISTS idx_session_updated ON session(updated_at DESC)");
   } catch {}
 
@@ -947,8 +950,9 @@ function forkSession(parentSessionId, title, messageIdCutoff = null) {
       const insertMsg = db.prepare(`
         INSERT INTO message (
           session_id, role, content, model_used, provider_used,
-          token_count, latency_ms, status, error_message, arena_model, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          token_count, latency_ms, status, error_message, arena_model, created_at,
+          thinking_content, thinking_duration_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertFts = db.prepare(
         'INSERT INTO messages_fts (content, session_id, message_id) VALUES (?, ?, ?)'
@@ -965,7 +969,9 @@ function forkSession(parentSessionId, title, messageIdCutoff = null) {
           m.status,
           m.error_message,
           m.arena_model,
-          m.created_at || localNow()
+          m.created_at || localNow(),
+          m.thinking_content || null,
+          m.thinking_duration_ms != null ? m.thinking_duration_ms : null
         );
         try {
           insertFts.run(String(m.content || ''), newSessionId, Number(msgInfo.lastInsertRowid));

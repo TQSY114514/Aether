@@ -207,7 +207,7 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
 
   return (
     <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-      <div role="button" tabIndex={0} onClick={() => setOpen(!open)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } }} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors cursor-pointer select-none" title={cmdString || tool.name}>
+      <div role="button" tabIndex={0} onClick={() => setOpen(!open)} onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } }} className="w-full flex items-center gap-2 px-2.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-90" title={cmdString || tool.name}>
         {open ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />}
         {isCommand ? (
           <Terminal size={12} className={isFailed ? "text-red-500 shrink-0" : running ? "text-amber-500 shrink-0" : "text-emerald-500 shrink-0"} />
@@ -325,14 +325,14 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                   <button
                     type="button"
                     onClick={handleCleanCopy}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[var(--text-secondary)] hover:bg-[#30363d] transition-colors"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[var(--text-secondary)] hover:bg-[var(--border)] transition-colors"
                     title={t('tool.clean_copy')}
                   >
                     {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
                     <span>{copied ? t('tool.clean_copied') : t('tool.clean_copy')}</span>
                   </button>
                 </div>
-                <pre className="text-[11px] font-mono p-2.5 whitespace-pre-wrap break-all max-h-56 overflow-y-auto leading-relaxed text-[#c9d1d9]">
+                <pre className="text-[11px] font-mono p-2.5 whitespace-pre-wrap break-all max-h-56 overflow-y-auto leading-relaxed text-[var(--text-primary)]">
                   {stripAnsi(running && !tool.liveOutputDone
                     ? (tool.liveOutput || tool.result || tool.error || '')
                     : (tool.error || tool.result || tool.liveOutput || ''))}

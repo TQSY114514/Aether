@@ -89,7 +89,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                   <div className="flex items-center gap-1.5 shrink-0">
                     {isRunning && item.currentTool && (
                       <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--accent)] bg-[var(--bg-secondary)] shrink-0">
-                        Running: {item.currentTool}
+                        {t('chat.subagent_running_tool', item.currentTool)}
                       </span>
                     )}
                     {isRunning && item.taskId != null && (
@@ -102,7 +102,8 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                             await api.cancel(item.taskId).catch(() => {})
                           }
                         }}
-                        className="px-2 py-0.5 text-[10px] rounded border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 active:scale-95 transition-all shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500/50"
+                        style={{ color: 'var(--error)', borderColor: 'var(--border)' }}
+                        className="px-2 py-0.5 text-[10px] rounded border hover:bg-[var(--bg-secondary)] active:scale-95 transition-all shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--error)] disabled:opacity-50 disabled:pointer-events-none"
                         title={t('chat.cancel', '取消')}
                       >
                         {t('chat.cancel', '取消')}

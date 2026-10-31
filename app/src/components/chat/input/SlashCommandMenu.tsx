@@ -38,7 +38,7 @@ export default function SlashCommandMenu({
   return (
     <div
       ref={menuRef}
-      className="slash-menu w-80 max-h-72 overflow-y-auto rounded-lg border shadow-lg z-50 text-xs select-none"
+      className="slash-menu w-[440px] max-w-[calc(100vw-32px)] max-h-80 overflow-y-auto rounded-lg border shadow-xl z-50 text-xs select-none"
       style={{
         backgroundColor: 'var(--bg-primary)',
         borderColor: 'var(--border)',
@@ -65,29 +65,29 @@ export default function SlashCommandMenu({
                 role="option"
                 aria-selected={active}
                 className={cn(
-                  'flex flex-col gap-0.5 px-2 py-1.5 rounded-md cursor-pointer transition-colors',
+                  'flex flex-col gap-1 px-3 py-2 rounded-md cursor-pointer transition-colors',
                   active ? 'bg-[var(--bg-secondary)]' : 'hover:bg-[var(--bg-secondary)]/50'
                 )}
                 onMouseEnter={() => onSelectIndex(idx)}
                 onClick={() => onSelectCommand(cmd)}
               >
-                <div className="flex items-center justify-between gap-1.5">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-mono text-[11px] font-semibold text-[var(--accent)] shrink-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className="font-mono text-[12px] font-semibold text-[var(--accent)] shrink-0">
                       /{cmd.id}
                     </span>
                     {cmd.paramHint && (
-                      <span className="font-mono text-[10px] text-[var(--text-muted)] opacity-70 truncate">
+                      <span className="font-mono text-[10px] text-[var(--text-muted)] opacity-75 truncate">
                         {cmd.paramHint}
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] font-medium truncate ml-auto shrink-0" style={{ color: 'var(--text-primary)' }}>
+                  <span className="text-[11px] font-medium text-[var(--text-primary)] shrink-0 ml-2">
                     {cmd.name}
                   </span>
                 </div>
                 {cmd.description && (
-                  <div className="text-[10px] truncate leading-tight" style={{ color: 'var(--text-muted)' }}>
+                  <div className="text-[11px] text-[var(--text-muted)] leading-snug line-clamp-2">
                     {cmd.description}
                   </div>
                 )}

@@ -1224,5 +1224,6 @@
   "settings.set_failed": "Failed to update setting",
   "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
   "settings.notify_sent": "Test notification sent",
-  "settings.notify_unavailable": "Notifications not supported"
+  "settings.notify_unavailable": "Notifications not supported",
+  "chat.subagent_running_tool": "Running: {0}"
 }

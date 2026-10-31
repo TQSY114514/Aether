@@ -94,12 +94,7 @@ function ensureOptimizationSchema(db) {
     }
   } catch {}
 
-  // Ensure compound indexes from Feature 13
-  try {
-    db.exec('CREATE INDEX IF NOT EXISTS idx_message_session_id_desc ON message(session_id, id DESC);')
-    db.exec('CREATE INDEX IF NOT EXISTS idx_agent_task_status_prio ON agent_task(status, priority DESC);')
-    db.exec('CREATE INDEX IF NOT EXISTS idx_agent_task_session ON agent_task(session_id, parent_session_id);')
-  } catch {}
+  // Indexes are verified against production database.initDatabase() / schema.createEmptyDatabase()
 }
 
 let testDb = null

@@ -467,6 +467,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
       let finalContent = ''
       let streamedContent = ''
       let turnFileSummary = null
+      let cb = null
       try {
         // Build shared callback bag (onToolCall, onAskUser, requestPermission, etc.)
         // using the extracted factory. Feature B's injection options stay inline below.
@@ -481,7 +482,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           allowRules: allowRulesStore,
           model,
         })
-        const cb = {
+        cb = {
           ...baseCb,
           onStreamDelta: (delta) => {
             if (delta) streamedContent += delta
@@ -842,6 +843,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (hasThinking && !thinkingEnded) {
           thinkingEnded = true
           const durationMs = thinkingStartedAt ? Date.now() - thinkingStartedAt : 0
+          streamThinkingDurationMs += durationMs
           try { getWebContents()?.send('chat:thinking-end', { messageId: msgId, sessionId, durationMs }) } catch {}
         }
         if (err.name === 'AbortError') {

@@ -228,6 +228,9 @@ function createEmptyDatabase(dbPath) {
 
   try {
     target.exec("CREATE INDEX IF NOT EXISTS idx_message_session_created ON message(session_id, created_at)");
+    target.exec("CREATE INDEX IF NOT EXISTS idx_message_session_id_desc ON message(session_id, id DESC)");
+    target.exec("CREATE INDEX IF NOT EXISTS idx_agent_task_status_prio ON agent_task(status, priority DESC)");
+    target.exec("CREATE INDEX IF NOT EXISTS idx_agent_task_session ON agent_task(session_id, parent_session_id)");
     target.exec("CREATE INDEX IF NOT EXISTS idx_session_updated ON session(updated_at DESC)");
     target.exec("CREATE INDEX IF NOT EXISTS idx_session_project ON session(project_id, updated_at DESC)");
   } catch {}

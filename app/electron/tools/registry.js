@@ -258,7 +258,11 @@ function maybeInvalidateRuleCaches(filePath, sessionId) {
   const norm = filePath.replace(/\\/g, '/').toLowerCase()
   const base = path.basename(filePath).toLowerCase()
   const ruleFiles = new Set(['agents.md', 'aether.md', '.aetherai.md', 'claude.md', 'agent.md', 'gemini.md', 'config.json', '.aether.json', 'opencode.json'])
-  const isRuleOrConfig = ruleFiles.has(base) || norm.includes('/.aether/rules/') || norm.includes('/.aether/config.json')
+  const isRuleOrConfig = ruleFiles.has(base) ||
+    norm.includes('/.aether/rules/') ||
+    norm.startsWith('.aether/rules/') ||
+    norm.includes('/.aether/config.json') ||
+    norm.startsWith('.aether/config.json')
 
   if (isRuleOrConfig) {
     try {
@@ -267,8 +271,18 @@ function maybeInvalidateRuleCaches(filePath, sessionId) {
     } catch {}
     try {
       const { invalidateProjectConfigCache } = require('../config/projectConfig')
-      const ws = getWorkspaceRoot(sessionId)
-      invalidateProjectConfigCache(ws || undefined)
+      let targetWs = getWorkspaceRoot(sessionId)
+      if (path.isAbsolute(filePath)) {
+        let cur = path.dirname(path.resolve(filePath))
+        while (cur && cur !== path.dirname(cur)) {
+          if (fs.existsSync(path.join(cur, '.aether')) || fs.existsSync(path.join(cur, 'AGENTS.md'))) {
+            targetWs = cur
+            break
+          }
+          cur = path.dirname(cur)
+        }
+      }
+      invalidateProjectConfigCache(targetWs || undefined)
     } catch {}
   }
 }

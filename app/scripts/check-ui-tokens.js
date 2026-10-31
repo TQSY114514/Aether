@@ -28,10 +28,7 @@ const LINE_COUNT_RATCHET_BASELINE = {
   'src/components/sidebar/Sidebar.tsx': 950,
   'src/pages/SettingPage.tsx': 810,
   'src/pages/ModelPage.tsx': 1100,
-  'src/pages/SkillsPage.tsx': 900,
-  'src/pages/ScoresPage.tsx': 900,
-  'src/pages/MemoryPage.tsx': 850,
-  'src/pages/PersonaPage.tsx': 800,
+
 }
 
 // Allowlist for specific files if needed

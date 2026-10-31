@@ -304,7 +304,10 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
     safeSend('chat:thinking-end',   { messageId: msgId, sessionId, durationMs })
   }
   callbacks.onThinkingDelta = (text) => { if (text) accumulatedThinking += text; safeSend('chat:thinking-chunk', { messageId: msgId, sessionId, delta: text, done: false }) }
-  callbacks.getThinkingData = () => ({ content: accumulatedThinking, durationMs: thinkingDurationMs })
+  callbacks.getThinkingData = () => ({
+    content: accumulatedThinking,
+    durationMs: thinkingDurationMs + (thinkingStartedAt ? Date.now() - thinkingStartedAt : 0),
+  })
   callbacks.onStreamDelta = (delta) => safeSend('chat:stream-chunk', { messageId: msgId, sessionId, delta, done: false })
 
   callbacks.onToolCall = (entry) =>

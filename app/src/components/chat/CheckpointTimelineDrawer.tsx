@@ -201,7 +201,7 @@ export default function CheckpointTimelineDrawer() {
     >
       {/* Header */}
       <div
-        className="h-12 flex items-center gap-2 px-3 shrink-0"
+        className="h-12 flex items-center gap-2 px-3 shrink-0 wco-pr app-drag"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <History size={16} style={{ color: 'var(--accent)' }} />

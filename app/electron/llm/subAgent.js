@@ -116,8 +116,12 @@ async function _runSubagent({
   const budget = new IterationBudget(cfg.maxIterations)
 
   // Wall-clock timeout
+  let timedOut = false
   const timeoutCtrl = new AbortController()
-  const timeout = setTimeout(() => timeoutCtrl.abort(), cfg.timeoutMs)
+  const timeout = setTimeout(() => {
+    timedOut = true
+    timeoutCtrl.abort()
+  }, cfg.timeoutMs)
   if (taskId) {
     try {
       const bg = require('./backgroundTasks')
@@ -204,8 +208,14 @@ async function _runSubagent({
     })
   } catch (e) {
     if (e?.name === 'AbortError' || e?.message?.includes('abort')) {
-      wasTimeout = true
-      finalContent = `[Sub-agent timed out after ${cfg.timeoutMs / 1000}s — partial result]`
+      if (timedOut) {
+        wasTimeout = true
+        finalContent = `[Sub-agent timed out after ${cfg.timeoutMs / 1000}s — partial result]`
+      } else {
+        hasError = true
+        errorMessage = 'Cancelled by user'
+        finalContent = `[Sub-agent was cancelled]`
+      }
     } else {
       hasError = true
       errorMessage = e?.message || 'unknown'
@@ -233,10 +243,26 @@ async function _runSubagent({
     })
   } catch {}
 
+  const isCancelled = !timedOut && (mergedSignal.aborted || timeoutCtrl.signal.aborted)
+  const taskStatus = isCancelled ? 'cancelled' : (wasTimeout || hasError) ? 'error' : 'done'
+
   if (taskId && typeof db.updateAgentTask === 'function') {
     try {
       db.updateAgentTask(taskId, {
-        status: wasTimeout ? 'timeout' : hasError ? 'error' : 'done',
+        status: taskStatus,
+        result: finalContent || '',
+        error: errorMessage || (wasTimeout ? 'Timed out' : null),
+      })
+    } catch {}
+  }
+
+  if (taskId) {
+    try {
+      callbacks?.onSubagentEvent?.({
+        type: taskStatus,
+        id: taskId,
+        taskId,
+        status: taskStatus,
         result: finalContent || '',
         error: errorMessage || (wasTimeout ? 'Timed out' : null),
       })
@@ -481,7 +507,12 @@ async function runParallel(tasks, shared = {}) {
               taskId: evt.taskId || liveTaskId,
             })
           } catch {}
-          shared.callbacks?.onSubagentEvent?.(evt)
+          if (
+            shared.callbacks?.onSubagentEvent &&
+            shared.callbacks.onSubagentEvent !== shared.onSubagentEvent
+          ) {
+            shared.callbacks.onSubagentEvent(evt)
+          }
         },
       }
       try {

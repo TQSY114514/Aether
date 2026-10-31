@@ -125,7 +125,10 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
         cancelAnimationFrame(rafRef.current)
         rafRef.current = requestAnimationFrame(() => {
           rafRef.current = 0
-          ref.current?.scrollIntoView({ behavior: 'auto' })
+          const scroller = ref.current?.closest('.overflow-y-auto') as HTMLElement | null
+          if (scroller) {
+            scroller.scrollTop = scroller.scrollHeight
+          }
         })
       }
     })

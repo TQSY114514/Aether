@@ -534,8 +534,8 @@ export default function ChatInput() {
         {dragOver && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-blur-fade pointer-events-none">
             <div className="rounded-lg border-2 border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-8 py-6 text-center">
-              <Paperclip size={32} className="text-white/80 mx-auto mb-2" />
-              <p className="text-white text-sm font-medium">{t('chat.drag_drop_hint')}</p>
+              <Paperclip size={32} className="text-[var(--accent)] mx-auto mb-2" />
+              <p className="text-sm font-medium text-[var(--text-primary)]">{t('chat.drag_drop_hint')}</p>
             </div>
           </div>
         )}

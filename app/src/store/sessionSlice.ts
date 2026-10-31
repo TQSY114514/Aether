@@ -98,13 +98,26 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         thinkingDurations[m.id] = m.thinking_duration_ms / 1000
       }
     }
-    set((s) => ({
-      currentSessionId: id,
-      messages: msgs,
-      arenaResults: [],
-      thinkingBlocksByMessage: { ...s.thinkingBlocksByMessage, ...thinkingBlocks },
-      thinkingDurationsByMessage: { ...s.thinkingDurationsByMessage, ...thinkingDurations },
-    }))
+    set((s) => {
+      const activeStreamingMsgIds = new Set(
+        Object.values(s.streamingBySession || {})
+          .map((b) => b?.messageId)
+          .filter((mid): mid is number => mid != null)
+      )
+      const boundedThinkingBlocks: Record<number, string> = { ...thinkingBlocks }
+      const boundedThinkingDurations: Record<number, number> = { ...thinkingDurations }
+      for (const mid of activeStreamingMsgIds) {
+        if (s.thinkingBlocksByMessage[mid]) boundedThinkingBlocks[mid] = s.thinkingBlocksByMessage[mid]
+        if (s.thinkingDurationsByMessage[mid] != null) boundedThinkingDurations[mid] = s.thinkingDurationsByMessage[mid]
+      }
+      return {
+        currentSessionId: id,
+        messages: msgs,
+        arenaResults: [],
+        thinkingBlocksByMessage: boundedThinkingBlocks,
+        thinkingDurationsByMessage: boundedThinkingDurations,
+      }
+    })
     try {
       let cfg = await window.electronAPI.session.getConfig(id)
       if (!cfg || !cfg.modelId) {
