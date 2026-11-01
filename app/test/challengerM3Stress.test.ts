@@ -319,54 +319,32 @@ describe('Milestone 3 Empirical Stress Test Suite', () => {
       expect(template).toContain('Testing & Verification')
     })
 
-    it('2.b-2 Empirical Proof of Template Generation UI Lockout Defect (ProjectPage.tsx:412 & 440)', () => {
-      // In ProjectPage.tsx:
-      // When a user selects a project with no existing instruction file:
+    it('2.b-2 Verification of Template Generation UI Lockout Resolution', () => {
       const instructions = { fileName: 'AGENTS.md', path: '/path/AGENTS.md', content: '', exists: false }
       let isEditingInstructions = false
       let instructionDraft = ''
 
-      // 1. User clicks "Generate AGENTS.md" (handleCreateTemplate, line 167):
       const handleCreateTemplate = () => {
         instructionDraft = '# AGENTS.md\nTemplate content...'
         isEditingInstructions = true
       }
       handleCreateTemplate()
 
-      // 2. Evaluate Header Toolbar rendering logic from ProjectPage.tsx lines 412-435:
-      // Line 412: ) : instructions?.exists ? (
-      //             isEditingInstructions ? ( Cancel & Save ) : ( Edit )
-      //           ) : (
-      //             Generate AGENTS.md button
-      //           )
       const renderHeaderToolbar = () => {
-        if (instructions?.exists) {
-          if (isEditingInstructions) return 'RENDER_SAVE_AND_CANCEL'
-          return 'RENDER_EDIT_BUTTON'
-        }
+        if (isEditingInstructions) return 'RENDER_SAVE_AND_CANCEL'
+        if (instructions?.exists) return 'RENDER_EDIT_BUTTON'
         return 'RENDER_GENERATE_BUTTON'
       }
 
-      // 3. Evaluate Content Area rendering logic from ProjectPage.tsx lines 440-464:
-      // Line 440: {instructions?.exists ? (
-      //             isEditingInstructions ? ( <textarea /> ) : ( <pre /> )
-      //           ) : (
-      //             <div empty-hint-card with Generate AGENTS.md button>
-      //           )}
       const renderContentArea = () => {
-        if (instructions?.exists) {
-          if (isEditingInstructions) return 'RENDER_TEXTAREA'
-          return 'RENDER_PRE_CODE'
-        }
+        if (isEditingInstructions) return 'RENDER_TEXTAREA'
+        if (instructions?.exists) return 'RENDER_PRE_CODE'
         return 'RENDER_EMPTY_HINT'
       }
 
-      // EMPIRICAL DEFECT VERIFICATION:
-      // Even though handleCreateTemplate set isEditingInstructions = true:
       expect(isEditingInstructions).toBe(true)
-      // Because instructions?.exists is FALSE on disk, the UI stays trapped in the initial state!
-      expect(renderHeaderToolbar()).toBe('RENDER_GENERATE_BUTTON') // BUG: does NOT show Save/Cancel!
-      expect(renderContentArea()).toBe('RENDER_EMPTY_HINT')         // BUG: does NOT show textarea!
+      expect(renderHeaderToolbar()).toBe('RENDER_SAVE_AND_CANCEL')
+      expect(renderContentArea()).toBe('RENDER_TEXTAREA')
     })
 
     it('2.c Model dropdown selection: Empty model list vs Populated model list', () => {

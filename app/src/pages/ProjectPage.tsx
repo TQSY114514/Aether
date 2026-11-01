@@ -1,9 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import {
-  FolderKanban, FolderGit2, FolderOpen, Copy, ExternalLink, Terminal,
-  Plus, Star, Trash2, Check, Edit3, Save, X, FileCode, MessageSquare,
-  Sparkles, GitBranch, RefreshCw, Folder, Layers
-} from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { FolderKanban, FolderGit2, FolderOpen, Copy, ExternalLink, Terminal, Plus, Star, Trash2, Check, Edit3, Save, X, FileCode, MessageSquare, Sparkles, GitBranch, RefreshCw, Folder, Layers } from 'lucide-react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
@@ -35,9 +31,13 @@ export default function ProjectPage() {
   const [instructionDraft, setInstructionDraft] = useState('')
   const [isSavingInstructions, setIsSavingInstructions] = useState(false)
 
+  const modelsLoadedRef = useRef(false)
   useEffect(() => {
     loadProjects?.()
-    if (!allModels || allModels.length === 0) loadAllModels?.()
+    if (!modelsLoadedRef.current) {
+      modelsLoadedRef.current = true
+      if (!allModels || allModels.length === 0) loadAllModels?.()
+    }
   }, [loadProjects, loadAllModels, allModels])
 
   const fetchGitStatus = useCallback(async (rootPath?: string) => {
@@ -318,7 +318,7 @@ export default function ProjectPage() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     {gitStatus.hasGit ? (
                       <div
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-[5px] border text-[11px] font-medium"
                         style={{
                           borderColor: gitStatus.isClean ? 'var(--border)' : 'var(--accent)',
                           backgroundColor: 'var(--bg-secondary)',
@@ -420,7 +420,12 @@ export default function ProjectPage() {
                       <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('projects.rules.saving', 'Loading...')}</span>
                     ) : isEditingInstructions ? (
                       <>
-                        <button onClick={() => setIsEditingInstructions(false)} disabled={isSavingInstructions} className={BTN_BASE} style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+                        <button
+                          onClick={() => { setIsEditingInstructions(false); setInstructionDraft(instructions?.content || '') }}
+                          disabled={isSavingInstructions}
+                          className={BTN_BASE}
+                          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                        >
                           <X size={12} />
                           <span>{t('projects.rules.cancel', 'Cancel')}</span>
                         </button>

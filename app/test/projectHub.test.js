@@ -124,14 +124,14 @@ async function invokeGetInstructions(handlers, db, projectId) {
   if (handlers && typeof handlers.get === 'function' && handlers.has('project:getInstructions')) {
     return handlers.get('project:getInstructions')(null, projectId)
   }
-  return specGetInstructions(db, projectId)
+  throw new Error('project:getInstructions handler not registered')
 }
 
 async function invokeSaveInstructions(handlers, db, params) {
   if (handlers && typeof handlers.get === 'function' && handlers.has('project:saveInstructions')) {
     return handlers.get('project:saveInstructions')(null, params)
   }
-  return specSaveInstructions(db, params)
+  throw new Error('project:saveInstructions handler not registered')
 }
 
 /**
@@ -471,6 +471,8 @@ describe('Project Hub & Sidebar Redesign: E2E Test Suite', () => {
           'project:delete',
           'project:current',
           'project:pickDirectory',
+          'project:getInstructions',
+          'project:saveInstructions',
         ]
         for (const ch of requiredChannels) {
           expect(handlers.has(ch)).toBe(true)
