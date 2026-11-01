@@ -420,11 +420,12 @@ describe('Milestone 3 Challenger Adversarial Probing & UI Resilience Suite', () 
       expect(saveButtonMatch).not.toBeNull()
 
       // Check Cancel button
-      const cancelButtonChunk = projectPageSource.substring(
-        projectPageSource.indexOf("onClick={() => setIsEditingInstructions(false)}"),
-        projectPageSource.indexOf("onClick={() => setIsEditingInstructions(false)}") + 200
-      )
-      const cancelHasDisabled = cancelButtonChunk.includes('disabled=')
+      const cancelIdx = projectPageSource.indexOf("projects.rules.cancel")
+      expect(cancelIdx).toBeGreaterThan(0)
+      const btnStart = projectPageSource.lastIndexOf("<button", cancelIdx)
+      expect(btnStart).toBeGreaterThan(0)
+      const cancelButtonChunk = projectPageSource.substring(btnStart, cancelIdx)
+      const cancelHasDisabled = cancelButtonChunk.includes('disabled={isSavingInstructions}')
       // Note: cancel button disables while saving to prevent race conditions
       expect(cancelHasDisabled).toBe(true)
     })

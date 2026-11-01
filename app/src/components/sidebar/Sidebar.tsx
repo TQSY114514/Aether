@@ -359,6 +359,7 @@ export default function Sidebar() {
       </div>
       <QuickControlDeck />
       <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
+        <NavItem icon={FolderKanban} label={t('sidebar.nav.projects')} active={currentView === 'projects'} onClick={() => setCurrentView('projects')} />
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
         <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
         <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
