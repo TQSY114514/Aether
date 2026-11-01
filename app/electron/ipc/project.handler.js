@@ -185,6 +185,111 @@ function registerProjectHandlers(ipcMain, db, getWebContents) {
       return null
     }
   })
+
+  // 8. project:getInstructions — Read instruction files for a project
+  ipcMain.handle('project:getInstructions', (_e, projectId) => {
+    let proj = null
+    if (projectId != null && projectId !== '') {
+      proj = typeof db.getProject === 'function' ? db.getProject(Number(projectId)) : null
+      if (!proj) {
+        proj = db.prepare('SELECT * FROM project WHERE id = ?').get(Number(projectId))
+      }
+    }
+    if (!proj) {
+      proj = typeof db.getActiveProject === 'function' ? db.getActiveProject() : null
+      if (!proj && typeof db.getSetting === 'function') {
+        const activeId = db.getSetting('active_project_id')
+        if (activeId) {
+          proj = typeof db.getProject === 'function' ? db.getProject(Number(activeId)) : db.prepare('SELECT * FROM project WHERE id = ?').get(Number(activeId))
+        }
+      }
+    }
+    if (!proj || !proj.root_path) {
+      return { fileName: 'AGENTS.md', path: '', content: '', exists: false, error: 'No active project or root path' }
+    }
+    if (hasUnsafeWindowsPrefix(proj.root_path) || isDangerousRoot(proj.root_path)) {
+      return { fileName: 'AGENTS.md', path: '', content: '', exists: false, error: `Forbidden workspace root: ${proj.root_path}` }
+    }
+    if (!fs.existsSync(proj.root_path)) {
+      return { fileName: 'AGENTS.md', path: '', content: '', exists: false, error: 'Directory not found' }
+    }
+
+    const priority = ['AGENTS.md', 'AETHER.md', 'CLAUDE.md', '.aetherai.md']
+    for (const name of priority) {
+      const target = path.join(proj.root_path, name)
+      if (fs.existsSync(target)) {
+        try {
+          const stat = fs.statSync(target)
+          if (stat.isFile()) {
+            const content = fs.readFileSync(target, 'utf8')
+            return { fileName: name, path: target, content, exists: true }
+          }
+        } catch {}
+      }
+    }
+
+    return { fileName: 'AGENTS.md', path: path.join(proj.root_path, 'AGENTS.md'), content: '', exists: false }
+  })
+
+  // 9. project:saveInstructions — Safely write instruction file with whitelist and containment validation
+  ipcMain.handle('project:saveInstructions', (_e, data) => {
+    if (!data) {
+      throw new Error('Save instructions data is required')
+    }
+    const { projectId, content } = data
+    const fileName = data.fileName || 'AGENTS.md'
+    const allowed = ['AGENTS.md', 'AETHER.md', 'CLAUDE.md', '.aetherai.md']
+    if (!allowed.includes(fileName)) {
+      throw new Error(`Invalid instruction file name: ${fileName}. Must be one of: ${allowed.join(', ')}`)
+    }
+    if (fileName.includes('..') || fileName.includes('/') || fileName.includes('\\')) {
+      throw new Error(`Path traversal attempt blocked: ${fileName}`)
+    }
+
+    let proj = null
+    if (projectId != null && projectId !== '') {
+      proj = typeof db.getProject === 'function' ? db.getProject(Number(projectId)) : null
+      if (!proj) {
+        proj = db.prepare('SELECT * FROM project WHERE id = ?').get(Number(projectId))
+      }
+    }
+    if (!proj) {
+      proj = typeof db.getActiveProject === 'function' ? db.getActiveProject() : null
+      if (!proj && typeof db.getSetting === 'function') {
+        const activeId = db.getSetting('active_project_id')
+        if (activeId) {
+          proj = typeof db.getProject === 'function' ? db.getProject(Number(activeId)) : db.prepare('SELECT * FROM project WHERE id = ?').get(Number(activeId))
+        }
+      }
+    }
+    if (!proj || !proj.root_path) {
+      throw new Error('No active project found to save instructions')
+    }
+    if (hasUnsafeWindowsPrefix(proj.root_path) || isDangerousRoot(proj.root_path)) {
+      throw new Error(`Forbidden workspace root: ${proj.root_path}`)
+    }
+
+    const resolvedRoot = path.resolve(proj.root_path)
+    if (hasUnsafeWindowsPrefix(resolvedRoot) || isDangerousRoot(resolvedRoot)) {
+      throw new Error(`Forbidden workspace root: ${resolvedRoot}`)
+    }
+
+    const targetPath = path.resolve(resolvedRoot, fileName)
+    if (path.dirname(targetPath) !== resolvedRoot || !targetPath.startsWith(resolvedRoot)) {
+      throw new Error(`Path traversal attempt blocked: ${fileName}`)
+    }
+
+    if (!fs.existsSync(resolvedRoot)) {
+      fs.mkdirSync(resolvedRoot, { recursive: true })
+    }
+
+    fs.writeFileSync(targetPath, String(content ?? ''), 'utf8')
+    try {
+      require('../llm/projectInstructions').invalidateCache()
+    } catch {}
+
+    return { ok: true, path: targetPath }
+  })
 }
 
 module.exports = { registerProjectHandlers }

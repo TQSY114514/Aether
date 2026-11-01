@@ -27,12 +27,23 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
 
   createSession: async () => {
     const s = get()
+    const activeProject = s.activeProject || get().activeProject
     const allProviders = await window.electronAPI.provider.list()
     const enabledProviders = allProviders.filter(p => p.enabled)
-    let cfg = { providerId: null as number | null, modelId: null as number | null, personaId: null as number | null }
-    if (s.defaultModelId) {
-      const defModel = (s.allModels.find(m => m.id === s.defaultModelId) ||
-        (await window.electronAPI.model.listAll()).find(m => m.id === s.defaultModelId))
+    let cfg = {
+      providerId: null as number | null,
+      modelId: null as number | null,
+      personaId: null as number | null,
+      projectId: activeProject?.id ? Number(activeProject.id) : null,
+    }
+
+    const targetModelId = activeProject?.default_model_id != null
+      ? activeProject.default_model_id
+      : s.defaultModelId
+
+    if (targetModelId) {
+      const defModel = (s.allModels.find(m => m.id === targetModelId) ||
+        (await window.electronAPI.model.listAll()).find(m => m.id === targetModelId))
       if (defModel) {
         cfg.providerId = defModel.provider_id
         cfg.modelId = defModel.id
@@ -55,10 +66,20 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     const result = await window.electronAPI.session.createAndSelect(cfg)
     const sid = result.session.id
     const sessionCfg = result.config
+
+    if (activeProject?.default_agent_mode) {
+      set({ agentMode: activeProject.default_agent_mode as any })
+    }
+
+    const boundSession = {
+      ...result.session,
+      project_id: result.session.project_id ?? (activeProject?.id ? Number(activeProject.id) : null),
+    }
+
     set((s) => ({
       currentView: "chat",
       currentSessionId: sid,
-      sessions: [...s.sessions, result.session],
+      sessions: [...s.sessions, boundSession],
       sessionConfigs: { ...s.sessionConfigs, [sid]: sessionCfg },
       messages: result.messages || [],
     }))

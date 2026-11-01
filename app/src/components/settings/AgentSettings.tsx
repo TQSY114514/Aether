@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
 import {
   Shield,
   ShieldCheck,
-  FolderOpen,
   FileText,
   Cpu,
   Zap,
@@ -51,8 +51,9 @@ function SwitchButton({
 
 export default function AgentSettings() {
   const { toast } = useUI()
+  const activeProject = useStore((s) => s.activeProject)
+  const setCurrentView = useStore((s) => s.setCurrentView)
   const [workspace, setWorkspace] = useState('')
-  const [busy, setBusy] = useState(false)
   const [maxIter, setMaxIter] = useState(25)
   const [toolTimeoutSec, setToolTimeoutSec] = useState(60)
   const [microcompactEnabled, setMicrocompactEnabled] = useState(true)
@@ -187,32 +188,6 @@ export default function AgentSettings() {
     }
   }
 
-  const pickFolder = async () => {
-    setBusy(true)
-    try {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.webkitdirectory = true
-      input.onchange = () => {
-        // @ts-expect-error .path is Electron-only
-        const firstPath = input.files?.[0]?.path || ''
-        const target = firstPath ? firstPath.replace(/[/\\][^/\\\\]*$/, '') : ''
-        if (target) applyWorkspace(target)
-      }
-      input.click()
-    } finally { setBusy(false) }
-  }
-
-  const applyWorkspace = async (dir: string | null) => {
-    const res = await window.electronAPI.agent.setWorkspace({ dir })
-    if (res?.success) {
-      setWorkspace(res.root)
-      toast(t('settings.agent.workspace_saved'), { type: 'success' })
-    }
-  }
-
-  const resetToDefault = () => applyWorkspace(null)
-
   const [safeBusy, setSafeBusy] = useState(false)
   const applySafeMode = async () => {
     setSafeBusy(true)
@@ -283,21 +258,30 @@ export default function AgentSettings() {
         <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.desc')}</p>
 
         <div className="space-y-3">
-          {/* Workspace root picker */}
-          <div>
+          {/* Workspace Root Section */}
+          <div className="p-3 rounded-lg border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
             <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>{t('settings.agent.workspace')}</label>
-            <div className="flex items-center gap-2">
-              <input readOnly value={workspace} placeholder={t('settings.agent.workspace_placeholder')}
-                className="flex-1 px-3 py-2 text-xs rounded-lg border outline-none font-mono"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }} />
-              <button onClick={pickFolder} disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
-                style={{ borderColor: 'var(--border)' }}>
-                <FolderOpen size={13} />{t('settings.agent.browse')}
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-md border text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-xs truncate" style={{ color: 'var(--text-primary)' }}>
+                  {activeProject ? activeProject.name : t('workspace.default')}
+                </div>
+                <div className="font-mono text-[11px] truncate opacity-80" style={{ color: 'var(--text-muted)' }}>
+                  {activeProject?.root_path || workspace || '~/.aetherai/sandbox'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCurrentView('projects')}
+                className="px-2.5 py-1 text-xs rounded-md border font-medium transition-colors hover:bg-[var(--border)] shrink-0 cursor-pointer"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              >
+                {t('projects.hub.enter', 'Enter Projects Hub')} ↗
               </button>
-              <button onClick={resetToDefault} className="px-3 py-2 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors" style={{ borderColor: 'var(--border)' }}>{t('settings.agent.reset')}</button>
             </div>
-            <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>{t('settings.agent.workspace_hint')}</p>
+            <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
+              {t('settings.agent.workspace_hint')}
+            </p>
           </div>
 
           {/* Command blocklist — always on, informational */}

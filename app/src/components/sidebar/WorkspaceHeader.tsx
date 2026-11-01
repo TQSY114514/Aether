@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Folder,
-  FolderOpen,
   FolderGit2,
   FolderKanban,
   Star,
@@ -11,10 +10,7 @@ import {
   Trash2,
   ExternalLink,
   Copy,
-  Terminal,
-  RefreshCw,
   ChevronDown,
-  ShieldCheck,
   Filter,
 } from 'lucide-react'
 import { useStore } from '@/store'
@@ -37,6 +33,7 @@ export default function WorkspaceHeader() {
   const toggleProjectScope = useStore((s) => s.toggleProjectScope)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const sessions = useStore((s) => s.sessions)
+  const setCurrentView = useStore((s) => s.setCurrentView)
   const { confirm, toast } = useUI()
 
   const [popoverOpen, setPopoverOpen] = useState(false)
@@ -47,16 +44,9 @@ export default function WorkspaceHeader() {
     isClean: boolean
     hasGit: boolean
   }>({ isClean: true, hasGit: false })
-  const [ruleInfo, setRuleInfo] = useState<{
-    has: boolean
-    fileName: string | null
-    rulesCount?: number
-  }>({ has: false, fileName: null })
-  const [refreshing, setRefreshing] = useState(false)
-
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Load and monitor git status & project rules
+  // Load and monitor git status
   const fetchWorkspaceMeta = useCallback(async () => {
     try {
       const gitRes = await window.electronAPI?.git?.status?.({ sessionId: currentSessionId ?? undefined })
@@ -72,19 +62,6 @@ export default function WorkspaceHeader() {
       }
     } catch {
       setGitStatus({ isClean: true, hasGit: false })
-    }
-
-    try {
-      const ruleRes = await window.electronAPI?.agent?.hasProjectInstructions?.(currentSessionId ?? undefined)
-      if (ruleRes) {
-        setRuleInfo({
-          has: !!ruleRes.has,
-          fileName: ruleRes.fileName || null,
-          rulesCount: ruleRes.rulesCount || 0,
-        })
-      }
-    } catch {
-      setRuleInfo({ has: false, fileName: null })
     }
   }, [currentSessionId, activeProject?.root_path])
 
@@ -179,31 +156,12 @@ export default function WorkspaceHeader() {
     }
   }
 
-  const handleCopyCd = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const target = activeProject?.root_path || (await window.electronAPI?.agent?.getWorkspace?.())
-    if (target) {
-      const isWin = target.includes('\\') || target.includes(':')
-      const cmd = isWin ? `cd /d "${target}"` : `cd "${target}"`
-      await window.electronAPI?.system?.clipboardWrite?.(cmd)
-      toast?.(`${t('workspace.copy_cd')}: ${cmd}`, { type: 'success' })
-    }
-  }
-
-  const handleRefresh = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setRefreshing(true)
-    await loadProjects()
-    await fetchWorkspaceMeta()
-    setTimeout(() => setRefreshing(false), 300)
-  }
-
   return (
     <div ref={containerRef} className="px-2 pt-2 pb-1.5 shrink-0 relative select-none app-no-drag">
-      {/* Primary Workspace Card */}
+      {/* Primary Workspace Card - Single-Row (~34px) Trigger */}
       <div
         onClick={() => setPopoverOpen((v) => !v)}
-        className="group relative flex flex-col gap-1 p-2 rounded-[8px] border transition-all cursor-pointer shadow-xs hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)] active:scale-[0.99] motion-reduce:transform-none"
+        className="group relative flex items-center justify-between gap-1.5 px-2.5 py-1.5 h-[34px] rounded-[8px] border transition-all cursor-pointer shadow-xs hover:border-[var(--accent)]/40 hover:bg-[var(--bg-secondary)] active:scale-[0.99] motion-reduce:transform-none select-none"
         style={{
           borderColor: popoverOpen ? 'var(--accent)' : 'var(--border)',
           backgroundColor: 'var(--content-bg)',
@@ -219,111 +177,47 @@ export default function WorkspaceHeader() {
           }
         }}
       >
-        {/* Row 1: Workspace Name + Git Badge + Caret */}
-        <div className="flex items-center justify-between gap-1.5 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            {gitStatus.hasGit ? (
-              <FolderGit2 size={13} className="shrink-0 text-[var(--accent)]" />
-            ) : activeProject ? (
-              <FolderKanban size={13} className="shrink-0 text-[var(--accent)]" />
-            ) : (
-              <Folder size={13} className="shrink-0 text-[var(--text-muted)]" />
-            )}
-            <HoverMarquee
-              text={activeProject ? activeProject.name : t('workspace.default')}
-              className="text-xs font-semibold tracking-tight truncate flex-1 min-w-0"
-              style={{ color: 'var(--text-primary)' }}
-            />
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            {gitStatus.hasGit && gitStatus.branch && (
-              <span
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] text-[10px] font-mono border"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-secondary)',
-                }}
-                title={gitStatus.isClean ? t('workspace.clean') : t('workspace.modified', gitStatus.dirtyCount ?? 0)}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{
-                    backgroundColor: gitStatus.isClean ? 'var(--success, #16a34a)' : 'var(--warning, #f59e0b)',
-                  }}
-                />
-                <span className="truncate max-w-[55px]">{gitStatus.branch}</span>
-              </span>
-            )}
-            <ChevronDown
-              size={12}
-              className={`shrink-0 transition-transform duration-200 text-[var(--text-muted)] ${
-                popoverOpen ? 'rotate-180 text-[var(--text-primary)]' : ''
-              }`}
-            />
-          </div>
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {gitStatus.hasGit ? (
+            <FolderGit2 size={13} className="shrink-0 text-[var(--accent)]" />
+          ) : activeProject ? (
+            <FolderKanban size={13} className="shrink-0 text-[var(--accent)]" />
+          ) : (
+            <Folder size={13} className="shrink-0 text-[var(--text-muted)]" />
+          )}
+          <HoverMarquee
+            text={activeProject ? activeProject.name : t('workspace.default')}
+            className="text-xs font-semibold tracking-tight truncate flex-1 min-w-0"
+            style={{ color: 'var(--text-primary)' }}
+          />
         </div>
 
-        {/* Row 2: Subtitle (Path or Rules) & Micro-Toolbar */}
-        <div className="flex items-center justify-between gap-1 min-w-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          <div className="flex items-center gap-1 truncate min-w-0 flex-1">
-            {ruleInfo.has ? (
+        <div className="flex items-center gap-1 shrink-0">
+          {gitStatus.hasGit && gitStatus.branch && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] text-[10px] font-mono border"
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                borderColor: 'var(--border)',
+                color: 'var(--text-secondary)',
+              }}
+              title={gitStatus.isClean ? t('workspace.clean') : t('workspace.modified', gitStatus.dirtyCount ?? 0)}
+            >
               <span
-                className="inline-flex items-center gap-1 px-1 py-0.2 rounded-[4px] border font-mono text-[9px] text-[var(--accent)] bg-[var(--bg-secondary)] shrink-0"
-                style={{ borderColor: 'var(--border)' }}
-                title={ruleInfo.rulesCount ? `${ruleInfo.rulesCount} rules active` : `${ruleInfo.fileName} active`}
-              >
-                <ShieldCheck size={9} />
-                <span>{ruleInfo.rulesCount ? `${ruleInfo.rulesCount} rules` : ruleInfo.fileName}</span>
-              </span>
-            ) : null}
-            <span className="truncate font-mono opacity-80" title={activeProject?.root_path || ''}>
-              {activeProject
-                ? activeProject.root_path.replace(/\\/g, '/').split('/').slice(-2).join('/')
-                : t('workspace.default')}
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{
+                  backgroundColor: gitStatus.isClean ? 'var(--success, #16a34a)' : 'var(--warning, #f59e0b)',
+                }}
+              />
+              <span className="truncate max-w-[55px]">{gitStatus.branch}</span>
             </span>
-          </div>
-
-          {/* Micro Action Icons (appear clean & subtle) */}
-          <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
-            <button
-              type="button"
-              onClick={handleRevealInExplorer}
-              className="p-1 rounded-[5px] hover:bg-[var(--border)]/60 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              title={t('workspace.reveal_explorer')}
-              aria-label={t('workspace.reveal_explorer')}
-            >
-              <ExternalLink size={10} />
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyCd}
-              className="p-1 rounded-[5px] hover:bg-[var(--border)]/60 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              title={t('workspace.copy_cd')}
-              aria-label={t('workspace.copy_cd')}
-            >
-              <Terminal size={10} />
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyPath}
-              className="p-1 rounded-[5px] hover:bg-[var(--border)]/60 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              title={t('workspace.copy_path')}
-              aria-label={t('workspace.copy_path')}
-            >
-              <Copy size={10} />
-            </button>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className="p-1 rounded-[5px] hover:bg-[var(--border)]/60 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              title={t('common.refresh', 'Refresh')}
-              aria-label={t('common.refresh', 'Refresh')}
-            >
-              <RefreshCw size={10} className={refreshing ? 'animate-spin' : ''} />
-            </button>
-          </div>
+          )}
+          <ChevronDown
+            size={12}
+            className={`shrink-0 transition-transform duration-200 text-[var(--text-muted)] ${
+              popoverOpen ? 'rotate-180 text-[var(--text-primary)]' : ''
+            }`}
+          />
         </div>
       </div>
 
@@ -460,17 +354,56 @@ export default function WorkspaceHeader() {
             )}
           </div>
 
-          {/* Action Row */}
-          <div className="pt-1.5 border-t flex flex-col gap-1" style={{ borderColor: 'var(--border)' }}>
+          {/* Action Row & Hub Navigation */}
+          <div className="pt-2 border-t flex flex-col gap-1.5" style={{ borderColor: 'var(--border)' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentView('projects')
+                setPopoverOpen(false)
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-[6px] border font-medium text-[var(--accent)] bg-[var(--bg-secondary)] hover:bg-[var(--content-bg)] transition-colors cursor-pointer active:scale-[0.99] motion-reduce:transform-none"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              <div className="flex items-center gap-1.5">
+                <FolderKanban size={13} className="shrink-0" />
+                <span>{t('projects.hub.enter', 'Enter Projects Hub')}</span>
+              </div>
+              <ExternalLink size={12} className="opacity-70" />
+            </button>
+
             <button
               type="button"
               onClick={handlePickNewFolder}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs rounded-[6px] border font-medium hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.99] text-[var(--text-primary)]"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs rounded-[6px] border font-medium hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer active:scale-[0.99] motion-reduce:transform-none text-[var(--text-primary)]"
               style={{ borderColor: 'var(--border)' }}
             >
               <Plus size={12} />
               <span>{t('workspace.open_folder')}</span>
             </button>
+
+            <div className="flex items-center gap-1 pt-0.5">
+              <button
+                type="button"
+                onClick={handleRevealInExplorer}
+                className="flex-1 flex items-center justify-center gap-1 py-1 text-[11px] rounded-[5px] border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                style={{ borderColor: 'var(--border)' }}
+                title={t('workspace.reveal_explorer')}
+              >
+                <ExternalLink size={11} />
+                <span className="truncate">{t('workspace.reveal_explorer')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyPath}
+                className="flex-1 flex items-center justify-center gap-1 py-1 text-[11px] rounded-[5px] border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                style={{ borderColor: 'var(--border)' }}
+                title={t('workspace.copy_path')}
+              >
+                <Copy size={11} />
+                <span className="truncate">{t('workspace.copy_path')}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

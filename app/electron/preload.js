@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (id) => ipcRenderer.invoke('project:delete', id),
     current: () => ipcRenderer.invoke('project:current'),
     pickDirectory: () => ipcRenderer.invoke('project:pickDirectory'),
+    getInstructions: (projectId) => ipcRenderer.invoke('project:getInstructions', projectId),
+    saveInstructions: (params) => ipcRenderer.invoke('project:saveInstructions', params),
     onOpened: (callback) => subscribe('project:opened', callback),
   },
   agent: {
