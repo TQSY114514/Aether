@@ -2,6 +2,32 @@
 
 All notable changes to AetherAI are documented here.
 
+## [1.0.0] - 2026-11-01
+
+### Added
+
+- **Aether 2.0 Core Architecture Upgrade (全架构跨越升级):**
+  - **First-Class Projects Hub & Streamlined Workspace (独立项目中心与极简侧边栏):** 新增全视口独立项目中心（`ProjectPage`），支持项目全局概览、Git 状态监测、内置文件树、运行时预设模型/模式、项目关联会话流与全局工作区矩阵；侧边栏收敛为 34px 极简顶栏卡片，彻底消除设置面板与侧栏多处配置的认知割裂。
+  - **In-Place Project Instructions & 3-File IPC Contract (就地项目指令编辑与严密安全契约):** 支持就地创建和编辑 `AGENTS.md` / `AETHER.md`，实现严格的跨平台三文件契约（`project.handler.js` / `preload.js` / `env.d.ts`），内置严密的路径遍历阻断与白名单防护。
+  - **Multi-Workspace & 4-Tier Agent Permission Modes (多工作区沙箱与四级安全执行模式):** 全面升级执行权限体系（Ask / Auto / Plan / Bypass），危险操作强制拦截与用户确认弹窗。
+  - **Thinking Persistence Migration 007 & Observability (持久化思考链追踪):** 思考链痕迹写入 SQLite，重载与重启不丢失，支持折叠展开与精确毫秒耗时。
+  - **Agent Dedicated Browser & Web ACI (受控浏览器沙箱与智能感知):** 基于内置 Chromium 的 Set-of-Marks 视觉语义降维，支持 Agent 自主验证页面交互与控制台自愈闭环。
+  - **Hashline Intelligent Patch Engine (Hashline 精准差异应用):** 引入 oh-my-pi 与 roboomp 启发的 Hashline 代码锚定算法，消除大文件改动的幻觉漂移。
+  - **Model Arena 2.0 & Starter Benchmarks (模型竞技场与胜者补丁一键应用):** 结构化 SWE-bench 评测与置信度自适应 ELO 评级，支持竞技场胜者方案一键应用至当前工作区。
+
+### Changed
+
+- **Industrial Anti-AI-Slop Design System (去 AI Slop 工业风设计重构):**
+  - 清理所有浮夸的紫粉渐变与伪毛玻璃滤镜，严格执行矩形圆角梯度（`rounded-[5px]` / `rounded-[6px]`）；
+  - 全站按钮与交互元素补充完整的 `hover` / `focus-visible` / `active` / `disabled` 状态反馈；
+  - 实施 650 行巨石组件防线（Ratchet），单文件规模大幅精简。
+- **Debris Elimination & Bundle Pruning (无效代码大瘦身):**
+  - 彻底清理 23 个废弃历史组件与 4 个孤立无用页面，瘦身超 4,000 行冗余代码。
+- **Complete 100% i18n Localization (1,226 词条 14 种语言全量覆盖):**
+  - 完善多语言字典，支持动态回退与参数安全格式化，彻底消除点分原生键裸露。
+- **Core Dependencies Upgrade:**
+  - 升级 Electron 至 45.0.0，升级 React 19，全面加固供应链依赖。
+
 ## [0.9.2] - 2026-10-17
 
 ### Added
