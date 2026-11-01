@@ -17,10 +17,23 @@ function baseName(p: string): string {
   return parts[parts.length - 1] || p
 }
 
-export default function FileTree() {
+export interface FileTreeProps {
+  rootPath?: string | null
+  alwaysOpen?: boolean
+  showHeader?: boolean
+  className?: string
+}
+
+export default function FileTree({
+  rootPath,
+  alwaysOpen = false,
+  showHeader = true,
+  className = '',
+}: FileTreeProps = {}) {
   const currentSessionId = useStore((s) => s.currentSessionId)
   const activeProject = useStore((s) => s.activeProject)
-  const [open, setOpen] = useState(false)
+  const isAlwaysOpen = Boolean(alwaysOpen)
+  const [open, setOpen] = useState(isAlwaysOpen)
   const [root, setRoot] = useState<string | null>(null)
   const [cache, setCache] = useState<Map<string, FsEntry[]>>(new Map())
   const cacheRef = useRef<Map<string, FsEntry[]>>(new Map())
@@ -29,6 +42,12 @@ export default function FileTree() {
   const [error, setError] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; path: string } | null>(null)
 
+  useEffect(() => {
+    if (isAlwaysOpen) {
+      setOpen(true)
+    }
+  }, [isAlwaysOpen])
+
   const loadDir = async (dir: string, force = false) => {
     if (!force && cacheRef.current.has(dir)) return
     setLoading(true)
@@ -36,7 +55,7 @@ export default function FileTree() {
     let entries: FsEntry[] = []
     let err: string | null = null
     try {
-      const res = await window.electronAPI?.fs?.listDir(dir, currentSessionId)
+      const res = await window.electronAPI?.fs?.listDir(dir, rootPath ? undefined : currentSessionId)
       if (res?.ok) entries = res.entries || []
       else err = res?.error || 'read_failed'
     } catch {
@@ -56,10 +75,18 @@ export default function FileTree() {
   useEffect(() => {
     let cancelled = false
     setRoot(null)
+    cacheRef.current = new Map()
     setCache(new Map())
     setExpanded({})
     setError(null)
     const resolveRoot = async () => {
+      if (rootPath) {
+        if (!cancelled) {
+          setRoot(rootPath)
+          loadDir(rootPath)
+        }
+        return
+      }
       try {
         const r = await window.electronAPI?.agent?.getWorkspace(currentSessionId ?? undefined)
         if (!cancelled) {
@@ -81,7 +108,7 @@ export default function FileTree() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSessionId, activeProject?.root_path])
+  }, [rootPath, currentSessionId, activeProject?.root_path])
 
   // Close the context menu on any outside click.
   useEffect(() => {
@@ -164,35 +191,47 @@ export default function FileTree() {
   }
 
   return (
-    <div className="px-2 pt-1" style={{ borderBottom: '1px solid var(--border)' }}>
-      <div
-        className="flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer select-none hover:bg-[var(--bg-secondary)] transition-colors"
-        onClick={() => setOpen(!open)}
-      >
-        <FolderOpen size={13} className="shrink-0" style={{ color: 'var(--accent)' }} />
-        <span className="flex-1 text-left truncate text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {t('filetree.files', '项目文件')}
-        </span>
-        <button
-          className="p-1 rounded hover:bg-[var(--border)] shrink-0"
-          title={t('filetree.refresh')}
-          onClick={(e) => {
-            e.stopPropagation()
-            cacheRef.current = new Map()
-            setCache(new Map())
-            if (root) loadDir(root, true)
+    <div
+      className={`file-tree-container ${isAlwaysOpen ? 'flex flex-col h-full min-h-0' : 'px-2 pt-1'} ${className}`}
+      style={showHeader ? { borderBottom: '1px solid var(--border)' } : undefined}
+    >
+      {showHeader && (
+        <div
+          className="flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer select-none hover:bg-[var(--bg-secondary)] transition-colors"
+          onClick={() => {
+            if (!isAlwaysOpen) setOpen(!open)
           }}
         >
-          <RefreshCw size={11} className="text-[var(--text-muted)]" />
-        </button>
-        <ChevronDown
-          size={12}
-          className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: 'var(--text-muted)' }}
-        />
-      </div>
-      {open && (
-        <div className="max-h-56 overflow-y-auto mb-1.5 rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+          <FolderOpen size={13} className="shrink-0" style={{ color: 'var(--accent)' }} />
+          <span className="flex-1 text-left truncate text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            {t('filetree.files', '项目文件')}
+          </span>
+          <button
+            className="p-1 rounded hover:bg-[var(--border)] shrink-0"
+            title={t('filetree.refresh')}
+            onClick={(e) => {
+              e.stopPropagation()
+              cacheRef.current = new Map()
+              setCache(new Map())
+              if (root) loadDir(root, true)
+            }}
+          >
+            <RefreshCw size={11} className="text-[var(--text-muted)]" />
+          </button>
+          {!isAlwaysOpen && (
+            <ChevronDown
+              size={12}
+              className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+              style={{ color: 'var(--text-muted)' }}
+            />
+          )}
+        </div>
+      )}
+      {(open || isAlwaysOpen) && (
+        <div
+          className={`${isAlwaysOpen ? 'flex-1 min-h-0 overflow-y-auto p-1.5' : 'max-h-56 overflow-y-auto mb-1.5'} rounded-lg border`}
+          style={{ borderColor: 'var(--border)' }}
+        >
           {loading && !root && (
             <div className="px-2 py-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>…</div>
           )}

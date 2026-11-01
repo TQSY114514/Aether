@@ -74,7 +74,7 @@ export interface Message {
   thinking_duration_ms?: number | null
 }
 
-export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'memory' | 'skills'
+export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'memory' | 'skills' | 'projects'
 
 export interface TestConnectionResult {
   success: boolean

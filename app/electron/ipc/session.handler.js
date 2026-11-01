@@ -55,14 +55,16 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('message:delete-arena', (_e, sessionId) => db.deleteArenaAssistantMessages(sessionId))
   ipcMain.handle('message:add-normal', (_e, msg) => db.addNormalMessage(msg))
 
-  ipcMain.handle('session:create-and-select', async (_e, { providerId, modelId, personaId } = {}) => {
+  ipcMain.handle('session:create-and-select', async (_e, { providerId, modelId, personaId, projectId, project_id } = {}) => {
     const work = async () => {
       db.pruneEmptySessions()
-      const sessionRow = db.createSession({ persona_id: personaId || null })
+      const effectivePid = projectId || project_id || null
+      const sessionRow = db.createSession({ persona_id: personaId || null, project_id: effectivePid })
       const sid = sessionRow.lastInsertRowid || sessionRow.id
       const cfg = { providerId: providerId || null, modelId: modelId || null, personaId: personaId || null }
       db.setSessionConfig(sid, cfg)
-      return { session: { ...sessionRow, id: sid }, config: cfg }
+      const fetched = typeof db.getSession === 'function' ? db.getSession(sid) : null
+      return { session: fetched || { ...sessionRow, id: sid, project_id: effectivePid }, config: cfg }
     }
     const result = await _sessionMutex.catch(() => {}).then(work)
     const sid = result.session.id

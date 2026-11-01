@@ -128,6 +128,14 @@ interface Project {
   last_opened_at?: string | null
 }
 
+interface ProjectInstructionsResult {
+  fileName: string
+  path: string
+  content: string
+  exists: boolean
+  error?: string
+}
+
 interface Window {
   electronAPI: {
     project: {
@@ -138,6 +146,8 @@ interface Window {
       delete: (id: number) => Promise<{ ok: boolean; success?: boolean; error?: string }>
       current: () => Promise<Project | null>
       pickDirectory: () => Promise<string | null>
+      getInstructions: (projectId?: number) => Promise<ProjectInstructionsResult>
+      saveInstructions: (params: { projectId?: number; content: string; fileName?: string }) => Promise<{ ok: boolean; path?: string; error?: string }>
       onOpened: (callback: (project: Project | null) => void) => () => void
     }
     provider: {
@@ -175,7 +185,7 @@ interface Window {
     session: {
       list: () => Promise<Session[]>
       create: (data: any) => Promise<{ lastInsertRowid: number }>
-      createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null }) => Promise<{ session: Session & { id: number }; config: { providerId: number | null; modelId: number | null; personaId: number | null }; messages: Message[] }>
+      createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null; projectId?: number | null; project_id?: number | null }) => Promise<{ session: Session & { id: number }; config: { providerId: number | null; modelId: number | null; personaId: number | null }; messages: Message[] }>
       rename: (id: number, title: string) => Promise<void>
       pin: (id: number, pinned: number) => Promise<void>
       fork: (params: { sessionId: number; title?: string }) => Promise<{ id: number; title: string }>

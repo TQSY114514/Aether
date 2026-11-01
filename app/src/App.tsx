@@ -10,6 +10,7 @@ import SettingPage from '@/pages/SettingPage'
 import ScoresPage from '@/pages/ScoresPage'
 import MemoryPage from '@/pages/MemoryPage'
 import SkillsPage from '@/pages/SkillsPage'
+import ProjectPage from '@/pages/ProjectPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
@@ -32,6 +33,7 @@ const VIEW_TITLES: Record<string, string> = {
   memory: 'sidebar.nav.memory',
   settings: 'sidebar.nav.settings',
   skills: 'settings.tools.skills',
+  projects: 'sidebar.nav.projects',
 }
 /** Render the application shell and route the active workspace page. */
 export default function App() {
@@ -282,6 +284,7 @@ export default function App() {
       case 'scores': return <ScoresPage />
       case 'memory': return <MemoryPage />
       case 'skills': return <SkillsPage />
+      case 'projects': return <ProjectPage />
       default: return <ChatPage />
     }
   }
