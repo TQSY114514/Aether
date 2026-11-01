@@ -78,6 +78,10 @@ jobs:
         working-directory: app/tui
         run: npm install --no-audit --no-fund --ignore-scripts
 
+      - name: Patch brace-expansion (ESM named export)
+        working-directory: app
+        run: node scripts/patch-brace-expansion.js
+
       # Local `./node_modules/better-sqlite3` would be unrelocatable across
       # platforms; the `files` whitelist in package.json only ships the JS
       # sources — the npm user rebuilds the native module on `npm install`.
