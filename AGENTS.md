@@ -154,8 +154,9 @@ artifact.
   `check-deps` (main-process externals declared) → `check-architecture`
   (SDK/TUI Electron-free, mutating tool risks, middleware, SQLite storage, CJS purity) →
   `check-ui-tokens` (anti-AI-slop gradients, legacy `hsl(var())`, 650-line component ratchet) →
+  `check-hygiene` (zero orphaned UI components, renderer contextBridge isolation, zero token leak) →
   `tsc --noEmit`.
-- **Full build** `cd app && npm run build` runs those same four gates, then
+- **Full build** `cd app && npm run build` runs those same five gates, then
   `vite build` + `build-icons.js` + `electron-builder` (it produces an
   installer — minutes, not seconds; do not reach for it to check a type error).
 - **Unit / smoke:** `npm test` (vitest), `npm run smoke:boot`, `npm run smoke:rpc`,

@@ -78,6 +78,12 @@ jobs:
       - name: IPC contract check
         run: cd app && node scripts/check-ipc.js
 
+      - name: Architecture contract check
+        run: cd app && node scripts/check-architecture.js
+
+      - name: Code hygiene and orphan check
+        run: cd app && node scripts/check-hygiene.js
+
       - name: TypeScript check
         run: cd app && npx tsc --noEmit
 

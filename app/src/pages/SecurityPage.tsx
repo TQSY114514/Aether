@@ -175,8 +175,7 @@ export default function SecurityPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      <div className="max-w-3xl mx-auto px-6 py-8">
+    <div className="space-y-4">
         <div className="flex items-baseline justify-between mb-1">
           <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{t('security.title', '安全')}</h1>
           <button onClick={applySafeMode} disabled={busy}
@@ -411,7 +410,6 @@ export default function SecurityPage() {
             </div>
           )}
         </div>
-      </div>
     </div>
   )
 }

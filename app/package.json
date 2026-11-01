@@ -102,9 +102,10 @@
     "check:deps": "node scripts/check-deps.js",
     "check:ui-tokens": "node scripts/check-ui-tokens.js",
     "check:architecture": "node scripts/check-architecture.js",
-    "build": "node scripts/check-ipc.js && node scripts/check-deps.js && node scripts/check-architecture.js && node scripts/check-ui-tokens.js && tsc --noEmit && vite build && node build-icons.js && electron-builder --publish never",
+    "check:hygiene": "node scripts/check-hygiene.js",
+    "build": "node scripts/check-ipc.js && node scripts/check-deps.js && node scripts/check-architecture.js && node scripts/check-ui-tokens.js && node scripts/check-hygiene.js && tsc --noEmit && vite build && node build-icons.js && electron-builder --publish never",
     "typecheck": "tsc --noEmit",
-    "check": "node scripts/check-ipc.js && node scripts/check-deps.js && node scripts/check-architecture.js && node scripts/check-ui-tokens.js && tsc --noEmit",
+    "check": "node scripts/check-ipc.js && node scripts/check-deps.js && node scripts/check-architecture.js && node scripts/check-ui-tokens.js && node scripts/check-hygiene.js && tsc --noEmit",
     "smoke:boot": "node scripts/boot-smoke.js",
     "smoke:rpc": "node scripts/smoke-rpc.js",
     "eval:coding": "node scripts/run-eval.cjs",
@@ -158,13 +159,14 @@
     "brace-expansion": "2.1.7",
     "browserslist": "4.28.9",
     "@xmldom/xmldom": "0.8.15",
-    "joi": "18.2.9",
+    "joi": "18.3.1",
     "js-yaml": "4.3.2",
     "@electron/get": {
       "undici": "7.30.1"
     },
     "node-gyp": {
       "undici": "6.29.1"
-    }
+    },
+    "follow-redirects": "1.16.2"
   }
 }

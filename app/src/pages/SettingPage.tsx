@@ -5,6 +5,7 @@ import {
   Shield,
   Blocks,
   Brain,
+  ShieldCheck,
 } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import GeneralDomain from '@/components/settings/domains/GeneralDomain'
@@ -12,6 +13,7 @@ import ProvidersRoutingDomain from '@/components/settings/domains/ProvidersRouti
 import AgentRuntimeDomain from '@/components/settings/domains/AgentRuntimeDomain'
 import ExtensionsMcpDomain from '@/components/settings/domains/ExtensionsMcpDomain'
 import MemoryEvolutionDomain from '@/components/settings/domains/MemoryEvolutionDomain'
+import SecurityPage from '@/pages/SecurityPage'
 import ChatBackgroundPattern from '@/components/chat/ChatBackgroundPattern'
 
 export type SettingsDomainKey =
@@ -19,6 +21,7 @@ export type SettingsDomainKey =
   | 'providers-routing'
   | 'agent-runtime'
   | 'extensions-mcp'
+  | 'security'
   | 'memory-evolution'
 
 interface DomainTab {
@@ -32,6 +35,7 @@ const DOMAIN_TABS: DomainTab[] = [
   { key: 'general', icon: Sliders, labelKey: 'settings.tab.general', fallback: '通用' },
   { key: 'providers-routing', icon: Server, labelKey: 'settings.tab.providers', fallback: '模型与路由' },
   { key: 'agent-runtime', icon: Shield, labelKey: 'settings.tab.agent', fallback: 'Agent 执行' },
+  { key: 'security', icon: ShieldCheck, labelKey: 'security.title', fallback: '安全与合规' },
   { key: 'extensions-mcp', icon: Blocks, labelKey: 'settings.tab.extensions', fallback: '扩展与 MCP' },
   { key: 'memory-evolution', icon: Brain, labelKey: 'settings.tab.memory', fallback: '记忆与自进化' },
 ]
@@ -78,6 +82,7 @@ export default function SettingPage() {
         {activeDomain === 'providers-routing' && <ProvidersRoutingDomain />}
         {activeDomain === 'agent-runtime' && <AgentRuntimeDomain />}
         {activeDomain === 'extensions-mcp' && <ExtensionsMcpDomain />}
+        {activeDomain === 'security' && <SecurityPage />}
         {activeDomain === 'memory-evolution' && <MemoryEvolutionDomain />}
       </div>
     </div>
