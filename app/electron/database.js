@@ -283,6 +283,39 @@ function initDatabase() {
   } catch {}
 
   try {
+    db.exec("ALTER TABLE session ADD COLUMN cwd TEXT");
+  } catch {}
+  try {
+    db.exec("CREATE INDEX IF NOT EXISTS idx_session_cwd ON session(cwd, updated_at DESC)");
+  } catch {}
+
+  // Backfill legacy sessions
+  try {
+    db.exec(`
+      UPDATE session
+      SET cwd = (SELECT root_path FROM project WHERE project.id = session.project_id)
+      WHERE (cwd IS NULL OR cwd = '')
+        AND project_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='project')
+    `);
+  } catch {}
+  try {
+    const unmapped = db.prepare("SELECT id, config FROM session WHERE (cwd IS NULL OR cwd = '') AND config IS NOT NULL").all();
+    for (const s of unmapped) {
+      try {
+        const cfg = JSON.parse(s.config);
+        const c = cfg?.cwd || cfg?.workspace;
+        if (c && typeof c === 'string' && c.trim()) {
+          db.prepare("UPDATE session SET cwd = ? WHERE id = ?").run(path.resolve(c.trim()), s.id);
+        }
+      } catch {}
+    }
+  } catch {}
+  try {
+    db.prepare("UPDATE session SET cwd = ? WHERE cwd IS NULL OR cwd = ''").run(process.cwd());
+  } catch {}
+
+  try {
     require("./llm/checkpointManager").createTable(db);
   } catch {}
   initSkillSuccessTable();
@@ -870,14 +903,22 @@ function setActiveProject(id) {
 
 // ===== Session CRUD =====
 function getSessions() {
-  return db
+  const rows = db
     .prepare(
       "SELECT s.*, (SELECT content FROM message WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message FROM session s WHERE COALESCE(s.session_kind, 'chat') = 'chat' ORDER BY s.pinned DESC, s.updated_at DESC",
     )
     .all();
+  for (const r of rows) {
+    if (!r.cwd) r.cwd = process.cwd();
+  }
+  return rows;
 }
 function getSession(id) {
-  return db.prepare("SELECT * FROM session WHERE id = ?").get(id) || null;
+  const row = db.prepare("SELECT * FROM session WHERE id = ?").get(id) || null;
+  if (row && !row.cwd) {
+    row.cwd = process.cwd();
+  }
+  return row;
 }
 function localNow() {
   const d = new Date();
@@ -891,31 +932,51 @@ function createSession({
   config = null,
   session_kind = "chat",
   project_id = null,
-}) {
+  cwd = null,
+} = {}) {
   const normalizedConfig = config == null
     ? null
     : (typeof config === "string" ? config : JSON.stringify(config));
-  let effectiveProjectId = project_id;
   let parentSession = null;
-  if ((effectiveProjectId === undefined || effectiveProjectId === null) && parentSessionId != null) {
-    parentSession = db.prepare("SELECT project_id FROM session WHERE id = ?").get(parentSessionId);
-    if (parentSession) effectiveProjectId = parentSession.project_id;
+  if (parentSessionId != null) {
+    try {
+      parentSession = db.prepare("SELECT cwd, project_id FROM session WHERE id = ?").get(parentSessionId);
+    } catch {}
   }
-  if ((effectiveProjectId === undefined || effectiveProjectId === null) && !parentSession) {
-    const activeSetting = getSetting("active_project_id");
-    if (activeSetting) {
-      const pid = Number(activeSetting);
-      if (Number.isInteger(pid) && pid > 0) {
-        effectiveProjectId = pid;
-      }
-    }
+
+  // Resolve cwd: explicit param -> parent session -> config JSON -> process.cwd()
+  let effectiveCwd = cwd;
+  if (!effectiveCwd && parentSession?.cwd) {
+    effectiveCwd = parentSession.cwd;
   }
+  if (!effectiveCwd && normalizedConfig) {
+    try {
+      const parsed = JSON.parse(normalizedConfig);
+      effectiveCwd = parsed?.cwd || parsed?.workspace || null;
+    } catch {}
+  }
+  if (!effectiveCwd) {
+    effectiveCwd = process.cwd();
+  }
+  effectiveCwd = path.resolve(effectiveCwd);
+
+  const effectiveProjectId = project_id !== undefined ? project_id : (parentSession?.project_id || null);
+
   const info = db
     .prepare(
-      "INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, project_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+      "INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, project_id, cwd, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
     )
-    .run(title, persona_id, parentSessionId, normalizedConfig, String(session_kind || "chat"), effectiveProjectId || null, localNow());
-  return { lastInsertRowid: Number(info.lastInsertRowid) };
+    .run(
+      title,
+      persona_id,
+      parentSessionId,
+      normalizedConfig,
+      String(session_kind || "chat"),
+      effectiveProjectId,
+      effectiveCwd,
+      localNow()
+    );
+  return { lastInsertRowid: Number(info.lastInsertRowid), cwd: effectiveCwd };
 }
 
 /** Create a session branch by copying the parent configuration and messages. */
@@ -936,10 +997,11 @@ function forkSession(parentSessionId, title, messageIdCutoff = null) {
     const config = parent.config || null;
     const sessionKind = parent.session_kind || 'chat';
     const projectId = parent.project_id || null;
+    const cwd = parent.cwd ? path.resolve(parent.cwd) : process.cwd();
 
     const info = db.prepare(
-      'INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, project_id, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, 0)'
-    ).run(newTitle, personaId, parentSessionId, config, sessionKind, projectId, localNow());
+      'INSERT INTO session (title, persona_id, parent_session_id, config, session_kind, project_id, cwd, updated_at, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)'
+    ).run(newTitle, personaId, parentSessionId, config, sessionKind, projectId, cwd, localNow());
     const newSessionId = Number(info.lastInsertRowid);
 
     const parentMsgs = messageIdCutoff != null
@@ -979,7 +1041,7 @@ function forkSession(parentSessionId, title, messageIdCutoff = null) {
       }
     }
 
-    return { id: newSessionId, title: newTitle };
+    return { id: newSessionId, lastInsertRowid: newSessionId, title: newTitle, cwd };
   })();
 }
 
@@ -1059,6 +1121,7 @@ function updateSession(id, fields) {
     "config",
     "status",
     "parent_session_id",
+    "cwd",
   ];
   const sets = [];
   const vals = [];
@@ -1075,6 +1138,18 @@ function updateSession(id, fields) {
   vals.push(localNow());
   vals.push(id);
   db.prepare(`UPDATE session SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+}
+
+/**
+ * Update the working directory for a session.
+ * @param {number|string} id
+ * @param {string} cwd
+ * @returns {string} resolved cwd
+ */
+function setSessionCwd(id, cwd) {
+  const target = cwd && String(cwd).trim() ? path.resolve(String(cwd).trim()) : process.cwd();
+  db.prepare("UPDATE session SET cwd = ?, updated_at = ? WHERE id = ?").run(target, localNow(), id);
+  return target;
 }
 function getSessionConfig(id) {
   const row = db
@@ -1646,13 +1721,20 @@ function getMemories(limit) {
 // + 当前 workspace 行，当前 workspace 行优先(ORDER BY (workspace IS NULL) ASC)，
 // 供 prefetch 的项目块与 memory:list 的 {workspace} 过滤使用。未传 workspace
 // 时回退全量 getMemories()(旧行为)。
-function getMemoriesScoped(workspace) {
-  if (!workspace) return getMemories();
+function getMemoriesScoped(scopeKey) {
+  if (scopeKey === undefined) return getMemories();
+  if (scopeKey === null) {
+    return db
+      .prepare(
+        "SELECT * FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC",
+      )
+      .all();
+  }
   return db
     .prepare(
       "SELECT * FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC",
     )
-    .all(workspace);
+    .all(String(scopeKey));
 }
 function addMemory({ content, type, source_session_id, workspace }) {
   // 手动添加与自动写入共用同一条去重入口（Hermes 式：重复在写入时拦截）。
@@ -2556,6 +2638,7 @@ module.exports = {
   deleteSession,
   touchSession,
   updateSession,
+  setSessionCwd,
   getMessages,
   getMessage,
   addMessage,

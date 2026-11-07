@@ -362,7 +362,7 @@ describe('summarize prompt safety boundary', () => {
 // used to promote it into the kept block before pruneOlderBlock ever ran.
 describe('maybeCompact prunes NOISE before retention', () => {
   it('compaction replaces a large list_dir result with a one-line stub', async () => {
-    const big = 'x'.repeat(9000)
+    const big = 'x'.repeat(130000)
     const msgs = [
       m('user', 'list the files then keep going'),
       { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'list_dir', arguments: '{}' } }] },

@@ -29,21 +29,18 @@ describe('buildCallIdToNameMap', () => {
 })
 
 describe('applyTieredTruncation with resolved tool names', () => {
-  it('applies the write_file per-tool limit (4000), not the default (16000)', () => {
-    // 5000 chars: buggy path → unknown name "call_1" → default 16000 → untouched;
-    // fixed path → write_file → 4000 → truncated.
-    const out = applyTieredTruncation(convoWithToolResult('write_file', 'call_1', 'x'.repeat(5000)), null, null)
+  it('applies the write_file per-tool limit (120000), spilling to disk when exceeded', () => {
+    const out = applyTieredTruncation(convoWithToolResult('write_file', 'call_1', 'x'.repeat(130000)), null, null)
     const toolMsg = out.find((m) => m.role === 'tool')
-    expect(toolMsg.content).toContain('[… truncated')
-    expect(toolMsg.content.startsWith('x'.repeat(4000))).toBe(true)
-    expect(toolMsg.content).toContain('tier:')
+    expect(toolMsg.content).toContain('[Output spilled to ')
+    expect(toolMsg.content).toContain('x'.repeat(40000))
   })
 
-  it('still truncates tool results whose assistant entry is missing (default limit)', () => {
-    const messages = [{ role: 'tool', tool_call_id: 'call_lost', content: 'y'.repeat(20000) }]
+  it('still truncates tool results whose assistant entry is missing (default limit 120000)', () => {
+    const messages = [{ role: 'tool', tool_call_id: 'call_lost', content: 'y'.repeat(130000) }]
     const out = applyTieredTruncation(messages, null, null)
-    expect(out[0].content).toContain('[… truncated')
-    expect(out[0].content.startsWith('y'.repeat(16000))).toBe(true)
+    expect(out[0].content).toContain('[Output spilled to ')
+    expect(out[0].content).toContain('y'.repeat(40000))
   })
 
   it('leaves short results untouched', () => {
@@ -54,8 +51,8 @@ describe('applyTieredTruncation with resolved tool names', () => {
 
 describe('pruneOlderBlock shows the real tool name', () => {
   it('prunes a NOISE-tier list_dir result naming list_dir, not call_9', () => {
-    const listing = Array.from({ length: 600 }, (_, i) => `C:\\tmp\\file${i}.txt`).join('\n') // >8000 chars → NOISE
-    expect(listing.length).toBeGreaterThan(8000)
+    const listing = Array.from({ length: 8000 }, (_, i) => `C:\\tmp\\file${i}.txt`).join('\n') // >120000 chars → NOISE
+    expect(listing.length).toBeGreaterThan(120000)
     const older = convoWithToolResult('list_dir', 'call_9', listing)
     const pruned = pruneOlderBlock(older, null, null)
     const toolMsg = pruned.find((m) => m.role === 'tool')

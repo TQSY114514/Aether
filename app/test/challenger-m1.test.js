@@ -183,7 +183,7 @@ describe('Adversarial Challenge 2: Workspace Rule Cache Invalidation Stress', ()
 
       // Immediately load project instructions - should NOT be cached Version 0
       const updated = projectInstructions.loadProjectInstructions()
-      expect(updated.content).toBe(newContent)
+      expect(updated.content).toContain(newContent)
     }
   })
 

@@ -253,12 +253,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
           }
         }
       }
-      // 阶段路由开关独立于基础路由（默认关，保守上线）。
-      try {
-        if (tools && toolPayload.length && db) {
-          stageState.enabled = require('../featureFlags').isEnabled(db, 'agent.toolRouter.staged') === true
-        }
-      } catch {}
+      // 阶段路由开关独立于基础路由（Aether 3.0: 禁用阶段工具剪裁以保证 Prompt Cache 稳定）
+      stageState.enabled = false
     } catch {}
   }
 
@@ -267,8 +263,8 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
     try { return db && require('../featureFlags').isEnabled(db, 'agent.poorMode') === true } catch { return false }
   })()
   const effectiveMaxIterations = isPoorMode
-    ? Math.min(Number(maxIterations) || 25, 15)
-    : maxIterations
+    ? Math.min(Number(maxIterations) || 100, 15)
+    : (Number(maxIterations) || 100)
   if (isPoorMode) {
     if (options) {
       // Clamp reasoning effort to 'low' and update model-specific thinking budgets only if reasoning was requested
@@ -302,13 +298,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   // Phase 4: Use external budget if provided (e.g. from subAgent), otherwise create one.
   const budget = externalBudget || new IterationBudget(effectiveMaxIterations)
   budget.start()
-  // Surface the 80% iteration/token/time budget warning as a status line.
-  // iterationBudget.js emits `budget:warning` once per dimension at 80%.
-  budget.on('budget:warning', (w) => {
-    try {
-      if (onStatus && w) onStatus({ kind: 'budget_warning', text: `⚠️ 预算已用 ${Math.round((w.ratio || 0) * 100)}% (${w.dimension || 'unknown'})，即将达到上限` })
-    } catch {}
-  })
+  // Aether 3.0: 80% budget anxiety warnings eliminated (Feature 15)
 
   // Observability: open a run row up-front so tool samples can reference it,
   // finalize it with real values on every exit path.
@@ -749,81 +739,18 @@ Reply in this format:
       } catch {}
     }
     const opts = { ...options }
-    // 阶段感知路由（'agent.toolRouter.staged'）：每轮按最近 8 条审计记录重估
-    // 任务阶段（verify>build>deliver>explore），新阶段带来的工具类别只加不减，
-    // 重路由仍受 plan 只读过滤与 routeTools 兑底约束。
-    if (stageState.enabled && routedPayload.length && auditTrail.length) {
-      try {
-        const recentWindow = auditTrail.slice(-8)
-        const { routeTools: rt, inferStage: inferStageFn, _stageCategories: stageCats } = require('./toolRouter')
-        const stage = inferStageFn({
-          depth,
-          recentToolCalls: recentWindow.map(e => e.name),
-          recentErrorKinds: recentWindow.filter(e => e.error).map(e => e.failure_kind),
-        })
-        if (stage) {
-          let grew = false
-          for (const c of (stageCats[stage] || [])) {
-            if (!stageState.seenCategories.includes(c)) { stageState.seenCategories.push(c); grew = true }
-          }
-          if (grew) {
-            const want = rt({
-              mode: agentMode === 'plan' ? 'plan' : undefined,
-              prompt: userText,
-              allToolNames: stageState.allNames,
-              safeNames: stageState.safeNames,
-              extraCategories: stageState.seenCategories,
-            })
-            // want 涨满(覆盖全部工具)时也要重建 payload——否则基础路由先前
-            // 砍掉的类别永远回不来（CodeRabbit #48 复审 R2）。
-            if (want.size > 0) {
-              if (stageState.cachePrefixStable) {
-                const existingNames = new Set(routedPayload.map(p => p.function.name))
-                const newlyAdded = stageState.fullPayload.filter(p => want.has(p.function.name) && !existingNames.has(p.function.name))
-                if (newlyAdded.length > 0) {
-                  routedPayload = [...routedPayload, ...newlyAdded]
-                }
-              } else {
-                routedPayload = stageState.fullPayload.filter(p => want.has(p.function.name))
-              }
-              try { onStatus?.({ kind: 'tool_router', text: `阶段路由[${stage}]: 注入 ${routedPayload.length}/${stageState.allNames.length} 个工具` }) } catch {}
-            }
-          }
-        }
-      } catch {}
-    }
+    // Aether 3.0: Stage-based tool pruning disabled in loop to ensure 100% prompt cache stability across consecutive turns (Feature 11).
+
     // Tool Router: 用路由后的 payload（未路由时 routedPayload === toolPayload）
     if (routedPayload.length) { opts.tools = routedPayload; opts.tool_choice = 'auto' }
     if (planToolsPayload.length) { opts.tools = [...routedPayload, ...planToolsPayload]; opts.tool_choice = 'auto' }
 
-    // ZCode-inspired Prompt Cache system block ordering + zero-LLM-cost local microcompact
+    // Prompt Cache system block ordering (stable system blocks before dynamic blocks)
     try {
-      const { maybeLocalMicrocompactMessages, orderSystemMessagesForCache } = require('./microcompact')
+      const { orderSystemMessagesForCache } = require('./microcompact')
       if (cachePrefixStable) {
         const ordered = orderSystemMessagesForCache(convo)
         convo.splice(0, convo.length, ...ordered)
-      }
-      const mcEnabled = db && typeof db.getSetting === 'function' ? db.getSetting('agent_microcompact_enabled') !== '0' : true
-      const mcKeepRecent = isPoorMode ? 2 : (db && typeof db.getSetting === 'function' ? Number(db.getSetting('agent_microcompact_keep_recent')) || 5 : 5)
-      const mcCacheTtlMin = db && typeof db.getSetting === 'function' ? Number(db.getSetting('agent_cache_ttl_minutes')) || 60 : 60
-      const mcResult = maybeLocalMicrocompactMessages({
-        messages: convo,
-        lastAssistantCompletedAtMs: options.lastAssistantCompletedAtMs,
-        config: {
-          enabled: mcEnabled,
-          keepRecentToolResults: mcKeepRecent,
-          maxIdleMs: mcCacheTtlMin * 60 * 1000,
-          ...(options.microcompact || {}),
-        },
-      })
-      if (mcResult.decision.reason === 'applied' && mcResult.payload) {
-        convo.splice(0, convo.length, ...mcResult.messages)
-        try {
-          onStatus?.({
-            kind: 'microcompact',
-            text: `🧹 本地微压缩 (${mcResult.payload.trigger}): 清理 ${mcResult.payload.clearedMessageCount} 条旧工具输出，节省 ~${mcResult.payload.tokensSaved} tokens`,
-          })
-        } catch {}
       }
     } catch {}
 

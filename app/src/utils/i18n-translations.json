@@ -2,6 +2,17 @@
   {
     "lang": "zh-CN",
     "strings": {
+      "common.browse": "浏览...",
+      "cwd.aria_label": "工作目录指示器",
+      "cwd.browse": "浏览",
+      "cwd.current": "工作目录",
+      "cwd.default": "进程默认 (process.cwd)",
+      "cwd.default_tooltip": "当前未配置专属工作目录，默认使用系统进程目录",
+      "cwd.reveal": "在文件管理器中打开",
+      "slash.cd": "切换工作目录",
+      "slash.cd_desc": "切换当前会话执行的工作目录 (cwd)",
+      "slash.cd_failed": "切换工作目录失败: {0}",
+      "slash.cd_success": "工作目录已切换为: {0}",
       "sidebar.nav.projects": "项目",
       "sidebar.project_scope.all": "全部会话",
       "projects.hub.title": "项目工作区中心",

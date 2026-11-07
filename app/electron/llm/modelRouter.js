@@ -44,15 +44,9 @@ const FAST_TASK_RE = /^(classify|filter|extract|format|summarize-short|route|det
  * @returns {ModelTier}
  */
 function routeTask(taskType, userMessage, historyLength) {
-  // Explicit fast path: tool classification, short extraction, intent detection
-  if (FAST_TASK_RE.test(taskType)) return 'fast'
-
   // Long conversations or complex prompts need standard reasoning
   const msg = String(userMessage || '')
   if (msg.length > 4000 || historyLength > 20) return 'thinking'
-
-  // Short, simple messages can use fast model
-  if (msg.length < 200 && historyLength < 5) return 'fast'
 
   // Tool execution results + observation: standard is fine
   if (taskType === 'tool_result') return 'standard'

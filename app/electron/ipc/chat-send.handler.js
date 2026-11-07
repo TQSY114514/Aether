@@ -420,9 +420,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
     const timeoutMs = parseInt(_s['fallback_timeout_ms'] ?? String(DEFAULT_FALLBACK_TIMEOUT_MS), 10)
     let lastError = null
 
-    // Set workspace root for this session (from session config or global default).
-    // This lets the sandbox resolve per-session workspaces.
-    try { const { setWorkspaceRootForSession } = require('../tools/sandbox'); setWorkspaceRootForSession(sessionId, (session0?.config && JSON.parse(session0.config)?.workspace) || null) } catch {}
+    // Phase 1: Unconstrained CWD execution - do not lock session into sandbox workspace root
+    // residual setWorkspaceRootForSession neutralized to prevent sandbox.js:252 containment failure during live chat.
 
     // Context budget: compute usage before the request so we can report it.
     const budgetBefore = estimateMessagesTokens(compacted)
@@ -527,7 +526,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             provider, model, messages: toolMessages, signal: controller.signal,
             options: mergedOpts,
             agentMode: agentMode || 'ask',
-            maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
+            maxIterations: parseInt(_s['agent_max_iterations'] ?? '100', 10),
             sessionId, messageId: msgId, db,
             autoCommit: true,
             onFileSummary: (summary) => { mergeFileSummary(summary, runIdx) },

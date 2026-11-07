@@ -63,10 +63,14 @@ async function globFiles(pattern, options = {}) {
 }
 
 function guardWorkspaceRead(target, ctx, label) {
-  const p = String(target || ''); if (!p) return
-  if (!isWorkspaceAskMode(ctx?.agentMode)) return
-  if (isInsideWorkspace(p, ctx?.sessionId)) return
-  throw new Error(`读取被拒绝：${label} ${p} 位于工作区之外（当前为 workspace 模式）。如确需读取该路径，请改用 ask_user 工具向用户说明并请求批准`)
+  const sb = require('./sandbox')
+  if (sb._isWorkspaceRootEnforced && sb._isWorkspaceRootEnforced()) {
+    const p = String(target || ''); if (!p) return
+    if (!isWorkspaceAskMode(ctx?.agentMode)) return
+    if (sb.isInsideWorkspace(p, ctx?.sessionId)) return
+    throw new Error(`读取被拒绝：${label} ${p} 位于工作区之外（当前为 workspace 模式）。如确需读取该路径，请改用 ask_user 工具向用户说明并请求批准`)
+  }
+  return
 }
 
 function lspFullEnabled(ctx) {
@@ -596,14 +600,14 @@ const TOOLS = [
       return `### Task ${i + 1}: ${String(label).slice(0, 80)}\n${r?.success ? r?.output : `(failed: ${r?.error})`}`
     }).join('\n\n')
   }},
-  { name: 'run_agent', description: 'Spawn a specialized sub-agent (explore/build/review/research/debug).', risk: 'dangerous', parameters: { type: 'object', properties: { role: { type: 'string', enum: ['explore', 'build', 'review', 'research', 'debug'] }, task: { type: 'string' }, maxIterations: { type: 'number' } }, required: ['role', 'task'] }, run: async (args, ctx) => {
+  { name: 'run_agent', description: 'Spawn a specialized sub-agent (explore/build/review/research/debug/oracle/librarian).', risk: 'dangerous', parameters: { type: 'object', properties: { role: { type: 'string', enum: ['explore', 'build', 'review', 'research', 'debug', 'oracle', 'librarian'] }, task: { type: 'string' }, maxIterations: { type: 'number' } }, required: ['role', 'task'] }, run: async (args, ctx) => {
     if (!ctx) return 'no context'
     const roles = require('../llm/agentRoles'); const SA = require('../llm/subAgent')
     if (!roles.getRole(args.role)) return `unknown role: ${args.role}`
     const td = String(args.task || '').trim(); if (!td) return 'task is required'
     const mp = roles.buildRolePrompt(args.role, td); if (!mp) return 'prompt build failed'
     const allowedTools = roles.buildToolFilter(args.role)
-    const maxIterations = Math.max(1, Math.min(50, Number(args.maxIterations) || 15))
+    const maxIterations = Math.max(1, Math.min(100, Number(args.maxIterations) || 100))
     try {
       const agentCallbacks = ctx.callbacks ? { ...ctx.callbacks } : (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {})
       delete agentCallbacks.onStreamDelta
@@ -644,6 +648,215 @@ const TOOLS = [
       return [`Best: ${r.bestPlan.role} (${r.bestPlan.score})`, r.execution?.success ? r.execution.output : `exec failed: ${r.execution?.error}`].join('\n')
     } catch (e) { return `error: ${e?.message}` }
   }},
+
+  // ── Subagent Supervisor Tools ───────────────────────────────────────────────
+  {
+    name: 'list_providers_and_models',
+    description: 'Inspect all configured LLM providers, endpoint categories (official_direct, major_aggregator, third_party_relay, local_engine), stability hints, baseUrls, available models, and cached health/latency metrics.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        includeInactive: { type: 'boolean', description: 'Whether to include disabled providers (default: false).' },
+      },
+    },
+    run: async (args, ctx) => {
+      const db = ctx?.db || require('../database').getDatabase?.() || null
+      if (!db) return 'Database is not available.'
+      const { buildProviderTopologySnapshot } = require('../llm/providerTopology')
+      const snapshot = buildProviderTopologySnapshot(db, { includeInactive: args?.includeInactive === true })
+      if (!snapshot || snapshot.length === 0) return 'No configured LLM providers found.'
+
+      const lines = ['### Configured Provider Topology & Models\n']
+      for (const p of snapshot) {
+        lines.push(`- **${p.providerName}** (ID: \`${p.providerId}\`, Kind: \`${p.endpointKind}\`, Stability: \`${p.stabilityHint}\`)\n  URL: \`${p.baseUrl}\``)
+        if (p.models && p.models.length > 0) {
+          lines.push(`  Models: ${p.models.map(m => `\`${m.modelId}\` (${(m.capabilityHints || []).join(', ')})`).join(', ')}`)
+        } else {
+          lines.push('  Models: (none configured)')
+        }
+      }
+      return lines.join('\n')
+    },
+  },
+  {
+    name: 'probe_model_health',
+    description: 'Actively probe streaming latency (TTFT) and availability for candidate models using minimal max_tokens: 1 requests with immediate socket abort. Use before dispatching subagents to verify endpoint health.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        providerId: { type: 'string', description: 'Provider ID from database.' },
+        modelId: { type: 'string', description: 'Model identifier string.' },
+        targets: {
+          type: 'array',
+          description: 'Optional batch of provider and model pairs to probe.',
+          items: {
+            type: 'object',
+            properties: {
+              providerId: { type: 'string', description: 'Provider ID.' },
+              modelId: { type: 'string', description: 'Model identifier string.' },
+            },
+            required: ['providerId', 'modelId'],
+          },
+        },
+        timeoutMs: { type: 'number', description: 'Probe timeout in milliseconds (default: 6000).' },
+      },
+      required: ['providerId', 'modelId'],
+    },
+    run: async (args, ctx) => {
+      const db = ctx?.db || require('../database').getDatabase?.() || null
+      if (!db) return 'Database is not available.'
+
+      let targets = []
+      if (Array.isArray(args?.targets) && args.targets.length > 0) {
+        targets = args.targets
+      } else if (args?.providerId && args?.modelId) {
+        targets = [{ providerId: args.providerId, modelId: args.modelId }]
+      } else {
+        throw new Error('providerId and modelId are required')
+      }
+
+      const { probeSingleModel } = require('../llm/providerTopology')
+      const providers = typeof db.getProvidersDecrypted === 'function' ? db.getProvidersDecrypted() : (typeof db.getProviders === 'function' ? db.getProviders() : [])
+      const provMap = new Map(providers.map(p => [String(p.id), p]))
+
+      const timeoutMs = Math.max(1000, Number(args.timeoutMs) || 6000)
+      const results = await Promise.all(targets.map(async (t) => {
+        const prov = provMap.get(String(t.providerId)) || { id: t.providerId, name: `Provider ${t.providerId}`, baseUrl: 'https://api.openai.com/v1' }
+        return await probeSingleModel({ provider: prov, modelId: t.modelId, timeoutMs })
+      }))
+
+      const rows = results.map(r =>
+        `| ${r.providerName || r.providerId} | ${r.modelId} | ${r.status} | ${r.ttftMs != null ? r.ttftMs + 'ms' : '-'} | ${r.available ? 'AVAILABLE' : 'FAILED'} | ${r.errorDetail || '-'} |`
+      )
+      return [
+        '| Provider | Model | Health Status | TTFT | Available | Error Details |',
+        '|---|---|---|---|---|---|',
+        ...rows,
+      ].join('\n')
+    },
+  },
+  {
+    name: 'spawn_subagent',
+    description: 'Spawn a supervised autonomous subagent with explicit provider and model selection, role specialization, and non-blocking streaming observation. Supports smart_window (8s initial window), async_immediate, and wait_until_done_or_stalled.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        taskPrompt: { type: 'string', description: 'Detailed specification of the task for the subagent.' },
+        role: { type: 'string', enum: ['explore', 'build', 'review', 'research', 'debug', 'oracle', 'librarian'], description: "Specialized role persona (default: 'explore')." },
+        providerId: { type: ['string', 'number'], description: 'Explicit provider ID.' },
+        modelId: { type: 'string', description: 'Explicit model ID.' },
+        cwd: { type: 'string', description: 'Working directory (defaults to current session cwd).' },
+        waitMode: { type: 'string', enum: ['smart_window', 'async_immediate', 'wait_until_done_or_stalled'], description: "Supervision wait mode (default: 'smart_window')." },
+        initialWaitMs: { type: 'number', description: 'Observation window for smart_window in ms (default: 8000).' },
+        stallTimeoutMs: { type: 'number', description: 'Threshold to alarm stalled stream in ms (default: 15000).' },
+      },
+      required: ['taskPrompt', 'providerId', 'modelId'],
+    },
+    run: async (args, ctx) => {
+      if (args?.cwd && (String(args.cwd).toLowerCase().startsWith('c:\\windows') || args.cwd === '/System')) {
+        return 'BLOCKED: Cannot execute subagent in protected system directory.'
+      }
+      const supervisor = require('../llm/subagentSupervisor')
+      const db = ctx?.db || require('../database').getDatabase?.() || null
+      const effectiveCwd = args?.cwd || ctx?.cwd || process.cwd()
+
+      const report = await supervisor.spawnSupervisedSubagent({
+        parentSessionId: ctx?.sessionId,
+        taskPrompt: args.taskPrompt,
+        role: args.role || 'explore',
+        providerId: args.providerId,
+        modelId: args.modelId,
+        cwd: effectiveCwd,
+        waitMode: args.waitMode || 'smart_window',
+        initialWaitMs: args.initialWaitMs != null ? Number(args.initialWaitMs) : 8000,
+        stallTimeoutMs: args.stallTimeoutMs != null ? Number(args.stallTimeoutMs) : 15000,
+      }, {
+        db,
+        runToolLoop: require('../llm/toolLoop').runToolLoop,
+        notifyRenderer: ctx?.onSubagentEvent || ctx?.callbacks?.onSubagentEvent,
+      })
+
+      if (report.status === 'completed') {
+        return `### Subagent [${report.subagentId}] Completed (${report.elapsedMs}ms, TTFT: ${report.ttftMs}ms)\n\n${report.finalOutput || report.output}`
+      } else if (report.status === 'running') {
+        return `### Subagent [${report.subagentId}] Running (Healthy Streaming)\n- Model: \`${report.modelId}\` (${report.providerId})\n- Measured TTFT: ${report.ttftMs}ms\n- Completed Turns: ${report.completedTurnCount}\n\n**Live Thinking Preview**:\n${report.recentThinkingTail || '(thinking...)'}\n\n**Live Text Preview**:\n${report.recentTextTail || '(streaming...)'}\n\n*Notice: ${report.systemNotice || 'Subagent continues in background.'}*`
+      } else if (report.status === 'stalled_suspected') {
+        return `⚠️ ### Subagent [${report.subagentId}] Stalled Suspected!\nIdle duration: ${report.idleSinceLastActivityMs}ms without response. Consider hot-swapping model via \`control_subagent(action='hot_swap_model')\`.`
+      } else {
+        return `### Subagent [${report.subagentId}] Status: ${report.status}\nError: ${report.error || 'Unknown error'}`
+      }
+    },
+  },
+  {
+    name: 'peek_subagent_stream',
+    description: 'Non-blockingly inspect live output, streaming reasoning (thinking), active tool calls, idle duration, and TTFT metrics for running subagents.',
+    risk: 'safe',
+    parameters: {
+      type: 'object',
+      properties: {
+        subagentIds: {
+          anyOf: [
+            { type: 'array', items: { type: 'string' } },
+            { type: 'string' },
+          ],
+          description: 'Subagent ID or array of subagent IDs to inspect.',
+        },
+        fromSeq: { type: 'number', description: 'Incremental sequence cursor from previous peek (default: 0).' },
+        tailCount: { type: 'number', description: 'Number of recent events if fromSeq is 0 (default: 40).' },
+      },
+      required: ['subagentIds'],
+    },
+    run: async (args) => {
+      const supervisor = require('../llm/subagentSupervisor')
+      const reports = supervisor.peekSubagentStream({
+        subagentIds: args?.subagentIds || [],
+        fromSeq: args?.fromSeq || 0,
+        tailCount: args?.tailCount != null ? Number(args.tailCount) : 40,
+      })
+
+      if (!reports || reports.length === 0) return 'No matching subagents found.'
+
+      return reports.map(r => {
+        if (r.status === 'not_found') {
+          return `### Subagent \`${r.subagentId}\` [NOT FOUND]\n${r.error || 'No record exists.'}`
+        }
+        const header = `### Subagent \`${r.subagentId}\` [${String(r.status).toUpperCase()}]`
+        const stats = `- Provider/Model: \`${r.providerId}\` / \`${r.modelId}\`\n- Elapsed: ${((r.elapsedMs || 0) / 1000).toFixed(1)}s | Idle: ${((r.idleSinceLastActivityMs || 0) / 1000).toFixed(1)}s | TTFT: ${r.ttftMs ? r.ttftMs + 'ms' : 'pending'}`
+        const tool = r.currentTool ? `- Active Tool: \`${r.currentTool}\`` : ''
+        const thinking = r.recentThinkingTail ? `\n**Recent Thinking**:\n${r.recentThinkingTail}` : ''
+        const text = r.recentTextTail ? `\n**Recent Output**:\n${r.recentTextTail}` : ''
+        return [header, stats, tool, thinking, text].filter(Boolean).join('\n')
+      }).join('\n\n---\n\n')
+    },
+  },
+  {
+    name: 'control_subagent',
+    description: 'Intervene on an active subagent: hot-swap stalled model while inheriting state and drafts (action=hot_swap_model), inject real-time steering instructions (action=steer), or cancel execution (action=cancel).',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        subagentId: { type: 'string', description: 'Target subagent ID.' },
+        action: { type: 'string', enum: ['hot_swap_model', 'steer', 'cancel'], description: 'Intervention action.' },
+        newProviderId: { type: ['string', 'number'], description: 'New provider ID (required for hot_swap_model).' },
+        newModelId: { type: 'string', description: 'New model ID (required for hot_swap_model).' },
+        steeringMessage: { type: 'string', description: 'Guidance instruction for steer or recovery prompt for hot_swap_model.' },
+        preservePartialDraft: { type: 'boolean', description: 'Whether to preserve partial thinking/text drafts across hot-swap (default: true).' },
+      },
+      required: ['subagentId', 'action'],
+    },
+    run: async (args) => {
+      const supervisor = require('../llm/subagentSupervisor')
+      const result = await supervisor.controlSubagent(args)
+      if (!result.ok) {
+        return `❌ Control action "${args.action}" failed for subagent [${args.subagentId}]: ${result.error || result.message}`
+      }
+      return `✅ Control action "${args.action}" succeeded for subagent [${args.subagentId}]:\n${result.message || result.systemNotice || 'OK'}`
+    },
+  },
 
   // ── Memory tools ────────────────────────────────────────────────────
   { name: 'memory_save', description: 'Save a structured memory entry (entity/fact/context/relation). DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { content: { type: 'string' }, type: { type: 'string', enum: ['entity', 'fact', 'context', 'relation'] } }, required: ['content', 'type'] }, run: async (args, ctx) => {

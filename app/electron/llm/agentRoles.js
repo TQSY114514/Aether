@@ -126,6 +126,49 @@ RULES:
     defaultMode: 'plan',
     allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'run_command'],
   },
+  oracle: {
+    label: 'Oracle',
+    description: 'High-order reasoning consultant. Read-only advisor for deep architecture, algorithms, and complex debugging.',
+    model: 'inherit',
+    effort: 'high',
+    readOnly: true,
+    systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
+
+You are an ORACLE agent. Your job is high-order reasoning and architectural consulting:
+- Analyze architectural trade-offs, system boundaries, and design invariants
+- Evaluate algorithmic complexity, race conditions, concurrency, and distributed state
+- Diagnose complex root causes and failure modes
+- Provide mathematically and architecturally sound decisions
+
+RULES:
+- READ-ONLY: never write, edit, or execute mutating commands
+- Be rigorous and decisive: provide definitive trade-off matrices and clear verdicts
+- Ground all reasoning in verified facts, code references, and theoretical soundness
+- Report exact file paths and line numbers when referencing code`,
+    defaultMode: 'plan',
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
+  },
+  librarian: {
+    label: 'Librarian',
+    description: 'External library and repository researcher. Analyzes external docs, packages, APIs, and dependencies.',
+    model: 'inherit',
+    effort: 'medium',
+    readOnly: true,
+    systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
+
+You are a LIBRARIAN agent. Your job is to research external libraries, dependencies, and documentation:
+- Investigate third-party packages, GitHub repositories, and API documentation
+- Verify dependency compatibility, version constraints, breaking changes, and migrations
+- Evaluate library trade-offs, licenses, and maintenance status
+- Provide concise, actionable API contracts and usage examples
+
+RULES:
+- READ-ONLY to project code: do NOT modify project source files
+- Provide URLs, version numbers, and authoritative documentation references for all findings
+- Summarize public APIs and interfaces clearly`,
+    defaultMode: 'plan',
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'web_search', 'web_fetch', 'run_command'],
+  },
 }
 
 /**

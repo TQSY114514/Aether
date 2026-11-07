@@ -31,7 +31,10 @@ export default function FileTree({
   className = '',
 }: FileTreeProps = {}) {
   const currentSessionId = useStore((s) => s.currentSessionId)
-  const activeProject = useStore((s) => s.activeProject)
+  const sessions = useStore((s) => s.sessions)
+  const sessionConfigs = useStore((s) => s.sessionConfigs)
+  const currentSession = sessions.find((s) => s.id === currentSessionId)
+  const activeCwd = currentSession?.cwd || (currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null) || null
   const isAlwaysOpen = Boolean(alwaysOpen)
   const [open, setOpen] = useState(isAlwaysOpen)
   const [root, setRoot] = useState<string | null>(null)
@@ -90,16 +93,16 @@ export default function FileTree({
       try {
         const r = await window.electronAPI?.agent?.getWorkspace(currentSessionId ?? undefined)
         if (!cancelled) {
-          const finalRoot = r || activeProject?.root_path || null
+          const finalRoot = r || activeCwd || null
           if (finalRoot) {
             setRoot(finalRoot)
             loadDir(finalRoot)
           }
         }
       } catch {
-        if (!cancelled && activeProject?.root_path) {
-          setRoot(activeProject.root_path)
-          loadDir(activeProject.root_path)
+        if (!cancelled && activeCwd) {
+          setRoot(activeCwd)
+          loadDir(activeCwd)
         }
       }
     }
@@ -108,7 +111,7 @@ export default function FileTree({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootPath, currentSessionId, activeProject?.root_path])
+  }, [rootPath, currentSessionId, activeCwd])
 
   // Close the context menu on any outside click.
   useEffect(() => {

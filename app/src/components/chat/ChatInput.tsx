@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { cn } from '@/lib/utils'
 import InputReference from '@/components/chat/InputReference'
-import { Send, Square, Paperclip, Zap, Leaf, HelpCircle, ListPlus } from 'lucide-react'
+import { Send, Square, Paperclip, Zap, Leaf, HelpCircle, ListPlus, Folder, FolderOpen, ExternalLink } from 'lucide-react'
 import AgentTaskDeck from './AgentTaskDeck'
 import QueueDock from './QueueDock'
 import { t } from '@/utils/i18n'
@@ -97,7 +97,7 @@ export default function ChatInput() {
     thinkingEnabled, setThinkingEnabled,
     providers, allModels, saveSessionConfig, queuedMessages,
     modelSuggestion, agentMode, setAgentMode, sessionConfigs, scores,
-    loopingSessions, toggleBtw,
+    loopingSessions, toggleBtw, sessions, setSessionCwd,
   } = useStore(useShallow((s) => ({
     sendMessage: s.sendMessage, enqueueMessage: s.enqueueMessage,
     removeQueued: s.removeQueued, stopGeneration: s.stopGeneration,
@@ -113,6 +113,8 @@ export default function ChatInput() {
     sessionConfigs: s.sessionConfigs, scores: s.scores,
     loopingSessions: s.loopingSessions,
     toggleBtw: s.toggleBtw,
+    sessions: s.sessions,
+    setSessionCwd: s.setSessionCwd,
   })))
 
   // ELO score map for model selector display
@@ -125,6 +127,23 @@ export default function ChatInput() {
   const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
   const isArenaRunning = chatMode === 'arena' && isStreaming
   const isLooping = isStreaming && loopingSessions.has(currentSessionId ?? -1)
+  const currentSession = useMemo(() => sessions.find((s) => s.id === currentSessionId), [sessions, currentSessionId])
+  const activeCwd = currentSession?.cwd || (currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null) || ''
+
+  const handlePickCwd = useCallback(async () => {
+    try {
+      const picked = await window.electronAPI?.system?.pickDirectory?.()
+      if (picked && currentSessionId) {
+        await setSessionCwd(picked)
+      }
+    } catch {}
+  }, [currentSessionId, setSessionCwd])
+
+  const handleOpenCwd = useCallback(() => {
+    if (activeCwd) {
+      window.electronAPI?.system?.openPath?.(activeCwd)
+    }
+  }, [activeCwd])
 
   // Rotating placeholder hints when idle
   const [hintIndex, setHintIndex] = useState(0)
@@ -552,6 +571,52 @@ export default function ChatInput() {
         />
 
         <AgentTaskDeck sessionId={currentSessionId} />
+
+        {/* CWD Indicator Capsule */}
+        <div
+          className="mb-1.5 flex items-center justify-between gap-2 px-2.5 py-1 rounded-[6px] border text-xs"
+          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+          role="region"
+          aria-label={t('cwd.aria_label', '工作目录指示器')}
+        >
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <Folder size={13} className="shrink-0 text-[var(--accent)]" />
+            <span className="text-[11px] font-medium shrink-0" style={{ color: 'var(--text-secondary)' }}>
+              {t('cwd.current', 'CWD')}:
+            </span>
+            <span
+              className="font-mono text-[11px] truncate select-all"
+              style={{ color: 'var(--text-primary)' }}
+              title={activeCwd || t('cwd.default_tooltip', '当前无特定工作目录，默认使用系统进程目录')}
+            >
+              {activeCwd || t('cwd.default', '进程默认 (process.cwd)')}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={handlePickCwd}
+              disabled={!currentSessionId || isStreaming}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] border text-[11px] font-medium hover:bg-[var(--border)] transition-colors disabled:opacity-30 cursor-pointer"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+              title={t('cwd.browse', '浏览并选择目录')}
+            >
+              <FolderOpen size={11} className="shrink-0" />
+              <span>{t('common.browse', '浏览')}</span>
+            </button>
+            {activeCwd ? (
+              <button
+                type="button"
+                onClick={handleOpenCwd}
+                className="p-1 rounded-[4px] hover:bg-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                title={t('cwd.reveal', '在文件资源管理器中打开')}
+                aria-label={t('cwd.reveal', '在文件资源管理器中打开')}
+              >
+                <ExternalLink size={11} />
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         <div
           className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}

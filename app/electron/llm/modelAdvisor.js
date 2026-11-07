@@ -179,8 +179,8 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
           baseScore *= speedFactor
           if (REASONING_FAMILIES.has(family)) baseScore *= 1.05
         } else if (priority === 'cost') {
-          const pricePerK = typeof m.input_price_per_1k === 'number' ? m.input_price_per_1k : 0.003
-          const costFactor = pricePerK <= 0 ? 1.25 : Math.max(0.4, Math.min(1.2, 0.003 / (pricePerK + 0.0005)))
+          // Aether 3.0: Price penalties eliminated (no 1.25x boost for free models, no 0.4x penalty for expensive models)
+          const costFactor = 1.0
           baseScore *= costFactor
         }
 
@@ -247,6 +247,7 @@ function routeWithExplanation({ allModels, userMessage, useTools, intent, eloDat
 
     return {
       model: winner.model,
+      hScore: winner.hScore,
       reason: parts.join(' · '),
       // Structured rationale for the renderer to localize (i18n) instead of
       // showing the raw English `reason` string above.

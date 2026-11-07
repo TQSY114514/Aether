@@ -165,6 +165,21 @@ function registerSystemHandlers(ipcMain, app, getWebContents, db) {
     }
   })
 
+  // 目录选择: 弹出原生文件夹选择框，供 CWD 切换与目录选择使用（替代原 project:pickDirectory）
+  ipcMain.handle('system:pickDirectory', async () => {
+    try {
+      const { dialog } = require('electron')
+      const res = await dialog.showOpenDialog({
+        properties: ['openDirectory'],
+        title: '选择工作目录 (CWD)',
+      })
+      if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null
+      return res.filePaths[0]
+    } catch {
+      return null
+    }
+  })
+
   // 系统与工作区全面体检 (Claude Code / OpenHands 对齐)
   ipcMain.handle('system:doctor', async (_e, { cwd, sessionId } = {}) => {
     try {

@@ -26,14 +26,17 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
 
 - **Roadmap / 方向**：见 `docs/roadmap.md`（2026-08 外部评审提炼，含 P0/P1/P2 优先级与"明确不做"清单；改动前先对齐优先级）。
 - **Renderer** `app/src/`: `store/index.ts` (the big zustand store — all state +
-  actions), `components/` (chat/sidebar/ui), `pages/` (model/persona/settings/…),
+  actions), `components/` (chat/sidebar/ui), `pages/` (chat/model/memory/settings/…),
   `utils/` (i18n generated from `gen-i18n.js`, theme, markdown).
 - **Main** `app/electron/`: `database.js` (better-sqlite3 data layer, WAL
   mode), `ipc/*.js` (one handler module per domain), `main.js` (window +
   handler registration), `preload.js` (contextBridge surface — the IPC contract).
 - **LLM layer** `app/electron/llm/`: `providerAdapter.js` (dispatch by
   `provider.api_format`) → `openaiAdapter.js` (fetch + SSE). `toolLoop.js`
-  (Plan→Act→Observe), `toolResultMiddleware.js` (redact+truncate tool output),
+  (Plan→Act→Observe), `toolResultMiddleware.js` (redact+truncate 120k + disk spill),
+  `providerTopology.js` (endpoint classification, `<available_providers_and_models>` XML injection, zero-waste TTFT probe),
+  `subagentSupervisor.js` (`SubagentLiveBuffer`, `smart_window` spawn, O(1) `peekSubagentStream`, state-inheriting `hot_swap_model`),
+  `sessionContext.js` (CWD-first `session.cwd || process.cwd()`), `projectInstructions.js` (cascading `AGENTS.md` discovery),
   `reasoning.js` (thinking-effort param shapes), `toolArgs.js`.
   `backgroundTasks.js` (Feature A task manager: queue/priority/retry, persisted
   in the `agent_task` table, crash-recoverable via `restorePendingTasks`).

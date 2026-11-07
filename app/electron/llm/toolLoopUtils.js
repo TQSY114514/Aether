@@ -18,7 +18,7 @@ const IterationBudgetBase = require('./iterationBudget')
 const log = require('../logger')
 
 // Concurrency & timeout constants
-const DEFAULT_MAX_ITERATIONS = 25
+const DEFAULT_MAX_ITERATIONS = 100
 const MAX_TOTAL_CHARS = 200000
 const LOOP_REPEAT_LIMIT = 3
 const TOOL_TIMEOUT_MS = 30000

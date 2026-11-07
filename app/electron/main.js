@@ -100,12 +100,10 @@ const { registerCronHandlers } = require('./ipc/cron.handler')
 const { registerFlagsHandlers } = require('./ipc/flags.handler')
 const { registerLearningHandlers } = require('./ipc/learning.handler')
 const { registerRecipeHandlers } = require('./ipc/recipe.handler')
-const { registerProjectHandlers } = require('./ipc/project.handler')
 const { registerBrowserHandlers } = require('./ipc/browser.handler')
 const { initScheduler } = require('./cron/scheduler')
 
 const mcpManager = require('./mcp/manager')
-const { setWorkspaceRoot, setActiveProjectRoot } = require('./tools/sandbox')
 const localGateway = require('./llm/localGateway')
 const featureFlags = require('./featureFlags')
 
@@ -363,7 +361,6 @@ function setupIpcHandlers() {
   registerFlagsHandlers(ipcMain, db)
   registerLearningHandlers(ipcMain, db)
   registerRecipeHandlers(ipcMain)
-  registerProjectHandlers(ipcMain, db, () => mainWindow?.webContents)
   registerBrowserHandlers(ipcMain, db)
 
   // ── Phase 0: apply feature-flag-driven runtime config (never throws) ──
@@ -429,14 +426,6 @@ app.whenReady().then(async () => {
   await Promise.all([
     (async () => { try { await db.pruneEmptySessions() } catch (e) { log.warn('pruneEmptySessions failed:', e.message) } })(),
     (async () => { try { require('./llm/credentialPool').init(db) } catch (e) { log.warn('credentialPool init failed:', e.message) } })(),
-    (async () => {
-      try { const wsr = db.getSetting('agent_workspace_root'); if (wsr) setWorkspaceRoot(wsr) }
-      catch (e) { log.warn('workspace root init failed:', e.message) }
-    })(),
-    (async () => {
-      try { const proj = typeof db.getActiveProject === 'function' ? db.getActiveProject() : null; if (proj?.root_path) setActiveProjectRoot(proj.root_path) }
-      catch (e) { log.warn('active project root init failed:', e.message) }
-    })(),
     (async () => {
       try { const { scanSkills } = require('./llm/skills'); scanSkills() }
       catch (e) { log.warn('skill scan failed:', e.message) }

@@ -17,6 +17,8 @@
 // Entity tracking enables relationship inference: "Alice works on Project X"
 // → we store both entities and can later answer "who works on Project X?"
 
+const fs = require('fs')
+const path = require('path')
 const { completeChat } = require('./providerAdapter')
 const knowledgeGraph = require('./knowledgeGraph')
 const { EXTERNAL_TOOLS } = require('./promptInjection')
@@ -34,6 +36,79 @@ const MAX_UNTRUSTED_MEMORIES = 3
 // 共享 —— database.js 的写入层去重必须用同一套比较逻辑，两处各抄一份迟早漂移。
 const { normalizeContent, keywords, jaccard, SIMILAR_JACCARD, SIMILAR_MIN_HITS } = require('../memoryText')
 
+/**
+ * Upward traversal to find Git root for memory scoping.
+ * @param {string} startDir
+ * @returns {string|null}
+ */
+function findGitRoot(startDir) {
+  if (!startDir || typeof startDir !== 'string') return null
+  try {
+    let cur = path.resolve(startDir)
+    while (true) {
+      const gitPath = path.join(cur, '.git')
+      try {
+        if (fs.existsSync(gitPath)) return cur
+      } catch {}
+      const parent = path.dirname(cur)
+      if (parent === cur) break
+      cur = parent
+    }
+  } catch {}
+  return null
+}
+
+/**
+ * Dynamically resolves the memory scope key.
+ * - Inside a Git repo -> returns Git root path (e.g. 'D:\\Aether')
+ * - Outside a Git repo / null -> returns null (global scope: workspace IS NULL)
+ * Never returns a project_id.
+ *
+ * @param {string|number|object} [target] - cwd string, sessionId, or config object
+ * @param {object} [db] - database instance
+ * @returns {string|null}
+ */
+function resolveMemoryScopeKey(target, dbOrSessionId) {
+  if (!target && !dbOrSessionId) return null
+
+  let db = (dbOrSessionId && typeof dbOrSessionId === 'object') ? dbOrSessionId : null
+  let sid = (typeof dbOrSessionId === 'number' || (typeof dbOrSessionId === 'string' && /^\d+$/.test(String(dbOrSessionId).trim())))
+    ? Number(dbOrSessionId)
+    : null
+
+  let candidateDir = null
+
+  if (typeof target === 'object' && target !== null) {
+    candidateDir = target.cwd || target.workspace || null
+  } else if (typeof target === 'number' || (typeof target === 'string' && /^\d+$/.test(target.trim()) && !path.isAbsolute(target.trim()))) {
+    sid = Number(target)
+  } else if (typeof target === 'string' && target.trim()) {
+    candidateDir = target.trim()
+  }
+
+  if (!candidateDir && sid != null && db) {
+    try {
+      if (typeof db.getSession === 'function') {
+        const sess = db.getSession(sid)
+        if (sess) {
+          candidateDir = sess.cwd || null
+          if (!candidateDir && sess.config) {
+            try {
+              const cfg = typeof sess.config === 'string' ? JSON.parse(sess.config) : sess.config
+              candidateDir = cfg?.cwd || cfg?.workspace || null
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (!candidateDir) return null
+
+  const gitRoot = findGitRoot(candidateDir)
+  return gitRoot ? path.resolve(gitRoot) : null
+}
+
 function score(memoryText, qkw) {
   const mkw = keywords(memoryText)
   let hits = 0
@@ -50,35 +125,24 @@ let _memCache = null
 let _memV = 0
 
 // ── Project Intelligence (review P1-5) ──────────────────────────────────────
-// type='project' 的记忆是项目级知识(架构/约定/决策), 不依赖关键词匹配,
-// 每轮都注入 —— "项目大脑"让 agent 进入项目不再从零开始。
-// 项目块置顶; 关键词记忆仍按需合并(_prefetchKeywords); 无关键词时仅注入项目块。
-// H5: origin='external' 的记忆不进入任何可信块(project/keyword), 改由
-// _untrustedBlock 降权注入 —— 末尾、限量、<untrusted_memory> 包裹。
-// Project Brain: 可选第 3 参 workspace —— 来自 session.config JSON 的
-// `workspace` 字段(chat-send.handler.js: JSON.parse(session0.config)?.workspace；
-// 全局兜底 agent_workspace_root)。传入时所有注入池都从 getMemoriesScoped
-// 行集派生(全局 NULL 行 + 当前 workspace 行，后者优先)；未传时回退旧行为。
-function prefetch(db, userMessage, workspace) {
-  const memories = _memCache && _memCache.v === _memV ? _memCache.data : (() => {
-    let m
-    try { m = db.getMemories(200) } catch { return [] }
-    _memCache = { data: m, v: _memV }
-    return m
-  })()
-  if (!memories || memories.length === 0) return ''
+function prefetch(db, userMessage, scopeOrCwd) {
+  if (!db || !userMessage) return ''
+  const scopeKey = resolveMemoryScopeKey(scopeOrCwd, db)
 
-  // Project Brain: 传入 workspace 时，全部注入池(project/keyword/untrusted)
-  // 一律从 getMemoriesScoped(workspace) 的行集派生 —— 其他 workspace 的记忆
-  // 不得经 keyword 或 untrusted 块漏进上下文。作用域读取失败按 fail-closed
-  // 处理(空池)，宁可少注入也不跨工作区泄漏。
-  let pool = memories
-  if (workspace) {
-    try {
-      pool = db.getMemoriesScoped(workspace) || []
-    } catch { pool = [] }
-    if (pool.length === 0) return ''
+  let pool = []
+  try {
+    if (typeof db.getMemoriesScoped === 'function') {
+      // scopeKey = 'D:\Aether' -> returns workspace IS NULL OR workspace = 'D:\Aether'
+      // scopeKey = null -> returns workspace IS NULL only
+      pool = db.getMemoriesScoped(scopeKey) || []
+    } else if (typeof db.getMemories === 'function') {
+      pool = db.getMemories(200) || []
+    }
+  } catch {
+    pool = []
   }
+
+  if (!pool || pool.length === 0) return ''
 
   const trusted = pool.filter(m => m.origin !== 'external')
   const external = pool.filter(m => m.origin === 'external')
@@ -232,9 +296,9 @@ let _syncTimer = null
 let _syncPromise = null
 let _pendingSyncArgs = null // the most recent args; used when timer fires
 
-async function sync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onMemorySaved }) {
+async function sync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, cwd, onMemorySaved }) {
   // Always keep the latest args; the debounced call picks them up when it fires.
-  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onMemorySaved }
+  _pendingSyncArgs = { db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, cwd, onMemorySaved }
 
   if (_syncTimer) clearTimeout(_syncTimer)
   _syncTimer = setTimeout(() => {
@@ -267,11 +331,12 @@ function _usedExternalTools(db, sessionId) {
   } catch { return false }
 }
 
-async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, onEscalation, onMemorySaved }) {
+async function _doSync({ db, provider, model, userMessage, assistantReply, signal, sessionId, workspace, cwd, onEscalation, onMemorySaved }) {
   try {
     // H5: 本轮消费过 external 工具结果 → 跳过本次入库，防止被污染的外部
     // 内容经提取持久化、再在后续会话中回注（跨会话持久注入）。
     if (_usedExternalTools(db, sessionId)) return
+    const scopeKey = resolveMemoryScopeKey(cwd || workspace || sessionId, db)
     const transcript = `User: ${String(userMessage || '').slice(0, 2000)}\n\nAssistant: ${String(assistantReply || '').slice(0, 3000)}`
     const modelRouter = require('./modelRouter')
     const aux = modelRouter.resolveAuxiliaryTarget({
@@ -326,15 +391,16 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
       .map(parseEntry)
       .filter(Boolean)
 
-    // De-dup against recent memories (separate direct DB read — this runs once
-    // per sync, not per turn, so the overhead is negligible).
-    // 修复：recentKeys 统一用「规范化完整内容」（此前用前 50 字符前缀，与
-    // 查找用的完整内容不一致，>50 字符的重复永远拦不住）；窗口从 50 扩到
-    // 500，避免重复积累后被挤出窗口；并拦截同一批 sync 内的重复条目。
     let recent
     try {
-      if (workspace && db.prepare) {
-        recent = db.prepare('SELECT id, content, type, origin, workspace FROM memory WHERE workspace = ? ORDER BY id DESC LIMIT 500').all(workspace)
+      if (db.prepare) {
+        if (scopeKey) {
+          recent = db.prepare('SELECT id, content, type, origin, workspace FROM memory WHERE workspace = ? OR workspace IS NULL ORDER BY id DESC LIMIT 500').all(scopeKey)
+        } else {
+          recent = db.prepare('SELECT id, content, type, origin, workspace FROM memory WHERE workspace IS NULL ORDER BY id DESC LIMIT 500').all()
+        }
+      } else if (typeof db.getMemoriesScoped === 'function') {
+        recent = (db.getMemoriesScoped(scopeKey) || []).slice(0, 500)
       } else {
         recent = db.getMemories(500)
       }
@@ -394,14 +460,9 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
         }
       }
       if (entry.type === 'relation') {
-        // relation 也走共享写入器：拿到 content_norm 落库 + 数据库层精确
-        // 去重。此前用裸 INSERT，content_norm 为 NULL —— 500 行 recent 窗口
-        // 淘汰后启动合并救不了它，重复 relation 会无限累积。
         try {
-          // workspace 仅在传入时追加为第 6 参 —— 旧路径保持原调用形状，
-          // 数据层对第 6 参的兼容写法（列存在才落 workspace 列）不受影响。
-          if (workspace) {
-            db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 }, workspace)
+          if (scopeKey) {
+            db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 }, scopeKey)
           } else {
             db.addMemoryWithProvenance(entry.content, 'relation', sessionId || null, 'assistant', { entity1: entry.entity1, relation: entry.relation, entity2: entry.entity2 })
           }
@@ -409,28 +470,19 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
           recordedPreviews.push(entry.content.slice(0, 60))
         } catch {}
       } else {
-        // H5: origin 落库 —— 自动提取自会话的记忆标记为 'assistant'，
-        // 与 user（手动创建）/ external（外部内容来源）/ review 区分。
         try {
-          const info = workspace
-            ? db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant', null, workspace)
-            : db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant')
-          // 数据层写入层去重命中时（duplicate=true）已 solidify 既有行：
-          // 不改写 origin（保住原始来源），也不标冲突（重新观察到同一事实
-          // 不是冲突）。仅真正新插入的行才做 origin 落库与冲突连线。
+          let info
+          if (scopeKey) {
+            info = db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant', null, scopeKey)
+          } else {
+            info = db.addMemoryWithProvenance(entry.content, entry.type, sessionId || null, 'assistant')
+          }
           if (info && info.lastInsertRowid != null && !info.duplicate) {
             const newId = Number(info.lastInsertRowid)
             addedCount++
             recordedPreviews.push(entry.content.slice(0, 60))
             try { db.run('UPDATE memory SET origin = ? WHERE id = ?', 'assistant', newId) } catch {}
-            // 同批可见性：recentKw 是 sync 开始时的快照，本批刚插入的行不在
-            // 其中。若同一次提取返回两条改写版事实（"user likes X" +
-            // "user really likes X"），第二条会漏过去重再插一份 —— 把新行
-            // 追加进 recentKw，让同批后续条目也能命中 Jaccard 去重。
             recentKw.push({ id: newId, type: entry.type, kw: keywords(entry.content) })
-            // 冲突标记在插入之后：新行指向旧行（new.conflicts_with = old.id），
-            // UI 的二选一才有真实的新旧对比。此前在插入前调用且传参
-            // [row.id, row.id]，把旧行指成了自己 —— 见 detectConflict 注释。
             if (entry.type === 'fact') {
               try { detectConflict(db, entry.content, 'fact', newId) } catch {}
             }
@@ -460,10 +512,10 @@ async function _doSync({ db, provider, model, userMessage, assistantReply, signa
     _memV++ // invalidate prefetch cache
     // Phase 3: build knowledge graph from recent memories after sync.
     try { knowledgeGraph.buildGraph(db) } catch {}
-    if (workspace) {
+    if (scopeKey) {
       try {
         const memoryProjector = require('./memoryProjector')
-        memoryProjector.debounceProjectWorkspaceMemory(db, workspace)
+        memoryProjector.debounceProjectWorkspaceMemory(db, scopeKey)
       } catch {}
     }
   } catch (e) {
@@ -572,11 +624,14 @@ User message: {query}
 Memories:
 {list}`
 
-async function recall({ db, provider, model, userMessage, signal, workspace }) {
+async function recall({ db, provider, model, userMessage, signal, workspace, cwd, sessionId }) {
   try {
     if (!db || !provider || !model) return ''
+    const scopeKey = resolveMemoryScopeKey(cwd || workspace || sessionId, db)
     let memories
-    try { memories = workspace ? db.getMemoriesScoped(workspace) : db.getMemories(RECALL_POOL * 2) } catch { return '' }
+    try {
+      memories = typeof db.getMemoriesScoped === 'function' ? db.getMemoriesScoped(scopeKey) : db.getMemories(RECALL_POOL * 2)
+    } catch { return '' }
     if (!memories || memories.length === 0) return ''
     // H5: external 来源记忆不走免包装的 recall 注入（否则绕过 <untrusted_memory>
     // 降权）；它们只经 prefetch 的 _untrustedBlock 路径注入。
@@ -604,4 +659,16 @@ async function recall({ db, provider, model, userMessage, signal, workspace }) {
   } catch { return '' }
 }
 
-module.exports = { prefetch, recall, sync, search, prune, keywords, parseEntry, EXTRACTION_PROMPT, detectConflict }
+module.exports = {
+  prefetch,
+  recall,
+  sync,
+  search,
+  prune,
+  keywords,
+  parseEntry,
+  EXTRACTION_PROMPT,
+  detectConflict,
+  findGitRoot,
+  resolveMemoryScopeKey,
+}

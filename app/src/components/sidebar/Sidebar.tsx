@@ -1,13 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, User, Settings, ChevronLeft, Trash2, Search, Pin, Trophy, Brain, Download, Loader2, TerminalSquare, PanelLeft, FolderKanban } from 'lucide-react'
+import { MessageSquare, Plus, Server, Settings, ChevronLeft, Trash2, Search, Pin, Brain, Download, Loader2, TerminalSquare, PanelLeft } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import { stripChannelMarkers } from '@/utils/markdown'
 import HoverMarquee from '@/components/ui/HoverMarquee'
 import QuickControlDeck from './QuickControlDeck'
-import WorkspaceHeader from './WorkspaceHeader'
 
 
 const PLACEHOLDER_TITLES = new Set(['新会话', '新对话', 'New Chat'])
@@ -78,9 +77,6 @@ export default function Sidebar() {
   const toggleSidebar = useStore((s) => s.toggleSidebar)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const loadSessions = useStore((s) => s.loadSessions)
-  const activeProject = useStore((s) => s.activeProject)
-  const projectScopeFilter = useStore((s) => s.projectScopeFilter)
-  const toggleProjectScope = useStore((s) => s.toggleProjectScope)
   const { confirm } = useUI()
 
   const [renamingId, setRenamingId] = useState<number | null>(null)
@@ -89,24 +85,16 @@ export default function Sidebar() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; session: Session } | null>(null)
   const lowerQuery = searchQuery.toLowerCase()
 
-  useEffect(() => {
-    useStore.getState().loadProjects?.()
-  }, [])
-
   const filteredSessions = useMemo(() => {
     // Show sessions that have had at least one message.
     // Sessions with placeholder titles are kept visible if they have messages —
     // the auto-title generation happens asynchronously after the first response,
     // so hiding them would make the chat disappear mid-conversation.
-    let list = sessions
-    if (projectScopeFilter && activeProject) {
-      list = list.filter((s) => s.project_id === activeProject.id)
-    }
     const streamingSet = new Set(activeStreamingIds ? activeStreamingIds.split(',') : [])
-    const withMessages = list.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingSet.has(String(s.id)))
+    const withMessages = sessions.filter(s => s.last_message || (s.title && !PLACEHOLDER_TITLES.has(s.title)) || streamingSet.has(String(s.id)))
     if (!lowerQuery) return withMessages
     return withMessages.filter(s => (s.title || '').toLowerCase().includes(lowerQuery))
-  }, [sessions, lowerQuery, projectScopeFilter, activeProject, activeStreamingIds])
+  }, [sessions, lowerQuery, activeStreamingIds])
   const groups = useMemo(() => getSessionGroups(filteredSessions), [filteredSessions, language])
 
   const handleDoubleClick = (session: Session) => {
@@ -191,10 +179,7 @@ export default function Sidebar() {
           <div className="w-5 my-1.5 border-t border-[var(--border)]" />
           <div className="mt-auto flex flex-col items-center gap-1 w-full pb-2">
             {([
-              { id: 'projects', icon: FolderKanban, title: t('sidebar.nav.projects') },
               { id: 'models', icon: Server, title: t('sidebar.nav.models') },
-              { id: 'agents', icon: User, title: t('sidebar.nav.personas') },
-              { id: 'scores', icon: Trophy, title: t('sidebar.nav.arena') },
               { id: 'memory', icon: Brain, title: t('sidebar.nav.memory') },
               { id: 'settings', icon: Settings, title: t('sidebar.nav.settings') },
             ] as const).map(({ id, icon: ItemIcon, title }) => {
@@ -216,8 +201,7 @@ export default function Sidebar() {
         </div>
       ) : (
     <div className="flex-1 flex flex-col min-h-0 w-[250px] tab-fade-in">
-      <WorkspaceHeader />
-      <div className="px-2 pb-1.5 shrink-0 flex items-center gap-1.5">
+      <div className="px-2 pb-1.5 pt-2 shrink-0 flex items-center gap-1.5">
         <button
           onClick={() => useStore.getState().newChat()}
           className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[6px] border bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] transition-all hover:shadow-2xs active:scale-[0.99]"
@@ -359,10 +343,7 @@ export default function Sidebar() {
       </div>
       <QuickControlDeck />
       <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
-        <NavItem icon={FolderKanban} label={t('sidebar.nav.projects')} active={currentView === 'projects'} onClick={() => setCurrentView('projects')} />
         <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
-        <NavItem icon={User} label={t('sidebar.nav.personas')} active={currentView === 'agents'} onClick={() => setCurrentView('agents')} />
-        <NavItem icon={Trophy} label={t('sidebar.nav.arena')} active={currentView === 'scores'} onClick={() => setCurrentView('scores')} />
         <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
         <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>

@@ -90,23 +90,28 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
-    id: 'project',
-    name: t('slash.project', '切换项目'),
-    description: t('slash.project_desc', '切换或打开独立项目工作区'),
+    id: 'cd',
+    name: t('slash.cd', '切换工作目录'),
+    description: t('slash.cd_desc', '切换当前会话执行的工作目录 (cwd)'),
     category: 'agent',
-    paramHint: '[name]',
+    paramHint: '[path]',
     requiresArg: true,
     action: async (arg) => {
       const store = useStore.getState()
       if (!arg) {
-        // Open project selection
+        const picked = await window.electronAPI?.system?.pickDirectory?.()
+        if (picked) {
+          await store.setSessionCwd(picked)
+          store.triggerToast(t('slash.cd_success', '已切换工作目录: {0}', picked), 'success')
+        }
         return
       }
-      const lower = arg.toLowerCase().trim()
-      const match = store.projects.find(p => p.name.toLowerCase().includes(lower) || p.root_path.toLowerCase().includes(lower))
-      if (match) {
-        await store.openProject(match.id)
-        store.triggerToast(match.name, 'success')
+      const target = arg.trim()
+      try {
+        await store.setSessionCwd(target)
+        store.triggerToast(t('slash.cd_success', '已切换工作目录: {0}', target), 'success')
+      } catch (e: any) {
+        store.triggerToast(t('slash.cd_failed', '切换目录失败: {0}', e?.message || String(e)), 'error')
       }
     },
   },
@@ -421,7 +426,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
         '- `/mode [explore|workspace|auto_review|unrestricted]` — 切换 Agent 运行权限模式',
         '- `/effort [minimal|low|medium|high|max|off]` — 调整模型思考深度预算',
         '- `/model [name]` — 快速切换模型',
-        '- `/project [name]` — 快速切换或打开项目工作区',
+        '- `/cd [path]` — 快速切换当前会话工作目录 (cwd)',
         '- `/poor` — 开关穷鬼省流模式',
         '',
         '#### 开发与验证 (Dev & Verification)',

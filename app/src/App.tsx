@@ -5,12 +5,9 @@ import { applyTheme } from '@/utils/theme'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
 import ModelPage from '@/pages/ModelPage'
-import PersonaPage from '@/pages/PersonaPage'
 import SettingPage from '@/pages/SettingPage'
-import ScoresPage from '@/pages/ScoresPage'
 import MemoryPage from '@/pages/MemoryPage'
 import SkillsPage from '@/pages/SkillsPage'
-import ProjectPage from '@/pages/ProjectPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
@@ -28,12 +25,9 @@ import { t } from '@/utils/i18n'
 
 const VIEW_TITLES: Record<string, string> = {
   models: 'sidebar.nav.models',
-  agents: 'sidebar.nav.personas',
-  scores: 'sidebar.nav.arena',
   memory: 'sidebar.nav.memory',
   settings: 'sidebar.nav.settings',
   skills: 'settings.tools.skills',
-  projects: 'sidebar.nav.projects',
 }
 /** Render the application shell and route the active workspace page. */
 export default function App() {
@@ -279,12 +273,9 @@ export default function App() {
     switch (currentView) {
       case 'chat': return <ChatPage />
       case 'models': return <ModelPage />
-      case 'agents': return <PersonaPage />
       case 'settings': return <SettingPage />
-      case 'scores': return <ScoresPage />
       case 'memory': return <MemoryPage />
       case 'skills': return <SkillsPage />
-      case 'projects': return <ProjectPage />
       default: return <ChatPage />
     }
   }

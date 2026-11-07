@@ -46,6 +46,7 @@ export interface Persona {
 
 export interface Session {
   id: number
+  cwd?: string | null
   project_id?: number | null
   title: string | null
   persona_id: number | null
@@ -74,7 +75,7 @@ export interface Message {
   thinking_duration_ms?: number | null
 }
 
-export type ViewType = 'chat' | 'models' | 'agents' | 'settings' | 'scores' | 'memory' | 'skills' | 'projects'
+export type ViewType = 'chat' | 'models' | 'settings' | 'memory' | 'skills'
 
 export interface TestConnectionResult {
   success: boolean

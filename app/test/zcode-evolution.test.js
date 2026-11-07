@@ -213,7 +213,7 @@ describe('ZCode / Paperclip / Search Architectural Evolution Suite', () => {
         messages: msgs,
         lastAssistantCompletedAtMs: Date.now() - 5 * 60_000,
         nowMs: Date.now(),
-        config: { thresholdTokens: 50_000 },
+        config: { enabled: true, thresholdTokens: 50_000 },
       })
       expect(noTrigger.decision.reason).toBe('not_triggered')
 
@@ -222,7 +222,7 @@ describe('ZCode / Paperclip / Search Architectural Evolution Suite', () => {
         messages: msgs,
         lastAssistantCompletedAtMs: Date.now() - 65 * 60_000,
         nowMs: Date.now(),
-        config: { thresholdTokens: 50_000, keepRecentToolResults: 5, minTokenSavings: 100 },
+        config: { enabled: true, thresholdTokens: 50_000, keepRecentToolResults: 5, minTokenSavings: 100 },
       })
       expect(idleTriggered.decision.reason).toBe('applied')
       expect(idleTriggered.payload.trigger).toBe('time_based')

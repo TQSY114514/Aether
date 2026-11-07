@@ -108,7 +108,7 @@ function maybeLocalMicrocompactMessages(input = {}) {
     positiveInt(config.thresholdTokens) ??
     buildDefaultMicrocompactThreshold(config.autoCompactThreshold)
 
-  if (config.enabled === false) {
+  if (config.enabled !== true) {
     return {
       decision: { estimatedTokenCount, reason: 'disabled', thresholdTokens },
       messages,

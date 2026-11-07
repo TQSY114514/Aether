@@ -11,8 +11,8 @@
 
 var EventEmitter = require('events');
 
-// Warning threshold: emit 'budget:warning' when consumption reaches 80%
-var WARNING_THRESHOLD = 0.8;
+// Warning threshold: abolished for unconstrained flagship capabilities (Aether 3.0)
+var WARNING_THRESHOLD = Infinity;
 
 function IterationBudget(opts) {
   // Allow callers to use `new IterationBudget()` or `IterationBudget.create()`
@@ -23,7 +23,7 @@ function IterationBudget(opts) {
   EventEmitter.call(this);
 
   // Configuration
-  this.maxIterations = 0;   // 0 = unlimited
+  this.maxIterations = 100;   // default 100 iterations (Aether 3.0)
   this.maxTokens = 0;       // 0 = unlimited
   this.maxTime = 0;         // milliseconds, 0 = unlimited
   this.maxErrors = 0;       // 0 = unlimited
@@ -46,7 +46,11 @@ function IterationBudget(opts) {
   this._exhaustedReason = null;
 
   // Apply opts if provided
-  if (opts) this.configure(opts);
+  if (typeof opts === 'number') {
+    this.maxIterations = opts;
+  } else if (opts) {
+    this.configure(opts);
+  }
 }
 
 IterationBudget.prototype = Object.create(EventEmitter.prototype);
@@ -218,20 +222,7 @@ IterationBudget.prototype.usage = function () {
 IterationBudget.prototype._checkThreshold = function (dimension, current, max) {
   if (max <= 0) return;
 
-  var ratio = current / max;
-
-  // Emit warning at 80% consumption (only once per dimension)
-  if (ratio >= WARNING_THRESHOLD && !this._warnings[dimension]) {
-    this._warnings[dimension] = true;
-    this.emit('budget:warning', {
-      dimension: dimension,
-      current: current,
-      max: max,
-      ratio: ratio,
-      message: dimension + ' budget at ' + Math.round(ratio * 100) + '% (' + current + '/' + max + ')',
-    });
-  }
-
+  // Aether 3.0: 80% budget anxiety warnings are eliminated (no-op)
   // Exhausted check
   if (current >= max) {
     this._setExhausted(dimension);
@@ -260,5 +251,8 @@ IterationBudget.create = function (opts) {
   if (opts) budget.configure(opts);
   return budget;
 };
+
+IterationBudget.IterationBudget = IterationBudget;
+IterationBudget.WARNING_THRESHOLD = WARNING_THRESHOLD;
 
 module.exports = IterationBudget;

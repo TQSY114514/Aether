@@ -46,6 +46,13 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:touch', (_e, id) => db.touchSession(id))
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))
   ipcMain.handle('session:set-config', (_e, id, config) => db.setSessionConfig(id, config))
+  ipcMain.handle('session:set-cwd', (_e, id, cwd) => {
+    if (typeof db.setSessionCwd === 'function') {
+      return db.setSessionCwd(id, cwd)
+    }
+    db.updateSession(id, { cwd })
+    return cwd
+  })
   ipcMain.handle('message:list', (_e, sessionId) => db.getMessages(sessionId))
   ipcMain.handle('message:update', (_e, id, data) => db.updateMessage(id, data))
   ipcMain.handle('message:delete-after', (_e, sessionId, afterId) => {
@@ -55,16 +62,17 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('message:delete-arena', (_e, sessionId) => db.deleteArenaAssistantMessages(sessionId))
   ipcMain.handle('message:add-normal', (_e, msg) => db.addNormalMessage(msg))
 
-  ipcMain.handle('session:create-and-select', async (_e, { providerId, modelId, personaId, projectId, project_id } = {}) => {
+  ipcMain.handle('session:create-and-select', async (_e, { providerId, modelId, personaId, cwd, projectId, project_id } = {}) => {
     const work = async () => {
       db.pruneEmptySessions()
+      const effectiveCwd = cwd || process.cwd()
       const effectivePid = projectId || project_id || null
-      const sessionRow = db.createSession({ persona_id: personaId || null, project_id: effectivePid })
+      const sessionRow = db.createSession({ persona_id: personaId || null, cwd: effectiveCwd, project_id: effectivePid })
       const sid = sessionRow.lastInsertRowid || sessionRow.id
-      const cfg = { providerId: providerId || null, modelId: modelId || null, personaId: personaId || null }
+      const cfg = { providerId: providerId || null, modelId: modelId || null, personaId: personaId || null, cwd: effectiveCwd }
       db.setSessionConfig(sid, cfg)
       const fetched = typeof db.getSession === 'function' ? db.getSession(sid) : null
-      return { session: fetched || { ...sessionRow, id: sid, project_id: effectivePid }, config: cfg }
+      return { session: fetched || { ...sessionRow, id: sid, cwd: effectiveCwd, project_id: effectivePid }, config: cfg }
     }
     const result = await _sessionMutex.catch(() => {}).then(work)
     const sid = result.session.id

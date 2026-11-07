@@ -183,15 +183,14 @@ export interface AppState {
   // Navigation
   currentView: ViewType
   setCurrentView: (view: ViewType) => void
-  memoryActiveTab: 'memories' | 'strategies'
-  setMemoryActiveTab: (tab: 'memories' | 'strategies') => void
   newChat: () => Promise<number | null>
   // Chat mode
   sessions: Session[]
   currentSessionId: number | null
   messages: Message[]
   loadSessions: () => Promise<void>
-  createSession: () => Promise<number | null>
+  createSession: (customCwd?: string) => Promise<number | null>
+  setSessionCwd: (cwd: string) => Promise<void>
   selectSession: (id: number) => Promise<void>
   deleteSession: (id: number) => Promise<void>
   forkSession: (messageId?: number) => Promise<number | null>
@@ -251,8 +250,36 @@ export interface AppState {
   todosByMessage: Record<number, { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[]>
   // Per-message plan snapshot (from hierarchical planner).
   planSnapshotsByMessage: Record<number, { id: string; description: string; tasks: { id: string; description: string; status: string; result?: string | null }[] }>
-  // Per-message subagents parallel state (from delegate_task).
-  subagentsByMessage: Record<number, { id: string; name: string; task: string; status: 'running' | 'done' | 'error'; latencyMs?: number; startedAt?: number; output?: string; error?: string; taskId?: number; currentTool?: string; currentStatus?: string }[]>
+  // Per-message subagents parallel state (from delegate_task / supervisor).
+  subagentsByMessage: Record<number, {
+    id: string
+    name: string
+    task: string
+    status: 'running' | 'done' | 'error' | 'cancelled' | 'timeout' | 'completed' | 'failed' | 'stalled_suspected'
+    latencyMs?: number
+    startedAt?: number
+    output?: string
+    error?: string
+    taskId?: number
+    currentTool?: string
+    currentStatus?: string
+    providerName?: string
+    providerId?: string | number
+    endpointKind?: 'official_direct' | 'major_aggregator' | 'third_party_relay' | 'local_engine'
+    baseUrlCategory?: 'official_direct' | 'major_aggregator' | 'third_party_relay' | 'local_engine'
+    modelId?: string
+    ttftMs?: number | null
+    idleSinceLastActivityMs?: number
+    idleSeconds?: number
+    swapHistory?: any[]
+    recentThinkingTail?: string
+    recentTextTail?: string
+    thinking?: string
+    liveThinkingTail?: string
+    liveOutputTail?: string
+    streamEvents?: any[]
+    events?: any[]
+  }[]>
   // Per-message thinking/reasoning blocks from extended-thinking models (Claude
   // extended thinking, OpenAI o-series reasoning_content). Accumulated as
   // deltas arrive during streaming; cleared when the stream ends.

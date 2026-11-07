@@ -11,6 +11,11 @@
 //   4. Tool result pruning: drop low-value tool results from older blocks
 // ───────────────────────────────────────────────────────────────────────────
 
+const os = require('os')
+const fs = require('fs')
+const path = require('path')
+const crypto = require('crypto')
+
 const { countTokensFallback, countTokens } = require('./tokenizer')
 const estimateTextTokens = countTokensFallback || ((text) => Math.ceil((text || '').length / 4))
 
@@ -29,41 +34,41 @@ const estimateTextTokens = countTokensFallback || ((text) => Math.ceil((text || 
 /** @type {Record<string, number>} */
 const TOOL_TRUNCATION = {
   // Read tools: high value, allow longer
-  read_file: 32000,
-  codebase_graph: 24000,
-  lsp_definition: 16000,
-  lsp_references: 12000,
-  lsp_diagnostics: 12000,
-  lsp_code_actions: 16000,
+  read_file: 120000,
+  codebase_graph: 120000,
+  lsp_definition: 120000,
+  lsp_references: 120000,
+  lsp_diagnostics: 120000,
+  lsp_code_actions: 120000,
 
   // Search tools: medium value, moderate length
-  grep_search: 16000,
-  glob_find: 8000,
-  find_symbol: 8000,
-  list_dir: 8000,
+  grep_search: 120000,
+  glob_find: 120000,
+  find_symbol: 120000,
+  list_dir: 120000,
 
   // Web tools: variable, cap generously
-  web_search: 24000,
-  web_fetch: 32000,
+  web_search: 120000,
+  web_fetch: 120000,
 
   // Shell: can be very long, cap high
-  run_command: 24000,
+  run_command: 120000,
 
   // Agent/summary: usually concise
-  delegate_task: 16000,
-  task: 16000,
-  run_agent: 16000,
-  review_code: 16000,
-  history_search: 16000,
-  ask_user: 8000,
+  delegate_task: 120000,
+  task: 120000,
+  run_agent: 120000,
+  review_code: 120000,
+  history_search: 120000,
+  ask_user: 120000,
 
   // Write tools: usually short confirmations
-  write_file: 4000,
-  edit_file: 4000,
-  apply_patch: 4000,
+  write_file: 120000,
+  edit_file: 120000,
+  apply_patch: 120000,
 
   // Default fallback
-  default: 16000,
+  default: 120000,
 }
 
 // ── Context budget tiers ──────────────────────────────────────────────────
@@ -82,8 +87,8 @@ const TIER_NOISE = 'noise'         // Verbose tool results — prune first
 const TIER_CONFIG = {
   [TIER_SYSTEM]: { maxAge: Infinity, maxChars: 64000, priority: 3 },
   [TIER_RECENT]: { maxAge: 30 * 60 * 1000, maxChars: 32000, priority: 2 },  // 30 min
-  [TIER_RELEVANT]: { maxAge: 2 * 60 * 60 * 1000, maxChars: 16000, priority: 1 },  // 2 hours
-  [TIER_NOISE]: { maxAge: 10 * 60 * 1000, maxChars: 4000, priority: 0 },  // 10 min
+  [TIER_RELEVANT]: { maxAge: 2 * 60 * 60 * 1000, maxChars: 120000, priority: 1 },  // 2 hours
+  [TIER_NOISE]: { maxAge: Infinity, maxChars: 120000, priority: 0 },  // 10 min eviction abolished
 }
 
 // ── Tool result classifier ────────────────────────────────────────────────
@@ -101,25 +106,13 @@ function classifyToolResult(toolName, content) {
   // System-level: never prune
   if (toolName === 'use_skill') return TIER_RELEVANT
 
-  // High-value tools: keep longer
-  if (['read_file', 'codebase_graph', 'web_fetch', 'run_command', 'run_agent'].includes(toolName)) {
-    if (len < 8000) return TIER_RELEVANT
-    return TIER_NOISE  // very long read_file output → noise
-  }
-
-  // Medium-value tools
-  if (['grep_search', 'glob_find', 'find_symbol', 'lsp_definition', 'lsp_references'].includes(toolName)) {
-    if (len < 4000) return TIER_RELEVANT
-    return TIER_NOISE
-  }
-
   // Short confirmations: always relevant
   if (['write_file', 'edit_file', 'apply_patch', 'ask_user'].includes(toolName)) {
     return TIER_RELEVANT
   }
 
-  // Default: medium
-  if (len < 8000) return TIER_RELEVANT
+  // Under 120,000 chars: relevant (retained in full)
+  if (len < 120000) return TIER_RELEVANT
   return TIER_NOISE
 }
 
@@ -215,8 +208,16 @@ function applyTieredTruncation(messages, provider, model) {
     const limit = Math.floor(toolLimit * ageFactor)
 
     if (content.length > limit) {
-      const truncated = content.slice(0, limit) + `\n[… truncated ${content.length - limit} chars — tier: ${tier}]`
-      result.push({ ...msg, content: truncated })
+      try {
+        const id = `aether-output-${crypto.randomBytes(4).toString('hex')}.log`
+        const logPath = path.join(os.tmpdir(), id)
+        fs.writeFileSync(logPath, content, 'utf8')
+        const tail = content.slice(-40000)
+        result.push({ ...msg, content: `[Output spilled to ${logPath}]\n${tail}` })
+      } catch (err) {
+        const tail = content.slice(-40000)
+        result.push({ ...msg, content: `[Output truncation: failed to spill to disk: ${err.message}]\n${tail}` })
+      }
     } else {
       result.push(msg)
     }

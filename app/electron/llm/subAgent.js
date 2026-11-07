@@ -30,7 +30,7 @@ Do NOT call the task tool — nested sub-agents are not allowed.`
 // ─── Subagent configuration ──────────────────────────────────────────────
 
 const DEFAULT_SUBAGENT_CONFIG = {
-  maxIterations: 15,
+  maxIterations: 100,
   timeoutMs: 5 * 60 * 1000,  // 5 minutes default
   maxOutputChars: 16000,      // summarize if output exceeds this
   cleanup: 'keep',            // retain child session for auditing and review
@@ -641,7 +641,29 @@ function rollbackBeforeSnapshot(snapshot) {
   }
 }
 
-async function runSubagent(args) { return subagentLimit.run(() => _runSubagent(args)) }
+async function runSubagent(args) {
+  if (args?.waitMode || args?.config?.waitMode || args?.supervised) {
+    const { spawnSupervisedSubagent } = require('./subagentSupervisor')
+    return spawnSupervisedSubagent({
+      taskPrompt: args.prompt || args.taskPrompt,
+      role: args.role || 'executor',
+      providerId: args.provider?.id || args.providerId,
+      modelId: args.model?.id || args.model?.model_name || args.modelId,
+      cwd: args.cwd,
+      waitMode: args.waitMode || args.config?.waitMode || 'smart_window',
+      initialWaitMs: args.initialWaitMs || args.config?.initialWaitMs || 8000,
+      stallTimeoutMs: args.stallTimeoutMs || args.config?.stallTimeoutMs || 15000,
+      parentSessionId: args.parentSessionId,
+      agentMode: args.agentMode,
+    }, {
+      db: args.db,
+      notifyRenderer: args.callbacks?.onSubagentEvent || args.onSubagentEvent,
+    })
+  }
+  return subagentLimit.run(() => _runSubagent(args))
+}
+
+const { spawnSupervisedSubagent, peekSubagentStream, controlSubagent } = require('./subagentSupervisor')
 
 module.exports = {
   runSubagent,
@@ -654,4 +676,7 @@ module.exports = {
   DEFAULT_SUBAGENT_CONFIG,
   captureBeforeSnapshot,
   rollbackBeforeSnapshot,
+  spawnSupervisedSubagent,
+  peekSubagentStream,
+  controlSubagent,
 }

@@ -34,18 +34,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fs: {
     listDir: (dir, sessionId) => ipcRenderer.invoke('fs:list-dir', dir, sessionId),
   },
-  project: {
-    list: () => ipcRenderer.invoke('project:list'),
-    create: (data) => ipcRenderer.invoke('project:create', data),
-    open: (id) => ipcRenderer.invoke('project:open', id),
-    update: (id, data) => ipcRenderer.invoke('project:update', id, data),
-    delete: (id) => ipcRenderer.invoke('project:delete', id),
-    current: () => ipcRenderer.invoke('project:current'),
-    pickDirectory: () => ipcRenderer.invoke('project:pickDirectory'),
-    getInstructions: (projectId) => ipcRenderer.invoke('project:getInstructions', projectId),
-    saveInstructions: (params) => ipcRenderer.invoke('project:saveInstructions', params),
-    onOpened: (callback) => subscribe('project:opened', callback),
-  },
   agent: {
     getWorkspace: (sessionId) => ipcRenderer.invoke('agent:workspace:get', sessionId),
     setWorkspace: (opts) => ipcRenderer.invoke('agent:workspace:set', typeof opts === 'string' ? { dir: opts } : opts),
@@ -99,6 +87,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     touch: (id) => ipcRenderer.invoke('session:touch', id),
     getConfig: (id) => ipcRenderer.invoke('session:get-config', id),
     setConfig: (id, config) => ipcRenderer.invoke('session:set-config', id, config),
+    setCwd: (id, cwd) => ipcRenderer.invoke('session:set-cwd', id, cwd),
   },
   message: {
     list: (sessionId) => ipcRenderer.invoke('message:list', sessionId),
@@ -231,6 +220,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setEnabled: (enabled) => ipcRenderer.invoke('gateway:set-enabled', enabled),
   },
   system: {
+    pickDirectory: () => ipcRenderer.invoke('system:pickDirectory'),
     getAutoLaunch: () => ipcRenderer.invoke('system:get-auto-launch'),
     setAutoLaunch: (enabled) => ipcRenderer.invoke('system:set-auto-launch', enabled),
     notify: (data) => ipcRenderer.invoke('system:notify', data),

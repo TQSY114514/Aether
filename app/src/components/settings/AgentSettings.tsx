@@ -51,8 +51,6 @@ function SwitchButton({
 
 export default function AgentSettings() {
   const { toast } = useUI()
-  const activeProject = useStore((s) => s.activeProject)
-  const setCurrentView = useStore((s) => s.setCurrentView)
   const [workspace, setWorkspace] = useState('')
   const [maxIter, setMaxIter] = useState(25)
   const [toolTimeoutSec, setToolTimeoutSec] = useState(60)
@@ -264,19 +262,30 @@ export default function AgentSettings() {
             <div className="flex items-center justify-between gap-2 p-2.5 rounded-md border text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-xs truncate" style={{ color: 'var(--text-primary)' }}>
-                  {activeProject ? activeProject.name : t('workspace.default')}
+                  {workspace || t('workspace.default')}
                 </div>
                 <div className="font-mono text-[11px] truncate opacity-80" style={{ color: 'var(--text-muted)' }}>
-                  {activeProject?.root_path || workspace || '~/.aetherai/sandbox'}
+                  {workspace || '~/.aetherai/sandbox'}
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setCurrentView('projects')}
+                onClick={async () => {
+                  try {
+                    const picked = await window.electronAPI?.system?.pickDirectory?.()
+                    if (picked) {
+                      setWorkspace(picked)
+                      await window.electronAPI?.agent?.setWorkspace?.({ dir: picked })
+                      toast(t('settings.agent.workspace_saved', 'Workspace updated'), { type: 'success' })
+                    }
+                  } catch (e) {
+                    toast(String(e), { type: 'error' })
+                  }
+                }}
                 className="px-2.5 py-1 text-xs rounded-md border font-medium transition-colors hover:bg-[var(--border)] shrink-0 cursor-pointer"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
-                {t('projects.hub.enter', 'Enter Projects Hub')} ↗
+                {t('common.browse', '浏览...')}
               </button>
             </div>
             <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
