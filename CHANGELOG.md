@@ -2,6 +2,35 @@
 
 All notable changes to AetherAI are documented here.
 
+## [1.1.0] - 2026-11-14
+
+### Added
+
+- **Prefix-Cache-Safe Two-Layer Tool Routing (前缀缓存安全双层路由):**
+  - 主 Agent 顶层工具固定为 10 个常驻 Schema（`read_file`, `edit_file`, `write_file`, `grep_search`, `glob_files`, `run_command`, `ask_user`, `session_plan`, `dispatch_subagent`, `call_extended_tool`），彻底杜绝阶段切换导致的 LLM Prompt Cache 抖动，Prefix-Cache 命中率稳定提升至 ~100%。
+  - 二级扩展工具通过 `call_extended_tool` 网关转发与并发/权限校验调用，并在 System Prompt 尾部提供精简目录索引。
+  - 子代理工具池解耦：`dispatch_subagent` 根据角色能力挂载专属工具子集。
+
+- **Binary Plan / Act Gate & Pre-Write Snapshots (二元 Plan/Act 门禁与写前快照回退):**
+  - 砍掉繁琐的 6-Axis 权限矩阵，简化为 `Plan`（只读规划探索）与 `Act`（工作区常规操作默认自动执行）二元模式。
+  - 引入写前轻量快照机制（Git 仓库优先调用 `git stash create` 生成树对象，非 Git 目录增量备份至 `.aether/snapshots/<turnId>`）。
+  - 内联红绿 Diff 卡片支持右上角一键安全回退；仅对工作区外越权、敏感凭证（`.env*` / `*.key` / `*.pem`）和高危破坏性 Shell 命令执行人工拦截弹窗。
+
+- **AutoMemory Zero-Disturbance Invisibility (AutoMemory 隐形化与零打扰沉淀):**
+  - 移除侧栏冗余的独立 Memory 管理页，对话流以极简黑白胶囊展示 `[Memory · X hits]`，点击弹出轻量 Popover 查看命中原因（Why Injected），支持一键移除与「Pin 固定到 AGENTS.md」（内置真实路径防越界守卫）。
+  - 自动检测高频复用工作流，对话底部内联提示生成 `SKILL.md` 草稿。
+
+- **Post-Digital Minimalist Consolidated Workbench (后数字黑白工业风工作台):**
+  - 一级导航收敛为 3 项主线：`Workspace`（核心对话 + 内联子代理 Deck + 内联 Diff 回退 + 同屏对比）、`Arena`（同屏多模型竞技场评测与基准回放）、`Settings`（统一服务商与配置）。
+  - 输入框底栏 HUD 合一：精简为 `[Plan/Act]`、`[主模型]`、`[思考强度 Effort]`、`[Token/费用与一键快照回退]` 4 个纯粹控件。
+
+### Fixed & Hardened
+
+- 修复 Windows CI 环境下 Git 真实物理路径与 8.3 短路径不匹配导致的快照回退跳过问题。
+- 修复子代理执行流中解构参数引用异常。
+- 加固 `call_extended_tool` 的 Plan/Act 权限门禁、禁用列表检查、串行并发限制与多模态透传。
+- 修复 `memory:pin-to-agents-md` 路径穿越校验与技能蒸馏工作区范围隔离。
+
 ## [1.0.0] - 2026-11-01
 
 ### Added

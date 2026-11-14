@@ -1,6 +1,6 @@
 {
   "name": "aetherai",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Aether headless agent — CLI, Electron-free SDK, and automation runtime. Pairs with the Aether Desktop Workbench sharing the same agent runtime and SQLite store.",
   "author": "TQSY114514",
   "contributors": [
