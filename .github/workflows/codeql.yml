@@ -21,9 +21,7 @@ jobs:
 
       - uses: github/codeql-action/init@v3
         with:
-          # 项目是 Electron + React + TypeScript,只分析 JS/TS。
-          # 默认配置会自动把 Python 等语言加进来,但本仓库没有 Python
-          # 代码,导致 "CodeQL / 分析（Python）" 失败。显式限定语言即可。
-          languages: javascript-typescript
+          # 分析应用代码（JS/TS）与 GitHub Actions 工作流（防止表达式注入与 CI 供应链风险）
+          languages: javascript-typescript, actions
 
       - uses: github/codeql-action/analyze@v3
