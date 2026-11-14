@@ -23,13 +23,13 @@ permissions:
 
 jobs:
   npm-audit:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       matrix:
         dir: [app, app/tui]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: useblacksmith/checkout@v1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

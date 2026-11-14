@@ -31,7 +31,7 @@ jobs:
     # Windows-style paths (e.g. `C:/...`) resolve the same way the rest of the
     # test suite does. ubuntu-latest caused Linux `path.posix.isAbsolute`
     # to return false for `C:/...`, treating Windows paths as relative.
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     # Avoid duplicate publishes if both v* and a manual dispatch trigger.
     concurrency:
       group: npm-publish-${{ github.ref }}

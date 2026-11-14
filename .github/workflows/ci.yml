@@ -15,7 +15,7 @@ jobs:
   # 按改动路径决定哪些 lane 需要跑（hermes-agent 式 detect-changes）：
   #   PR = 增量触发（只跑受影响 lane）；push 到主干 = fail-open 全跑。
   detect:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       core: ${{ steps.classify.outputs.core }}
       renderer: ${{ steps.classify.outputs.renderer }}
@@ -26,7 +26,7 @@ jobs:
       ci: ${{ steps.classify.outputs.ci }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0
 
@@ -49,10 +49,10 @@ jobs:
       needs.detect.outputs.tui == 'true' ||
       needs.detect.outputs.deps == 'true' ||
       needs.detect.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: useblacksmith/checkout@v1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -99,7 +99,7 @@ jobs:
       needs.detect.outputs.ci == 'true'
     # Windows-only tests (sandbox-win / UNC / \\?\ prefix path checks) require
     # Windows path semantics — must run on windows-latest, not ubuntu.
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -135,10 +135,10 @@ jobs:
       needs.detect.outputs.tui == 'true' ||
       needs.detect.outputs.deps == 'true' ||
       needs.detect.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: useblacksmith/checkout@v1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -171,7 +171,7 @@ jobs:
       needs.detect.outputs.tui == 'true' ||
       needs.detect.outputs.deps == 'true' ||
       needs.detect.outputs.ci == 'true'
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -211,7 +211,7 @@ jobs:
   all-checks-pass:
     needs: [typecheck-ipc, tests, build, smoke]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check all lanes passed
         env:
