@@ -11,7 +11,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 
 const CACHEABLE_TOOLS = new Set([
-  'read_file', 'list_dir', 'glob_find', 'grep_search',
+  'read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search',
   'git_status', 'git_diff', 'git_log',
   'web_fetch', 'web_search',
 ])

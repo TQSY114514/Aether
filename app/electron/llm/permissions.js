@@ -293,27 +293,34 @@ class PermissionPolicy {
       return PermissionOutcome.deny(overrideReason || `tool '${toolName}' denied by hook`)
     }
 
-    // Capability deny is an absolute runtime ceiling.
-    let axisPolicy = null
-    try {
-      const { decideAxisPolicy } = require('./capabilityPolicy')
-      axisPolicy = decideAxisPolicy(toolName, input, this.axisPolicies || {})
-    } catch {}
-    
-    if (axisPolicy?.matched && axisPolicy.policy === 'deny') {
-      return PermissionOutcome.deny(`capability policy: ${axisPolicy.axis} axis denies ${toolName}`)
+    // Always Ask hook override & destructive shell guard bypass session-approved shortcuts
+    let isDestructiveShell = false
+    if (toolName === 'run_command') {
+      try {
+        const parsed = (input && typeof input === 'object') ? input : JSON.parse(input || '{}')
+        const cmdText = String(parsed?.command || parsed?.code || input || '').trim().toLowerCase()
+        isDestructiveShell = (
+          /\brm\s+-[a-z]*r[a-z]*f/i.test(cmdText) ||
+          /\brm\s+-[a-z]*f[a-z]*r/i.test(cmdText) ||
+          /\bdel\s+\/s\b/i.test(cmdText) ||
+          cmdText.includes('drop table') ||
+          cmdText.includes('mkfs') ||
+          /\bgit\s+reset\s+--hard\b/i.test(cmdText) ||
+          /\bgit\s+push\s+(?:--force|-f)\b/i.test(cmdText)
+        )
+      } catch { /* ignore parse errors */ }
     }
+    const isAlwaysAsk = override === PermissionOverride.AlwaysAsk || isDestructiveShell
 
-    // Always Ask overrides session approved
-    const isAlwaysAsk = (override === PermissionOverride.AlwaysAsk) || (axisPolicy?.matched && axisPolicy.policy === 'always_ask')
-
-    // P0: session-scoped always-allow
+    // Session-scoped always-allow rules
     if (!isAlwaysAsk && _findMatchingRule(this.sessionApproved, toolName, input)) {
       return PermissionOutcome.allowVia('session_approved')
     }
 
-    if (override === PermissionOverride.Ask || override === PermissionOverride.AlwaysAsk) {
-      const reason = overrideReason || `tool '${toolName}' requires approval due to hook guidance`
+    if (override === PermissionOverride.Ask || isAlwaysAsk) {
+      const reason = overrideReason || (isDestructiveShell
+        ? `high-risk shell command in '${toolName}' requires explicit confirmation`
+        : `tool '${toolName}' requires approval due to hook guidance`)
       return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
     }
 
@@ -321,9 +328,6 @@ class PermissionPolicy {
       if (askRule) {
         const reason = `tool '${toolName}' requires approval due to ask rule`
         return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
-      }
-      if (axisPolicy?.matched && (axisPolicy.policy === 'ask' || axisPolicy.policy === 'always_ask')) {
-        return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${axisPolicy.axis} axis requires approval`, prompter, this)
       }
       if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {
         return PermissionOutcome.allow()
@@ -334,14 +338,6 @@ class PermissionPolicy {
     if (askRule) {
       const reason = `tool '${toolName}' requires approval due to ask rule`
       return _promptOrDeny(toolName, input, currentMode, requiredMode, reason, prompter, this)
-    }
-
-    // ── Capability axis policy（外部评审 P0-2）───────────────────────────
-    if (axisPolicy?.matched) {
-      if (axisPolicy.policy === 'allow') return PermissionOutcome.allow()
-      if (axisPolicy.policy === 'ask' || axisPolicy.policy === 'always_ask') {
-        return _promptOrDeny(toolName, input, currentMode, requiredMode, `capability policy: ${axisPolicy.axis} axis requires approval`, prompter, this)
-      }
     }
 
     if (allowRule || _modeSatisfiesRequirement(currentMode, requiredMode)) {

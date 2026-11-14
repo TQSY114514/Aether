@@ -7,16 +7,21 @@ const { checkWritePath, checkCommand, isInsideWorkspace, getWorkspaceRoot } = re
 const { normalizeAgentMode } = require('../llm/toolLoopUtils')
 
 function isWorkspaceAskMode(mode) {
-  const norm = normalizeAgentMode(mode)
-  return norm === 'workspace' || mode === 'ask'
+  return mode === 'ask'
 }
 function isUnrestrictedMode(mode) {
-  const norm = normalizeAgentMode(mode)
-  return norm === 'unrestricted' || mode === 'yolo'
+  return mode === 'yolo'
 }
 function isReadOnlyMode(mode) {
   const norm = normalizeAgentMode(mode)
-  return norm === 'explore' || mode === 'plan' || mode === 'review'
+  return norm === 'plan' || mode === 'review'
+}
+function assertWritePathAllowed(p, ctx) {
+  if (isUnrestrictedMode(ctx?.agentMode)) return
+  const g = checkWritePath(p, ctx?.sessionId)
+  if (g.ok) return
+  if (ctx?.highRiskApproved && g.reason === 'path outside workspace') return
+  throw new Error(g.reason)
 }
 const { streamCommand, formatStreamResult } = require('../llm/toolStream')
 const { checkSSRF, checkSSRFHostname } = require('./ssrf')
@@ -375,7 +380,7 @@ const TOOLS = [
   // ── Write tools ─────────────────────────────────────────────────────
   { name: 'write_file', description: 'Write text to a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const c = String(args.content ?? ''); if (!p) throw new Error('path is required')
-    if (!isUnrestrictedMode(ctx?.agentMode)) { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
+    assertWritePathAllowed(p, ctx)
     try {
       if (fs.existsSync(p)) {
         const stat = fs.statSync(p)
@@ -403,7 +408,7 @@ const TOOLS = [
     const p = String(args.path || ''); const o = String(args.old_string ?? ''); const n = String(args.new_string ?? '')
     const replaceAll = Boolean(args.replace_all)
     if (!p || !o) throw new Error('path and old_string are required')
-    if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
+    assertWritePathAllowed(p, ctx)
     try {
       const stat = fs.statSync(p)
       const { checkStaleReadBeforeEdit } = require('./editMatchers')
@@ -471,7 +476,7 @@ const TOOLS = [
   }},
   { name: 'apply_patch', description: 'Apply a unified diff patch or Aider-style SEARCH/REPLACE blocks. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, patch: { type: 'string' } }, required: ['path', 'patch'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const pt = String(args.patch || ''); if (!p || !pt) throw new Error('path and patch required')
-    if (ctx?.agentMode !== 'yolo') { const g = checkWritePath(p, ctx?.sessionId); if (!g.ok) throw new Error(g.reason) }
+    assertWritePathAllowed(p, ctx)
     const orig = await fs.promises.readFile(p, 'utf-8')
     let cleanedPatch = pt
     try {
@@ -497,7 +502,7 @@ const TOOLS = [
   // ── Execution tools ─────────────────────────────────────────────────
   { name: 'run_command', description: 'Run a shell command. DANGEROUS.', risk: 'dangerous', executionMode: 'sequential', parameters: { type: 'object', properties: { command: { type: 'string' }, description: { type: 'string' }, cwd: { type: 'string' }, timeout: { type: 'number' } }, required: ['command', 'description'] }, run: async (args, ctx) => {
     const cmd = String(args.command || ''); if (!cmd) throw new Error('command is required')
-    if (!isUnrestrictedMode(ctx?.agentMode)) { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
+    if (!isUnrestrictedMode(ctx?.agentMode) && !ctx?.highRiskApproved) { const g = checkCommand(cmd); if (!g.ok) throw new Error(g.reason) }
     const cwd = args.cwd ? String(args.cwd) : undefined; const timeoutMs = Number(args.timeout) || 30000
 
     // Pre-push gate: blocks a push that would carry credentials to a remote.
@@ -559,6 +564,290 @@ const TOOLS = [
     const todos = Array.isArray(args.todos) ? args.todos : []
     try { ctx?.onTodoUpdate?.(todos) } catch {}
     return `Updated ${todos.length} todo item(s).`
+  }},
+  { name: 'session_plan', description: 'Create or update the session execution plan checklist. Use for multi-step tasks to track progress live.', risk: 'safe', parameters: { type: 'object', properties: { todos: { type: 'array', items: { type: 'object', properties: { content: { type: 'string', description: 'Step description' }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] }, activeForm: { type: 'string', description: 'Action phrasing when in progress' } }, required: ['content', 'status'] } }, description: { type: 'string', description: 'Optional overall plan summary' } }, required: ['todos'] }, run: async (args, ctx) => {
+    const todos = Array.isArray(args.todos) ? args.todos : []
+    try { ctx?.onTodoUpdate?.(todos) } catch {}
+    if (ctx?.db && ctx?.sessionId && typeof ctx.db.saveSessionPlan === 'function') {
+      try {
+        const plan = {
+          id: `plan_${ctx.sessionId}`,
+          description: String(args.description || 'Session Plan').slice(0, 120),
+          tasks: todos.map((t, i) => ({
+            id: String(i + 1),
+            description: String(t.content || ''),
+            status: t.status || 'pending',
+            result: null,
+          })),
+        }
+        ctx.db.saveSessionPlan(ctx.sessionId, plan)
+        try { ctx?.callbacks?.onPlanSnapshot?.(plan) } catch {}
+      } catch {}
+    }
+    return `Updated session plan with ${todos.length} step(s).`
+  }},
+  { name: 'dispatch_subagent', description: 'Dispatch a specialized sub-agent by role (explore, explorer, build, implementer, review, research, debug, oracle, librarian, hunter, verifier) with role-scoped tools, or run parallel sub-tasks. Live progress renders inline in SubagentDeck.', risk: 'dangerous', parameters: { type: 'object', properties: { role: { type: 'string', description: 'Sub-agent role (explore, explorer, build, implementer, review, research, debug, oracle, librarian, hunter, verifier)' }, task: { type: 'string', description: 'Clear, self-contained task instruction for the sub-agent' }, tasks: { type: 'array', description: 'Optional list of parallel sub-tasks (each a string or { role, task, write_paths, read_only })', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { role: { type: 'string' }, task: { type: 'string' }, write_paths: { type: 'array', items: { type: 'string' } }, read_only: { type: 'boolean' } }, required: ['task'] }] } }, maxIterations: { type: 'number', description: 'Optional iteration cap (default 40)' } }, required: ['role', 'task'] }, run: async (args, ctx) => {
+    if (!ctx) return 'no context'
+    const roles = require('../llm/agentRoles')
+    const SA = require('../llm/subAgent')
+    const roleName = String(args.role || 'explore').trim().toLowerCase()
+    const roleDesc = roles.getRole(roleName)
+    if (!roleDesc) return `unknown role: ${roleName}. Available: ${roles.ROLE_NAMES.join(', ')}`
+
+    // Parallel dispatch branch when `tasks` array is provided
+    if (Array.isArray(args.tasks) && args.tasks.length > 0) {
+      const subCallbacks = ctx.callbacks ? { ...ctx.callbacks } : (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {})
+      delete subCallbacks.onStreamDelta
+      const shared = {
+        db: ctx.db,
+        provider: ctx.provider,
+        model: ctx.model,
+        signal: ctx.signal,
+        options: ctx.options || {},
+        agentMode: ctx.agentMode === 'plan' ? 'plan' : (roleDesc.readOnly ? 'plan' : 'auto'),
+        parentSessionId: ctx.sessionId,
+        onSubagentEvent: ctx.onSubagentEvent,
+        callbacks: subCallbacks,
+      }
+      const normTasks = args.tasks.map(t => {
+        if (typeof t === 'string') return { task: t, read_only: roleDesc.readOnly }
+        return { ...t, read_only: t.read_only !== undefined ? t.read_only : roleDesc.readOnly }
+      })
+      const results = await SA.runParallel(normTasks, shared)
+      return results.map((r, i) => {
+        const label = typeof normTasks[i] === 'string' ? normTasks[i] : (normTasks[i]?.task || '')
+        return `### [${roleName}] Task ${i + 1}: ${String(label).slice(0, 80)}\n${r?.success ? r?.output : `(failed: ${r?.error})`}`
+      }).join('\n\n')
+    }
+
+    const td = String(args.task || '').trim()
+    if (!td) return 'task is required'
+    const mp = roles.buildRolePrompt(roleName, td) || td
+    const allowedTools = roles.buildToolFilter(roleName)
+    const maxIterations = Math.max(1, Math.min(100, Number(args.maxIterations) || 40))
+    const saId = `sa_${roleName}_${Date.now()}`
+    const startedAt = Date.now()
+    let thinkingTail = ''
+    let outputTail = ''
+    const streamEvents = []
+    const emitEvent = (payload) => {
+      try { ctx.onSubagentEvent?.(payload) } catch {}
+    }
+
+    emitEvent({
+      type: 'start',
+      id: saId,
+      name: `${roleDesc.label || roleName}`,
+      task: td.slice(0, 160),
+      status: 'running',
+      startedAt,
+      modelId: ctx.model?.model_name || ctx.model?.id || undefined,
+      providerName: ctx.provider?.name || undefined,
+    })
+
+    try {
+      const agentCallbacks = ctx.callbacks ? { ...ctx.callbacks } : (ctx.requestPermission ? { requestPermission: ctx.requestPermission } : {})
+      delete agentCallbacks.onStreamDelta
+      const origOnToolCall = agentCallbacks.onToolCall
+      const origOnThinkingDelta = agentCallbacks.onThinkingDelta
+      const origOnStreamDelta = ctx.callbacks?.onStreamDelta
+      const origOnSubagentEvent = ctx.callbacks?.onSubagentEvent
+
+      // Intercept and unify all subagent events under the exact same saId
+      agentCallbacks.onSubagentEvent = (evt) => {
+        if (!evt) return
+        emitEvent({
+          ...evt,
+          id: saId,
+          name: `${roleDesc.label || roleName}`,
+          task: td.slice(0, 160),
+          recentThinkingTail: thinkingTail || undefined,
+          liveOutputTail: outputTail || undefined,
+        })
+        try { origOnSubagentEvent?.({ ...evt, id: saId }) } catch {}
+      }
+
+      agentCallbacks.onToolCall = (entry) => {
+        if (entry?.name) {
+          streamEvents.push({
+            type: 'tool_call',
+            id: `evt_${streamEvents.length + 1}`,
+            content: `${entry.name}${entry.latencyMs != null ? ` (${entry.latencyMs}ms)` : ''}`,
+            latencyMs: entry.latencyMs,
+          })
+          emitEvent({
+            type: 'tool_call',
+            id: saId,
+            name: `${roleDesc.label || roleName}`,
+            task: td.slice(0, 160),
+            status: 'running',
+            startedAt,
+            tool: entry,
+            streamEvents: streamEvents.slice(-30),
+          })
+        }
+        try { origOnToolCall?.(entry) } catch {}
+      }
+      agentCallbacks.onThinkingDelta = (delta) => {
+        if (delta) {
+          thinkingTail = (thinkingTail + delta).slice(-2000)
+          emitEvent({
+            type: 'status',
+            id: saId,
+            status: 'running',
+            startedAt,
+            recentThinkingTail: thinkingTail,
+          })
+        }
+        try { origOnThinkingDelta?.(delta) } catch {}
+      }
+      // Capture subagent text deltas into SubagentDeck without polluting parent bubble
+      agentCallbacks.onStreamDelta = (delta) => {
+        if (delta) {
+          outputTail = (outputTail + delta).slice(-2000)
+          emitEvent({
+            type: 'status',
+            id: saId,
+            status: 'running',
+            startedAt,
+            liveOutputTail: outputTail,
+          })
+        }
+      }
+
+      const o = await SA.runSubagent({
+        db: ctx.db,
+        parentSessionId: ctx.sessionId,
+        provider: ctx.provider,
+        model: ctx.model,
+        prompt: mp,
+        signal: ctx.signal,
+        id: saId,
+        agentMode: ctx.agentMode === 'plan' ? 'plan' : (roleDesc.readOnly ? 'plan' : (ctx.agentMode || roles.getRoleDefaultMode(roleName))),
+        callbacks: agentCallbacks,
+        config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'keep', id: saId },
+      })
+      const out = o?.content || '(no content)'
+      emitEvent({
+        type: 'done',
+        id: saId,
+        name: `${roleDesc.label || roleName}`,
+        task: td.slice(0, 160),
+        status: 'done',
+        startedAt,
+        latencyMs: Date.now() - startedAt,
+        output: out,
+        recentThinkingTail: thinkingTail || undefined,
+        streamEvents: streamEvents.slice(-30),
+      })
+      return out
+    } catch (e) {
+      const errMsg = e?.message || String(e)
+      emitEvent({
+        type: 'error',
+        id: saId,
+        name: `${roleDesc.label || roleName}`,
+        task: td.slice(0, 160),
+        status: 'error',
+        startedAt,
+        latencyMs: Date.now() - startedAt,
+        error: errMsg,
+        recentThinkingTail: thinkingTail || undefined,
+        streamEvents: streamEvents.slice(-30),
+      })
+      return `agent error: ${errMsg}`
+    }
+  }},
+  { name: 'call_extended_tool', description: 'Gateway to invoke any non-core built-in or MCP tool listed in the Extended Tools index (e.g., lsp_diagnostics, git_status, web_search, web_fetch, apply_patch, github_pr_list).', risk: 'safe', parameters: { type: 'object', properties: { tool_name: { type: 'string', description: 'Exact name of the extended tool to invoke' }, arguments: { type: 'object', description: 'Arguments object for the target tool' } }, required: ['tool_name'] }, run: async (args, ctx) => {
+    const toolName = String(args.tool_name || args.name || '').trim()
+    if (!toolName) return 'Error: tool_name is required.'
+    if (toolName === 'call_extended_tool') return 'Error: recursive call_extended_tool is not allowed.'
+
+    let targetTool = null
+    try {
+      const mcp = require('../mcp/manager')
+      targetTool = mcp.getMergedTool(toolName)
+    } catch {}
+    if (!targetTool) targetTool = getTool(toolName)
+    if (!targetTool) {
+      const available = TOOLS.map(t => t.name).filter(n => n !== 'call_extended_tool')
+      return `Unknown extended tool "${toolName}". Available built-in tools: ${available.join(', ')}`
+    }
+
+    let parsedArgs = args.arguments !== undefined ? args.arguments : {}
+    if (typeof parsedArgs === 'string') {
+      try { parsedArgs = JSON.parse(parsedArgs) } catch { parsedArgs = {} }
+    }
+    if (!parsedArgs || typeof parsedArgs !== 'object') parsedArgs = {}
+
+    // Check disabled tools list
+    const disabled = Array.isArray(ctx?.disabledTools)
+      ? ctx.disabledTools
+      : (Array.isArray(ctx?.options?.disabledTools) ? ctx.options.disabledTools : [])
+    if (disabled.includes(toolName) || disabled.includes('call_extended_tool')) {
+      return `[BLOCKED] Tool "${toolName}" is disabled in current settings.`
+    }
+
+    // Check boundary allowlist
+    const boundaryAllowlist = ctx?.allowedTools || ctx?.options?.allowedTools || ctx?.options?.toolBoundaryAllowlist
+    if (boundaryAllowlist && Array.isArray(boundaryAllowlist)) {
+      if (!boundaryAllowlist.includes(toolName)) {
+        return `[BLOCKED] Tool "${toolName}" is not permitted by the tool boundary allowlist.`
+      }
+    }
+
+    // Enforce Plan/Act mode permissions & 3-Scenario High-Risk gate on behalf of targetTool
+    const mode = String(ctx?.agentMode || 'act').toLowerCase()
+    const { checkToolAllowed } = require('./trustEngine')
+    const check = checkToolAllowed(toolName, mode, parsedArgs, { workspaceRoot: ctx?.workspaceRoot })
+    if (!check.allowed) {
+      return `[BLOCKED] Extended tool "${toolName}" is blocked in ${mode} mode: ${check.reason || 'permission denied'}`
+    }
+
+    const isReadOnly = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
+    const WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_or_update_file', 'apply_patch', 'delete_file'])
+    if (isReadOnly && (targetTool.risk === 'dangerous' || WRITE_TOOLS.has(toolName))) {
+      return `[BLOCKED] Extended tool "${toolName}" is a mutating/dangerous operation and is blocked in ${mode} mode.`
+    }
+
+    if (check.requiresPrompt || check.promptRequired) {
+      if (typeof ctx?.requestPermission === 'function') {
+        const allowed = await ctx.requestPermission({
+          name: toolName,
+          args: parsedArgs,
+          risk: targetTool.risk,
+          reason: check.reason,
+        })
+        if (!allowed) return `[DENIED] User denied permission to run "${toolName}".`
+      } else if (!ctx?.highRiskApproved) {
+        return `[DENIED] High-risk operation "${toolName}" requires explicit confirmation.`
+      }
+    } else if (mode === 'ask' && targetTool.risk === 'dangerous') {
+      if (typeof ctx?.requestPermission === 'function') {
+        const allowed = await ctx.requestPermission({
+          name: toolName,
+          args: parsedArgs,
+          risk: targetTool.risk,
+        })
+        if (!allowed) return `[DENIED] User denied permission to run "${toolName}".`
+      }
+    }
+
+    const raw = await targetTool.run(parsedArgs, ctx)
+
+    // Multimodal pass-through: if targetTool returns an array of content parts with image blocks
+    // (e.g. web_visualize returning [{type:'image_url', ...}]), pass through directly.
+    if (Array.isArray(raw)) {
+      const hasMedia = raw.some(p => p && typeof p === 'object' && (p.type === 'image' || p.type === 'image_url' || p.type === 'input_image'))
+      if (hasMedia) return raw
+    }
+
+    try {
+      const { applyMiddleware } = require('../llm/toolResultMiddleware')
+      return applyMiddleware(typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw : JSON.stringify(raw)), { tool: toolName, db: ctx?.db })
+    } catch {
+      return typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw : JSON.stringify(raw))
+    }
   }},
   { name: 'delegate_task', description: 'Delegate parallel sub-tasks to sub-agents. Parallel writers MUST declare non-overlapping write_paths (omitting write_paths claims the entire workspace and blocks other parallel writers; pass write_paths: [] or read_only: true for read-only tasks; max 3 parallel writers).', risk: 'dangerous', parameters: { type: 'object', properties: { tasks: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { task: { type: 'string', description: 'Sub-task instruction' }, prompt: { type: 'string' }, write_paths: { type: 'array', items: { type: 'string' }, description: 'Disjoint relative file/directory paths this writer touches (omit = whole workspace, [] = read-only)' }, read_only: { type: 'boolean' } }, required: ['task'] }] }, minItems: 1, maxItems: 5 } }, required: ['tasks'] }, run: async (args, ctx) => {
     const tasks = Array.isArray(args.tasks) ? args.tasks.filter(Boolean) : []
@@ -1285,6 +1574,13 @@ TOOLS.push(
     const { auditAgentBundle } = require('./reverseEngineer')
     const res = await auditAgentBundle({ targetPath, maxMatches: args.maxMatches, cwd: wsRoot })
     return res.formattedSummary || String(res)
+  }},
+  { name: 'glob_files', description: 'Find files matching a glob pattern (up to 100).', risk: 'safe', parameters: { type: 'object', properties: { pattern: { type: 'string' }, cwd: { type: 'string', description: 'Optional directory (defaults to workspace root)' } }, required: ['pattern'] }, run: async (args, ctx) => {
+    const pattern = String(args.pattern || '')
+    const cwd = String(args.cwd || getWorkspaceRoot(ctx?.sessionId) || process.cwd())
+    if (!pattern) throw new Error('pattern is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
+    const m = await globFiles(pattern, { cwd: cwd || undefined, absolute: true, nodir: true })
+    return m.slice(0, 100).join('\n') || '(no matches)'
   }}
 )
 

@@ -316,12 +316,27 @@ describe('runToolLoop permission gate wiring (P0-C1)', () => {
     return { entries, final, result }
   }
 
-  it('ask + dangerous: user approves → confirmation requested once and the tool executes', { timeout: 30000 }, async () => {
-    const target = join(wsRoot, 'approved.txt')
+  it('act + workspace write: auto-executes inside workspace without confirmation popup', { timeout: 30000 }, async () => {
+    const target = join(wsRoot, 'auto-written.txt')
     scriptToolCall('write_file', { path: target, content: 'hi' })
     const permCalls = []
     const { final } = await runLoop({
-      agentMode: 'ask',
+      agentMode: 'act',
+      requestPermission: async (p) => { permCalls.push(p); return true },
+    })
+    expect(permCalls.length).toBe(0)
+    const entry = final.find((e) => e.name === 'write_file')
+    expect(entry.error).toBeFalsy()
+    expect(String(entry.result)).toContain('wrote')
+    expect(existsSync(target)).toBe(true)
+  })
+
+  it('act + high-risk (.env credential file): user approves → confirmation requested once and the tool executes', { timeout: 30000 }, async () => {
+    const target = join(wsRoot, '.env.local')
+    scriptToolCall('write_file', { path: target, content: 'SECRET=1' })
+    const permCalls = []
+    const { final } = await runLoop({
+      agentMode: 'act',
       requestPermission: async (p) => { permCalls.push(p); return true },
     })
     expect(permCalls.length).toBe(1)
@@ -329,24 +344,23 @@ describe('runToolLoop permission gate wiring (P0-C1)', () => {
     expect(permCalls[0].args).toMatchObject({ path: target })
     const entry = final.find((e) => e.name === 'write_file')
     expect(entry.error).toBeFalsy()
-    expect(String(entry.result)).toContain('wrote')
     expect(existsSync(target)).toBe(true)
   })
 
-  it('ask + dangerous: user denies → permission_denied, tool never runs', { timeout: 30000 }, async () => {
-    const target = join(wsRoot, 'denied.txt')
+  it('act + high-risk (.env credential file): user denies → permission_denied, tool never runs', { timeout: 30000 }, async () => {
+    const target = join(wsRoot, '.env')
     scriptToolCall('write_file', { path: target, content: 'x' })
-    const { final } = await runLoop({ agentMode: 'ask', requestPermission: async () => false })
+    const { final } = await runLoop({ agentMode: 'act', requestPermission: async () => false })
     const entry = final.find((e) => e.name === 'write_file')
     expect(entry.failure_kind).toBe('permission_denied')
     expect(entry.error).toContain('denied by user')
     expect(existsSync(target)).toBe(false)
   })
 
-  it('ask + dangerous: no permission callback → default deny (headless safety)', { timeout: 30000 }, async () => {
-    const target = join(wsRoot, 'no-callback.txt')
+  it('act + high-risk (.env credential file): no permission callback → default deny (headless safety)', { timeout: 30000 }, async () => {
+    const target = join(wsRoot, '.env')
     scriptToolCall('write_file', { path: target, content: 'x' })
-    const { final } = await runLoop({ agentMode: 'ask', requestPermission: undefined })
+    const { final } = await runLoop({ agentMode: 'act', requestPermission: undefined })
     const entry = final.find((e) => e.name === 'write_file')
     expect(entry.failure_kind).toBe('permission_denied')
     expect(entry.error).toContain('requires user confirmation')
@@ -397,7 +411,7 @@ describe('runToolLoop permission gate wiring (P0-C1)', () => {
     expect(prompted).toBe(0) // plan never prompts — it denies dangerous outright
   })
 
-  it('auto (WorkspaceWrite): safe tools run, dangerous denied', { timeout: 30000 }, async () => {
+  it('act (legacy auto alias): safe tools run, high-risk outside workspace denied when rejected', { timeout: 30000 }, async () => {
     const readTarget = join(wsRoot, 'auto-read.txt')
     writeFileSync(readTarget, 'auto-ok')
     scriptToolCall('read_file', { path: readTarget })
@@ -405,12 +419,12 @@ describe('runToolLoop permission gate wiring (P0-C1)', () => {
     const readEntry = r1.final.find((e) => e.name === 'read_file')
     expect(readEntry.error).toBeFalsy()
 
-    const bad = join(wsRoot, 'auto-out.txt')
-    scriptToolCall('write_file', { path: bad, content: 'x' })
-    const r2 = await runLoop({ agentMode: 'auto', requestPermission: async () => true })
+    const outsideTarget = join(tmpdir(), `aether-outside-${Date.now()}.txt`)
+    scriptToolCall('write_file', { path: outsideTarget, content: 'x' })
+    const r2 = await runLoop({ agentMode: 'auto', requestPermission: async () => false })
     const denied = r2.final.find((e) => e.name === 'write_file')
     expect(denied.failure_kind).toBe('permission_denied')
-    expect(existsSync(bad)).toBe(false)
+    expect(existsSync(outsideTarget)).toBe(false)
   })
 
   it('yolo: dangerous tools execute without any confirmation', { timeout: 30000 }, async () => {
@@ -502,24 +516,23 @@ describe('approveAlways / sessionApproved', () => {
     expect(p.asks).toBe(2)
   })
 
-  it('capability axis deny beats session-approved rules', () => {
+  it('deny rule beats session-approved rules', () => {
     const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
+      .withPermissionRules({ allow: [], ask: [], deny: ['run_command(npm test)'], denied_tools: [] })
     policy.approveAlways('run_command(npm test)')
-    policy.withAxisPolicies({ shell: 'deny' })
     const r = policy.authorize('run_command', JSON.stringify({ command: 'npm test' }), null)
     expect(r.allowed).toBe(false)
   })
 
-  it('session approval substitutes for capability axis ask (no second prompt)', () => {
+  it('session approval substitutes for askRule prompt (no second prompt)', () => {
     const policy = new permissions.PermissionPolicy(PermissionMode.Prompt)
     const p = countingPrompter()
     const input = JSON.stringify({ command: 'npm test' })
-    policy.withToolRequirement('run_command', PermissionMode.DangerFullAccess);
-    // 必须真的声明轴策略——否则走的是 askRule/模式询问路径而非轴 ask 绕行分支（CodeRabbit r3）。
-    policy.withAxisPolicies({ shell: 'ask' });
-    policy.authorize('run_command', input, p) // 第一次：轴 ask → 询问并 AllowAlways
+    policy.withToolRequirement('run_command', PermissionMode.DangerFullAccess)
+    policy.withPermissionRules({ allow: [], ask: ['run_command(npm test)'], deny: [], denied_tools: [] })
+    policy.authorize('run_command', input, p) // 第一次：askRule → 询问并 AllowAlways
     expect(p.asks).toBe(1)
-    const r2 = policy.authorize('run_command', input, p) // 第二次：会话批准代替轴询问
+    const r2 = policy.authorize('run_command', input, p) // 第二次：会话批准代替再次询问
     expect(r2.allowed).toBe(true)
     expect(r2.via).toBe('session_approved')
     expect(p.asks).toBe(1)

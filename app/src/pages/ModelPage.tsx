@@ -20,7 +20,7 @@ function PresetButtons({ onPick }: { onPick: (p: { name: string; api_url: string
   )
 }
 
-export default function ModelPage() {
+export default function ModelPage({ embedded = false }: { embedded?: boolean } = {}) {
   const providers = useStore((s) => s.providers)
   const modelsByProvider = useStore((s) => s.modelsByProvider)
   const loadProviders = useStore((s) => s.loadProviders)
@@ -140,19 +140,33 @@ export default function ModelPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-transparent page-fade-in">
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{t('models.title')}</h1>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('models.subtitle')}</p>
+    <div className={embedded ? "w-full" : "flex-1 overflow-y-auto bg-transparent page-fade-in"}>
+      <div className={embedded ? "w-full space-y-4" : "max-w-2xl mx-auto px-6 py-8"}>
+        {!embedded && (
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>{t('models.title')}</h1>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{t('models.subtitle')}</p>
+            </div>
+            <button onClick={() => setShowAdd(!showAdd)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
+              style={{ borderColor: 'var(--border)' }}>
+              <Plus size={14} />{t('models.add_provider')}
+            </button>
           </div>
-          <button onClick={() => setShowAdd(!showAdd)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-[var(--bg-secondary)] transition-colors"
-            style={{ borderColor: 'var(--border)' }}>
-            <Plus size={14} />{t('models.add_provider')}
-          </button>
-        </div>
+        )}
+        {embedded && (
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-xs font-mono text-[var(--text-muted)]">
+              已注册服务商 ({providers.length})
+            </span>
+            <button onClick={() => setShowAdd(!showAdd)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+              <Plus size={13} />{t('models.add_provider')}
+            </button>
+          </div>
+        )}
 
         {showAdd && (
           <div className="mb-6 p-4 rounded-lg space-y-3" style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>

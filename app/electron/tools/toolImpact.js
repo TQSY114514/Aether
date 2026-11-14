@@ -180,11 +180,21 @@ function buildUnifiedDiff(oldLines, newLines) {
   return parts.join('\n')
 }
 
-function generateDiff(name, args) {
+function _resolveDiffPath(rawPath, opts) {
+  const s = String(rawPath || '')
+  if (!s) return ''
+  const path = require('path')
+  if (path.isAbsolute(s)) return s
+  const base = opts && opts.workspaceRoot ? String(opts.workspaceRoot) : process.cwd()
+  return path.resolve(base, s)
+}
+
+function generateDiff(name, args, opts = {}) {
   if (name === 'write_file') {
-    const filePath = String(args?.path || '')
+    const displayPath = String(args?.path || '')
+    const filePath = _resolveDiffPath(displayPath, opts)
     const content = String(args?.content ?? '')
-    if (!filePath || !content) return null
+    if (!displayPath || !content) return null
     let oldLines = []
     let exists = false
     try {
@@ -197,12 +207,12 @@ function generateDiff(name, args) {
     if (exists) {
       const newLines = content.split('\n')
       const body = buildUnifiedDiff(oldLines, newLines)
-      const diff = '--- ' + filePath + '\n+++ ' + filePath + '\n' + body
-      return { diff: truncate(diff, MAX_DIFF_CHARS), oldPath: filePath, newPath: filePath }
+      const diff = '--- ' + displayPath + '\n+++ ' + displayPath + '\n' + body
+      return { diff: truncate(diff, MAX_DIFF_CHARS), oldPath: displayPath, newPath: displayPath }
     } else {
       const lines = content.split('\n')
       const body = lines.map(l => '+' + l).join('\n')
-      return { diff: truncate(body, MAX_DIFF_CHARS), oldPath: '/dev/null', newPath: filePath }
+      return { diff: truncate(body, MAX_DIFF_CHARS), oldPath: '/dev/null', newPath: displayPath }
     }
   }
   if (name === 'edit_file') {
@@ -253,16 +263,17 @@ function generateDiff(name, args) {
 // Generate a "before vs after" snapshot for any file-touching tool by reading
 // the current file state after execution. Returns null if the file doesn't
 // exist (new file) or can't be read.
-function generateAfterSnapshot(name, args) {
+function generateAfterSnapshot(name, args, opts = {}) {
   if (!['write_file', 'edit_file', 'apply_patch'].includes(name)) return null
-  const filePath = String(args?.path || '')
+  const displayPath = String(args?.path || '')
+  const filePath = _resolveDiffPath(displayPath, opts)
   if (!filePath) return null
   try {
     const stat = require('fs').statSync(filePath)
     if (!stat.isFile()) return null
     const buf = readFileSync(filePath)
     const content = buf.toString('utf-8')
-    return { path: filePath, content, truncated: content.length > 4000 }
+    return { path: displayPath, content, truncated: content.length > 4000 }
   } catch {
     return null // file may not exist yet (write_file creates it)
   }

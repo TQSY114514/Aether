@@ -8,7 +8,7 @@ import QueueDock from './QueueDock'
 import { t } from '@/utils/i18n'
 import { TEXT_EXTS, MAX_ATTACHMENT_BYTES, PASTE_COLLAPSE_LINES, PASTE_COLLAPSE_CHARS } from '@/utils/constants'
 import { estimateTextTokens } from '@/utils/tokenEstimate'
-import ContextMeterBadge from './ContextMeterBadge'
+import SessionUsageRollbackBadge from './input/SessionUsageRollbackBadge'
 import { useShallow } from 'zustand/react/shallow'
 import { useFeatureFlag } from '@/utils/featureFlags'
 
@@ -721,15 +721,9 @@ export default function ChatInput() {
 
         <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-nowrap min-w-0">
           <div className="flex items-center gap-1.5 flex-nowrap min-w-0 shrink">
+            {/* 1. Mode: Plan / Act */}
             <AgentModeSelector mode={agentMode} onChange={setAgentMode} compact />
-            <EffortControl
-              thinkingEnabled={thinkingEnabled}
-              onToggleThinking={setThinkingEnabled}
-              level={effortLevel}
-              onLevelChange={setEffortLevel}
-              isBinary={isBinaryReasoning}
-              compact
-            />
+            {/* 2. Main Model Selector */}
             <ModelSelector
               providers={providers}
               allModels={allModels}
@@ -745,38 +739,23 @@ export default function ChatInput() {
                 }
               }}
             />
+            {/* 3. Thinking Effort Control */}
+            <EffortControl
+              thinkingEnabled={thinkingEnabled}
+              onToggleThinking={setThinkingEnabled}
+              level={effortLevel}
+              onLevelChange={setEffortLevel}
+              isBinary={isBinaryReasoning}
+              compact
+            />
           </div>
 
           <div className="flex items-center gap-1.5 min-w-0 shrink ml-auto flex-nowrap">
             {isStreaming ? (
               <StreamingStatusBar sessionId={currentSessionId} />
             ) : (
-              <>
-                {stoppedHint && (
-                  <span
-                    className="flex items-center gap-1.5 h-6.5 px-2 rounded-[6px] border text-[10px] font-mono shrink-0 select-none shadow-2xs font-medium border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
-                    title={t('chat.generation_stopped_hint')}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                    <span className="hidden sm:inline">{t('chat.generation_stopped_hint')}</span>
-                  </span>
-                )}
-                {poorMode && (
-                  <span
-                    className="flex items-center gap-1.5 h-6.5 px-2 rounded-[6px] border text-[10px] font-mono cursor-help shrink-0 select-none shadow-2xs font-medium border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]"
-                    title={t('slash.poor_enabled', '穷鬼省流模式：最大循环限制为 8 轮，激进压缩 Token')}
-                  >
-                    <Leaf size={11} className="text-emerald-500 shrink-0" />
-                    <span className="hidden sm:inline">{t('slash.poor', '省流')}</span>
-                  </span>
-                )}
-                <ContextMeterBadge />
-                {totalInputTokens > 0 && (
-                  <span className="text-[10px] tabular-nums shrink-0 font-mono hidden sm:inline" style={{ color: 'var(--text-muted)' }}>
-                    {t('chat.tokens_estimate', String(totalInputTokens))}
-                  </span>
-                )}
-              </>
+              /* 4. Session Tokens / Cost & Snapshot Rollback */
+              <SessionUsageRollbackBadge sessionId={currentSessionId} />
             )}
           </div>
         </div>

@@ -1,15 +1,3 @@
-import { HardDrive, TerminalSquare, Globe } from 'lucide-react'
-
-// Capability axis options（与 capabilityPolicy.js 三态对齐）
-export const AXIS_OPTIONS = ['allow', 'ask', 'deny'] as const
-export type AxisPolicy = typeof AXIS_OPTIONS[number]
-
-export const AXES: { key: string; label: string; desc: string; icon: any; hint: string }[] = [
-  { key: 'filesystem', label: '文件系统', desc: '文件读写 / 目录操作 / git 本地操作', icon: HardDrive, hint: 'allow 放行所有文件操作; ask 每次确认; deny 禁止' },
-  { key: 'shell', label: 'Shell 命令', desc: 'run_command / 调试循环 / 测试循环', icon: TerminalSquare, hint: '命令执行是最高风险轴, 建议 ask 或 deny' },
-  { key: 'network', label: '网络访问', desc: 'web 搜索/抓取 / GitHub 操作', icon: Globe, hint: 'allow 直连; ask 每次确认; deny 断网' },
-]
-
 export interface FlagItem {
   key: string
   label: string
@@ -59,15 +47,9 @@ export const CONTEXT_CACHE_FLAGS: FlagItem[] = [
   },
   {
     key: 'agent.toolRouter',
-    label: '智能意图工具路由 (Intent-Aware Tool Router)',
-    desc: '按任务关键词按需挂载 GitHub / LSP / 记忆 / 子代理工具子集，降低首轮 Prompt Token 开销',
-    badge: 'Router',
-  },
-  {
-    key: 'agent.toolRouter.staged',
-    label: '阶段感知增量工具挂载 (Stage-Aware Additive Routing)',
-    desc: '随任务推进自动识别 Explore -> Build -> Verify -> Deliver 四阶段，以只追加方式动态解锁所需工具桶',
-    badge: '4-Stage',
+    label: '前缀缓存安全双层工具路由 (Prefix-Cache-Safe Tool Router)',
+    desc: '主 Agent 顶层固定 10 个常驻工具 Schema 保持 KV-Cache 100% 稳定；非核心工具经 call_extended_tool 网关转发，子代理按角色阶段挂载专属工具池',
+    badge: 'Prefix-Safe',
   },
   {
     key: 'llm.tokenCompression',

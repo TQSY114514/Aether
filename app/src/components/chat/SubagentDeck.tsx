@@ -267,6 +267,11 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                     {isCancelled && <Ban size={12} className="text-[var(--text-muted)] shrink-0" />}
                     {isStalled && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
                     <span className="font-mono text-[10px] text-[var(--text-muted)] shrink-0">#{idx + 1}</span>
+                    {item.name && (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] shrink-0">
+                        {item.name}
+                      </span>
+                    )}
                     <span className="font-medium truncate text-[var(--text-primary)]" title={item.task}>
                       {item.task}
                     </span>
@@ -377,6 +382,12 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                   </div>
                 )}
 
+                {thinkingContent && (
+                  <div className="text-[10px] text-[var(--text-muted)] truncate pl-4 font-mono" title={thinkingContent}>
+                    Thinking: {thinkingContent.replace(/\s+/g, ' ').trim().slice(-140)}
+                  </div>
+                )}
+
                 {isItemError && item.error && (
                   <div className="text-[11px] text-red-500 bg-red-50 dark:bg-red-950/20 p-2 rounded border border-red-500/30 font-mono break-all">
                     {item.error}
@@ -460,14 +471,21 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                             streamEvents.map((evt, eIdx) => (
                               <div
                                 key={evt.seq || evt.id || eIdx}
-                                className="p-1 rounded bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-muted)]"
+                                className="p-1 rounded bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-muted)] flex items-center justify-between gap-2"
                               >
-                                <span className="font-semibold text-[var(--text-secondary)]">
-                                  {evt.type || 'event'}:
-                                </span>{' '}
-                                {typeof evt.content === 'string'
-                                  ? evt.content.slice(0, 200)
-                                  : JSON.stringify(evt).slice(0, 200)}
+                                <span className="truncate">
+                                  <span className="font-semibold text-[var(--text-secondary)]">
+                                    {evt.type || 'event'}:
+                                  </span>{' '}
+                                  {typeof evt.content === 'string'
+                                    ? evt.content.slice(0, 200)
+                                    : JSON.stringify(evt).slice(0, 200)}
+                                </span>
+                                {evt.latencyMs != null && (
+                                  <span className="tabular-nums shrink-0 text-[var(--text-muted)]">
+                                    {evt.latencyMs}ms
+                                  </span>
+                                )}
                               </div>
                             ))
                           ) : (

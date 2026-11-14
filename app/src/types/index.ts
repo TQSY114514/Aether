@@ -56,6 +56,14 @@ export interface Session {
   updated_at: string
 }
 
+export interface MemoryHit {
+  id: number
+  content: string
+  type: string
+  origin: string
+  why: string
+}
+
 export interface Message {
   id: number
   session_id: number
@@ -73,9 +81,10 @@ export interface Message {
   file_summary?: string | null
   thinking_content?: string | null
   thinking_duration_ms?: number | null
+  memory_hits?: string | null
 }
 
-export type ViewType = 'chat' | 'models' | 'settings' | 'memory' | 'skills'
+export type ViewType = 'chat' | 'arena' | 'settings' | 'models' | 'memory' | 'skills' | 'workspace'
 
 export interface TestConnectionResult {
   success: boolean

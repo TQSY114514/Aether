@@ -1,19 +1,24 @@
 // ───────────────────────────────────────────────────────────────────────────
-// app/electron/tools/trustEngine.js — 4-Tier Trust & Permission Engine
+// app/electron/tools/trustEngine.js — Binary Plan / Act Trust & Safety Gate
 //
-// Enforces the 4 developer-centric agent operating modes:
-//   1. 'explore' (仅查看): Read-only exploration and inspection; strictly blocks file edits and destructive shell commands.
-//   2. 'workspace' (工作区内修改 - default): Controlled workspace mutations with inline Diff preview and explicit confirmation on external shell commands.
-//   3. 'auto_review' (自动审查): Supervised TDD loop; automatically mutates code, runs tests/checks, and triggers debugAgent self-healing on failure.
-//   4. 'unrestricted' (完全权限): Autonomous execution in sandbox with background safety boundaries and zero popups.
-//
-// Bridges dynamic session trust scoring (0-100) with 4-tier permission gating.
+// Converges the legacy 4-tier + 6-axis matrix into clean binary operating modes:
+//   1. 'plan' (Read-Only Planning): Allows workspace reads, search, read-only Git
+//      commands, read-only subagent exploration, and structured `session_plan`.
+//      Blocks all file writes and state-mutating shell commands.
+//   2. 'act' (Default Action Mode): Auto-executes workspace reads, searches,
+//      code edits (with pre-write snapshot + inline Diff revert), and non-destructive
+//      build/test commands without interrupting the stream.
+//      ONLY triggers manual confirmation for the 3 high-risk scenarios:
+//        (a) Paths outside Workspace Root
+//        (b) Modifying sensitive credential files (.env*, *.pem, *.key)
+//        (c) Destructive / high-risk shell commands (rm -rf, del /s,
+//            git reset --hard, git push --force, or unknown remote script exec)
 // ───────────────────────────────────────────────────────────────────────────
 
-const log = require('../logger')
-const { WRITE_TOOLS, READ_TOOLS, normalizeAgentMode } = require('../llm/toolLoopUtils')
+const fs = require('fs')
+const path = require('path')
+const { WRITE_TOOLS, normalizeAgentMode } = require('../llm/toolLoopUtils')
 
-// Forward or fallback to llm/trustEngine base scoring if present
 let baseTrustEngine = null
 try {
   baseTrustEngine = require('../llm/trustEngine')
@@ -26,19 +31,50 @@ const TRUST_AUTO_APPROVE = 80
 const TRUST_YOLO_THRESHOLD = 50
 const HIGH_RISK_TOOLS = baseTrustEngine?.HIGH_RISK_TOOLS ?? new Set(['write_file', 'edit_file', 'run_command', 'git_commit', 'git_push', 'apply_patch'])
 
-// Destructive command pattern (e.g. system wipes, recursive deletions, disk formats)
-const DESTRUCTIVE_COMMAND_REGEX = /(?:\brm\s+-(?:r[f]?|f?r)\b|\brm\s+.*--recursive\b|\bdel\s+.*[\/\-]s\b|\bdel\s+\/[sfq]|\brd\s+.*[\/\-]s\b|\brd\s+\/[sq]|\brmdir\s+.*[\/\-]s\b|\brmdir\s+[\/\-]s\b|\bformat\s+[a-z]:|\bmkfs|\bdd\s+if=.*of=|\bdrop\s+(?:database|table)\b|\btruncate\s+table\b)/i
-const BENIGN_SHELL_REGEX = /^\s*(git\s+(status|diff|log|branch|show)|ls|dir|pwd|echo|cat|head|tail|node\s+-v|npm\s+-v|python\s+--version)\b/i
+// Destructive or high-risk shell command patterns (Scenario 3)
+const DESTRUCTIVE_COMMAND_REGEX = /(?:\brm\s+-(?:[a-z]*r[a-z]*f|[a-z]*f[a-z]*r|[a-z]*r)\b|\brm\s+.*--recursive\b|\bdel\s+.*\/s\b|\brd\s+.*\/s\b|\brmdir\s+.*\/s\b|\bremove-item\b.*-recurse\b|\bformat\s+[a-z]:|\bmkfs\b|\bdd\s+if=|\bdrop\s+(?:database|table)\b|\btruncate\s+table\b|\bgit\s+reset\s+--hard\b|\bgit\s+push\b[^\n]*(?:\s--force\b|\s-f\b|\s--force-with-lease\b))/i
 
-function isDestructiveCommand(cmd) {
-  return DESTRUCTIVE_COMMAND_REGEX.test(String(cmd || ''))
+const REMOTE_SCRIPT_EXEC_REGEX = /(?:\b(?:curl|wget)\b[^\n|]*\|\s*(?:sh|bash|zsh|ash|dash|node|python|python3|ruby|perl|php|pwsh|powershell)\b|\b(?:sh|bash|zsh|pwsh|powershell)\s+-c\s+["'`][^"'`]*\b(?:curl|wget|irm|iwr|invoke-webrequest|invoke-restmethod)\b|\b(?:irm|iwr|invoke-webrequest|invoke-restmethod)\b[^\n|]*\|\s*(?:iex|invoke-expression)\b)/i
+
+const BENIGN_SHELL_REGEX = /^\s*(?:git\s+(?:status|diff|log|show|ls-files|rev-parse)(?:\s|$)|git\s+branch(?:\s+(?!--delete\b|-d\b|-D\b|-m\b|-M\b)\S*)*$|ls(?:\s|$)|dir(?:\s|$)|pwd(?:\s|$)|echo(?:\s|$)|cat(?:\s|$)|head(?:\s|$)|tail(?:\s|$)|rg(?:\s|$)|grep(?:\s|$)|findstr(?:\s|$)|which(?:\s|$)|where(?:\s|$)|type(?:\s|$)|node\s+-v\b|npm\s+-v\b|python\s+--version\b|npm\s+(?:test|run\s+\S+)|npx\s+(?:vitest|jest|tsc)\b|pnpm\s+(?:test|run\s+\S+)|yarn\s+(?:test|run\s+\S+)|pytest\b|cargo\s+(?:test|check|build)\b|go\s+(?:test|vet|build)\b)/i
+
+const READONLY_PLAN_SHELL_REGEX = /^\s*(?:git\s+(?:status|diff|log|show|ls-files|rev-parse)(?:\s|$)|git\s+branch(?:\s+(?:-a\b|-r\b|-v\b|--list\b)\S*)*$|ls(?:\s|$)|dir(?:\s|$)|pwd(?:\s|$)|cat(?:\s|$)|head(?:\s|$)|tail(?:\s|$)|rg(?:\s|$)|grep(?:\s|$)|findstr(?:\s|$)|which(?:\s|$)|where(?:\s|$)|type(?:\s|$)|node\s+-v\b|npm\s+-v\b|python\s+--version\b)/i
+
+const SHELL_CHAIN_REGEX = /[;&<>`\r\n]|\$\(|\|\|/
+
+function isHighRiskShellCommand(cmd) {
+  const s = String(cmd || '')
+  return DESTRUCTIVE_COMMAND_REGEX.test(s) || REMOTE_SCRIPT_EXEC_REGEX.test(s)
 }
 
-const SHELL_CHAIN_REGEX = /[;&|<>\`\r\n]|\$\(/
+function isDestructiveCommand(cmd) {
+  return isHighRiskShellCommand(cmd)
+}
 
 function isBenignCommand(cmd) {
   const c = String(cmd || '').trim()
+  if (!c || isHighRiskShellCommand(c)) return false
   return BENIGN_SHELL_REGEX.test(c) && !SHELL_CHAIN_REGEX.test(c)
+}
+
+function isReadOnlyPlanShellCommand(cmd) {
+  const c = String(cmd || '').trim()
+  if (!c || isHighRiskShellCommand(c)) return false
+  // Disallow shell operators, command chaining, and file output redirection (> or >>)
+  if (/[;&<>`\r\n]|\$\(|\|\|/.test(c)) return false
+  // Disallow file output/redirection flags like -o or --output= or --output
+  if (/(?:^|\s)(?:-o\s+|--output(?:=|\s))\S+/i.test(c)) return false
+  if (/(?:^|\s)-o\S+/i.test(c)) return false
+  // Disallow piping in Plan mode unless piping strictly to harmless readers like head/tail/grep/sort/wc
+  if (c.includes('|')) {
+    const parts = c.split('|').map(s => s.trim())
+    if (parts.length < 2 || !READONLY_PLAN_SHELL_REGEX.test(parts[0])) return false
+    return parts.slice(1).every(seg => {
+      if (/(?:^|\s)(?:-o\s+|--output(?:=|\s))\S+/i.test(seg) || /(?:^|\s)-o\S+/i.test(seg)) return false
+      return /^(?:head|tail|grep|rg|findstr|sort|uniq|wc|more)\b/i.test(seg)
+    })
+  }
+  return READONLY_PLAN_SHELL_REGEX.test(c)
 }
 
 function isCriticalSystemWipe(cmd) {
@@ -51,6 +87,152 @@ function isCriticalSystemWipe(cmd) {
          /\bformat\s+[a-z]:/i.test(c) ||
          /\bmkfs\b/i.test(c) ||
          /\bdd\s+if=.*of=\/dev\/(?:sd[a-z]|nvme|hd[a-z])/i.test(c)
+}
+
+function _realpathOrNearest(absPath) {
+  try {
+    return fs.realpathSync(absPath)
+  } catch {
+    try {
+      const parent = path.dirname(absPath)
+      if (parent && parent !== absPath) {
+        const realParent = _realpathOrNearest(parent)
+        return path.join(realParent, path.basename(absPath))
+      }
+    } catch {}
+    return path.normalize(absPath)
+  }
+}
+
+function isOutsideWorkspace(targetPath, workspaceRoot) {
+  if (!targetPath || !workspaceRoot) return false
+  const raw = String(targetPath).trim()
+  if (!raw) return false
+  // Windows raw/UNC prefixes escape normal root checks
+  const winNorm = raw.replace(/\//g, '\\')
+  if (/^\\{2,}\?[\\/]/.test(winNorm) || /^\\{2,}[^\\]+/.test(winNorm)) return true
+
+  const rootResolved = _realpathOrNearest(path.resolve(String(workspaceRoot)))
+  const absTarget = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(rootResolved, raw)
+  const targetResolved = _realpathOrNearest(absTarget)
+
+  const cmpRoot = process.platform === 'win32' ? rootResolved.toLowerCase() : rootResolved
+  const cmpTarget = process.platform === 'win32' ? targetResolved.toLowerCase() : targetResolved
+  const prefix = cmpRoot.endsWith(path.sep) ? cmpRoot : cmpRoot + path.sep
+  return !(cmpTarget === cmpRoot || cmpTarget.startsWith(prefix))
+}
+
+function isSensitiveCredentialPath(targetPath) {
+  if (!targetPath) return false
+  const raw = String(targetPath).trim()
+  if (!raw) return false
+  const resolved = path.resolve(raw)
+  const base = path.basename(resolved).toLowerCase()
+  if (base === '.env' || base.startsWith('.env.') || base.endsWith('.env')) return true
+  if (base.endsWith('.pem') || base.endsWith('.key')) return true
+  return false
+}
+
+function _unwrapExtendedTool(toolName, toolArgs) {
+  const args = (toolArgs && typeof toolArgs === 'object') ? toolArgs : {}
+  if (toolName === 'call_extended_tool' && args.tool_name) {
+    let innerArgs = args.arguments
+    if (typeof innerArgs === 'string') {
+      try { innerArgs = JSON.parse(innerArgs) } catch { innerArgs = {} }
+    }
+    return {
+      effectiveName: String(args.tool_name),
+      effectiveArgs: (innerArgs && typeof innerArgs === 'object') ? innerArgs : {},
+    }
+  }
+  return { effectiveName: toolName, effectiveArgs: args }
+}
+
+function extractToolTargetPaths(toolName, toolArgs = {}) {
+  const args = (toolArgs && typeof toolArgs === 'object') ? toolArgs : {}
+  const paths = []
+  for (const k of ['path', 'file_path', 'target_file', 'target', 'cwd', 'dir', 'outputDir', 'destination']) {
+    if (args[k] && typeof args[k] === 'string') paths.push(args[k])
+  }
+  if (Array.isArray(args.paths)) {
+    for (const p of args.paths) {
+      if (typeof p === 'string' && p.trim()) paths.push(p)
+    }
+  }
+  return [...new Set(paths)]
+}
+
+/**
+ * Evaluates the 3 high-risk scenarios that require explicit user confirmation in Act mode:
+ *   1. Reading or writing paths outside Workspace Root
+ *   2. Modifying sensitive credential files (.env*, *.pem, *.key)
+ *   3. Executing destructive or high-risk shell commands
+ */
+function evaluateHighRiskGate(toolName, toolArgs = {}, workspaceRoot = null) {
+  const { effectiveName, effectiveArgs } = _unwrapExtendedTool(toolName, toolArgs)
+  const paths = extractToolTargetPaths(effectiveName, effectiveArgs)
+
+  // Scenario 1: Path outside Workspace Root (read, search, write, or shell cwd)
+  if (workspaceRoot) {
+    for (const p of paths) {
+      if (isOutsideWorkspace(p, workspaceRoot)) {
+        return {
+          highRisk: true,
+          scenario: 'outside_workspace',
+          reason: `High-risk: path outside Workspace Root (${p})`,
+          target: p,
+        }
+      }
+    }
+  }
+
+  // Scenario 2: Modifying sensitive credential files (.env*, *.pem, *.key)
+  const isMutating = WRITE_TOOLS.has(effectiveName) || effectiveName === 'delete_file' || effectiveName === 'create_or_update_file'
+  if (isMutating) {
+    for (const p of paths) {
+      if (isSensitiveCredentialPath(p)) {
+        return {
+          highRisk: true,
+          scenario: 'sensitive_credential',
+          reason: `High-risk: modifying sensitive credential file (${path.basename(p)})`,
+          target: p,
+        }
+      }
+    }
+  }
+
+  // Scenario 3: Destructive or high-risk shell command (or shell modifying credential files)
+  if (effectiveName === 'run_command' || effectiveName === 'exec' || effectiveName === 'run_shell') {
+    const cmd = String(effectiveArgs.command || effectiveArgs.cmd || '')
+    if (isHighRiskShellCommand(cmd)) {
+      return {
+        highRisk: true,
+        scenario: 'high_risk_shell',
+        isDestructive: true,
+        reason: `High-risk shell command requires confirmation: ${cmd.slice(0, 100)}`,
+        target: cmd,
+      }
+    }
+    if (/(?:>|>>|\bcp\b|\bmv\b|\brm\b|\bdel\b|\bsed\s+-i)\s+[^\n]*(?:\.env\b|\.env\.|\S+\.pem\b|\S+\.key\b)/i.test(cmd)) {
+      return {
+        highRisk: true,
+        scenario: 'sensitive_credential',
+        reason: 'High-risk: shell command modifies sensitive credential file (.env* / *.pem / *.key)',
+        target: cmd,
+      }
+    }
+  }
+
+  if (effectiveName === 'git_push' && /\s(--force|-f|--force-with-lease)\b/.test(String(effectiveArgs.flags || effectiveArgs.args || ''))) {
+    return {
+      highRisk: true,
+      scenario: 'high_risk_shell',
+      isDestructive: true,
+      reason: 'High-risk: force push requires explicit confirmation',
+    }
+  }
+
+  return { highRisk: false }
 }
 
 function getTrustScore(db, sessionId) {
@@ -91,9 +273,6 @@ function adjustTrust(db, sessionId, delta, toolName) {
   return newScore
 }
 
-/**
- * Returns permission mode recommendation for a dangerous tool given session trust score.
- */
 function getPermissionMode(db, sessionId, toolName) {
   if (baseTrustEngine && typeof baseTrustEngine.getPermissionMode === 'function') {
     return baseTrustEngine.getPermissionMode(db, sessionId, toolName)
@@ -109,179 +288,177 @@ function getPermissionMode(db, sessionId, toolName) {
 }
 
 /**
- * Evaluates effective operating mode for a tool invocation across the 4 tiers.
+ * Resolves effective binary operating mode ('plan' | 'act' | 'off').
  */
-function getEffectiveMode(agentMode, toolName, db, sessionId) {
-  const norm = normalizeAgentMode(agentMode)
-
-  // Explore tier is strictly read-only
-  if (norm === 'explore') return 'explore'
-
-  // Unrestricted tier runs autonomously
-  if (norm === 'unrestricted') return 'unrestricted'
-
-  // Auto-review tier runs supervised TDD
-  if (norm === 'auto_review') return 'auto_review'
-
-  // In workspace (default) or legacy ask mode, evaluate adaptive trust
-  if (norm === 'workspace') {
-    if (sessionId && db) {
-      const perm = getPermissionMode(db, sessionId, toolName)
-      if (perm === 'auto') return 'auto_review'
-      if (perm === 'yolo') return 'unrestricted'
-    }
-    return 'workspace'
-  }
-
-  // Preserve legacy exact string returns if legacy mode was explicitly passed
-  if (agentMode === 'plan') return 'plan'
-  if (agentMode === 'yolo') return 'yolo'
-  if (agentMode === 'auto_confirm') return 'auto'
-  if (agentMode === 'ask' && sessionId && db) {
-    return getPermissionMode(db, sessionId, toolName)
-  }
-
-  return agentMode
+function getEffectiveMode(agentMode) {
+  return normalizeAgentMode(agentMode)
 }
 
 /**
- * Validates whether a tool is allowed to execute under the given agent mode.
- * In 'explore' mode, strictly blocks mutating tools (write_file, edit_file, apply_patch, run_command, etc.).
+ * Validates whether a tool is allowed under Binary Plan / Act mode.
  */
-function checkToolAllowed(toolName, agentMode, toolArgs = {}) {
+function checkToolAllowed(toolName, agentMode, toolArgs = {}, opts = {}) {
   const mode = normalizeAgentMode(agentMode)
+  const { effectiveName, effectiveArgs } = _unwrapExtendedTool(toolName, toolArgs)
 
-  if (mode === 'explore') {
-    let tool = null
-    try {
-      const registry = require('./registry')
-      tool = registry.getTool(toolName)
-    } catch {}
-
-    const isDangerousMutating = (
-      WRITE_TOOLS.has(toolName) ||
-      tool?.risk === 'dangerous' ||
-      toolName === 'run_command' ||
-      toolName === 'exec' ||
-      toolName === 'lsp_rename' ||
-      toolName === 'sandbox_apply' ||
-      toolName === 'extract_asar'
-    )
-
-    if (isDangerousMutating) {
-      const isShell = toolName === 'run_command' || toolName === 'exec'
+  if (mode === 'plan' || mode === 'off') {
+    if (effectiveName === 'run_command' || effectiveName === 'exec' || effectiveName === 'run_shell') {
+      const cmd = effectiveArgs.command || effectiveArgs.cmd || ''
+      if (isReadOnlyPlanShellCommand(cmd)) {
+        const risk = evaluateHighRiskGate(effectiveName, effectiveArgs, opts.workspaceRoot)
+        if (risk.highRisk) {
+          return {
+            allowed: true,
+            requiresPrompt: true,
+            promptRequired: true,
+            scenario: risk.scenario,
+            reason: risk.reason,
+          }
+        }
+        return { allowed: true, requiresPrompt: false, promptRequired: false }
+      }
       return {
         allowed: false,
         requiresPrompt: false,
         promptRequired: false,
-        reason: isShell
-          ? 'Shell command execution is forbidden in read-only explore mode'
-          : `Tool '${toolName}' is forbidden in read-only explore mode`
+        reason: 'Mutating shell command execution is blocked in Plan mode',
       }
     }
-    return { allowed: true, requiresPrompt: false, promptRequired: false }
-  }
 
-  if (mode === 'workspace') {
-    if (toolName === 'run_command' || toolName === 'exec') {
-      const cmd = toolArgs.command || toolArgs.cmd || ''
-      if (isDestructiveCommand(cmd)) {
+    let tool = null
+    try {
+      const registry = require('./registry')
+      tool = registry.getTool(effectiveName)
+    } catch {}
+
+    // Allow read-only subagent exploration, planning, and user Q&A in Plan mode
+    if (effectiveName === 'dispatch_subagent') {
+      const subRole = String(effectiveArgs?.role || 'explorer').trim().toLowerCase()
+      const mutatingRoles = new Set(['implementer', 'writer', 'editor', 'coder', 'fixer', 'refactorer'])
+      if (mutatingRoles.has(subRole)) {
         return {
-          allowed: true,
-          requiresPrompt: true,
-          promptRequired: true,
-          isDestructive: true,
-          warning: 'Destructive shell command detected',
-          reason: 'Destructive shell command requires explicit confirmation in workspace mode'
-        }
-      }
-      if (isBenignCommand(cmd)) {
-        return {
-          allowed: true,
+          allowed: false,
           requiresPrompt: false,
-          promptRequired: false
+          promptRequired: false,
+          reason: `Mutating subagent role '${subRole}' is blocked in Plan mode`,
         }
       }
+      return { allowed: true, requiresPrompt: false, promptRequired: false }
+    }
+    if (effectiveName === 'session_plan' || effectiveName === 'ask_user') {
+      return { allowed: true, requiresPrompt: false, promptRequired: false }
+    }
+
+    const isMutatingOrDangerous = (
+      WRITE_TOOLS.has(effectiveName) ||
+      tool?.risk === 'dangerous' ||
+      effectiveName === 'lsp_rename' ||
+      effectiveName === 'sandbox_apply' ||
+      effectiveName === 'extract_asar'
+    )
+
+    if (isMutatingOrDangerous) {
+      return {
+        allowed: false,
+        requiresPrompt: false,
+        promptRequired: false,
+        reason: `Tool '${effectiveName}' is blocked in Plan mode`,
+      }
+    }
+
+    const risk = evaluateHighRiskGate(effectiveName, effectiveArgs, opts.workspaceRoot)
+    if (risk.highRisk) {
       return {
         allowed: true,
         requiresPrompt: true,
         promptRequired: true,
-        reason: 'External shell commands require explicit confirmation in workspace mode'
+        scenario: risk.scenario,
+        reason: risk.reason,
       }
     }
     return { allowed: true, requiresPrompt: false, promptRequired: false }
   }
 
-  if (mode === 'auto_review') {
-    return { allowed: true, requiresPrompt: false, promptRequired: false }
+  // 'act' mode: auto-execute normal workspace operations; prompt ONLY on the 3 high-risk scenarios
+  if (effectiveName === 'run_command' || effectiveName === 'exec' || effectiveName === 'run_shell') {
+    const cmd = effectiveArgs.command || effectiveArgs.cmd || ''
+    if (isCriticalSystemWipe(cmd)) {
+      return {
+        allowed: false,
+        requiresPrompt: false,
+        promptRequired: false,
+        isDestructive: true,
+        reason: 'Critical system destructive command blocked',
+      }
+    }
   }
 
-  if (mode === 'unrestricted') {
-    return { allowed: true, requiresPrompt: false, promptRequired: false }
+  const risk = evaluateHighRiskGate(toolName, toolArgs, opts.workspaceRoot)
+  if (risk.highRisk) {
+    return {
+      allowed: true,
+      requiresPrompt: true,
+      promptRequired: true,
+      isDestructive: !!risk.isDestructive,
+      scenario: risk.scenario,
+      warning: risk.isDestructive ? 'Destructive shell command detected' : undefined,
+      reason: risk.reason,
+    }
   }
 
-  return { allowed: true, requiresPrompt: true, promptRequired: true, reason: 'Explicit confirmation required' }
+  return { allowed: true, requiresPrompt: false, promptRequired: false }
 }
 
 /**
- * Evaluates shell command safety under the current agent mode.
+ * Evaluates shell command safety under Binary Plan / Act mode.
  */
-function evaluateShellSafety(cmd, agentMode) {
+function evaluateShellSafety(cmd, agentMode, opts = {}) {
   const mode = normalizeAgentMode(agentMode)
-  const isDestruct = isDestructiveCommand(cmd)
+  const isDestruct = isHighRiskShellCommand(cmd)
   const isCritWipe = isCriticalSystemWipe(cmd)
 
-  if (mode === 'explore') {
+  if (mode === 'plan' || mode === 'off') {
+    if (isReadOnlyPlanShellCommand(cmd)) {
+      return {
+        allowed: true,
+        proceed: true,
+        requiresPrompt: false,
+        promptRequired: false,
+        isDestructive: false,
+      }
+    }
     return {
       allowed: false,
       proceed: false,
       requiresPrompt: false,
       promptRequired: false,
       isDestructive: isDestruct,
-      reason: 'Shell commands are forbidden in read-only explore mode'
+      reason: 'Mutating shell commands are blocked in Plan mode',
     }
   }
 
-  if (mode === 'unrestricted') {
-    if (isCritWipe) {
-      return {
-        allowed: false,
-        proceed: false,
-        requiresPrompt: false,
-        promptRequired: false,
-        isDestructive: true,
-        reason: 'Critical system destructive command blocked by background safety boundaries'
-      }
-    }
+  if (isCritWipe) {
     return {
-      allowed: true,
-      proceed: true,
+      allowed: false,
+      proceed: false,
       requiresPrompt: false,
       promptRequired: false,
-      isDestructive: isDestruct
+      isDestructive: true,
+      reason: 'Critical system destructive command blocked',
     }
   }
 
-  if (isDestruct) {
+  const risk = evaluateHighRiskGate('run_command', { command: cmd, cwd: opts.cwd }, opts.workspaceRoot)
+  if (risk.highRisk) {
     return {
       allowed: true,
       proceed: false,
       requiresPrompt: true,
       promptRequired: true,
-      isDestructive: true,
-      warning: 'Destructive shell command detected',
-      reason: 'Destructive shell command requires explicit confirmation'
-    }
-  }
-
-  if (mode === 'workspace') {
-    const benign = isBenignCommand(cmd)
-    return {
-      allowed: true,
-      proceed: benign,
-      requiresPrompt: !benign,
-      promptRequired: !benign,
-      isDestructive: false
+      isDestructive: !!risk.isDestructive,
+      scenario: risk.scenario,
+      warning: risk.isDestructive ? 'Destructive shell command detected' : undefined,
+      reason: risk.reason,
     }
   }
 
@@ -290,7 +467,7 @@ function evaluateShellSafety(cmd, agentMode) {
     proceed: true,
     requiresPrompt: false,
     promptRequired: false,
-    isDestructive: false
+    isDestructive: false,
   }
 }
 
@@ -323,6 +500,12 @@ module.exports = {
   getTrustBadge,
   checkToolAllowed,
   evaluateShellSafety,
+  evaluateHighRiskGate,
+  extractToolTargetPaths,
+  isOutsideWorkspace,
+  isSensitiveCredentialPath,
+  isHighRiskShellCommand,
+  isReadOnlyPlanShellCommand,
   isDestructiveCommand,
   isBenignCommand,
   isCriticalSystemWipe,

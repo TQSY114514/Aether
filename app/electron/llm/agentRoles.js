@@ -23,6 +23,8 @@ const DEFAULT_ROLES = {
     model: 'fast',
     effort: 'low',
     readOnly: true,
+    stage: 'Search',
+    capability: 'READ',
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
 
 You are an EXPLORATION agent. Your job is to understand codebases:
@@ -37,7 +39,24 @@ RULES:
 - Report exact file paths and line numbers
 - If something is ambiguous, list all possibilities`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
+  },
+  explorer: {
+    label: 'Explorer',
+    description: 'Read-only pathfinding & codebase exploration. Searches files, symbols, and patterns.',
+    model: 'fast',
+    effort: 'low',
+    readOnly: true,
+    stage: 'Search',
+    capability: 'READ',
+    systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
+
+You are an EXPLORER agent (read-only pathfinder). Your job is to map the codebase quickly and accurately:
+- Find files, symbol definitions, and cross-file dependencies
+- Report exact file paths and line numbers
+- Never modify files or run mutating commands.`,
+    defaultMode: 'plan',
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'generate_repo_map', 'web_search', 'web_fetch'],
   },
   build: {
     label: 'Build',
@@ -45,6 +64,8 @@ RULES:
     model: 'inherit',
     effort: 'medium',
     readOnly: false,
+    stage: 'Edit',
+    capability: 'WRITE',
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
 
 You are a BUILD agent. Your job is to implement features and fix bugs:
@@ -61,12 +82,32 @@ RULES:
     defaultMode: 'auto',
     allowTools: null, // null = all tools
   },
+  implementer: {
+    label: 'Implementer',
+    description: 'Scoped implementation agent. Applies focused, localized edits and verifies with tests/LSP.',
+    model: 'inherit',
+    effort: 'medium',
+    readOnly: false,
+    stage: 'Edit',
+    capability: 'WRITE',
+    systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
+
+You are an IMPLEMENTER agent. Your job is to make focused, localized code changes:
+- Read target files before editing
+- Make minimal, surgical edits via edit_file / apply_patch / write_file
+- Run targeted tests or diagnostics to confirm your change compiles and passes
+- Report exact files modified and verification output`,
+    defaultMode: 'auto',
+    allowTools: ['read_file', 'edit_file', 'write_file', 'apply_patch', 'glob_files', 'glob_find', 'grep_search', 'lsp_definition', 'lsp_references', 'lsp_code_actions', 'lsp_rename', 'run_command'],
+  },
   review: {
     label: 'Review',
     description: 'Code review agent. Analyzes code for bugs, security, performance, and style.',
     model: 'inherit',
     effort: 'high',
     readOnly: true,
+    stage: 'Verify',
+    capability: 'READ',
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
 
 You are a REVIEW agent. Your job is to analyze code quality:
@@ -81,7 +122,7 @@ RULES:
 - Prioritize findings: Critical > High > Medium > Low
 - For each issue, explain the impact and suggest a fix`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
   },
   research: {
     label: 'Research',
@@ -89,6 +130,8 @@ RULES:
     model: 'fast',
     effort: 'low',
     readOnly: true,
+    stage: 'Search',
+    capability: 'NETWORK',
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
 
 You are a RESEARCH agent. Your job is to gather information from external sources:
@@ -110,6 +153,8 @@ RULES:
     model: 'inherit',
     effort: 'high',
     readOnly: true,
+    stage: 'Diagnose',
+    capability: 'READ',
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
 
 You are a DEBUG agent. Your job is to find and fix bugs:
@@ -124,7 +169,7 @@ RULES:
 - Check edge cases and error handling
 - If the fix isn't obvious, explain what you've ruled out`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'run_command'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'lsp_diagnostics', 'run_command'],
   },
   oracle: {
     label: 'Oracle',
@@ -132,6 +177,8 @@ RULES:
     model: 'inherit',
     effort: 'high',
     readOnly: true,
+    stage: 'Diagnose',
+    capability: 'READ',
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
 
 You are an ORACLE agent. Your job is high-order reasoning and architectural consulting:
@@ -146,7 +193,7 @@ RULES:
 - Ground all reasoning in verified facts, code references, and theoretical soundness
 - Report exact file paths and line numbers when referencing code`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
   },
   librarian: {
     label: 'Librarian',
@@ -154,6 +201,8 @@ RULES:
     model: 'inherit',
     effort: 'medium',
     readOnly: true,
+    stage: 'Search',
+    capability: 'NETWORK',
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
 
 You are a LIBRARIAN agent. Your job is to research external libraries, dependencies, and documentation:
@@ -167,7 +216,41 @@ RULES:
 - Provide URLs, version numbers, and authoritative documentation references for all findings
 - Summarize public APIs and interfaces clearly`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'grep_search', 'web_search', 'web_fetch', 'run_command'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'web_search', 'web_fetch', 'run_command'],
+  },
+  hunter: {
+    label: 'Hunter',
+    description: 'Isolated security finder (Finder != Verifier). Scans code for candidate vulnerabilities with source-to-sink traces.',
+    model: 'inherit',
+    effort: 'high',
+    readOnly: true,
+    stage: 'Security',
+    capability: 'READ',
+    systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
+
+You are a SECURITY HUNTER agent (Finder role in Finder != Verifier isolation).
+- Scan the codebase for security vulnerabilities (injection, auth bypass, path traversal, SSRF, secrets).
+- Produce structured candidate findings with exact file paths, line numbers, and source-to-sink traces.
+- You do NOT have authority to mark findings as 'confirmed' — an isolated Verifier will independently validate each candidate.`,
+    defaultMode: 'plan',
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'git_log', 'git_diff', 'inspect_app_bundle', 'audit_agent_bundle'],
+  },
+  verifier: {
+    label: 'Verifier',
+    description: 'Isolated verification agent (Finder != Verifier). Independently verifies candidate fixes, tests, or security findings without prior reasoning bias.',
+    model: 'inherit',
+    effort: 'high',
+    readOnly: true,
+    stage: 'Verify',
+    capability: 'READ',
+    systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}
+
+You are an ISOLATED VERIFIER agent (Finder != Verifier).
+- You receive only the target artifact/candidate and source code — verify independently from first principles.
+- Run diagnostics, tests, or static source-to-sink checks to confirm or reject claims.
+- Report verified evidence (file paths, line numbers, command exit codes). Never modify production files.`,
+    defaultMode: 'plan',
+    allowTools: ['read_file', 'grep_search', 'glob_files', 'glob_find', 'lsp_diagnostics', 'run_command', 'review_code'],
   },
 }
 
@@ -206,6 +289,8 @@ function parseRoleMarkdown(rawMarkdown, fallbackName, sourcePath = null) {
     effort: meta.effort || 'medium',
     readOnly,
     defaultMode,
+    stage: meta.stage || undefined,
+    capability: meta.capability || undefined,
     allowTools,
     systemPrompt: `${SUBAGENT_SYSTEM_PROMPT}\n\n${(body || '').trim()}`,
     source: sourcePath,
@@ -285,11 +370,22 @@ ${taskDescription}`
 
 /**
  * Build a tool list filter for a role.
+ * Resolves explicit `allowTools`, or falls back to stage/capability tool pool
+ * via `toolRouter.getStageToolPool`, or null for unrestricted roles (`build`).
  * Returns an array of tool names to include, or null for all tools.
  */
 function buildToolFilter(roleName, workspaceRoot) {
   const role = getRole(roleName, workspaceRoot)
-  return role ? role.allowTools : null
+  if (!role) return null
+  if (Array.isArray(role.allowTools)) return role.allowTools
+  if (role.stage || role.capability) {
+    try {
+      const { getStageToolPool } = require('./toolRouter')
+      const pool = getStageToolPool(role.stage || role.capability)
+      if (Array.isArray(pool) && pool.length > 0) return pool
+    } catch {}
+  }
+  return null
 }
 
 /**

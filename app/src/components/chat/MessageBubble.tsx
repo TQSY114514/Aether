@@ -2,7 +2,7 @@ import { useState, memo, useMemo, useCallback } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
-import { Copy, Check, RefreshCw, Pencil, Play, GitFork } from 'lucide-react'
+import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X } from 'lucide-react'
 import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
@@ -37,6 +37,22 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const editMessage = useStore(s => s.editMessage)
   const continueMessage = useStore(s => s.continueMessage)
   const forkSession = useStore(s => s.forkSession)
+
+  const [memoryPopoverOpen, setMemoryPopoverOpen] = useState(false)
+  const [pinnedHitIds, setPinnedHitIds] = useState<Set<number>>(new Set())
+  const [removedHitIds, setRemovedHitIds] = useState<Set<number>>(new Set())
+  const storeMemoryHits = useStore(s => s.memoryHitsByMessage[message.id])
+  const memoryHits = useMemo(() => {
+    if (storeMemoryHits && storeMemoryHits.length > 0) return storeMemoryHits
+    if (message.memory_hits) {
+      try {
+        const parsed = JSON.parse(message.memory_hits)
+        return Array.isArray(parsed) ? parsed : []
+      } catch { return [] }
+    }
+    return []
+  }, [storeMemoryHits, message.memory_hits])
+  const visibleMemoryHits = useMemo(() => memoryHits.filter((h: any) => !removedHitIds.has(h.id)), [memoryHits, removedHitIds])
 
   const isUser = message.role === 'user'
   // An assistant turn with a live todo checklist renders as a task card.
@@ -232,6 +248,99 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
               {isError ? t('chat.error_short') : isAborted ? t('chat.aborted') : 'Assistant'}
             </span>
+            {visibleMemoryHits.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMemoryPopoverOpen((o) => !o)}
+                  className="h-5 px-1.5 rounded-[4px] border text-[10px] font-mono flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer select-none"
+                  style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)', color: 'var(--text-secondary)' }}
+                  title="查看本轮注入的记忆上下文"
+                >
+                  <Brain size={11} className="shrink-0 text-[var(--accent)]" />
+                  <span>Memory · {visibleMemoryHits.length} hit{visibleMemoryHits.length > 1 ? 's' : ''}</span>
+                </button>
+
+                {memoryPopoverOpen && (
+                  <div
+                    className="absolute left-0 top-full mt-1.5 w-80 rounded-lg border shadow-xl p-2.5 z-50 text-left animate-spring-up"
+                    style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border)] mb-2">
+                      <span className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                        <Brain size={12} className="text-[var(--accent)]" />
+                        <span>Injected Memory ({visibleMemoryHits.length})</span>
+                      </span>
+                      <button
+                        onClick={() => setMemoryPopoverOpen(false)}
+                        className="p-0.5 rounded hover:bg-[var(--border)] text-[var(--text-muted)] cursor-pointer"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {visibleMemoryHits.map((hit: any) => {
+                        const isPinned = pinnedHitIds.has(hit.id)
+                        return (
+                          <div
+                            key={hit.id}
+                            className="p-2 rounded border text-[11px] space-y-1.5"
+                            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
+                          >
+                            <div className="text-[11px] leading-snug line-clamp-2" style={{ color: 'var(--text-primary)' }}>
+                              {hit.content}
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-[var(--border)]/50">
+                              <span className="font-mono text-[var(--text-muted)] truncate max-w-[140px]" title={hit.why}>
+                                Why: {hit.why || 'relevant'}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={async () => {
+                                    const res = await window.electronAPI.memory.pinToAgentsMd({
+                                      id: hit.id,
+                                      content: hit.content,
+                                    })
+                                    if (res.success) {
+                                      setPinnedHitIds((prev) => new Set([...prev, hit.id]))
+                                      useStore.getState().triggerToast('已固定到 AGENTS.md', 'success')
+                                    } else {
+                                      useStore.getState().triggerToast(res.error || '固定失败', 'warning')
+                                    }
+                                  }}
+                                  disabled={isPinned}
+                                  className="flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] hover:bg-[var(--border)] transition-colors disabled:opacity-50 cursor-pointer"
+                                  style={{ borderColor: 'var(--border)', color: isPinned ? 'var(--accent)' : 'var(--text-secondary)' }}
+                                  title="Pin 固定到 AGENTS.md"
+                                >
+                                  <Pin size={10} className={isPinned ? 'fill-current' : ''} />
+                                  <span>{isPinned ? '已固定' : 'Pin'}</span>
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    await window.electronAPI.memory.delete(hit.id)
+                                    setRemovedHitIds((prev) => new Set([...prev, hit.id]))
+                                    useStore.getState().triggerToast('已移除该条记忆', 'info')
+                                  }}
+                                  className="flex items-center gap-0.5 px-1 py-0.5 rounded border hover:bg-red-500/10 text-red-500 transition-colors cursor-pointer"
+                                  style={{ borderColor: 'var(--border)' }}
+                                  title="移除记忆"
+                                >
+                                  <X size={10} />
+                                  <span>移除</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {isFallback && message.model_used && (
               <span className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 font-mono">
                 {t('chat.fallback_label', message.model_used)}

@@ -154,12 +154,24 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const label = toolLabel(tool)
   // Auto-expand when there's an error or command failure so the user can see what went wrong.
   useEffect(() => { if (tool.error || cmdFailure.failed) setOpen(true) }, [tool.error, cmdFailure.failed])
-  const rollback = async () => {
-    if (!tool.checkpointId || rollbackState === 'running') return
+  const rollback = async (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    if (!tool.checkpointId || rollbackState === 'running' || rollbackState === 'done') return
     setRollbackState('running')
-    const res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId })
-    setRollbackState(res.success ? 'done' : 'error')
-    if (!res.success) setOpen(true)
+    try {
+      let res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId })
+      if (!res?.success && res?.conflict) {
+        const ok = window.confirm(res.error + '\n是否确认强制回退？')
+        if (ok) {
+          res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId, force: true })
+        }
+      }
+      setRollbackState(res?.success ? 'done' : 'error')
+      if (!res?.success) setOpen(true)
+    } catch {
+      setRollbackState('error')
+      setOpen(true)
+    }
   }
   const [copied, setCopied] = useState(false)
   const isCommand = tool.name === 'run_command' || Boolean(tool.args && typeof tool.args === 'object' && (tool.args as any).command)
@@ -306,6 +318,19 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
           </span>
         </div>
       </div>
+      {/* Inline red/green Diff card directly visible in the chat stream with top-right Revert */}
+      {tool.diff && !tool.error && (
+        <div className="px-2 pb-2 pt-1 border-t border-[var(--border)]" style={{ backgroundColor: 'var(--content-bg)' }}>
+          <DiffPreview
+            diff={tool.diff}
+            toolName={tool.name}
+            filePath={(tool.args && typeof tool.args === 'object' ? (tool.args as any).path : '') || ''}
+            checkpointId={tool.checkpointId}
+            rollbackState={rollbackState}
+            onRevert={rollback}
+          />
+        </div>
+      )}
       <div
         className="transition-[grid-template-rows] duration-250 ease-out"
         style={{
@@ -396,18 +421,14 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
                 <img src={extractedImageUrl} alt={t('tool.browser_snapshot')} className="w-full h-auto object-contain max-h-72" />
               </div>
             )}
-            {/* Diff preview — shown for write_file / edit_file / apply_patch (Claude Code-style) */}
-            {tool.diff && !tool.error && (
-              <DiffPreview diff={tool.diff} toolName={tool.name} />
-            )}
             {/* After-snapshot — shows the file's current content after the tool ran */}
             {tool.afterSnapshot && !tool.error && (
               <AfterSnapshotView snapshot={tool.afterSnapshot} />
             )}
-            {/* Actions: Rollback and One-Click Fix */}
-            {(tool.checkpointId || tool.error || cmdFailure.failed) && (
+            {/* Actions: Rollback (if no inline Diff card) and One-Click Fix */}
+            {((tool.checkpointId && !tool.diff) || tool.error || cmdFailure.failed) && (
               <div className="flex items-center gap-2 pt-1 flex-wrap">
-                {tool.checkpointId && (
+                {tool.checkpointId && !tool.diff && (
                   <button
                     type="button"
                     onClick={rollback}
@@ -451,11 +472,25 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   )
 }
 
-// ─── Diff Preview (Claude Code-style) ───────────────────────────────────────
+// ─── Diff Preview (Inline Chat Card with Top-Right One-Click Revert) ────────
 // Shows a unified diff for write_file / edit_file / apply_patch results.
 // Green (+) for additions, red (-) for deletions, gray for context.
 
-function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
+function DiffPreview({
+  diff,
+  toolName,
+  filePath,
+  checkpointId,
+  rollbackState,
+  onRevert,
+}: {
+  diff: string
+  toolName: string
+  filePath?: string
+  checkpointId?: number | null
+  rollbackState?: 'idle' | 'running' | 'done' | 'error'
+  onRevert?: (e?: React.MouseEvent) => void
+}) {
   const [showFull, setShowFull] = useState(false)
   const cleanLines = useMemo(() => cleanDiffLines(diff), [diff])
   const maxShow = 60
@@ -467,13 +502,40 @@ function DiffPreview({ diff, toolName }: { diff: string; toolName: string }) {
   return (
     <div className="rounded-[4px] border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)' }}>
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-        <FileDiff size={12} style={{ color: 'var(--accent)' }} />
-        <span className="text-[11px] font-medium" style={{ color: 'var(--text-primary)' }}>
+        <FileDiff size={12} style={{ color: 'var(--accent)' }} className="shrink-0" />
+        <span className="text-[11px] font-medium truncate" style={{ color: 'var(--text-primary)' }} title={filePath || undefined}>
           {toolName === 'write_file' ? t('diff.title_write') : toolName === 'apply_patch' ? t('diff.title_patch') : t('diff.title_edit')}
+          {filePath ? ` · ${filePath.replace(/\\/g, '/').split('/').pop()}` : ''}
         </span>
-        <div className="text-[10px] ml-auto font-mono flex items-center gap-1">
-          {addedCount > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{addedCount}</span>}
-          {removedCount > 0 && <span className="text-rose-600 dark:text-rose-400">−{removedCount}</span>}
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-mono flex items-center gap-1">
+            {addedCount > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{addedCount}</span>}
+            {removedCount > 0 && <span className="text-rose-600 dark:text-rose-400">−{removedCount}</span>}
+          </span>
+          {checkpointId && onRevert && (
+            <button
+              type="button"
+              onClick={onRevert}
+              disabled={rollbackState === 'running' || rollbackState === 'done'}
+              className="inline-flex items-center gap-1 rounded-[3px] border px-2 py-0.5 text-[10px] font-medium transition-colors duration-150 motion-reduce:transition-none active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-60 hover:bg-[var(--bg-primary)]"
+              style={{
+                borderColor: rollbackState === 'done' ? 'var(--success)' : rollbackState === 'error' ? 'var(--error)' : 'var(--border)',
+                color: rollbackState === 'done' ? 'var(--success)' : rollbackState === 'error' ? 'var(--error)' : 'var(--text-primary)',
+              }}
+              title={t('diff.revert_turn_tooltip', '一键撤回本轮修改')}
+            >
+              <RotateCcw size={10} />
+              <span>
+                {rollbackState === 'running'
+                  ? t('tool.rollback.running')
+                  : rollbackState === 'done'
+                  ? t('tool.rollback.done')
+                  : rollbackState === 'error'
+                  ? t('tool.rollback.error')
+                  : t('diff.revert_turn', 'Revert / 一键撤回本轮修改')}
+              </span>
+            </button>
+          )}
         </div>
       </div>
       <div className="overflow-x-auto max-h-60 overflow-y-auto p-1 leading-relaxed" style={{ backgroundColor: 'var(--bg-primary)' }}>

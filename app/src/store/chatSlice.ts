@@ -90,6 +90,25 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   thinkingActiveByMessage: {},
   statusLinesByMessage: {},
   fileSummariesByMessage: {},
+  memoryHitsByMessage: {},
+  setMemoryHitsForMessage: (messageId, hits) => {
+    set((s) => ({
+      memoryHitsByMessage: { ...s.memoryHitsByMessage, [messageId]: hits },
+    }))
+  },
+  distillProposalBySession: {},
+  setDistillProposalForSession: (sessionId, proposal) => {
+    set((s) => ({
+      distillProposalBySession: { ...s.distillProposalBySession, [sessionId]: proposal },
+    }))
+  },
+  dismissDistillProposal: (sessionId) => {
+    set((s) => {
+      const next = { ...s.distillProposalBySession }
+      delete next[sessionId]
+      return { distillProposalBySession: next }
+    })
+  },
   setFileSummaryForMessage: (messageId, summary) => {
     set((s) => ({
       fileSummariesByMessage: summary
@@ -108,7 +127,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
   loopingSessions: new Set<number>(),
   thinkingEnabled: true,
   effortLevel: 'medium',
-  agentMode: 'workspace',
+  agentMode: 'act',
   modelSuggestion: null as ModelSuggestion | null,
   messageSearchQuery: "",
 
@@ -216,7 +235,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         personaId: cfg?.personaId ?? null,
         attachments: imageAttachments,
         useTools: effMode !== "off",
-        agentMode: effMode === "off" ? "workspace" : effMode,
+        agentMode: effMode === "off" ? "act" : effMode,
         effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
@@ -348,7 +367,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         sessionId: currentSessionId, content: messages[userIdx].content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
-        agentMode: agentMode === "off" ? "workspace" : agentMode,
+        agentMode: agentMode === "off" ? "act" : agentMode,
         effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,
@@ -468,7 +487,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
         sessionId: currentSessionId, content, modelId: activeModelId, regenerate: true,
         personaId: cfg?.personaId ?? null,
         useTools: agentMode !== "off",
-        agentMode: agentMode === "off" ? "workspace" : agentMode,
+        agentMode: agentMode === "off" ? "act" : agentMode,
         effortLevel, thinkingEnabled,
         genParams: { maxTokens, temperature, topP },
         systemPrefix,

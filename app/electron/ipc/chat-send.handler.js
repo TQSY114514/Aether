@@ -174,7 +174,7 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
   }
 ipcMain.handle('chat:complete', handleChatComplete)
 
-  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'ask', effortLevel = 'medium', thinkingEnabled = true, genParams = {}, systemPrefix = '' }) => {
+  ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'act', effortLevel = 'medium', thinkingEnabled = true, genParams = {}, systemPrefix = '' }) => {
     // Backstop guard: if a tool loop is active for this session, buffer the message
     // as an injection instead of starting a new send turn. Prevents race conditions
     // when the renderer's loopingSessions state hasn't caught up with main-process reality.
@@ -389,7 +389,19 @@ ipcMain.handle('chat:complete', handleChatComplete)
       } catch {}
     }
     const recallWs = isMemoryAuthorized ? wsRoot : null
-    let memBlock = autoMemoryOn ? autoMemory.prefetch(db, content, recallWs) : ''
+    let memDetails = { text: '', hits: [] }
+    if (autoMemoryOn) {
+      if (typeof autoMemory.prefetchWithDetails === 'function') {
+        try { memDetails = autoMemory.prefetchWithDetails(db, content, recallWs) || { text: '', hits: [] } } catch {}
+      } else if (typeof autoMemory.prefetch === 'function') {
+        try {
+          const raw = autoMemory.prefetch(db, content, recallWs) || ''
+          memDetails = { text: raw, hits: [] }
+        } catch {}
+      }
+    }
+    let memBlock = memDetails.text || memDetails.contextBlock || ''
+    let memHits = memDetails.hits || []
     if (!memBlock && autoMemoryOn && provider && model) {
       // LLM second-pass recall (P1-5): keyword+graph recall found nothing —
       // ask the model to pick relevant memories from the recent pool. Gated
@@ -463,13 +475,24 @@ ipcMain.handle('chat:complete', handleChatComplete)
       if (skillsBlock) extraSystemMsgs.push({ role: 'system', content: skillsBlock })
       if (topoXml) extraSystemMsgs.push({ role: 'system', content: topoXml })
       let toolMessages = extraSystemMsgs.length > 0 ? [...extraSystemMsgs, ...compacted] : compacted
-      const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
+      const asstMsg = db.addMessage({
+        session_id: sessionId,
+        role: 'assistant',
+        content: '',
+        model_used: model.model_name,
+        provider_used: provider.id,
+        status: 'success',
+        memory_hits: memHits && memHits.length > 0 ? JSON.stringify(memHits) : null,
+      })
       const msgId = asstMsg.lastInsertRowid
       // Track msgId → session mapping for abortControllers cleanup on session delete
       registerSessionMessages(sessionId, [msgId])
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
       const wc = getWebContents()
+      if (memHits && memHits.length > 0) {
+        try { wc?.send('chat:memory-hits', { sessionId, messageId: msgId, hits: memHits }) } catch {}
+      }
       activeToolLoops.add(sessionId)
       try { wc?.send('chat:tool-loop-start', { sessionId }) } catch {}
       let finalContent = ''
@@ -534,7 +557,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
           return runToolLoop({
             provider, model, messages: toolMessages, signal: controller.signal,
             options: mergedOpts,
-            agentMode: agentMode || 'ask',
+            agentMode: agentMode || 'act',
             maxIterations: parseInt(_s['agent_max_iterations'] ?? '100', 10),
             sessionId, messageId: msgId, db,
             autoCommit: true,
@@ -665,6 +688,22 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           } catch {}
         }
+        if (autoMemoryOn && sessionId && db) {
+          try {
+            const bridge = require('../llm/memorySkillBridge')
+            const mems = (db.getMemoriesScoped && recallWs) ? db.getMemoriesScoped(recallWs, 30) : (db.getMemories ? db.getMemories(30) : [])
+            const clusters = bridge.clusterMemories(mems)
+            if (clusters && clusters.length > 0) {
+              const topCluster = clusters[0]
+              const topic = topCluster[0]?.content?.slice(0, 40) || '可复用工作流'
+              wc?.send('chat:distillable-workflow', {
+                sessionId,
+                topic,
+                clusterIds: topCluster.map(m => m.id),
+              })
+            }
+          } catch {}
+        }
         // Report and persist turn file summary if any files were created/modified/deleted
         if (turnFileSummary?.fileCount > 0) {
           try {
@@ -722,9 +761,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
       const asstMsg = db.addMessage({
         session_id: sessionId, role: 'assistant', content: '',
         model_used: m.model_name, provider_used: p.id, status: isFallback ? 'fallback' : 'success',
+        memory_hits: memHits && memHits.length > 0 ? JSON.stringify(memHits) : null,
       })
       const msgId = asstMsg.lastInsertRowid
       registerSessionMessages(sessionId, [msgId])
+      if (memHits && memHits.length > 0) {
+        try { getWebContents()?.send('chat:memory-hits', { sessionId, messageId: msgId, hits: memHits }) } catch {}
+      }
 
       const controller = new AbortController()
       abortControllers.set(msgId, controller)
@@ -824,6 +867,22 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         try { db.setSetting('llm.lastProvider', String(p?.id || p || '')); db.setSetting('llm.lastModel', String(m || '')) } catch {}
         if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
+        if (autoMemoryOn && sessionId && db) {
+          try {
+            const bridge = require('../llm/memorySkillBridge')
+            const mems = (db.getMemoriesScoped && recallWs) ? db.getMemoriesScoped(recallWs, 30) : (db.getMemories ? db.getMemories(30) : [])
+            const clusters = bridge.clusterMemories(mems)
+            if (clusters && clusters.length > 0) {
+              const topCluster = clusters[0]
+              const topic = topCluster[0]?.content?.slice(0, 40) || '可复用工作流'
+              wc?.send('chat:distillable-workflow', {
+                sessionId,
+                topic,
+                clusterIds: topCluster.map(mc => mc.id),
+              })
+            }
+          } catch {}
+        }
         log.info('DB write', msgId, 'len=', fullContent.length, 'tokens=', tokens)
         providerHealth.recordResult(p.id, true)
         providerHealth.recordError(p.id, null)

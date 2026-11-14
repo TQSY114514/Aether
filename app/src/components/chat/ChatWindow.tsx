@@ -5,7 +5,7 @@ import EmptyState from './EmptyState'
 import { renderMarkdown } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import MessageNav from './MessageNav'
-import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert, Star, Check } from 'lucide-react'
+import { Search, X, Brain, Lightbulb, ChevronUp, ChevronDown, History, ShieldAlert, Star, Check, Sparkles } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import ArenaResultsDeck from '@/components/arena/ArenaResultsDeck'
@@ -252,6 +252,8 @@ export default function ChatWindow() {
   // survives ChatWindow unmount/remount (view switches / session hopping).
   const messageSearchQuery = useStore((s) => s.messageSearchQuery)
   const setMessageSearchQuery = useStore((s) => s.setMessageSearchQuery)
+  const distillProposal = useStore((s) => currentSessionId ? s.distillProposalBySession[currentSessionId] : null)
+  const [isDistilling, setIsDistilling] = useState(false)
   const [activeMsgId, setActiveMsgId] = useState<number | null>(null)
   // Use the virtualizer to jump to a message — works even for off-screen rows
   // (which are not in the DOM under virtual scrolling) by index lookup.
@@ -537,6 +539,54 @@ export default function ChatWindow() {
             <div className="text-[11px] px-1 py-1 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
               <span>{t('chat.arena.running', String(arenaPending))}</span>
+            </div>
+          )}
+
+          {distillProposal && (
+            <div
+              className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border text-xs my-2 font-mono"
+              style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles size={13} className="shrink-0 text-[var(--accent)]" />
+                <span className="truncate">检测到可复用工作流: {distillProposal.topic}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={async () => {
+                    setIsDistilling(true)
+                    try {
+                      const res = await window.electronAPI.memory.distillSkill({
+                        sessionId: currentSessionId!,
+                        clusterIds: distillProposal.clusterIds,
+                      })
+                      if (res.success) {
+                        useStore.getState().triggerToast(`已生成技能草稿: ${res.draft?.name || 'SKILL.md'}`, 'success')
+                        useStore.getState().dismissDistillProposal(currentSessionId!)
+                      } else {
+                        useStore.getState().triggerToast(res.error || '生成失败', 'warning')
+                      }
+                    } catch (err: any) {
+                      useStore.getState().triggerToast(err.message || '生成失败', 'warning')
+                    } finally {
+                      setIsDistilling(false)
+                    }
+                  }}
+                  disabled={isDistilling}
+                  className="px-2.5 py-1 rounded-[5px] border text-[11px] font-medium bg-[var(--content-bg)] hover:bg-[var(--border)]/40 transition-colors cursor-pointer disabled:opacity-50"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                >
+                  {isDistilling ? '生成中...' : '生成 SKILL.md'}
+                </button>
+                <button
+                  onClick={() => {
+                    if (currentSessionId) useStore.getState().dismissDistillProposal(currentSessionId)
+                  }}
+                  className="px-2 py-1 rounded-[5px] text-[11px] hover:bg-[var(--border)]/40 transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  忽略
+                </button>
+              </div>
             </div>
           )}
 

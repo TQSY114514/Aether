@@ -4,6 +4,7 @@ import { ensureAllListeners } from '@/store'
 import { applyTheme } from '@/utils/theme'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
+import ArenaPage from '@/pages/ArenaPage'
 import ModelPage from '@/pages/ModelPage'
 import SettingPage from '@/pages/SettingPage'
 import MemoryPage from '@/pages/MemoryPage'
@@ -15,7 +16,6 @@ import ShortcutOverlay from '@/components/ShortcutOverlay'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { useUI } from '@/components/ui/feedback'
 import { useShortcuts } from '@/hooks/useShortcuts'
-import TaskPanel from '@/components/tasks/TaskPanel'
 import CheckpointTimelineDrawer from '@/components/chat/CheckpointTimelineDrawer'
 import BtwDrawer from '@/components/chat/BtwDrawer'
 import FirstRunWizard from '@/components/onboarding/FirstRunWizard'
@@ -24,6 +24,9 @@ import { PanelLeft, ChevronLeft } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 const VIEW_TITLES: Record<string, string> = {
+  chat: 'sidebar.nav.workspace',
+  workspace: 'sidebar.nav.workspace',
+  arena: 'sidebar.nav.arena',
   models: 'sidebar.nav.models',
   memory: 'sidebar.nav.memory',
   settings: 'sidebar.nav.settings',
@@ -271,12 +274,21 @@ export default function App() {
 
   const renderPage = () => {
     switch (currentView) {
-      case 'chat': return <ChatPage />
-      case 'models': return <ModelPage />
-      case 'settings': return <SettingPage />
-      case 'memory': return <MemoryPage />
-      case 'skills': return <SkillsPage />
-      default: return <ChatPage />
+      case 'chat':
+      case 'workspace':
+        return <ChatPage />
+      case 'arena':
+        return <ArenaPage />
+      case 'models':
+        return <ModelPage />
+      case 'settings':
+        return <SettingPage />
+      case 'memory':
+        return <MemoryPage />
+      case 'skills':
+        return <SkillsPage />
+      default:
+        return <ChatPage />
     }
   }
 
@@ -299,7 +311,7 @@ export default function App() {
         <Sidebar />
         <main className="flex-1 flex flex-col min-w-0 relative" style={{ zIndex: 1 }}>
           {currentView !== 'chat' && (
-            <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
+            <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr" style={{ borderColor: 'var(--border)' }}>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setCurrentView('chat')}
@@ -320,7 +332,6 @@ export default function App() {
             {renderPage()}
           </div>
         </main>
-        <TaskPanel />
         <CheckpointTimelineDrawer />
         <BtwDrawer />
         <PermissionDialog />

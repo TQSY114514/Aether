@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { Shield, ChevronDown, Check } from 'lucide-react'
+import { useMemo } from 'react'
+import { Compass, Zap } from 'lucide-react'
 import Tooltip from '@/components/Tooltip'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
@@ -12,30 +12,20 @@ export interface AgentModeSelectorProps {
   compact?: boolean
 }
 
-type CanonicalMode = 'explore' | 'workspace' | 'auto_review' | 'unrestricted' | 'custom'
+type BinaryMode = 'plan' | 'act'
 
-function toCanonicalMode(m: AgentMode | string): CanonicalMode {
+function toBinaryMode(m: AgentMode | string): BinaryMode {
   const norm = String(m || '').trim().toLowerCase()
   switch (norm) {
-    case 'explore':
     case 'plan':
+    case 'explore':
     case 'read_only':
-      return 'explore'
-    case 'auto_review':
-    case 'auto':
-    case 'auto_confirm':
-    case 'tdd':
-      return 'auto_review'
-    case 'unrestricted':
-    case 'yolo':
-      return 'unrestricted'
-    case 'custom':
-      return 'custom'
-    case 'workspace':
-    case 'ask':
-    case 'manual':
+    case 'readonly':
+    case 'read-only':
+    case 'review':
+      return 'plan'
     default:
-      return 'workspace'
+      return 'act'
   }
 }
 
@@ -43,123 +33,48 @@ export default function AgentModeSelector({ mode, onChange, disabled = false, co
   const language = useStore((s) => s.language)
   const isZh = language.startsWith('zh')
 
-  const [dropdownOpen, setDropdownOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!dropdownOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [dropdownOpen])
-
-  const AGENT_MODES: {
-    value: CanonicalMode
+  const modes: {
+    value: BinaryMode
     label: string
     tooltip: string
+    Icon: typeof Compass
   }[] = useMemo(() => [
     {
-      value: 'explore',
-      label: t('agent.mode.explore', isZh ? '仅查看' : 'Explore'),
-      tooltip: t('agent.mode.explore.desc', isZh ? '仅查看 — 只读探索与检查，禁止文件修改与破坏性命令' : 'Explore — Read-only exploration and inspection; strictly blocks file edits'),
+      value: 'plan',
+      label: t('agent.mode.plan', 'Plan'),
+      tooltip: t(
+        'agent.mode.plan.desc',
+        isZh
+          ? 'Plan (只读规划) — 允许工作区读取、代码搜索、只读 Git 与子代理探路；拦截文件写入与变更 Shell，输出结构化计划'
+          : 'Plan (Read-Only) — Allows workspace reads, search, read-only git and subagent exploration; blocks writes and mutating shell'
+      ),
+      Icon: Compass,
     },
     {
-      value: 'workspace',
-      label: t('agent.mode.workspace', isZh ? '工作区' : 'Workspace'),
-      tooltip: t('agent.mode.workspace.desc', isZh ? '工作区内修改 — 受控修改工作区，外部命令显式确认（默认）' : 'Workspace — Controlled workspace mutations; explicit confirmation for external commands (default)'),
+      value: 'act',
+      label: t('agent.mode.act', 'Act'),
+      tooltip: t(
+        'agent.mode.act.desc',
+        isZh
+          ? 'Act (默认行动) — 工作区内读写编辑与常规构建测试自动执行，写前自动快照并展示内联 Diff 回滚；仅工作区外路径、敏感凭证及高危 Shell 需确认'
+          : 'Act (Default) — Auto-executes workspace reads, edits (with pre-write snapshot + inline Diff revert), and test commands; prompts only on high-risk operations'
+      ),
+      Icon: Zap,
     },
-    {
-      value: 'auto_review',
-      label: t('agent.mode.auto_review', isZh ? '自动审查' : 'Auto Review'),
-      tooltip: t('agent.mode.auto_review.desc', isZh ? '自动审查 — 监督式 TDD 闭环，自动执行测试并触发自我修复' : 'Auto Review — Supervised TDD loop; runs tests and triggers self-healing on failure'),
-    },
-    {
-      value: 'unrestricted',
-      label: t('agent.mode.unrestricted', isZh ? '完全权限' : 'Unrestricted'),
-      tooltip: t('agent.mode.unrestricted.desc', isZh ? '完全权限 — 沙箱内自主运行，零弹窗确认，后台安全守卫' : 'Unrestricted — Autonomous execution in sandbox with zero popups and safety guards'),
-    },
-    {
-      value: 'custom',
-      label: t('agent.mode.custom', isZh ? '自定义' : 'Custom'),
-      tooltip: t('agent.mode.custom.desc', isZh ? '自定义模式 — 独立配置细粒度权限矩阵' : 'Custom — Custom capability and permission matrix'),
-    },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [language, isZh, t])
+  ], [isZh])
 
-  const activeCanonical = toCanonicalMode(mode)
-
-  if (compact) {
-    const activeItem = AGENT_MODES.find((m) => m.value === activeCanonical) || AGENT_MODES[1]
-    return (
-      <div ref={dropdownRef} className="relative inline-block">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => setDropdownOpen(!dropdownOpen)}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded-[6px] border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-          style={{ borderColor: 'var(--border)' }}
-          title={activeItem.tooltip}
-          aria-label={activeItem.tooltip}
-        >
-          <Shield size={11} className="text-[var(--accent)] shrink-0" />
-          <span className="truncate max-w-[80px]" style={{ color: 'var(--text-primary)' }}>
-            {activeItem.label}
-          </span>
-          <ChevronDown size={10} className="text-[var(--text-muted)] shrink-0 opacity-70" />
-        </button>
-
-        {dropdownOpen && (
-          <div
-            className="absolute bottom-full left-0 mb-1 w-56 rounded-lg border shadow-lg p-1.5 z-50 animate-spring-up space-y-1 text-xs"
-            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}
-          >
-            <span className="text-[10px] font-semibold px-1 text-[var(--text-muted)] block">
-              {t('quickdeck.agent_mode_label', 'Agent 权限模式 (4 档)')}
-            </span>
-            {AGENT_MODES.map((m) => {
-              const isSelected = m.value === activeCanonical
-              return (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(m.value)
-                    setDropdownOpen(false)
-                  }}
-                  className="w-full text-left p-1.5 rounded-md transition-colors hover:bg-[var(--bg-secondary)] block"
-                  style={isSelected ? { backgroundColor: 'var(--content-bg)' } : {}}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-xs" style={{ color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>
-                      {m.label}
-                    </span>
-                    {isSelected && <Check size={11} className="text-emerald-500" />}
-                  </div>
-                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                    {m.tooltip}
-                  </p>
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    )
-  }
+  const activeMode = toBinaryMode(mode)
 
   return (
     <div
-      className="flex items-center gap-0.5"
+      className="inline-flex items-center p-0.5 rounded-[6px] border shrink-0"
+      style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
       role="group"
       aria-label={t('agent.mode.group_label', isZh ? '智能体运行模式' : 'Agent Operating Mode')}
     >
-      <Shield size={12} className="text-[var(--text-muted)] shrink-0 mr-0.5" aria-hidden="true" />
-      {AGENT_MODES.map((m) => {
-        const isActive = m.value === activeCanonical
+      {modes.map((m) => {
+        const isActive = m.value === activeMode
+        const Icon = m.Icon
         return (
           <Tooltip key={m.value} text={m.tooltip}>
             <button
@@ -168,13 +83,16 @@ export default function AgentModeSelector({ mode, onChange, disabled = false, co
               onClick={() => onChange(m.value)}
               aria-pressed={isActive}
               aria-label={m.tooltip}
-              className={`text-[10px] font-medium px-1.5 py-0.5 rounded-[6px] border outline-none select-none transition-colors duration-150 motion-reduce:transition-none motion-reduce:transform-none active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+              className={`inline-flex items-center gap-1 rounded-[4px] font-medium outline-none select-none transition-colors duration-150 motion-reduce:transition-none motion-reduce:transform-none active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+                compact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-0.5 text-[11px]'
+              } ${
                 isActive
-                  ? 'bg-[var(--bg-secondary)] text-[var(--accent)] border-[var(--border)] font-semibold shadow-xs'
-                  : 'bg-transparent text-[var(--text-muted)] border-transparent hover:text-[var(--text-primary)] hover:bg-[var(--border)]/40'
+                  ? 'bg-[var(--bg-primary)] text-[var(--accent)] font-semibold border border-[var(--border)]'
+                  : 'bg-transparent text-[var(--text-muted)] border border-transparent hover:text-[var(--text-primary)]'
               }`}
             >
-              {m.label}
+              <Icon size={11} className="shrink-0" aria-hidden="true" />
+              <span>{m.label}</span>
             </button>
           </Tooltip>
         )

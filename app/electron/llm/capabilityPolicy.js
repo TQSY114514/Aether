@@ -21,7 +21,7 @@ const POLICY = Object.freeze({ ALLOW: 'allow', ASK: 'ask', DENY: 'deny', ALWAYS_
 // 工具 → 轴映射（覆盖 registry 42 工具 + MCP 默认 unknown）
 const TOOL_AXIS = {
   // filesystem: 文件/目录操作
-  read_file: AXES.FILESYSTEM, list_dir: AXES.FILESYSTEM, glob_find: AXES.FILESYSTEM,
+  read_file: AXES.FILESYSTEM, list_dir: AXES.FILESYSTEM, glob_find: AXES.FILESYSTEM, glob_files: AXES.FILESYSTEM,
   grep_search: AXES.FILESYSTEM, write_file: AXES.FILESYSTEM, edit_file: AXES.FILESYSTEM,
   apply_patch: AXES.FILESYSTEM, get_project_context: AXES.FILESYSTEM,
   codebase_graph: AXES.FILESYSTEM, workspace_files: AXES.FILESYSTEM,
@@ -41,10 +41,10 @@ const TOOL_AXIS = {
   git_status: AXES.FILESYSTEM, git_diff: AXES.FILESYSTEM, git_log: AXES.FILESYSTEM,
   git_commit: AXES.FILESYSTEM, git_push: AXES.FILESYSTEM, git_create_branch: AXES.FILESYSTEM,
   // agent meta: 工具自身（ask_user/todo/use_skill/memory/delegate）→ filesystem 兜底宽松
-  use_skill: AXES.FILESYSTEM, ask_user: AXES.FILESYSTEM, todo_write: AXES.FILESYSTEM,
+  use_skill: AXES.FILESYSTEM, ask_user: AXES.FILESYSTEM, todo_write: AXES.FILESYSTEM, session_plan: AXES.FILESYSTEM,
   history_search: AXES.FILESYSTEM,
   memory_save: AXES.FILESYSTEM, memory_list: AXES.FILESYSTEM, memory_search: AXES.FILESYSTEM,
-  delegate_task: AXES.FILESYSTEM, run_agent: AXES.FILESYSTEM,
+  delegate_task: AXES.FILESYSTEM, run_agent: AXES.FILESYSTEM, dispatch_subagent: AXES.FILESYSTEM, call_extended_tool: AXES.FILESYSTEM,
   run_workflow: AXES.FILESYSTEM, run_arena: AXES.FILESYSTEM,
   task: AXES.FILESYSTEM, review_code: AXES.FILESYSTEM,
   // Phase 3: topology-aware subagent supervisor tools

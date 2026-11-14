@@ -219,12 +219,115 @@ function sortToolsForCacheStability(payload) {
     .map(entry => entry.item)
 }
 
+// ─── 前缀缓存安全双层路由（Prefix-Cache-Safe Two-Layer Router）────────────────
+// 主 Agent 顶层 tools 固定为 10 个常驻 Schema，不随阶段变化，保证 100% KV-Cache
+// 前缀命中；其余 36+ 工具通过：
+//   (a) 子代理专属工具池（STAGE_TOOL_POOLS）按角色 stage/capability 挂载；
+//   (b) call_extended_tool(tool_name, arguments) 二级网关转发 + System Prompt 尾部一行索引。
+const CORE_10_TOOLS = Object.freeze([
+  'read_file',
+  'edit_file',
+  'write_file',
+  'grep_search',
+  'glob_files',
+  'run_command',
+  'ask_user',
+  'session_plan',
+  'dispatch_subagent',
+  'call_extended_tool',
+])
+const CORE_10_SET = new Set(CORE_10_TOOLS)
+const CORE_10_DANGEROUS = new Set(['edit_file', 'write_file', 'run_command', 'dispatch_subagent'])
+
+// 原阶段分类（Diagnose / Search / Edit / Verify / Security / Arena）转换为子代理专属工具池
+const STAGE_TOOL_POOLS = Object.freeze({
+  Diagnose: [
+    'read_file', 'list_dir', 'glob_files', 'glob_find', 'grep_search',
+    'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'find_symbol',
+    'codebase_graph', 'git_status', 'git_diff', 'git_log', 'run_command',
+  ],
+  Search: [
+    'read_file', 'list_dir', 'glob_files', 'glob_find', 'grep_search',
+    'find_symbol', 'codebase_graph', 'workspace_files', 'generate_repo_map',
+    'web_search', 'web_fetch', 'history_search',
+  ],
+  Edit: [
+    'read_file', 'edit_file', 'write_file', 'apply_patch',
+    'lsp_definition', 'lsp_references', 'lsp_code_actions', 'lsp_rename',
+    'run_command',
+  ],
+  Verify: [
+    'read_file', 'grep_search', 'glob_files', 'glob_find',
+    'lsp_diagnostics', 'run_command', 'review_code',
+    'web_visualize', 'agent_browser',
+  ],
+  Security: [
+    'read_file', 'list_dir', 'glob_files', 'glob_find', 'grep_search',
+    'find_symbol', 'codebase_graph', 'git_log', 'git_diff',
+    'inspect_app_bundle', 'audit_agent_bundle',
+  ],
+  Arena: [
+    'read_file', 'grep_search', 'glob_files', 'glob_find',
+    'run_arena', 'run_workflow', 'review_code',
+    'list_providers_and_models', 'probe_model_health',
+  ],
+})
+
+function getStageToolPool(stage) {
+  if (!stage) return null
+  const key = Object.keys(STAGE_TOOL_POOLS).find(k => k.toLowerCase() === String(stage).trim().toLowerCase())
+  return key ? STAGE_TOOL_POOLS[key].slice() : null
+}
+
+/**
+ * 构造主 Agent 固定 10 工具 Schema（严格按 CORE_10_TOOLS 顺序，跨轮次 100% 不变）。
+ * plan/explore 只读模式下过滤危险写/执行工具。
+ */
+function getFixedCorePayload(fullPayload, mode) {
+  if (!Array.isArray(fullPayload) || fullPayload.length === 0) return []
+  const isReadOnly = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
+  const byName = new Map()
+  for (const item of fullPayload) {
+    const name = (item && item.function && item.function.name) || (item && item.name) || ''
+    if (CORE_10_SET.has(name)) byName.set(name, item)
+  }
+  const out = []
+  for (const name of CORE_10_TOOLS) {
+    const item = byName.get(name)
+    if (!item) continue
+    if (isReadOnly && CORE_10_DANGEROUS.has(name)) continue
+    out.push(item)
+  }
+  return out
+}
+
+/**
+ * 生成 System Prompt 尾部精简一行扩展工具目录索引（排除 10 个常驻核心工具）。
+ */
+function buildExtendedToolIndex(fullPayloadOrNames) {
+  const names = []
+  for (const entry of Array.isArray(fullPayloadOrNames) ? fullPayloadOrNames : []) {
+    const name = typeof entry === 'string'
+      ? entry
+      : ((entry && entry.function && entry.function.name) || (entry && entry.name) || '')
+    if (name && !CORE_10_SET.has(name)) names.push(name)
+  }
+  if (names.length === 0) return ''
+  return `[Extended Tools via call_extended_tool(tool_name, arguments)]: ${names.join(', ')}`
+}
+
 module.exports = {
   routeTools,
   routerEnabled,
   inferStage,
   sortToolsForCacheStability,
   getToolPrefixBucket,
+  CORE_10_TOOLS,
+  CORE_10_SET,
+  STAGE_TOOL_POOLS,
+  getStageToolPool,
+  getFixedCorePayload,
+  buildExtendedToolIndex,
   _categories: CATEGORY_TOOLS,
   _stageCategories: STAGE_CATEGORIES,
 }

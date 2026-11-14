@@ -187,38 +187,20 @@ export default function ChatPage() {
         </select>
       </div>
 
-      {/* Mode Switcher Pill */}
-      <Tooltip text={t('tooltip.mode_switch')}>
-        <div
-          className="relative inline-grid grid-cols-2 p-0.5 rounded-md border text-xs shrink-0 w-[140px] select-none h-7.5 items-center"
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
-        >
-          <div
-            className="absolute inset-y-0.5 rounded-[5px] bg-[var(--accent)] shadow-xs transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
-            style={{
-              left: '2px',
-              width: 'calc(50% - 2px)',
-              transform: chatMode === 'normal' ? 'translateX(0)' : 'translateX(calc(100%))',
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => setChatMode('normal')}
-            className={`relative z-[1] h-6 flex items-center justify-center transition-colors duration-200 font-medium text-xs truncate ${chatMode === 'normal' ? 'text-white font-semibold' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-          >
-            {t('chat.mode.normal')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setChatMode('arena')}
-            title={t('tooltip.arena_mode')}
-            className={`relative z-[1] h-6 flex items-center justify-center gap-1 transition-colors duration-200 font-medium text-xs truncate ${chatMode === 'arena' ? 'text-white font-semibold' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-          >
-            <FlaskConical size={12} className="shrink-0" />
-            <span>{t('chat.mode.arena')}</span>
-          </button>
-        </div>
-      </Tooltip>
+      {/* One-Click Split Run Toggle */}
+      <button
+        type="button"
+        onClick={() => setChatMode(chatMode === 'arena' ? 'normal' : 'arena')}
+        className={`h-7.5 flex items-center gap-1.5 px-2.5 rounded-[6px] border text-xs font-mono transition-colors cursor-pointer select-none ${
+          chatMode === 'arena'
+            ? 'bg-[var(--accent)] text-white font-semibold border-transparent shadow-xs'
+            : 'bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border)]'
+        }`}
+        title={chatMode === 'arena' ? '关闭同屏双模型对比' : '一键开启同屏双模型对比 (Split Run)'}
+      >
+        <FlaskConical size={13} className="shrink-0" />
+        <span>{chatMode === 'arena' ? 'Split Run 开启' : 'Split Run'}</span>
+      </button>
 
       {/* Workspace Context Chip: Full project badge when sidebar is collapsed; concise Git/Rule chip when expanded */}
       {(!sidebarOpen || headerRule?.has || headerGit?.branch) && (

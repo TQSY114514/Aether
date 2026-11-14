@@ -47,6 +47,7 @@ async function _runSubagent({
   model,
   prompt,
   signal,
+  id: explicitId,
   agentMode = 'auto',
   callbacks = {},
   config = {},
@@ -122,6 +123,8 @@ async function _runSubagent({
     timedOut = true
     timeoutCtrl.abort()
   }, cfg.timeoutMs)
+  const subagentEventId = explicitId || cfg.id || taskId || childSessionId
+
   if (taskId) {
     try {
       const bg = require('./backgroundTasks')
@@ -132,7 +135,7 @@ async function _runSubagent({
     try {
       callbacks?.onSubagentEvent?.({
         type: 'start',
-        id: taskId,
+        id: subagentEventId,
         taskId,
         status: 'running',
       })
@@ -172,7 +175,7 @@ async function _runSubagent({
           try {
             callbacks.onSubagentEvent({
               type: 'tool_call',
-              id: taskId || childSessionId,
+              id: subagentEventId,
               taskId,
               tool: entry,
             })

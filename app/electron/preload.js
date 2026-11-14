@@ -133,6 +133,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onUsage: (cb) => subscribe('chat:usage', cb),
     onTurnSummary: (cb) => subscribe('chat:turn-summary', cb),
     onMemorySaved: (cb) => subscribe('chat:memory-saved', cb),
+    onMemoryHits: (cb) => subscribe('chat:memory-hits', cb),
+    onDistillableWorkflow: (cb) => subscribe('chat:distillable-workflow', cb),
     onSkillPatched: (cb) => subscribe('chat:skill-patched', cb),
     compact: (sessionId) => ipcRenderer.invoke('chat:compact', sessionId),
     test: (opts) => ipcRenderer.invoke('chat:test', opts),
@@ -202,6 +204,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     projectWorkspace: (workspace) => ipcRenderer.invoke('memory:project-workspace', workspace),
     syncFromFile: (workspace) => ipcRenderer.invoke('memory:sync-from-file', workspace),
     fileStatus: (workspace) => ipcRenderer.invoke('memory:file-status', workspace),
+    pinToAgentsMd: (args) => ipcRenderer.invoke('memory:pin-to-agents-md', args),
+    distillSkill: (args) => ipcRenderer.invoke('memory:distill-skill', args),
   },
   kg: {
     graph: (opts) => ipcRenderer.invoke('kg:graph', opts),
