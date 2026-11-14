@@ -126,10 +126,18 @@ function runCommandSync(command, args, opts = {}) {
     windowsHide = true,
   } = opts
 
+  if (typeof command !== 'string' || !/^[a-zA-Z0-9_.-]+$/.test(command) || command === 'cmd.exe' || command === 'sh' || command === 'bash') {
+    throw new Error(`Disallowed or invalid binary: ${command}`)
+  }
+
+  const fs = require('fs')
+  const safeCwd = cwd && typeof cwd === 'string' && !/[;&|`$><\r\n\0]/.test(cwd) && fs.existsSync(cwd) ? cwd : undefined
+  const safeArgs = (Array.isArray(args) ? args : []).filter(a => typeof a === 'string' && !/[\r\n\0]/.test(a))
+
   const { execFileSync } = require('child_process')
   try {
-    const stdout = execFileSync(command, Array.isArray(args) ? args : [], {
-      cwd,
+    const stdout = execFileSync(command, safeArgs, {
+      cwd: safeCwd,
       env: sanitizeProcessEnv(process.env, env || {}),
       windowsHide,
       stdio: ['pipe', 'pipe', 'pipe'],

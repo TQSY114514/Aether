@@ -34,12 +34,15 @@ function nearestGitRoot(start) {
   try {
     const cwd = fs.existsSync(start) && fs.statSync(start).isDirectory() ? start : path.dirname(start)
     const out = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim()
-    if (!out) return null
+    if (!out || /[;&|`$><\r\n\0]/.test(out)) return null
+    let resolved = null
     try {
-      return fs.realpathSync(out)
+      resolved = fs.realpathSync(out)
     } catch {
-      return path.resolve(out)
+      resolved = path.resolve(out)
     }
+    if (!resolved || /[;&|`$><\r\n\0]/.test(resolved) || !fs.existsSync(resolved)) return null
+    return resolved
   } catch { return null }
 }
 

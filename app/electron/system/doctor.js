@@ -52,7 +52,9 @@ function probeCliTool(cmd, args = ['--version']) {
     let res = runCommandSync(cmd, args, { timeout: 2500 })
     if (!res || res.exitCode !== 0) {
       if (process.platform === 'win32') {
-        res = runCommandSync('cmd.exe', ['/c', `${cmd} ${args.join(' ')}`], { timeout: 2500 })
+        res = runCommandSync('where.exe', [cmd], { timeout: 2500 })
+      } else {
+        res = runCommandSync('which', [cmd], { timeout: 2500 })
       }
     }
     if (res && res.exitCode === 0) {
