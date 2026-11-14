@@ -1,7 +1,9 @@
 import { useStore } from '@/store'
-import { Server, Sparkles, SlidersHorizontal } from 'lucide-react'
+import { Server, Sparkles, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState } from 'react'
 import { t } from '@/utils/i18n'
 import DefaultChatSettings from '@/components/settings/DefaultChatSettings'
+import ModelPage from '@/pages/ModelPage'
 import type { EffortLevel } from '@/store/types'
 
 const EFFORT_OPTIONS: { value: EffortLevel; labelKey: string; desc: string }[] = [
@@ -18,31 +20,37 @@ export default function ProvidersRoutingDomain() {
   const defaultThinkingEnabled = useStore((s) => s.defaultThinkingEnabled)
   const setDefaultEffort = useStore((s) => s.setDefaultEffort)
   const setDefaultThinkingEnabled = useStore((s) => s.setDefaultThinkingEnabled)
+  const [modelManagerExpanded, setModelManagerExpanded] = useState(true)
 
   return (
     <div className="space-y-4">
-      {/* Quick link to Model Manager */}
-      <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <Server size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
+      {/* Embedded Model & Provider Manager */}
+      <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+        <div
+          className="flex items-center justify-between p-3.5 border-b cursor-pointer select-none"
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
+          onClick={() => setModelManagerExpanded(!modelManagerExpanded)}
+        >
+          <div className="flex items-center gap-2.5">
+            <Server size={15} className="shrink-0" style={{ color: 'var(--accent)' }} />
             <div>
-              <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
-                {t('sidebar.nav.models', '模型与服务商管理')}
+              <h2 className="text-xs font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                {t('sidebar.nav.models', '模型与服务商管理 (Providers & Models)')}
               </h2>
-              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                配置 OpenAI、Claude、Gemini、DeepSeek、Ollama 及本地中继密钥与端点
-              </p>
             </div>
           </div>
           <button
-            onClick={() => setCurrentView('models')}
-            className="px-3.5 py-1.5 text-xs rounded-md border font-medium hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98]"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            type="button"
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
           >
-            {t('common.manage', '前往管理')}
+            {modelManagerExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
+        {modelManagerExpanded && (
+          <div className="p-4 border-t border-[var(--border)]">
+            <ModelPage embedded />
+          </div>
+        )}
       </div>
 
       {/* Default Chat & Auto-Routing */}

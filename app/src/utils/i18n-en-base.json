@@ -13,7 +13,9 @@
   "agent.mode.off": "Off",
   "agent.mode.off.desc": "Off — plain chat, no tools",
   "agent.mode.plan": "Plan",
-  "agent.mode.plan.desc": "Plan — read-only tools, no writes",
+  "agent.mode.plan.desc": "Plan (Read-Only) — Allows workspace reads, search, read-only git and subagent exploration; blocks writes and mutating shell",
+  "agent.mode.act": "Act",
+  "agent.mode.act.desc": "Act (Default) — Auto-executes workspace reads, edits (with pre-write snapshot + inline Diff revert), and test commands; prompts only on high-risk operations",
   "agent.mode.yolo": "Yolo",
   "agent.mode.yolo.desc": "Yolo — full access, no sandbox",
   "agent.mode.yolo_warn": "⚠ HIGH RISK: Yolo mode grants FULL permission — the agent can write ANY file and run ANY command with no sandbox and no confirms. Only use with a trusted model on a machine you can afford to lose. Continue?",
@@ -813,6 +815,7 @@
   "sidebar.group.yesterday": "Yesterday",
   "sidebar.nav.arena": "Arena",
   "sidebar.nav.chat": "Chat",
+  "sidebar.nav.workspace": "Workspace",
   "sidebar.nav.collapse": "Collapse sidebar",
   "sidebar.nav.evolution": "Evolution",
   "sidebar.nav.expand": "Expand sidebar",
@@ -1295,5 +1298,9 @@
   "chat.subagent_no_thinking": "(No thinking content recorded)",
   "chat.subagent_streaming_live": "(Output streaming...)",
   "chat.subagent_no_output": "(No output produced yet)",
-  "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
+  "chat.subagent_no_events": "(No tool invocations or stream events recorded)",
+  "diff.revert_turn": "Revert",
+  "diff.revert_turn_tooltip": "Revert changes from this turn",
+  "security.high_risk_gates": "Binary Plan / Act Mode & High-Risk Gates",
+  "security.high_risk_gates_desc": "Plan allows read-only exploration and structured planning; Act auto-executes workspace reads, edits (with pre-write snapshot + Diff revert), and test commands, prompting only on 3 high-risk scenarios:"
 }

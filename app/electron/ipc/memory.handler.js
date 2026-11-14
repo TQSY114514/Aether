@@ -2,6 +2,8 @@
 // 用来分流（project 恒注入等），放行任意字符串会让渲染层/注入内容操纵
 // 记忆行为。
 const path = require('path')
+const fs = require('fs')
+const os = require('os')
 const MEMORY_TYPES = new Set(['fact', 'context', 'project', 'preference', 'review'])
 const memoryProjector = require('../llm/memoryProjector')
 const { isAuthorizedWorkspace, isWorkspaceTrusted, getWorkspaceRoot } = require('../tools/sandbox')
@@ -76,6 +78,83 @@ function registerMemoryHandlers(ipcMain, db) {
       return { exists: false, path: null, mtime: null, lineCount: 0 }
     }
     return memoryProjector.getMemoryFileStatus(targetWs)
+  })
+  ipcMain.handle('memory:pin-to-agents-md', (_e, { id, content, workspace }) => {
+    let ws = workspace ? path.resolve(workspace) : getWorkspaceRoot()
+    if (!ws || !isAuthorizedWorkspace(db, ws)) {
+      ws = null
+    }
+    const targetFile = ws ? path.join(ws, 'AGENTS.md') : path.join(os.homedir(), '.aether', 'AGENTS.md')
+    try {
+      fs.mkdirSync(path.dirname(targetFile), { recursive: true })
+      let prev = ''
+      if (fs.existsSync(targetFile)) {
+        prev = fs.readFileSync(targetFile, 'utf8')
+      }
+      const header = '## Pinned Rules / Memories'
+      const entry = `- ${String(content).trim()}`
+      let next = ''
+      if (prev.includes(header)) {
+        next = prev.replace(header, `${header}\n${entry}`)
+      } else {
+        next = `${prev.trim()}\n\n${header}\n${entry}\n`.trimStart()
+      }
+      fs.writeFileSync(targetFile, next, 'utf8')
+      return { success: true, targetFile }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+  ipcMain.handle('memory:distill-skill', async (_e, { sessionId, clusterIds }) => {
+    try {
+      const bridge = require('../llm/memorySkillBridge')
+      const electron = require('electron')
+      const app = electron?.app || (typeof electron === 'object' ? electron : null)
+      const skillsDir = app?.getPath
+        ? path.join(app.getPath('userData'), 'skills')
+        : path.join(process.cwd(), '.aetherai', 'skills')
+
+      let memories = []
+      if (Array.isArray(clusterIds) && clusterIds.length > 0) {
+        for (const cid of clusterIds) {
+          try {
+            const row = db.prepare('SELECT * FROM memory WHERE id = ?').get(cid)
+            if (row) memories.push(row)
+          } catch {}
+        }
+      }
+      if (memories.length < bridge.MIN_CLUSTER_SIZE) {
+        memories = (db.getMemories(30) || []).slice(0, 5)
+      }
+
+      const pId = db.getSetting('llm.lastProvider') || db.getSetting('activeProviderId')
+      const mName = db.getSetting('llm.lastModel') || db.getSetting('activeModelId')
+      let provider = null, model = null
+      if (pId) {
+        try { provider = db.getProvider(Number(pId)) || db.getProviders().find(p => p.id === Number(pId) || p.name === pId) } catch {}
+      }
+      if (!provider) {
+        const providers = db.getProviders()
+        provider = providers.find(p => p.is_active) || providers[0]
+      }
+      if (provider) {
+        const models = db.getModels(provider.id)
+        model = models.find(m => m.model_name === mName) || models[0]
+      }
+
+      if (!provider || !model) {
+        return { success: false, error: 'No active provider/model found for skill distillation' }
+      }
+
+      const draft = await bridge.generateDraftSkill({ provider, model, memories })
+      if (!draft) {
+        return { success: false, error: 'Failed to generate draft skill' }
+      }
+      const saved = bridge.saveDraftSkill(draft, skillsDir)
+      return { success: !!saved, draft: saved }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
   })
 }
 

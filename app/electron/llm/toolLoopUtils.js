@@ -32,7 +32,7 @@ const MAX_WRITE_CONCURRENT = 1
 const MAX_DEFAULT_CONCURRENT = 5
 
 const READ_TOOLS = new Set([
-  'read_file', 'list_dir', 'glob_find', 'grep_search', 'web_search',
+  'read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'web_search',
   'web_fetch', 'get_file_contents', 'list_branches', 'list_commits',
   'list_issues', 'list_pull_requests', 'list_releases', 'list_tags',
   'search_code', 'search_commits', 'search_issues', 'search_pull_requests',
@@ -185,60 +185,57 @@ class IterationBudget extends IterationBudgetBase {
   }
 }
 
-// Canonical 4-Tier Agent Operating Modes map with legacy aliases
+// Canonical Binary Agent Operating Modes map with legacy aliases ('plan' | 'act')
 const TIER_CANONICAL_MAP = Object.freeze({
-  // Tier 1: Explore / Plan (Read-only)
-  'explore': 'explore',
-  'plan': 'explore',
-  'read_only': 'explore',
-  'readonly': 'explore',
-  'read-only': 'explore',
-  // Tier 2: Workspace / Ask (Controlled workspace mutations - Default)
-  'workspace': 'workspace',
-  'ask': 'workspace',
-  'manual': 'workspace',
-  // Tier 3: Auto-Review / Auto (Supervised TDD loop)
-  'auto_review': 'auto_review',
-  'auto': 'auto_review',
-  'auto_confirm': 'auto_review',
-  'tdd': 'auto_review',
-  // Tier 4: Unrestricted / YOLO (Autonomous sandbox execution)
-  'unrestricted': 'unrestricted',
-  'yolo': 'unrestricted',
-  // Special
-  'custom': 'custom',
+  // Mode 1: Plan (Read-only exploration & planning; blocks writes & mutating shell)
+  'plan': 'plan',
+  'explore': 'plan',
+  'read_only': 'plan',
+  'readonly': 'plan',
+  'read-only': 'plan',
+  'review': 'plan',
+  // Mode 2: Act (Default action mode — workspace read/write/build/test auto-execute;
+  // prompts ONLY on the 3 high-risk scenarios: outside workspace, credential files, high-risk shell)
+  'act': 'act',
+  'workspace': 'act',
+  'ask': 'act',
+  'manual': 'act',
+  'auto_review': 'act',
+  'auto': 'act',
+  'auto_confirm': 'act',
+  'tdd': 'act',
+  'unrestricted': 'act',
+  'yolo': 'act',
+  'custom': 'act',
+  // Special: agent tools off
   'off': 'off',
 })
 
 const MAX_AUTO_REVIEW_TDD = 3
 
 /**
- * Normalizes input mode string to one of the 4 canonical agent operating modes
- * ('explore' | 'workspace' | 'auto_review' | 'unrestricted') or special modes ('custom' | 'off').
- * Robust against empty, corrupted, or non-string values (defaults safely to 'workspace').
+ * Normalizes input mode string to the binary agent operating modes ('plan' | 'act')
+ * or special disabled mode ('off'). Defaults safely to 'act'.
  * Uses Object.hasOwn to prevent prototype property leakage ('constructor', '__proto__').
  */
 function normalizeAgentMode(mode) {
-  if (mode === null || mode === undefined) return 'workspace'
-  if (typeof mode !== 'string') return 'workspace'
+  if (mode === null || mode === undefined) return 'act'
+  if (typeof mode !== 'string') return 'act'
   const trimmed = mode.toLowerCase().trim()
   if (Object.hasOwn(TIER_CANONICAL_MAP, trimmed)) {
     return TIER_CANONICAL_MAP[trimmed]
   }
-  return 'workspace'
+  return 'act'
 }
 
 /** Translate the agent UI mode into the permission policy mode key name. */
 function agentModeToPermissionMode(agentMode) {
   const canonical = normalizeAgentMode(agentMode)
   switch (canonical) {
-    case 'explore':      return 'ReadOnly'
-    case 'workspace':    return 'Prompt'
-    case 'auto_review':  return 'WorkspaceWrite'
-    case 'unrestricted': return 'Allow'
-    case 'custom':       return 'Prompt'
-    case 'off':          return 'ReadOnly'
-    default:             return 'Prompt'
+    case 'plan': return 'ReadOnly'
+    case 'off':  return 'ReadOnly'
+    case 'act':
+    default:     return 'Allow'
   }
 }
 
@@ -350,6 +347,56 @@ function requestPermissionWithTimeout(requestPermission, payload, timeoutMs = PE
   })
 }
 
+/**
+ * Heal orphan tool calls / orphan tool results in a message array without
+ * mutating valid prefixes.
+ * - Drops `role: 'tool'` messages whose `tool_call_id` has no matching preceding
+ *   `assistant.tool_calls` entry.
+ * - Inserts a synthetic `role: 'tool'` error result immediately after any
+ *   `assistant` message whose `tool_calls` entries lack a following `role: 'tool'`.
+ */
+function healOrphanToolCalls(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return Array.isArray(messages) ? messages : []
+
+  // Collect all declared tool_call ids from assistant messages and all answered tool_call_ids
+  const declaredIds = new Set()
+  const answeredIds = new Set()
+  for (const m of messages) {
+    if (m && m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+      for (const tc of m.tool_calls) {
+        if (tc && tc.id) declaredIds.add(tc.id)
+      }
+    } else if (m && m.role === 'tool' && m.tool_call_id) {
+      answeredIds.add(m.tool_call_id)
+    }
+  }
+
+  let changed = false
+  const out = []
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (!m) continue
+    if (m.role === 'tool' && m.tool_call_id && !declaredIds.has(m.tool_call_id)) {
+      changed = true
+      continue // drop orphan tool result
+    }
+    out.push(m)
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      for (const tc of m.tool_calls) {
+        if (tc && tc.id && !answeredIds.has(tc.id)) {
+          changed = true
+          out.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: '[tool call interrupted — no result recorded]',
+          })
+        }
+      }
+    }
+  }
+  return changed ? out : messages
+}
+
 module.exports = {
   DEFAULT_MAX_ITERATIONS,
   MAX_TOTAL_CHARS,
@@ -378,4 +425,5 @@ module.exports = {
   sleep,
   runToolWithTimeout,
   requestPermissionWithTimeout,
+  healOrphanToolCalls,
 }

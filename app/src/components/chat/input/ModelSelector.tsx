@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Trophy, Sparkles } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
 
@@ -66,23 +66,6 @@ export default function ModelSelector({
     return ms.length ? { providerId: p.id, providerName: p.name, models: ms } : null
   }).filter(Boolean) as { providerId: number; providerName: string; models: typeof allModels }[], [providers, allModels])
 
-  const handleAutoRoute = async () => {
-    try {
-      const route = await window.electronAPI.arena.autoRoute({ prompt: currentPrompt })
-      if (route && route.model_id) {
-        onSelect(route.model_id, route.provider_id)
-        useStore.getState().triggerToast(
-          t('chat.model_routed').replace('{0}', route.model_name).replace('{1}', route.route_reason),
-          'success'
-        )
-      } else {
-        useStore.getState().triggerToast(t('model.suggest.no_match'), 'info')
-      }
-    } catch {
-      useStore.getState().triggerToast(t('chat.auto_route_failed', '自动路由失败'), 'warning')
-    }
-  }
-
   if (groups.length === 0) return null
 
   const reasonTitle = formatSuggestionReason(modelSuggestion)
@@ -128,17 +111,6 @@ export default function ModelSelector({
           <span>ELO {arenaElo}</span>
         </span>
       )}
-
-      <button
-        onClick={handleAutoRoute}
-        className="h-6.5 px-2 rounded-[6px] border text-[10px] flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors shrink-0 cursor-pointer shadow-2xs active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-        title={t('chat.model_auto_route_desc')}
-        aria-label={t('chat.model_auto_route')}
-      >
-        <Sparkles size={11} className="text-amber-500 shrink-0" />
-        <span className="hidden md:inline font-medium">{t('chat.model_auto_route')}</span>
-      </button>
     </div>
   )
 }

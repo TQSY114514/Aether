@@ -22,13 +22,18 @@ function resolveTool(name) {
 
 /** Translate the agent UI mode into the permission policy mode. */
 function agentModeToPermissionMode(agentMode) {
-  switch (agentMode) {
-    case 'auto':   return 'Auto'
-    case 'ask':    return 'Prompt'
-    case 'plan':   return 'ReadOnly'
-    case 'review': return 'ReadOnly'
-    case 'custom': return 'Prompt'
-    default:       return 'Prompt'
+  const m = String(agentMode || '').toLowerCase().trim()
+  switch (m) {
+    case 'plan':
+    case 'explore':
+    case 'read_only':
+    case 'readonly':
+    case 'review':
+    case 'off':
+      return 'ReadOnly'
+    case 'act':
+    default:
+      return 'Allow'
   }
 }
 

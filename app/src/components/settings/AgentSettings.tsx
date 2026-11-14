@@ -13,9 +13,6 @@ import {
   Sliders,
 } from 'lucide-react'
 import {
-  AXIS_OPTIONS,
-  type AxisPolicy,
-  AXES,
   type FlagItem,
   EXEC_SELF_HEAL_FLAGS,
   CONTEXT_CACHE_FLAGS,
@@ -60,7 +57,6 @@ export default function AgentSettings() {
   const [strictReadGuard, setStrictReadGuard] = useState(true)
   const [autoMemory, setAutoMemory] = useState(true)
   const [projectInst, setProjectInst] = useState<{ has: boolean; fileName: string | null }>({ has: false, fileName: null })
-  const [axes, setAxes] = useState<Record<string, AxisPolicy | null>>({ filesystem: null, shell: null, network: null })
   const [flagMap, setFlagMap] = useState<Record<string, boolean>>({})
 
   const loadAllFlags = () => {
@@ -114,29 +110,7 @@ export default function AgentSettings() {
     try { window.electronAPI?.settings?.get?.('auto_memory_enabled').then((v) => setAutoMemory(v !== '0')).catch(() => {}) } catch {}
     try { window.electronAPI?.agent?.hasProjectInstructions?.().then(setProjectInst).catch(() => {}) } catch {}
     loadAllFlags()
-    try {
-      Promise.all([
-        window.electronAPI?.settings?.get?.('capability.filesystem').catch(() => null),
-        window.electronAPI?.settings?.get?.('capability.shell').catch(() => null),
-        window.electronAPI?.settings?.get?.('capability.network').catch(() => null),
-      ]).then(([fs, sh, nw]) => {
-        setAxes({
-          filesystem: (AXIS_OPTIONS as readonly string[]).includes(fs || '') ? fs as AxisPolicy : null,
-          shell: (AXIS_OPTIONS as readonly string[]).includes(sh || '') ? sh as AxisPolicy : null,
-          network: (AXIS_OPTIONS as readonly string[]).includes(nw || '') ? nw as AxisPolicy : null,
-        })
-      })
-    } catch {}
   }, [])
-
-  const saveAxis = async (axis: string, v: AxisPolicy | null) => {
-    setAxes((p) => ({ ...p, [axis]: v }))
-    try {
-      if (v) await window.electronAPI?.settings?.set?.(`capability.${axis}`, v)
-      else await window.electronAPI?.settings?.set?.(`capability.${axis}`, '')
-      toast(t('settings.agent.capability_set', t('capability.axis.' + axis), v ? t('capability.' + v) : t('settings.agent.capability_default')), { type: 'success' })
-    } catch { toast(t('settings.agent.capability_failed'), { type: 'error' }) }
-  }
 
   const saveMaxIter = async (v: number) => {
     const clamped = Math.max(1, Math.min(200, Math.floor(v)))
@@ -318,43 +292,6 @@ export default function AgentSettings() {
               style={{ backgroundColor: 'var(--accent)' }}>
               {safeBusy ? '应用中…' : '应用'}
             </button>
-          </div>
-
-          {/* Capability axis policies — filesystem / shell / network */}
-          <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck size={13} className="text-gray-400" />
-              <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.agent.capability_title')}</p>
-            </div>
-            <p className="text-[10px] mb-2.5" style={{ color: 'var(--text-muted)' }}>
-              {t('settings.agent.capability_desc')}
-            </p>
-            <div className="space-y-2">
-              {AXES.map((a) => {
-                const Icon = a.icon
-                const cur = axes[a.key] || ''
-                return (
-                  <div key={a.key} className="flex items-center justify-between gap-2">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <Icon size={13} className="text-gray-400 mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{a.label}</p>
-                        <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{a.desc}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      {AXIS_OPTIONS.map((opt) => (
-                        <button key={opt} onClick={() => saveAxis(a.key, cur === opt ? null : opt)}
-                          className={`px-2 py-1 text-[10px] rounded-md border transition-colors ${cur === opt ? 'text-white' : ''}`}
-                          style={cur === opt ? { backgroundColor: opt === 'deny' ? 'var(--error)' : opt === 'ask' ? '#d97706' : 'var(--accent)', borderColor: 'transparent' } : { borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-                          {opt === 'allow' ? t('capability.allow') : opt === 'ask' ? t('capability.ask') : t('capability.deny')}{cur === opt ? ' ✓' : ''}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
           </div>
 
           {/* Project instructions status */}

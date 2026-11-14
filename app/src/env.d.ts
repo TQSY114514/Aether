@@ -170,7 +170,7 @@ interface Window {
       addNormal: (msg: any) => Promise<{ lastInsertRowid: number }>
     }
     chat: {
-      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom' | 'explore' | 'workspace' | 'auto_review' | 'unrestricted'; effortLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'; thinkingEnabled?: boolean; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: ModelSuggestion | null; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number; model_name: string; provider_name: string } }>
+      send: (params: { sessionId: number; content: string; modelId: number; mode?: string; personaId?: number | null; regenerate?: boolean; attachments?: { name: string; mime: string; dataUrl: string }[]; useTools?: boolean; agentMode?: 'off' | 'plan' | 'act' | 'ask' | 'auto_confirm' | 'auto' | 'yolo' | 'custom' | 'explore' | 'workspace' | 'auto_review' | 'unrestricted'; effortLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'; thinkingEnabled?: boolean; genParams?: { maxTokens?: number; temperature?: number; topP?: number }; systemPrefix?: string }) => Promise<{ messageId: number; modelSuggestion?: ModelSuggestion | null; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cost: number; model_name: string; provider_name: string } }>
       complete: (params: { content: string; modelId?: number | null; sessionId?: number | null; context?: string; systemPrefix?: string }) => Promise<{ content?: string; sessionId?: number; messageId?: number; error?: string }>
       onChunk: (callback: (payload: { messageId: number; delta: string; done: boolean; sessionId?: number }) => void) => () => void
       onToolCall: (callback: (payload: { messageId: number; sessionId: number; tool: { name: string; args: any; result: string | null; error: string | null; failure_kind?: string | null; recovery_hint?: { action: string; hint: string } | null; risk?: string | null; latencyMs?: number | null; startedAt?: number | null; checkpointId?: number | null; diff?: string | null; after_snapshot?: { path: string; content: string; truncated: boolean } | null; exitCode?: number | null; commandFailed?: boolean; timedOut?: boolean } }) => void) => () => void
@@ -207,6 +207,8 @@ interface Window {
       onThinkingChunk: (callback: (payload: { messageId: number; delta: string; done?: boolean; sessionId?: number }) => void) => () => void
       onTurnSummary: (callback: (payload: { messageId: number; sessionId: number; fileSummary: TurnFileSummary | null }) => void) => () => void
       onMemorySaved: (callback: (payload: { sessionId: number; added: number; solidified: number; total: number; text: string; previews: string[] }) => void) => () => void
+      onMemoryHits: (callback: (payload: { sessionId: number; messageId: number; hits: MemoryHit[] }) => void) => () => void
+      onDistillableWorkflow: (callback: (payload: { sessionId: number; topic: string; clusterIds: number[] }) => void) => () => void
       onSkillPatched: (callback: (payload: { skillName: string; action: string; text: string }) => void) => () => void
       test: (opts?: { cwd?: string; sessionId?: number | string; args?: string }) => Promise<{
         ok: boolean
@@ -297,6 +299,8 @@ interface Window {
       projectWorkspace: (workspace?: string | null) => Promise<{ success: boolean; path?: string; count: number; updated: boolean; error?: string }>
       syncFromFile: (workspace?: string | null) => Promise<{ success: boolean; added: number; removed: number; total: number; error?: string }>
       fileStatus: (workspace?: string | null) => Promise<{ exists: boolean; path: string; mtime: number | null; lineCount: number }>
+      pinToAgentsMd: (args: { id: number; content: string; workspace?: string | null }) => Promise<{ success: boolean; targetFile?: string; error?: string }>
+      distillSkill: (args: { sessionId: number; clusterIds?: number[] }) => Promise<{ success: boolean; draft?: any; error?: string }>
     }
     learning: {
       overview: () => Promise<{
@@ -467,12 +471,12 @@ interface Window {
       action: (payload: { sessionId?: number | string; args: Record<string, unknown> }) => Promise<{ success: boolean; result?: unknown; error?: string }>
     }
     task: {
-      start: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+      start: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: 'off' | 'plan' | 'act' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
       list: () => Promise<{ id: number; sessionId: number; parentSessionId?: number | null; status: TaskStatus7; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }[]>
       cancel: (taskId: number) => Promise<{ ok: boolean }>
       pause: (taskId: number) => Promise<{ ok: boolean }>
       resume: (taskId: number) => Promise<{ ok: boolean }>
-      derive: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: 'off' | 'plan' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
+      derive: (params: { content: string; modelId: number; parentSessionId?: number | null; agentMode?: 'off' | 'plan' | 'act' | 'ask' | 'auto_confirm' | 'auto' | 'yolo'; priority?: number; maxRetry?: number }) => Promise<{ taskId: number; sessionId: number; error?: string }>
       getResult: (taskId: number) => Promise<{ status: string; finalContent: string | null } | null>
       onStarted: (callback: (payload: { id: number; sessionId: number; parentSessionId?: number | null; status: TaskStatus7; title: string; createdAt: number; priority: number; attempts: number; maxRetry: number; finalContent?: string | null; error?: string | null }) => void) => () => void
       onProgress: (callback: (payload: { taskId: number; type: 'tool-call' | 'plan-step' | 'status' | 'todo-update' | 'chunk' | 'paused' | 'resumed'; payload: unknown }) => void) => () => void

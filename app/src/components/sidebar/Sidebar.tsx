@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useStore } from '@/store'
 import { useUI } from '@/components/ui/feedback'
-import { MessageSquare, Plus, Server, Settings, ChevronLeft, Trash2, Search, Pin, Brain, Download, Loader2, TerminalSquare, PanelLeft } from 'lucide-react'
+import { MessageSquare, Plus, Server, Settings, ChevronLeft, Trash2, Search, Pin, Brain, Download, Loader2, TerminalSquare, PanelLeft, FlaskConical } from 'lucide-react'
 import type { Session } from '@/types'
 import { t } from '@/utils/i18n'
 import { stripChannelMarkers } from '@/utils/markdown'
@@ -179,11 +179,11 @@ export default function Sidebar() {
           <div className="w-5 my-1.5 border-t border-[var(--border)]" />
           <div className="mt-auto flex flex-col items-center gap-1 w-full pb-2">
             {([
-              { id: 'models', icon: Server, title: t('sidebar.nav.models') },
-              { id: 'memory', icon: Brain, title: t('sidebar.nav.memory') },
-              { id: 'settings', icon: Settings, title: t('sidebar.nav.settings') },
-            ] as const).map(({ id, icon: ItemIcon, title }) => {
-              const active = currentView === id
+              { id: 'chat' as const, icon: MessageSquare, title: t('sidebar.nav.workspace', '工作区') },
+              { id: 'arena' as const, icon: FlaskConical, title: t('sidebar.nav.arena', '竞技场') },
+              { id: 'settings' as const, icon: Settings, title: t('sidebar.nav.settings', '设置') },
+            ]).map(({ id, icon: ItemIcon, title }) => {
+              const active = currentView === id || (id === 'chat' && currentView === 'workspace')
               return (
                 <button
                   key={id}
@@ -343,9 +343,9 @@ export default function Sidebar() {
       </div>
       <QuickControlDeck />
       <div className="p-1.5 space-y-0.5 shrink-0 border-t border-[var(--border)]">
-        <NavItem icon={Server} label={t('sidebar.nav.models')} active={currentView === 'models'} onClick={() => setCurrentView('models')} />
-        <NavItem icon={Brain} label={t('sidebar.nav.memory')} active={currentView === 'memory'} onClick={() => setCurrentView('memory')} />
-        <NavItem icon={Settings} label={t('sidebar.nav.settings')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
+        <NavItem icon={MessageSquare} label={t('sidebar.nav.workspace', '工作区')} active={currentView === 'chat' || currentView === 'workspace'} onClick={() => setCurrentView('chat')} />
+        <NavItem icon={FlaskConical} label={t('sidebar.nav.arena', '竞技场')} active={currentView === 'arena'} onClick={() => setCurrentView('arena')} />
+        <NavItem icon={Settings} label={t('sidebar.nav.settings', '设置')} active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
       </div>
         </div>
       )}

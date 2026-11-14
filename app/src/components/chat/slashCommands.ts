@@ -33,17 +33,18 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
   {
     id: 'mode',
     name: t('slash.mode', '运行模式'),
-    description: t('slash.mode_desc', '切换 Agent 权限模式（explore 只读、workspace 受控、auto_review TDD、unrestricted 完全）'),
+    description: t('slash.mode_desc', '切换 Agent 二元模式（plan 只读规划、act 默认行动）'),
     category: 'agent',
-    paramHint: '[explore|workspace|auto_review|unrestricted]',
+    paramHint: '[plan|act]',
     requiresArg: true,
     action: (arg) => {
       if (!arg) return
-      const validModes: AgentMode[] = ['explore', 'workspace', 'auto_review', 'unrestricted', 'plan', 'ask', 'auto', 'yolo', 'off', 'auto_confirm', 'custom']
+      const validModes: AgentMode[] = ['plan', 'act', 'explore', 'workspace', 'auto_review', 'unrestricted', 'ask', 'auto', 'yolo', 'off', 'auto_confirm', 'custom']
       const lower = arg.toLowerCase().trim() as AgentMode
       if (validModes.includes(lower)) {
-        useStore.getState().setAgentMode(lower)
-        useStore.getState().triggerToast(t('cmd.set_mode') + ' ' + lower, 'success')
+        const canonical: AgentMode = ['plan', 'explore'].includes(lower) ? 'plan' : lower === 'off' ? 'off' : 'act'
+        useStore.getState().setAgentMode(canonical)
+        useStore.getState().triggerToast(t('cmd.set_mode') + ' ' + canonical, 'success')
       }
     },
   },
@@ -369,12 +370,35 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
-    id: 'tasks',
-    name: t('slash.tasks', '后台任务'),
-    description: t('slash.tasks_desc', '打开后台任务与子代理监控驾驶舱'),
-    category: 'session',
-    action: () => {
-      useStore.getState().setTasksOpen(true)
+    id: 'role',
+    name: t('slash.role', '调度子代理'),
+    description: t('slash.role_desc', '按指定角色触发子代理（/role <explore|explorer|implementer|build|review|research|debug|oracle|librarian|hunter|verifier> <任务>）'),
+    category: 'agent',
+    requiresArg: true,
+    paramHint: '<role> <task>',
+    action: async (arg) => {
+      const SUPPORTED_ROLES = ['explore', 'explorer', 'build', 'implementer', 'review', 'research', 'debug', 'oracle', 'librarian', 'hunter', 'verifier']
+      const trimmed = (arg || '').trim()
+      const store = useStore.getState()
+      if (!trimmed) {
+        store.triggerToast(`可用子代理角色: ${SUPPORTED_ROLES.join(', ')}`, 'info')
+        return
+      }
+      const spaceIdx = trimmed.search(/\s+/)
+      const roleName = (spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)).toLowerCase()
+      const taskText = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx).trim()
+      if (!SUPPORTED_ROLES.includes(roleName)) {
+        store.triggerToast(`未知角色 "${roleName}"，可用: ${SUPPORTED_ROLES.join(', ')}`, 'error')
+        return
+      }
+      if (!taskText) {
+        store.triggerToast(`请在 /role ${roleName} 后补充具体任务描述`, 'info')
+        return
+      }
+      if (!store.currentSessionId) return
+      await store.sendMessage(
+        `请立即调用 \`dispatch_subagent\` 工具（role="${roleName}"）完成以下委派任务，并将子代理执行结果整理回复：\n\n${taskText}`
+      )
     },
   },
   {
@@ -423,7 +447,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
         '### Aether 快捷指令指南',
         '',
         '#### 智能体与控制 (Agent & Control)',
-        '- `/mode [explore|workspace|auto_review|unrestricted]` — 切换 Agent 运行权限模式',
+        '- `/mode [plan|act]` — 切换 Agent 运行模式（Plan 只读规划 / Act 自动行动）',
         '- `/effort [minimal|low|medium|high|max|off]` — 调整模型思考深度预算',
         '- `/model [name]` — 快速切换模型',
         '- `/cd [path]` — 快速切换当前会话工作目录 (cwd)',
@@ -441,7 +465,7 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
         '- `/compact` — 智能压缩上下文历史以节省 Token',
         '- `/clear` — 清空当前会话历史',
         '- `/fork` — 分叉当前会话到新分支',
-        '- `/tasks` — 打开后台任务与子代理监控抽屉',
+        '- `/role <role> <task>` — 直接调度指定角色子代理，进度内联展示于对话流',
         '- `/checkpoints` — 打开时间旅行历史快照抽屉',
         '- `/history` — 打开时间旅行历史快照抽屉',
         '- `/btw` — 打开只读旁支提问抽屉 (Alt+B)',

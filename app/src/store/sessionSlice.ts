@@ -122,12 +122,21 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     try { msgs = await window.electronAPI.message.list(id) } catch (e) { log.error("preload", e) }
     const thinkingBlocks: Record<number, string> = {}
     const thinkingDurations: Record<number, number> = {}
+    const loadedMemoryHits: Record<number, any> = {}
     for (const m of msgs) {
       if (m.thinking_content) {
         thinkingBlocks[m.id] = m.thinking_content
       }
       if (m.thinking_duration_ms != null) {
         thinkingDurations[m.id] = m.thinking_duration_ms / 1000
+      }
+      if (m.memory_hits) {
+        try {
+          const parsed = JSON.parse(m.memory_hits)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            loadedMemoryHits[m.id] = parsed
+          }
+        } catch {}
       }
     }
     set((s) => {
@@ -148,6 +157,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         arenaResults: [],
         thinkingBlocksByMessage: boundedThinkingBlocks,
         thinkingDurationsByMessage: boundedThinkingDurations,
+        memoryHitsByMessage: { ...s.memoryHitsByMessage, ...loadedMemoryHits },
       }
     })
     try {

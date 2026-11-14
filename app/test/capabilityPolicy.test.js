@@ -59,75 +59,41 @@ describe('normalizeAxisPolicies', () => {
   })
 })
 
-describe('PermissionPolicy + axis policies integration', () => {
-  const policy = new PermissionPolicy(PermissionMode.WorkspaceWrite)
-    .withToolRequirement('write_file', PermissionMode.DangerFullAccess)
-    .withToolRequirement('run_command', PermissionMode.DangerFullAccess)
-
-  it('deny axis rejects before the 5-tier fallback', () => {
-    const p = new PermissionPolicy(PermissionMode.Allow)
-      .withAxisPolicies({ shell: 'deny' })
-    const out = p.authorize('run_command', '{"command":"rm -rf /"}')
-    expect(out.allowed).toBe(false)
-    expect(out.reason).toContain('capability policy')
-  })
-
-  it('deny axis cannot be bypassed by a hook allow override', () => {
-    const p = new PermissionPolicy(PermissionMode.Allow)
-      .withAxisPolicies({ shell: 'deny' })
-    const out = p.authorizeWithContext(
-      'run_command',
-      '{"command":"npm test"}',
-      { permissionOverride: PermissionOverride.Allow },
-    )
-    expect(out.allowed).toBe(false)
-  })
-
-  it('allow axis permits even in a stricter mode', () => {
-    const p = new PermissionPolicy(PermissionMode.ReadOnly)
+describe('PermissionPolicy decoupled from capability axis matrix', () => {
+  it('withAxisPolicies no longer overrides ReadOnly / Allow / rule safeguards at runtime', () => {
+    // Under Binary Plan/Act architecture, PermissionPolicy does not enforce
+    // axis matrix overrides inside authorizeWithContext.
+    const denyReadOnly = new PermissionPolicy(PermissionMode.ReadOnly)
+      .withToolRequirement('write_file', PermissionMode.DangerFullAccess)
       .withAxisPolicies({ filesystem: 'allow' })
-    // ReadOnly 模式下写文件本应被拒, 但轴策略 allow 放行
-    const out = p.authorize('write_file', '{"path":"x"}')
-    expect(out.allowed).toBe(true)
+    expect(denyReadOnly.authorize('write_file', '{"path":"x"}').allowed).toBe(false)
+
+    const pAllow = new PermissionPolicy(PermissionMode.Allow)
+      .withToolRequirement('run_command', PermissionMode.DangerFullAccess)
+      .withAxisPolicies({ shell: 'deny' })
+    expect(pAllow.authorize('run_command', '{"command":"npm test"}').allowed).toBe(true)
   })
 
-  it('ask axis routes to the prompter', () => {
-    const p = new PermissionPolicy(PermissionMode.WorkspaceWrite)
-      .withAxisPolicies({ network: 'ask' })
-    let request = null
-    const prompter = { decide: (r) => { request = r; return PermissionPromptDecision.Allow } }
-    expect(p.authorize('web_fetch', '{"url":"http://x"}', prompter).allowed).toBe(true)
-    expect(request.tool_name).toBe('web_fetch')
-    expect(request.reason).toContain('network axis requires approval')
-    const denyPrompter = { decide: () => PermissionPromptDecision.Deny }
-    expect(p.authorize('web_fetch', '{"url":"http://x"}', denyPrompter).allowed).toBe(false)
-  })
-
-  it('ask axis still prompts when a hook requests allow', () => {
+  it('destructive shell guard still enforces confirmation in Allow mode regardless of axis policies', () => {
     const p = new PermissionPolicy(PermissionMode.Allow)
-      .withAxisPolicies({ network: 'ask' })
-    let requests = 0
-    const prompter = { decide: () => { requests++; return PermissionPromptDecision.Deny } }
-    const out = p.authorizeWithContext(
-      'web_fetch',
-      '{"url":"http://x"}',
-      { permissionOverride: PermissionOverride.Allow },
-      prompter,
-    )
-    expect(requests).toBe(1)
-    expect(out.allowed).toBe(false)
+      .withToolRequirement('run_command', PermissionMode.DangerFullAccess)
+      .withAxisPolicies({ shell: 'allow' })
+    expect(p.authorize('run_command', '{"command":"rm -rf /"}').allowed).toBe(false)
+    const prompter = { decide: () => PermissionPromptDecision.Allow }
+    expect(p.authorize('run_command', '{"command":"rm -rf /"}', prompter).allowed).toBe(true)
   })
 
-  it('allow axis retains higher-priority deny safeguards', () => {
+  it('explicit permission deny rules still block even when Allow mode + axis allow are set', () => {
     const p = new PermissionPolicy(PermissionMode.Allow)
       .withPermissionRules({ allow: [], ask: [], deny: ['write_file(*)'], denied_tools: [] })
       .withAxisPolicies({ filesystem: 'allow' })
     expect(p.authorize('write_file', '{"path":"x"}').allowed).toBe(false)
   })
 
-  it('no axis policies configured → 5-tier behavior unchanged', () => {
-    const out = policy.authorize('run_command', '{"command":"ls"}')
-    // WorkspaceWrite 模式下 dangerous 工具 → prompt/deny
+  it('no axis policies configured → WorkspaceWrite escalates dangerous tools', () => {
+    const p = new PermissionPolicy(PermissionMode.WorkspaceWrite)
+      .withToolRequirement('run_command', PermissionMode.DangerFullAccess)
+    const out = p.authorize('run_command', '{"command":"ls"}')
     expect(out.allowed).toBe(false)
   })
 })

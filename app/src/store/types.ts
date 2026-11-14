@@ -1,4 +1,4 @@
-import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore } from '@/types'
+import type { Provider, Model, Persona, Session, Message, ViewType, ArenaResult, ModelScore, MemoryHit } from '@/types'
 import { type LangCode, LANGS, getLangDir } from '@/utils/i18n'
 
 // Set <html dir> for RTL languages (Arabic).
@@ -11,15 +11,16 @@ export const LANGS_CODES = LANGS.map(l => l.code)
 // ── Unified 5-Tier Reasoning Scale (R3: Hermes-Aligned) ───────────────────
 export type EffortLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'max'
 
-// ── Agent Operating Modes (R2: 4-Tier Developer-Centric Ladder) ───────────
+// ── Binary Agent Operating Modes (Plan | Act) ───────────────────────────
 export type AgentMode =
+  | 'plan'
+  | 'act'
+  // Backward compatibility legacy aliases
   | 'explore'
   | 'workspace'
   | 'auto_review'
   | 'unrestricted'
-  // Backward compatibility legacy aliases
   | 'off'
-  | 'plan'
   | 'ask'
   | 'auto_confirm'
   | 'auto'
@@ -233,6 +234,13 @@ export interface AppState {
   messageSearchQuery: string
   setMessageSearchQuery: (q: string) => void
 
+  // AutoMemory hits & workflow distillation proposals
+  memoryHitsByMessage: Record<number, MemoryHit[]>
+  setMemoryHitsForMessage: (messageId: number, hits: MemoryHit[]) => void
+  distillProposalBySession: Record<number, { topic: string; clusterIds: number[] } | null>
+  setDistillProposalForSession: (sessionId: number, proposal: { topic: string; clusterIds: number[] } | null) => void
+  dismissDistillProposal: (sessionId: number) => void
+
   // Chat — per-session streaming state so multiple sessions can stream concurrently.
   // `streamingBySession[sid]` holds the live assistant content being streamed for that
   // session. Components should derive their own per-session `isStreaming` from this
@@ -300,12 +308,10 @@ export interface AppState {
   // Pending AskUserQuestion dialogs awaiting a user answer.
   pendingQuestions: { reqId: string; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }[]
   resolveQuestion: (reqId: string, answers: { question: string; answer: string }[]) => void
-  // ── Agent Operating Modes (R2: 4-Tier Developer-Centric Ladder) ───────────
-  // Canonical 4 tiers:
-  //   'explore'      — Read-only exploration and inspection; strictly blocks file edits and destructive shell commands.
-  //   'workspace'    — Controlled workspace mutations with inline Diff preview and explicit confirmation on external shell commands (default).
-  //   'auto_review'  — Supervised TDD loop; automatically mutates code, runs tests/checks, and triggers debugAgent self-healing on failure.
-  //   'unrestricted' — Autonomous execution in sandbox with background safety boundaries and zero popups.
+  // ── Binary Agent Operating Modes (Plan | Act) ───────────────────────────
+  // Canonical 2 modes:
+  //   'plan' — Read-only exploration & planning; blocks file writes and mutating shell commands, produces session_plan.
+  //   'act'  — Default action mode; workspace reads, edits (with auto pre-write snapshot + inline Diff revert), and test commands run automatically; prompts ONLY on 3 high-risk scenarios.
   agentMode: AgentMode
   setAgentMode: (v: AgentMode) => void
   // Pending permission requests awaiting a user decision (rendered as a dialog).

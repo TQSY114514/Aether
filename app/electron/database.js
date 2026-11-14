@@ -258,6 +258,9 @@ function initDatabase() {
   try {
     db.exec("ALTER TABLE memory ADD COLUMN source_trust_level TEXT DEFAULT 'user_direct'");
   } catch {}
+  try {
+    db.exec("ALTER TABLE message ADD COLUMN memory_hits TEXT");
+  } catch {}
 
   // P0-4: Task / Checklist Runtime - persistent session plans
   try {
@@ -1191,10 +1194,11 @@ function addMessage({
   arena_model = null,
   thinking_content = null,
   thinking_duration_ms = null,
+  memory_hits = null,
 }) {
   const info = db
     .prepare(
-      "INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model, thinking_content, thinking_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO message (session_id, role, content, model_used, provider_used, token_count, latency_ms, status, error_message, arena_model, thinking_content, thinking_duration_ms, memory_hits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       session_id,
@@ -1209,6 +1213,7 @@ function addMessage({
       arena_model,
       thinking_content,
       thinking_duration_ms,
+      memory_hits,
     );
   try {
     db.prepare(

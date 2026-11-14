@@ -144,15 +144,18 @@ describe('getMaxConcurrent', () => {
 describe('agentModeToPermissionMode', () => {
   it.each([
     ['plan', 'ReadOnly'],
-    ['ask', 'Prompt'],
-    ['auto', 'WorkspaceWrite'],
+    ['explore', 'ReadOnly'],
+    ['off', 'ReadOnly'],
+    ['act', 'Allow'],
+    ['ask', 'Allow'],
+    ['auto', 'Allow'],
     ['yolo', 'Allow'],
   ])('maps %s to %s', (mode, expected) => {
     expect(toolLoop.agentModeToPermissionMode(mode)).toBe(expected)
   })
 
-  it('defaults unknown modes to Prompt', () => {
-    expect(toolLoop.agentModeToPermissionMode('non-existent-mode')).toBe('Prompt')
+  it('defaults unknown modes to Allow (binary Act default)', () => {
+    expect(toolLoop.agentModeToPermissionMode('non-existent-mode')).toBe('Allow')
   })
 })
 

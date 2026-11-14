@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
-import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2, FolderOpen, SquareTerminal, Wifi, CheckCircle2, X } from 'lucide-react'
+import { ShieldCheck, Activity, Shield, Lock, ShieldAlert, Loader2, CheckCircle2, X } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 「安全面板」——让 Aether 的「默认安全」看得见：
@@ -29,23 +29,10 @@ const SECURITY_CAPABILITIES: { name: string; desc: string }[] = [
 // 在面板里展示的关键安全 flag（feature_flag.* 中的那些）。
 const SECURITY_FLAGS = ['agent.toolRouter', 'agent.worktreeIsolation', 'agent.backgroundReview', 'network.policy']
 
-// 能力轴定义
-type CapabilityValue = 'allow' | 'ask' | 'deny'
-interface CapabilityAxis {
-  key: string
-  label: string
-  icon: typeof FolderOpen
-  desc: string
-}
-const CAPABILITY_AXES: CapabilityAxis[] = [
-  { key: 'capability.filesystem', label: '文件系统', icon: FolderOpen, desc: 'read_file / write_file / edit_file 等文件操作' },
-  { key: 'capability.shell', label: 'Shell', icon: SquareTerminal, desc: 'run_command 等命令执行' },
-  { key: 'capability.network', label: '网络', icon: Wifi, desc: 'web_fetch / web_search 等网络访问' },
-]
-const CAPABILITY_OPTIONS: { value: CapabilityValue; label: string }[] = [
-  { value: 'allow', label: '允许' },
-  { value: 'ask', label: '询问' },
-  { value: 'deny', label: '拒绝' },
+const HIGH_RISK_SCENARIOS: { title: string; desc: string }[] = [
+  { title: '工作区外路径访问', desc: '尝试读写 Workspace Root 根目录以外的文件或目录时弹出确认' },
+  { title: '敏感凭证文件修改', desc: '修改 .env*、*.pem、*.key 等密钥与凭证文件时强制手动确认' },
+  { title: '破坏性或高危 Shell', desc: '执行 rm -rf、del /s、git reset --hard、git push --force 或未知远程脚本管道时拦截确认' },
 ]
 
 interface AuditRow {
@@ -62,8 +49,6 @@ export default function SecurityPage() {
   const [flags, setFlags] = useState<{ key: string; enabled: boolean; description: string }[]>([])
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [capabilities, setCapabilities] = useState<Record<string, CapabilityValue>>({})
-  const [capLoading, setCapLoading] = useState(true)
 
   const [rules, setRules] = useState<{ tool: string; ruleKey: string; decision: string; key: string }[]>([])
   const [newTool, setNewTool] = useState('run_command')
@@ -131,31 +116,7 @@ export default function SecurityPage() {
     setLoading(false)
   }
 
-  const loadCapabilities = async () => {
-    setCapLoading(true)
-    try {
-      const entries = await Promise.all(
-        CAPABILITY_AXES.map(async (ax) => {
-          const v = await window.electronAPI.settings.get(ax.key)
-          return [ax.key, (v as CapabilityValue) || 'ask'] as [string, CapabilityValue]
-        })
-      )
-      setCapabilities(Object.fromEntries(entries))
-    } catch { /* ignore */ }
-    setCapLoading(false)
-  }
-
-  useEffect(() => { load(); loadCapabilities(); loadRules() }, [])
-
-  const setCapability = async (key: string, value: CapabilityValue) => {
-    setCapabilities((prev) => ({ ...prev, [key]: value }))
-    try {
-      await window.electronAPI.settings.set(key, value)
-    } catch {
-      toast(t('security.save_failed', '保存失败'), { type: 'error' })
-      loadCapabilities()
-    }
-  }
+  useEffect(() => { load(); loadRules() }, [])
 
   const applySafeMode = async () => {
     setBusy(true)
@@ -208,51 +169,25 @@ export default function SecurityPage() {
           </div>
         </div>
 
-        {/* 2. 能力轴 */}
+        {/* 2. 二元模式与高危拦截门禁 (3 类高危场景) */}
         <div className="rounded-lg border p-4 mb-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-          <div className="flex items-center gap-1.5 mb-3">
+          <div className="flex items-center gap-1.5 mb-2">
             <ShieldAlert size={15} style={{ color: 'var(--warning)' }} />
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('security.capability_axes', '能力轴')}</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+              {t('security.high_risk_gates', 'Plan / Act 二元模式与高危门禁')}
+            </span>
           </div>
           <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
-            {t('security.capability_axes_desc', '控制 agent 在文件、Shell、网络三类能力上的默认行为。允许 = 自动执行，询问 = 每次确认，拒绝 = 直接拒绝。')}
+            {t('security.high_risk_gates_desc', 'Plan 模式仅允许只读探索与规划；Act 模式默认自动执行工作区内读写、编辑（含写前自动快照与一键 Diff 回滚）及常规测试命令，仅以下 3 类高危操作弹出确认：')}
           </p>
-          {capLoading ? (
-            <div className="text-center py-4 text-xs" style={{ color: 'var(--text-muted)' }}>{t('common.loading', '加载中…')}</div>
-          ) : (
-            <div className="space-y-2">
-              {CAPABILITY_AXES.map((ax) => {
-                const Icon = ax.icon
-                const current = capabilities[ax.key] || 'ask'
-                return (
-                  <div key={ax.key} className="flex items-center justify-between gap-3 rounded-md px-2.5 py-2 border border-[var(--border)]" style={{ backgroundColor: 'var(--content-bg)' }}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Icon size={13} className="shrink-0" style={{ color: 'var(--text-secondary)' }} />
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{ax.label}</div>
-                        <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{ax.desc}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-0.5 shrink-0 rounded-md p-0.5" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                      {CAPABILITY_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => setCapability(ax.key, opt.value)}
-                          className="px-2.5 py-1 text-[11px] rounded-md transition-colors"
-                          style={{
-                            backgroundColor: current === opt.value ? 'var(--accent)' : 'transparent',
-                            color: current === opt.value ? 'white' : 'var(--text-secondary)',
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {HIGH_RISK_SCENARIOS.map((item) => (
+              <div key={item.title} className="rounded-md px-2.5 py-2 border border-[var(--border)]" style={{ backgroundColor: 'var(--content-bg)' }}>
+                <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{item.title}</div>
+                <div className="text-[10px] leading-snug mt-0.5" style={{ color: 'var(--text-muted)' }}>{item.desc}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* 3. 自动审批白名单规则 (Cline & Claude Code 对齐) */}

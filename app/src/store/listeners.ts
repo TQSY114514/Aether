@@ -609,6 +609,26 @@ export function ensureSkillPatchedListener() {
   })
 }
 
+let _memoryHitsListenerInstalled = false
+export function ensureMemoryHitsListener() {
+  if (_memoryHitsListenerInstalled) return
+  _memoryHitsListenerInstalled = true
+  window.electronAPI.chat.onMemoryHits?.(({ messageId, hits }) => {
+    if (!messageId || !Array.isArray(hits)) return
+    getStore().getState().setMemoryHitsForMessage(messageId, hits)
+  })
+}
+
+let _distillableWorkflowListenerInstalled = false
+export function ensureDistillableWorkflowListener() {
+  if (_distillableWorkflowListenerInstalled) return
+  _distillableWorkflowListenerInstalled = true
+  window.electronAPI.chat.onDistillableWorkflow?.(({ sessionId, topic, clusterIds }) => {
+    if (!sessionId) return
+    getStore().getState().setDistillProposalForSession(sessionId, { topic, clusterIds })
+  })
+}
+
 let _questionListenerInstalled = false
 export function ensureQuestionListener() {
   if (_questionListenerInstalled) return
@@ -644,6 +664,8 @@ export function ensureAllListeners() {
   ensureUsageListener()
   ensureTurnSummaryListener()
   ensureMemorySavedListener()
+  ensureMemoryHitsListener()
+  ensureDistillableWorkflowListener()
   ensureSkillPatchedListener()
   ensureTaskListeners()
   ensureQuestionListener()
