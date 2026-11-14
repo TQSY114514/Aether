@@ -651,6 +651,22 @@ const TOOLS = [
       const origOnToolCall = agentCallbacks.onToolCall
       const origOnThinkingDelta = agentCallbacks.onThinkingDelta
       const origOnStreamDelta = ctx.callbacks?.onStreamDelta
+      const origOnSubagentEvent = ctx.callbacks?.onSubagentEvent
+
+      // Intercept and unify all subagent events under the exact same saId
+      agentCallbacks.onSubagentEvent = (evt) => {
+        if (!evt) return
+        emitEvent({
+          ...evt,
+          id: saId,
+          name: `${roleDesc.label || roleName}`,
+          task: td.slice(0, 160),
+          recentThinkingTail: thinkingTail || undefined,
+          liveOutputTail: outputTail || undefined,
+        })
+        try { origOnSubagentEvent?.({ ...evt, id: saId }) } catch {}
+      }
+
       agentCallbacks.onToolCall = (entry) => {
         if (entry?.name) {
           streamEvents.push({
@@ -706,9 +722,10 @@ const TOOLS = [
         model: ctx.model,
         prompt: mp,
         signal: ctx.signal,
+        id: saId,
         agentMode: ctx.agentMode === 'plan' ? 'plan' : (roleDesc.readOnly ? 'plan' : (ctx.agentMode || roles.getRoleDefaultMode(roleName))),
         callbacks: agentCallbacks,
-        config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'keep' },
+        config: { allowedTools, maxIterations, inheritPermissions: true, cleanup: 'keep', id: saId },
       })
       const out = o?.content || '(no content)'
       emitEvent({
@@ -757,26 +774,79 @@ const TOOLS = [
       return `Unknown extended tool "${toolName}". Available built-in tools: ${available.join(', ')}`
     }
 
-    const mode = String(ctx?.agentMode || 'ask').toLowerCase()
-    const isReadOnly = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
-    if (isReadOnly && targetTool.risk === 'dangerous') {
-      return `[BLOCKED] Extended tool "${toolName}" (risk: dangerous) is not allowed in ${mode} mode.`
-    }
-    if (mode === 'ask' && targetTool.risk === 'dangerous' && typeof ctx?.requestPermission === 'function') {
-      const allowed = await ctx.requestPermission({ name: toolName, args: args.arguments || {}, risk: targetTool.risk })
-      if (!allowed) return `[DENIED] User denied permission to run "${toolName}".`
-    }
-
     let parsedArgs = args.arguments !== undefined ? args.arguments : {}
     if (typeof parsedArgs === 'string') {
       try { parsedArgs = JSON.parse(parsedArgs) } catch { parsedArgs = {} }
     }
-    const raw = await targetTool.run(parsedArgs || {}, ctx)
+    if (!parsedArgs || typeof parsedArgs !== 'object') parsedArgs = {}
+
+    // Check disabled tools list
+    const disabled = Array.isArray(ctx?.disabledTools)
+      ? ctx.disabledTools
+      : (Array.isArray(ctx?.options?.disabledTools) ? ctx.options.disabledTools : [])
+    if (disabled.includes(toolName) || disabled.includes('call_extended_tool')) {
+      return `[BLOCKED] Tool "${toolName}" is disabled in current settings.`
+    }
+
+    // Check boundary allowlist
+    const boundaryAllowlist = ctx?.allowedTools || ctx?.options?.allowedTools || ctx?.options?.toolBoundaryAllowlist
+    if (boundaryAllowlist && Array.isArray(boundaryAllowlist)) {
+      if (!boundaryAllowlist.includes(toolName)) {
+        return `[BLOCKED] Tool "${toolName}" is not permitted by the tool boundary allowlist.`
+      }
+    }
+
+    // Enforce Plan/Act mode permissions & 3-Scenario High-Risk gate on behalf of targetTool
+    const mode = String(ctx?.agentMode || 'act').toLowerCase()
+    const { checkToolAllowed } = require('./trustEngine')
+    const check = checkToolAllowed(toolName, mode, parsedArgs, { workspaceRoot: ctx?.workspaceRoot })
+    if (!check.allowed) {
+      return `[BLOCKED] Extended tool "${toolName}" is blocked in ${mode} mode: ${check.reason || 'permission denied'}`
+    }
+
+    const isReadOnly = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
+    const WRITE_TOOLS = new Set(['write_file', 'edit_file', 'create_or_update_file', 'apply_patch', 'delete_file'])
+    if (isReadOnly && (targetTool.risk === 'dangerous' || WRITE_TOOLS.has(toolName))) {
+      return `[BLOCKED] Extended tool "${toolName}" is a mutating/dangerous operation and is blocked in ${mode} mode.`
+    }
+
+    if (check.requiresPrompt || check.promptRequired) {
+      if (typeof ctx?.requestPermission === 'function') {
+        const allowed = await ctx.requestPermission({
+          name: toolName,
+          args: parsedArgs,
+          risk: targetTool.risk,
+          reason: check.reason,
+        })
+        if (!allowed) return `[DENIED] User denied permission to run "${toolName}".`
+      } else if (!ctx?.highRiskApproved) {
+        return `[DENIED] High-risk operation "${toolName}" requires explicit confirmation.`
+      }
+    } else if (mode === 'ask' && targetTool.risk === 'dangerous') {
+      if (typeof ctx?.requestPermission === 'function') {
+        const allowed = await ctx.requestPermission({
+          name: toolName,
+          args: parsedArgs,
+          risk: targetTool.risk,
+        })
+        if (!allowed) return `[DENIED] User denied permission to run "${toolName}".`
+      }
+    }
+
+    const raw = await targetTool.run(parsedArgs, ctx)
+
+    // Multimodal pass-through: if targetTool returns an array of content parts with image blocks
+    // (e.g. web_visualize returning [{type:'image_url', ...}]), pass through directly.
+    if (Array.isArray(raw)) {
+      const hasMedia = raw.some(p => p && typeof p === 'object' && (p.type === 'image' || p.type === 'image_url' || p.type === 'input_image'))
+      if (hasMedia) return raw
+    }
+
     try {
       const { applyMiddleware } = require('../llm/toolResultMiddleware')
-      return applyMiddleware(typeof raw === 'string' ? raw : JSON.stringify(raw), { tool: toolName, db: ctx?.db })
+      return applyMiddleware(typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw : JSON.stringify(raw)), { tool: toolName, db: ctx?.db })
     } catch {
-      return typeof raw === 'string' ? raw : JSON.stringify(raw)
+      return typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw : JSON.stringify(raw))
     }
   }},
   { name: 'delegate_task', description: 'Delegate parallel sub-tasks to sub-agents. Parallel writers MUST declare non-overlapping write_paths (omitting write_paths claims the entire workspace and blocks other parallel writers; pass write_paths: [] or read_only: true for read-only tasks; max 3 parallel writers).', risk: 'dangerous', parameters: { type: 'object', properties: { tasks: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { task: { type: 'string', description: 'Sub-task instruction' }, prompt: { type: 'string' }, write_paths: { type: 'array', items: { type: 'string' }, description: 'Disjoint relative file/directory paths this writer touches (omit = whole workspace, [] = read-only)' }, read_only: { type: 'boolean' } }, required: ['task'] }] }, minItems: 1, maxItems: 5 } }, required: ['tasks'] }, run: async (args, ctx) => {

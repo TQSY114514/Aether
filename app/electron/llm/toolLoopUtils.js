@@ -71,13 +71,26 @@ function resolveTool(name) {
 
 /** Compute safe tool-call concurrency from the requested tool metadata. */
 function getMaxConcurrent(toolCalls, getToolFn = resolveTool) {
-  const names = toolCalls.map(tc => (tc.function || {}).name).filter(Boolean)
+  const unwrapped = (toolCalls || []).map(tc => {
+    const fn = tc?.function || {}
+    let name = fn.name
+    let args = {}
+    if (name === 'call_extended_tool') {
+      try {
+        args = typeof fn.arguments === 'string' ? JSON.parse(fn.arguments) : (fn.arguments || {})
+        if (args?.tool_name) name = String(args.tool_name).trim()
+      } catch {}
+    }
+    return { name, args }
+  }).filter(t => Boolean(t.name))
+
+  const names = unwrapped.map(t => t.name)
   const hasWrite = names.some(n => WRITE_TOOLS.has(n))
-  const hasAnySequential = toolCalls.some(tc => {
-    const t = getToolFn ? getToolFn((tc.function || {}).name) : null
-    return t && t.executionMode === 'sequential'
+  const hasAnySequentialOrDangerous = unwrapped.some(({ name }) => {
+    const t = getToolFn ? getToolFn(name) : null
+    return t && (t.executionMode === 'sequential' || t.risk === 'dangerous')
   })
-  if (hasAnySequential || hasWrite) return 1
+  if (hasAnySequentialOrDangerous || hasWrite) return 1
   const allRead = names.every(n => READ_TOOLS.has(n))
   if (allRead) return MAX_READ_CONCURRENT
   return MAX_DEFAULT_CONCURRENT

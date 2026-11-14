@@ -1,9 +1,12 @@
 const fs = require('fs')
 const path = require('path')
+const crypto = require('crypto')
 const { execFileSync } = require('child_process')
 
 let db = null
 function setDb(handle) { db = handle }
+
+const _activeTurnSnapshots = new Map()
 
 function extractAffectedPaths(toolName, args, workspaceRoot = null) {
   const paths = []
@@ -61,14 +64,17 @@ function captureFiles(paths) {
 }
 
 function sanitizeTurnId(turnId) {
-  return String(turnId || `turn_${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, '_')
+  return String(turnId || `turn_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`).replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
 /**
  * Lightweight pre-write snapshot before edit_file / write_file / apply_patch:
  * - In Git repositories: records a lightweight tree/commit object via `git stash create`
  *   (falling back to `HEAD` when working tree has no tracked edits) without touching stash reflog or HEAD.
- * - In non-Git directories: saves incremental file backup under `<workspaceRoot>/.aether/snapshots/<turnId>/`.
+ *   Uses `-c user.name=Aether -c user.email=aether@local` so CI/headless environments without global git config
+ *   reliably generate tree/commit hashes.
+ * - In non-Git directories: saves incremental file backups under `<workspaceRoot>/.aether/snapshots/<turnId>/files/`
+ *   without creating a JSON sidecar manifest (metadata is kept in the returned snapshot object and SQLite).
  * Always deduplicates per `(turnId, path)` so multiple writes to the same file in a turn
  * preserve the true pre-turn state.
  */
@@ -84,74 +90,95 @@ function createPreWriteSnapshot({ workspaceRoot, turnId, affectedPaths = [], too
     let treeHash = null
     let headHash = null
     try {
-      const out = execFileSync('git', ['stash', 'create'], { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim()
+      const out = execFileSync(
+        'git',
+        ['-c', 'user.name=Aether', '-c', 'user.email=aether@local', 'stash', 'create'],
+        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
+      ).trim()
       if (out) stashHash = out
     } catch {}
     try {
-      headHash = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim() || null
+      headHash = execFileSync(
+        'git',
+        ['rev-parse', 'HEAD'],
+        { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
+      ).trim() || null
     } catch {}
     const refToTree = stashHash || headHash
     if (refToTree) {
       try {
-        treeHash = execFileSync('git', ['rev-parse', `${refToTree}^{tree}`], { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim() || null
+        treeHash = execFileSync(
+          'git',
+          ['rev-parse', `${refToTree}^{tree}`],
+          { cwd: gitRoot, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }
+        ).trim() || null
       } catch {}
-    }
-    return {
-      method: 'git_stash_create',
-      turnId: safeTurnId,
-      gitRoot,
-      stashHash: stashHash || headHash,
-      treeHash,
-      hadDirtyStash: Boolean(stashHash),
-      files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory })),
+      return {
+        method: 'git_stash_create',
+        turnId: safeTurnId,
+        gitRoot,
+        stashHash: stashHash || headHash,
+        treeHash,
+        hadDirtyStash: Boolean(stashHash),
+        files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory })),
+      }
     }
   }
 
-  // Non-Git directory: store incremental pre-turn snapshot under .aether/snapshots/<turnId>/
+  // Non-Git directory: incremental backup in memory & disk file backups (no sidecar manifest.json)
   const snapshotDir = path.join(root, '.aether', 'snapshots', safeTurnId)
   const filesBackupDir = path.join(snapshotDir, 'files')
-  const manifestPath = path.join(snapshotDir, 'manifest.json')
-  try {
-    fs.mkdirSync(filesBackupDir, { recursive: true })
-    let manifest = { turnId: safeTurnId, root, createdAt: new Date().toISOString(), entries: {} }
-    if (fs.existsSync(manifestPath)) {
-      try {
-        const prev = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'))
-        if (prev && typeof prev === 'object' && prev.entries) manifest = prev
-      } catch {}
-    }
-    for (const f of filesMeta) {
-      if (f.isDirectory) continue
-      const key = process.platform === 'win32' ? f.path.toLowerCase() : f.path
-      if (Object.hasOwn(manifest.entries, key)) continue // preserve earliest pre-turn state
-      let backupRel = null
-      if (f.existed) {
-        const idx = Object.keys(manifest.entries).length
-        const ext = path.extname(f.path) || '.bak'
-        const fname = `${idx}_${path.basename(f.path).replace(/[^a-zA-Z0-9._-]/g, '_')}${ext}`
-        backupRel = path.join('files', fname)
-        fs.writeFileSync(path.join(snapshotDir, backupRel), f.content ?? '', 'utf-8')
-      }
-      manifest.entries[key] = {
-        path: f.path,
-        existed: f.existed,
-        backupRel,
-        toolName,
-      }
-    }
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
-    return {
+  let currentSnap = _activeTurnSnapshots.get(safeTurnId)
+  if (!currentSnap) {
+    currentSnap = {
       method: 'dir_incremental',
       turnId: safeTurnId,
       snapshotDir,
-      manifestPath,
-      files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory })),
+      entries: {},
+      files: [],
     }
+    _activeTurnSnapshots.set(safeTurnId, currentSnap)
+  }
+
+  try {
+    fs.mkdirSync(filesBackupDir, { recursive: true })
+    for (let i = 0; i < filesMeta.length; i++) {
+      const f = filesMeta[i]
+      if (f.isDirectory) continue
+      const key = process.platform === 'win32' ? f.path.toLowerCase() : f.path
+      if (Object.hasOwn(currentSnap.entries, key)) continue // preserve earliest pre-turn state!
+
+      let backupPath = null
+      if (f.existed) {
+        const idx = Object.keys(currentSnap.entries).length
+        const ext = path.extname(f.path) || '.bak'
+        const fname = `${idx}_${path.basename(f.path).replace(/[^a-zA-Z0-9._-]/g, '_')}${ext}`
+        backupPath = path.join(filesBackupDir, fname)
+        if (!fs.existsSync(backupPath)) {
+          fs.writeFileSync(backupPath, f.content ?? '', 'utf-8')
+        }
+      }
+      currentSnap.entries[key] = {
+        path: f.path,
+        existed: f.existed,
+        backupPath,
+        content: f.content,
+        toolName,
+      }
+    }
+    currentSnap.files = Object.values(currentSnap.entries).map(e => ({
+      path: e.path,
+      existed: e.existed,
+      isDirectory: false,
+      content: e.content,
+    }))
+    return currentSnap
   } catch (e) {
     return {
       method: 'memory_fallback',
       turnId: safeTurnId,
       error: e.message,
+      entries: currentSnap.entries,
       files: filesMeta,
     }
   }
@@ -162,10 +189,17 @@ function rollbackPreWriteSnapshot(meta, targetPaths = null) {
   const restored = []
   const failed = []
 
-  if (meta.method === 'dir_incremental' && meta.manifestPath && fs.existsSync(meta.manifestPath)) {
+  if (meta.method === 'dir_incremental' || meta.method === 'memory_fallback') {
     try {
-      const manifest = JSON.parse(fs.readFileSync(meta.manifestPath, 'utf-8'))
-      const entries = Object.values(manifest.entries || {})
+      const active = meta.turnId ? _activeTurnSnapshots.get(meta.turnId) : null
+      const mergedEntries = { ...(active?.entries || {}), ...(meta.entries || {}) }
+      let entries = Object.values(mergedEntries)
+      if (entries.length === 0 && meta.manifestPath && fs.existsSync(meta.manifestPath)) {
+        try {
+          const manifest = JSON.parse(fs.readFileSync(meta.manifestPath, 'utf-8'))
+          entries = Object.values(manifest.entries || {})
+        } catch {}
+      }
       const filterSet = targetPaths && targetPaths.length
         ? new Set(targetPaths.map(p => process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p)))
         : null
@@ -173,11 +207,19 @@ function rollbackPreWriteSnapshot(meta, targetPaths = null) {
         const normPath = process.platform === 'win32' ? path.resolve(ent.path).toLowerCase() : path.resolve(ent.path)
         if (filterSet && !filterSet.has(normPath)) continue
         try {
-          if (ent.existed && ent.backupRel) {
-            const content = fs.readFileSync(path.join(meta.snapshotDir, ent.backupRel), 'utf-8')
-            fs.mkdirSync(path.dirname(ent.path), { recursive: true })
-            fs.writeFileSync(ent.path, content, 'utf-8')
-            restored.push(ent.path)
+          if (ent.existed) {
+            let content = ent.content
+            if (content == null && ent.backupPath && fs.existsSync(ent.backupPath)) {
+              content = fs.readFileSync(ent.backupPath, 'utf-8')
+            } else if (content == null && ent.backupRel && meta.snapshotDir) {
+              const relPath = path.join(meta.snapshotDir, ent.backupRel)
+              if (fs.existsSync(relPath)) content = fs.readFileSync(relPath, 'utf-8')
+            }
+            if (content != null) {
+              fs.mkdirSync(path.dirname(ent.path), { recursive: true })
+              fs.writeFileSync(ent.path, content, 'utf-8')
+              restored.push(ent.path)
+            }
           } else if (!ent.existed && fs.existsSync(ent.path)) {
             fs.rmSync(ent.path, { force: true, recursive: true })
             restored.push(ent.path)
@@ -186,7 +228,8 @@ function rollbackPreWriteSnapshot(meta, targetPaths = null) {
           failed.push({ path: ent.path, error: e.message })
         }
       }
-      return { success: failed.length === 0, restored, failed, method: 'dir_incremental' }
+      if (meta.turnId) _activeTurnSnapshots.delete(meta.turnId)
+      return { success: failed.length === 0, restored, failed, method: meta.method }
     } catch (e) {
       return { success: false, error: e.message, restored, failed }
     }
@@ -205,14 +248,24 @@ function rollbackPreWriteSnapshot(meta, targetPaths = null) {
         }
         const rel = path.relative(meta.gitRoot, ent.path).replace(/\\/g, '/')
         if (rel && !rel.startsWith('..')) {
-          execFileSync('git', ['checkout', meta.stashHash, '--', rel], { cwd: meta.gitRoot, timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
-          restored.push(ent.path)
+          try {
+            execFileSync('git', ['checkout', meta.stashHash, '--', rel], { cwd: meta.gitRoot, timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+            restored.push(ent.path)
+          } catch (gitErr) {
+            if (ent.content != null) {
+              fs.mkdirSync(path.dirname(ent.path), { recursive: true })
+              fs.writeFileSync(ent.path, ent.content, 'utf-8')
+              restored.push(ent.path)
+            } else {
+              throw gitErr
+            }
+          }
         }
       } catch (e) {
         failed.push({ path: ent.path, error: e.message })
       }
     }
-    if (failed.length === 0 && restored.length > 0) {
+    if (failed.length === 0 && (restored.length > 0 || entries.length === 0)) {
       return { success: true, restored, failed, method: 'git_stash_create' }
     }
   }
@@ -225,10 +278,16 @@ function createCheckpoint({ sessionId, messageId, turnId, workspaceRoot, toolNam
     try { return require('../tools/sandbox').getWorkspaceRoot(sessionId) } catch { return null }
   })()
   const affectedPaths = extractAffectedPaths(toolName, args, resolvedRoot)
-  const capturedFiles = captureFiles(affectedPaths)
+  const filesMeta = captureFiles(affectedPaths)
   const preWrite = createPreWriteSnapshot({ workspaceRoot: resolvedRoot, turnId: turnId || messageId, affectedPaths, toolName })
 
   if (!db) return null
+
+  const gitCaptured = Boolean(preWrite && preWrite.method === 'git_stash_create' && (preWrite.stashHash || preWrite.treeHash))
+  // When Git snapshot captures the revision, avoid redundantly storing full file contents in SQLite
+  const capturedFiles = gitCaptured
+    ? filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory, content: null }))
+    : filesMeta
 
   const snapshot = {
     version: 2,
@@ -294,29 +353,41 @@ function rollbackCheckpoint(id, opts = {}) {
 
   const snapshot = cp.snapshot || {}
 
-  // Try exact captured pre-write file contents first (fastest & zero side effects),
-  // then preWrite directory/git_stash_create snapshot if needed.
-  const restored = []
-  const failed = []
-  for (const f of snapshot.files || []) {
-    if (f.isDirectory) continue
-    try {
-      if (f.existed) {
-        fs.mkdirSync(path.dirname(f.path), { recursive: true })
-        fs.writeFileSync(f.path, f.content ?? '', 'utf-8')
-        restored.push(f.path)
-      } else if (fs.existsSync(f.path)) {
-        fs.rmSync(f.path, { force: true, recursive: true })
-        restored.push(f.path)
-      }
-    } catch (e) {
-      failed.push({ path: f.path, error: e.message })
+  // If git stash snapshot exists, restore via git checkout from stash/tree object
+  if (snapshot.preWrite && snapshot.preWrite.method === 'git_stash_create') {
+    const preRes = rollbackPreWriteSnapshot(snapshot.preWrite)
+    if (preRes.success) {
+      db.markAgentCheckpointRolledBack(id)
+      return { success: true, restored: preRes.restored, sessionId: cp.session_id, method: preRes.method }
     }
   }
 
-  if (failed.length === 0 && (restored.length > 0 || (snapshot.files || []).length > 0)) {
-    db.markAgentCheckpointRolledBack(id)
-    return { success: true, restored, sessionId: cp.session_id, method: snapshot.preWrite?.method || 'file_snapshot' }
+  // Restore exact captured pre-write file contents (when content is stored, e.g. non-git)
+  const restored = []
+  const failed = []
+  const hasCapturedContents = (snapshot.files || []).some(f => !f.isDirectory && f.content !== null && f.content !== undefined)
+  if (hasCapturedContents) {
+    for (const f of snapshot.files || []) {
+      if (f.isDirectory) continue
+      if (f.content === null || f.content === undefined) continue
+      try {
+        if (f.existed) {
+          fs.mkdirSync(path.dirname(f.path), { recursive: true })
+          fs.writeFileSync(f.path, f.content ?? '', 'utf-8')
+          restored.push(f.path)
+        } else if (fs.existsSync(f.path)) {
+          fs.rmSync(f.path, { force: true, recursive: true })
+          restored.push(f.path)
+        }
+      } catch (e) {
+        failed.push({ path: f.path, error: e.message })
+      }
+    }
+
+    if (failed.length === 0 && (restored.length > 0 || (snapshot.files || []).length > 0)) {
+      db.markAgentCheckpointRolledBack(id)
+      return { success: true, restored, sessionId: cp.session_id, method: snapshot.preWrite?.method || 'file_snapshot' }
+    }
   }
 
   if (snapshot.preWrite) {

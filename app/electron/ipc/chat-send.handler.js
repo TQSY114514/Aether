@@ -389,8 +389,18 @@ ipcMain.handle('chat:complete', handleChatComplete)
       } catch {}
     }
     const recallWs = isMemoryAuthorized ? wsRoot : null
-    let memDetails = autoMemoryOn ? autoMemory.prefetchWithDetails(db, content, recallWs) : { text: '', hits: [] }
-    let memBlock = memDetails.text
+    let memDetails = { text: '', hits: [] }
+    if (autoMemoryOn) {
+      if (typeof autoMemory.prefetchWithDetails === 'function') {
+        try { memDetails = autoMemory.prefetchWithDetails(db, content, recallWs) || { text: '', hits: [] } } catch {}
+      } else if (typeof autoMemory.prefetch === 'function') {
+        try {
+          const raw = autoMemory.prefetch(db, content, recallWs) || ''
+          memDetails = { text: raw, hits: [] }
+        } catch {}
+      }
+    }
+    let memBlock = memDetails.text || memDetails.contextBlock || ''
     let memHits = memDetails.hits || []
     if (!memBlock && autoMemoryOn && provider && model) {
       // LLM second-pass recall (P1-5): keyword+graph recall found nothing —

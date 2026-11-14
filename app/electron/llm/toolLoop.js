@@ -28,6 +28,7 @@ const { generateDiff, generateAfterSnapshot, countDiffLines } = require('../tool
 const { buildProjectContextMessage, invalidateCache } = require('./projectInstructions')
 const { buildRepoMapMessage } = require('../context/repoMap')
 const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox')
+const crypto = require('crypto')
 const modelRouter = require('./modelRouter')
 const path = require('path')
 const fs = require('fs')
@@ -181,7 +182,7 @@ async function runToolLoop({ provider, model, messages, tools = true, signal, on
   let activeModel = model
   const normalizedAgentMode = normalizeAgentMode(agentMode)
   const wsRoot = workspaceRoot || getWorkspaceRoot(sessionId) || process.cwd()
-  const turnId = messageId ? `turn_${messageId}` : `turn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  const turnId = messageId ? `turn_${messageId}` : `turn_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
   const turnFileTracker = createTurnFileTracker(wsRoot)
   const emitFileSummary = () => {
     try {
@@ -1041,25 +1042,6 @@ Reply in this format:
           } catch {}
         }
 
-        // Plan mode (read-only planning): allow workspace reads, search, session_plan,
-        // ask_user, read-only subagent exploration, and read-only git/inspection shell;
-        // block all file writes and mutating shell commands.
-        if (!entry.error && (normalizedAgentMode === 'plan' || normalizedAgentMode === 'off')) {
-          try {
-            const { checkToolAllowed } = require('../tools/trustEngine')
-            const planCheck = checkToolAllowed(fn.name, normalizedAgentMode, args, { workspaceRoot: wsRoot })
-            if (!planCheck.allowed) {
-              entry.error = planCheck.reason || `Permission denied: '${fn.name}' is blocked in Plan mode`
-              entry.failure_kind = 'permission_denied'
-            }
-          } catch {
-            if (WRITE_TOOLS.has(fn.name) || tool?.risk === 'dangerous' || fn.name === 'run_command' || fn.name === 'exec') {
-              entry.error = `Permission denied: write operations and mutating tool '${fn.name}' are blocked in Plan mode`
-              entry.failure_kind = 'permission_denied'
-            }
-          }
-        }
-
         if (!tool) {
           entry.error = `unknown tool: ${fn.name}`
           entry.failure_kind = 'model_invalid_args'
@@ -1129,6 +1111,8 @@ Reply in this format:
           // ── Binary Plan / Act Gate (3-Scenario High-Risk Check) ───────────────
           // Workspace reads, searches, regular edits, and non-destructive dev commands
           // auto-execute in Act mode without confirmation popups.
+          // In Plan mode, only read-only operations, search, git inspection, session_plan
+          // and ask_user are allowed.
           // ONLY the 3 high-risk scenarios (outside workspace, sensitive credentials,
           // destructive/remote-exec shell commands) prompt the user.
           const effectiveMode = normalizedAgentMode
@@ -1138,12 +1122,17 @@ Reply in this format:
               const { checkToolAllowed } = require('../tools/trustEngine')
               const riskCheck = checkToolAllowed(fn.name, effectiveMode, args, { workspaceRoot: wsRoot })
               if (!riskCheck.allowed) {
-                entry.error = riskCheck.reason || `blocked tool '${fn.name}'`
+                entry.error = riskCheck.reason || `Permission denied: '${fn.name}' is blocked in ${effectiveMode} mode`
                 entry.failure_kind = 'permission_denied'
               } else if (riskCheck.requiresPrompt) {
                 highRiskReason = riskCheck.reason || `High-risk operation requires explicit confirmation`
               }
-            } catch {}
+            } catch {
+              if (effectiveMode === 'plan' && (WRITE_TOOLS.has(fn.name) || tool?.risk === 'dangerous' || fn.name === 'run_command' || fn.name === 'exec')) {
+                entry.error = `Permission denied: write operations and mutating tool '${fn.name}' are blocked in Plan mode`
+                entry.failure_kind = 'permission_denied'
+              }
+            }
           }
 
           // Compute pre-write unified Diff before modifying any file so write_file overwrites
@@ -1159,12 +1148,13 @@ Reply in this format:
             } catch {}
           }
 
-          // Runner-Up Dual-Model Review (when explicitly enabled via feature flag)
+          // Runner-Up Dual-Model Review (requires explicit opt-in; never defaults to burning tokens in Act mode)
           let runnerUpObjection = null
-          if (!entry.error && effectiveMode === 'act' && tool.risk === 'dangerous' && db) {
+          const isRunnerUpEnabled = Boolean(options?.runnerUpReview === true || (db && options?.runnerUpReview !== false && require('../featureFlags').isEnabled(db, 'agent.runnerUpReview') === true))
+          if (!entry.error && isRunnerUpEnabled && tool.risk === 'dangerous' && db) {
             try {
               const ff = require('../featureFlags')
-              if (ff.isEnabled(db, 'agent.runnerUpReview')) {
+              if (options?.runnerUpReview === true || ff.isEnabled(db, 'agent.runnerUpReview')) {
                 const diffObj = preDiff || generateDiff(fn.name, args, { workspaceRoot: wsRoot })
                 const diffText = diffObj?.diff || ''
                 const lineCount = diffText ? diffText.split('\n').length : 0

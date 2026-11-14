@@ -177,7 +177,16 @@ function prefetchWithDetails(db, userMessage, scopeOrCwd) {
   const untrustedResult = _untrustedBlockWithHits(db, userMessage, external)
   hits.push(...untrustedResult.hits)
   if (untrustedResult.text) out = out ? `${out}\n\n${untrustedResult.text}` : untrustedResult.text
-  return { text: out, hits }
+
+  const seenIds = new Set()
+  const dedupedHits = []
+  for (const h of hits) {
+    if (!h || h.id == null) continue
+    if (seenIds.has(h.id)) continue
+    seenIds.add(h.id)
+    dedupedHits.push(h)
+  }
+  return { text: out, hits: dedupedHits }
 }
 
 function prefetch(db, userMessage, scopeOrCwd) {

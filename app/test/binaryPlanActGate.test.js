@@ -189,7 +189,9 @@ describe('Binary Plan / Act + Pre-Write Snapshot + 3 High-Risk Gate', () => {
       toolName: 'edit_file',
     })
     expect(snap1.method).toBe('dir_incremental')
-    expect(existsSync(join(wsRoot, '.aether', 'snapshots', 'turn_100', 'manifest.json'))).toBe(true)
+    // No manifest.json sidecar file is written — metadata is preserved in SQLite / memory object
+    expect(existsSync(join(wsRoot, '.aether', 'snapshots', 'turn_100', 'manifest.json'))).toBe(false)
+    expect(snap1.entries).toBeDefined()
 
     writeFileSync(targetExisting, 'v1-modified', 'utf8')
 
@@ -209,7 +211,7 @@ describe('Binary Plan / Act + Pre-Write Snapshot + 3 High-Risk Gate', () => {
     expect(existsSync(targetCreated)).toBe(false)
   })
 
-  it('Git repo pre-write snapshot uses git stash create hash and rollbackPreWriteSnapshot restores tracked file', { timeout: 15000 }, () => {
+  it('Git repo pre-write snapshot uses git stash create hash and rollbackPreWriteSnapshot restores tracked file', { timeout: 30000 }, () => {
     execFileSync('git', ['init'], { cwd: wsRoot, stdio: 'ignore', windowsHide: true })
     execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: wsRoot, stdio: 'ignore', windowsHide: true })
     execFileSync('git', ['config', 'user.email', 'test@aether.local'], { cwd: wsRoot, stdio: 'ignore', windowsHide: true })

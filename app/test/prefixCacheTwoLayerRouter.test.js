@@ -124,6 +124,38 @@ describe('Prefix-Cache-Safe Two-Layer Tool Router', () => {
     )
     expect(blocked).toContain('[BLOCKED]')
 
+    // Blocks mutating apply_patch in plan mode
+    const blockedPatch = await gw.run(
+      { tool_name: 'apply_patch', arguments: { path: 'a.txt', patch: 'diff' } },
+      { agentMode: 'plan' }
+    )
+    expect(blockedPatch).toContain('[BLOCKED]')
+
+    // Blocks disabled tool
+    const blockedDisabled = await gw.run(
+      { tool_name: 'list_dir', arguments: { path: '.' } },
+      { agentMode: 'act', disabledTools: ['list_dir'] }
+    )
+    expect(blockedDisabled).toContain('[BLOCKED]')
+
+    // Multimodal pass-through: preserves image parts array
+    const fakeCtx = { agentMode: 'act' }
+    const mockVisionTool = {
+      name: 'mock_vision_tool',
+      risk: 'safe',
+      parameters: { type: 'object' },
+      run: async () => [{ type: 'text', text: 'view' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } }],
+    }
+    registry.TOOLS.push(mockVisionTool)
+    try {
+      const multiRes = await gw.run({ tool_name: 'mock_vision_tool', arguments: {} }, fakeCtx)
+      expect(Array.isArray(multiRes)).toBe(true)
+      expect(multiRes[1].type).toBe('image_url')
+    } finally {
+      const idx = registry.TOOLS.indexOf(mockVisionTool)
+      if (idx !== -1) registry.TOOLS.splice(idx, 1)
+    }
+
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aether-ext-'))
     fs.writeFileSync(path.join(tmpDir, 'hello.txt'), 'world', 'utf8')
     const listed = await gw.run(
@@ -132,6 +164,38 @@ describe('Prefix-Cache-Safe Two-Layer Tool Router', () => {
     )
     expect(listed).toContain('hello.txt')
     fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('getMaxConcurrent serializes call_extended_tool when targeting mutating or dangerous tools', () => {
+    const { getMaxConcurrent } = require('../electron/llm/toolLoopUtils')
+    const readCalls = [
+      { function: { name: 'read_file', arguments: '{}' } },
+      { function: { name: 'call_extended_tool', arguments: JSON.stringify({ tool_name: 'list_dir' }) } },
+    ]
+    expect(getMaxConcurrent(readCalls)).toBeGreaterThan(1)
+
+    const writeCalls = [
+      { function: { name: 'read_file', arguments: '{}' } },
+      { function: { name: 'call_extended_tool', arguments: JSON.stringify({ tool_name: 'apply_patch' }) } },
+    ]
+    expect(getMaxConcurrent(writeCalls)).toBe(1)
+  })
+
+  it('trustEngine resolves sensitive credential paths and blocks -o / redirection in Plan mode shell', () => {
+    const { isSensitiveCredentialPath, isReadOnlyPlanShellCommand } = require('../electron/tools/trustEngine')
+
+    expect(isSensitiveCredentialPath('./.env')).toBe(true)
+    expect(isSensitiveCredentialPath('subdir/../.env.production')).toBe(true)
+    expect(isSensitiveCredentialPath('certs/cert.pem')).toBe(true)
+    expect(isSensitiveCredentialPath('certs/server.key')).toBe(true)
+    expect(isSensitiveCredentialPath('src/main.ts')).toBe(false)
+
+    expect(isReadOnlyPlanShellCommand('git status')).toBe(true)
+    expect(isReadOnlyPlanShellCommand('git log -n 5')).toBe(true)
+    expect(isReadOnlyPlanShellCommand('git archive -o out.zip HEAD')).toBe(false)
+    expect(isReadOnlyPlanShellCommand('git archive --output=out.zip HEAD')).toBe(false)
+    expect(isReadOnlyPlanShellCommand('git log > log.txt')).toBe(false)
+    expect(isReadOnlyPlanShellCommand('git log >> log.txt')).toBe(false)
   })
 
   it('toolCallRepair repairs malformed JSON and scavenges reasoning calls for new core-10 tools', () => {

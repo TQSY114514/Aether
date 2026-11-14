@@ -60,12 +60,19 @@ function isBenignCommand(cmd) {
 function isReadOnlyPlanShellCommand(cmd) {
   const c = String(cmd || '').trim()
   if (!c || isHighRiskShellCommand(c)) return false
+  // Disallow shell operators, command chaining, and file output redirection (> or >>)
   if (/[;&<>`\r\n]|\$\(|\|\|/.test(c)) return false
+  // Disallow file output/redirection flags like -o or --output= or --output
+  if (/(?:^|\s)(?:-o\s+|--output(?:=|\s))\S+/i.test(c)) return false
+  if (/(?:^|\s)-o\S+/i.test(c)) return false
   // Disallow piping in Plan mode unless piping strictly to harmless readers like head/tail/grep/sort/wc
   if (c.includes('|')) {
     const parts = c.split('|').map(s => s.trim())
     if (parts.length < 2 || !READONLY_PLAN_SHELL_REGEX.test(parts[0])) return false
-    return parts.slice(1).every(seg => /^(?:head|tail|grep|rg|findstr|sort|uniq|wc|more)\b/i.test(seg))
+    return parts.slice(1).every(seg => {
+      if (/(?:^|\s)(?:-o\s+|--output(?:=|\s))\S+/i.test(seg) || /(?:^|\s)-o\S+/i.test(seg)) return false
+      return /^(?:head|tail|grep|rg|findstr|sort|uniq|wc|more)\b/i.test(seg)
+    })
   }
   return READONLY_PLAN_SHELL_REGEX.test(c)
 }
@@ -119,8 +126,9 @@ function isSensitiveCredentialPath(targetPath) {
   if (!targetPath) return false
   const raw = String(targetPath).trim()
   if (!raw) return false
-  const base = path.basename(raw).toLowerCase()
-  if (base === '.env' || base.startsWith('.env.')) return true
+  const resolved = path.resolve(raw)
+  const base = path.basename(resolved).toLowerCase()
+  if (base === '.env' || base.startsWith('.env.') || base.endsWith('.env')) return true
   if (base.endsWith('.pem') || base.endsWith('.key')) return true
   return false
 }
