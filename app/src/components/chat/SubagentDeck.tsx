@@ -113,13 +113,13 @@ export function getEndpointKindLabel(kind: string): string {
 export function getCategoryTagClass(kind: string): string {
   switch (kind) {
     case 'official_direct':
-      return 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10'
+      return 'border-[var(--accent)] text-[var(--accent)] bg-[var(--bg-secondary)]'
     case 'major_aggregator':
-      return 'border-blue-500/30 text-blue-700 dark:text-blue-300 bg-blue-500/10'
+      return 'border-[var(--border)] text-[var(--text-primary)] bg-[var(--bg-secondary)]'
     case 'third_party_relay':
-      return 'border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10'
+      return 'border-[var(--border)] text-[var(--text-secondary)] bg-[var(--bg-tertiary)]'
     case 'local_engine':
-      return 'border-cyan-500/30 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10'
+      return 'border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-secondary)]'
     default:
       return 'border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-secondary)]'
   }

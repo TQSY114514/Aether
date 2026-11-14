@@ -741,6 +741,7 @@ const TOOLS = [
     name: 'spawn_subagent',
     description: 'Spawn a supervised autonomous subagent with explicit provider and model selection, role specialization, and non-blocking streaming observation. Supports smart_window (8s initial window), async_immediate, and wait_until_done_or_stalled.',
     risk: 'dangerous',
+    noRetry: true,
     parameters: {
       type: 'object',
       properties: {
