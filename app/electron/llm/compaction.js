@@ -253,22 +253,50 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
             if (!fs.existsSync(normPath)) continue
             const realPath = fs.realpathSync(normPath)
             if (hasUnsafeWindowsPrefix(realPath) || isDangerousRoot(realPath) || isSensitivePath(realPath)) continue
-            if (_isWorkspaceRootEnforced && _isWorkspaceRootEnforced() && !isInsideWorkspace(realPath, sessionId)) continue
+            if (_isWorkspaceRootEnforced && _isWorkspaceRootEnforced(sessionId) && !isInsideWorkspace(realPath, sessionId)) continue
+            const offset = Math.max(0, (entry.offset ? entry.offset - 1 : 0))
+            const limit = entry.limit && entry.limit > 0 ? entry.limit : 80
+            const endLine = offset + limit
+            const MAX_SCAN_BYTES = 8 * 1024 * 1024
             const fd = fs.openSync(realPath, 'r')
-            let chunkText = ''
+            const collected = []
+            let collectedBytes = 0
             try {
               const buf = Buffer.alloc(MAX_REHYDRATE_BYTES)
-              const bytesRead = fs.readSync(fd, buf, 0, MAX_REHYDRATE_BYTES, 0)
-              chunkText = buf.slice(0, bytesRead).toString('utf8')
+              let filePos = 0
+              let currentLine = 0
+              let leftover = ''
+              while (currentLine < endLine && filePos < MAX_SCAN_BYTES) {
+                const bytesRead = fs.readSync(fd, buf, 0, MAX_REHYDRATE_BYTES, filePos)
+                if (bytesRead <= 0) break
+                filePos += bytesRead
+                const text = leftover + buf.slice(0, bytesRead).toString('utf8')
+                const parts = text.split('\n')
+                leftover = parts.pop() ?? ''
+                for (const rawLine of parts) {
+                  if (currentLine >= offset && currentLine < endLine) {
+                    const cleanLine = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+                    if (collectedBytes + cleanLine.length + 1 <= MAX_REHYDRATE_BYTES) {
+                      collected.push(cleanLine)
+                      collectedBytes += cleanLine.length + 1
+                    }
+                  }
+                  currentLine++
+                  if (currentLine >= endLine) break
+                }
+              }
+              if (leftover && currentLine >= offset && currentLine < endLine) {
+                const cleanLine = leftover.endsWith('\r') ? leftover.slice(0, -1) : leftover
+                if (collectedBytes + cleanLine.length <= MAX_REHYDRATE_BYTES) {
+                  collected.push(cleanLine)
+                }
+              }
             } finally {
               fs.closeSync(fd)
             }
-            const lines = chunkText.split(/\r?\n/)
-            const offset = Math.max(0, (entry.offset ? entry.offset - 1 : 0))
-            const limit = entry.limit && entry.limit > 0 ? entry.limit : 80
-            const sliceLines = lines.slice(offset, offset + limit)
-            const snippet = sliceLines.join('\n')
-            const lineRange = `${offset + 1}-${offset + sliceLines.length}`
+            if (collected.length === 0) continue
+            const snippet = collected.join('\n')
+            const lineRange = `${offset + 1}-${offset + collected.length}`
             snippets.push({ path: normPath, snippet, lineRange })
           } catch {}
         }

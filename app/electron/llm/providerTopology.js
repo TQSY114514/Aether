@@ -244,11 +244,12 @@ async function probeSingleModel(opts = {}) {
   const fetchFn = mockFetch || globalThis.fetch
 
   const protocol = (provider.api_format || provider.protocol || provider.type || 'openai').toLowerCase()
-  const payload = isResponsesProtocol(protocol)
+  const useResponses = isResponsesProtocol(protocol)
+  const payload = useResponses
     ? {
         model: modelId,
         input: '1',
-        max_output_tokens: 1,
+        max_output_tokens: 16,
         stream: true,
       }
     : {
@@ -309,26 +310,95 @@ async function probeSingleModel(opts = {}) {
       return report
     }
 
-    // Read the first stream chunk
+    // Read the first stream chunk (for Responses API, wait for actual output delta & catch response.failed)
+    let responsesFailedDetail = null
+    const inspectResponsesChunk = (chunk, decoder, state) => {
+      state.buffer += decoder.decode(chunk, { stream: true })
+      const lines = state.buffer.split(/\r?\n/)
+      state.buffer = lines.pop() ?? ''
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line || !line.startsWith('data:')) continue
+        const dataStr = line.slice(5).trim()
+        if (!dataStr || dataStr === '[DONE]') continue
+        let evt = null
+        try { evt = JSON.parse(dataStr) } catch { continue }
+        const evtType = evt?.type || ''
+        if (evtType === 'response.failed' || evt?.error) {
+          responsesFailedDetail = evt?.response?.error?.message || evt?.error?.message || 'Responses stream failed'
+          return 'failed'
+        }
+        if (
+          (evtType === 'response.output_text.delta' && typeof evt.delta === 'string' && evt.delta.length > 0) ||
+          (evtType === 'response.reasoning_summary_text.delta' && typeof evt.delta === 'string' && evt.delta.length > 0) ||
+          (evtType === 'response.output_text.done' && typeof evt.text === 'string' && evt.text.length > 0) ||
+          (evtType === 'response.content_part.added' && typeof evt?.part?.text === 'string' && evt.part.text.length > 0) ||
+          evtType === 'response.completed'
+        ) {
+          return 'token'
+        }
+      }
+      return 'continue'
+    }
+
     if (res.body) {
+      const decoder = useResponses ? new TextDecoder() : null
+      const sseState = { buffer: '' }
       if (typeof res.body.getReader === 'function') {
         const reader = res.body.getReader()
         try {
-          const { done, value } = await reader.read()
-          if (!done && value && value.length > 0) {
-            firstChunkReceived = true
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (!value || value.length === 0) continue
+            if (!useResponses) {
+              firstChunkReceived = true
+              break
+            }
+            const verdict = inspectResponsesChunk(value, decoder, sseState)
+            if (verdict === 'token') {
+              firstChunkReceived = true
+              break
+            }
+            if (verdict === 'failed') break
           }
         } finally {
           try { reader.releaseLock?.() } catch {}
         }
       } else if (res.body[Symbol.asyncIterator]) {
         for await (const chunk of res.body) {
-          if (chunk && chunk.length > 0) {
+          if (!chunk || chunk.length === 0) continue
+          if (!useResponses) {
             firstChunkReceived = true
             break
           }
+          const verdict = inspectResponsesChunk(chunk, decoder, sseState)
+          if (verdict === 'token') {
+            firstChunkReceived = true
+            break
+          }
+          if (verdict === 'failed') break
         }
       }
+    }
+
+    if (responsesFailedDetail) {
+      try { controller.abort('PROBE_FAILED') } catch {}
+      if (timeoutId) clearTimeout(timeoutId)
+      const report = {
+        providerId: provider.id,
+        providerName: provider.name || '',
+        baseUrl: cleanBase,
+        modelId,
+        available: false,
+        status: 'upstream_error_5xx',
+        ttftMs: null,
+        headerLatencyMs,
+        errorDetail: String(responsesFailedDetail).slice(0, 240),
+        checkedAt: new Date().toISOString(),
+      }
+      runtimeProbeCache.set(`${provider.id}::${modelId}`, report)
+      return report
     }
 
     if (firstChunkReceived) {

@@ -418,6 +418,8 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
     error: null,
     startedAt: Date.now(),
     completedAt: null,
+    _runGeneration: 0,
+    _controlGeneration: 0,
     _executeLoop: null,
     _restartLoop: null,
   }
@@ -440,6 +442,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
   const requestPermission = opts.requestPermission || deps.requestPermission
 
   const startLoop = () => {
+    const runGen = ++record._runGeneration
     const currentController = new AbortController()
     record.abortController = currentController
     record.status = 'running'
@@ -488,14 +491,17 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
             } catch {}
           },
           onThinkingDelta: (delta) => {
+            if (record._runGeneration !== runGen) return
             if (delta) liveBuffer.appendStreamDelta('thinking', delta)
             emitRenderer('subagent:stream', { subagentId, type: 'thinking', delta })
           },
           onStreamDelta: (delta) => {
+            if (record._runGeneration !== runGen) return
             if (delta) liveBuffer.appendStreamDelta('text', delta)
             emitRenderer('subagent:stream', { subagentId, type: 'text', delta })
           },
           onToolCall: (entry) => {
+            if (record._runGeneration !== runGen) return
             if (entry && !entry.result && !entry.error) {
               liveBuffer.appendToolEvent('tool_call_start', entry)
             } else {
@@ -504,11 +510,12 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
             emitRenderer('subagent:tool', { subagentId, tool: entry })
           },
           onTurnComplete: (msgs) => {
+            if (record._runGeneration !== runGen) return
             record.completedMessages = Array.isArray(msgs) ? [...msgs] : record.completedMessages
             liveBuffer.recordTurnComplete()
           },
           onSubagentEvent: (evt) => {
-            if (!evt) return
+            if (record._runGeneration !== runGen || !evt) return
             if (evt.type === 'thinking_delta' || evt.type === 'thinking') {
               liveBuffer.appendStreamDelta('thinking', evt.delta || evt.content || '')
             } else if (evt.type === 'text_delta' || evt.type === 'text') {
@@ -521,6 +528,8 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
             emitRenderer('agent:subagent-progress', { subagentId, ...evt })
           },
         })
+
+        if (record._runGeneration !== runGen) return
 
         if (
           currentController.signal.aborted &&
@@ -538,6 +547,8 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
           : (result?.finalText || result?.output || liveBuffer.accumulatedText)
         liveBuffer.recordTurnComplete()
       } catch (err) {
+        if (record._runGeneration !== runGen) return
+
         if (
           currentController.signal.aborted &&
           (currentController.signal.reason === 'HOT_SWAP_MODEL' ||
@@ -672,6 +683,8 @@ async function controlSubagent(opts = {}) {
   }
 
   if (action === 'cancel') {
+    record._controlGeneration = (record._controlGeneration || 0) + 1
+    record._runGeneration = (record._runGeneration || 0) + 1
     record.abortController.abort('USER_CANCELLED')
     record.status = 'cancelled'
     const report = formatSubagentReport(record, 'Subagent cancelled by parent agent.')
@@ -715,6 +728,17 @@ async function controlSubagent(opts = {}) {
       return { ok: false, error: 'newProviderId and newModelId are required for hot_swap_model' }
     }
 
+    // Validate and resolve target provider/model BEFORE aborting or mutating the running child
+    const targetDb = opts.db || record.db
+    const resolved = resolveProviderAndModel(
+      targetDb,
+      newProviderId,
+      newModelId,
+      opts.newProvider,
+      opts.newModel
+    )
+
+    const myOpGen = (record._controlGeneration = (record._controlGeneration || 0) + 1)
     const oldProvider = record.providerId
     const oldModel = record.modelId
     record.status = 'swapping_model'
@@ -724,8 +748,20 @@ async function controlSubagent(opts = {}) {
     if (prevPromise && typeof prevPromise.then === 'function') {
       await Promise.race([
         prevPromise.catch(() => {}),
-        new Promise((resolve) => setTimeout(resolve, 50)),
+        new Promise((resolve) => setTimeout(resolve, 250)),
       ])
+    }
+    // Invalidate any lingering callbacks from the previous run before mutating state
+    record._runGeneration = (record._runGeneration || 0) + 1
+
+    if (record.status === 'cancelled' || record._controlGeneration !== myOpGen) {
+      return {
+        ok: false,
+        action: 'hot_swap_model',
+        subagentId,
+        status: record.status,
+        error: 'Subagent was cancelled or superseded during model hot-swap.',
+      }
     }
 
     const partialThinking = (record.liveBuffer.accumulatedThinking || '').slice(-3000)
@@ -747,16 +783,6 @@ async function controlSubagent(opts = {}) {
 
     record.providerId = newProviderId
     record.modelId = newModelId
-
-    // Re-resolve provider and model objects using database or fallback
-    const targetDb = opts.db || record.db
-    const resolved = resolveProviderAndModel(
-      targetDb,
-      newProviderId,
-      newModelId,
-      opts.newProvider,
-      opts.newModel
-    )
     record.provider = resolved.provider
     record.model = resolved.model
 

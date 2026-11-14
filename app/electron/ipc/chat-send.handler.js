@@ -113,7 +113,7 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
   // Cache rarely-changing settings at handler registration time. Invalidation
   // happens via the settings:changed event emitted by the settings handler.
   const _s = {}
-  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: String(DEFAULT_FALLBACK_TIMEOUT_MS), agent_max_iterations: '25' }
+  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: String(DEFAULT_FALLBACK_TIMEOUT_MS), agent_max_iterations: '100' }
   ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? SETTING_DEFAULTS[k] })
 
   ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })

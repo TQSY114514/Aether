@@ -635,7 +635,7 @@ Reply in this format:
     requestPermission, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
     onPlanStep, onPlanSnapshot, onStatus, onThinkingStart, onThinkingEnd, onThinkingDelta, onToolCall,
   }
-  const toolCtx = { sessionId, provider: activeProvider, model: activeModel, signal, agentMode: normalizedAgentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
+  const toolCtx = { sessionId, provider: activeProvider, model: activeModel, signal, sessionSignal: signal, agentMode: normalizedAgentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
   const permissionCtx = { provider: activeProvider, model: activeModel, agentMode: normalizedAgentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 

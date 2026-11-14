@@ -47,8 +47,11 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))
   ipcMain.handle('session:set-config', (_e, id, config) => db.setSessionConfig(id, config))
   ipcMain.handle('session:set-cwd', (_e, id, cwd) => {
+    const sandbox = require('../tools/sandbox')
+    if (sandbox._isShadowActive?.(id)) {
+      throw new Error('Cannot change working directory (/cd) while a shadow workspace run is active; wait for the current run to finish.')
+    }
     try {
-      const sandbox = require('../tools/sandbox')
       if (typeof sandbox.isInsideWorkspace === 'function' && sandbox.getWorkspaceRoot(id) !== cwd) {
         // Only update _sessionWorkspaces if this session already had a pinned workspace
         // (avoids re-enabling containment on unconstrained CWD sessions).

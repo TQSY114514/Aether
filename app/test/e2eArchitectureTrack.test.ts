@@ -150,7 +150,15 @@ async function refProbeSingleModel({ provider, modelId, timeoutMs = 6000, mockFe
       stream: true,
     }
 
-    if (protocol === 'anthropic' || baseUrl.includes('api.anthropic.com')) {
+    const isAnthropicHost = (rawUrl: string): boolean => {
+      try {
+        return new URL(rawUrl).hostname.toLowerCase() === 'api.anthropic.com'
+      } catch {
+        return false
+      }
+    }
+
+    if (protocol === 'anthropic' || isAnthropicHost(baseUrl)) {
       url = baseUrl.endsWith('/v1') ? `${baseUrl}/messages` : `${baseUrl}/v1/messages`
       headers['x-api-key'] = apiKey
       headers['anthropic-version'] = '2023-06-01'

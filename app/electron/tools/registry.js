@@ -64,7 +64,7 @@ async function globFiles(pattern, options = {}) {
 
 function guardWorkspaceRead(target, ctx, label) {
   const sb = require('./sandbox')
-  if (sb._isWorkspaceRootEnforced && sb._isWorkspaceRootEnforced()) {
+  if (sb._isWorkspaceRootEnforced && sb._isWorkspaceRootEnforced(ctx?.sessionId)) {
     const p = String(target || ''); if (!p) return
     if (!isWorkspaceAskMode(ctx?.agentMode)) return
     if (sb.isInsideWorkspace(p, ctx?.sessionId)) return
@@ -777,14 +777,14 @@ const TOOLS = [
         waitMode: args.waitMode || 'smart_window',
         initialWaitMs: args.initialWaitMs != null ? Number(args.initialWaitMs) : 8000,
         stallTimeoutMs: args.stallTimeoutMs != null ? Number(args.stallTimeoutMs) : 15000,
-        parentSignal: ctx?.signal,
+        parentSignal: ctx?.sessionSignal || ctx?.signal,
         requestPermission: ctx?.requestPermission,
       }, {
         db,
         runToolLoop: require('../llm/toolLoop').runToolLoop,
         notifyRenderer: ctx?.onSubagentEvent || ctx?.callbacks?.onSubagentEvent,
         requestPermission: ctx?.requestPermission,
-        signal: ctx?.signal,
+        signal: ctx?.sessionSignal || ctx?.signal,
       })
 
       if (report.status === 'completed') {
