@@ -8,7 +8,6 @@ import { createArenaSlice } from "./arenaSlice"
 import { createSettingsSlice } from "./settingsSlice"
 import { createUiSlice } from "./uiSlice"
 import { createUsageSlice } from "./usageSlice"
-import { createProjectSlice } from "./projectSlice"
 import { initStoreListeners } from "./listeners"
 
 export const useStore = create<AppState>()((...args) => ({
@@ -20,7 +19,6 @@ export const useStore = create<AppState>()((...args) => ({
   ...createSettingsSlice(...args),
   ...createUiSlice(...args),
   ...createUsageSlice(...args),
-  ...createProjectSlice(...args),
 } as AppState))
 
 // Initialize the listener bridge so module-level listeners can access the store.

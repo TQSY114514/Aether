@@ -48,8 +48,8 @@ beforeEach(async () => {
   toolLoop = await import('../electron/llm/toolLoop')
 })
 
-describe('runToolLoop budget warning wiring (F5)', () => {
-  it('emits budget_warning at 80% of maxIterations, then budget_exhausted', { timeout: 60000 }, async () => {
+describe('runToolLoop budget warning wiring (F15)', () => {
+  it('runs cleanly without 80% anxiety warnings, then budget_exhausted at 100%', { timeout: 60000 }, async () => {
     const statuses = []
     const controller = new AbortController()
     const result = await toolLoop.runToolLoop({
@@ -78,14 +78,10 @@ describe('runToolLoop budget warning wiring (F5)', () => {
     const warning = statuses.find((s) => s.kind === 'budget_warning')
     const exhausted = statuses.find((s) => s.kind === 'budget_exhausted')
 
-    // The wiring under test: an 80% warning must arrive before exhaustion.
-    expect(warning, JSON.stringify(statuses)).toBeTruthy()
-    expect(warning.kind).toBe('budget_warning')
-    expect(warning.text).toContain('80%')
-    expect(warning.text).toContain('iterations')
+    // Aether 3.0: 80% budget anxiety warnings are eliminated.
+    expect(warning).toBeUndefined()
     expect(exhausted, JSON.stringify(statuses)).toBeTruthy()
     expect(exhausted.kind).toBe('budget_exhausted')
-    expect(statuses.indexOf(warning)).toBeLessThan(statuses.indexOf(exhausted))
 
     // The loop really ran ~14 tool rounds before exhausting.
     expect(toolRoundCounts.length).toBeGreaterThanOrEqual(13)

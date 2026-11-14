@@ -15,7 +15,13 @@
 // passes through unchanged) so one bad middleware can't break the tool loop.
 // ───────────────────────────────────────────────────────────────────────────
 
-const MAX_TOOL_RESULT_CHARS = 16000 // cap a single tool result ~16k chars
+const os = require('os')
+const fs = require('fs')
+const path = require('path')
+const crypto = require('crypto')
+
+const MAX_TOOL_RESULT_CHARS = 120000 // cap a single tool result at 120k chars
+const SPILL_TAIL_CHARS = 40000
 
 // Truncate a single tool result so one verbose tool (e.g. reading a huge file,
 // or a web_search that dumped a page) can't dominate the context window.
@@ -24,39 +30,27 @@ function truncateMiddleware(content, ctx) {
   const maxChars = (ctx && ctx.isPoorMode) ? 4000 : MAX_TOOL_RESULT_CHARS
   if (content.length <= maxChars) return content
 
-  const HEAD_CHARS = (ctx && ctx.isPoorMode) ? 1200 : 4000
-  const TAIL_CHARS = (ctx && ctx.isPoorMode) ? 1800 : 6000
-  const head = content.slice(0, HEAD_CHARS)
-  const tail = content.slice(-TAIL_CHARS)
-  const middle = content.slice(HEAD_CHARS, content.length - TAIL_CHARS)
-
-  // Scan middle chunk for error / failure signals so critical stack traces are not lost
-  const errorLines = []
-  const lines = middle.split('\n')
-  const ERROR_RE = /(?:error|fail|exception|fatal|panic|cannot|syntaxerror|typeerror|uncaught|reject|warn)/i
-  let collectedChars = 0
-  const MAX_EXTRACTED_ERROR_CHARS = 3000
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (ERROR_RE.test(line)) {
-      const snippet = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 2)).join('\n')
-      if (collectedChars + snippet.length <= MAX_EXTRACTED_ERROR_CHARS) {
-        errorLines.push(snippet)
-        collectedChars += snippet.length
-        i += 1
-      }
-    }
-    if (collectedChars >= MAX_EXTRACTED_ERROR_CHARS) break
+  // Poor mode fallback
+  if (ctx && ctx.isPoorMode) {
+    const HEAD_CHARS = 1200
+    const TAIL_CHARS = 1800
+    const head = content.slice(0, HEAD_CHARS)
+    const tail = content.slice(-TAIL_CHARS)
+    const omittedChars = content.length - (head.length + tail.length)
+    return head + `\n\n[… truncated ${omittedChars > 0 ? omittedChars : 0} chars from middle …]\n` + tail
   }
 
-  const omittedChars = content.length - (head.length + tail.length + collectedChars)
-  let middleSummary = `\n\n[… truncated ${omittedChars > 0 ? omittedChars : 0} chars from middle …]\n`
-  if (errorLines.length > 0) {
-    middleSummary += `[Extracted key error lines from middle]:\n${errorLines.join('\n---\n')}\n[… continuing to output tail …]\n\n`
+  // Feature 13: Spill full content to disk and return banner + trailing 40,000 chars
+  try {
+    const id = `aether-output-${crypto.randomBytes(4).toString('hex')}.log`
+    const logPath = path.join(os.tmpdir(), id)
+    fs.writeFileSync(logPath, content, { encoding: 'utf8', mode: 0o600 })
+    const tail = content.slice(-SPILL_TAIL_CHARS)
+    return `[Output spilled to ${logPath}]\n${tail}`
+  } catch (err) {
+    const tail = content.slice(-SPILL_TAIL_CHARS)
+    return `[Output truncation: failed to spill to disk: ${err.message}]\n${tail}`
   }
-
-  return head + middleSummary + tail
 }
 
 // Redact things that look like secrets before the model ever sees them. Catches

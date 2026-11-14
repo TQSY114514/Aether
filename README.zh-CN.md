@@ -22,7 +22,7 @@ Aether 将模型评测、项目工作区上下文与可审阅的 Agent 执行流
 [![license](https://img.shields.io/badge/license-MIT-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#1-windows-桌面端安装主力形态--强烈推荐)
 
-[English](./README.md) · **[简体中文](./README.zh-CN.md)** · [日本語](./README.ja.md) · [20 款 Agent 竞品评估矩阵](./docs/competitive-analysis.md)
+[English](./README.md) · **[简体中文](./README.zh-CN.md)** · [日本語](./README.ja.md)
 
 </div>
 
@@ -207,49 +207,38 @@ flowchart LR
 
 ---
 
-## 客观能力定位（对比 20 款主流 Agent）
-
-Aether 拒绝“八边形全满”的宣传式打分。我们的优势集中在**本地 SQLite 数据主权 (`9.6/10`)** 与 **多模型自由切换 + 内置 Arena 盲测与胜者落盘 (`9.4/10`)**；在 **桌面工作台交互 (`8.4/10`)** 上具备一级工作区中心、实时思考流、BTW 抽屉、TUI 终端与无冗余单权威布局，但不及 Cursor (`9.8`)、Windsurf (`9.6`) 的深度 IDE 内嵌；在 **安全与权限门 (`8.6/10`)** 上具备 4 档模式、6 轴门禁、Win32 Job Object 与可选 Docker 沙箱，但由于 Windows 默认本地后端运行在用户态而非 OS 内核级沙箱，客观低于 Codex CLI (`9.8`) 与 Claude Code (`9.0`)；在 **多 Agent 编排 (`7.6/10`)** 上具备后台子代理期刊、崩溃恢复与独立 SDK；在 **单一编程深度 (`7.2/10`)**（已落地 Hashline 防漂移与 TDD 自动审查闭环）与 **早期社区生态 (`6.5/10`)** 上，我们如实画出与商业大厂及成熟开源生态的客观代差（下方雷达图由 `node app/scripts/gen-radar.cjs` 生成）：
-
-<div align="center">
-  <img src="./assets/agent-radar-2026.zh-CN.svg" width="88%" alt="Aether · Agent 能力与架构客观自评雷达" />
-</div>
-
-详细的 8 维度扣分依据、短板说明与 20 款工具对比表格见 [docs/competitive-analysis.md](./docs/competitive-analysis.md)。
-
----
-
 ## 致谢 (Acknowledgements)
 
-Aether 的架构设计与具体模块实现参考并吸收了以下开源项目与工程先驱的设计思想（按代码模块溯源）：
+Aether 的架构设计与具体模块实现参考并吸收了以下开源项目与工程先驱的设计思想（按模块溯源）：
 
-### Agent 框架与运行时机制
-- **[Claude Code](https://claude.ai/code) (Anthropic)** — 自动测试验证闭环（`debugAgent.js`）、10 点生命周期钩子规范（`hooks.js`）、权限阶梯模型（`trustEngine.js`）、`Ctrl+T` 任务面板、`ask_user` 结构化交互及文件修改行内 Diff 预审（`toolImpact.js`）。
+### Agent 运行时与编程 Harness
+- **[Claude Code](https://claude.ai/code) (Anthropic)** — 级联 `AGENTS.md` 指令发现（`projectInstructions.js`）、压缩后核心文件再水合（`compaction.js`）、自动测试验证闭环（`debugAgent.js`）、10 点生命周期钩子规范（`hooks.js`）、权限阶梯模型（`trustEngine.js`）、`Ctrl+T` 任务面板、`ask_user` 结构化交互及文件修改行内 Diff 预审（`toolImpact.js`）。
+- **[OpenAI Codex CLI](https://github.com/openai/codex)** — 基于测试与 Git Diff 证据的验证闭环（`toolLoop.js`）、级联指令发现规范、TUI 紧凑运行计时器、单键权限直达（`y/s/a/n`）与快照回退（`rewind`）交互。
+- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI 表现层与 LLM 传输层解耦抽象（`agentMessage.js`）、统一事件流遥测架构（`agentEvents.js`）、运行中动态指令转向（`steering.js`）及超大输出落盘 `$TMPDIR` 并返回尾部切片（`toolResultMiddleware.js`）。
+- **[OpenCode](https://github.com/sst/opencode)** — 终端 TUI 键盘状态机与 Timed Leader Key（`keyHandlers.js`）、`DialogSelect` 窗口化列表、编译期 Prompt 缓存策略（`cachePolicy.js`）及上下文预算管理器（`contextBudget.js`）。
+- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi) & [roboomp](https://github.com/roboomp)** — 终端 AI 编程 Harness、roboomp 自动化 Triage 与 PR 机器人、哈希锚定代码编辑（`patchEngine.js` 中的 Hashline Edits 防并发冲突与行号漂移）、LSP/DAP 符号级代码智能与多 Worktree 子代理并发编排。
+- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` 容错补丁解析引擎（`patchEngine.js`）、Git 工作流集成与压缩交接提示词设计。
+- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 级级联模糊代码编辑匹配器（`editMatchers.js`）、写前只读时间戳防覆盖哨兵（`sessionContext.js` `readFileState`）、后台任务 `branchGeneration` 隔离与通知批次合并（`backgroundTasks.js`）、内置多 Agent 角色与工作流编排模板（`.aether/agents`、`.aether/workflows`）及 GitHub URL / `owner/repo` 技能一键安装（`skills.js`）。
+- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — 上下文 Token 预算估算（`contextBudget.js`）、审批模式切换及 50ms 事件流防抖聚合渲染（`runSession.js`）。
+- **[Cline](https://github.com/cline/cline)、[Roo Code](https://github.com/RooVetGit/Roo-Code) & [Continue](https://github.com/continuedev/continue)** — 冗余工具输出折叠裁剪（`compaction.js`）、可见子步骤任务追踪与声明式配置即代码规范（`.aether/config.json`）。
+- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — 多粒度本地代码仓库检索与上下文感知搜索管线灵感（`registry.js`、`repoMap.js`）。
+
+### 上下文、记忆与安全机制
 - **[OpenClaw](https://github.com/openclaw/openclaw)** — 上下文分块压缩算法（`compaction.js`）、工具调用损坏自愈（`toolCallRepair.js`）、只读工具结果缓存（`toolCache.js`）、语义死循环哈希检测（`toolResultHash.js`）及工具输出脱敏截断中间件（`toolResultMiddleware.js`）。
 - **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — 迭代预算控制与优雅收尾机制（`iterationBudget.js`）、SQLite + FTS5 长期记忆（`autoMemory.js`）、本地实体关系图谱（`knowledgeGraph.js`）、长对话轨迹压缩（`trajectory.js`）及长效技能习得（`habitLearner.js`）。
-- **[OpenCode](https://github.com/sst/opencode)** — 终端 TUI 键盘状态机与 Timed Leader Key（`keyHandlers.js`）、`DialogSelect` 窗口化列表、编译期 Prompt 缓存策略（`cachePolicy.js`）及上下文预算管理器（`contextBudget.js`）。
-- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI 表现层与 LLM 传输层解耦抽象（`agentMessage.js`）、统一事件流遥测架构（`agentEvents.js`）及运行中动态指令转向（`steering.js`）。
-- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 级级联模糊代码编辑匹配器（`editMatchers.js`）、写前只读时间戳防覆盖哨兵（`sessionContext.js` `readFileState`）、两阶段零 LLM 成本本地微压缩（`microcompact.js`）、后台任务 `branchGeneration` 隔离与通知批次合并（`backgroundTasks.js`）、内置多 Agent 角色与工作流编排模板（`.aether/agents`、`.aether/workflows`）及 GitHub URL / `owner/repo` 技能一键安装（`skills.js`）。
-- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent 运行时控制平面治理设计（`AgentSettings.tsx`）、多 Agent 角色权限隔离与交叉验证机制（`securityAudit.js` 中 `Hunter != Verifier`、`agentRoles.js`）及计划步骤自动推进与完成态终态闭合机制（`planning.js`）。
-- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — 多粒度本地代码仓库检索与上下文感知搜索管线灵感（`registry.js`、`repoMap.js`）。
-- **[OpenAI Codex CLI](https://github.com/openai/codex)** — 基于测试与 Git Diff 证据的验证闭环（`toolLoop.js`）、TUI 紧凑运行计时器、单键权限直达（`y/s/a/n`）与快照回退（`rewind`）交互。
-- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` 容错补丁解析引擎（`patchEngine.js`）、Git 工作流集成与压缩交接提示词设计。
-- **[Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code)** — 冗余工具输出折叠裁剪（`compaction.js`）与可见子步骤任务追踪设计。
-- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — 上下文 Token 预算估算（`contextBudget.js`）、审批模式切换及 `aichat` 50ms 事件流防抖聚合渲染（`runSession.js`）。
-- **[Evolver](https://github.com/EvoMap/evolver)** — 基因组进化协议 (GEP) 策略反思架构。
-- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** — 执行前层次化任务分解与规划思想（`planning.js`）。
-- **[Continue](https://github.com/continuedev/continue)** — 声明式配置即代码规范（`.aether/config.json`）。
-- **[Grok Build](https://x.ai) & [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — 专门化子 Agent 角色划分（`agentRoles.js`）、长程任务执行状态机（`longRunningTask.js`）与运行时间线抽屉灵感。
-- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — 本地网关回环绑定与 HTTP Host 头安全校验实践（QVD-2026-57410 防御参考）及 README 徽章视觉规范。
-- **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena 多模型并行竞技场与 Git Worktree 隔离执行机制（`/arena` 启发 `shadowGit.js` 影子工作区隔离、多模型并行分发与 `arena:apply-patch` 胜者补丁落盘）、`qwencoder-eval` 评测基准思想、思考参数自适应（`enable_thinking` 融入 `reasoning.js`）及长程代码基准规范。
-- **[Jules](https://jules.google.com)** (Google Labs) — 全自主异步后台编码 Agent、基于安全云沙箱的端到端 Issue-to-PR 闭环及多任务并发托管架构。
-- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi) & [roboomp](https://github.com/roboomp)** — 终端 AI 编程 Harness、roboomp 自动化 Triage 与 PR 机器人、哈希锚定代码编辑（`patchEngine.js` 中的 Hashline Edits 防并发冲突与行号漂移）、LSP/DAP 符号级代码智能与多 Worktree 子代理并发编排。
-- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自动化 PR 逐行代码审查、AST/上下文感知高危 API 拦截（`.coderabbit.yaml`）与全仓库架构级语义图谱回归防御。
-- **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — 微内核架构不变量守卫与无头隔离规范（借鉴 `architecture.rs` 静态分析思想落地 `check-architecture.js` 5 重架构门禁、无头模式下 `database.js` Electron 依赖解耦及基于真值裁决器的有界树搜索验证）。
-- **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — 内置本地模型双盲竞技场（`arena.handler.js`）、成对盲测 ELO 积分排名与代码能力自动化基准体系。
-- **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — 多执行后端抽象（`backend.js`、`dockerBackend.js`、`sshBackend.js`）与全自主 Sandbox 隔离执行工作流。
-- **[Kiro](https://aws.amazon.com/q/developer/)** — 推理深度多档位自适应控制（`reasoning.js` / `EffortControl.tsx`）与行内子代理执行视图（`SubagentDeck.tsx`）。
 - **[Wish](https://github.com/WindustH/wish-core) (WindustH)** — Prompt Cache 零损耗的按需 CLI 桥接架构、Windows Win32 Job Object 内核级进程树沙箱治理与基于 Fetch 的高韧性流状态机。
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — 本地网关回环绑定与 HTTP Host 头安全校验实践（QVD-2026-57410 防御参考）及 README 徽章视觉规范。
+- **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — 微内核架构不变量守卫与无头隔离规范（借鉴 `architecture.rs` 静态分析思想落地 `check-architecture.js` 5 重架构门禁与无头模式下 `database.js` Electron 依赖解耦）。
+
+### 评测、代码审查与多 Agent 编排
+- **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena 多模型并行竞技场与 Git Worktree 隔离执行机制（`/arena` 启发 `shadowGit.js` 与 `arena:apply-patch`）、`qwencoder-eval` 评测基准思想及思考参数自适应（`enable_thinking` 融入 `reasoning.js`）。
+- **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — 内置本地模型双盲竞技场（`arena.handler.js`）、成对盲测 ELO 积分排名与代码能力自动化基准体系。
+- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent 运行时控制平面治理设计（`AgentSettings.tsx`）、多 Agent 角色权限隔离与交叉验证机制（`securityAudit.js` 中 `Hunter != Verifier`、`agentRoles.js`）及计划步骤自动推进（`planning.js`）。
+- **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — 多执行后端抽象（`backend.js`、`dockerBackend.js`、`sshBackend.js`）与全自主 Sandbox 隔离执行工作流。
+- **[Jules](https://jules.google.com)** (Google Labs)、**[Grok Build](https://x.ai)**、**[Amp](https://ampcode.com)** & **[Devin Desktop (Windsurf)](https://windsurf.com)** — 异步后台编码 Agent、专门化子 Agent 角色划分（`agentRoles.js`）、长程任务执行状态机（`longRunningTask.js`）与运行时间线抽屉灵感。
+- **[Kiro](https://aws.amazon.com/q/developer/)** — 推理深度多档位自适应控制（`reasoning.js` / `EffortControl.tsx`）与行内子代理执行视图（`SubagentDeck.tsx`）。
+- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** & **[Evolver](https://github.com/EvoMap/evolver)** — 执行前层次化任务分解（`planning.js`）与基因组进化协议 (GEP) 策略反思架构。
+- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自动化 PR 逐行代码审查、AST/上下文感知高危 API 拦截（`.coderabbit.yaml`）与全仓库架构级语义图谱回归防御。
 
 ### 核心基础设施与 UI 生态
 - **运行时与存储底座**：[Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com)。

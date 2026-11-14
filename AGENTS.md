@@ -26,14 +26,17 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
 
 - **Roadmap / 方向**：见 `docs/roadmap.md`（2026-08 外部评审提炼，含 P0/P1/P2 优先级与"明确不做"清单；改动前先对齐优先级）。
 - **Renderer** `app/src/`: `store/index.ts` (the big zustand store — all state +
-  actions), `components/` (chat/sidebar/ui), `pages/` (model/persona/settings/…),
+  actions), `components/` (chat/sidebar/ui), `pages/` (chat/model/memory/settings/…),
   `utils/` (i18n generated from `gen-i18n.js`, theme, markdown).
 - **Main** `app/electron/`: `database.js` (better-sqlite3 data layer, WAL
   mode), `ipc/*.js` (one handler module per domain), `main.js` (window +
   handler registration), `preload.js` (contextBridge surface — the IPC contract).
 - **LLM layer** `app/electron/llm/`: `providerAdapter.js` (dispatch by
   `provider.api_format`) → `openaiAdapter.js` (fetch + SSE). `toolLoop.js`
-  (Plan→Act→Observe), `toolResultMiddleware.js` (redact+truncate tool output),
+  (Plan→Act→Observe), `toolResultMiddleware.js` (redact+truncate 120k + disk spill),
+  `providerTopology.js` (endpoint classification, `<available_providers_and_models>` XML injection, zero-waste TTFT probe),
+  `subagentSupervisor.js` (`SubagentLiveBuffer`, `smart_window` spawn, O(1) `peekSubagentStream`, state-inheriting `hot_swap_model`),
+  `sessionContext.js` (CWD-first `session.cwd || process.cwd()`), `projectInstructions.js` (cascading `AGENTS.md` discovery),
   `reasoning.js` (thinking-effort param shapes), `toolArgs.js`.
   `backgroundTasks.js` (Feature A task manager: queue/priority/retry, persisted
   in the `agent_task` table, crash-recoverable via `restorePendingTasks`).
@@ -110,7 +113,6 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
   Don't add JSON/JSONL sidecar stores for runtime state — graph memory belongs
   in the `kg_nodes`/`kg_edges` tables. (The old `memoryGraph.js` JSONL module
   was dead code and has been removed; do not revive that approach.)
-- **主动沉淀知识库 (Proactive Knowledge Base Logging)**: 每当完成重要特性开发、重大架构重构、关键 Bug 根治或提炼出核心教训时，**必须主动**沉淀到 `D:\.知识库`（包括 `03-开发日志/` 专项记录、`04-踩坑与经验/Aether踩坑与经验.md` 黄金教训追加、以及 `00-索引.md` 导航更新），遵循 Obsidian 双链提炼规范，无需用户反复提醒。
 - **UI must not look AI-generated**: every visual decision in `app/src` must be
   intentional per `docs/ui-design.md` — no indigo/violet/purple gradients, no
   `bg-clip-text` gradient headlines, no reflexive glassmorphism, no oversized
@@ -124,6 +126,8 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
 - `.js` under `app/electron` is plain CommonJS. No TS type annotations (`: string`, `as X`) and no `import`/`export`: Node's CJS loader throws `SyntaxError`. Deleting a trailing `module.exports` turns `require()` into `{}` and kills LLM/IPC paths.
 - Electron APIs (`protocol.handle`, `session.defaultSession`) only after `app.whenReady()`. `nativeImage.createFromDataURL` is removed in Electron 43, use `createFromBuffer`. One IPC channel = one `ipcMain.handle`; a duplicate throws and aborts the whole registration chain in `main.js`.
 - DB: `db.exec()` is DDL-only; parameterize every query with `prepare()...` and `?` bindings. `CURRENT_TIMESTAMP` is UTC, use `localNow()`. `lastInsertRowid` BigInt, `Number()` it. Windows Defender can lock the .exe during electron-builder (EPERM), retry or build portable.
+- Testing & IPC gates: `vi.mock` does not intercept nested CJS `require()` inside `app/electron/` (hook `Module._load` when mocking internals). Keep `preload.js` top-level namespaces at 2-space indent or `check-ipc` fails to parse them.
+- Security & streaming invariants: path-containment checks must resolve symlinks via `fs.realpathSync` (lexical `path.resolve` alone is bypassable). Stream parsers must branch on event `type` independently of `text` truthiness so empty-payload `done` signals aren't dropped.
 
 ## Before changing X, read Y
 

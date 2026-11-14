@@ -10,7 +10,15 @@ const autoMemory = require('./autoMemory')
 // 裸 better-sqlite3 → autoMemory.prefetch 需要的 db 面（无则注入跳过）
 function ensureMemDb(db) {
   if (!db) return null
-  if (typeof db.getMemories === 'function') return db
+  if (typeof db.getMemories === 'function' && typeof db.getMemoriesScoped === 'function') return db
+  if (typeof db.getMemories === 'function' && typeof db.getMemoriesScoped !== 'function') {
+    return {
+      ...db,
+      getMemoriesScoped(_scopeKey) {
+        return db.getMemories(200)
+      }
+    }
+  }
   try {
     return {
       getMemories(limit = 200) {
@@ -23,6 +31,24 @@ function ensureMemDb(db) {
         } catch {
           return db.prepare('SELECT id, content, type, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?').all(l)
         }
+      },
+      getMemoriesScoped(scopeKey) {
+        try {
+          if (scopeKey === null) {
+            return db.prepare("SELECT id, content, type, origin, created_at AS createdAt FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC").all()
+          } else if (scopeKey) {
+            return db.prepare("SELECT id, content, type, origin, created_at AS createdAt FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC").all(String(scopeKey))
+          }
+        } catch {
+          try {
+            if (scopeKey === null) {
+              return db.prepare("SELECT id, content, type, created_at AS createdAt FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC").all()
+            } else if (scopeKey) {
+              return db.prepare("SELECT id, content, type, created_at AS createdAt FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC").all(String(scopeKey))
+            }
+          } catch {}
+        }
+        return this.getMemories(200)
       },
       // knowledgeGraph.searchGraph 需要 allRows；kg_nodes/kg_edges 表在裸连接下
       // 不存在时静默返回 []（graph 增强是 best-effort，缺失不报错、不刷日志）。
@@ -37,14 +63,16 @@ function ensureMemDb(db) {
 
 /**
  * 组装会话前缀。
- * @param {object} opts
+ * @param {object} [opts]
  * @param {object} [opts.db]          数据库（裸连接或带 getMemories 的包装）
  * @param {string|number} [opts.sessionId]
  * @param {string|number} [opts.personaId]  指定 persona 记录 id
  * @param {string} [opts.userMessage]      当前用户消息（记忆相关度打分）
+ * @param {string} [opts.cwd]              显式当前工作目录
  * @returns {{ prefix: Array<{role:'system', content:string}>, memoryCount: number }}
  */
-function buildSessionContext({ db, sessionId, personaId, userMessage } = {}) {
+function buildSessionContext(opts = {}) {
+  const { db, sessionId, personaId, userMessage, cwd } = opts || {}
   const prefix = []
   let memoryCount = 0
 
@@ -58,36 +86,62 @@ function buildSessionContext({ db, sessionId, personaId, userMessage } = {}) {
     } catch { /* persona 表缺失/行缺失 → 跳过 */ }
   }
 
-  // 2) Context Engine 核心扩充 (AGENTS.md — stable workspace prefix, placed BEFORE dynamic memory!)
+  // Determine effective working directory once in function scope
+  let effectiveCwd = (cwd && typeof cwd === 'string' && cwd.trim()) ? cwd.trim() : null
+  if (!effectiveCwd) {
+    try {
+      const { getWorkspaceRoot } = require('../tools/sandbox')
+      effectiveCwd = getWorkspaceRoot(sessionId)
+    } catch {}
+  }
+  if (!effectiveCwd && sessionId && db) {
+    try {
+      if (typeof db.getSession === 'function') {
+        const s = db.getSession(sessionId)
+        if (s && s.cwd) effectiveCwd = s.cwd
+      } else if (typeof db.prepare === 'function') {
+        const r = db.prepare('SELECT cwd FROM session WHERE id = ?').get(Number(sessionId))
+        if (r && r.cwd) effectiveCwd = r.cwd
+      }
+    } catch {}
+  }
+  if (!effectiveCwd) {
+    effectiveCwd = process.cwd()
+  }
+
+  // 2) Context Engine 核心扩充 (AGENTS.md — stable CWD prefix, placed BEFORE dynamic memory!)
   try {
     const fs = require('fs')
     const path = require('path')
-    let getWorkspaceRoot
-    try {
-      getWorkspaceRoot = require('../tools/sandbox').getWorkspaceRoot
-    } catch {
-      // 兼容 TUI 等沙箱外环境
-    }
-    
-    if (getWorkspaceRoot) {
-      const root = getWorkspaceRoot(sessionId)
-      if (root) {
-        const agentsMdPath = path.join(root, 'AGENTS.md')
-        if (fs.existsSync(agentsMdPath)) {
-          const agentsMd = fs.readFileSync(agentsMdPath, 'utf8')
-          if (agentsMd && agentsMd.trim()) {
-            prefix.push({ role: 'system', content: `[Workspace Context: AGENTS.md]\n${agentsMd.slice(0, 8000)}`, cacheHint: 'stable' })
-          }
+    if (effectiveCwd) {
+      const agentsMdPath = path.join(effectiveCwd, 'AGENTS.md')
+      if (fs.existsSync(agentsMdPath)) {
+        const agentsMd = fs.readFileSync(agentsMdPath, 'utf8')
+        if (agentsMd && agentsMd.trim()) {
+          prefix.push({ role: 'system', content: `[Workspace Context: AGENTS.md]\n${agentsMd.slice(0, 8000)}`, cacheHint: 'stable' })
         }
       }
     }
   } catch { /* 容错：防止因文件读取失败导致会话崩溃 */ }
 
-  // 3) 记忆注入（autoMemory.prefetch，keyword 相关度；dynamic per-turn suffix so stable prefix stays cache-hot）
+  // 3) Provider topology snapshot injection (Milestone 3: Feature 18)
+  if (db) {
+    try {
+      const { buildTopologyPromptXml } = require('./providerTopology')
+      const topoXml = buildTopologyPromptXml(db)
+      if (topoXml) {
+        prefix.push({ role: 'system', content: topoXml, cacheHint: 'stable' })
+      }
+    } catch {
+      /* Best-effort topology injection — silent fallback on error */
+    }
+  }
+
+  // 4) 记忆注入（autoMemory.prefetch，keyword 相关度；dynamic per-turn suffix so stable prefix stays cache-hot）
   const memDb = ensureMemDb(db)
   if (memDb && userMessage) {
     try {
-      const block = autoMemory.prefetch(memDb, String(userMessage))
+      const block = autoMemory.prefetch(memDb, String(userMessage), effectiveCwd || sessionId)
       if (block) {
         prefix.push({ role: 'system', content: block, cacheHint: 'dynamic' })
         memoryCount = block.split('\n').filter((l) => l.trim().startsWith('- ')).length
@@ -145,6 +199,9 @@ function getActiveFileSnippets(sessionId, { maxFiles = 3, maxLinesPerFile = 80, 
       const { getWorkspaceRoot } = require('../tools/sandbox')
       effectiveWsRoot = getWorkspaceRoot(sessionId)
     } catch {}
+  }
+  if (!effectiveWsRoot) {
+    effectiveWsRoot = process.cwd()
   }
 
   const sortedFiles = Array.from(fileMap.entries())

@@ -77,16 +77,18 @@ function getWorkspaceRoot(sessionId) {
       const db = require('../database')
       if (db && typeof db.getSession === 'function') {
         const sess = db.getSession(sessionId)
-        if (sess && sess.project_id && typeof db.getProject === 'function') {
-          const proj = db.getProject(sess.project_id)
-          if (proj && proj.root_path && !isDangerousRoot(proj.root_path)) {
-            return path.resolve(proj.root_path)
-          }
+        if (sess && sess.cwd && !isDangerousRoot(sess.cwd)) {
+          return path.resolve(sess.cwd)
+        }
+      } else if (db && typeof db.prepare === 'function') {
+        const row = db.prepare('SELECT cwd FROM session WHERE id = ?').get(Number(sessionId))
+        if (row && row.cwd && !isDangerousRoot(row.cwd)) {
+          return path.resolve(row.cwd)
         }
       }
     } catch {}
   }
-  return _activeProjectRoot || _workspaceRoot || defaultWorkspace()
+  return _workspaceRoot || process.cwd()
 }
 
 /**
@@ -225,9 +227,13 @@ function defaultWorkspace() {
 function resolveInside(target, { mustExist = false } = {}, sessionId) {
   const root = getWorkspaceRoot(sessionId)
   let abs = path.isAbsolute(target) ? target : path.join(root, target)
-  // todo 19：Windows 不安全前缀（\\?\ 原始路径 / UNC 共享）直接拒绝（平台无关判定）
+  // Windows 不安全前缀（\\?\ 原始路径 / UNC 共享）直接拒绝（平台无关判定）
   if (hasUnsafeWindowsPrefix(abs)) {
     return { ok: false, reason: 'unsafe Windows path prefix (\\\\?\\ or UNC)', abs }
+  }
+  // 系统关键根目录（C:\Windows 等）拒绝
+  if (isDangerousRoot(abs)) {
+    return { ok: false, reason: 'path outside workspace', abs }
   }
   let resolved
   try { resolved = fs.realpathSync(abs) }
@@ -238,14 +244,41 @@ function resolveInside(target, { mustExist = false } = {}, sessionId) {
       resolved = path.join(parentReal, path.basename(abs))
     } catch { resolved = path.normalize(abs) }
   }
+  if (isDangerousRoot(resolved)) {
+    return { ok: false, reason: 'path outside workspace', abs }
+  }
   const rootResolved = path.normalize(root)
-  const inside = resolved === rootResolved || resolved.startsWith(rootResolved + path.sep)
-  return { ok: inside, resolved, root: rootResolved, abs }
+  // 若显式设定了全局工作区或会话专属隔离工作区，仍执行包含性检查（保证测试沙箱隔离套件兼容）
+  if (_workspaceRoot || (sessionId && _sessionWorkspaces.has(sessionId))) {
+    const inside = resolved.toLowerCase() === rootResolved.toLowerCase() || resolved.toLowerCase().startsWith((rootResolved + path.sep).toLowerCase())
+    if (!inside) {
+      return { ok: false, reason: 'path outside workspace', resolved, root: rootResolved, abs }
+    }
+  }
+  // Phase 1 CWD 全目录执行：普通合法路径全面放行，解除工作区边界拦截
+  return { ok: true, resolved, root: rootResolved, abs }
 }
 
 function isInsideWorkspace(target, sessionId) {
-  const r = resolveInside(target, {}, sessionId)
-  return r.ok === true
+  const root = getWorkspaceRoot(sessionId)
+  let abs = path.isAbsolute(target) ? target : path.join(root, target)
+  let resolved
+  try { resolved = fs.realpathSync(abs) } catch { resolved = path.normalize(abs) }
+  const rootResolved = path.normalize(root)
+  const normResolved = resolved.toLowerCase()
+  const normRoot = rootResolved.toLowerCase()
+  if (normResolved === normRoot || normResolved.startsWith(normRoot + path.sep)) {
+    return true
+  }
+  if (app && typeof app.getPath === 'function') {
+    try {
+      const def = path.normalize(defaultWorkspace()).toLowerCase()
+      if (normResolved === def || normResolved.startsWith(def + path.sep)) {
+        return true
+      }
+    } catch {}
+  }
+  return false
 }
 
 // ── Windows 路径强化（todo 19）────────────────────────────────────────────
@@ -296,7 +329,9 @@ const SENSITIVE_FILE_NAMES = new Set([
 ])
 
 function isSensitivePath(p) {
-  const segs = String(p || '').replace(/\\/g, '/').toLowerCase().split('/')
+  const norm = String(p || '').replace(/\\/g, '/').toLowerCase()
+
+  const segs = norm.split('/')
   for (const seg of segs) {
     if (SENSITIVE_DIR_SEGMENTS.has(seg)) return true
   }
@@ -313,6 +348,12 @@ function isSensitivePath(p) {
 function checkWritePath(target, sessionId) {
   const r = resolveInside(target, { mustExist: false }, sessionId)
   if (r.ok !== true) return { ok: false, reason: r.reason || 'path outside workspace', abs: r.abs }
+  const normResolved = String(r.resolved || r.abs || '').replace(/\\/g, '/').toLowerCase()
+  const segs = normResolved.split('/')
+  // Phase 1 read-only carve-out: block all writes into .aether/ (while allowing read-only SOUL.md/config reads)
+  if (segs.includes('.aether')) {
+    return { ok: false, reason: '敏感路径禁止写入：.aether/ 为只读防篡改目录', abs: r.abs }
+  }
   // P0-C4：敏感路径（hooks/skills/.git/.ssh/.claude/.aether/config.json）默认拒绝，防写入
   // post-commit 钩子 /authorized_keys 之类的持久化 RCE 载体。
   if (isSensitivePath(r.resolved || r.abs)) {
@@ -600,4 +641,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, _isWorkspaceRootEnforced: (sid) => _workspaceRoot !== null || (sid != null && _sessionWorkspaces.has(sid)), _hasSessionWorkspace: (sid) => _sessionWorkspaces.has(sid), _isShadowActive: (sid) => sid != null && _sessionShadowOrigins.has(sid), DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

@@ -301,12 +301,14 @@ describe('P0-1 Step 1d & 1c: End-to-End runToolLoop Provider Boundary Prefix Sta
       expect(metrics.reuseRatio).toBe(1)
     }
 
-    // Specifically confirm that stage transitions actually added tools at the tail:
-    // Turn 0 -> Turn 2 (build stage added lsp) -> Turn 3 (verify stage added agent)
-    const t0Len = capturedRequests[0].tools.length
-    const t2Len = capturedRequests[2].tools.length
-    const t3Len = capturedRequests[3].tools.length
-    expect(t2Len).toBeGreaterThan(t0Len)
-    expect(t3Len).toBeGreaterThan(t2Len)
-  })
+    // Phase 2: Staged tool pruning is disabled for 100% prefix cache stability,
+    // so all core tools are present from Turn 0 with zero mid-loop deletions/mutations.
+    const t0Tools = capturedRequests[0].tools
+    const t2Tools = capturedRequests[2].tools
+    const t3Tools = capturedRequests[3].tools
+    const t0Names = t0Tools.map(t => t.function.name)
+    expect(t0Names).toEqual(expect.arrayContaining(['read_file', 'write_file', 'run_command']))
+    expect(t2Tools).toEqual(t0Tools)
+    expect(t3Tools).toEqual(t0Tools)
+  }, 15000)
 })

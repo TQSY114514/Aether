@@ -113,7 +113,7 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
   // Cache rarely-changing settings at handler registration time. Invalidation
   // happens via the settings:changed event emitted by the settings handler.
   const _s = {}
-  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: String(DEFAULT_FALLBACK_TIMEOUT_MS), agent_max_iterations: '25' }
+  const SETTING_DEFAULTS = { autoTitle: '1', titleLanguage: 'auto', auto_memory_enabled: '1', fallback_timeout_ms: String(DEFAULT_FALLBACK_TIMEOUT_MS), agent_max_iterations: '100' }
   ;['autoTitle', 'titleLanguage', 'auto_memory_enabled', 'fallback_timeout_ms', 'agent_max_iterations'].forEach(k => { _s[k] = db.getSetting(k) ?? SETTING_DEFAULTS[k] })
 
   ipcMain.on('settings:changed', (_e, key) => { if (key in SETTING_DEFAULTS) { _s[key] = db.getSetting(key) ?? SETTING_DEFAULTS[key] } })
@@ -279,8 +279,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // - personaId === 0: explicit "No persona" (clean slate)
     // - personaId == null: check session.persona_id, else auto-inject workspace SOUL.md if present
     const session = session0
-    let wsRoot = null
-    try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+    let wsRoot = session0?.cwd || null
+    if (!wsRoot) {
+      try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+    }
 
     const targetPersonaId = (personaId !== undefined && personaId !== null)
       ? Number(personaId)
@@ -420,9 +422,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
     const timeoutMs = parseInt(_s['fallback_timeout_ms'] ?? String(DEFAULT_FALLBACK_TIMEOUT_MS), 10)
     let lastError = null
 
-    // Set workspace root for this session (from session config or global default).
-    // This lets the sandbox resolve per-session workspaces.
-    try { const { setWorkspaceRootForSession } = require('../tools/sandbox'); setWorkspaceRootForSession(sessionId, (session0?.config && JSON.parse(session0.config)?.workspace) || null) } catch {}
+    // Phase 1: Unconstrained CWD execution - do not lock session into sandbox workspace root
+    // residual setWorkspaceRootForSession neutralized to prevent sandbox.js:252 containment failure during live chat.
 
     // Context budget: compute usage before the request so we can report it.
     const budgetBefore = estimateMessagesTokens(compacted)
@@ -442,19 +443,26 @@ ipcMain.handle('chat:complete', handleChatComplete)
       try {
         const ff = require('../featureFlags')
         if (ff.isEnabled(db, 'memory.codeUnderstanding')) {
-          let wsRoot = null
-          try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
-          if (wsRoot) setImmediate(() => { try { codeUnderstanding.indexWorkspace(db, wsRoot, { maxFiles: 2000 }) } catch {} })
+          let codeWsRoot = session0?.cwd || null
+          if (!codeWsRoot) {
+            try { codeWsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+          }
+          if (codeWsRoot) setImmediate(() => { try { codeUnderstanding.indexWorkspace(db, codeWsRoot, { maxFiles: 2000 }) } catch {} })
         }
       } catch {}
-      // Inject the available-skills list as a system message so the model can
-      // call use_skill when a task matches. Only when tools are on (skills are
-      // meaningless without the tool loop). Done after compaction so the list
-      // is never summarized away.
+      // Inject the available-skills list and provider topology snapshot as system
+      // messages so the desktop main agent can call use_skill and dispatch
+      // topology-aware subagents. Done after compaction so they are never summarized away.
       const skillsBlock = skills.formatSkillsForPrompt()
-      // memBlock was already injected into `compacted` above (shared by both paths).
-      // toolMessages 可被溢出自愈重试重建（force 压缩后），故用 let。
-      let toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
+      let topoXml = ''
+      try {
+        const { buildTopologyPromptXml } = require('../llm/providerTopology')
+        topoXml = buildTopologyPromptXml(db)
+      } catch {}
+      const extraSystemMsgs = []
+      if (skillsBlock) extraSystemMsgs.push({ role: 'system', content: skillsBlock })
+      if (topoXml) extraSystemMsgs.push({ role: 'system', content: topoXml })
+      let toolMessages = extraSystemMsgs.length > 0 ? [...extraSystemMsgs, ...compacted] : compacted
       const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
       const msgId = asstMsg.lastInsertRowid
       // Track msgId → session mapping for abortControllers cleanup on session delete
@@ -527,7 +535,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             provider, model, messages: toolMessages, signal: controller.signal,
             options: mergedOpts,
             agentMode: agentMode || 'ask',
-            maxIterations: parseInt(_s['agent_max_iterations'] ?? '25', 10),
+            maxIterations: parseInt(_s['agent_max_iterations'] ?? '100', 10),
             sessionId, messageId: msgId, db,
             autoCommit: true,
             onFileSummary: (summary) => { mergeFileSummary(summary, runIdx) },

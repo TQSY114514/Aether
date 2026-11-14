@@ -115,41 +115,8 @@ interface TurnFileSummary {
   fileCount: number
 }
 
-interface Project {
-  id: number
-  name: string
-  root_path: string
-  icon?: string | null
-  color?: string | null
-  default_model_id?: number | null
-  default_agent_mode?: string
-  is_favorite?: number
-  created_at: string
-  last_opened_at?: string | null
-}
-
-interface ProjectInstructionsResult {
-  fileName: string
-  path: string
-  content: string
-  exists: boolean
-  error?: string
-}
-
 interface Window {
   electronAPI: {
-    project: {
-      list: () => Promise<Project[]>
-      create: (data: { name: string; root_path: string; icon?: string | null; color?: string | null; default_model_id?: number | null; default_agent_mode?: string; is_favorite?: boolean | number }) => Promise<Project>
-      open: (id: number | null) => Promise<Project | null>
-      update: (id: number, data: Partial<Project>) => Promise<Project>
-      delete: (id: number) => Promise<{ ok: boolean; success?: boolean; error?: string }>
-      current: () => Promise<Project | null>
-      pickDirectory: () => Promise<string | null>
-      getInstructions: (projectId?: number) => Promise<ProjectInstructionsResult>
-      saveInstructions: (params: { projectId?: number; content: string; fileName?: string }) => Promise<{ ok: boolean; path?: string; error?: string }>
-      onOpened: (callback: (project: Project | null) => void) => () => void
-    }
     provider: {
       list: () => Promise<Provider[]>
       get: (id: number) => Promise<Provider>
@@ -185,7 +152,7 @@ interface Window {
     session: {
       list: () => Promise<Session[]>
       create: (data: any) => Promise<{ lastInsertRowid: number }>
-      createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null; projectId?: number | null; project_id?: number | null }) => Promise<{ session: Session & { id: number }; config: { providerId: number | null; modelId: number | null; personaId: number | null }; messages: Message[] }>
+      createAndSelect: (opts: { providerId?: number | null; modelId?: number | null; personaId?: number | null; cwd?: string | null; projectId?: number | null; project_id?: number | null }) => Promise<{ session: Session & { id: number; cwd?: string | null }; config: { providerId: number | null; modelId: number | null; personaId: number | null; cwd?: string | null }; messages: Message[] }>
       rename: (id: number, title: string) => Promise<void>
       pin: (id: number, pinned: number) => Promise<void>
       fork: (params: { sessionId: number; title?: string }) => Promise<{ id: number; title: string }>
@@ -193,6 +160,7 @@ interface Window {
       touch: (id: number) => Promise<void>
       getConfig: (id: number) => Promise<{ providerId: number | null; modelId: number | null; personaId: number | null } | null>
       setConfig: (id: number, config: any) => Promise<void>
+      setCwd: (id: number | string, cwd: string) => Promise<string>
     }
     message: {
       list: (sessionId: number) => Promise<Message[]>
@@ -209,7 +177,7 @@ interface Window {
       onPlanStep: (callback: (payload: { messageId: number; sessionId: number; step: { step: number; depth: number; assistantText: string; kind?: 'plan' | 'act' | 'observe' } }) => void) => () => void
       onPlanSnapshot: (callback: (payload: { messageId: number; sessionId: number; plan: { id: string; description: string; tasks: { id: string; description: string; status: string; result?: string | null }[] } }) => void) => () => void
       onTodoUpdate: (callback: (payload: { messageId: number; sessionId: number; todos: { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[] }) => void) => () => void
-      onSubagentEvent: (callback: (payload: { messageId: number; sessionId: number; event: { type: 'start' | 'done' | 'error' | 'tool_call' | 'status'; id: string; index?: number; task?: string; status?: 'running' | 'done' | 'error'; startedAt?: number; latencyMs?: number; output?: string; error?: string; childSessionId?: number; taskId?: number; name?: string; tool?: any; text?: string } }) => void) => () => void
+      onSubagentEvent: (callback: (payload: { messageId: number; sessionId: number; event: { type: 'start' | 'done' | 'error' | 'tool_call' | 'status' | string; id: string; index?: number; task?: string; status?: 'running' | 'done' | 'error' | 'completed' | 'failed' | 'cancelled' | 'stalled_suspected'; startedAt?: number; latencyMs?: number; output?: string; error?: string; childSessionId?: number; taskId?: number; name?: string; tool?: any; text?: string; providerName?: string; providerId?: string | number; endpointKind?: string; baseUrlCategory?: string; modelId?: string; ttftMs?: number | null; idleSinceLastActivityMs?: number; idleSeconds?: number; swapHistory?: any[]; recentThinkingTail?: string; recentTextTail?: string; liveThinkingTail?: string; liveOutputTail?: string; streamEvents?: any[]; events?: any[] } }) => void) => () => void
       onStatus: (callback: (payload: { messageId: number; sessionId: number; text: string; kind?: string }) => void) => () => void
       onQuestion: (callback: (payload: { reqId: string; sessionId: number; questions: { question: string; header?: string; options: { label: string; description?: string }[] }[] }) => void) => () => void
       onQuestionExpired: (callback: (payload: { reqId: string }) => void) => () => void
@@ -357,6 +325,7 @@ interface Window {
       setEnabled: (enabled: boolean) => Promise<{ ok: boolean; running: boolean }>
     }
     system: {
+      pickDirectory: () => Promise<string | null>
       getAutoLaunch: () => Promise<{ enabled: boolean }>
       setAutoLaunch: (enabled: boolean) => Promise<{ ok: boolean; enabled?: boolean; error?: string }>
       notify: (data: { title?: string; body?: string; sessionId?: number; taskId?: string }) => Promise<{ ok: boolean; error?: string }>

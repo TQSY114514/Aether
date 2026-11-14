@@ -365,6 +365,21 @@ export function ensureSubagentListener() {
         taskId: event.taskId ?? prev?.taskId,
         currentTool,
         currentStatus,
+        providerName: (event as any).providerName ?? prev?.providerName,
+        providerId: (event as any).providerId ?? prev?.providerId,
+        endpointKind: (event as any).endpointKind ?? (event as any).baseUrlCategory ?? prev?.endpointKind,
+        baseUrlCategory: (event as any).baseUrlCategory ?? (event as any).endpointKind ?? prev?.baseUrlCategory,
+        modelId: (event as any).modelId ?? prev?.modelId,
+        ttftMs: (event as any).ttftMs !== undefined ? (event as any).ttftMs : prev?.ttftMs,
+        idleSinceLastActivityMs: (event as any).idleSinceLastActivityMs !== undefined ? (event as any).idleSinceLastActivityMs : prev?.idleSinceLastActivityMs,
+        idleSeconds: (event as any).idleSeconds !== undefined ? (event as any).idleSeconds : prev?.idleSeconds,
+        swapHistory: (event as any).swapHistory ?? prev?.swapHistory,
+        recentThinkingTail: (event as any).recentThinkingTail ?? prev?.recentThinkingTail,
+        recentTextTail: (event as any).recentTextTail ?? prev?.recentTextTail,
+        liveThinkingTail: (event as any).liveThinkingTail ?? prev?.liveThinkingTail,
+        liveOutputTail: (event as any).liveOutputTail ?? prev?.liveOutputTail,
+        streamEvents: (event as any).streamEvents ?? prev?.streamEvents,
+        events: (event as any).events ?? prev?.events,
       }
       let nextList = [...existing]
       if (idx >= 0) {

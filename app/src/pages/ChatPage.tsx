@@ -8,7 +8,7 @@ import ChatBackgroundPattern from '@/components/chat/ChatBackgroundPattern'
 import PersonaSelector from '@/components/chat/PersonaSelector'
 import Tooltip from '@/components/Tooltip'
 import HoverMarquee from '@/components/ui/HoverMarquee'
-import { FlaskConical, FolderGit2, FolderKanban, ShieldCheck } from 'lucide-react'
+import { FlaskConical, FolderGit2, Folder, ShieldCheck } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
 // Trust badge dot color → tailwind class
@@ -48,7 +48,14 @@ export default function ChatPage() {
   const allModels = useStore((s) => s.allModels)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
 
-  const activeProject = useStore((s) => s.activeProject)
+  const currentSession = useMemo(() => sessions.find((s) => s.id === currentSessionId), [sessions, currentSessionId])
+  const activeCwd = currentSession?.cwd || (currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null) || null
+  const displayFolder = useMemo(() => {
+    if (!activeCwd) return t('workspace.default')
+    const parts = activeCwd.replace(/\\/g, '/').split('/').filter(Boolean)
+    return parts[parts.length - 1] || activeCwd
+  }, [activeCwd])
+
   const [headerGit, setHeaderGit] = useState<{ branch?: string; isClean?: boolean } | null>(null)
   const [headerRule, setHeaderRule] = useState<{ has: boolean; fileName: string | null } | null>(null)
 
@@ -68,7 +75,7 @@ export default function ChatPage() {
         setHeaderRule(null)
       }
     }).catch(() => {})
-  }, [currentSessionId, activeProject?.root_path])
+  }, [currentSessionId, activeCwd])
 
   // Trust badge
   const [trustBadge, setTrustBadge] = useState<{ trust: number; color: string; label: string } | null>(null)
@@ -216,12 +223,12 @@ export default function ChatPage() {
       {/* Workspace Context Chip: Full project badge when sidebar is collapsed; concise Git/Rule chip when expanded */}
       {(!sidebarOpen || headerRule?.has || headerGit?.branch) && (
         <Tooltip
-          text={`${activeProject ? activeProject.name : t('workspace.default')}${headerGit?.branch ? ` (${headerGit.branch})` : ''} · ${activeProject?.root_path || '~/.aetherai'}${headerRule?.has ? ` · [${headerRule.fileName || 'Rules'}]` : ''}`}
+          text={`${displayFolder}${headerGit?.branch ? ` (${headerGit.branch})` : ''} · ${activeCwd || '~/.aetherai'}${headerRule?.has ? ` · [${headerRule.fileName || 'Rules'}]` : ''}`}
         >
           <button
             type="button"
             onClick={async () => {
-              const target = activeProject?.root_path || (await window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined))
+              const target = activeCwd || (await window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined))
               if (target) window.electronAPI?.system?.openPath?.(target)
             }}
             className="h-7.5 flex items-center gap-1.5 px-2 rounded-[6px] border text-xs font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] cursor-pointer"
@@ -233,10 +240,10 @@ export default function ChatPage() {
                 {headerGit ? (
                   <FolderGit2 size={12} className="text-[var(--accent)] shrink-0" />
                 ) : (
-                  <FolderKanban size={12} className="text-[var(--accent)] shrink-0" />
+                  <Folder size={12} className="text-[var(--accent)] shrink-0" />
                 )}
                 <span className="truncate max-w-[90px] text-[11px] font-semibold">
-                  {activeProject ? activeProject.name : t('workspace.default')}
+                  {displayFolder}
                 </span>
               </>
             ) : null}

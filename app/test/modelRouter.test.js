@@ -12,9 +12,9 @@ const models = [
 ]
 
 describe('modelRouter routeTask', () => {
-  it('routes fast tasks to the fast tier', () => {
-    expect(routeTask('classify', 'is this a bug?', 2)).toBe('fast')
-    expect(routeTask('extract', 'get the name', 1)).toBe('fast')
+  it('does not downgrade fast tasks to fast tier (flagship execution in Aether 3.0)', () => {
+    expect(routeTask('classify', 'is this a bug?', 2)).toBe('standard')
+    expect(routeTask('extract', 'get the name', 1)).toBe('standard')
   })
 
   it('routes long messages or long histories to thinking', () => {
@@ -22,8 +22,8 @@ describe('modelRouter routeTask', () => {
     expect(routeTask('complete', 'short', 50)).toBe('thinking')
   })
 
-  it('routes short simple messages to fast', () => {
-    expect(routeTask('complete', 'hi', 1)).toBe('fast')
+  it('does not downgrade short simple messages to fast', () => {
+    expect(routeTask('complete', 'hi', 1)).toBe('standard')
   })
 
   it('defaults to standard for everything else', () => {

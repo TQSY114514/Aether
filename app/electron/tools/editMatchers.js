@@ -490,6 +490,27 @@ function clearReadFileState(sessionId) {
   }
 }
 
+/**
+ * Get top-N recently operated file slices for a session from readFileState.
+ * Sorts by readAt descending; ties broken deterministically by filePath.
+ * @param {string|number} sessionId
+ * @param {number} [limit=3]
+ * @returns {Array<{ path: string, offset: number, limit?: number, readAt: Date|number }>}
+ */
+function getRecentReadFileStates(sessionId, limit = 3) {
+  const key = String(sessionId ?? 'default')
+  const map = _sessionReadStates.get(key)
+  if (!map || map.size === 0) return []
+  const entries = Array.from(map.values())
+  entries.sort((a, b) => {
+    const timeA = a.readAt instanceof Date ? a.readAt.getTime() : Number(a.readAt || 0)
+    const timeB = b.readAt instanceof Date ? b.readAt.getTime() : Number(b.readAt || 0)
+    if (timeB !== timeA) return timeB - timeA
+    return String(a.path || '').localeCompare(String(b.path || ''))
+  })
+  return entries.slice(0, limit)
+}
+
 module.exports = {
   findEditMatch,
   normalizeLineEndings,
@@ -498,6 +519,7 @@ module.exports = {
   stripReadLineNumberPrefixes,
   recordReadFileState,
   findLatestReadFileState,
+  getRecentReadFileStates,
   checkStaleReadBeforeEdit,
   clearReadFileState,
 }

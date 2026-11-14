@@ -52,10 +52,10 @@ describe('IterationBudget', () => {
     expect(b.remaining).toBe(4)
   })
 
-  it('uses DEFAULT_MAX_ITERATIONS (25) when maxTotal is 0', () => {
+  it('uses DEFAULT_MAX_ITERATIONS (100) when maxTotal is 0', () => {
     const b = new toolLoop.IterationBudget()
-    expect(b.maxTotal).toBe(25)
-    expect(b.remaining).toBe(25)
+    expect(b.maxTotal).toBe(100)
+    expect(b.remaining).toBe(100)
   })
 })
 

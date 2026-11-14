@@ -65,8 +65,6 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     const pages: [string, string, typeof Search][] = [
       ['chat', t('sidebar.nav.chat') || 'Chat', MessageSquare],
       ['models', t('sidebar.nav.models'), Server],
-      ['agents', t('sidebar.nav.personas'), MessageSquare],
-      ['scores', t('sidebar.nav.arena'), MessageSquare],
       ['settings', t('sidebar.nav.settings'), SettingsIcon],
     ]
     pages.forEach(([view, label, icon]) => {

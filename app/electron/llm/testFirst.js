@@ -102,6 +102,14 @@ function writeFiles(root, files, sessionId, skip) {
       written.push({ path: f.path, skipped: true })
       continue
     }
+    if (root && path.isAbsolute(f.path)) {
+      const normRoot = path.normalize(root).toLowerCase()
+      const normTarget = path.normalize(target).toLowerCase()
+      if (normTarget !== normRoot && !normTarget.startsWith(normRoot + path.sep)) {
+        written.push({ path: f.path, error: 'path outside workspace' })
+        continue
+      }
+    }
     const guard = checkWritePath(target, sessionId)
     if (!guard.ok) {
       written.push({ path: f.path, error: guard.reason })

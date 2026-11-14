@@ -25,21 +25,18 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     }
   },
 
-  createSession: async () => {
+  createSession: async (customCwd?: string) => {
     const s = get()
-    const activeProject = s.activeProject || get().activeProject
     const allProviders = await window.electronAPI.provider.list()
     const enabledProviders = allProviders.filter(p => p.enabled)
     let cfg = {
       providerId: null as number | null,
       modelId: null as number | null,
       personaId: null as number | null,
-      projectId: activeProject?.id ? Number(activeProject.id) : null,
+      cwd: customCwd || null,
     }
 
-    const targetModelId = activeProject?.default_model_id != null
-      ? activeProject.default_model_id
-      : s.defaultModelId
+    const targetModelId = s.defaultModelId
 
     if (targetModelId) {
       const defModel = (s.allModels.find(m => m.id === targetModelId) ||
@@ -67,25 +64,39 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
     const sid = result.session.id
     const sessionCfg = result.config
 
-    if (activeProject?.default_agent_mode) {
-      set({ agentMode: activeProject.default_agent_mode as any })
-    }
-
-    const boundSession = {
-      ...result.session,
-      project_id: result.session.project_id ?? (activeProject?.id ? Number(activeProject.id) : null),
-    }
-
     set((s) => ({
       currentView: "chat",
       currentSessionId: sid,
-      sessions: [...s.sessions, boundSession],
+      sessions: [...s.sessions, result.session],
       sessionConfigs: { ...s.sessionConfigs, [sid]: sessionCfg },
       messages: result.messages || [],
     }))
     if (sessionCfg.providerId) get().loadModels(sessionCfg.providerId)
-    await get().loadWorkspaceSoul((sessionCfg as any)?.workspace || null)
+    await get().loadWorkspaceSoul(result.session?.cwd || (sessionCfg as any)?.workspace || null)
     return sid
+  },
+
+  setSessionCwd: async (targetPath: string) => {
+    const { currentSessionId, sessionConfigs } = get()
+    if (!currentSessionId) return
+    const trimmed = (targetPath || '').trim()
+    if (!trimmed) return
+    try {
+      if (window.electronAPI.session.setCwd) {
+        await window.electronAPI.session.setCwd(currentSessionId, trimmed)
+      }
+      await window.electronAPI.session.setConfig(currentSessionId, { ...sessionConfigs[currentSessionId], workspace: trimmed })
+      set((s) => ({
+        sessions: s.sessions.map((sess) => sess.id === currentSessionId ? { ...sess, cwd: trimmed } : sess),
+        sessionConfigs: {
+          ...s.sessionConfigs,
+          [currentSessionId]: { ...s.sessionConfigs[currentSessionId], workspace: trimmed },
+        },
+      }))
+      await get().loadWorkspaceSoul(trimmed)
+    } catch (e) {
+      log.error("setSessionCwd failed", e)
+    }
   },
 
   newChat: async () => {
@@ -152,11 +163,13 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
         sessionConfigs: { ...s.sessionConfigs, [id]: cfg },
       }))
       const savedCfg = get().sessionConfigs[id]
-      if (savedCfg?.workspace) {
-        try { await window.electronAPI.agent.setWorkspace({ dir: savedCfg.workspace, sessionId: id }) } catch {}
+      const sess = get().sessions.find((s) => s.id === id)
+      const currentCwd = sess?.cwd || savedCfg?.workspace || null
+      if (currentCwd) {
+        try { await window.electronAPI.agent.setWorkspace({ dir: currentCwd, sessionId: id }) } catch {}
       }
       if (cfg.providerId) get().loadModels(cfg.providerId)
-      get().loadWorkspaceSoul(savedCfg?.workspace || null)
+      get().loadWorkspaceSoul(currentCwd)
     } catch {
       set({ currentSessionId: id })
     }
