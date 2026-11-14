@@ -677,7 +677,7 @@ async function runAuditPipeline(targetInput, options = {}) {
   if (nativeBundleInfo && Array.isArray(nativeBundleInfo.exposedApis)) {
     for (const api of nativeBundleInfo.exposedApis) {
       ipcArchitecture.preloadExposures.push({
-        apiKey: api.namespace,
+        apiNamespace: api.namespace,
         file: api.file,
         line: api.line,
         col: api.col || 1,
@@ -710,7 +710,7 @@ async function runAuditPipeline(targetInput, options = {}) {
       const bridgeRe = /contextBridge\s*\.\s*exposeInMainWorld\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(\{[\s\S]*?\}|[\w$]+)/g;
       let bMatch;
       while ((bMatch = bridgeRe.exec(text)) !== null) {
-        const apiKey = bMatch[1];
+        const apiNamespace = bMatch[1];
         const { line, col, byteOffset } = getLineAndOffset(text, bMatch.index);
         const bridgeObj = bMatch[2];
 
@@ -724,7 +724,7 @@ async function runAuditPipeline(targetInput, options = {}) {
         }
 
         ipcArchitecture.preloadExposures.push({
-          apiKey,
+          apiNamespace,
           file: f.relPath,
           line,
           col,
@@ -739,7 +739,7 @@ async function runAuditPipeline(targetInput, options = {}) {
           authority: `${f.relPath}:${line}`,
           line,
           byteOffset,
-          description: `Preload ContextBridge: Exposed '${apiKey}' with ${methodNames.length} methods (${methodNames.slice(0, 5).join(', ')}...)`
+          description: `Preload ContextBridge: Exposed '${apiNamespace}' with ${methodNames.length} methods (${methodNames.slice(0, 5).join(', ')}...)`
         });
       }
     }
@@ -1245,7 +1245,7 @@ function formatMarkdownReport(auditData, selectedLang) {
     lines.push(`| ${t(lang, 'apiNamespace')} | ${t(lang, 'methodsCount')} | ${t(lang, 'sampleMethods')} | ${t(lang, 'sourceLocation')} |`);
     lines.push(`| :--- | :--- | :--- | :--- |`);
     for (const b of ipcArchitecture.preloadExposures) {
-      lines.push(`| \`${b.apiKey}\` | ${b.methods.length} | \`${b.methods.slice(0, 4).join(', ')}${b.methods.length > 4 ? '...' : ''}\` | \`${b.file}:${b.line}\` |`);
+      lines.push(`| \`${b.apiNamespace}\` | ${b.methods.length} | \`${b.methods.slice(0, 4).join(', ')}${b.methods.length > 4 ? '...' : ''}\` | \`${b.file}:${b.line}\` |`);
     }
   }
 

@@ -123,7 +123,6 @@ function runCommandSync(command, args, opts = {}) {
   const {
     cwd,
     env,
-    shell = false,
     windowsHide = true,
   } = opts
 
@@ -131,7 +130,7 @@ function runCommandSync(command, args, opts = {}) {
   const child = spawnSync(command, args, {
     cwd,
     env: sanitizeProcessEnv(process.env, env || {}),
-    shell,
+    shell: false,
     windowsHide,
     stdio: ['pipe', 'pipe', 'pipe'],
     maxBuffer: opts.maxBuffer || 1024 * 1024,
