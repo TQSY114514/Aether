@@ -126,26 +126,36 @@ function runCommandSync(command, args, opts = {}) {
     windowsHide = true,
   } = opts
 
-  const { spawnSync } = require('child_process')
-  const child = spawnSync(command, args, {
-    cwd,
-    env: sanitizeProcessEnv(process.env, env || {}),
-    shell: false,
-    windowsHide,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    maxBuffer: opts.maxBuffer || 1024 * 1024,
-    timeout: opts.timeout,
-  })
-
-  const isTruncated = child.error?.code === 'ENOBUFS' || false
-  const isTimedOut = child.error?.code === 'ETIMEDOUT' || false
-  return {
-    stdout: (child.stdout || Buffer.from('')).toString('utf-8'),
-    stderr: (child.stderr || Buffer.from('')).toString('utf-8'),
-    exitCode: child.status != null ? child.status : (child.error ? 1 : 0),
-    error: child.error ? child.error.message : null,
-    truncated: isTruncated,
-    timedOut: isTimedOut,
+  const { execFileSync } = require('child_process')
+  try {
+    const stdout = execFileSync(command, Array.isArray(args) ? args : [], {
+      cwd,
+      env: sanitizeProcessEnv(process.env, env || {}),
+      windowsHide,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      maxBuffer: opts.maxBuffer || 1024 * 1024,
+      timeout: opts.timeout,
+      encoding: 'utf-8',
+    })
+    return {
+      stdout: stdout || '',
+      stderr: '',
+      exitCode: 0,
+      error: null,
+      truncated: false,
+      timedOut: false,
+    }
+  } catch (child) {
+    const isTruncated = child.code === 'ENOBUFS' || false
+    const isTimedOut = child.code === 'ETIMEDOUT' || false
+    return {
+      stdout: (child.stdout ? child.stdout.toString('utf-8') : ''),
+      stderr: (child.stderr ? child.stderr.toString('utf-8') : child.message || ''),
+      exitCode: child.status != null ? child.status : (child.code ? 1 : 0),
+      error: child.message || null,
+      truncated: isTruncated,
+      timedOut: isTimedOut,
+    }
   }
 }
 
