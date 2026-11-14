@@ -14,8 +14,8 @@ Aether is a local-first, multi-model AI workbench (Electron Desktop GUI + Ink v5
 
 Before touching the codebase, read [`AGENTS.md`](./AGENTS.md) and [`docs/roadmap.md`](./docs/roadmap.md):
 
-- **Renderer (`app/src/`)**: React + TypeScript + Zustand (`store/index.ts`) + Tailwind CSS. Must stric
-- **Main Process & Agent Runtime (`app/electron/`)**: Plain Node.js CommonJS (`require` / `module.exportly follow [`docs/ui-design.md`](./docs/ui-design.md) (clean engineering UI, full keyboard/focus states, `prefers-reduced-motion` support, zero AI-template clichés).ts` — no TypeScript syntax in `.js` files) + `better-sqlite3` (WAL mode).
+- **Renderer (`app/src/`)**: React + TypeScript + Zustand (`store/index.ts`) + Tailwind CSS. Must strictly follow [`docs/ui-design.md`](./docs/ui-design.md) (clean engineering UI, full keyboard/focus states, `prefers-reduced-motion` support, zero AI-template clichés).
+- **Main Process & Agent Runtime (`app/electron/`)**: Plain Node.js CommonJS (`require` / `module.exports` — no TypeScript syntax in `.js` files) + `better-sqlite3` (WAL mode).
 - **Terminal UI (`app/tui/`)**: ESM (`"type": "module"`) + Ink v5 (`react.createElement` without JSX bundlers). Must remain 100% Electron-free.
 - **SDK (`app/electron/sdk/`)**: Electron-free aggregation exported as `aetherai/sdk`.
 

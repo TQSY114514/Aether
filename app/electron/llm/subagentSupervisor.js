@@ -35,6 +35,9 @@ function resolveProviderAndModel(db, providerId, modelId, customProvider = null,
   }
 
   if (!provider) {
+    if (db && providerId && providerId !== 'default') {
+      throw new Error(`Provider "${providerId}" not found in database`)
+    }
     provider = {
       id: providerId,
       name: `Provider ${providerId}`,
@@ -278,6 +281,34 @@ function formatSubagentReport(record, systemNotice = '', snapshotOpts = {}) {
   }
 }
 
+const MAX_COMPLETED_RECORDS = 50
+const COMPLETED_RECORD_TTL_MS = 30 * 60 * 1000
+
+/**
+ * Prunes terminal subagent records to prevent unbounded memory growth.
+ */
+function pruneCompletedSubagents() {
+  const now = Date.now()
+  const terminal = []
+  for (const [id, rec] of activeSubagents.entries()) {
+    if (rec.status === 'completed' || rec.status === 'failed' || rec.status === 'cancelled') {
+      const doneAt = rec.completedAt || rec.startedAt || now
+      if (now - doneAt > COMPLETED_RECORD_TTL_MS) {
+        activeSubagents.delete(id)
+      } else {
+        terminal.push({ id, doneAt })
+      }
+    }
+  }
+  if (terminal.length > MAX_COMPLETED_RECORDS) {
+    terminal.sort((a, b) => a.doneAt - b.doneAt)
+    const excess = terminal.length - MAX_COMPLETED_RECORDS
+    for (let i = 0; i < excess; i++) {
+      activeSubagents.delete(terminal[i].id)
+    }
+  }
+}
+
 /**
  * Spawns a supervised subagent with explicit provider/model and non-blocking waitMode.
  * @param {object} opts
@@ -391,13 +422,40 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
     _restartLoop: null,
   }
 
+  pruneCompletedSubagents()
   activeSubagents.set(subagentId, record)
+
+  const emitRenderer = (channel, payload) => {
+    if (typeof notifyRenderer !== 'function') return
+    try {
+      if (notifyRenderer.length >= 2) {
+        notifyRenderer(channel, payload)
+      } else {
+        notifyRenderer({ channel, ...payload })
+      }
+    } catch {}
+  }
+
+  const parentSignal = opts.parentSignal || deps.signal
+  const requestPermission = opts.requestPermission || deps.requestPermission
 
   const startLoop = () => {
     const currentController = new AbortController()
     record.abortController = currentController
     record.status = 'running'
     record.liveBuffer.lastActivityAt = Date.now()
+
+    let onParentAbort = null
+    if (parentSignal) {
+      if (parentSignal.aborted) {
+        currentController.abort('USER_CANCELLED')
+      } else {
+        onParentAbort = () => {
+          try { currentController.abort('USER_CANCELLED') } catch {}
+        }
+        parentSignal.addEventListener('abort', onParentAbort, { once: true })
+      }
+    }
 
     record.completionPromise = (async () => {
       try {
@@ -410,6 +468,8 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
           provider: record.provider,
           model: record.model,
           cwd: record.cwd,
+          db: record.db,
+          requestPermission,
           agentMode: effectiveAgentMode,
           signal: currentController.signal,
           messages: record.completedMessages,
@@ -429,15 +489,11 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
           },
           onThinkingDelta: (delta) => {
             if (delta) liveBuffer.appendStreamDelta('thinking', delta)
-            if (typeof notifyRenderer === 'function') {
-              notifyRenderer('subagent:stream', { subagentId, type: 'thinking', delta })
-            }
+            emitRenderer('subagent:stream', { subagentId, type: 'thinking', delta })
           },
           onStreamDelta: (delta) => {
             if (delta) liveBuffer.appendStreamDelta('text', delta)
-            if (typeof notifyRenderer === 'function') {
-              notifyRenderer('subagent:stream', { subagentId, type: 'text', delta })
-            }
+            emitRenderer('subagent:stream', { subagentId, type: 'text', delta })
           },
           onToolCall: (entry) => {
             if (entry && !entry.result && !entry.error) {
@@ -445,9 +501,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
             } else {
               liveBuffer.appendToolEvent('tool_result', entry)
             }
-            if (typeof notifyRenderer === 'function') {
-              notifyRenderer('subagent:tool', { subagentId, tool: entry })
-            }
+            emitRenderer('subagent:tool', { subagentId, tool: entry })
           },
           onTurnComplete: (msgs) => {
             record.completedMessages = Array.isArray(msgs) ? [...msgs] : record.completedMessages
@@ -464,9 +518,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
             } else if (evt.type === 'tool_result' || evt.type === 'tool_end') {
               liveBuffer.appendToolEvent('tool_result', evt)
             }
-            if (typeof notifyRenderer === 'function') {
-              notifyRenderer('agent:subagent-progress', { subagentId, ...evt })
-            }
+            emitRenderer('agent:subagent-progress', { subagentId, ...evt })
           },
         })
 
@@ -481,7 +533,9 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
 
         record.status = 'completed'
         record.completedAt = Date.now()
-        record.finalOutput = result?.finalText || result?.output || liveBuffer.accumulatedText
+        record.finalOutput = typeof result === 'string'
+          ? result
+          : (result?.finalText || result?.output || liveBuffer.accumulatedText)
         liveBuffer.recordTurnComplete()
       } catch (err) {
         if (
@@ -506,6 +560,10 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
         record.status = 'failed'
         record.completedAt = Date.now()
         record.error = String(err?.message || err)
+      } finally {
+        if (parentSignal && onParentAbort) {
+          try { parentSignal.removeEventListener('abort', onParentAbort) } catch {}
+        }
       }
     })()
     return record.completionPromise
@@ -661,7 +719,14 @@ async function controlSubagent(opts = {}) {
     const oldModel = record.modelId
     record.status = 'swapping_model'
 
+    const prevPromise = record.completionPromise
     record.abortController.abort('HOT_SWAP_MODEL')
+    if (prevPromise && typeof prevPromise.then === 'function') {
+      await Promise.race([
+        prevPromise.catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 50)),
+      ])
+    }
 
     const partialThinking = (record.liveBuffer.accumulatedThinking || '').slice(-3000)
     const partialText = (record.liveBuffer.accumulatedText || '').slice(-3000)

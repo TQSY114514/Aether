@@ -366,7 +366,7 @@ describe('Tier 1: Feature Coverage (Features 1 through 13)', () => {
       const msg = projectInstructions.buildProjectContextMessage()
       expect(msg).not.toBeNull()
       expect(msg.role).toBe('system')
-      expect(msg.content).toContain('Project Instructions (AGENTS.md)')
+      expect(msg.content).toContain('Project Instructions (Cascading Hierarchy)')
       expect(msg.content).toContain('Telegraph style only.')
     })
   })

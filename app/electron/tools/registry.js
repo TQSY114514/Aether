@@ -761,7 +761,11 @@ const TOOLS = [
       }
       const supervisor = require('../llm/subagentSupervisor')
       const db = ctx?.db || require('../database').getDatabase?.() || null
-      const effectiveCwd = args?.cwd || ctx?.cwd || process.cwd()
+      let sessionCwd = null
+      if (!args?.cwd && !ctx?.cwd && db && ctx?.sessionId && typeof db.getSession === 'function') {
+        try { sessionCwd = db.getSession(ctx.sessionId)?.cwd || null } catch {}
+      }
+      const effectiveCwd = args?.cwd || ctx?.cwd || sessionCwd || process.cwd()
 
       const report = await supervisor.spawnSupervisedSubagent({
         parentSessionId: ctx?.sessionId,
@@ -773,10 +777,14 @@ const TOOLS = [
         waitMode: args.waitMode || 'smart_window',
         initialWaitMs: args.initialWaitMs != null ? Number(args.initialWaitMs) : 8000,
         stallTimeoutMs: args.stallTimeoutMs != null ? Number(args.stallTimeoutMs) : 15000,
+        parentSignal: ctx?.signal,
+        requestPermission: ctx?.requestPermission,
       }, {
         db,
         runToolLoop: require('../llm/toolLoop').runToolLoop,
         notifyRenderer: ctx?.onSubagentEvent || ctx?.callbacks?.onSubagentEvent,
+        requestPermission: ctx?.requestPermission,
+        signal: ctx?.signal,
       })
 
       if (report.status === 'completed') {
@@ -828,7 +836,10 @@ const TOOLS = [
         const tool = r.currentTool ? `- Active Tool: \`${r.currentTool}\`` : ''
         const thinking = r.recentThinkingTail ? `\n**Recent Thinking**:\n${r.recentThinkingTail}` : ''
         const text = r.recentTextTail ? `\n**Recent Output**:\n${r.recentTextTail}` : ''
-        return [header, stats, tool, thinking, text].filter(Boolean).join('\n')
+        const finalOut = (r.status === 'completed' && (r.finalOutput || r.output))
+          ? `\n**Final Output**:\n${r.finalOutput || r.output}`
+          : ''
+        return [header, stats, tool, thinking, text, finalOut].filter(Boolean).join('\n')
       }).join('\n\n---\n\n')
     },
   },

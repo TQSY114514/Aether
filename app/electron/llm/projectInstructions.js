@@ -152,7 +152,9 @@ function findInstructionInDir(dir) {
  * @returns {Array<{ name: string, path: string, content: string }>}
  */
 function scanRulesDir(dir) {
-  const rulesDir = path.join(dir, '.aether', 'rules')
+  const rulesDir = path.basename(dir) === '.aether'
+    ? path.join(dir, 'rules')
+    : path.join(dir, '.aether', 'rules')
   try {
     if (!fs.existsSync(rulesDir)) return []
     const files = fs.readdirSync(rulesDir).filter(f => f.endsWith('.md') || f.endsWith('.mdc')).sort()

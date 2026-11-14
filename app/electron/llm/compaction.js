@@ -241,18 +241,35 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
         : []
       if (recentSlices && recentSlices.length > 0) {
         const fs = require('fs')
+        const path = require('path')
+        const { hasUnsafeWindowsPrefix, isDangerousRoot, isSensitivePath, isInsideWorkspace, _isWorkspaceRootEnforced } = require('../tools/sandbox')
+        const MAX_REHYDRATE_BYTES = 64 * 1024
         const snippets = []
         for (const entry of recentSlices) {
           try {
-            if (!entry.path || !fs.existsSync(entry.path)) continue
-            const fullText = fs.readFileSync(entry.path, 'utf8')
-            const lines = fullText.split(/\r?\n/)
+            if (!entry.path || typeof entry.path !== 'string') continue
+            const normPath = path.resolve(entry.path)
+            if (hasUnsafeWindowsPrefix(normPath) || isDangerousRoot(normPath) || isSensitivePath(normPath)) continue
+            if (!fs.existsSync(normPath)) continue
+            const realPath = fs.realpathSync(normPath)
+            if (hasUnsafeWindowsPrefix(realPath) || isDangerousRoot(realPath) || isSensitivePath(realPath)) continue
+            if (_isWorkspaceRootEnforced && _isWorkspaceRootEnforced() && !isInsideWorkspace(realPath, sessionId)) continue
+            const fd = fs.openSync(realPath, 'r')
+            let chunkText = ''
+            try {
+              const buf = Buffer.alloc(MAX_REHYDRATE_BYTES)
+              const bytesRead = fs.readSync(fd, buf, 0, MAX_REHYDRATE_BYTES, 0)
+              chunkText = buf.slice(0, bytesRead).toString('utf8')
+            } finally {
+              fs.closeSync(fd)
+            }
+            const lines = chunkText.split(/\r?\n/)
             const offset = Math.max(0, (entry.offset ? entry.offset - 1 : 0))
             const limit = entry.limit && entry.limit > 0 ? entry.limit : 80
             const sliceLines = lines.slice(offset, offset + limit)
             const snippet = sliceLines.join('\n')
             const lineRange = `${offset + 1}-${offset + sliceLines.length}`
-            snippets.push({ path: entry.path, snippet, lineRange })
+            snippets.push({ path: normPath, snippet, lineRange })
           } catch {}
         }
         if (snippets.length > 0) {

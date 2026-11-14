@@ -597,7 +597,7 @@ export default function ChatInput() {
               type="button"
               onClick={handlePickCwd}
               disabled={!currentSessionId || isStreaming}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] border text-[11px] font-medium hover:bg-[var(--border)] transition-colors disabled:opacity-30 cursor-pointer"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] border text-[11px] font-medium hover:bg-[var(--border)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
               style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
               title={t('cwd.browse', '浏览并选择目录')}
             >
@@ -608,7 +608,8 @@ export default function ChatInput() {
               <button
                 type="button"
                 onClick={handleOpenCwd}
-                className="p-1 rounded-[4px] hover:bg-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                disabled={isStreaming}
+                className="p-1 rounded-[4px] hover:bg-[var(--border)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                 title={t('cwd.reveal', '在文件资源管理器中打开')}
                 aria-label={t('cwd.reveal', '在文件资源管理器中打开')}
               >

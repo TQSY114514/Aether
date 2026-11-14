@@ -828,7 +828,7 @@
   "sidebar.new_chat_tip": "Ctrl+N new · double-click to rename",
   "sidebar.no_match": "No matching conversations",
   "sidebar.no_sessions": "No conversations yet",
-  "sidebar.project_scope.all": "All Sessions",
+  "sidebar.project_scope.all": "All",
   "sidebar.search": "Search conversations...",
   "skill.patched_toast": "Self-improvement review: Skill '{0}' patched",
   "skills.col_actions": "Actions",
@@ -1203,7 +1203,6 @@
   "agent.mode.unrestricted": "Unrestricted",
   "agent.mode.group_label": "Agent Operating Mode",
   "sidebar.project_scope.project": "Project",
-  "sidebar.project_scope.all": "All",
   "sidebar.project_scope.tooltip": "Toggle session project scope filter",
   "settings.agent.session_budget_usd": "Session Cost Limit (USD)",
   "settings.agent.session_budget_desc": "Set network request timeout and per-session cost limit (USD)",
@@ -1288,5 +1287,13 @@
   "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
   "settings.notify_sent": "Test notification sent",
   "settings.notify_unavailable": "Notifications not supported",
-  "chat.subagent_running_tool": "Running: {0}"
+  "chat.subagent_running_tool": "Running: {0}",
+  "chat.thinking": "Thinking",
+  "chat.output": "Output",
+  "chat.tools": "Tools",
+  "chat.subagent_thinking_live": "(Thinking stream active...)",
+  "chat.subagent_no_thinking": "(No thinking content recorded)",
+  "chat.subagent_streaming_live": "(Output streaming...)",
+  "chat.subagent_no_output": "(No output produced yet)",
+  "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
 }

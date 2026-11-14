@@ -44,7 +44,7 @@ function truncateMiddleware(content, ctx) {
   try {
     const id = `aether-output-${crypto.randomBytes(4).toString('hex')}.log`
     const logPath = path.join(os.tmpdir(), id)
-    fs.writeFileSync(logPath, content, 'utf8')
+    fs.writeFileSync(logPath, content, { encoding: 'utf8', mode: 0o600 })
     const tail = content.slice(-SPILL_TAIL_CHARS)
     return `[Output spilled to ${logPath}]\n${tail}`
   } catch (err) {

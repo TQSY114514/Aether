@@ -47,6 +47,12 @@ const TOOL_AXIS = {
   delegate_task: AXES.FILESYSTEM, run_agent: AXES.FILESYSTEM,
   run_workflow: AXES.FILESYSTEM, run_arena: AXES.FILESYSTEM,
   task: AXES.FILESYSTEM, review_code: AXES.FILESYSTEM,
+  // Phase 3: topology-aware subagent supervisor tools
+  list_providers_and_models: AXES.FILESYSTEM,
+  probe_model_health: AXES.NETWORK,
+  spawn_subagent: AXES.FILESYSTEM,
+  peek_subagent_stream: AXES.FILESYSTEM,
+  control_subagent: AXES.FILESYSTEM,
 }
 
 /** 工具 → 轴 */

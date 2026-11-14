@@ -175,7 +175,7 @@ Parallelism: you may call multiple INDEPENDENT tools in one round (they run conc
  * @param {Function} [args.waitIfPaused] - Async function that suspends execution if the loop is paused.
  * @returns {Promise<Object>} The final LLM response message and metrics.
  */
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, onTurnComplete, options = {}, agentMode = 'ask', requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry }) {
   let activeProvider = provider
   let activeModel = model
   const normalizedAgentMode = normalizeAgentMode(agentMode)
@@ -1630,6 +1630,7 @@ Reply ONLY with JSON:
           }
         } catch {}
       }
+      try { onTurnComplete?.(convo) } catch {}
       if (totalChars > MAX_TOTAL_CHARS) {
         emitFileSummary()
         return '（工具输出超出上下文预算，已停止）'

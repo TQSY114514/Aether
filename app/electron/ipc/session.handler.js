@@ -47,6 +47,16 @@ function registerSessionHandlers(ipcMain, db) {
   ipcMain.handle('session:get-config', (_e, id) => db.getSessionConfig(id))
   ipcMain.handle('session:set-config', (_e, id, config) => db.setSessionConfig(id, config))
   ipcMain.handle('session:set-cwd', (_e, id, cwd) => {
+    try {
+      const sandbox = require('../tools/sandbox')
+      if (typeof sandbox.isInsideWorkspace === 'function' && sandbox.getWorkspaceRoot(id) !== cwd) {
+        // Only update _sessionWorkspaces if this session already had a pinned workspace
+        // (avoids re-enabling containment on unconstrained CWD sessions).
+        if (typeof sandbox.setWorkspaceRootForSession === 'function' && sandbox._hasSessionWorkspace?.(id)) {
+          sandbox.setWorkspaceRootForSession(id, cwd)
+        }
+      }
+    } catch {}
     if (typeof db.setSessionCwd === 'function') {
       return db.setSessionCwd(id, cwd)
     }

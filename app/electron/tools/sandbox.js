@@ -317,7 +317,7 @@ function isReparsePoint(p) {
 // 段命中即拒（大小写不敏感、正/反斜杠通吃）。yolo 例外由调用方
 // （registry 各工具 `ctx?.agentMode !== 'yolo'` 的门）保证，本函数只在
 // 非 yolo 语境下被调用。
-const SENSITIVE_DIR_SEGMENTS = new Set(['.ssh', '.claude'])
+const SENSITIVE_DIR_SEGMENTS = new Set(['.git', '.ssh', '.claude'])
 const SENSITIVE_DIR_PAIRS = {
   '.aetherai': new Set(['hooks', 'skills']),
   '.aether': new Set(['config.json', 'config.jsonc']),
@@ -330,15 +330,6 @@ const SENSITIVE_FILE_NAMES = new Set([
 
 function isSensitivePath(p) {
   const norm = String(p || '').replace(/\\/g, '/').toLowerCase()
-
-  // 严格实施只读防篡改保护：.git/hooks、.git/config 与 .aether/
-  if (
-    norm.includes('/.git/hooks') || norm.endsWith('/.git/hooks') || norm.startsWith('.git/hooks') || norm === '.git/hooks' ||
-    norm.includes('/.git/config') || norm.endsWith('/.git/config') || norm.startsWith('.git/config') || norm === '.git/config' ||
-    norm.includes('/.aether/') || norm.endsWith('/.aether') || norm.startsWith('.aether/') || norm === '.aether'
-  ) {
-    return true
-  }
 
   const segs = norm.split('/')
   for (const seg of segs) {
@@ -357,6 +348,12 @@ function isSensitivePath(p) {
 function checkWritePath(target, sessionId) {
   const r = resolveInside(target, { mustExist: false }, sessionId)
   if (r.ok !== true) return { ok: false, reason: r.reason || 'path outside workspace', abs: r.abs }
+  const normResolved = String(r.resolved || r.abs || '').replace(/\\/g, '/').toLowerCase()
+  const segs = normResolved.split('/')
+  // Phase 1 read-only carve-out: block all writes into .aether/ (while allowing read-only SOUL.md/config reads)
+  if (segs.includes('.aether')) {
+    return { ok: false, reason: '敏感路径禁止写入：.aether/ 为只读防篡改目录', abs: r.abs }
+  }
   // P0-C4：敏感路径（hooks/skills/.git/.ssh/.claude/.aether/config.json）默认拒绝，防写入
   // post-commit 钩子 /authorized_keys 之类的持久化 RCE 载体。
   if (isSensitivePath(r.resolved || r.abs)) {
@@ -644,4 +641,4 @@ async function runInSandboxExecutor(command, opts = {}) {
   } catch (err) { return { ok: false, stdout: '', stderr: 'sandbox error: ' + err.message, exitCode: null } }
 }
 
-module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, _isWorkspaceRootEnforced: () => _workspaceRoot !== null, DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }
+module.exports = { getWorkspaceRoot, getOriginalWorkspaceRoot, setWorkspaceRoot, setActiveProjectRoot, getActiveProjectRoot, setWorkspaceRootForSession, setShadowOrigin, clearSessionWorkspaces, isDangerousRoot, isInsideWorkspace, resolveInside, checkWritePath, checkCommand, isWhitelistedCommand, isSandboxExecutorEnabled, runInSandboxExecutor, hasUnsafeWindowsPrefix, hasDangerousExtension, isReparsePoint, isSensitivePath, isAuthorizedWorkspace, isWorkspaceTrusted, _isWorkspaceRootEnforced: () => _workspaceRoot !== null, _hasSessionWorkspace: (sid) => _sessionWorkspaces.has(sid), DANGEROUS_EXTENSIONS, NPX_ALLOWED_PACKAGES, NPX_ALLOWED_SCOPES, NPX_BLOCKED_PACKAGES }

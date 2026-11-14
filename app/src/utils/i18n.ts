@@ -1380,7 +1380,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
     "settings.notify_unavailable": "Notifications not supported",
-    "chat.subagent_running_tool": "Running: {0}"
+    "chat.subagent_running_tool": "Running: {0}",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "zh-CN": {
     "common.browse": "浏览...",
@@ -2670,7 +2678,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "设置失败",
     "settings.notify_sample": "这是一条测试通知 —— 任务完成/新消息提醒将在这里出现。",
     "settings.notify_sent": "已发送测试通知",
-    "settings.notify_unavailable": "通知不可用"
+    "settings.notify_unavailable": "通知不可用",
+    "chat.thinking": "思考过程",
+    "chat.output": "输出内容",
+    "chat.tools": "工具调用",
+    "chat.subagent_thinking_live": "(正在实时思考中...)",
+    "chat.subagent_no_thinking": "(暂无思考过程记录)",
+    "chat.subagent_streaming_live": "(正在流式输出中...)",
+    "chat.subagent_no_output": "(暂无输出内容)",
+    "chat.subagent_no_events": "(暂无工具调用或流事件记录)"
   },
   "es": {
     "app.name": "Aether",
@@ -3811,7 +3827,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "ja": {
     "app.name": "Aether",
@@ -4952,7 +4976,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "設定の更新に失敗しました",
     "settings.notify_sample": "テスト通知です。タスクの完了や新しいメッセージがここに表示されます。",
     "settings.notify_sent": "テスト通知を送信しました",
-    "settings.notify_unavailable": "通知はサポートされていません"
+    "settings.notify_unavailable": "通知はサポートされていません",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "zh-WEN": {
     "app.name": "Aether",
@@ -6098,7 +6130,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "fr": {
     "app.name": "Aether",
@@ -7239,7 +7279,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "de": {
     "app.name": "Aether",
@@ -8380,7 +8428,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "pt": {
     "app.name": "Aether",
@@ -9521,7 +9577,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "ru": {
     "app.name": "Aether",
@@ -10662,7 +10726,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "zh-TW": {
     "agent.ask": "詢問 — 危險操作前確認",
@@ -11816,7 +11888,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "設定失敗",
     "settings.notify_sample": "這是一條測試通知 —— 任務完成/新消息提醒將在這裡出現。",
     "settings.notify_sent": "已發送測試通知",
-    "settings.notify_unavailable": "通知不可用"
+    "settings.notify_unavailable": "通知不可用",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "ar": {
     "app.name": "Aether",
@@ -12957,7 +13037,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "uk": {
     "app.name": "Aether",
@@ -14098,7 +14186,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "ko": {
     "app.name": "Aether",
@@ -15239,7 +15335,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   },
   "hi": {
     "app.name": "Aether",
@@ -16380,7 +16484,15 @@ const translations: Record<string, Record<string, string>> = {
     "settings.set_failed": "Failed to update setting",
     "settings.notify_sample": "This is a test notification — task completions and new messages will appear here.",
     "settings.notify_sent": "Test notification sent",
-    "settings.notify_unavailable": "Notifications not supported"
+    "settings.notify_unavailable": "Notifications not supported",
+    "chat.thinking": "Thinking",
+    "chat.output": "Output",
+    "chat.tools": "Tools",
+    "chat.subagent_thinking_live": "(Thinking stream active...)",
+    "chat.subagent_no_thinking": "(No thinking content recorded)",
+    "chat.subagent_streaming_live": "(Output streaming...)",
+    "chat.subagent_no_output": "(No output produced yet)",
+    "chat.subagent_no_events": "(No tool invocations or stream events recorded)"
   }
 }
 

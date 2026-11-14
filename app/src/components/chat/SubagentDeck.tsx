@@ -473,7 +473,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                           ) : (
                             !item.currentTool && (
                               <div className="italic text-[var(--text-muted)] py-1">
-                                (No tool invocations or stream events recorded)
+                                {t('chat.subagent_no_events')}
                               </div>
                             )
                           )}

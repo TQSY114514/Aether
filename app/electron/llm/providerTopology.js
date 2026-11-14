@@ -157,16 +157,37 @@ function inferModelCapabilities(modelId = '') {
   return tags
 }
 
+function isAnthropicUrl(rawUrl) {
+  const s = String(rawUrl || '').trim()
+  if (!s) return false
+  try {
+    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`)
+    const h = u.hostname.toLowerCase()
+    return h === 'anthropic.com' || h.endsWith('.anthropic.com')
+  } catch {
+    return false
+  }
+}
+
+function isResponsesProtocol(protocol) {
+  return protocol === 'responses' || protocol === 'openai-responses'
+}
+
 /**
  * Resolves probe target URL.
  */
 function resolveProbeUrl(provider) {
   const protocol = (provider.api_format || provider.protocol || provider.type || 'openai').toLowerCase()
   const raw = (provider.api_url || provider.baseUrl || provider.base_url || '').replace(/\/+$/, '')
-  if (protocol === 'anthropic' || raw.includes('anthropic.com')) {
+  if (protocol === 'anthropic' || isAnthropicUrl(raw)) {
     if (raw.endsWith('/messages')) return raw
     if (raw.endsWith('/v1')) return `${raw}/messages`
     return `${raw}/v1/messages`
+  }
+  if (isResponsesProtocol(protocol)) {
+    if (raw.endsWith('/responses')) return raw
+    if (raw.endsWith('/v1')) return `${raw}/responses`
+    return `${raw}/v1/responses`
   }
   if (raw.endsWith('/chat/completions')) return raw
   if (raw.endsWith('/v1')) return `${raw}/chat/completions`
@@ -179,13 +200,12 @@ function resolveProbeUrl(provider) {
 function resolveProbeHeaders(provider) {
   const protocol = (provider.api_format || provider.protocol || provider.type || 'openai').toLowerCase()
   const apiKey = provider.api_key || provider.apiKey || ''
-  const isAnthropic = protocol === 'anthropic' || String(provider.api_url || provider.baseUrl || '').includes('anthropic.com')
+  const isAnthropic = protocol === 'anthropic' || isAnthropicUrl(provider.api_url || provider.baseUrl || provider.base_url || '')
 
   const hdrs = { 'Content-Type': 'application/json' }
   if (isAnthropic) {
     if (apiKey) hdrs['x-api-key'] = apiKey
     hdrs['anthropic-version'] = '2023-06-01'
-    if (apiKey) hdrs['Authorization'] = `Bearer ${apiKey}`
   } else {
     if (apiKey) hdrs['Authorization'] = `Bearer ${apiKey}`
   }
@@ -223,12 +243,20 @@ async function probeSingleModel(opts = {}) {
   const headers = resolveProbeHeaders(provider)
   const fetchFn = mockFetch || globalThis.fetch
 
-  const payload = {
-    model: modelId,
-    messages: [{ role: 'user', content: '1' }],
-    max_tokens: 1,
-    stream: true,
-  }
+  const protocol = (provider.api_format || provider.protocol || provider.type || 'openai').toLowerCase()
+  const payload = isResponsesProtocol(protocol)
+    ? {
+        model: modelId,
+        input: '1',
+        max_output_tokens: 1,
+        stream: true,
+      }
+    : {
+        model: modelId,
+        messages: [{ role: 'user', content: '1' }],
+        max_tokens: 1,
+        stream: true,
+      }
 
   const controller = new AbortController()
   let timeoutId = null

@@ -279,8 +279,10 @@ ipcMain.handle('chat:complete', handleChatComplete)
     // - personaId === 0: explicit "No persona" (clean slate)
     // - personaId == null: check session.persona_id, else auto-inject workspace SOUL.md if present
     const session = session0
-    let wsRoot = null
-    try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+    let wsRoot = session0?.cwd || null
+    if (!wsRoot) {
+      try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+    }
 
     const targetPersonaId = (personaId !== undefined && personaId !== null)
       ? Number(personaId)
@@ -441,19 +443,26 @@ ipcMain.handle('chat:complete', handleChatComplete)
       try {
         const ff = require('../featureFlags')
         if (ff.isEnabled(db, 'memory.codeUnderstanding')) {
-          let wsRoot = null
-          try { wsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
-          if (wsRoot) setImmediate(() => { try { codeUnderstanding.indexWorkspace(db, wsRoot, { maxFiles: 2000 }) } catch {} })
+          let codeWsRoot = session0?.cwd || null
+          if (!codeWsRoot) {
+            try { codeWsRoot = (session0 && session0.config && JSON.parse(session0.config).workspace) || null } catch {}
+          }
+          if (codeWsRoot) setImmediate(() => { try { codeUnderstanding.indexWorkspace(db, codeWsRoot, { maxFiles: 2000 }) } catch {} })
         }
       } catch {}
-      // Inject the available-skills list as a system message so the model can
-      // call use_skill when a task matches. Only when tools are on (skills are
-      // meaningless without the tool loop). Done after compaction so the list
-      // is never summarized away.
+      // Inject the available-skills list and provider topology snapshot as system
+      // messages so the desktop main agent can call use_skill and dispatch
+      // topology-aware subagents. Done after compaction so they are never summarized away.
       const skillsBlock = skills.formatSkillsForPrompt()
-      // memBlock was already injected into `compacted` above (shared by both paths).
-      // toolMessages 可被溢出自愈重试重建（force 压缩后），故用 let。
-      let toolMessages = skillsBlock ? [{ role: 'system', content: skillsBlock }, ...compacted] : compacted
+      let topoXml = ''
+      try {
+        const { buildTopologyPromptXml } = require('../llm/providerTopology')
+        topoXml = buildTopologyPromptXml(db)
+      } catch {}
+      const extraSystemMsgs = []
+      if (skillsBlock) extraSystemMsgs.push({ role: 'system', content: skillsBlock })
+      if (topoXml) extraSystemMsgs.push({ role: 'system', content: topoXml })
+      let toolMessages = extraSystemMsgs.length > 0 ? [...extraSystemMsgs, ...compacted] : compacted
       const asstMsg = db.addMessage({ session_id: sessionId, role: 'assistant', content: '', model_used: model.model_name, provider_used: provider.id, status: 'success' })
       const msgId = asstMsg.lastInsertRowid
       // Track msgId → session mapping for abortControllers cleanup on session delete
