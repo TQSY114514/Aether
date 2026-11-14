@@ -117,7 +117,7 @@ export function getCategoryTagClass(kind: string): string {
     case 'major_aggregator':
       return 'border-[var(--border)] text-[var(--text-primary)] bg-[var(--bg-secondary)]'
     case 'third_party_relay':
-      return 'border-[var(--border)] text-[var(--text-secondary)] bg-[var(--bg-tertiary)]'
+      return 'border-[var(--border)] text-[var(--text-secondary)] bg-[var(--bg-secondary)]'
     case 'local_engine':
       return 'border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-secondary)]'
     default:
