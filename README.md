@@ -22,7 +22,7 @@ Compare models on real coding tasks, inspect the results, and use that evidence 
 [![license](https://img.shields.io/badge/license-MIT-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#1-windows-desktop-installation-primary-edition--recommended)
 
-**[English](./README.md)** · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md) · [20-Peer Competitive Matrix](./docs/competitive-analysis.md)
+**[English](./README.md)** · [简体中文](./README.zh-CN.md) · [日本語](./README.ja.md)
 
 </div>
 
@@ -207,49 +207,38 @@ flowchart LR
 
 ---
 
-## Honest Positioning (20-Peer Radar Comparison)
-
-Aether avoids inflated "all-10/10" marketing charts. Our genuine strengths are **Local SQLite Data Ownership (`9.6/10`)** and **Multi-Model BYOK + Built-in ELO Arena & Winner Patch Apply (`9.4/10`)**. On **Desktop Workbench UX (`8.4/10`)**, Aether provides a focused, decluttered workspace (Workspace Hub, live streaming reasoning, BTW side questions, Ink v5 terminal TUI, and Single Authoritative Home layout), while candidly trailing deep editor forks like Cursor (`9.8`) and Windsurf (`9.6`). On **Permission Safety (`8.6/10`)**, Aether enforces 4 agent modes, a 6-axis permission gate, Win32 Job Object process governance, and optional Docker sandboxing, but trails OS-kernel-sandboxed tools like Codex CLI (`9.8`) and Claude Code (`9.0`) when running in default Windows user-space (`localBackend`). On **Multi-Agent Orchestration (`7.6/10`)**, Aether provides task-journal subagents, crash recovery, and an Electron-free SDK. On **Single-Model Coding Depth (`7.2/10`)** (reinforced by Hashline hash-anchored editing and TDD auto-review) and **Early-Stage Community Ecosystem (`6.5/10`)**, the chart candidly depicts our honest gap behind commercial giants (generated via `node app/scripts/gen-radar.cjs`):
-
-<div align="center">
-  <img src="./assets/agent-radar-2026.en.svg" width="88%" alt="Aether · Candid Capability & Architecture Self-Assessment Radar" />
-</div>
-
-For the complete scoring breakdown, explicit engineering limitations, and 20-peer comparison matrix, see [docs/competitive-analysis.md](./docs/competitive-analysis.md).
-
----
-
 ## Acknowledgements
 
-Aether stands on the shoulders of these open-source projects and engineering pioneers (traced directly to the codebase modules they inspired):
+Aether stands on the shoulders of these open-source projects and engineering pioneers (traced to the codebase modules they inspired):
 
-### Agent Frameworks & Runtime Mechanisms
-- **[Claude Code](https://claude.ai/code) (Anthropic)** — Verification test loop (`debugAgent.js`), 10-point lifecycle hook system (`hooks.js`), progressive permission ladder (`trustEngine.js`), `Ctrl+T` task checklist panel, `ask_user` structured prompts, and inline file Diff previews (`toolImpact.js`).
+### Agent Runtime & Coding Harnesses
+- **[Claude Code](https://claude.ai/code) (Anthropic)** — Cascading `AGENTS.md` instruction discovery (`projectInstructions.js`), post-compaction file rehydration (`compaction.js`), verification loop (`debugAgent.js`), 10-point lifecycle hooks (`hooks.js`), progressive permission ladder (`trustEngine.js`), `Ctrl+T` task checklist, `ask_user` prompts, and inline Diff previews (`toolImpact.js`).
+- **[OpenAI Codex CLI](https://github.com/openai/codex)** — Evidence-based test/diff verification (`toolLoop.js`), cascading project instruction loading, compact TUI elapsed timers, single-key permission shortcuts (`y/s/a/n`), and checkpoint rewind UX.
+- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI-to-wire decoupling (`agentMessage.js`), unified event-stream telemetry (`agentEvents.js`), mid-execution steering (`steering.js`), and large-output disk spill to `$TMPDIR` with tail preview (`toolResultMiddleware.js`).
+- **[OpenCode](https://github.com/sst/opencode)** — Terminal TUI keyboard state machine & timed leader keys (`keyHandlers.js`), windowed `DialogSelect` lists, compile-time prompt cache policy (`cachePolicy.js`), and context budget manager (`contextBudget.js`).
+- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi) & [roboomp](https://github.com/roboomp)** — Terminal AI coding harness, automated triage & PR workflows, hash-anchored edits (`patchEngine.js` Hashline Edits) preventing concurrent clobbering and line drift, symbol-aware LSP/DAP code intelligence, and isolated multi-worktree subagent orchestration.
+- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` fault-tolerant patch parser (`patchEngine.js`), Git workflow integration, and compaction handoff framing.
+- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8-tier cascading fuzzy edit matchers (`editMatchers.js`), read-before-write file `mtime` freshness guard (`sessionContext.js`), background task `branchGeneration` isolation & notification coalescing (`backgroundTasks.js`), built-in agent & workflow profiles (`.aether/agents`, `.aether/workflows`), and GitHub URL / `owner/repo` skill installer (`skills.js`).
+- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — Token budget estimation (`contextBudget.js`), approval mode cycling, and 50ms event-stream debounce coalescing (`runSession.js`).
+- **[Cline](https://github.com/cline/cline), [Roo Code](https://github.com/RooVetGit/Roo-Code) & [Continue](https://github.com/continuedev/continue)** — Context output folding/pruning (`compaction.js`), visible sub-step task tracking, and declarative configuration-as-code schema (`.aether/config.json`).
+- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — Multi-granularity local repository search & context-aware code retrieval ergonomics (`registry.js`, `repoMap.js`).
+
+### Context, Memory & Safety Mechanisms
 - **[OpenClaw](https://github.com/openclaw/openclaw)** — Context compaction planning (`compaction.js`), malformed tool-call auto-repair (`toolCallRepair.js`), read-only tool caching (`toolCache.js`), semantic loop hash detection (`toolResultHash.js`), and secret-redacting tool result middleware (`toolResultMiddleware.js`).
 - **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — Iteration budget control & graceful wrap-up (`iterationBudget.js`), SQLite + FTS5 long-term memory (`autoMemory.js`), entity-relationship Knowledge Graph (`knowledgeGraph.js`), trajectory compression (`trajectory.js`), and long-term skill acquisition (`habitLearner.js`).
-- **[OpenCode](https://github.com/sst/opencode)** — Terminal TUI keyboard state machine & timed leader keys (`keyHandlers.js`), windowed `DialogSelect` lists, compile-time prompt cache policy (`cachePolicy.js`), and context budget manager (`contextBudget.js`).
-- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI-to-wire decoupling (`agentMessage.js`), unified event-stream telemetry (`agentEvents.js`), and mid-execution steering (`steering.js`).
-- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8-tier cascading fuzzy edit matchers (`editMatchers.js`), read-before-write file `mtime` freshness guard (`sessionContext.js`), two-tier zero-LLM-cost local microcompaction (`microcompact.js`), background task `branchGeneration` isolation & notification coalescing (`backgroundTasks.js`), built-in agent & workflow profiles (`.aether/agents`, `.aether/workflows`), and GitHub URL / `owner/repo` skill installer (`skills.js`).
-- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent control-plane governance (`AgentSettings.tsx`), role-isolated multi-agent verification (`Hunter != Verifier` in `securityAudit.js`, `agentRoles.js`), and autonomous plan step progression & completion finalization (`planning.js`).
-- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — Multi-granularity local repository search & context-aware code retrieval ergonomics (`registry.js`, `repoMap.js`).
-- **[OpenAI Codex CLI](https://github.com/openai/codex)** — Evidence-based test/diff verification (`toolLoop.js`), compact TUI elapsed timers, single-key permission shortcuts (`y/s/a/n`), and checkpoint rewind UX.
-- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` fault-tolerant patch parser (`patchEngine.js`), Git workflow integration, and compaction handoff framing.
-- **[Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code)** — Context output folding/pruning (`compaction.js`) and visible sub-step task tracking.
-- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — Token budget estimation (`contextBudget.js`), approval mode cycling, and `aichat`'s 50ms event-stream debounce coalescing (`runSession.js`).
-- **[Evolver](https://github.com/EvoMap/evolver)** — Genome Evolution Protocol (GEP) strategy reflection architecture.
-- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** — Pre-execution hierarchical task decomposition (`planning.js`).
-- **[Continue](https://github.com/continuedev/continue)** — Declarative configuration-as-code schema (`.aether/config.json`).
-- **[Grok Build](https://x.ai), [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — Specialized sub-agent role profiles (`agentRoles.js`), long-running execution state machine (`longRunningTask.js`), and run timeline drawer concepts.
-- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — Loopback binding & HTTP Host header validation lessons (QVD-2026-57410 defense) and badge row visual conventions.
-- **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena multi-model competitive execution & Git worktree isolation architecture (`/arena` inspiring `shadowGit.js` shadow workspace sandboxing, concurrent model dispatch, and `arena:apply-patch` winner patch apply), `qwencoder-eval` benchmarking methodology, thinking parameter adaptation (`enable_thinking` in `reasoning.js`), and long-range coding benchmarks.
-- **[Jules](https://jules.google.com)** (Google Labs) — Autonomous asynchronous background coding agent, cloud sandbox-isolated Issue-to-PR automation, and multi-task hosted orchestration.
-- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi) & [roboomp](https://github.com/roboomp)** — Terminal AI coding agent harness, roboomp automated triage & PR agent, hash-anchored edits (Hashline Edits in `patchEngine.js`) preventing concurrent clobbering and line drift, symbol-aware LSP/DAP code intelligence, and isolated multi-worktree subagent orchestration.
-- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — Automated PR-level line-by-line review, AST-aware unsafe API interception (`.coderabbit.yaml`), and repository-wide architectural semantic graph regression defense.
-- **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — Microkernel architectural invariant guards & headless isolation (`architecture.rs` static analysis principles inspiring the 5-gate `check-architecture.js` suite, headless decoupling of `database.js` from Electron, and ground-truth tree-search validation).
-- **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — Built-in local model arena (`arena.handler.js`), pairwise blind ELO ranking system, and coding capability evaluation harnesses.
-- **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — Multi-backend execution abstractions (`backend.js`, `dockerBackend.js`, `sshBackend.js`) and persistent subagent sandbox workflows.
-- **[Kiro](https://aws.amazon.com/q/developer/)** — Adaptive reasoning level controls (budget-based thinking vs binary toggle in `reasoning.js` / `EffortControl.tsx`) and inline subagent execution visualization (`SubagentDeck.tsx`).
 - **[Wish](https://github.com/WindustH/wish-core) (WindustH)** — Zero-token MCP/Skill CLI bridge architecture for prompt cache protection, Windows Win32 Job Object kernel process tree lifecycle governance, and fetch-based resilient stream state machine.
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — Loopback binding & HTTP Host header validation lessons (QVD-2026-57410 defense) and badge row visual conventions.
+- **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — Microkernel architectural invariant guards & headless isolation (`architecture.rs` principles inspiring `check-architecture.js` static gates and Electron-free `database.js` decoupling).
+
+### Evaluation, Code Review & Multi-Agent Orchestration
+- **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena multi-model competitive execution & Git worktree isolation (`/arena` inspiring `shadowGit.js` and `arena:apply-patch`), `qwencoder-eval` benchmarking methodology, and thinking parameter adaptation (`enable_thinking` in `reasoning.js`).
+- **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — Built-in local model arena (`arena.handler.js`), pairwise blind ELO ranking system, and coding capability evaluation harnesses.
+- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent control-plane governance (`AgentSettings.tsx`), role-isolated multi-agent verification (`Hunter != Verifier` in `securityAudit.js`, `agentRoles.js`), and autonomous plan step progression (`planning.js`).
+- **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — Multi-backend execution abstractions (`backend.js`, `dockerBackend.js`, `sshBackend.js`) and persistent subagent sandbox workflows.
+- **[Jules](https://jules.google.com)** (Google Labs), **[Grok Build](https://x.ai)**, **[Amp](https://ampcode.com)** & **[Devin Desktop (Windsurf)](https://windsurf.com)** — Asynchronous background coding agents, specialized sub-agent role profiles (`agentRoles.js`), long-running execution state machine (`longRunningTask.js`), and run timeline drawer concepts.
+- **[Kiro](https://aws.amazon.com/q/developer/)** — Adaptive reasoning level controls (`reasoning.js` / `EffortControl.tsx`) and inline subagent execution visualization (`SubagentDeck.tsx`).
+- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** & **[Evolver](https://github.com/EvoMap/evolver)** — Pre-execution hierarchical task decomposition (`planning.js`) and Genome Evolution Protocol (GEP) strategy reflection.
+- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — Automated PR-level line-by-line review, AST-aware unsafe API interception (`.coderabbit.yaml`), and repository-wide architectural semantic graph regression defense.
 
 ### Core Infrastructure & UI Ecosystem
 - **Runtime & Storage**: [Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com).

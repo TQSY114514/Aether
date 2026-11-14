@@ -20,7 +20,7 @@
 [![license](https://img.shields.io/badge/license-MIT-8b949e?style=flat-square&labelColor=161b22&label=license)](./LICENSE)
 [![platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22&logo=windows&logoColor=white)](#デスクトップ版-windows--推奨)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md) · **[日本語](./README.ja.md)** · [競合分析](./docs/competitive-analysis.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · **[日本語](./README.ja.md)**
 
 </div>
 
@@ -34,18 +34,6 @@
 2. **4段階の自律動作モードと6軸権限ゲート。** `explore`（読取専用探索）、`workspace`（ワークスペース内書込・承認）、`auto_review`（TDD自己修復・テスト合格まで反復）、`unrestricted`（完全自律）の4つのモードをプロジェクトに応じて選択。提案されたファイル変更はインライン差分（Diff）として表示され、リスクのあるコマンドは実行前に承認を求めます。
 3. **構造化長期記憶（AutoMemory & Project Brain）。** API キー、チャット履歴、知識グラフはすべてローカルの SQLite データベース（`%APPDATA%/aetherai/aetherai.db`）に保存され、ワークスペース単位で分離されます。
 4. **デスクトップ中心ワークベンチとヘッドレス自動化。** **開発の主軸は 100% Windows デスクトップ版 (GUI)** に置かれており、Workspace 枢紐（プロジェクト切り替え・お気に入り・スコープ絞り込み）、5段階思考予算制御、ビジュアルなモデルアリーナ、リアルタイム推論トレース、BTW追問ドロワー、Diff レビューの全機能を提供します。軽量なターミナル TUI（`aether tui`）とヘッドレス CLI（`aether run "prompt"` / `--eval`）および SDK は npm から提供されます。
-
----
-
-## 誠実な自己評価レーダー
-
-公開ベンチマークと再現可能な評価スクリプト（`node app/scripts/gen-radar.cjs`）に基づき、20 の主要 Agent（Claude Code, Codex, Cursor, Windsurf, Trae, Devin, OpenHands など）に対する客観的自己評価スコア:
-
-<p align="center">
-  <img src="./assets/agent-radar-2026.ja.svg" width="88%" alt="Aether 主要エージェント20種との誠実な自己評価レーダーチャート" />
-</p>
-
-Aether の客観的な優位性は **ローカルファーストのプライバシー (`9.6/10`)、マルチモデル・ブラインド Arena (`9.4/10`)、および権限安全ゲート (`8.6/10`)** にあります。デスクトップワークベンチ体験（`8.4/10`、Workspace 枢紐、5段階思考予算、TUI を備えるが、Cursor などのフル IDE 統合には及ばない）、多 Agent オーケストレーション（`7.6/10`、サブタスクジャーナル・クラッシュ復旧）、単一モデルの純粋なコーディング能力（`7.2/10`、Hashline ハッシュアンカー編集と TDD 自動自己修復ループを実装）やエコシステム成熟度（`6.5/10`、個人開発段階）においては、大規模商用ツールとの客観的な差を率直に認めています（詳細な減点根拠は [docs/competitive-analysis.md](./docs/competitive-analysis.md) を参照）。
 
 ---
 
@@ -107,34 +95,34 @@ start.bat        # 依存関係をインストールし、フロントエンド�
 
 Aether の設計とコードベースは、以下のオープンソースプロジェクトやエンジニアリング実践から具体的な知見を得ています:
 
-### Agent フレームワークとランタイム設計
+### Agent ランタイムとコーディングハーネス
+- **[Claude Code](https://claude.ai/code) (Anthropic)** — カスケード型 `AGENTS.md` 探索（`projectInstructions.js`）、圧縮後の重要ファイル再水和（`compaction.js`）、検証デバッグループ（`debugAgent.js`）、10 点ライフサイクルフック（`hooks.js`）、6 軸権限ラダー（`trustEngine.js`）、`Ctrl+T` タスクパネル、`ask_user` 構造化プロンプト、およびインライン Diff プレビュー（`toolImpact.js`）。
+- **[OpenAI Codex CLI](https://github.com/openai/codex)** — テストと Git Diff の証拠に基づく検証ループ（`toolLoop.js`）、カスケード型指示探索、TUI コンパクト実行タイマー、単一キー権限ショートカット（`y/s/a/n`）、およびチェックポイント巻き戻し（`rewind`）UX。
+- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI・通信層分離抽象化（`agentMessage.js`）、統合イベントストリームテレメトリ（`agentEvents.js`）、実行中の動的ステアリング（`steering.js`）、および巨大出力の `$TMPDIR` ディスク退避と末尾プレビュー（`toolResultMiddleware.js`）。
+- **[OpenCode](https://github.com/sst/opencode)** — ターミナル TUI キーボード状態マシンと Timed Leader Key（`keyHandlers.js`）、ウィンドウ化 `DialogSelect` リスト、コンパイル時プロンプトキャッシュポリシー（`cachePolicy.js`）、およびコンテキストバジェットマネージャー（`contextBudget.js`）。
+- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi) & [roboomp](https://github.com/roboomp)** — ターミナル AI コーディングハーネス、自動 Triage/PR ワークフロー、ハッシュアンカー編集（`patchEngine.js` の Hashline Edits）、LSP/DAP シンボル認識コードインテリジェンス、およびマルチ Worktree サブエージェントオーケストレーション。
+- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` 耐障害パッチパーサー（`patchEngine.js`）、Git ワークフロー統合、およびコンテキスト圧縮ハンドオフ設計。
+- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 段階カスケードファジー編集マッチャー（`editMatchers.js`）、書き込み前の読み取りタイムスタンプ鮮度ガード（`sessionContext.js` `readFileState`）、バックグラウンドタスクの `branchGeneration` 分離と通知集約（`backgroundTasks.js`）、組み込みマルチ Agent ロールとワークフローテンプレート（`.aether/agents`、`.aether/workflows`）、および GitHub URL / `owner/repo` スキルインストーラー（`skills.js`）。
+- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — トークンバジェット見積もり（`contextBudget.js`）、承認モード切り替え、および 50ms イベントストリームデバウンス集約（`runSession.js`）。
+- **[Cline](https://github.com/cline/cline)、[Roo Code](https://github.com/RooVetGit/Roo-Code) & [Continue](https://github.com/continuedev/continue)** — ツール出力の折りたたみ・トリミング戦略（`compaction.js`）、可視化サブステップ追跡、および宣言的設定スキーマ（`.aether/config.json`）。
+- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — マルチ粒度ローカルリポジトリ検索とコンテキスト認識コード検索パイプラインの設計着想（`registry.js`、`repoMap.js`）。
 
-- **[Claude Code](https://claude.ai/code) (Anthropic)** — 検証デバッグループ（`debugAgent.js`）、10 点ライフサイクルフック（`hooks.js`）、6 軸権限ラダー（`trustEngine.js`）、`Ctrl+T` タスクパネル、`ask_user` 構造化プロンプト、およびファイル変更のインライン Diff プレビュー（`toolImpact.js`）。
+### コンテキスト・メモリ・安全機構
 - **[OpenClaw](https://github.com/openclaw/openclaw)** — コンテキスト圧縮アルゴリズム（`compaction.js`）、不正なツール呼び出し自動修復（`toolCallRepair.js`）、読み取り専用ツールキャッシュ（`toolCache.js`）、意味的無限ループハッシュ検知（`toolResultHash.js`）、およびツール結果サニタイズミドルウェア（`toolResultMiddleware.js`）。
 - **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — 反復バジェット制御とグレースフル終了（`iterationBudget.js`）、SQLite + FTS5 長期メモリ（`autoMemory.js`）、エンティティ関係知識グラフ（`knowledgeGraph.js`）、対話軌跡圧縮（`trajectory.js`）、および長期スキル習得（`habitLearner.js`）。
-- **[OpenCode](https://github.com/sst/opencode)** — ターミナル TUI キーボード状態マシンと Timed Leader Key（`keyHandlers.js`）、ウィンドウ化 `DialogSelect` リスト、コンパイル時プロンプトキャッシュポリシー（`cachePolicy.js`）、およびコンテキストバジェットマネージャー（`contextBudget.js`）。
-- **[pi (`pi-mono`)](https://github.com/badlogic/pi-mono) (Mario Zechner)** — `AgentMessage` UI・通信層分離抽象化（`agentMessage.js`）、統合イベントストリームテレメトリ（`agentEvents.js`）、および実行中の動的ステアリング（`steering.js`）。
-- **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 段階カスケードファジー編集マッチャー（`editMatchers.js`）、書き込み前の読み取りタイムスタンプ鮮度ガード（`sessionContext.js` `readFileState`）、2 段階ゼロ LLM コストのローカルマイクロ圧縮（`microcompact.js`）、バックグラウンドタスクの `branchGeneration` 分離と通知集約（`backgroundTasks.js`）、組み込みマルチ Agent ロールとワークフローテンプレート（`.aether/agents`、`.aether/workflows`）、および GitHub URL / `owner/repo` スキルインストーラー（`skills.js`）。
-- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent ランタイム制御プレーンガバナンス（`AgentSettings.tsx`）、ロール分離されたマルチ Agent 交差検証（`securityAudit.js` における `Hunter != Verifier`、`agentRoles.js`）、および計画ステップの自動進行と完了時最終確定（`planning.js`）。
-- **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — マルチ粒度ローカルリポジトリ検索とコンテキスト認識コード検索パイプラインの設計着想（`registry.js`、`repoMap.js`）。
-- **[OpenAI Codex CLI](https://github.com/openai/codex)** — テストと Git Diff の証拠に基づく検証ループ（`toolLoop.js`）、TUI コンパクト実行タイマー、単一キー権限ショートカット（`y/s/a/n`）、およびチェックポイント巻き戻し（`rewind`）UX。
-- **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` 耐障害パッチパーサー（`patchEngine.js`）、Git ワークフロー統合、およびコンテキスト圧縮ハンドオフ設計。
-- **[Cline](https://github.com/cline/cline) & [Roo Code](https://github.com/RooVetGit/Roo-Code)** — ツール出力のコンテキスト折りたたみ・トリミング戦略（`compaction.js`）および可視化サブステップ追跡。
-- **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — トークンバジェット見積もり（`contextBudget.js`）、承認モード切り替え、および `aichat` の 50ms イベントストリームデバウンス集約（`runSession.js`）。
-- **[Evolver](https://github.com/EvoMap/evolver)** — ゲノム進化プロトコル (GEP) 戦略内省アーキテクチャ。
-- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** — 実行前の階層的タスク分解と計画設計（`planning.js`）。
-- **[Continue](https://github.com/continuedev/continue)** — 宣言的設定スキーマ（`.aether/config.json`）。
-- **[Grok Build](https://x.ai) & [Amp](https://ampcode.com) & [Devin Desktop (Windsurf)](https://windsurf.com)** — 特化型サブ Agent ロール定義（`agentRoles.js`）、長時間実行状態マシン（`longRunningTask.js`）、および実行タイムラインドロワーの設計着想。
-- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — ローカルゲートウェイのループバックバインドおよび HTTP Host ヘッダー検証による DNS Rebinding 防御（QVD-2026-57410 防御実践）とバッジ行の視覚規約。
-- **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena マルチモデル並行競合実行と Git Worktree 隔離実行アーキテクチャ（`/arena` に着想を得た `shadowGit.js` シャドウワークスペース、並行モデルディスパッチ、および `arena:apply-patch` 勝者パッチ反映）、`qwencoder-eval` 評価設計、思考パラメータ適応（`reasoning.js` の `enable_thinking`）、および長文コーディングベンチマーク。
-- **[Jules](https://jules.google.com)** (Google Labs) — 完全自律型の非同期バックグラウンドコーディングAgent、セキュアなクラウドサンドボックスによるIssue-to-PR自動化、およびマルチタスク並行管理設計。
-- **[oh-my-pi (`omp`)](https://github.com/can1357/oh-my-pi) & [roboomp](https://github.com/roboomp)** — ターミナル AI コーディングハーネス、roboomp 自動 Triage/PR ボット、同時編集の競合と行番号ドリフトを防ぐハッシュアンカー編集（`patchEngine.js` の Hashline Edits）、LSP/DAP シンボル認識コードインテリジェンス、および分離されたマルチ Worktree サブエージェントオーケストレーション。
-- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自動 PR 行単位コードレビュー、AST 認識の高リスク API 遮断（`.coderabbit.yaml`）、およびリポジトリ全体のセマンティックグラフ回帰防御。
-- **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — マイクロカーネルアーキテクチャ不変条件とヘッドレス隔離（architecture.rs の静的解析に着想を得た 5 重の check-architecture.js ゲート、ヘッドレス環境での database.js の Electron 依存分離、および真値判定器に基づく検証設計）。
-- **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — 組み込みローカルモデルアリーナ（arena.handler.js）、ブラインドペア ELO ランキングシステム、およびコーディング能力評価ハーネス。
-- **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — マルチバックエンド実行抽象化（backend.js, dockerBackend.js, sshBackend.js）と永続的なサブエージェントサンドボックスワークフロー。
-- **[Kiro](https://aws.amazon.com/q/developer/)** — 適応型推論深度制御（reasoning.js / EffortControl.tsx）およびインラインサブエージェント実行ビジュアル（SubagentDeck.tsx）。
 - **[Wish](https://github.com/WindustH/wish-core) (WindustH)** — プロンプトキャッシュを保護するオンデマンド CLI ブリッジ、Windows Win32 Job Object によるカーネルレベルのプロセスツリー統治、および Fetch ベースの高耐障害性ストリーム状態マシン。
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** — ローカルゲートウェイのループバックバインドおよび HTTP Host ヘッダー検証による DNS Rebinding 防御（QVD-2026-57410 防御実践）とバッジ行の視覚規約。
+- **[Open Math Harness](https://github.com/openmathmodel/open-math-harness) (SAIR Foundation)** — マイクロカーネルアーキテクチャ不変条件とヘッドレス隔離（`architecture.rs` の静的解析に着想を得た 5 重の `check-architecture.js` ゲート、および `database.js` の Electron 依存分離）。
+
+### 評価・コードレビュー・マルチ Agent オーケストレーション
+- **[Qwen Code](https://github.com/QwenLM/qwen-code) & [Qwen-Coder](https://github.com/QwenLM/Qwen3-Coder)** (Alibaba Cloud) — Agent Arena マルチモデル並行競合実行と Git Worktree 隔離実行（`/arena` に着想を得た `shadowGit.js` および `arena:apply-patch`）、`qwencoder-eval` 評価設計、および思考パラメータ適応（`reasoning.js` の `enable_thinking`）。
+- **[LMSYS Chatbot Arena](https://chat.lmsys.org/) & [SWE-bench](https://www.swebench.com/)** — 組み込みローカルモデルアリーナ（`arena.handler.js`）、ブラインドペア ELO ランキングシステム、およびコーディング能力評価ハーネス。
+- **[Paperclip](https://github.com/paperclipai/paperclip)** — Agent ランタイム制御プレーンガバナンス（`AgentSettings.tsx`）、ロール分離されたマルチ Agent 交差検証（`securityAudit.js` における `Hunter != Verifier`、`agentRoles.js`）、および計画ステップの自動進行（`planning.js`）。
+- **[OpenHands](https://github.com/All-Hands-AI/OpenHands) (All-Hands AI)** — マルチバックエンド実行抽象化（`backend.js`、`dockerBackend.js`、`sshBackend.js`）と永続的なサブエージェントサンドボックスワークフロー。
+- **[Jules](https://jules.google.com)** (Google Labs)、**[Grok Build](https://x.ai)**、**[Amp](https://ampcode.com)** & **[Devin Desktop (Windsurf)](https://windsurf.com)** — 非同期バックグラウンドコーディング Agent、特化型サブ Agent ロール定義（`agentRoles.js`）、長時間実行状態マシン（`longRunningTask.js`）、および実行タイムラインドロワーの設計着想。
+- **[Kiro](https://aws.amazon.com/q/developer/)** — 適応型推論深度制御（`reasoning.js` / `EffortControl.tsx`）およびインラインサブエージェント実行ビジュアル（`SubagentDeck.tsx`）。
+- **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** & **[Evolver](https://github.com/EvoMap/evolver)** — 実行前の階層的タスク分解（`planning.js`）およびゲノム進化プロトコル (GEP) 戦略内省アーキテクチャ。
+- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自動 PR 行単位コードレビュー、AST 認識の高リスク API 遮断（`.coderabbit.yaml`）、およびリポジトリ全体のセマンティックグラフ回帰防御。
 
 ### コアインフラストラクチャと UI エコシステム
 - **ランタイムとストレージ基盤**：[Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com)。
