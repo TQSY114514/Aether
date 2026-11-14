@@ -8,11 +8,11 @@
 
 # Aether
 
-### Test models on your work. Put the results to work.
+### High-conviction AI engineering. Local-first, zero slop.
 
-An evidence-driven AI development workbench connecting model evaluation, project workspace context, and controlled agent execution.
+A post-digital minimalist AI engineering workbench connecting empirical model evaluation, project workspace context, and controlled agent execution.
 
-Compare models on real coding tasks, inspect the results, and use that evidence to inform your workflow. Local-first storage, provider flexibility, and capability-gated execution help keep your work under your control.
+Prefix-cache-safe dual-layer routing, binary Plan/Act execution gates with instant pre-write rollbacks, and zero-disturbance invisible memory. Local-first storage, pluggable providers, and strict anti-AI-slop design.
 
 [![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
@@ -34,11 +34,11 @@ Aether is a local-first desktop AI development workbench built with Electron, Re
 
 It is built around five complementary capabilities:
 
-1. **Task-based model evaluation (Arena 2.0)**: Compare multiple models on identical coding tasks, inspect streaming outputs, and gather preference or evaluation signals. Winner patches can be applied directly to your working tree in one click.
-2. **Workspace Hub**: First-class project workspace management with Git branch tracking, project instructions discovery (`AGENTS.md` / `AETHER.md`), system-native file explorer integration, and project-scoped session filtering.
-3. **Evidence-informed model selection & adaptive reasoning**: Model advice and routing use task categories and available Arena scores; 5-tier adaptive thinking budgets (`1k` to `32k` tokens) provide granular control over reasoning depth.
-4. **Project context and long-term memory**: AutoMemory, Project Brain, and repository mapping preserve relevant facts and architectural context across sessions with `< 2ms` zero-roundtrip prefetching.
-5. **Controlled agent execution & Hashline edits**: Four explicit operating modes (`explore`, `workspace`, `auto_review`, `unrestricted`) backed by a six-axis permission gate (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`), content-hash-anchored editing against line drift, and supervised TDD self-healing loops.
+1. **Task-based model evaluation (Arena 2.0)**: Compare multiple models on identical coding tasks with concurrent streaming, empirical ELO leaderboards, and 1-click winner patch disk apply (`arena:apply-patch`).
+2. **Workspace Hub & 3-Item Navigation**: First-class project workspace management with Git branch tracking, automatic project instructions discovery (`AGENTS.md`), native explorer integration, and project-scoped session filtering — organized cleanly across `Workspace`, `Arena`, and `Settings`.
+3. **Prefix-Cache-Safe Two-Layer Tool Routing**: 10 fixed top-level schemas (`read_file`, `edit_file`, `write_file`, `grep_search`, `glob_files`, `run_command`, `ask_user`, `session_plan`, `dispatch_subagent`, `call_extended_tool`) that eliminate stage-switch prompt cache misses (~100% prefix cache reuse), backed by specialized subagent pools and secondary gateway calls (`call_extended_tool`).
+4. **Binary Plan / Act Execution Gate & Pre-Write Snapshots**: Simple, decisive binary execution. `Plan` mode allows read-only exploration and structured plans; `Act` mode auto-executes workspace edits with zero confirmation fatigue, backed by pre-write Git-tree/incremental snapshots, inline red/green Diff cards, and 1-click revert. Manual confirmation is reserved strictly for 3 high-risk scenarios: out-of-workspace paths, credential files (`.env*`, `*.pem`, `*.key`), and destructive shell commands.
+5. **AutoMemory Zero-Disturbance Invisibility**: SQLite WAL + FTS5 `< 2ms` zero-roundtrip prefetch. Unobtrusive `[Memory · X hits]` capsule in assistant headers, explainable Why-Injected popovers with 1-click AGENTS.md pinning (symlink traversal safe), and inline suggestions to distill recurring workflows into `SKILL.md`.
 
 Aether is local-first: sessions, memories, evaluation data, and encrypted provider credentials are stored in the local SQLite database. When you use a hosted model provider, prompts, code, or context sent to that provider are still subject to its data-handling policies.
 
@@ -129,7 +129,7 @@ Instead of storing memories in a flat YAML/JSON file that requires full-file rew
 #### Isolation & Safety Controls
 
 1. **Automatic `AGENTS.md` Discovery**: When pointed at a project directory, Aether automatically detects and injects root `AGENTS.md` or `AETHER.md` files.
-2. **Transparent Provenance (`Why Injected`)**: Whenever a memory is injected into a conversation turn, the UI displays which memory entries were used and why they matched. Users can inspect, edit, deduplicate (`dedupe`), or delete entries in the **Memory** view.
+2. **Zero-Disturbance Invisibility & Transparent Provenance**: Memory management is completely invisible and zero-distraction. An unobtrusive `[Memory · X hits]` capsule appears in the assistant response header. Clicking it opens a lightweight popover displaying the exact injected memories and match reasons (`Why Injected`), with quick `[Remove]` and `[Pin to AGENTS.md]` actions (protected by canonical path realpath validation). When repetitive patterns are detected, an inline suggestion bar allows instant distillation into a `SKILL.md`.
 3. **Fail-Closed Workspace Isolation (`getMemoriesScoped`)**: Project memories recorded in Repository A are strictly isolated from Repository B.
 4. **Untrusted Memory Sandboxing (`<untrusted_memory>`)**: Memories originating from web fetches or external tools are tagged with `origin='external'`, capped in count, and wrapped in `<untrusted_memory>` tags so the model treats them as data rather than executable instructions.
 5. **Memory-to-Skill Distillation (`memorySkillBridge`)**: Clusters recurring project memories into reusable draft `SKILL.md` templates.
@@ -140,10 +140,11 @@ Instead of storing memories in a flat YAML/JSON file that requires full-file rew
 
 Aether 2.0 establishes the Workspace as a first-class citizen, decoupling cross-project context and eliminating interface redundancy:
 
+- **3-Item Primary Navigation**: Streamlined into `Workspace` (Main chat + inline Subagent Deck + inline Diff & 1-click Rollback + Split Run), `Arena` (empirical multi-model comparison), and `Settings` (unified Providers & MCP).
 - **Sidebar Workspace Hub (`WorkspaceHeader.tsx`)**: Mounted prominently at the top of the sidebar, providing instant project switching, favorites (`⭐`), one-click Reveal in File Explorer, and terminal `cd` command copying.
 - **Live Git & Rules Telemetry**: Automatically tracks the active Git branch and dirty working-tree state, and surfaces active project governance rules (`AGENTS.md`).
 - **Project Scope Filter**: One-click toggling between "Current Project Sessions" and "All Sessions", keeping chat histories organized and unpolluted across separate codebases.
-- **Single Authoritative Home Layout**: Per-turn execution controls (Model selector, Agent mode, Thinking depth) live strictly in the prompt composer toolbar; system-wide diagnostic readiness (SQLite WAL, active MCP servers, local gateway port) is unified into a sleek, non-intrusive status capsule at the sidebar footer.
+- **Unified 4-Control Composer HUD**: Per-turn execution controls are consolidated directly below the input prompt: `[Plan / Act Mode]`, `[Model Selector]`, `[EffortControl Reasoning Depth]`, and `[Session Tokens & Quick Pre-Write Rollback]`. No visual clutter or duplicate buttons.
 
 ---
 
@@ -161,30 +162,35 @@ The built-in Arena allows side-by-side evaluation on your actual workload, closi
 
 ---
 
-### 4. 4-Tier Operating Modes & 6 Capability Axes
+### 4. Binary Plan / Act Execution Gate & Pre-Write Snapshots
 
-Permissions are evaluated independently across six axes (`READ`, `WRITE`, `EXECUTE`, `NETWORK`, `GIT`, `EXTERNAL`) under four explicit operating modes:
+Aether replaces complex permission matrices with a decisive, low-friction binary execution model (`Plan` vs `Act`) backed by instant rollbacks:
 
 | Mode | Enforcement Behavior | Typical Scenario |
 | :--- | :--- | :--- |
-| **`explore` (Read-Only)** | Blocks all file writes and mutating shell commands; the agent inspects, searches, and analyzes code safely. | Architecture review, codebase exploration, impact analysis |
-| **`workspace` (Default)** | Read tools run automatically; file edits display an inline red/green Diff and commands outside the workspace require confirmation. | Daily pair programming, refactoring, and feature work |
-| **`auto_review` (TDD Loop)** | Supervised test-driven development: automatically runs test suites after editing code and self-heals failures (up to 3 bounded repair loops). | Automated unit testing and self-healing bug fixes |
-| **`unrestricted` (Full Sandbox)** | Approves all operations automatically with background security guards (recommended with the Docker execution backend). | Sandboxed autonomous long-running tasks |
+| **`Plan` (Read-Only Planning)** | Blocks all file modifications and state-mutating shell commands. Allows codebase reading, grep/glob search, read-only Git exploration, and outputs structured `session_plan` milestones. | Architecture review, task scoping, dependency discovery |
+| **`Act` (Autonomous Action)** | Automatically executes workspace reads, edits, writes, and test commands **without modal interruptions**. Every turn that touches files captures a pre-write snapshot (`git stash create` or `.aether/snapshots/<turnId>`), renders an inline red/green Diff, and provides a 1-click `[Revert]` button. | Active feature development, bug fixes, refactoring |
+
+#### 3 High-Risk Interception Gates (Act Mode)
+
+Act mode runs autonomously inside the project workspace, but halts execution and prompts for explicit confirmation in only 3 strictly audited scenarios:
+1. **Out-of-Workspace Paths**: Any attempt to read or write files outside the workspace root.
+2. **Sensitive Credentials**: Any modification to credential files (`.env*`, `*.pem`, `*.key`).
+3. **Destructive Shell Commands**: Execution of dangerous commands (e.g. `rm -rf`, `git reset --hard`, `git push --force`, or unverified script pipe execution).
 
 ```mermaid
 flowchart LR
-  Input["User Input"] --> Router["Staged Tool Router<br/>(Loads stage-relevant tool schemas)"]
-  Router --> Loop["Agent Loop<br/>(Plan → Inspect → Act → Verify)"]
-  Loop --> Gate{"6-Axis Permission Gate<br/>+ 4 Mode Policies"}
-  Gate -- "Safe Read Tools" --> Backend["Execution Backend (Local / Docker / SSH)"]
-  Gate -- "File Write / High-Risk Shell" --> Review["Inline Diff Preview<br/>+ Manual Confirmation Card"]
-  Review -- "Approved" --> Backend
-  Backend --> Sanitize["toolResultMiddleware<br/>(Secret Redaction + Smart Truncation)"]
-  Backend -- "auto_review mode" --> TDD["Automated TDD Self-Healing<br/>(Max 3 iterations)"]
-  TDD --> Sanitize
-  Sanitize --> Recovery["Self-Healing & Budget Guard<br/>(Orphan Repair / Shrink-Retry / Cost Cap)"]
-  Recovery --> Loop
+  Input["User Input"] --> Router["Prefix-Cache-Safe Router<br/>(10 Fixed Schemas, ~100% Cache Hit)"]
+  Router --> ModeCheck{"Plan / Act Gate"}
+  ModeCheck -- "Plan Mode" --> ReadOnly["Read & Search Tools<br/>+ Structured session_plan"]
+  ModeCheck -- "Act Mode" --> RiskCheck{"3 High-Risk Checks<br/>(Out-of-bounds, Secrets, Destructive)"}
+  RiskCheck -- "High Risk Detected" --> Confirm["Manual Confirmation Card"]
+  RiskCheck -- "Workspace Safe" --> Snap["Pre-Write Snapshot<br/>(Git Tree / Incremental)"]
+  Confirm -- "Approved" --> Snap
+  Snap --> Exec["Execution Backend<br/>(Local / Docker / SSH)"]
+  Exec --> InlineDiff["Inline Diff Preview<br/>+ 1-Click [Revert] Button"]
+  InlineDiff --> Sanitize["toolResultMiddleware<br/>(Secret Redaction + Disk Spill)"]
+  Sanitize --> Loop["Next Turn Loop"]
 ```
 
 ---
@@ -193,7 +199,7 @@ flowchart LR
 
 - **5-Tier Adaptive Thinking Depth (Thinking Budget)**: Per-turn control over reasoning budgets (`minimal 1k`, `low 2k`, `medium 8k`, `high 16k`, `max 32k tokens`), natively supporting token-budget models (Claude 3.7 Sonnet, DeepSeek R1, Qwen-Reasoner) and boolean-toggle models (`enable_thinking`).
 - **Hashline Hash-Anchored Code Editing**: Incorporates content-hash line anchoring into `patchEngine.js`, preventing line drift and merge collisions across concurrently edited files.
-- **Staged Tool Router**: Dynamically injects only the tool schemas relevant to the current task phase (`Diagnose → Search → Edit → Verify`) out of 42+ built-in and MCP tools, reducing prompt token overhead by ~40%.
+- **Prefix-Cache-Safe Two-Layer Tool Router**: Instead of dynamically mutating tool schemas across phases (which invalidates API prompt prefix caches on every turn), Aether pins 10 fixed top-level tool schemas to guarantee near 100% prefix cache reuse. Specialized roles (`Explorer`, `Implementer`, `Verifier`) receive targeted subagent pools via `dispatch_subagent`, and auxiliary tools are dispatched through `call_extended_tool` with a compact catalog index.
 - **Orphan Tool-Call Self-Healing**: Automatically sanitizes unclosed `tool_calls` on session reload so a previously interrupted tool execution never poisons subsequent turns with HTTP 400 errors.
 - **Live Cost & Iteration Circuit Breaker**: The status bar displays current iteration count, estimated turn tokens, cumulative USD cost, and stops execution automatically if a user-defined budget cap is reached.
 

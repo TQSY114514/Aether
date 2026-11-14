@@ -8,11 +8,11 @@
 
 # Aether
 
-### 用真实结果选模型，把有效的能力用到开发里。
+### 高确定性 AI 工程工作台。本地优先，拒绝 AI-Slop。
 
-Aether 将模型评测、项目工作区上下文与可审阅的 Agent 执行流程连接起来。
+Aether 是一个连接模型实证评测、项目工作区上下文与受控智能体执行的后数字极简主义开发工作台。
 
-在真实编码任务中比较不同模型，检查结果，并用这些证据辅助后续开发。本地优先的数据存储、灵活的模型接入与受控执行，让整个工作流程更可掌控。
+前缀缓存安全双层路由 · 二元 Plan/Act 守卫与写前快照一键回退 · 零打扰隐形记忆 · 极简黑白工业风。本地优先数据存储、多模型接入灵活性与纯粹的工程品格，让整个工作流始终完全受控。
 
 [![release](https://img.shields.io/github/v/release/TQSY114514/Aether.svg?style=flat-square&color=8250df&labelColor=161b22&label=release)](https://github.com/TQSY114514/Aether/releases)
 [![downloads](https://img.shields.io/github/downloads/TQSY114514/Aether/total?style=flat-square&color=3fb950&labelColor=161b22&logo=github&logoColor=white&label=downloads)](https://github.com/TQSY114514/Aether/releases)
@@ -34,11 +34,11 @@ Aether 是一个基于 Electron、React/TypeScript 与 SQLite 构建的本地优
 
 它围绕五项互补核心能力构建：
 
-1. **任务驱动的模型评测（Arena 2.0）**：让多个模型处理同一编码任务，检查各自输出，并收集用户偏好或评测信号。评测结果是辅助决策的证据，且支持胜者补丁一键写入工作区。
-2. **多项目工作区中心（Workspace Hub）**：独立管理本地项目，自动追踪 Git 分支与项目规范（`AGENTS.md` / `AETHER.md`），提供系统级资源管理器定位与单项目会话过滤。
-3. **基于证据的模型选择与自适应思考**：模型建议与路由参考意图类别和已有 Arena 评分；支持 5 档自适应思考深度预算（`1k`～`32k` tokens）精细控制推理。
-4. **项目上下文与结构化长期记忆**：AutoMemory、Project Brain 与代码仓库映射帮助跨会话保留相关事实和架构背景，`< 2ms` 零轮次消耗即时预取。
-5. **受控的 Agent 执行与 Hashline 防漂移**：四档权限模式（`explore`、`workspace`、`auto_review`、`unrestricted`）与六轴权限门禁（`READ`、`WRITE`、`EXECUTE`、`NETWORK`、`GIT`、`EXTERNAL`），配合 Hashline 哈希锚定代码编辑与 TDD 自动审查自愈。
+1. **任务驱动的模型评测（Arena 2.0）**：让多个模型同屏并排处理同一编码任务，检查各自流式输出，并基于意图分类积累本地 ELO 战力榜与基准；支持胜者补丁一键写入工作区（`arena:apply-patch`）。
+2. **多项目工作区中心与三主线导航**：独立管理本地项目，自动追踪 Git 分支与项目规范（`AGENTS.md`），提供系统级文件管理器定位与单项目会话过滤 —— 一级导航收敛为 `Workspace`、`Arena`、`Settings` 三项主线。
+3. **前缀缓存安全（Prefix-Cache-Safe）双层工具路由**：固定 10 个顶层常驻工具 Schema（`read_file`, `edit_file`, `write_file`, `grep_search`, `glob_files`, `run_command`, `ask_user`, `session_plan`, `dispatch_subagent`, `call_extended_tool`），杜绝阶段切换导致的 API Prompt Prefix-Cache 抖动（缓存命中率 ~100%）；解耦子代理专属工具池，非核心工具经 `call_extended_tool` 安全网关转发。
+4. **二元 Plan / Act 执行门禁与写前快照回退**：砍掉繁琐的 6 轴权限矩阵与频繁弹窗，简化为 `Plan`（只读规划与结构化方案）与 `Act`（工作区内常规读写自动执行零打扰）。每次写操作前后台捕获轻量 Git 树对象 / 增量快照，内联红绿 Diff 卡片并支持右上角一键安全回滚；仅对工作区外越界、敏感凭证（`.env*`, `*.pem`, `*.key`）及高危 Shell 执行人工确认。
+5. **AutoMemory 零打扰隐形化与技能蒸馏**：SQLite WAL + FTS5 `< 2ms` 零轮次消耗即时预取。对话头部极简黑白胶囊展示 `[Memory · X hits]`，点击弹出轻量 Popover 查看注入原因（Why Injected），支持一键移除与「Pin 固定到 AGENTS.md」（符号链接防穿越校验）；自动检测重复模式并在对话底部内联提示生成 `SKILL.md`。
 
 Aether 采用本地优先设计：会话、记忆、评测数据和加密后的模型提供商凭据保存在本地 SQLite 数据库中。使用托管模型服务时，发送给服务商的提示词、代码或上下文仍受该服务商的数据处理政策约束。
 
@@ -129,21 +129,22 @@ Aether 的长期记忆系统基于 SQLite（WAL 模式）、FTS5 全文索引与
 #### 记忆安全与管理特性
 
 1. **`AGENTS.md` 自动发现**：当工作区指向具体代码仓库时，系统自动扫描并注入根目录下的 `AGENTS.md` 或 `AETHER.md` 规范文件。
-2. **注入来源透明化（Why Injected）**：每当本轮回复引用了长期记忆，界面会明确标注命中的记忆条目及触发原因，支持在侧栏 **记忆 (Memory)** 页面随时查看、编辑、合并重复项（`dedupe`）或删除单条记录。
+2. **零打扰隐形化与注入来源透明化（Why Injected）**：记忆管理完全隐形化、零打扰。每轮回复头部以极简黑白胶囊展示 `[Memory · X hits]`，点击弹出轻量 Popover 查看命中条目及具体触发原因（Why Injected），支持一键移除与「Pin 固定到 AGENTS.md」（内置真实路径防越界校验）；当检测到重复工作流时，对话底部内联提示生成 `SKILL.md`。
 3. **跨工作区防串味（Fail-Closed Isolation）**：A 项目的工作区记忆严格限制在 A 目录内生效，不会泄漏到 B 项目的对话上下文中。
 4. **外部内容降权沙箱（`<untrusted_memory>`）**：由网页抓取或外部工具产生的记忆会自动标记为 `origin='external'`，注入时置于末尾并用 `<untrusted_memory>` 标签隔离，防止间接提示词注入（Indirect Prompt Injection）。
 5. **记忆向技能演进（Memory → Skill Bridge）**：支持将高频复用的项目记忆自动聚类，生成可复用的 `SKILL.md` 技能草稿。
 
 ---
 
-### 二、 Workspace Hub · 多项目工作区中心与桌面单权威布局
+### 二、 Workspace Hub · 多项目工作区中心与三主线极简布局
 
 Aether 2.0 确立了工作区作为开发的第一公民，彻底解耦跨项目代码污染，消除界面控件冗余散落：
 
+- **收敛至三项主线导航**：一级导航精简为 `Workspace`（主对话 + 内联子代理 Deck + 内联 Diff 回退 + 同屏对比）、`Arena`（同屏多模型实证竞技场）与 `Settings`（统一服务商与 MCP）。
 - **侧栏一级工作区中心 (`WorkspaceHeader.tsx`)**：置于侧栏最顶端，提供项目名、仓库识别、一键秒切项目、收藏置顶（⭐）、一键在系统资源管理器中定位（Reveal in Explorer）、一键复制终端 `cd` 路径。
 - **Git 状态与规则实时伴随**：自动监测 Git 当前分支与是否有未提交脏文件；识别工作区中生效的项目规则（`AGENTS.md`）。
 - **项目会话隔离筛选 (Project Scope Filter)**：支持在会话列表上方一键切换“当前项目专属会话”与“全局会话”，不同工程的会话历史互不干扰。
-- **单一权威交互归位（Single Authoritative Home）**：模型选择、Agent 模式、思考深度严格归位至输入框工具栏；系统全局就绪度（SQLite WAL、MCP 在线数、网关状态）收敛为侧栏底部单行紧凑状态胶囊，彻底消除了界面相同功能按钮到处并排打架的视觉噪音。
+- **输入框合一 HUD（4 项核心控件）**：精简为 `[Plan / Act 模式]`、`[主模型选择]`、`[思考强度 Effort]`、`[会话 Token/费用与一键快照回退]`。去伪存真，无冗余打架按钮与 AI 营销感发光特效。
 
 ---
 
@@ -161,39 +162,44 @@ Aether 2.0 确立了工作区作为开发的第一公民，彻底解耦跨项目
 
 ---
 
-### 四、 4 档运行模式与 6 轴细粒度权限
+### 四、 二元 Plan / Act 执行门禁与写前快照回退
 
-系统在 `READ`（读文件）、`WRITE`（写文件）、`EXECUTE`（执行命令）、`NETWORK`（网络访问）、`GIT`（版本控制）、`EXTERNAL`（外部 MCP 工具）六个维度上进行独立权限校验，并提供四档明确预设模式：
+Aether 彻底告别繁琐的 6 轴权限矩阵与频繁弹窗打断，收敛为果断干脆的 `Plan` / `Act` 二元执行体系，并以即时快照作为安全护城河：
 
 | 模式 | 行为规则 | 适用场景 |
 | :--- | :--- | :--- |
-| **`explore`（只读探索）** | 禁用一切写文件与系统破坏性命令；Agent 仅可读取、检索与分析代码 | 架构探讨、代码走读、改动前方案评估 |
-| **`workspace`（工作区受控 · 默认）** | 文件写入提供行内红绿 Diff 预览与审批卡片，跨出工作区的命令需显式确认 | 日常编码协作、安全重构与功能实现 |
-| **`auto_review`（自动审查 TDD 闭环）** | 监督式 TDD 自愈循环：改写代码后自动运行单测，单测报错自动触发修复重试（最多 3 轮） | 自动化编写单测、自愈 Bug 修复 |
-| **`unrestricted`（沙箱全速模式）** | 全部操作免确认自主执行，后台运行安全与预算守卫（推荐配合 Docker 后端） | 隔离环境下的长程自动化工程任务 |
+| **`Plan`（只读规划模式）** | 禁用一切写文件与状态变更命令；放行项目内代码读取、Grep/Glob 搜索与只读 Git 探路，输出结构化 `session_plan` | 架构探讨、代码走读、改动前方案评估 |
+| **`Act`（行动执行模式 · 默认）** | 工作区内部的常规代码搜索、读取、常规编辑与构建测试命令**默认自动执行，不再弹出确认卡片打断流式循环**。每轮 Turn 写操作前后台自动捕获轻量快照（`git stash create` 树对象或 `.aether/snapshots/<turnId>`），内联红绿 Diff 卡片并提供右上角 `[Revert / 一键撤回]` 按钮。 | 日常编码协作、自动化重构与功能实现 |
+
+#### 仅保留 3 种真正高危操作的拦截门禁（Act 模式）
+
+在 `Act` 模式下，仅遇到以下 3 种高危操作时触发人工确认卡片，杜绝误操作风险：
+1. **越界访问**：尝试读写项目工作区根目录（Workspace Root）以外的路径；
+2. **敏感凭证**：修改敏感凭据文件（`.env*`, `*.pem`, `*.key`）；
+3. **破坏性命令**：执行破坏性或高风险 Shell（包含 `rm -rf`, `git reset --hard`, `git push --force`, 或未知外部脚本管道下载执行）。
 
 ```mermaid
 flowchart LR
-  Input["用户输入"] --> Router["阶段感知 Tool Router<br/>(按诊断/检索/编辑/验证按需加载工具)"]
-  Router --> Loop["Agent Loop<br/>(Plan → Inspect → Act → Verify)"]
-  Loop --> Gate{"6 轴权限门<br/>+ 4 档模式策略"}
-  Gate -- "安全只读工具" --> Backend["执行后端 (Local / Docker / SSH)"]
-  Gate -- "写文件 / 高危命令" --> Review["行内 Diff 预览<br/>+ 人工确认卡片"]
-  Review -- "批准执行" --> Backend
-  Backend --> Sanitize["toolResultMiddleware<br/>(密钥脱敏 + 超长输出截断)"]
-  Backend -- "auto_review 模式" --> TDD["自动单测自愈<br/>(最多 3 次循环修复)"]
-  TDD --> Sanitize
-  Sanitize --> Recovery["自愈与预算控制<br/>(孤儿调用修复 / 缩围重试 / 成本上限)"]
-  Recovery --> Loop
+  Input["用户输入"] --> Router["前缀缓存安全 Router<br/>(10 个固定顶层 Schema, ~100% 缓存命中)"]
+  Router --> ModeCheck{"Plan / Act 门禁"}
+  ModeCheck -- "Plan 模式" --> ReadOnly["只读/检索工具<br/>+ 结构化 session_plan"]
+  ModeCheck -- "Act 模式" --> RiskCheck{"3 大高危门禁检测<br/>(越界/凭证/破坏性Shell)"}
+  RiskCheck -- "存在高危操作" --> Confirm["人工确认卡片"]
+  RiskCheck -- "工作区安全" --> Snap["写前轻量快照<br/>(Git 树对象 / 增量备份)"]
+  Confirm -- "批准执行" --> Snap
+  Snap --> Exec["执行后端<br/>(Local / Docker / SSH)"]
+  Exec --> InlineDiff["内联红绿 Diff 卡片<br/>+ 一键 [Revert] 撤回"]
+  InlineDiff --> Sanitize["toolResultMiddleware<br/>(脱敏 + 大输出溢出落盘)"]
+  Sanitize --> Loop["下一轮循环"]
 ```
 
 ---
 
-### 五、 自适应思考深度、Hashline 锚定编辑与运行时容错
+### 五、 自适应思考深度、Hashline 锚定编辑与前缀缓存安全路由
 
 - **5 档自适应思考深度（Thinking Budget）**：在输入框内按回合精细调节推理深度（`minimal 1k`、`low 2k`、`medium 8k`、`high 16k`、`max 32k tokens`），原生兼容以 Token 预算驱动（Claude 3.7 Sonnet、DeepSeek R1、Qwen-Reasoner）与以布尔开关驱动（`enable_thinking`）的主流推理模型。
 - **Hashline 哈希锚定代码编辑（Hashline Edits）**：在 `patchEngine.js` 中引入行内容哈希锚定算法，防止多文件或长上下文并发改写时的行号漂移与补丁错位冲突。
-- **阶段感知工具路由（Staged Tool Router）**：从 42+ 内置工具及已挂载的 MCP 工具中，按当前任务阶段动态筛选注入工具 Schema，降低上下文 Token 占用约 40%，减少小模型选错工具的概率。
+- **前缀缓存安全双层路由（Prefix-Cache-Safe Two-Layer Router）**：固定 10 个顶层常驻工具 Schema（`read_file`, `edit_file`, `write_file`, `grep_search`, `glob_files`, `run_command`, `ask_user`, `session_plan`, `dispatch_subagent`, `call_extended_tool`），彻底消除动态增删工具导致的模型 API Prompt Prefix-Cache 失效，缓存命中率提升至 ~100%；多角色子代理（`Explorer`、`Implementer`、`Verifier`）挂载专属工具池，非核心工具通过 `call_extended_tool` 二级安全网关转发。
 - **异常自愈机制**：自动清理中断遗留的孤儿 `tool_calls` 记录（防止会话因未闭合的工具调用而永久报错 400）；工具失败时自动触发缩小范围重试（`tryShrinkRetry`）。
 - **实时成本与预算熔断**：状态栏实时显示当前迭代步数、单轮预估 Token、累计成本及预算上限，达到阈值时自动暂停 Agent 循环。
 
