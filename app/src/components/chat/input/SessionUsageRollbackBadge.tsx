@@ -63,9 +63,15 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
       .then((list: any[]) => {
         if (cancelled) return
         if (Array.isArray(list) && list.length > 0) {
-          const sorted = list.slice().sort((a, b) => b.id - a.id)
-          setHasCheckpoints(true)
-          setLatestCheckpointId(sorted[0].id)
+          const activeCheckpoints = list.filter((cp: any) => !cp.rolled_back_at)
+          if (activeCheckpoints.length > 0) {
+            const sorted = activeCheckpoints.slice().sort((a, b) => b.id - a.id)
+            setHasCheckpoints(true)
+            setLatestCheckpointId(sorted[0].id)
+          } else {
+            setHasCheckpoints(false)
+            setLatestCheckpointId(null)
+          }
         } else {
           setHasCheckpoints(false)
           setLatestCheckpointId(null)

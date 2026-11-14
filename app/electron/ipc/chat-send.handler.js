@@ -691,7 +691,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (autoMemoryOn && sessionId && db) {
           try {
             const bridge = require('../llm/memorySkillBridge')
-            const mems = db.getMemories ? db.getMemories(30) : []
+            const mems = (db.getMemoriesScoped && recallWs) ? db.getMemoriesScoped(recallWs, 30) : (db.getMemories ? db.getMemories(30) : [])
             const clusters = bridge.clusterMemories(mems)
             if (clusters && clusters.length > 0) {
               const topCluster = clusters[0]
@@ -870,7 +870,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         if (autoMemoryOn && sessionId && db) {
           try {
             const bridge = require('../llm/memorySkillBridge')
-            const mems = db.getMemories ? db.getMemories(30) : []
+            const mems = (db.getMemoriesScoped && recallWs) ? db.getMemoriesScoped(recallWs, 30) : (db.getMemories ? db.getMemories(30) : [])
             const clusters = bridge.clusterMemories(mems)
             if (clusters && clusters.length > 0) {
               const topCluster = clusters[0]

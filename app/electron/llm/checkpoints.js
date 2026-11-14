@@ -33,7 +33,13 @@ function extractAffectedPaths(toolName, args, workspaceRoot = null) {
 function nearestGitRoot(start) {
   try {
     const cwd = fs.existsSync(start) && fs.statSync(start).isDirectory() ? start : path.dirname(start)
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim()
+    const out = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim()
+    if (!out) return null
+    try {
+      return fs.realpathSync(out)
+    } catch {
+      return path.resolve(out)
+    }
   } catch { return null }
 }
 
@@ -120,7 +126,7 @@ function createPreWriteSnapshot({ workspaceRoot, turnId, affectedPaths = [], too
         stashHash: stashHash || headHash,
         treeHash,
         hadDirtyStash: Boolean(stashHash),
-        files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory })),
+        files: filesMeta.map(f => ({ path: f.path, existed: f.existed, isDirectory: f.isDirectory, content: f.content })),
       }
     }
   }
@@ -236,6 +242,12 @@ function rollbackPreWriteSnapshot(meta, targetPaths = null) {
   }
 
   if (meta.method === 'git_stash_create' && meta.gitRoot && meta.stashHash) {
+    let resolvedGitRoot = meta.gitRoot
+    try {
+      resolvedGitRoot = fs.realpathSync(meta.gitRoot)
+    } catch {
+      resolvedGitRoot = path.resolve(meta.gitRoot)
+    }
     const entries = Array.isArray(meta.files) ? meta.files : []
     for (const ent of entries) {
       try {
@@ -246,10 +258,23 @@ function rollbackPreWriteSnapshot(meta, targetPaths = null) {
           }
           continue
         }
-        const rel = path.relative(meta.gitRoot, ent.path).replace(/\\/g, '/')
+        let resolvedEntPath = ent.path
+        try {
+          resolvedEntPath = fs.realpathSync(ent.path)
+        } catch {
+          resolvedEntPath = path.resolve(ent.path)
+        }
+        let rel = path.relative(resolvedGitRoot, resolvedEntPath).replace(/\\/g, '/')
+        if (!rel || rel.startsWith('..')) {
+          const normRoot = resolvedGitRoot.toLowerCase().replace(/\\/g, '/')
+          const normEnt = resolvedEntPath.toLowerCase().replace(/\\/g, '/')
+          if (normEnt.startsWith(normRoot)) {
+            rel = resolvedEntPath.slice(resolvedGitRoot.length).replace(/^[/\\]+/, '').replace(/\\/g, '/')
+          }
+        }
         if (rel && !rel.startsWith('..')) {
           try {
-            execFileSync('git', ['checkout', meta.stashHash, '--', rel], { cwd: meta.gitRoot, timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+            execFileSync('git', ['checkout', meta.stashHash, '--', rel], { cwd: resolvedGitRoot, timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
             restored.push(ent.path)
           } catch (gitErr) {
             if (ent.content != null) {
@@ -260,6 +285,10 @@ function rollbackPreWriteSnapshot(meta, targetPaths = null) {
               throw gitErr
             }
           }
+        } else if (ent.content != null) {
+          fs.mkdirSync(path.dirname(ent.path), { recursive: true })
+          fs.writeFileSync(ent.path, ent.content, 'utf-8')
+          restored.push(ent.path)
         }
       } catch (e) {
         failed.push({ path: ent.path, error: e.message })

@@ -47,6 +47,7 @@ async function _runSubagent({
   model,
   prompt,
   signal,
+  id: explicitId,
   agentMode = 'auto',
   callbacks = {},
   config = {},
@@ -122,7 +123,7 @@ async function _runSubagent({
     timedOut = true
     timeoutCtrl.abort()
   }, cfg.timeoutMs)
-  const subagentEventId = cfg.id || args?.id || taskId || childSessionId
+  const subagentEventId = explicitId || cfg.id || taskId || childSessionId
 
   if (taskId) {
     try {

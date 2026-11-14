@@ -159,7 +159,13 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
     if (!tool.checkpointId || rollbackState === 'running' || rollbackState === 'done') return
     setRollbackState('running')
     try {
-      const res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId, force: true })
+      let res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId })
+      if (!res?.success && res?.conflict) {
+        const ok = window.confirm(res.error + '\n是否确认强制回退？')
+        if (ok) {
+          res = await window.electronAPI.agentCheckpoint.rollback({ id: tool.checkpointId, force: true })
+        }
+      }
       setRollbackState(res?.success ? 'done' : 'error')
       if (!res?.success) setOpen(true)
     } catch {

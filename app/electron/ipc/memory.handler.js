@@ -86,7 +86,19 @@ function registerMemoryHandlers(ipcMain, db) {
     }
     const targetFile = ws ? path.join(ws, 'AGENTS.md') : path.join(os.homedir(), '.aether', 'AGENTS.md')
     try {
+      const allowedDir = ws ? path.resolve(ws) : path.join(os.homedir(), '.aether')
       fs.mkdirSync(path.dirname(targetFile), { recursive: true })
+      const realParent = fs.realpathSync(path.dirname(targetFile))
+      const realAllowed = fs.realpathSync(allowedDir)
+      if (realParent !== realAllowed && !realParent.startsWith(realAllowed + path.sep)) {
+        return { success: false, error: 'Path traversal detected in AGENTS.md destination' }
+      }
+      if (fs.existsSync(targetFile)) {
+        const realTarget = fs.realpathSync(targetFile)
+        if (realTarget !== path.join(realParent, 'AGENTS.md') && !realTarget.startsWith(realAllowed + path.sep)) {
+          return { success: false, error: 'Symlink target escapes allowed directory' }
+        }
+      }
       let prev = ''
       if (fs.existsSync(targetFile)) {
         prev = fs.readFileSync(targetFile, 'utf8')
