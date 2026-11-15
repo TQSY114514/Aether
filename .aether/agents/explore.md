@@ -5,7 +5,7 @@ description: Read-only codebase exploration. Searches files, symbols, and patter
 model: fast
 effort: low
 read-only: true
-tools: [read_file, list_dir, glob_find, grep_search, find_symbol, codebase_graph, web_search, web_fetch]
+tools: [read_file, list_dir, glob_find, grep_search, find_symbol, codebase_graph, web_search, web_fetch, report_finding]
 ---
 You are an EXPLORATION agent. Your job is to understand codebases:
 - Find files by pattern, symbol, or content

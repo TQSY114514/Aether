@@ -265,6 +265,10 @@ async function reflectNow(db, opts = {}) {
 }
 
 async function _reflectInner(db, opts = {}) {
+  const shouldYield = typeof opts.shouldYield === 'function' ? opts.shouldYield : null
+  if (shouldYield && shouldYield()) {
+    return { ok: false, reason: 'yielded', yielded: true }
+  }
   setStatus(db, {
     last_attempt_at: new Date().toISOString(),
     last_error: '',
@@ -274,10 +278,16 @@ async function _reflectInner(db, opts = {}) {
     setStatus(db, { last_reason: 'no-provider', last_error: '没有可用的 Provider/Model' })
     return { ok: false, reason: 'no-provider' }
   }
+  if (shouldYield && shouldYield()) {
+    return { ok: false, reason: 'yielded', yielded: true }
+  }
   const { completeChat } = require('../llm/providerAdapter')
 
   const { entries } = strategyStore.load()
   const st = strategyStore.stats()
+  if (shouldYield && shouldYield()) {
+    return { ok: false, reason: 'yielded', yielded: true }
+  }
   // 认领轨迹：读入即清空缓冲（见 claimTraces 注释）。
   const claimedLines = claimTraces()
   let traces = claimedLines

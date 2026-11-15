@@ -175,6 +175,7 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
 ipcMain.handle('chat:complete', handleChatComplete)
 
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'act', effortLevel = 'medium', thinkingEnabled = true, genParams = {}, systemPrefix = '' }) => {
+    try { require('../cron/scheduler').noteUserActivity() } catch {}
     // Backstop guard: if a tool loop is active for this session, buffer the message
     // as an injection instead of starting a new send turn. Prevents race conditions
     // when the renderer's loopingSessions state hasn't caught up with main-process reality.
@@ -650,6 +651,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
               try { wc?.send('chat:memory-saved', payload) } catch {}
             },
           })
+          if (memHits.length > 0) {
+            try { autoMemory.reinforceEchoes(db, memHits, finalContent) } catch {}
+          }
           if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
         }
         // 回写本次使用的 provider/model：定时反思（strategy-reflect）等
@@ -863,6 +867,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
         if (autoMemoryOn) {
           autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, sessionId, workspace: wsRoot })
+          if (memHits.length > 0) {
+            try { autoMemory.reinforceEchoes(db, memHits, fullContent) } catch {}
+          }
           if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
         }
         try { db.setSetting('llm.lastProvider', String(p?.id || p || '')); db.setSetting('llm.lastModel', String(m || '')) } catch {}

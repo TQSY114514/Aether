@@ -27,26 +27,38 @@ function ensureMemDb(db) {
         // 的记忆分流进 <untrusted_memory> 降权块。旧库尚无该列时回退查询。
         const l = Number(limit) || 200
         try {
-          return db.prepare('SELECT id, content, type, origin, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?').all(l)
+          return db.prepare('SELECT id, content, type, origin, created_at, created_at AS createdAt, access_count, last_accessed_at, confidence FROM memory ORDER BY id DESC LIMIT ?').all(l)
         } catch {
-          return db.prepare('SELECT id, content, type, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?').all(l)
+          try {
+            return db.prepare('SELECT id, content, type, origin, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?').all(l)
+          } catch {
+            return db.prepare('SELECT id, content, type, created_at AS createdAt FROM memory ORDER BY id DESC LIMIT ?').all(l)
+          }
         }
       },
       getMemoriesScoped(scopeKey) {
         try {
           if (scopeKey === null) {
-            return db.prepare("SELECT id, content, type, origin, created_at AS createdAt FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC").all()
+            return db.prepare("SELECT id, content, type, origin, created_at, created_at AS createdAt, access_count, last_accessed_at, confidence FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC").all()
           } else if (scopeKey) {
-            return db.prepare("SELECT id, content, type, origin, created_at AS createdAt FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC").all(String(scopeKey))
+            return db.prepare("SELECT id, content, type, origin, created_at, created_at AS createdAt, access_count, last_accessed_at, confidence FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC").all(String(scopeKey))
           }
         } catch {
           try {
             if (scopeKey === null) {
-              return db.prepare("SELECT id, content, type, created_at AS createdAt FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC").all()
+              return db.prepare("SELECT id, content, type, origin, created_at AS createdAt FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC").all()
             } else if (scopeKey) {
-              return db.prepare("SELECT id, content, type, created_at AS createdAt FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC").all(String(scopeKey))
+              return db.prepare("SELECT id, content, type, origin, created_at AS createdAt FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC").all(String(scopeKey))
             }
-          } catch {}
+          } catch {
+            try {
+              if (scopeKey === null) {
+                return db.prepare("SELECT id, content, type, created_at AS createdAt FROM memory WHERE workspace IS NULL ORDER BY created_at DESC, id DESC").all()
+              } else if (scopeKey) {
+                return db.prepare("SELECT id, content, type, created_at AS createdAt FROM memory WHERE workspace IS NULL OR workspace = ? ORDER BY (workspace IS NULL) ASC, created_at DESC, id DESC").all(String(scopeKey))
+              }
+            } catch {}
+          }
         }
         return this.getMemories(200)
       },

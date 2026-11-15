@@ -53,6 +53,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   auditLog.setDb(db)
   checkpoints.setDb(db)
   if (typeof allowRulesStore.setDb === 'function') allowRulesStore.setDb(db)
+  try {
+    const scheduler = require('../cron/scheduler')
+    if (typeof scheduler.registerBusyChecker === 'function') {
+      scheduler.registerBusyChecker(() => activeToolLoops.size > 0 || abortControllers.size > 0 || sideAbortControllers.size > 0)
+    }
+  } catch {}
 
   // Pass the shared live state to the extracted chat:send handler
   const ctx = {

@@ -301,6 +301,7 @@ interface Window {
       fileStatus: (workspace?: string | null) => Promise<{ exists: boolean; path: string; mtime: number | null; lineCount: number }>
       pinToAgentsMd: (args: { id: number; content: string; workspace?: string | null }) => Promise<{ success: boolean; targetFile?: string; error?: string }>
       distillSkill: (args: { sessionId: number; clusterIds?: number[] }) => Promise<{ success: boolean; draft?: any; error?: string }>
+      consolidate: (opts?: { scopeKey?: string | null }) => Promise<{ ok: boolean; skipped?: string; consolidated: number; workspaces: number; digestIds?: number[]; error?: string }>
     }
     learning: {
       overview: () => Promise<{

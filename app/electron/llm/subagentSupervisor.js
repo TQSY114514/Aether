@@ -76,13 +76,13 @@ function resolveSubagentTools(role, cwd, agentMode, db) {
   try {
     const mcp = require('../mcp/manager')
     if (typeof mcp.getMergedToolsPayload === 'function') {
-      fullPayload = mcp.getMergedToolsPayload(mode, { cacheStable: true, db })
+      fullPayload = mcp.getMergedToolsPayload(mode, { cacheStable: true, db, includeExtendedLedger: true })
     }
   } catch {}
   if (!fullPayload || fullPayload.length === 0) {
     try {
       const registry = require('../tools/registry')
-      fullPayload = registry.toolsPayload(mode, { cacheStable: true, db })
+      fullPayload = registry.toolsPayload(mode, { cacheStable: true, db, includeExtendedLedger: true })
     } catch {}
   }
   if (!Array.isArray(fullPayload)) return true
@@ -366,7 +366,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
   } else if (Array.isArray(resolvedTools) && resolvedTools.length > 0 && typeof resolvedTools[0] === 'string') {
     try {
       const registry = require('../tools/registry')
-      const full = registry.toolsPayload(effectiveAgentMode, { cacheStable: true, db })
+      const full = registry.toolsPayload(effectiveAgentMode, { cacheStable: true, db, includeExtendedLedger: true })
       resolvedTools = full.filter((t) => resolvedTools.includes(t?.function?.name))
     } catch {
       resolvedTools = true
@@ -463,6 +463,8 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
     record.completionPromise = (async () => {
       try {
         const targetSessionId = childSessionId || subagentId
+        const { FindingsLedger } = require('./findingsLedger')
+        const findingsLedger = new FindingsLedger({ workspaceRoot: record.cwd || process.cwd() })
         const result = await runToolLoop({
           sessionId: targetSessionId,
           role: record.role,
@@ -477,6 +479,7 @@ async function spawnSupervisedSubagent(opts = {}, deps = {}) {
           signal: currentController.signal,
           messages: record.completedMessages,
           tools: record.tools,
+          findingsLedger,
           getPendingInjections: () => {
             try {
               const pending = steering.getPendingInjections(targetSessionId)

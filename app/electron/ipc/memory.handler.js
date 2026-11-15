@@ -168,6 +168,19 @@ function registerMemoryHandlers(ipcMain, db) {
       return { success: false, error: err.message }
     }
   })
+
+  ipcMain.handle('memory:consolidate', async (_e, opts = {}) => {
+    try {
+      const autoMemory = require('../llm/autoMemory')
+      const callOpts = { force: true }
+      if (opts && Object.prototype.hasOwnProperty.call(opts, 'scopeKey')) {
+        callOpts.scopeKey = opts.scopeKey
+      }
+      return await autoMemory.consolidate(db, callOpts)
+    } catch (err) {
+      return { ok: false, consolidated: 0, workspaces: 0, error: err?.message || 'consolidate_failed' }
+    }
+  })
 }
 
 module.exports = { registerMemoryHandlers }

@@ -1,0 +1,70 @@
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import '../../app/src/index.css'
+import App from '@/App'
+import { applyTheme } from '@/utils/theme'
+import { useStore } from '@/store'
+import { installDemoBridge } from './demo-bridge'
+
+const params = new URLSearchParams(window.location.search)
+const lang = params.get('lang') === 'en' ? 'en' : 'zh'
+const { reset } = installDemoBridge(lang)
+applyTheme('light', false)
+
+// Listen for step orchestration commands from the outer Site showcase chrome
+window.addEventListener('message', async (event) => {
+  const data = event.data as { type?: string; step?: string } | null
+  if (!data || data.type !== 'aether-demo:command') return
+  const store = useStore.getState()
+
+  if (data.step === 'reset') {
+    reset()
+    await store.loadSessions()
+    await store.loadScores()
+    store.setCurrentView('chat')
+    await store.selectSession(101)
+    return
+  }
+
+  if (data.step === 'arena') {
+    store.setCurrentView('chat')
+    await store.selectSession(101)
+    store.setArenaModelIds([11, 12])
+    await store.runArena(
+      lang === 'zh'
+        ? '对比修复 IdleGate 并发重入的最小补丁方案：先写冷却时间戳再检查 hasMaterial()。'
+        : 'Compare minimal patches for IdleGate concurrency: stamp cooldown before hasMaterial().',
+    )
+    return
+  }
+
+  if (data.step === 'vote') {
+    const res = store.arenaResults
+    if (res.length >= 2) {
+      await store.arenaVote(res[0], res.slice(1))
+    }
+    return
+  }
+
+  if (data.step === 'act-rollback') {
+    store.setCurrentView('chat')
+    await store.selectSession(101)
+    store.setAgentMode('act')
+    await store.sendMessage(
+      lang === 'zh'
+        ? '在 Act 模式下应用最佳补丁并保存写前快照以测试回滚。'
+        : 'Apply the winning patch in Act mode with a pre-write snapshot ready for rollback.',
+    )
+    return
+  }
+
+  if (data.step === 'memory') {
+    store.setCurrentView('memory')
+  }
+})
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)

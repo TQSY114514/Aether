@@ -18,26 +18,124 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const log = require('../logger')
+const { IdleGate } = require('./idleGate')
+
+// ─── Idle & Busy Coordination ──────────────────────────────────────────────
+
+const _busyCheckers = new Set()
+
+function registerBusyChecker(fn) {
+  if (typeof fn === 'function') _busyCheckers.add(fn)
+  return () => _busyCheckers.delete(fn)
+}
+
+function isSystemBusy() {
+  for (const fn of _busyCheckers) {
+    try {
+      if (fn() === true) return true
+    } catch {}
+  }
+  try {
+    const bg = require('../llm/backgroundTasks')
+    if (typeof bg.listTasks === 'function') {
+      const active = bg.listTasks().some((t) => t && (t.status === 'running' || t.status === 'plan'))
+      if (active) return true
+    }
+  } catch {}
+  return false
+}
+
+function getLastPassMs(db, name) {
+  try {
+    const raw = db?.getSetting?.(`cron.last_pass.${name}`)
+    if (!raw) return null
+    const n = Number(raw)
+    if (Number.isFinite(n) && n > 0) return n
+    const parsed = Date.parse(String(raw))
+    return Number.isFinite(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function markLastPassMs(db, name, ts = Date.now()) {
+  try {
+    if (db && typeof db.setSetting === 'function') {
+      db.setSetting(`cron.last_pass.${name}`, String(ts))
+    }
+  } catch {}
+}
 
 // ─── Task Registry ─────────────────────────────────────────────────────────
 
 const TASKS = {}
 
-function defineTask(name, intervalMs, fn) {
-  TASKS[name] = { intervalMs, fn, timer: null, running: false }
+function defineTask(name, intervalMs, fn, opts = {}) {
+  const task = {
+    name,
+    intervalMs,
+    fn,
+    timer: null,
+    running: false,
+    idleOptions: opts.idle || null,
+    gate: null,
+  }
+  if (task.idleOptions) {
+    task.gate = new IdleGate({
+      idleMs: task.idleOptions.idleMs ?? 5 * 60 * 1000,
+      cooldownMs: task.idleOptions.cooldownMs ?? intervalMs,
+      minRetryMs: task.idleOptions.minRetryMs ?? 60 * 1000,
+      enabled: task.idleOptions.enabled ?? true,
+      isBusy: () => isSystemBusy(),
+      lastFullPassAt: () => getLastPassMs(_db, name),
+      hasMaterial: task.idleOptions.hasMaterial ? () => task.idleOptions.hasMaterial(_db) : undefined,
+      runPass: async ({ shouldYield }) => {
+        const res = await fn(_db, { shouldYield })
+        if (!res || res.yielded !== true) {
+          markLastPassMs(_db, name, Date.now())
+        }
+        return res
+      },
+    })
+  }
+  TASKS[name] = task
+}
+
+function noteUserActivity() {
+  for (const task of Object.values(TASKS)) {
+    if (task.gate) task.gate.noteActivity()
+  }
 }
 
 // ─── Built-in Tasks ────────────────────────────────────────────────────────
 
-// Prune old memories (>90d unused or >365d old). Runs every 6 hours.
-defineTask('memory-cleanup', 6 * 3600 * 1000, async (db) => {
+// Prune/consolidate old memories. Polls on idle, runs at most once per 6 hours.
+defineTask('memory-cleanup', 6 * 3600 * 1000, async (db, ctx = {}) => {
   try {
-    const { prune } = require('../llm/autoMemory')
-    prune(db, 90)
+    const autoMemory = require('../llm/autoMemory')
+    const featureFlags = require('../featureFlags')
+    if (featureFlags.isEnabled(db, 'memory.dreamConsolidation') && typeof autoMemory.consolidate === 'function') {
+      const res = await autoMemory.consolidate(db, { shouldYield: ctx.shouldYield })
+      log.info('cron: memory-cleanup (dreamConsolidation) completed:', JSON.stringify({
+        consolidated: res?.consolidated || 0,
+        pruned: res?.pruned || 0,
+        yielded: Boolean(res?.yielded),
+      }))
+      return res
+    }
+    autoMemory.prune(db, 90)
     log.info('cron: memory-cleanup completed')
+    return { ok: true }
   } catch (e) {
     log.warn('cron: memory-cleanup failed:', e.message)
+    return { ok: false, error: e.message }
   }
+}, {
+  idle: {
+    idleMs: 5 * 60 * 1000,
+    cooldownMs: 6 * 3600 * 1000,
+    minRetryMs: 60 * 1000,
+  },
 })
 
 // Apply skill lifecycle transitions (active→stale→archived). Runs every 12 hours.
@@ -50,9 +148,12 @@ defineTask('skill-scan', 12 * 3600 * 1000, async (db) => {
   }
 })
 
-// Scan for repeating usage patterns and auto-draft skills. Runs every 4 hours.
-defineTask('skill-autodraft', 4 * 3600 * 1000, async (db) => {
+// Scan for repeating usage patterns and auto-draft skills. Runs on idle every 4 hours.
+defineTask('skill-autodraft', 4 * 3600 * 1000, async (db, ctx = {}) => {
   try {
+    if (typeof ctx.shouldYield === 'function' && ctx.shouldYield()) {
+      return { ok: false, yielded: true }
+    }
     const skills = require('../llm/skills')
     const habitLearner = require('../llm/habitLearner')
     const skillSelfCreate = require('../llm/skillSelfCreate')
@@ -66,25 +167,52 @@ defineTask('skill-autodraft', 4 * 3600 * 1000, async (db) => {
       log.info(`cron: skill-autodraft found ${habits.length} habits ready to promote`)
     }
     log.info(`cron: skill-autodraft completed (${count} skills indexed${drafted.length ? `, ${drafted.length} auto-drafted` : ''})`)
+    return { ok: true }
   } catch (e) {
     log.warn('cron: skill-autodraft failed:', e.message)
+    return { ok: false, error: e.message }
   }
+}, {
+  idle: {
+    idleMs: 5 * 60 * 1000,
+    cooldownMs: 4 * 3600 * 1000,
+    minRetryMs: 60 * 1000,
+  },
 })
 
-// 自进化反思：从最近会话轨迹提炼策略条目进有界 STRATEGY.md。每 6 小时；
-// 无待处理轨迹且未超容时直接跳过，无 provider/model 配置时 reflectNow 静默跳过。
-defineTask('strategy-reflect', 6 * 3600 * 1000, async (db) => {
+// 自进化反思：从最近会话轨迹提炼策略条目进有界 STRATEGY.md。
+// 空闲门控 + 6 小时冷却；无待处理轨迹且未超容时跳过，用户回归立即让路。
+defineTask('strategy-reflect', 6 * 3600 * 1000, async (db, ctx = {}) => {
   try {
     const reflect = require('../evolution/reflect')
-    const pending = reflect.pendingTraceCount()
-    const needsMerge = require('../evolution/strategyStore').stats().needsMerge
-    if (pending === 0 && !needsMerge) return
-    const r = await reflect.reflectNow(db)
+    const r = await reflect.reflectNow(db, { shouldYield: ctx.shouldYield })
+    if (r.yielded) {
+      log.info('cron: strategy-reflect yielded on user activity')
+      return { ok: false, yielded: true }
+    }
     if (r.ok) log.info(`cron: strategy-reflect done (+${r.added.length} ~${r.replaced.length} -${r.removed.length})`)
     else log.info(`cron: strategy-reflect skipped (${r.reason})`)
+    return r
   } catch (e) {
     log.warn('cron: strategy-reflect failed:', e.message)
+    return { ok: false, error: e.message }
   }
+}, {
+  idle: {
+    idleMs: 5 * 60 * 1000,
+    cooldownMs: 6 * 3600 * 1000,
+    minRetryMs: 60 * 1000,
+    hasMaterial: () => {
+      try {
+        const reflect = require('../evolution/reflect')
+        const pending = reflect.pendingTraceCount()
+        const needsMerge = require('../evolution/strategyStore').stats().needsMerge
+        return pending > 0 || needsMerge
+      } catch {
+        return false
+      }
+    },
+  },
 })
 
 // ─── User-Configurable Tasks (Task 4.3) ────────────────────────────────────
@@ -196,12 +324,16 @@ function runUserTaskNow(id) {
 let _db = null
 let _initialized = false
 
+const IDLE_POLL_MS = 60 * 1000
+const _startupTimers = []
+
 function initScheduler(db) {
   if (_initialized) return
   _db = db
   _initialized = true
 
-  // Run each task once on startup (with a staggered delay to avoid thundering herd)
+  // Run each task once on startup (with a staggered delay to avoid thundering herd).
+  // Idle-gated tasks poll coarsely every 60s and only fire once idle + cooldown pass.
   const names = Object.keys(TASKS)
   for (let i = 0; i < names.length; i++) {
     const name = names[i]
@@ -210,13 +342,15 @@ function initScheduler(db) {
     // on their own interval from now on.
     if (task.userTask) continue
     // Stagger startup runs by 30s each
-    setTimeout(() => {
+    const t0 = setTimeout(() => {
       runTask(name)
     }, (i + 1) * 30000)
-    // Schedule recurring runs
+    _startupTimers.push(t0)
+    // Schedule recurring runs (coarse poll for idle-gated tasks, raw interval otherwise)
+    const pollMs = task.gate ? Math.min(task.intervalMs, IDLE_POLL_MS) : task.intervalMs
     task.timer = setInterval(() => {
       runTask(name)
-    }, task.intervalMs)
+    }, pollMs)
   }
   log.info(`cron: scheduler initialized with ${names.length} tasks`)
 
@@ -233,19 +367,22 @@ function initScheduler(db) {
   }
 }
 
-function runTask(name) {
+function runTask(name, opts = {}) {
   const task = TASKS[name]
   if (!task || task.running) return
   task.running = true
-  Promise.resolve(task.fn(_db))
+  const exec = task.gate
+    ? task.gate.tick({ force: Boolean(opts.force) })
+    : Promise.resolve(task.fn(_db))
+  Promise.resolve(exec)
     .catch(e => log.warn(`cron: ${name} error:`, e.message))
     .finally(() => { task.running = false })
 }
 
-// Run a specific task immediately (for manual triggers).
+// Run a specific task immediately (for manual triggers — bypasses idle/cooldown gates).
 function runNow(name) {
   if (!TASKS[name]) return false
-  runTask(name)
+  runTask(name, { force: true })
   return true
 }
 
@@ -255,11 +392,15 @@ function listTasks() {
     name,
     intervalMs: t.intervalMs,
     running: t.running,
+    idleGated: Boolean(t.gate),
   }))
 }
 
 // Graceful shutdown: clear all timers.
 function shutdown() {
+  while (_startupTimers.length > 0) {
+    clearTimeout(_startupTimers.pop())
+  }
   for (const name of Object.keys(TASKS)) {
     const task = TASKS[name]
     if (task.timer) {
@@ -271,4 +412,17 @@ function shutdown() {
   log.info('cron: scheduler shut down')
 }
 
-module.exports = { initScheduler, runNow, listTasks, shutdown, registerUserTask, removeUserTask, listUserTasks, runUserTaskNow, USER_TASK_TYPES }
+module.exports = {
+  initScheduler,
+  runNow,
+  listTasks,
+  shutdown,
+  registerUserTask,
+  removeUserTask,
+  listUserTasks,
+  runUserTaskNow,
+  USER_TASK_TYPES,
+  noteUserActivity,
+  registerBusyChecker,
+  isSystemBusy,
+}

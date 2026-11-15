@@ -206,6 +206,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fileStatus: (workspace) => ipcRenderer.invoke('memory:file-status', workspace),
     pinToAgentsMd: (args) => ipcRenderer.invoke('memory:pin-to-agents-md', args),
     distillSkill: (args) => ipcRenderer.invoke('memory:distill-skill', args),
+    consolidate: (opts) => ipcRenderer.invoke('memory:consolidate', opts),
   },
   kg: {
     graph: (opts) => ipcRenderer.invoke('kg:graph', opts),
