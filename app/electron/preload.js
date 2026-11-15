@@ -143,6 +143,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stopSide: (sessionId) => ipcRenderer.invoke('chat:stop-side', sessionId),
     onSideChunk: (cb) => subscribe('chat:side-chunk', cb),
     fork: (params) => ipcRenderer.invoke('chat:fork', params),
+    handoffDraft: (params) => ipcRenderer.invoke('chat:handoff-draft', params),
+    handoffCommit: (params) => ipcRenderer.invoke('chat:handoff-commit', params),
   },
   arena: {
     send: (params) => ipcRenderer.invoke('arena:send', params),

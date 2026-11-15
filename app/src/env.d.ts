@@ -238,6 +238,8 @@ interface Window {
       stopSide: (sessionId: number) => Promise<{ ok: boolean }>
       onSideChunk: (callback: (payload: { sessionId: number; delta: string; done: boolean; fullContent?: string; error?: string }) => void) => () => void
       fork: (params: { sessionId: number; messageId?: number | null; title?: string }) => Promise<{ id: number; title: string }>
+      handoffDraft: (params: { sessionId: number; goal?: string }) => Promise<{ ok: boolean; title?: string; draftPrompt?: string; source?: 'llm' | 'fallback'; modelUsed?: string | null; error?: string }>
+      handoffCommit: (params: { sessionId: number; prompt: string; title?: string | null; modelId?: number | null; insertInitialMessage?: boolean }) => Promise<{ ok: boolean; id?: number; sessionId?: number; parentSessionId?: number; title?: string; initialPrompt?: string; error?: string }>
     }
     arena: {
       send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>

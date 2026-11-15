@@ -14,6 +14,7 @@
 const SLOW = process.argv.includes('--slow')
 const CRASH = process.argv.includes('--crash')
 const DEFUNCT = process.argv.includes('--defunct')
+const PUSH_DIAG = process.argv.includes('--push-diag')
 
 if (DEFUNCT) {
   process.exit(1)
@@ -148,7 +149,27 @@ const handle = (msg) => {
     })
     return
   }
-  if (msg.method === 'textDocument/didOpen') return // notification
+  if (msg.method === 'textDocument/didOpen' || msg.method === 'textDocument/didChange') {
+    if (PUSH_DIAG && msg.params && msg.params.textDocument && msg.params.textDocument.uri) {
+      const uri = msg.params.textDocument.uri
+      const text = msg.method === 'textDocument/didOpen'
+        ? (msg.params.textDocument.text || '')
+        : ((msg.params.contentChanges && msg.params.contentChanges[0] && msg.params.contentChanges[0].text) || '')
+      const diags = text.includes('BAD_SYNTAX')
+        ? [
+            { severity: 2, message: 'Style hint on line 1', range: { start: { line: 0, character: 0 } } },
+            { severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' },
+          ]
+        : []
+      write({
+        jsonrpc: '2.0',
+        method: 'textDocument/publishDiagnostics',
+        params: { uri, diagnostics: diags },
+      })
+    }
+    return
+  }
+  if (msg.method === 'textDocument/didSave') return // notification
   // Unknown request — reply empty.
   if (msg.id !== undefined && msg.id !== null) {
     write({ jsonrpc: '2.0', id: msg.id, result: null })

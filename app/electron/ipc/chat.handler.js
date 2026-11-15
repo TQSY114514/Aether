@@ -499,6 +499,48 @@ The user is asking a quick side question about the ongoing conversation.
     return db.forkSession(sId, safeTitle, mId)
   })
 
+  // ─── Editable Session Handoff IPC (Amp-style 2-step) ────────────────────
+  ipcMain.handle('chat:handoff-draft', async (_e, { sessionId, goal } = {}) => {
+    const sId = Number(sessionId)
+    if (!Number.isInteger(sId) || sId <= 0) {
+      return { ok: false, error: `chat:handoff-draft: sessionId must be a positive integer, got ${sessionId}` }
+    }
+    try {
+      const { generateHandoffDraft } = require('../llm/handoff')
+      const draft = await generateHandoffDraft({
+        db,
+        sessionId: sId,
+        goal: typeof goal === 'string' ? goal : '',
+      })
+      return { ok: true, ...draft }
+    } catch (e) {
+      log.warn('chat:handoff-draft failed:', e.message || e)
+      return { ok: false, error: e.message || String(e) }
+    }
+  })
+
+  ipcMain.handle('chat:handoff-commit', async (_e, { sessionId, prompt, title, modelId, insertInitialMessage } = {}) => {
+    const sId = Number(sessionId)
+    if (!Number.isInteger(sId) || sId <= 0) {
+      return { ok: false, error: `chat:handoff-commit: sessionId must be a positive integer, got ${sessionId}` }
+    }
+    try {
+      const { commitHandoff } = require('../llm/handoff')
+      const created = commitHandoff({
+        db,
+        parentSessionId: sId,
+        prompt: String(prompt || ''),
+        title: typeof title === 'string' && title.trim() ? title.trim().slice(0, 255) : null,
+        modelId: modelId != null ? Number(modelId) : null,
+        insertInitialMessage: insertInitialMessage !== false,
+      })
+      return { ok: true, ...created }
+    } catch (e) {
+      log.warn('chat:handoff-commit failed:', e.message || e)
+      return { ok: false, error: e.message || String(e) }
+    }
+  })
+
   // Surface the chat-send handler exports (e.g. handleChatComplete for the
   // local gateway) so main.js can register them as proxy channels.
   return chatSendState

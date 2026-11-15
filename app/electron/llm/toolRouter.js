@@ -31,7 +31,7 @@ const CATEGORY_TOOLS = {
   ],
   agent: [
     'delegate_task', 'run_agent', 'task',
-    'run_workflow', 'run_arena',
+    'run_workflow', 'run_arena', 'run_script',
     'debug_loop', 'test_first', 'review_code',
   ],
   memory: ['memory_save', 'memory_list', 'memory_search'],
@@ -244,7 +244,7 @@ const STAGE_TOOL_POOLS = Object.freeze({
   Diagnose: [
     'read_file', 'list_dir', 'glob_files', 'glob_find', 'grep_search',
     'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'find_symbol',
-    'codebase_graph', 'git_status', 'git_diff', 'git_log', 'run_command',
+    'codebase_graph', 'git_status', 'git_diff', 'git_log', 'run_command', 'run_script',
   ],
   Search: [
     'read_file', 'list_dir', 'glob_files', 'glob_find', 'grep_search',
@@ -254,7 +254,7 @@ const STAGE_TOOL_POOLS = Object.freeze({
   Edit: [
     'read_file', 'edit_file', 'write_file', 'apply_patch',
     'lsp_definition', 'lsp_references', 'lsp_code_actions', 'lsp_rename',
-    'run_command',
+    'run_command', 'run_script',
   ],
   Verify: [
     'read_file', 'grep_search', 'glob_files', 'glob_find',

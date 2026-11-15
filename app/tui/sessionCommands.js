@@ -7,7 +7,7 @@
 
 // 命令补全候选（斜杠提示用, 按字母序）
 export const SLASH_COMMANDS = [
-  '/approval-mode', '/apikey', '/clear', '/compact', '/compress-fast', '/context', '/delete', '/diff', '/effort', '/export', '/fork', '/help', '/memory', '/mode', '/model', '/permissions', '/permissions add', '/persona', '/provider',
+  '/approval-mode', '/apikey', '/clear', '/compact', '/compress-fast', '/context', '/delete', '/diff', '/effort', '/export', '/fork', '/handoff', '/help', '/memory', '/mode', '/model', '/permissions', '/permissions add', '/persona', '/provider',
   '/provider add', '/provider list', '/quit', '/recap', '/rename', '/status',
   '/sessions', '/skill accept', '/skill dismiss', '/skills', '/undo', '/use',
 ]
@@ -107,6 +107,8 @@ export function parseSessionCommand(input) {
     }
     case '/fork':
       return { type: 'fork', ...(arg ? { title: arg } : {}) }
+    case '/handoff':
+      return { type: 'handoff', ...(arg ? { goal: arg } : {}) }
     // ── W1（t10-t14）会话上下文命令 ─────────────────────────────────────
     case '/compact':
       // 多余参数一律忽略（/compact foo 与 /compact 等价，防误输入崩溃）

@@ -31,6 +31,7 @@ const FLAG_DEFS = [
   // Phase 0/2 — code intelligence (already-shipped capabilities, now gated)
   { key: 'repoMap.enabled',      default: true,  category: 'code-intel',  description: 'Inject the repo map into the agent tool loop' },
   { key: 'lsp.full',             default: false, category: 'code-intel',  description: 'Full LSP feature set (definition / references / rename / code actions)' },
+  { key: 'lsp.autoDiagnostics',  default: true,  category: 'code-intel',  description: 'Automatically push debounced LSP diagnostics after file-modifying tool calls' },
   // Phase 1 — cloud execution + parallel tasks
   { key: 'exec.docker',          default: false, category: 'exec',        description: 'Docker sandbox execution backend' },
   { key: 'exec.jobSandbox',      default: true,  category: 'exec',        description: 'Windows native Job Object process isolation (2GB memory limit + kill-on-close zombie prevention)' },
@@ -43,6 +44,7 @@ const FLAG_DEFS = [
   { key: 'agent.runnerUpReview',    default: false, category: 'agent',    description: 'Runner-up dual-model review: 2nd-ranked ELO model cross-checks destructive diffs before auto-apply' },
   { key: 'agent.visualVerification', default: false, category: 'agent',    description: 'Visual self-healing loop: offscreen render & screenshot verification after frontend UI modifications' },
   { key: 'agent.browser',            default: true,  category: 'agent',    description: 'Agent-dedicated browser environment: interactive web ACI (navigate, click, type, snapshot, console) for automated verification and SPA exploration' },
+  { key: 'agent.script',             default: false, category: 'agent',    description: 'Programmatic batch tool execution inside an isolated JS script worker (run_script)' },
   // Phase 2 — background code intelligence
   { key: 'agent.backgroundReview', default: false, category: 'agent',     description: 'Background code review after file-touching tools' },
   // Phase 2 — agent quality (external review P0-1)

@@ -23,6 +23,8 @@ import {
   renameWorkspace,
   codeActionsWorkspace,
   diagnosticsWorkspace,
+  diagnosticsAfterEdit,
+  formatDiagnosticsSummary,
   configureServer,
   disposeAll,
 } from '../electron/context/lspClient'
@@ -257,5 +259,95 @@ describe('full LSP workspace API', () => {
     pointServerAtFixture('--defunct')
     const res = await referencesWorkspace(tmpDir, SAMPLE, { line: 1 })
     expect(res).toBeNull()
+  })
+})
+
+describe('Post-write push/pull diagnostics & tool integration', () => {
+  it('diagnosticsAfterEdit captures push textDocument/publishDiagnostics and formats Error-first', async () => {
+    pointServerAtFixture('--push-diag')
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true })
+    const file = path.join(tmpDir, 'src', 'broken.ts')
+    const content = 'const ok = 1\nconst x = BAD_SYNTAX\n'
+    fs.writeFileSync(file, content, 'utf8')
+
+    const diags = await diagnosticsAfterEdit(tmpDir, file, { content, waitMs: 1500 })
+    expect(diags).not.toBeNull()
+    expect(diags).toHaveLength(2)
+
+    const summary = formatDiagnosticsSummary(file, diags)
+    expect(summary).toContain('[LSP Diagnostics] broken.ts (2):')
+    // Error severity must sort before Warning severity even if pushed second
+    const errIdx = summary.indexOf('[Error] line 2:')
+    const warnIdx = summary.indexOf('[Warning] line 1:')
+    expect(errIdx).toBeGreaterThan(-1)
+    expect(warnIdx).toBeGreaterThan(errIdx)
+    expect(summary).toContain('Syntax error near BAD_SYNTAX')
+  })
+
+  it('formatDiagnosticsSummary caps output at maxItems (15)', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ severity: 1, line: i, message: `err ${i}` }))
+    const summary = formatDiagnosticsSummary('big.js', many, { maxItems: 15 })
+    expect(summary).toContain('[LSP Diagnostics] big.js (20):')
+    expect(summary).toContain('... (+5 more)')
+  })
+
+  it('caches ENOENT unavailable languages and resets on disposeAll()', async () => {
+    configureServer('python', { command: '__nonexistent_lsp_bin_aether__', args: [] })
+    const pyFile = path.join(tmpDir, 'app.py')
+    fs.writeFileSync(pyFile, 'x = 1\n', 'utf8')
+    const first = await diagnosticsAfterEdit(tmpDir, pyFile, { waitMs: 500 })
+    expect(first).toBeNull()
+  })
+
+  it('write_file, edit_file, and apply_patch append [LSP Diagnostics] unless lsp.autoDiagnostics is disabled', async () => {
+    const lspCjs = require('../electron/context/lspClient')
+    lspCjs.configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag'],
+    })
+    const { getTool } = require('../electron/tools/registry')
+    const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
+    const sid = 'lsp-post-write-sess'
+    setWorkspaceRootForSession(sid, tmpDir)
+    try {
+      const target = path.join(tmpDir, 'mod.ts')
+      const wOut = await getTool('write_file').run(
+        { path: target, content: 'export const v = 1\n// BAD_SYNTAX\n' },
+        { sessionId: sid, agentMode: 'act', lspWaitMs: 1500 }
+      )
+      expect(wOut).toContain('wrote ')
+      expect(wOut).toContain('[LSP Diagnostics] mod.ts')
+
+      const eOut = await getTool('edit_file').run(
+        { path: target, old_string: 'export const v = 1', new_string: 'export const v = 2' },
+        { sessionId: sid, agentMode: 'act', lspWaitMs: 1500 }
+      )
+      expect(eOut).toContain('edited ')
+      expect(eOut).toContain('[LSP Diagnostics] mod.ts')
+
+      const pOut = await getTool('apply_patch').run(
+        {
+          path: target,
+          patch: '<<<<<<< SEARCH\nexport const v = 2\n=======\nexport const v = 3\n>>>>>>> REPLACE',
+        },
+        { sessionId: sid, agentMode: 'act', lspWaitMs: 1500 }
+      )
+      expect(pOut).toContain('patched ')
+      expect(pOut).toContain('[LSP Diagnostics] mod.ts')
+
+      // Disabled via feature flag lsp.autoDiagnostics=0 -> no [LSP Diagnostics] suffix
+      const dbDisabled = {
+        getSetting: (k) => (k === 'feature_flag.lsp.autoDiagnostics' ? '0' : null),
+      }
+      const target2 = path.join(tmpDir, 'mod2.ts')
+      const offOut = await getTool('write_file').run(
+        { path: target2, content: 'export const v = 4\n// BAD_SYNTAX\n' },
+        { sessionId: sid, agentMode: 'act', db: dbDisabled, lspWaitMs: 1500 }
+      )
+      expect(offOut).not.toContain('[LSP Diagnostics]')
+    } finally {
+      lspCjs.disposeAll()
+      clearSessionWorkspaces(sid)
+    }
   })
 })

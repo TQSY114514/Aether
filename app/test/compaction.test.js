@@ -261,9 +261,18 @@ describe('findKeepPoint（token 保尾）', () => {
 
 // --- summarize prompt split (TQS-5: instructions ≠ untrusted data) ---
 describe('buildSummarizerSystemPrompt', () => {
-  it('full mode: six headings and verbatim rule, no untrusted data blocks', () => {
+  it('full mode: eight anchored headings and verbatim rule, no untrusted data blocks', () => {
     const s = buildSummarizerSystemPrompt(null)
-    for (const sec of ['## Goal', '## Constraints', '## Progress', '## Key Decisions', '## Next Steps', '## Critical Context']) {
+    for (const sec of [
+      '## Goal',
+      '## Constraints & Decisions',
+      '## Files & Locations',
+      '## Progress',
+      '## Errors & Verification Status',
+      '## Next Steps',
+      '## Critical Context',
+      '## Open Questions',
+    ]) {
       expect(s).toContain(sec)
     }
     expect(s).toContain('逐字保留')

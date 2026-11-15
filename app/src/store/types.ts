@@ -380,6 +380,9 @@ export interface AppState {
   btwOpen: boolean
   setBtwOpen: (v: boolean) => void
   toggleBtw: () => void
+  handoffOpen: boolean
+  handoffInitialGoal: string
+  setHandoffOpen: (v: boolean, initialGoal?: string) => void
   stopGeneration: () => Promise<void>
   continueMessage: () => Promise<void>
 

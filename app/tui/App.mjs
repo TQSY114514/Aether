@@ -885,6 +885,37 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
       } else if (cmd.type === 'fork') {
         const r = forkSession(db, { title: cmd.title, parentSessionId: state.currentSessionId })
         dispatch({ type: 'SESSION_FORK', sessionId: r.lastInsertRowid, parentId: state.currentSessionId, title: cmd.title || 'fork' })
+      } else if (cmd.type === 'handoff') {
+        const st = latestState.current
+        if (st.running) {
+          dispatch({ type: 'STATUS', text: 'handoff: 请等待当前回合结束' })
+        } else if (st.dbSessionId == null) {
+          dispatch({ type: 'STATUS', text: 'handoff: 当前无持久化会话 — 请先发送一条消息' })
+        } else {
+          try {
+            dispatch({ type: 'STATUS', text: 'handoff: 正在提炼上下文...' })
+            const cjs = await import('../electron/llm/handoff.js')
+            const handoff = cjs.generateHandoffDraft ? cjs : (cjs.default || {})
+            const draft = await handoff.generateHandoffDraft({
+              db,
+              sessionId: st.dbSessionId,
+              goal: cmd.goal || '',
+            })
+            const created = handoff.commitHandoff({
+              db,
+              parentSessionId: st.dbSessionId,
+              prompt: draft.draftPrompt,
+              title: draft.title,
+            })
+            dispatch({ type: 'RESET' })
+            dispatch({ type: 'SESSION_ID_SET', sessionId: created.sessionId })
+            dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) })
+            dispatch({ type: 'APPEND_SYSTEM', text: `[Handoff -> #${created.sessionId}] ${created.title}\n\n${draft.draftPrompt}` })
+            dispatch({ type: 'STATUS', text: `handoff: 已交接至新会话 #${created.sessionId} (${draft.source})` })
+          } catch (err) {
+            dispatch({ type: 'STATUS', text: `handoff failed: ${err && err.message ? err.message : String(err)}` })
+          }
+        }
       } else if (cmd.type === 'memory') {
         // todo 8：/memory <关键词> → autoMemory.search（keyword 兜底）→ 卡片
         const { results } = searchMemory(dbPath, cmd.query || '')

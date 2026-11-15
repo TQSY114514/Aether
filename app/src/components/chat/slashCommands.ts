@@ -355,6 +355,18 @@ export const DEFAULT_COMMANDS: SlashCommand[] = [
     },
   },
   {
+    id: 'handoff',
+    name: t('slash.handoff', '交接新会话'),
+    description: t('slash.handoff_desc', '提炼当前进展并编辑交接简报，创建干净的新会话'),
+    category: 'session',
+    paramHint: '[goal]',
+    action: async (arg) => {
+      const store = useStore.getState()
+      if (!store.currentSessionId) return
+      store.setHandoffOpen(true, (arg || '').trim())
+    },
+  },
+  {
     id: 'fork',
     name: t('slash.fork', '分叉会话'),
     description: t('slash.fork_desc', '从当前节点分叉出独立会话分支'),

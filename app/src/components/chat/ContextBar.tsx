@@ -140,6 +140,20 @@ export default function ContextBar() {
           {t('chat.compact')}
         </button>
         
+        {/* Handoff button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (!currentSessionId) return
+            useStore.getState().setHandoffOpen(true, '')
+          }}
+          title={t('chat.handoff_hint')}
+          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors motion-reduce:transition-none shrink-0"
+        >
+          {t('chat.handoff')}
+        </button>
+
         {/* Fork button */}
         <button
           onClick={async (e) => {

@@ -26,29 +26,84 @@ const EXTS_TO_LANG = {
   '.py': 'python', '.rs': 'rust', '.go': 'go', '.java': 'java', '.kt': 'kotlin',
 }
 
-// Which languages get a server and how to launch it. Currently only
-// javascript/typescript (the dominant codebase languages); other languages
-// fall through to the regex indexer unchanged.
+// Which languages get a server and how to launch it.
 const serverOverrides = new Map() // language -> { command, args }
+const unavailableLangs = new Set() // languages whose default binary ENOENT'd
+
+const LANGUAGE_SERVER_CANDIDATES = {
+  python: [
+    { command: 'pyright-langserver', args: ['--stdio'] },
+    { command: 'pylsp', args: [] },
+  ],
+  go: [
+    { command: 'gopls', args: [] },
+  ],
+  rust: [
+    { command: 'rust-analyzer', args: [] },
+  ],
+}
+
+const LSP_LANGUAGE_IDS = {
+  '.js': 'javascript',
+  '.jsx': 'javascriptreact',
+  '.ts': 'typescript',
+  '.tsx': 'typescriptreact',
+  '.mjs': 'javascript',
+  '.cjs': 'javascript',
+  '.py': 'python',
+  '.go': 'go',
+  '.rs': 'rust',
+}
+
+function isCommandOnPath(cmd) {
+  if (!cmd) return false
+  const fs = require('fs')
+  const isWin = process.platform === 'win32'
+  const exts = isWin ? ['', '.exe', '.cmd', '.bat'] : ['']
+  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean)
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const candidate = path.join(dir, cmd.endsWith(ext) ? cmd : cmd + ext)
+      try {
+        if (fs.statSync(candidate).isFile()) return true
+      } catch {}
+    }
+  }
+  return false
+}
 
 function defaultServerFor(language) {
-  if (language !== 'javascript') return null
-  // Prefer the locally installed package bin (no shell shim needed, works on
-  // Windows). typescript-language-server is an optional install — missing it
-  // just means we degrade.
-  try {
-    const pkgPath = require.resolve('typescript-language-server/package.json', { paths: [__dirname] })
-    const pkg = require(pkgPath)
-    const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin && pkg.bin['typescript-language-server']
-    if (bin) {
-      return { command: process.execPath, args: [path.resolve(path.dirname(pkgPath), bin), '--stdio'] }
-    }
-  } catch { /* not installed locally — fall through to PATH */ }
-  return { command: 'typescript-language-server', args: ['--stdio'] }
+  if (language === 'javascript') {
+    // Prefer the locally installed package bin (no shell shim needed, works on
+    // Windows). typescript-language-server is an optional install — missing it
+    // just means we degrade.
+    try {
+      const pkgPath = require.resolve('typescript-language-server/package.json', { paths: [__dirname] })
+      const pkg = require(pkgPath)
+      const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin && pkg.bin['typescript-language-server']
+      if (bin) {
+        return { command: process.execPath, args: [path.resolve(path.dirname(pkgPath), bin), '--stdio'] }
+      }
+    } catch { /* not installed locally — fall through to PATH */ }
+    return { command: 'typescript-language-server', args: ['--stdio'] }
+  }
+  const candidates = LANGUAGE_SERVER_CANDIDATES[language]
+  if (!candidates) return null
+  for (const cand of candidates) {
+    if (isCommandOnPath(cand.command)) return cand
+  }
+  return null
 }
 
 function extToLanguage(filePath) {
   return EXTS_TO_LANG[path.extname(filePath).toLowerCase()] ?? null
+}
+
+function normalizeUriKey(uri) {
+  const filePath = uriToFilePath(uri)
+  if (!filePath) return String(uri || '')
+  const resolved = path.resolve(filePath)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
 /**
@@ -172,9 +227,13 @@ class LspClient {
     this._proc = null
     this._parser = new MessageParser()
     this._pending = new Map() // id -> { resolve, reject, timer }
+    this._diagnosticsByUri = new Map() // normalizedUri -> Diagnostic[]
+    this._diagnosticWaiters = new Map() // normalizedUri -> Set<{ resolve, timer }>
+    this._docVersions = new Map() // uri -> version number
     this._id = 0
     this._disposed = false
     this._startFailed = false
+    this._startErrorCode = null
   }
 
   /** Send a request and await its response. Rejects on timeout / crash. */
@@ -220,9 +279,40 @@ class LspClient {
   }
 
   _handleMessage(msg) {
-    if (msg.id === undefined || msg.id === null) return // notification
+    if (msg.id === undefined || msg.id === null) {
+      if (msg.method === 'textDocument/publishDiagnostics' && msg.params && msg.params.uri) {
+        const key = normalizeUriKey(msg.params.uri)
+        const rawItems = Array.isArray(msg.params.diagnostics) ? msg.params.diagnostics : []
+        const normalized = rawItems.map(d => ({
+          severity: d.severity ?? 1,
+          message: d.message || '',
+          line: (d.range && d.range.start && d.range.start.line) ?? 0,
+          source: d.source || null,
+          code: d.code ?? null,
+        }))
+        this._diagnosticsByUri.set(key, normalized)
+        const waiters = this._diagnosticWaiters.get(key)
+        if (waiters && waiters.size > 0) {
+          this._diagnosticWaiters.delete(key)
+          for (const w of waiters) {
+            clearTimeout(w.timer)
+            w.resolve(normalized)
+          }
+        }
+      }
+      return
+    }
     const pending = this._pending.get(msg.id)
-    if (!pending) return
+    if (!pending) {
+      // Server-initiated request (e.g. workspace/configuration, client/registerCapability):
+      // acknowledge with null so strict servers do not block waiting on the client.
+      if (msg.method && this._proc && this._proc.stdin) {
+        try {
+          this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: null }))
+        } catch { /* ignore */ }
+      }
+      return
+    }
     clearTimeout(pending.timer)
     this._pending.delete(msg.id)
     if (msg.error) pending.reject(new Error(msg.error.message || 'LSP error'))
@@ -241,6 +331,7 @@ class LspClient {
     proc.stderr.on('data', () => { /* server diagnostics — ignore */ })
     proc.on('error', (err) => {
       this._startFailed = true
+      this._startErrorCode = err && err.code ? err.code : null
       this._fail(`LSP server failed to start: ${err.message}`)
     })
     proc.on('exit', (code, signal) => {
@@ -252,7 +343,12 @@ class LspClient {
       await this._send('initialize', {
         processId: process.pid,
         rootUri,
-        capabilities: {},
+        capabilities: {
+          textDocument: {
+            publishDiagnostics: { relatedInformation: false },
+            synchronization: { dynamicRegistration: false, didSave: true },
+          },
+        },
         workspaceFolders: [{ uri: rootUri, name: path.basename(path.resolve(this.root)) }],
       })
       try {
@@ -302,8 +398,98 @@ class LspClient {
    */
   async openDocument(uri) {
     if (!(await this._ensureStarted())) return false
-    this._notify('textDocument/didOpen', { textDocument: { uri, languageId: 'plaintext', version: 1, text: '' } })
+    const ver = (this._docVersions.get(uri) || 0) + 1
+    this._docVersions.set(uri, ver)
+    this._notify('textDocument/didOpen', { textDocument: { uri, languageId: 'plaintext', version: ver, text: '' } })
     return true
+  }
+
+  /**
+   * Synchronize full document text (`didOpen` on first sight, `didChange`
+   * + `didSave` on subsequent edits) so both pull and push LSP servers analyze
+   * the latest disk contents.
+   * @param {string} uri
+   * @param {string} text
+   * @param {string} [languageId]
+   * @returns {Promise<boolean>}
+   */
+  async syncDocument(uri, text, languageId = 'plaintext') {
+    if (!(await this._ensureStarted())) return false
+    const prev = this._docVersions.get(uri)
+    if (prev == null) {
+      this._docVersions.set(uri, 1)
+      this._notify('textDocument/didOpen', {
+        textDocument: { uri, languageId, version: 1, text },
+      })
+    } else {
+      const next = prev + 1
+      this._docVersions.set(uri, next)
+      this._notify('textDocument/didChange', {
+        textDocument: { uri, version: next },
+        contentChanges: [{ text }],
+      })
+    }
+    this._notify('textDocument/didSave', {
+      textDocument: { uri },
+      text,
+    })
+    return true
+  }
+
+  /**
+   * Wait up to `waitMs` for a fresh `textDocument/publishDiagnostics` push
+   * notification, resolving to `null` on timeout.
+   * @private
+   */
+  _awaitPushDiagnostics(uri, waitMs = 450) {
+    const key = normalizeUriKey(uri)
+    return new Promise((resolve) => {
+      if (waitMs <= 0) {
+        resolve(this._diagnosticsByUri.get(key) ?? null)
+        return
+      }
+      let waiters = this._diagnosticWaiters.get(key)
+      if (!waiters) {
+        waiters = new Set()
+        this._diagnosticWaiters.set(key, waiters)
+      }
+      const entry = {
+        resolve,
+        timer: setTimeout(() => {
+          waiters.delete(entry)
+          if (waiters.size === 0) this._diagnosticWaiters.delete(key)
+          resolve(null)
+        }, waitMs),
+      }
+      if (entry.timer.unref) entry.timer.unref()
+      waiters.add(entry)
+    })
+  }
+
+  /**
+   * Sync document content and collect diagnostics using push first, falling
+   * back to LSP 3.17 pull (`textDocument/diagnostic`) if no push arrives.
+   * @param {string} uri
+   * @param {string} text
+   * @param {{ languageId?: string, waitMs?: number }} [opts]
+   * @returns {Promise<Array<{ severity: number, message: string, line: number, source?: string|null, code?: string|number|null }> | null>}
+   */
+  async syncAndCollectDiagnostics(uri, text, { languageId = 'plaintext', waitMs = 450 } = {}) {
+    if (!(await this._ensureStarted())) return null
+    const key = normalizeUriKey(uri)
+    // Register push waiter BEFORE sending notifications to avoid missing fast pushes.
+    const pushPromise = this._awaitPushDiagnostics(uri, waitMs)
+    await this.syncDocument(uri, text, languageId)
+    const pushed = await pushPromise
+    if (Array.isArray(pushed)) return pushed
+
+    // Push did not arrive in time; try pull diagnostics if server supports it.
+    try {
+      const pulled = await this.getDiagnostics(uri)
+      if (Array.isArray(pulled) && pulled.length > 0) return pulled
+    } catch { /* server may not implement textDocument/diagnostic */ }
+
+    return this._diagnosticsByUri.get(key) || []
   }
 
   /**
@@ -407,6 +593,15 @@ class LspClient {
       reject(new Error('LSP client disposed'))
     }
     this._pending.clear()
+    for (const waiters of this._diagnosticWaiters.values()) {
+      for (const w of waiters) {
+        clearTimeout(w.timer)
+        w.resolve(null)
+      }
+    }
+    this._diagnosticWaiters.clear()
+    this._diagnosticsByUri.clear()
+    this._docVersions.clear()
     if (!proc) return
     try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: ++this._id, method: 'shutdown', params: null })) } catch { /* gone */ }
     try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method: 'exit', params: null })) } catch { /* gone */ }
@@ -457,6 +652,7 @@ async function searchWorkspace(root, query, { language = 'javascript', timeoutMs
 
 /** Override the launch config for a language (tests / power users). */
 function configureServer(language, { command, args }) {
+  unavailableLangs.delete(language)
   serverOverrides.set(language, { command, args })
 }
 
@@ -467,6 +663,7 @@ function configureServer(language, { command, args }) {
 
 /** Get a client for a workspace+language (cached), or null when unavailable. */
 function clientFor(root, language = 'javascript') {
+  if (!serverOverrides.has(language) && unavailableLangs.has(language)) return null
   const server = serverOverrides.get(language) || defaultServerFor(language)
   if (!server) return null
   const key = `${root}|${language}`
@@ -484,8 +681,17 @@ async function withClient(root, language, fn) {
   const client = clientFor(root, language)
   if (!client) return null
   try {
-    return await fn(client)
+    const res = await fn(client)
+    if (client._startErrorCode === 'ENOENT' && !serverOverrides.has(language)) {
+      unavailableLangs.add(language)
+      clientCache.delete(`${root}|${language}`)
+      try { client.dispose() } catch { /* already disposed */ }
+    }
+    return res
   } catch {
+    if (client._startErrorCode === 'ENOENT' && !serverOverrides.has(language)) {
+      unavailableLangs.add(language)
+    }
     clientCache.delete(`${root}|${language}`)
     try { client.dispose() } catch { /* already disposed */ }
     return null
@@ -540,12 +746,69 @@ function diagnosticsWorkspace(root, file, { language } = {}) {
   return withClient(root, lang, async (client) => client.getDiagnostics(uri))
 }
 
+/**
+ * Push-first + pull-fallback diagnostics after a file write/edit.
+ * Never throws; returns `null` when language has no LSP or server fails.
+ * @param {string} root
+ * @param {string} file
+ * @param {{ content?: string, language?: string, waitMs?: number }} [opts]
+ * @returns {Promise<Array<{ severity: number, message: string, line: number, source?: string|null, code?: string|number|null }> | null>}
+ */
+async function diagnosticsAfterEdit(root, file, { content, language, waitMs = 450 } = {}) {
+  const lang = language || extToLanguage(file)
+  if (!lang) return null
+  const absFile = path.resolve(file)
+  const ext = path.extname(absFile).toLowerCase()
+  const languageId = LSP_LANGUAGE_IDS[ext] || lang
+  const uri = pathToFileURL(absFile).href
+  let text = content
+  if (typeof text !== 'string') {
+    try {
+      text = require('fs').readFileSync(absFile, 'utf8')
+    } catch {
+      return null
+    }
+  }
+  return withClient(root, lang, (client) => client.syncAndCollectDiagnostics(uri, text, { languageId, waitMs }))
+}
+
+const SEVERITY_LABELS = { 1: 'Error', 2: 'Warning', 3: 'Info', 4: 'Hint' }
+
+/**
+ * Format diagnostics into a compact Error-first summary block for tool output.
+ * @param {string} file
+ * @param {Array<{ severity: number, message: string, line: number, source?: string|null, code?: string|number|null }>} diagnostics
+ * @param {{ maxItems?: number }} [opts]
+ * @returns {string}
+ */
+function formatDiagnosticsSummary(file, diagnostics, { maxItems = 15 } = {}) {
+  if (!Array.isArray(diagnostics) || diagnostics.length === 0) return ''
+  const sorted = [...diagnostics].sort((a, b) => {
+    const sa = a.severity ?? 1
+    const sb = b.severity ?? 1
+    if (sa !== sb) return sa - sb
+    return (a.line ?? 0) - (b.line ?? 0)
+  })
+  const shown = sorted.slice(0, maxItems)
+  const lines = shown.map((d) => {
+    const label = SEVERITY_LABELS[d.severity ?? 1] || 'Diag'
+    const lineNum = (d.line ?? 0) + 1
+    const src = d.source ? `${d.source}: ` : ''
+    return `  - [${label}] line ${lineNum}: ${src}${d.message}`
+  })
+  if (sorted.length > maxItems) {
+    lines.push(`  - ... (+${sorted.length - maxItems} more)`)
+  }
+  return `\n[LSP Diagnostics] ${path.basename(file)} (${sorted.length}):\n${lines.join('\n')}`
+}
+
 /** Dispose every cached client (shutdown / test teardown). */
 function disposeAll() {
   for (const client of clientCache.values()) {
     try { client.dispose() } catch { /* already disposed */ }
   }
   clientCache.clear()
+  unavailableLangs.clear()
 }
 
 module.exports = {
@@ -561,6 +824,8 @@ module.exports = {
   renameWorkspace,
   codeActionsWorkspace,
   diagnosticsWorkspace,
+  diagnosticsAfterEdit,
+  formatDiagnosticsSummary,
   configureServer,
   disposeAll,
   DEFAULT_TIMEOUT_MS,

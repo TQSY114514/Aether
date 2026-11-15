@@ -28,6 +28,25 @@ const { checkSSRF, checkSSRFHostname } = require('./ssrf')
 const { resolveBackendForMode } = require('../exec/resolveBackend')
 const { dockerBackend } = require('../exec/dockerBackend')
 
+async function collectPostWriteDiagnostics(filePath, content, ctx) {
+  try {
+    const lsp = require('../context/lspClient')
+    if (!lsp.extToLanguage(filePath)) return ''
+    const featureFlags = require('../featureFlags')
+    if (!featureFlags.isEnabled(ctx?.db, 'lsp.autoDiagnostics')) return ''
+    let root
+    try { root = getWorkspaceRoot(ctx?.sessionId) } catch { /* ignore */ }
+    if (!root) root = path.dirname(path.resolve(filePath))
+    const diags = await lsp.diagnosticsAfterEdit(root, filePath, {
+      content,
+      waitMs: typeof ctx?.lspWaitMs === 'number' ? ctx.lspWaitMs : 450,
+    })
+    return diags && diags.length ? lsp.formatDiagnosticsSummary(filePath, diags, { maxItems: 15 }) : ''
+  } catch {
+    return ''
+  }
+}
+
 const MAX_READ_BYTES = 64 * 1024
 const MAX_GREP_BYTES = 32 * 1024
 
@@ -402,7 +421,8 @@ const TOOLS = [
       recordFileActivity(ctx?.sessionId, p, 'write')
     } catch {}
     maybeInvalidateRuleCaches(p, ctx?.sessionId)
-    return `wrote ${c.length} chars to ${p}`
+    const diagSuffix = await collectPostWriteDiagnostics(p, c, ctx)
+    return `wrote ${c.length} chars to ${p}${diagSuffix}`
   }},
   { name: 'edit_file', description: 'Replace text in a file. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, old_string: { type: 'string' }, new_string: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['path', 'old_string', 'new_string'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const o = String(args.old_string ?? ''); const n = String(args.new_string ?? '')
@@ -472,7 +492,8 @@ const TOOLS = [
       recordFileActivity(ctx?.sessionId, p, 'edit')
     } catch {}
     maybeInvalidateRuleCaches(p, ctx?.sessionId)
-    return `edited ${p}`
+    const diagSuffix = await collectPostWriteDiagnostics(p, updated, ctx)
+    return `edited ${p}${diagSuffix}`
   }},
   { name: 'apply_patch', description: 'Apply a unified diff patch or Aider-style SEARCH/REPLACE blocks. DANGEROUS.', risk: 'dangerous', parameters: { type: 'object', properties: { path: { type: 'string' }, patch: { type: 'string' } }, required: ['path', 'patch'] }, run: async (args, ctx) => {
     const p = String(args.path || ''); const pt = String(args.patch || ''); if (!p || !pt) throw new Error('path and patch required')
@@ -496,7 +517,8 @@ const TOOLS = [
       recordFileActivity(ctx?.sessionId, p, 'edit')
     } catch {}
     maybeInvalidateRuleCaches(p, ctx?.sessionId)
-    return `patched ${p} (${r.applied} changes applied via ${r.format})`
+    const diagSuffix = await collectPostWriteDiagnostics(p, r.content, ctx)
+    return `patched ${p} (${r.applied} changes applied via ${r.format})${diagSuffix}`
   }},
 
   // ── Execution tools ─────────────────────────────────────────────────
@@ -786,6 +808,17 @@ const TOOLS = [
       : (Array.isArray(ctx?.options?.disabledTools) ? ctx.options.disabledTools : [])
     if (disabled.includes(toolName) || disabled.includes('call_extended_tool')) {
       return `[BLOCKED] Tool "${toolName}" is disabled in current settings.`
+    }
+
+    if (toolName === 'run_script') {
+      try {
+        const featureFlags = require('../featureFlags')
+        if (!featureFlags.isEnabled(ctx?.db, 'agent.script')) {
+          return '[BLOCKED] Tool "run_script" is disabled by feature flag "agent.script".'
+        }
+      } catch {
+        return '[BLOCKED] Tool "run_script" is unavailable.'
+      }
     }
 
     // Check boundary allowlist
@@ -1581,7 +1614,39 @@ TOOLS.push(
     if (!pattern) throw new Error('pattern is required'); guardWorkspaceRead(cwd, ctx, 'cwd')
     const m = await globFiles(pattern, { cwd: cwd || undefined, absolute: true, nodir: true })
     return m.slice(0, 100).join('\n') || '(no matches)'
-  }}
+  }},
+  {
+    name: 'run_script',
+    description: 'Execute a short JavaScript batch script inside an isolated sandboxed Node VM worker with access to `inputs`, `console`, and `await tools.<name>(args)` RPC calls (no filesystem/network/require). Ideal for multi-file batch reads/edits without extra model turns. DANGEROUS.',
+    risk: 'dangerous',
+    parameters: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'Async JavaScript body with access to `inputs`, `tools`, and `console`. Use `return` to output final value.' },
+        inputs: { type: 'object', description: 'Optional structured inputs passed to the script as `inputs`.' },
+        timeoutMs: { type: 'number', description: 'Execution timeout in milliseconds (default 30000, max 120000).' },
+        maxToolCalls: { type: 'number', description: 'Maximum tool calls allowed inside the script (default 50, max 200).' },
+      },
+      required: ['code'],
+    },
+    run: async (args, ctx) => {
+      if (!ctx?.allowRunScript) {
+        const featureFlags = require('../featureFlags')
+        if (!featureFlags.isEnabled(ctx?.db, 'agent.script')) {
+          throw new Error('Tool "run_script" is disabled by feature flag "agent.script".')
+        }
+      }
+      const { runScript } = require('./scriptRunner')
+      const res = await runScript({
+        code: String(args.code || ''),
+        inputs: args.inputs,
+        timeoutMs: args.timeoutMs,
+        maxToolCalls: args.maxToolCalls,
+        ctx,
+      })
+      return res.text
+    },
+  }
 )
 
 // ── Exports ──────────────────────────────────────────────────────────────
@@ -1589,13 +1654,16 @@ function getTool(name) { return TOOLS.find(t => t.name === name) }
 function toolsPayload(mode, opts = {}) {
   const isExplore = mode === 'plan' || mode === 'explore' || mode === 'read_only' || mode === 'readonly' || mode === 'read-only'
   let list = isExplore ? TOOLS.filter(t => t.risk === 'safe') : TOOLS
-  if (opts?.db) {
-    try {
-      const featureFlags = require('../featureFlags')
-      if (!featureFlags.isEnabled(opts.db, 'agent.browser')) {
-        list = list.filter(t => t.name !== 'agent_browser')
-      }
-    } catch {}
+  try {
+    const featureFlags = require('../featureFlags')
+    if (opts?.db && !featureFlags.isEnabled(opts.db, 'agent.browser')) {
+      list = list.filter(t => t.name !== 'agent_browser')
+    }
+    if (!opts?.includeRunScript && !featureFlags.isEnabled(opts?.db, 'agent.script')) {
+      list = list.filter(t => t.name !== 'run_script')
+    }
+  } catch {
+    if (!opts?.includeRunScript) list = list.filter(t => t.name !== 'run_script')
   }
   const raw = list.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
   if (opts && opts.cacheStable === false) return raw
