@@ -1187,10 +1187,8 @@ const TOOLS = [
       required: ['claim', 'cites'],
     },
     run: async (args, ctx) => {
-      const { FindingsLedger } = require('../llm/findingsLedger')
-      const wsRoot = getWorkspaceRoot(ctx?.sessionId) || process.cwd()
-      if (!ctx.findingsLedger) {
-        ctx.findingsLedger = new FindingsLedger({ workspaceRoot: wsRoot })
+      if (!ctx || !ctx.findingsLedger || typeof ctx.findingsLedger.add !== 'function') {
+        throw new Error('report_finding rejected: active subagent FindingsLedger is required')
       }
       const res = ctx.findingsLedger.add({ claim: args?.claim, cites: args?.cites })
       if (!res.ok) {

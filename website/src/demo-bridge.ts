@@ -316,7 +316,24 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
     ].join('\n')
   }
 
+  let demoEpoch = 0
+  const pendingTimers = new Set<ReturnType<typeof setTimeout>>()
+
+  const scheduleTimer = (fn: () => void, ms: number) => {
+    const epoch = demoEpoch
+    const id = setTimeout(() => {
+      pendingTimers.delete(id)
+      if (epoch !== demoEpoch) return
+      fn()
+    }, ms)
+    pendingTimers.add(id)
+    return id
+  }
+
   const reset = () => {
+    demoEpoch++
+    for (const id of pendingTimers) clearTimeout(id)
+    pendingTimers.clear()
     state = createInitialState(lang)
     for (const k of Object.keys(arenaResultsBySession)) delete arenaResultsBySession[Number(k)]
   }
@@ -393,7 +410,7 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
       exportSoulMd: async () => null,
     },
     session: {
-      list: async () => state.sessions,
+      list: async () => [...state.sessions],
       create: async (data) => {
         const id = ++nextId
         state.sessions.unshift({
@@ -535,7 +552,7 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
           '+    if (!(await this.hasMaterial())) return { ran: false }',
         ].join('\n')
 
-        setTimeout(() => {
+        scheduleTimer(() => {
           bus.emit('chat:tool-loop-start', { sessionId })
           bus.emit('chat:status', { messageId: msgId, sessionId, text: lang === 'zh' ? '正在执行 Act 工具链与写前快照...' : 'Running Act tool loop & snapshot...' })
           bus.emit('chat:plan-snapshot', {
@@ -582,9 +599,9 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
           ? `已完成修改并创建写前快照 \`#${cpId}\`。\n\n\`\`\`diff\n${diff}\n\`\`\`\n\n点击工具卡片或底部回滚徽章即可一键还原到写前状态。`
           : `Applied patch with pre-write snapshot \`#${cpId}\`.\n\n\`\`\`diff\n${diff}\n\`\`\`\n\nClick the snapshot rollback action to revert cleanly.`
 
-        const chunks = fullReply.match(/.{1,18}/g) || [fullReply]
+        const chunks = fullReply.match(/[\s\S]{1,18}/g) || [fullReply]
         chunks.forEach((delta, idx) => {
-          setTimeout(() => {
+          scheduleTimer(() => {
             const target = (state.messagesBySession[sessionId] || []).find((m) => m.id === msgId)
             if (target) target.content += delta
             const isLast = idx === chunks.length - 1
@@ -681,9 +698,17 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
           latency_ms: 910,
           usage: { prompt_tokens: 320, completion_tokens: 144, total_tokens: 464, cost: 0.0049 },
         }
-        setTimeout(() => bus.emit('arena:model-done', { sessionId, result: resA }), 380)
-        setTimeout(() => bus.emit('arena:model-done', { sessionId, result: resB }), 680)
-        await new Promise((r) => setTimeout(r, 760))
+        const epoch = demoEpoch
+        scheduleTimer(() => bus.emit('arena:model-done', { sessionId, result: resA }), 380)
+        scheduleTimer(() => bus.emit('arena:model-done', { sessionId, result: resB }), 680)
+        await new Promise<void>((r) => {
+          const id = setTimeout(() => {
+            pendingTimers.delete(id)
+            r()
+          }, 760)
+          pendingTimers.add(id)
+        })
+        if (epoch !== demoEpoch) return { results: [] }
         const results = [resA, resB]
         arenaResultsBySession[sessionId] = results
         return { results }

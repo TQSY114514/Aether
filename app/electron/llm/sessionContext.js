@@ -14,6 +14,19 @@ function ensureMemDb(db) {
   if (typeof db.getMemories === 'function' && typeof db.getMemoriesScoped !== 'function') {
     return {
       ...db,
+      ...(typeof db.getSetting === 'function'
+        ? {}
+        : {
+          getSetting(key) {
+            if (typeof db.prepare === 'function') {
+              try {
+                const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
+                return row ? row.value : null
+              } catch { return null }
+            }
+            return null
+          },
+        }),
       getMemoriesScoped(_scopeKey) {
         return db.getMemories(200)
       }
@@ -21,6 +34,14 @@ function ensureMemDb(db) {
   }
   try {
     return {
+      getSetting(key) {
+        try {
+          const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
+          return row ? row.value : null
+        } catch {
+          return null
+        }
+      },
       getMemories(limit = 200) {
         // 与 database.js memory 表列面一致（默认无 confidence 列，不做假设）。
         // H5: 带上 origin 列 —— autoMemory.prefetch 靠它把 origin='external'
@@ -271,6 +292,7 @@ function clearFileActivities(sessionId) {
 
 module.exports = {
   buildSessionContext,
+  ensureMemDb,
   recordFileActivity,
   getActiveFileSnippets,
   clearFileActivities,

@@ -89,4 +89,58 @@ describe('IdleGate', () => {
     expect(res.ran).toBe(true)
     expect(runPass).toHaveBeenCalledTimes(1)
   })
+
+  it('reports busy when subagentSupervisor has running subagents', async () => {
+    const subagentSupervisor = require('../electron/llm/subagentSupervisor')
+    const scheduler = require('../electron/cron/scheduler')
+    const origMap = new Map(subagentSupervisor.activeSubagents)
+    subagentSupervisor.activeSubagents.clear()
+    try {
+      expect(scheduler.isSystemBusy()).toBe(false)
+      subagentSupervisor.activeSubagents.set('sa-busy-test', { id: 'sa-busy-test', status: 'running' })
+      expect(scheduler.isSystemBusy()).toBe(true)
+      subagentSupervisor.activeSubagents.set('sa-busy-test', { id: 'sa-busy-test', status: 'completed' })
+      expect(scheduler.isSystemBusy()).toBe(false)
+    } finally {
+      subagentSupervisor.activeSubagents.clear()
+      for (const [k, v] of origMap.entries()) subagentSupervisor.activeSubagents.set(k, v)
+    }
+  })
+
+  it('prune supports onlyNonConsolidatable and preserveDigest fallback', () => {
+    const Database = require('better-sqlite3')
+    const autoMemory = require('../electron/llm/autoMemory')
+    const raw = new Database(':memory:')
+    try {
+      raw.exec(`
+        CREATE TABLE memory (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          type TEXT DEFAULT 'fact',
+          origin TEXT DEFAULT 'user',
+          workspace TEXT,
+          confidence REAL DEFAULT 1.0,
+          access_count INTEGER NOT NULL DEFAULT 0,
+          last_accessed_at DATETIME,
+          created_at DATETIME
+        );
+      `)
+      const db = {
+        run: (sql, params) => raw.prepare(sql).run(...(Array.isArray(params) ? params : [params])),
+      }
+      raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Old user fact', 'fact', 'user', 0, '2020-01-01T00:00:00Z')
+      raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Old consolidatable assistant fact', 'fact', 'assistant', 0, '2020-01-01T00:00:00Z')
+      raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('## Old Digest', 'digest', 'assistant', 0, '2020-01-01T00:00:00Z')
+
+      const res = autoMemory.prune(db, 90, { onlyNonConsolidatable: true, preserveDigest: true })
+      expect(res.deleted).toBeGreaterThanOrEqual(1)
+      const remaining = raw.prepare('SELECT content, type FROM memory ORDER BY id').all()
+      expect(remaining.map(r => r.content)).toEqual([
+        'Old consolidatable assistant fact',
+        '## Old Digest',
+      ])
+    } finally {
+      raw.close()
+    }
+  })
 })

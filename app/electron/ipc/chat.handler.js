@@ -21,6 +21,7 @@ const pendingInjections = new Map() // sessionId -> string[] of pending injectio
 // Per-session message tracking for abortControllers cleanup on session delete.
 let sessionMessagesMap = new Map() // sessionId -> Set<messageId>
 const sideAbortControllers = new Map() // sessionId -> AbortController
+const activeCompleteControllers = new Set() // active synchronous chat:complete AbortControllers
 function registerSessionMessages(sessionId, messageIds) {
   if (!sessionMessagesMap.has(sessionId)) sessionMessagesMap.set(sessionId, new Set())
   const set = sessionMessagesMap.get(sessionId)
@@ -56,7 +57,12 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
   try {
     const scheduler = require('../cron/scheduler')
     if (typeof scheduler.registerBusyChecker === 'function') {
-      scheduler.registerBusyChecker(() => activeToolLoops.size > 0 || abortControllers.size > 0 || sideAbortControllers.size > 0)
+      scheduler.registerBusyChecker(() =>
+        activeToolLoops.size > 0 ||
+        abortControllers.size > 0 ||
+        sideAbortControllers.size > 0 ||
+        activeCompleteControllers.size > 0
+      )
     }
   } catch {}
 
@@ -68,6 +74,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     sessionMessagesMap,
     registerSessionMessages,
     allowRulesStore,
+    activeCompleteControllers,
   }
   const chatSendState = registerChatSendHandler({ ipcMain, db, getWebContents, ctx })
 
@@ -108,9 +115,9 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
       return { ok: false, error: 'sessionId and non-empty question are required' }
     }
     const sid = Number(sessionId) || sessionId
-    if (sideAbortControllers.has(sid)) {
-      try { sideAbortControllers.get(sid).abort() } catch {}
-      sideAbortControllers.delete(sid)
+    const prev = sideAbortControllers.get(sid)
+    if (prev) {
+      try { prev.abort() } catch {}
     }
     const controller = new AbortController()
     sideAbortControllers.set(sid, controller)
@@ -128,12 +135,10 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
         model = all[0]
       }
       if (!model) {
-        sideAbortControllers.delete(sid)
         return { ok: false, error: 'No model available' }
       }
       const provider = db.getProvider(model.provider_id)
       if (!provider) {
-        sideAbortControllers.delete(sid)
         return { ok: false, error: 'No provider available' }
       }
 
@@ -173,13 +178,15 @@ The user is asking a quick side question about the ongoing conversation.
       }
 
       try { wc?.send('chat:side-chunk', { sessionId: sid, delta: '', done: true, fullContent: fullAnswer }) } catch {}
-      sideAbortControllers.delete(sid)
       return { ok: true, answer: fullAnswer }
     } catch (err) {
-      sideAbortControllers.delete(sid)
       const errMsg = err.name === 'AbortError' ? '已取消' : (err.message || String(err))
       try { wc?.send('chat:side-chunk', { sessionId: sid, delta: '', done: true, error: errMsg }) } catch {}
       return { ok: false, error: errMsg }
+    } finally {
+      if (sideAbortControllers.get(sid) === controller) {
+        sideAbortControllers.delete(sid)
+      }
     }
   })
 

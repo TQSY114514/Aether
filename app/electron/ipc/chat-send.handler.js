@@ -128,6 +128,10 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
   async function handleChatComplete(_event, { content, modelId = null, sessionId = null, context = '', systemPrefix = '' }) {
     const text = String(content || '').trim()
     if (!text) return { error: 'content is required' }
+    try { require('../cron/scheduler').noteUserActivity() } catch {}
+    const controller = new AbortController()
+    ctx.activeCompleteControllers?.add(controller)
+    const timeout = setTimeout(() => controller.abort(), 120000)
     try {
       // Resolve model: explicit id, else primary, else first enabled model.
       let model = (modelId && db.getModel(modelId)) || null
@@ -153,15 +157,8 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
       messages.push({ role: 'user', content: text })
       db.addMessage({ session_id: sid, role: 'user', content: text })
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 120000)
-      let replyText = ''
-      try {
-        const reply = await completeChat({ provider, model, messages, signal: controller.signal, options: { temperature: 0.3 } })
-        replyText = String(reply || '')
-      } finally {
-        clearTimeout(timeout)
-      }
+      const reply = await completeChat({ provider, model, messages, signal: controller.signal, options: { temperature: 0.3 } })
+      const replyText = String(reply || '')
       const msg = db.addMessage({
         session_id: sid, role: 'assistant', content: replyText,
         model_used: model.model_name, provider_used: String(provider.id),
@@ -170,6 +167,9 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
       return { content: replyText, sessionId: sid, messageId: msg.lastInsertRowid }
     } catch (e) {
       return { error: e && e.message ? e.message : String(e) }
+    } finally {
+      clearTimeout(timeout)
+      ctx.activeCompleteControllers?.delete(controller)
     }
   }
 ipcMain.handle('chat:complete', handleChatComplete)

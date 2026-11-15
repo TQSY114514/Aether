@@ -4,7 +4,7 @@
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
-const MEMORY_TYPES = new Set(['fact', 'context', 'project', 'preference', 'review'])
+const MEMORY_TYPES = new Set(['fact', 'context', 'project', 'preference', 'review', 'digest'])
 const memoryProjector = require('../llm/memoryProjector')
 const { isAuthorizedWorkspace, isWorkspaceTrusted, getWorkspaceRoot } = require('../tools/sandbox')
 
@@ -173,7 +173,9 @@ function registerMemoryHandlers(ipcMain, db) {
     try {
       const autoMemory = require('../llm/autoMemory')
       const callOpts = { force: true }
-      if (opts && Object.prototype.hasOwnProperty.call(opts, 'scopeKey')) {
+      if (opts && Array.isArray(opts.scopeKeys)) {
+        callOpts.scopeKeys = opts.scopeKeys
+      } else if (opts && Object.prototype.hasOwnProperty.call(opts, 'scopeKey')) {
         callOpts.scopeKey = opts.scopeKey
       }
       return await autoMemory.consolidate(db, callOpts)

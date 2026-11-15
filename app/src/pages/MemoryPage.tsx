@@ -7,7 +7,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { parseMemoryImport } from '@/utils/memoryImport'
 
 const TYPE_COLORS: Record<string, string> = {
-  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#0284C7', project: '#0D9488', digest: '#475569',
+  entity: '#2563EB', fact: '#16A34A', context: '#D97706', relation: '#0284C7', project: '#0D9488', digest: 'var(--badge-digest)',
 }
 
 // 记忆来源 → 展示标签/颜色。origin 由自动记忆链路写入：user=手动添加、
@@ -35,7 +35,7 @@ export default function MemoryPage() {
   const [loading, setLoading] = useState(true)
   const [deleted, setDeleted] = useState<{ content: string; type: string; source_session_id: number | null; workspace: string | null } | null>(null)
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { toast } = useUI()
+  const { toast, confirm } = useUI()
 
   // Active session's workspace (session.config `workspace`, falling back to
   // the global agent_workspace_root). memory.list({workspace}) pre-scopes at
@@ -205,9 +205,45 @@ export default function MemoryPage() {
     if (consolidating) return
     setConsolidating(true)
     try {
-      const res = await window.electronAPI.memory.consolidate()
+      let consolidateOpts: { scopeKeys?: (string | null)[] } | undefined
+      if (activeWorkspace) {
+        if (scopeFilter === 'global') consolidateOpts = { scopeKeys: [null] }
+        else if (scopeFilter === 'project') consolidateOpts = { scopeKeys: [activeWorkspace] }
+        else consolidateOpts = { scopeKeys: [activeWorkspace, null] }
+      } else if (scopeFilter === 'global') {
+        consolidateOpts = { scopeKeys: [null] }
+      } else if (scopeFilter === 'project') {
+        const projectScopes = Array.from(new Set(entries.map(e => e.workspace || null))).filter((w): w is string => Boolean(w))
+        if (projectScopes.length > 1) {
+          const confirmed = await confirm({
+            title: t('memory.consolidate'),
+            description: t('memory.consolidate_all_confirm', projectScopes.length),
+            confirmText: t('memory.consolidate'),
+          })
+          if (!confirmed) return
+        }
+        consolidateOpts = { scopeKeys: projectScopes }
+      } else {
+        const allScopes = Array.from(new Set(entries.map(e => e.workspace || null)))
+        if (allScopes.length > 1) {
+          const confirmed = await confirm({
+            title: t('memory.consolidate'),
+            description: t('memory.consolidate_all_confirm', allScopes.length),
+            confirmText: t('memory.consolidate'),
+          })
+          if (!confirmed) return
+        }
+      }
+
+      const res = await window.electronAPI.memory.consolidate(consolidateOpts)
+      const errSummary = res?.errors?.length
+        ? res.errors.map(e => `${e.workspace || 'global'}: ${e.error}`).join('; ')
+        : ''
       if (!res?.ok) {
-        toast(t('memory.consolidate_failed', res?.error || res?.skipped || 'error'), { type: 'error' })
+        toast(t('memory.consolidate_failed', errSummary || res?.error || res?.skipped || 'error'), { type: 'error' })
+      } else if (res.errors?.length && res.consolidated > 0) {
+        toast(t('memory.consolidate_partial', res.consolidated, res.workspaces, res.errors.length), { type: 'warning' })
+        loadEntries()
       } else if (res.consolidated > 0) {
         toast(t('memory.consolidate_done', res.consolidated, res.workspaces), { type: 'success' })
         loadEntries()

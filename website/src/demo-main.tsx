@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import '../../app/src/index.css'
 import App from '@/App'
+import { UIProvider } from '@/components/ui/feedback'
 import { applyTheme } from '@/utils/theme'
 import { useStore } from '@/store'
 import { installDemoBridge } from './demo-bridge'
@@ -23,6 +24,7 @@ window.addEventListener('message', async (event) => {
     await store.loadScores()
     store.setCurrentView('chat')
     await store.selectSession(101)
+    window.parent?.postMessage({ type: 'aether-demo:reset-done' }, '*')
     return
   }
 
@@ -34,6 +36,10 @@ window.addEventListener('message', async (event) => {
       lang === 'zh'
         ? '对比修复 IdleGate 并发重入的最小补丁方案：先写冷却时间戳再检查 hasMaterial()。'
         : 'Compare minimal patches for IdleGate concurrency: stamp cooldown before hasMaterial().',
+    )
+    window.parent?.postMessage(
+      { type: 'aether-demo:arena-done', count: useStore.getState().arenaResults.length },
+      '*',
     )
     return
   }
@@ -65,6 +71,10 @@ window.addEventListener('message', async (event) => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <UIProvider>
+      <App />
+    </UIProvider>
   </React.StrictMode>,
 )
+
+window.parent?.postMessage({ type: 'aether-demo:ready', lang }, '*')

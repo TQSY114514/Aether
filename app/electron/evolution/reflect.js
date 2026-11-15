@@ -265,7 +265,15 @@ async function reflectNow(db, opts = {}) {
 }
 
 async function _reflectInner(db, opts = {}) {
-  const shouldYield = typeof opts.shouldYield === 'function' ? opts.shouldYield : null
+  let shouldYield = typeof opts.shouldYield === 'function' ? opts.shouldYield : null
+  if (!shouldYield && !opts.force) {
+    try {
+      const scheduler = require('../cron/scheduler')
+      if (typeof scheduler.isSystemBusy === 'function') {
+        shouldYield = () => scheduler.isSystemBusy()
+      }
+    } catch {}
+  }
   if (shouldYield && shouldYield()) {
     return { ok: false, reason: 'yielded', yielded: true }
   }

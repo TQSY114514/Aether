@@ -200,27 +200,28 @@ function prefetchWithDetails(db, userMessage, scopeOrCwd) {
 
   const hits = []
   const sections = []
-  const dreamOn = _isDreamEnabled(db)
 
-  if (dreamOn) {
-    const digestPicks = trusted.filter(m => m.type === 'digest').slice(0, 2)
-    if (digestPicks.length > 0) {
-      for (const m of digestPicks) {
-        hits.push({
-          id: m.id,
-          content: m.content,
-          type: m.type,
-          origin: m.origin || 'assistant',
-          why: 'consolidated digest',
-        })
-      }
-      const digestBody = digestPicks
-        .map(m => String(m.content || '').slice(0, DIGEST_CHAR_BUDGET).trim())
-        .filter(Boolean)
-        .join('\n\n')
-      if (digestBody) {
-        sections.push(`Consolidated memory digest:\n${digestBody}`)
-      }
+  // Existing persisted workspace/global digests must remain recallable even if
+  // `memory.dreamConsolidation` is later toggled off (or created via manual
+  // consolidation), because the flag controls new consolidation/echo work, not
+  // access to already-consolidated knowledge.
+  const digestPicks = trusted.filter(m => m.type === 'digest').slice(0, 2)
+  if (digestPicks.length > 0) {
+    for (const m of digestPicks) {
+      hits.push({
+        id: m.id,
+        content: m.content,
+        type: m.type,
+        origin: m.origin || 'assistant',
+        why: 'consolidated digest',
+      })
+    }
+    const digestBody = digestPicks
+      .map(m => String(m.content || '').slice(0, DIGEST_CHAR_BUDGET).trim())
+      .filter(Boolean)
+      .join('\n\n')
+    if (digestBody) {
+      sections.push(`Consolidated memory digest:\n${digestBody}`)
     }
   }
 
@@ -720,15 +721,31 @@ function detectConflict(db, newContent, newType, newRowId) {
 // Remove stale memories (old, low-relevance) to keep the store lean.
 // Called occasionally; not on every sync (too expensive).
 
-function prune(db, maxAgeDays = 90) {
+function prune(db, maxAgeDays = 90, opts = {}) {
   try {
     // Two-pronged prune:
     // 1. Never-accessed memories older than maxAgeDays are safe to drop.
     // 2. All memories older than 365 days are pruned regardless of access
     //    (prevents unbounded growth from very old, irrelevant entries).
-    db.run('DELETE FROM memory WHERE access_count = 0 AND created_at < ?', [new Date(Date.now() - maxAgeDays * 86400000).toISOString()])
-    db.run('DELETE FROM memory WHERE created_at < ?', [new Date(Date.now() - 365 * 86400000).toISOString()])
-  } catch {}
+    const preserveDigest = opts.preserveDigest !== false
+    const nonConsolidatableOnly = opts.onlyNonConsolidatable === true
+    const extraConds = []
+    if (preserveDigest) extraConds.push("type != 'digest'")
+    if (nonConsolidatableOnly) extraConds.push("(origin = 'user' OR type NOT IN ('fact','context','entity','relation'))")
+    const suffix = extraConds.length ? ` AND ${extraConds.join(' AND ')}` : ''
+    const c1 = db.run(
+      `DELETE FROM memory WHERE access_count = 0 AND created_at < ?${suffix}`,
+      [new Date(Date.now() - maxAgeDays * 86400000).toISOString()]
+    )
+    const c2 = db.run(
+      `DELETE FROM memory WHERE created_at < ?${suffix}`,
+      [new Date(Date.now() - 365 * 86400000).toISOString()]
+    )
+    const deleted = Number(c1?.changes || 0) + Number(c2?.changes || 0)
+    return { deleted }
+  } catch {
+    return { deleted: 0 }
+  }
 }
 
 // ─── LLM Second-Pass Recall ────────────────────────────────────────────────
@@ -914,13 +931,97 @@ async function _resolveConsolidationTarget(db, opts = {}) {
  * rewrite the workspace's single `digest` entry via whole-page semanticization,
  * and atomically delete only the digested candidate rows on verified success.
  */
+const _consolidateLocks = new WeakMap()
+
+function _selectEligibleCandidates(rows, nowMs, { maxAgeDays, strengthThreshold, minCreatedAgeDays, scoreOpts }) {
+  const out = []
+  for (const r of rows) {
+    const lastTouchMs = _parseTimestampMs(r.last_accessed_at || r.created_at, nowMs)
+    const createdMs = _parseTimestampMs(r.created_at, nowMs)
+    const ageDays = (nowMs - lastTouchMs) / 86400000
+    const createdAgeDays = (nowMs - createdMs) / 86400000
+    const strength = computeMemoryStrength(r, nowMs, scoreOpts)
+    const isAging = ageDays >= maxAgeDays
+    const isWeak = strength < strengthThreshold && createdAgeDays >= minCreatedAgeDays
+    if (isAging || isWeak) out.push(r)
+  }
+  return out
+}
+
+function _queryScopeRows(db, wsKey) {
+  const sql = wsKey === null
+    ? `SELECT id, content, type, origin, workspace, confidence, access_count, last_accessed_at, created_at
+       FROM memory
+       WHERE workspace IS NULL
+         AND (origin IS NULL OR origin != 'external')
+         AND (type IS NULL OR type NOT IN ('digest', 'project'))
+       ORDER BY COALESCE(last_accessed_at, created_at) ASC, id ASC`
+    : `SELECT id, content, type, origin, workspace, confidence, access_count, last_accessed_at, created_at
+       FROM memory
+       WHERE workspace = ?
+         AND (origin IS NULL OR origin != 'external')
+         AND (type IS NULL OR type NOT IN ('digest', 'project'))
+       ORDER BY COALESCE(last_accessed_at, created_at) ASC, id ASC`
+  if (db.prepare) return wsKey === null ? db.prepare(sql).all() : db.prepare(sql).all(wsKey)
+  if (db.allRows) return wsKey === null ? db.allRows(sql) : db.allRows(sql, [wsKey])
+  throw new Error('memory_query_unavailable')
+}
+
+function _queryScopeDigest(db, wsKey) {
+  const q = wsKey === null
+    ? "SELECT id, content, type, origin, workspace FROM memory WHERE type = 'digest' AND workspace IS NULL AND (origin IS NULL OR origin != 'external') ORDER BY id DESC LIMIT 1"
+    : "SELECT id, content, type, origin, workspace FROM memory WHERE type = 'digest' AND workspace = ? AND (origin IS NULL OR origin != 'external') ORDER BY id DESC LIMIT 1"
+  if (db.prepare) return wsKey === null ? db.prepare(q).get() : db.prepare(q).get(wsKey)
+  return (wsKey === null ? db.allRows?.(q) : db.allRows?.(q, [wsKey]) || [])[0] || null
+}
+
+function _staleSnapshotError(reason = 'stale_snapshot') {
+  const err = new Error(reason)
+  err.code = 'STALE_SNAPSHOT'
+  return err
+}
+
+/**
+ * Consolidate aging/weak memories per workspace into one `digest` record via LLM.
+ *
+ * Options:
+ *   - force?: boolean (ignore `memory.dreamConsolidation` flag — used by explicit user click)
+ *   - shouldYield?: () => boolean (cooperative yield callback checked between workspaces)
+ *   - completeChat?: ({ provider, model, messages, signal, options }) => Promise<string>
+ *   - provider / model?: explicit target override
+ *   - scopeKey?: string | null (restrict consolidation to one workspace or null global)
+ *   - scopeKeys?: (string | null)[] (restrict consolidation to an explicit list of scopes)
+ *   - nowMs?: number (test hook)
+ *   - maxAgeDays?: number
+ *   - strengthThreshold?: number
+ *   - batchSize?: number
+ *   - charBudget?: number
+ */
 async function consolidate(db, opts = {}) {
   if (!db) return { ok: false, error: 'no_db', consolidated: 0, workspaces: 0 }
+  const prev = _consolidateLocks.get(db) || Promise.resolve()
+  let release
+  const gate = new Promise((r) => { release = r })
+  _consolidateLocks.set(db, gate)
+  await prev.catch(() => {})
+  try {
+    return await _consolidateInner(db, opts)
+  } finally {
+    if (_consolidateLocks.get(db) === gate) _consolidateLocks.delete(db)
+    release()
+  }
+}
+
+async function _consolidateInner(db, opts = {}) {
   if (!opts.force && !_isDreamEnabled(db)) {
     return { ok: true, skipped: 'flag_disabled', consolidated: 0, workspaces: 0 }
   }
   if (opts.shouldYield?.()) {
     return { ok: true, yielded: true, consolidated: 0, workspaces: 0 }
+  }
+  // Fail-closed: deletion of source memories and digest upsert must execute atomically.
+  if (typeof db.transaction !== 'function') {
+    return { ok: false, error: 'db_no_transaction_support', consolidated: 0, workspaces: 0 }
   }
 
   const nowMs = Number.isFinite(Number(opts.nowMs)) ? Number(opts.nowMs) : Date.now()
@@ -945,22 +1046,29 @@ async function consolidate(db, opts = {}) {
     return { ok: false, error: err?.message || 'memory_read_failed', consolidated: 0, workspaces: 0 }
   }
 
-  const hasScopeFilter = Object.prototype.hasOwnProperty.call(opts, 'scopeKey')
-  const targetScope = opts.scopeKey ? String(opts.scopeKey) : null
+  const hasSingleScope = Object.prototype.hasOwnProperty.call(opts, 'scopeKey')
+  const hasMultiScope = Array.isArray(opts.scopeKeys)
+  const scopeSet = hasMultiScope
+    ? new Set(opts.scopeKeys.map(k => (k ? String(k) : null)))
+    : (hasSingleScope ? new Set([opts.scopeKey ? String(opts.scopeKey) : null]) : null)
+
   const groups = new Map()
   for (const r of rows) {
     const ws = r.workspace ? String(r.workspace) : null
-    if (hasScopeFilter && ws !== targetScope) continue
-    const lastTouchMs = _parseTimestampMs(r.last_accessed_at || r.created_at, nowMs)
-    const createdMs = _parseTimestampMs(r.created_at, nowMs)
-    const ageDays = (nowMs - lastTouchMs) / 86400000
-    const createdAgeDays = (nowMs - createdMs) / 86400000
-    const strength = computeMemoryStrength(r, nowMs, opts)
-    const isAging = ageDays >= maxAgeDays
-    const isWeak = strength < strengthThreshold && createdAgeDays >= minCreatedAgeDays
-    if (!isAging && !isWeak) continue
+    if (scopeSet && !scopeSet.has(ws)) continue
     if (!groups.has(ws)) groups.set(ws, [])
     groups.get(ws).push(r)
+  }
+
+  for (const [ws, scopeAll] of groups.entries()) {
+    const eligible = _selectEligibleCandidates(scopeAll, nowMs, {
+      maxAgeDays,
+      strengthThreshold,
+      minCreatedAgeDays,
+      scoreOpts: opts,
+    })
+    if (eligible.length === 0) groups.delete(ws)
+    else groups.set(ws, eligible)
   }
 
   if (groups.size === 0) {
@@ -979,126 +1087,185 @@ async function consolidate(db, opts = {}) {
   const digestIds = []
   const errors = []
 
-  for (const [wsKey, scopeRows] of groups.entries()) {
-    if (opts.shouldYield?.()) {
-      return {
-        ok: true,
-        yielded: true,
-        consolidated: consolidatedCount,
-        workspaces: workspacesUpdated,
-        digestIds,
+  for (const [wsKey, initialScopeRows] of groups.entries()) {
+    let scopeRows = initialScopeRows
+    let attempt = 0
+    while (attempt < 2) {
+      if (opts.shouldYield?.()) {
+        return {
+          ok: true,
+          yielded: true,
+          consolidated: consolidatedCount,
+          workspaces: workspacesUpdated,
+          digestIds,
+          ...(errors.length > 0 ? { errors } : {}),
+        }
       }
-    }
 
-    const batch = scopeRows.slice(0, batchSize)
-    let existingDigest = null
-    try {
-      if (wsKey === null) {
-        const q = "SELECT id, content FROM memory WHERE type = 'digest' AND workspace IS NULL AND (origin IS NULL OR origin != 'external') ORDER BY id DESC LIMIT 1"
-        existingDigest = db.prepare ? db.prepare(q).get() : (db.allRows?.(q) || [])[0] || null
-      } else {
-        const q = "SELECT id, content FROM memory WHERE type = 'digest' AND workspace = ? AND (origin IS NULL OR origin != 'external') ORDER BY id DESC LIMIT 1"
-        existingDigest = db.prepare ? db.prepare(q).get(wsKey) : (db.allRows?.(q, [wsKey]) || [])[0] || null
+      if (!scopeRows || scopeRows.length === 0) break
+
+      const batch = scopeRows.slice(0, batchSize)
+      let existingDigest = null
+      try {
+        existingDigest = _queryScopeDigest(db, wsKey)
+      } catch (err) {
+        // Fail-closed: never delete candidates or overwrite digest if reading existing digest errored
+        errors.push({ workspace: wsKey, error: err?.message || 'digest_read_failed' })
+        break
       }
-    } catch (err) {
-      // Fail-closed: never delete candidates or overwrite digest if reading existing digest errored
-      errors.push({ workspace: wsKey, error: err?.message || 'digest_read_failed' })
-      continue
-    }
 
-    const numbered = batch
-      .map((m, idx) => `${idx + 1}. [${m.type || 'fact'}] ${String(m.content || '').replace(/\s+/g, ' ').trim()}`)
-      .join('\n')
-    const userPrompt = [
-      `Workspace scope: ${wsKey || '(global)'}`,
-      `Character limit: keep strictly under ${Math.floor(charBudget * 0.9)} characters (hard cap ${charBudget}).`,
-      existingDigest?.content
-        ? `Existing digest:\n"""\n${String(existingDigest.content).trim()}\n"""`
-        : 'Existing digest: (none)',
-      `Aging memories to consolidate (${batch.length}):\n${numbered}`,
-    ].join('\n\n')
+      const numbered = batch
+        .map((m, idx) => `${idx + 1}. [${m.type || 'fact'}] ${String(m.content || '').replace(/\s+/g, ' ').trim()}`)
+        .join('\n')
+      const userPrompt = [
+        `Workspace scope: ${wsKey || '(global)'}`,
+        `Character limit: keep strictly under ${Math.floor(charBudget * 0.9)} characters (hard cap ${charBudget}).`,
+        existingDigest?.content
+          ? `Existing digest:\n"""\n${String(existingDigest.content).trim()}\n"""`
+          : 'Existing digest: (none)',
+        `Aging memories to consolidate (${batch.length}):\n${numbered}`,
+      ].join('\n\n')
 
-    let replyText
-    try {
-      replyText = await chatFn({
-        provider: target.provider,
-        model: target.model,
-        messages: [
-          { role: 'system', content: DIGEST_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        signal: opts.signal,
-        options: { temperature: 0.2, max_tokens: 1000 },
-      })
-    } catch (err) {
-      errors.push({ workspace: wsKey, error: err?.message || 'llm_failed' })
-      continue
-    }
-
-    if (opts.shouldYield?.()) {
-      return {
-        ok: true,
-        yielded: true,
-        consolidated: consolidatedCount,
-        workspaces: workspacesUpdated,
-        digestIds,
+      let replyText
+      try {
+        replyText = await chatFn({
+          provider: target.provider,
+          model: target.model,
+          messages: [
+            { role: 'system', content: DIGEST_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          signal: opts.signal,
+          options: { temperature: 0.2, max_tokens: 1000 },
+        })
+      } catch (err) {
+        errors.push({ workspace: wsKey, error: err?.message || 'llm_failed' })
+        break
       }
-    }
 
-    const validation = validateDigestBody(replyText, charBudget)
-    if (!validation.ok) {
-      errors.push({ workspace: wsKey, error: `invalid_digest:${validation.reason}` })
-      continue
-    }
+      if (opts.shouldYield?.()) {
+        return {
+          ok: true,
+          yielded: true,
+          consolidated: consolidatedCount,
+          workspaces: workspacesUpdated,
+          digestIds,
+          ...(errors.length > 0 ? { errors } : {}),
+        }
+      }
 
-    const nextContent = validation.content
-    const nextNorm = normalizeContent(nextContent)
-    const candidateIds = batch.map(r => r.id)
+      const validation = validateDigestBody(replyText, charBudget)
+      if (!validation.ok) {
+        errors.push({ workspace: wsKey, error: `invalid_digest:${validation.reason}` })
+        break
+      }
 
-    try {
-      const applyScopeUpdate = () => {
-        let digestId
-        if (existingDigest?.id != null) {
-          digestId = Number(existingDigest.id)
-          const upd = 'UPDATE memory SET content = ?, content_norm = ?, last_accessed_at = ? WHERE id = ?'
-          if (db.prepare) db.prepare(upd).run(nextContent, nextNorm, nowStr, digestId)
-          else db.run?.(upd, nextContent, nextNorm, nowStr, digestId)
-          try {
-            const ftsUpd = 'UPDATE memories_fts SET content = ? WHERE memory_id = ?'
-            if (db.prepare) db.prepare(ftsUpd).run(nextContent, digestId)
-          } catch {}
-        } else {
-          const ins = "INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm, workspace, source_trust_level, created_at, last_accessed_at) VALUES (?, 'digest', NULL, 1.0, 'assistant', ?, ?, 'user_direct', ?, ?)"
-          const info = db.prepare
-            ? db.prepare(ins).run(nextContent, nextNorm, wsKey, nowStr, nowStr)
-            : db.run?.(ins, nextContent, nextNorm, wsKey, nowStr, nowStr)
-          digestId = Number(info?.lastInsertRowid)
-          try {
-            const ftsIns = "INSERT INTO memories_fts (content, type, memory_id) VALUES (?, 'digest', ?)"
-            if (db.prepare && Number.isFinite(digestId)) db.prepare(ftsIns).run(nextContent, digestId)
-          } catch {}
+      const nextContent = validation.content
+      const nextNorm = normalizeContent(nextContent)
+      const expectedDigestId = existingDigest?.id != null ? Number(existingDigest.id) : null
+      const expectedDigestContent = existingDigest?.id != null ? String(existingDigest.content ?? '') : null
+      const snapshotCandidates = batch.map(r => ({
+        id: r.id,
+        content: String(r.content ?? ''),
+        type: r.type ?? null,
+        origin: r.origin ?? null,
+        workspace: r.workspace ? String(r.workspace) : null,
+      }))
+
+      try {
+        const applyScopeUpdate = () => {
+          const currentDigest = _queryScopeDigest(db, wsKey)
+          let digestId
+          if (expectedDigestId != null) {
+            if (!currentDigest || Number(currentDigest.id) !== expectedDigestId || String(currentDigest.content ?? '') !== expectedDigestContent) {
+              throw _staleSnapshotError('stale_digest_snapshot')
+            }
+            digestId = expectedDigestId
+            const upd = "UPDATE memory SET content = ?, content_norm = ?, last_accessed_at = ? WHERE id = ? AND type = 'digest' AND content = ?"
+            const info = db.prepare
+              ? db.prepare(upd).run(nextContent, nextNorm, nowStr, digestId, expectedDigestContent)
+              : db.run?.(upd, nextContent, nextNorm, nowStr, digestId, expectedDigestContent)
+            if (!info || Number(info.changes) !== 1) {
+              throw _staleSnapshotError('stale_digest_update')
+            }
+            try {
+              const ftsUpd = 'UPDATE memories_fts SET content = ? WHERE memory_id = ?'
+              if (db.prepare) db.prepare(ftsUpd).run(nextContent, digestId)
+            } catch {}
+          } else {
+            if (currentDigest) {
+              throw _staleSnapshotError('concurrent_digest_inserted')
+            }
+            const ins = "INSERT INTO memory (content, type, source_session_id, confidence, origin, content_norm, workspace, source_trust_level, created_at, last_accessed_at) VALUES (?, 'digest', NULL, 1.0, 'assistant', ?, ?, 'user_direct', ?, ?)"
+            const info = db.prepare
+              ? db.prepare(ins).run(nextContent, nextNorm, wsKey, nowStr, nowStr)
+              : db.run?.(ins, nextContent, nextNorm, wsKey, nowStr, nowStr)
+            digestId = Number(info?.lastInsertRowid)
+            try {
+              const ftsIns = "INSERT INTO memories_fts (content, type, memory_id) VALUES (?, 'digest', ?)"
+              if (db.prepare && Number.isFinite(digestId)) db.prepare(ftsIns).run(nextContent, digestId)
+            } catch {}
+          }
+
+          const checkSql = 'SELECT id, content, type, origin, workspace FROM memory WHERE id = ?'
+          const checkStmt = db.prepare ? db.prepare(checkSql) : null
+          const delSql = 'DELETE FROM memory WHERE id = ?'
+          const delFtsSql = 'DELETE FROM memories_fts WHERE memory_id = ?'
+          const delStmt = db.prepare ? db.prepare(delSql) : null
+
+          for (const cand of snapshotCandidates) {
+            const liveRow = checkStmt
+              ? checkStmt.get(cand.id)
+              : (db.allRows?.(checkSql, [cand.id]) || [])[0]
+            if (!liveRow) {
+              throw _staleSnapshotError('stale_candidate_missing')
+            }
+            const liveWs = liveRow.workspace ? String(liveRow.workspace) : null
+            if (
+              String(liveRow.content ?? '') !== cand.content
+              || (liveRow.type ?? null) !== cand.type
+              || (liveRow.origin ?? null) !== cand.origin
+              || liveWs !== cand.workspace
+            ) {
+              throw _staleSnapshotError('stale_candidate_modified')
+            }
+            const delInfo = delStmt ? delStmt.run(cand.id) : db.run?.(delSql, cand.id)
+            if (delInfo && Number(delInfo.changes) !== 1) {
+              throw _staleSnapshotError('stale_candidate_delete')
+            }
+            try {
+              if (db.prepare) db.prepare(delFtsSql).run(cand.id)
+            } catch {}
+          }
+          return digestId
         }
 
-        const delSql = 'DELETE FROM memory WHERE id = ?'
-        const delFtsSql = 'DELETE FROM memories_fts WHERE memory_id = ?'
-        const delStmt = db.prepare ? db.prepare(delSql) : null
-        for (const cid of candidateIds) {
-          if (delStmt) delStmt.run(cid)
-          else db.run?.(delSql, cid)
+        const txn = db.transaction(applyScopeUpdate)
+        const savedId = txn()
+        digestIds.push(savedId)
+        consolidatedCount += snapshotCandidates.length
+        workspacesUpdated++
+        break
+      } catch (err) {
+        if (err?.code === 'STALE_SNAPSHOT' && attempt === 0) {
+          attempt++
           try {
-            if (db.prepare) db.prepare(delFtsSql).run(cid)
-          } catch {}
+            const freshRows = _queryScopeRows(db, wsKey)
+            scopeRows = _selectEligibleCandidates(freshRows, nowMs, {
+              maxAgeDays,
+              strengthThreshold,
+              minCreatedAgeDays,
+              scoreOpts: opts,
+            })
+            continue
+          } catch (reErr) {
+            errors.push({ workspace: wsKey, error: reErr?.message || 'stale_snapshot_requery_failed' })
+            break
+          }
         }
-        return digestId
+        errors.push({ workspace: wsKey, error: err?.message || 'db_commit_failed' })
+        break
       }
-
-      const txn = typeof db.transaction === 'function' ? db.transaction(applyScopeUpdate) : null
-      const savedId = txn ? txn() : applyScopeUpdate()
-      digestIds.push(savedId)
-      consolidatedCount += candidateIds.length
-      workspacesUpdated++
-    } catch (err) {
-      errors.push({ workspace: wsKey, error: err?.message || 'db_commit_failed' })
     }
   }
 

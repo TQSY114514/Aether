@@ -346,6 +346,67 @@ describe('Forensic Auditor Independent Verification Suite (Milestone 3)', () => 
       expect(rehydratedMsg.content).toContain('Need mutex lock wrapper.')
       expect(rehydratedMsg.content).toContain('Resume with priority lock implementation')
     })
+
+    it('4.6b: preserves findingsLedger across hot_swap_model and includes findings in final report', async () => {
+      const fs = require('node:fs')
+      const os = require('node:os')
+      const path = require('node:path')
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sup-ledger-'))
+      fs.writeFileSync(path.join(tmpDir, 'target.js'), 'const a = 1\nconst b = 2\n', 'utf8')
+      try {
+        let loopCount = 0
+        const mockLoop = async (opts) => {
+          loopCount++
+          if (loopCount === 1) {
+            opts.findingsLedger?.add({ claim: 'Initial pre-swap finding', cites: ['target.js:1'] })
+            return new Promise((resolve) => {
+              opts.signal?.addEventListener('abort', () => {
+                // Simulate stale late callback trying to clobber after swap
+                opts.onChunk?.('stale chunk')
+                resolve('stale abort output')
+              }, { once: true })
+            })
+          }
+          opts.findingsLedger?.add({ claim: 'Post-swap verified finding', cites: ['target.js:2'] })
+          return 'Completed analysis after swap'
+        }
+
+        const spawned = await subagentSupervisor.spawnSupervisedSubagent(
+          {
+            taskPrompt: 'Analyze target.js',
+            providerId: 'p_relay',
+            modelId: 'm_slow',
+            cwd: tmpDir,
+            waitMode: 'async_immediate',
+          },
+          { runToolLoop: mockLoop }
+        )
+
+        await new Promise((r) => setTimeout(r, 30))
+        const swapRes = await subagentSupervisor.controlSubagent({
+          subagentId: spawned.subagentId,
+          action: 'hot_swap_model',
+          newProviderId: 'p_direct',
+          newModelId: 'm_flagship',
+        })
+        expect(swapRes.ok).toBe(true)
+
+        const rec = subagentSupervisor.activeSubagents.get(spawned.subagentId)
+        await rec.completionPromise
+        const finalReport = subagentSupervisor.formatSubagentReport(rec)
+        expect(finalReport.status).toBe('completed')
+        expect(finalReport.finalOutput).toContain('Completed analysis after swap')
+        expect(finalReport.finalOutput).not.toContain('stale chunk')
+        expect(finalReport.finalOutput).toContain('## Verified Findings')
+        expect(finalReport.findings?.length).toBe(2)
+        expect(finalReport.findings?.map((f) => f.claim)).toEqual([
+          'Initial pre-swap finding',
+          'Post-swap verified finding',
+        ])
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
   })
 
   // ==========================================================================

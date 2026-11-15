@@ -78,4 +78,23 @@ describe('FindingsLedger & report_finding', () => {
     expect(buildToolFilter('explorer')).toContain('report_finding')
     expect(buildToolFilter('review')).toContain('report_finding')
   })
+
+  it('handles trailing newlines accurately without off-by-one line counts', () => {
+    const fourLineDir = path.join(tmpRoot, 'src')
+    fs.writeFileSync(path.join(fourLineDir, 'four.js'), 'a\nb\nc\nd\n', 'utf8')
+    const ledger = new FindingsLedger({ workspaceRoot: tmpRoot })
+    expect(ledger.add({ claim: 'Line 4 valid', cites: ['src/four.js:4'] }).ok).toBe(true)
+    const over = ledger.add({ claim: 'Line 5 invalid', cites: ['src/four.js:5'] })
+    expect(over.ok).toBe(false)
+
+    fs.writeFileSync(path.join(fourLineDir, 'blank.js'), 'a\n\nb\n', 'utf8')
+    expect(ledger.add({ claim: 'Line 3 blank trailing', cites: ['src/blank.js:3'] }).ok).toBe(true)
+    expect(ledger.add({ claim: 'Line 4 invalid', cites: ['src/blank.js:4'] }).ok).toBe(false)
+  })
+
+  it('rejects report_finding when called outside subagent findingsLedger context', async () => {
+    const tool = getTool('report_finding')
+    await expect(tool.run({ claim: 'x', cites: ['src/index.js:1'] })).rejects.toThrow(/findingsLedger/i)
+    await expect(tool.run({ claim: 'x', cites: ['src/index.js:1'] }, {})).rejects.toThrow(/findingsLedger/i)
+  })
 })

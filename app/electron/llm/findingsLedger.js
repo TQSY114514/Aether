@@ -124,7 +124,7 @@ function verifyCitation(rawCite, workspaceRoot) {
       }
     }
     const content = fs.readFileSync(realTarget, 'utf8')
-    const lineCount = content === '' ? 0 : content.split(/\r?\n/).length
+    const lineCount = content === '' ? 0 : content.replace(/\r?\n$/, '').split(/\r?\n/).length
     if (parsed.endLine > lineCount) {
       return {
         ok: false,

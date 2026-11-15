@@ -323,4 +323,94 @@ describe('autoMemory dream economy loop', () => {
     expect(yielded.consolidated).toBe(0)
     expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idOld)).toBeTruthy()
   })
+
+  it('keeps existing digest readable even when memory.dreamConsolidation is disabled', () => {
+    const path = require('path')
+    const ws = path.resolve(__dirname, '../..')
+    const dbOff = makeMemoryTestDb(false)
+    try {
+      insertMem(dbOff, {
+        content: '## Persisted Digest\n- Important durable decision',
+        type: 'digest',
+        origin: 'assistant',
+        workspace: ws,
+      })
+      const pref = autoMemory.prefetchWithDetails(dbOff, 'hello', ws)
+      expect(pref.hits.some(h => h.type === 'digest')).toBe(true)
+      expect(pref.text).toContain('Persisted Digest')
+    } finally {
+      dbOff.close()
+    }
+  })
+
+  it('fails closed if db lacks transaction(), supports scopeKeys, and retries on stale candidate mutation', async () => {
+    const noTxnDb = { ...db, transaction: undefined }
+    const noTxnRes = await autoMemory.consolidate(noTxnDb, {
+      force: true,
+      nowMs: Date.parse('2026-11-15T12:00:00Z'),
+    })
+    expect(noTxnRes.ok).toBe(false)
+    expect(noTxnRes.error).toBe('db_no_transaction_support')
+
+    const idA = insertMem(db, { content: 'Old A', workspace: '/ws/a', created_at: '2026-09-01 00:00:00' })
+    const idB = insertMem(db, { content: 'Old B', workspace: '/ws/b', created_at: '2026-09-01 00:00:00' })
+    const idStable = insertMem(db, { content: 'Old A stable sibling', workspace: '/ws/a', created_at: '2026-09-01 00:00:00' })
+
+    let llmAttempt = 0
+    const res = await autoMemory.consolidate(db, {
+      nowMs: Date.parse('2026-11-15T12:00:00Z'),
+      scopeKeys: ['/ws/a'],
+      provider: { id: 1, name: 'mock' },
+      model: { id: 1, model_name: 'mock' },
+      completeChat: async () => {
+        llmAttempt++
+        if (llmAttempt === 1) {
+          // Concurrent user edit touches idA while LLM is in flight; on retry idA is now fresh so skipped
+          db.prepare("UPDATE memory SET content = 'Edited A by user', access_count = 5, last_accessed_at = '2026-11-15T11:55:00Z' WHERE id = ?").run(idA)
+        }
+        return `## Digest\n- Consolidated attempt ${llmAttempt}`
+      },
+    })
+    expect(res.ok).toBe(true)
+    expect(llmAttempt).toBe(2)
+    // Modified idA must NOT be deleted; untouched idStable in /ws/a WAS consolidated; /ws/b was untouched due to scopeKeys
+    expect(db.prepare('SELECT content FROM memory WHERE id = ?').get(idA)?.content).toBe('Edited A by user')
+    expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idStable)).toBeUndefined()
+    expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idB)).toBeTruthy()
+  })
+
+  it('ensureMemDb exposes getSetting on raw sqlite db and serializes concurrent consolidate calls', async () => {
+    const sessionContext = require('../electron/llm/sessionContext')
+    const wrapped = sessionContext.ensureMemDb(db.raw)
+    expect(typeof wrapped.getSetting).toBe('function')
+    expect(wrapped.getSetting('feature_flag.memory.dreamConsolidation')).toBe('1')
+
+    insertMem(db, { content: 'Concurrent aging 1', workspace: '/ws/lock', created_at: '2026-09-01 00:00:00' })
+    let calls = 0
+    const [r1, r2] = await Promise.all([
+      autoMemory.consolidate(db, {
+        nowMs: Date.parse('2026-11-15T12:00:00Z'),
+        scopeKeys: ['/ws/lock'],
+        provider: { id: 1, name: 'mock' },
+        model: { id: 1, model_name: 'mock' },
+        completeChat: async () => {
+          calls++
+          await new Promise((r) => setTimeout(r, 20))
+          return '## Lock Digest\n- Consolidated once'
+        },
+      }),
+      autoMemory.consolidate(db, {
+        nowMs: Date.parse('2026-11-15T12:00:00Z'),
+        scopeKeys: ['/ws/lock'],
+        provider: { id: 1, name: 'mock' },
+        model: { id: 1, model_name: 'mock' },
+        completeChat: async () => {
+          calls++
+          return '## Lock Digest 2\n- Should not run twice'
+        },
+      }),
+    ])
+    expect(calls).toBe(1)
+    expect(r1.consolidated + r2.consolidated).toBe(1)
+  })
 })

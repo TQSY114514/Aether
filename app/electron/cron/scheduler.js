@@ -42,6 +42,16 @@ function isSystemBusy() {
       if (active) return true
     }
   } catch {}
+  try {
+    const sup = require('../llm/subagentSupervisor')
+    if (sup?.activeSubagents instanceof Map) {
+      for (const rec of sup.activeSubagents.values()) {
+        if (rec && rec.status !== 'completed' && rec.status !== 'failed' && rec.status !== 'cancelled') {
+          return true
+        }
+      }
+    }
+  } catch {}
   return false
 }
 
@@ -116,14 +126,23 @@ defineTask('memory-cleanup', 6 * 3600 * 1000, async (db, ctx = {}) => {
     const featureFlags = require('../featureFlags')
     if (featureFlags.isEnabled(db, 'memory.dreamConsolidation') && typeof autoMemory.consolidate === 'function') {
       const res = await autoMemory.consolidate(db, { shouldYield: ctx.shouldYield })
+      let pruned = 0
+      if (!res?.yielded) {
+        const failedOrSkipped = !res?.ok || (Array.isArray(res?.errors) && res.errors.length > 0) || res?.skipped === 'no_provider'
+        const pruneRes = autoMemory.prune(db, 90, {
+          onlyNonConsolidatable: failedOrSkipped,
+          preserveDigest: true,
+        })
+        pruned = (pruneRes?.deleted || 0) + (res?.pruned || 0)
+      }
       log.info('cron: memory-cleanup (dreamConsolidation) completed:', JSON.stringify({
         consolidated: res?.consolidated || 0,
-        pruned: res?.pruned || 0,
+        pruned,
         yielded: Boolean(res?.yielded),
       }))
       return res
     }
-    autoMemory.prune(db, 90)
+    autoMemory.prune(db, 90, { preserveDigest: true })
     log.info('cron: memory-cleanup completed')
     return { ok: true }
   } catch (e) {
@@ -386,6 +405,17 @@ function runNow(name) {
   return true
 }
 
+// Cooperatively trigger an idle-gated task through its IdleGate without
+// bypassing idle window, busy checks, cooldown, or shouldYield guarantees.
+function nudgeIdleTask(name, dbOverride = null) {
+  const task = TASKS[name]
+  if (!task) return false
+  if (!_db && dbOverride) _db = dbOverride
+  if (task.running || isSystemBusy()) return false
+  runTask(name, { force: false })
+  return true
+}
+
 // List all registered tasks with their intervals.
 function listTasks() {
   return Object.entries(TASKS).map(([name, t]) => ({
@@ -425,4 +455,5 @@ module.exports = {
   noteUserActivity,
   registerBusyChecker,
   isSystemBusy,
+  nudgeIdleTask,
 }

@@ -112,4 +112,48 @@ describe('runSubagent — 回调透传', () => {
     await subAgent.runSubagent({ db: mkDb(), provider: { id: 1 }, model: { model_name: 'test' }, prompt: 'hi' })
     expect(runToolLoop).toHaveBeenCalledTimes(1)
   })
+
+  it('onJournalEntry 仅记录 start（result=null）时不误判为工作区写入，保留 ledger 预算', async () => {
+    const fs = require('node:fs')
+    const os = require('node:os')
+    const path = require('node:path')
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-budget-'))
+    fs.writeFileSync(path.join(tmpDir, 'main.js'), 'line1\nline2\n', 'utf8')
+    mockedSandbox.getWorkspaceRoot.mockReturnValueOnce(tmpDir)
+    try {
+      const longProse = 'X'.repeat(1200)
+      runToolLoop.mockImplementationOnce(async (opts) => {
+        opts.onJournalEntry?.({ tool: 'write_file', result: null })
+        opts.findingsLedger?.add({ claim: 'Verified claim in main.js', cites: ['main.js:1'] })
+        return longProse
+      })
+      const out = await subAgent.runSubagent({
+        db: mkDb(),
+        provider: { id: 1 },
+        model: { model_name: 'test' },
+        prompt: 'inspect',
+        config: { maxOutputChars: 500 },
+      })
+      expect(out.hasWorkspaceMutations).toBe(false)
+      expect(out.content.length).toBeLessThanOrEqual(500)
+      expect(out.content).toContain('## Verified Findings')
+      expect(out.content).toContain('Verified claim in main.js')
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('onFileSummary 记录文件变更时正确设置 hasWorkspaceMutations=true', async () => {
+    runToolLoop.mockImplementationOnce(async (opts) => {
+      opts.onFileSummary?.({ fileCount: 1, files: [{ path: 'a.js', status: 'modified' }] })
+      return 'done'
+    })
+    const out = await subAgent.runSubagent({
+      db: mkDb(),
+      provider: { id: 1 },
+      model: { model_name: 'test' },
+      prompt: 'edit',
+    })
+    expect(out.hasWorkspaceMutations).toBe(true)
+  })
 })

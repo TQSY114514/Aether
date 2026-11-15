@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Play, RotateCcw, Swords, ShieldCheck, Layers, CheckCircle2, Terminal } from 'lucide-react'
 
 type Lang = 'zh' | 'en'
@@ -36,11 +36,47 @@ const COPY = {
 export default function Site() {
   const [lang, setLang] = useState<Lang>('zh')
   const [activeStep, setActiveStep] = useState<StepId | null>(null)
+  const [demoReady, setDemoReady] = useState(false)
+  const [arenaStatus, setArenaStatus] = useState<'idle' | 'running' | 'ready'>('idle')
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const copy = COPY[lang]
 
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const iframeWin = iframeRef.current?.contentWindow
+      if (!iframeWin || event.source !== iframeWin) return
+      const data = event.data
+      if (!data || typeof data.type !== 'string') return
+      if (data.type === 'aether-demo:ready') {
+        setDemoReady(true)
+      } else if (data.type === 'aether-demo:reset-done') {
+        setDemoReady(true)
+        setArenaStatus('idle')
+      } else if (data.type === 'aether-demo:arena-done') {
+        setArenaStatus(Number(data.count) > 0 ? 'ready' : 'idle')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+
+  const toggleLang = () => {
+    setDemoReady(false)
+    setArenaStatus('idle')
+    setActiveStep(null)
+    setLang(lang === 'zh' ? 'en' : 'zh')
+  }
+
   const sendCommand = (step: StepId) => {
-    setActiveStep(step === 'reset' ? null : step)
+    if (!demoReady) return
+    if (step === 'vote' && arenaStatus !== 'ready') return
+    if (step === 'reset') {
+      setActiveStep(null)
+      setArenaStatus('idle')
+    } else {
+      setActiveStep(step)
+      if (step === 'arena') setArenaStatus('running')
+    }
     iframeRef.current?.contentWindow?.postMessage({ type: 'aether-demo:command', step }, '*')
   }
 
@@ -67,7 +103,7 @@ export default function Site() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+              onClick={toggleLang}
               className="px-3 py-1.5 text-xs font-mono rounded-md border hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-80 transition-colors motion-reduce:transition-none"
               style={{ borderColor: 'var(--border)' }}
             >
@@ -75,7 +111,8 @@ export default function Site() {
             </button>
             <button
               onClick={() => sendCommand('reset')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-80 transition-colors motion-reduce:transition-none"
+              disabled={!demoReady}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors motion-reduce:transition-none"
               style={{ borderColor: 'var(--border)' }}
             >
               <RotateCcw size={12} />
@@ -89,12 +126,14 @@ export default function Site() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
           {copy.steps.map((s, idx) => {
             const isSelected = activeStep === s.id
+            const isDisabled = !demoReady || (s.id === 'vote' && arenaStatus !== 'ready')
             const Icon = idx === 0 ? Swords : idx === 1 ? CheckCircle2 : idx === 2 ? ShieldCheck : Layers
             return (
               <button
                 key={s.id}
                 onClick={() => sendCommand(s.id)}
-                className="text-left px-3.5 py-2.5 rounded-lg border transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-80"
+                disabled={isDisabled}
+                className="text-left px-3.5 py-2.5 rounded-lg border transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={isSelected
                   ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)', color: '#FFFFFF' }
                   : { borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}
