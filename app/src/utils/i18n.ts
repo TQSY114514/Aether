@@ -1410,6 +1410,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -2731,6 +2733,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "创建并立即执行",
     "chat.handoff_generating": "正在提炼上下文...",
     "chat.handoff_success": "已交接至新会话",
+    "chat.handoff_draft_failed": "生成交接草稿失败",
+    "chat.handoff_commit_failed": "创建交接会话失败",
     "slash.handoff": "交接新会话",
     "slash.handoff_desc": "提炼当前进展并编辑交接简报，创建干净的新会话"
   },
@@ -3896,6 +3900,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -5061,6 +5067,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -6231,6 +6239,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -7396,6 +7406,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -8561,6 +8573,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -9726,6 +9740,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -10891,6 +10907,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -12069,6 +12087,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "建立並立即執行",
     "chat.handoff_generating": "正在提煉上下文...",
     "chat.handoff_success": "已交接至新會話",
+    "chat.handoff_draft_failed": "產生交接草稿失敗",
+    "chat.handoff_commit_failed": "建立交接會話失敗",
     "slash.handoff": "交接新會話",
     "slash.handoff_desc": "提煉當前進展並編輯交接簡報，建立乾淨的新會話"
   },
@@ -13234,6 +13254,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -14399,6 +14421,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -15564,6 +15588,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   },
@@ -16729,6 +16755,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_submit_and_send": "Create & Send",
     "chat.handoff_generating": "Distilling context...",
     "chat.handoff_success": "Handed off to new session",
+    "chat.handoff_draft_failed": "Failed to generate handoff draft",
+    "chat.handoff_commit_failed": "Failed to create handoff session",
     "slash.handoff": "Handoff Session",
     "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
   }

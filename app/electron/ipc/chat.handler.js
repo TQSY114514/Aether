@@ -433,8 +433,19 @@ The user is asking a quick side question about the ongoing conversation.
       const messages = db.getMessages(sessionId)
       if (!messages || messages.length <= 2) return { ok: false, error: '对话过短，无需压缩' }
 
-      const modelId = session.model_id
-      const model = modelId ? db.getModel(modelId) : (db.getDefaultModel?.() || { model_name: 'default' })
+      let sessionCfg = null
+      try {
+        sessionCfg = session.config ? (typeof session.config === 'string' ? JSON.parse(session.config) : session.config) : null
+      } catch {}
+      const modelId = sessionCfg?.modelId ?? session.model_id ?? null
+      let model = modelId ? db.getModel(modelId) : null
+      if (!model && typeof db.getPrimaryModel === 'function') {
+        const primary = db.getPrimaryModel()
+        if (primary) model = db.getModel(primary.id) || primary
+      }
+      if (!model) {
+        model = db.getDefaultModel?.() || { model_name: 'default' }
+      }
       const provider = model?.provider_id ? db.getProvider(model.provider_id) : null
       const { maybeCompact, estimateMessagesTokens } = require('../llm/compaction')
 

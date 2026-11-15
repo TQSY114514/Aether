@@ -45,7 +45,7 @@ const TOOL_AXIS = {
   history_search: AXES.FILESYSTEM,
   memory_save: AXES.FILESYSTEM, memory_list: AXES.FILESYSTEM, memory_search: AXES.FILESYSTEM,
   delegate_task: AXES.FILESYSTEM, run_agent: AXES.FILESYSTEM, dispatch_subagent: AXES.FILESYSTEM, call_extended_tool: AXES.FILESYSTEM,
-  run_workflow: AXES.FILESYSTEM, run_arena: AXES.FILESYSTEM,
+  run_workflow: AXES.FILESYSTEM, run_arena: AXES.FILESYSTEM, run_script: AXES.FILESYSTEM,
   task: AXES.FILESYSTEM, review_code: AXES.FILESYSTEM,
   // Phase 3: topology-aware subagent supervisor tools
   list_providers_and_models: AXES.FILESYSTEM,

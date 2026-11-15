@@ -267,6 +267,7 @@ export async function runSession({
   // dbSessionId == null → 建新会话行（W2-t17 自动标题: 首条 prompt 前 40 字）;
   // 非 null（/use /fork 置入）→ 复用既有行，不重复建。
   let sessionRowId = null
+  let priorMessages = []
   if (db) {
     const adapter = taskDbAdapter(db)
     try {
@@ -278,6 +279,14 @@ export async function runSession({
         sessionRowId = Number(adapter.createSession({ title, parentSessionId: null }).lastInsertRowid)
       } else {
         sessionRowId = Number(dbSessionId)
+        try {
+          const rows = db.prepare(
+            "SELECT role, content FROM message WHERE session_id = ? AND role IN ('user', 'assistant') ORDER BY id ASC"
+          ).all(sessionRowId)
+          priorMessages = rows
+            .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
+            .map((m) => ({ role: m.role, content: m.content }))
+        } catch { priorMessages = [] }
       }
       // 用户消息在运行前落库：agent 抛错也保留该行（中断轮次 = 合法的"无回复"态）
       adapter.addMessage({ session_id: sessionRowId, role: 'user', content: String(prompt || '') })
@@ -351,6 +360,7 @@ export async function runSession({
   try {
     result = await runAgentImpl({
       prompt: String(prompt || ''),
+      ...(priorMessages.length > 0 ? { messages: [...priorMessages, { role: 'user', content: String(prompt || '') }] } : {}),
       provider: effectiveProvider,
       model,
       db,

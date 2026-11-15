@@ -28,7 +28,9 @@ const EXTS_TO_LANG = {
 
 // Which languages get a server and how to launch it.
 const serverOverrides = new Map() // language -> { command, args }
-const unavailableLangs = new Set() // languages whose default binary ENOENT'd
+const unavailableLangs = new Set() // languages whose binary ENOENT'd
+const serverCooldowns = new Map() // `${root}|${language}` -> expiry timestamp (ms)
+const STARTUP_COOLDOWN_MS = 30000
 
 const LANGUAGE_SERVER_CANDIDATES = {
   python: [
@@ -55,21 +57,73 @@ const LSP_LANGUAGE_IDS = {
   '.rs': 'rust',
 }
 
-function isCommandOnPath(cmd) {
-  if (!cmd) return false
+const WIN_EXECUTABLE_EXTS = ['.exe', '.cmd', '.bat', '.com']
+
+function resolveCommandOnPath(cmd) {
+  if (!cmd) return null
   const fs = require('fs')
   const isWin = process.platform === 'win32'
-  const exts = isWin ? ['', '.exe', '.cmd', '.bat'] : ['']
-  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean)
+  const hasSep = cmd.includes('/') || cmd.includes('\\') || path.isAbsolute(cmd)
+  const hasExt = Boolean(path.extname(cmd))
+  // On Windows, bare command names must resolve to real executable extensions
+  // (.exe/.cmd/.bat/.com) rather than matching extensionless POSIX shims.
+  const exts = isWin ? (hasExt ? [''] : WIN_EXECUTABLE_EXTS) : ['']
+
+  if (hasSep) {
+    for (const ext of exts) {
+      const candidate = ext ? cmd + ext : cmd
+      try {
+        if (fs.statSync(candidate).isFile()) return path.resolve(candidate)
+      } catch {}
+    }
+    return null
+  }
+
+  const dirs = (process.env.PATH || process.env.Path || '').split(path.delimiter).filter(Boolean)
   for (const dir of dirs) {
     for (const ext of exts) {
-      const candidate = path.join(dir, cmd.endsWith(ext) ? cmd : cmd + ext)
+      const candidate = path.join(dir, ext ? cmd + ext : cmd)
       try {
-        if (fs.statSync(candidate).isFile()) return true
+        if (fs.statSync(candidate).isFile()) return candidate
       } catch {}
     }
   }
-  return false
+  return null
+}
+
+function isCommandOnPath(cmd) {
+  return Boolean(resolveCommandOnPath(cmd))
+}
+
+function quoteCmdArg(value) {
+  const str = String(value)
+  if (/[\r\n\0]/.test(str)) throw new Error('Invalid control character in LSP command argument')
+  if (str === '') return '""'
+  if (!/[\s"&|<>^()%!]/.test(str)) return str
+  return `"${str.replace(/"/g, '\\"')}"`
+}
+
+function buildSpawnInvocation(command, args) {
+  let resolvedCmd = command
+  if (process.platform === 'win32') {
+    if (!path.isAbsolute(resolvedCmd) && !resolvedCmd.includes('/') && !resolvedCmd.includes('\\')) {
+      resolvedCmd = resolveCommandOnPath(resolvedCmd) || resolvedCmd
+    }
+    if (/\.(cmd|bat)$/i.test(resolvedCmd)) {
+      const comspec = process.env.ComSpec || 'cmd.exe'
+      const cmdLine = [quoteCmdArg(resolvedCmd), ...(args || []).map(quoteCmdArg)].join(' ')
+      return {
+        file: comspec,
+        args: ['/d', '/s', '/c', `"${cmdLine}"`],
+        options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, windowsVerbatimArguments: true },
+      }
+    }
+  }
+  return {
+    file: resolvedCmd,
+    args: args || [],
+    options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
+  }
 }
 
 function defaultServerFor(language) {
@@ -85,12 +139,14 @@ function defaultServerFor(language) {
         return { command: process.execPath, args: [path.resolve(path.dirname(pkgPath), bin), '--stdio'] }
       }
     } catch { /* not installed locally — fall through to PATH */ }
-    return { command: 'typescript-language-server', args: ['--stdio'] }
+    const resolved = resolveCommandOnPath('typescript-language-server')
+    return { command: resolved || 'typescript-language-server', args: ['--stdio'] }
   }
   const candidates = LANGUAGE_SERVER_CANDIDATES[language]
   if (!candidates) return null
   for (const cand of candidates) {
-    if (isCommandOnPath(cand.command)) return cand
+    const resolved = resolveCommandOnPath(cand.command)
+    if (resolved) return { command: resolved, args: cand.args }
   }
   return null
 }
@@ -227,25 +283,32 @@ class LspClient {
     this._proc = null
     this._parser = new MessageParser()
     this._pending = new Map() // id -> { resolve, reject, timer }
-    this._diagnosticsByUri = new Map() // normalizedUri -> Diagnostic[]
-    this._diagnosticWaiters = new Map() // normalizedUri -> Set<{ resolve, timer }>
-    this._docVersions = new Map() // uri -> version number
+    this._diagnosticsByUri = new Map() // normalizedUri -> { version: number|null, diagnostics: Diagnostic[] }
+    this._diagnosticWaiters = new Map() // normalizedUri -> Set<{ resolve, timer, minVersion: number|null }>
+    this._docVersions = new Map() // normalizedUri -> version number
     this._id = 0
     this._disposed = false
+    this._initialized = false
+    this._startPromise = null
     this._startFailed = false
+    this._startTimedOut = false
     this._startErrorCode = null
+    this._lastErrorMessage = null
   }
 
   /** Send a request and await its response. Rejects on timeout / crash. */
-  _send(method, params, timeoutMs = this.timeoutMs) {
+  _send(method, params, timeoutMs = this.timeoutMs, { killOnTimeout = true } = {}) {
     if (this._disposed) return Promise.reject(new Error('LSP client disposed'))
     const id = ++this._id
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this._pending.delete(id)
-        this._fail(`LSP request timed out: ${method}`)
+        if (killOnTimeout) {
+          this._fail(`LSP request timed out: ${method}`)
+        }
         reject(new Error(`LSP request timed out after ${timeoutMs}ms: ${method}`))
       }, timeoutMs)
+      if (!killOnTimeout && timer.unref) timer.unref()
       this._pending.set(id, { resolve, reject, timer })
       try {
         this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id, method, params: params ?? {} }))
@@ -267,6 +330,7 @@ class LspClient {
 
   /** Reject everything in flight and tear the process down. */
   _fail(reason) {
+    this._initialized = false
     for (const { reject, timer } of this._pending.values()) {
       clearTimeout(timer)
       reject(new Error(reason))
@@ -282,6 +346,13 @@ class LspClient {
     if (msg.id === undefined || msg.id === null) {
       if (msg.method === 'textDocument/publishDiagnostics' && msg.params && msg.params.uri) {
         const key = normalizeUriKey(msg.params.uri)
+        const currentDocVersion = this._docVersions.get(key) ?? null
+        const diagVersion = typeof msg.params.version === 'number' ? msg.params.version : null
+        // Drop stale push notifications from older document versions so old
+        // diagnostics cannot overwrite or resolve waiters for a newer edit.
+        if (diagVersion !== null && currentDocVersion !== null && diagVersion < currentDocVersion) {
+          return
+        }
         const rawItems = Array.isArray(msg.params.diagnostics) ? msg.params.diagnostics : []
         const normalized = rawItems.map(d => ({
           severity: d.severity ?? 1,
@@ -290,13 +361,26 @@ class LspClient {
           source: d.source || null,
           code: d.code ?? null,
         }))
-        this._diagnosticsByUri.set(key, normalized)
+        const effectiveVersion = diagVersion !== null ? diagVersion : currentDocVersion
+        const existing = this._diagnosticsByUri.get(key)
+        if (!existing || existing.version == null || effectiveVersion == null || effectiveVersion >= existing.version) {
+          this._diagnosticsByUri.set(key, { version: effectiveVersion, diagnostics: normalized })
+        }
         const waiters = this._diagnosticWaiters.get(key)
         if (waiters && waiters.size > 0) {
-          this._diagnosticWaiters.delete(key)
+          const matched = []
           for (const w of waiters) {
-            clearTimeout(w.timer)
-            w.resolve(normalized)
+            if (diagVersion === null || w.minVersion == null || diagVersion >= w.minVersion) {
+              matched.push(w)
+            }
+          }
+          if (matched.length > 0) {
+            for (const w of matched) {
+              waiters.delete(w)
+              clearTimeout(w.timer)
+              w.resolve(normalized)
+            }
+            if (waiters.size === 0) this._diagnosticWaiters.delete(key)
           }
         }
       }
@@ -320,45 +404,71 @@ class LspClient {
   }
 
   /** Spawn + initialize handshake. Returns true when the server is ready. */
-  async _ensureStarted() {
-    if (this._proc) return true
+  async _ensureStarted({ timeoutMs } = {}) {
+    if (this._proc && this._initialized) return true
     if (this._startFailed) return false
-    const proc = spawn(this.command, this.args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
-    this._proc = proc
-    proc.stdout.on('data', (chunk) => {
-      for (const msg of this._parser.push(chunk)) this._handleMessage(msg)
-    })
-    proc.stderr.on('data', () => { /* server diagnostics — ignore */ })
-    proc.on('error', (err) => {
-      this._startFailed = true
-      this._startErrorCode = err && err.code ? err.code : null
-      this._fail(`LSP server failed to start: ${err.message}`)
-    })
-    proc.on('exit', (code, signal) => {
-      if (this._proc === proc) this._proc = null
-      if (this._pending.size) this._fail(`LSP server exited (code=${code}, signal=${signal})`)
-    })
-    try {
-      const rootUri = pathToFileURL(path.resolve(this.root)).href
-      await this._send('initialize', {
-        processId: process.pid,
-        rootUri,
-        capabilities: {
-          textDocument: {
-            publishDiagnostics: { relatedInformation: false },
-            synchronization: { dynamicRegistration: false, didSave: true },
-          },
-        },
-        workspaceFolders: [{ uri: rootUri, name: path.basename(path.resolve(this.root)) }],
+    if (this._startPromise) return this._startPromise
+
+    this._startPromise = (async () => {
+      let invocation
+      try {
+        invocation = buildSpawnInvocation(this.command, this.args)
+      } catch (err) {
+        this._startFailed = true
+        this._lastErrorMessage = err && err.message ? err.message : 'Invalid LSP command'
+        return false
+      }
+      const proc = spawn(invocation.file, invocation.args, invocation.options)
+      this._proc = proc
+      proc.stdout.on('data', (chunk) => {
+        for (const msg of this._parser.push(chunk)) this._handleMessage(msg)
+      })
+      proc.stderr.on('data', () => { /* server diagnostics — ignore */ })
+      proc.on('error', (err) => {
+        this._startFailed = true
+        this._startErrorCode = err && err.code ? err.code : null
+        this._lastErrorMessage = err && err.message ? err.message : 'LSP server failed to start'
+        this._fail(`LSP server failed to start: ${err.message}`)
+      })
+      proc.on('exit', (code, signal) => {
+        if (this._proc === proc) {
+          this._proc = null
+          this._initialized = false
+        }
+        if (this._pending.size) this._fail(`LSP server exited (code=${code}, signal=${signal})`)
       })
       try {
-        this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method: 'initialized', params: {} }))
-      } catch { /* server already gone — searchSymbols will surface it */ }
-      return true
-    } catch {
-      this._fail('LSP initialize handshake failed')
-      return false
-    }
+        const rootUri = pathToFileURL(path.resolve(this.root)).href
+        const initTimeoutMs = typeof timeoutMs === 'number' ? timeoutMs : this.timeoutMs
+        await this._send('initialize', {
+          processId: process.pid,
+          rootUri,
+          capabilities: {
+            textDocument: {
+              publishDiagnostics: { relatedInformation: false },
+              synchronization: { dynamicRegistration: false, didSave: true },
+            },
+          },
+          workspaceFolders: [{ uri: rootUri, name: path.basename(path.resolve(this.root)) }],
+        }, initTimeoutMs)
+        this._initialized = true
+        try {
+          this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method: 'initialized', params: {} }))
+        } catch { /* server already gone — searchSymbols will surface it */ }
+        return true
+      } catch (err) {
+        this._startFailed = true
+        const msg = err && err.message ? err.message : 'LSP initialize handshake failed'
+        if (/timed out/i.test(msg)) this._startTimedOut = true
+        this._lastErrorMessage = msg
+        this._fail(msg)
+        return false
+      } finally {
+        this._startPromise = null
+      }
+    })()
+
+    return this._startPromise
   }
 
   /**
@@ -398,10 +508,33 @@ class LspClient {
    */
   async openDocument(uri) {
     if (!(await this._ensureStarted())) return false
-    const ver = (this._docVersions.get(uri) || 0) + 1
-    this._docVersions.set(uri, ver)
-    this._notify('textDocument/didOpen', { textDocument: { uri, languageId: 'plaintext', version: ver, text: '' } })
+    const key = normalizeUriKey(uri)
+    if (this._docVersions.has(key)) return true
+    this._docVersions.set(key, 1)
+    this._notify('textDocument/didOpen', { textDocument: { uri, languageId: 'plaintext', version: 1, text: '' } })
     return true
+  }
+
+  _syncDocumentSync(uri, text, languageId = 'plaintext') {
+    const key = normalizeUriKey(uri)
+    const prev = this._docVersions.get(key)
+    const ver = prev == null ? 1 : prev + 1
+    this._docVersions.set(key, ver)
+    if (prev == null) {
+      this._notify('textDocument/didOpen', {
+        textDocument: { uri, languageId, version: ver, text },
+      })
+    } else {
+      this._notify('textDocument/didChange', {
+        textDocument: { uri, version: ver },
+        contentChanges: [{ text }],
+      })
+    }
+    this._notify('textDocument/didSave', {
+      textDocument: { uri },
+      text,
+    })
+    return ver
   }
 
   /**
@@ -415,37 +548,25 @@ class LspClient {
    */
   async syncDocument(uri, text, languageId = 'plaintext') {
     if (!(await this._ensureStarted())) return false
-    const prev = this._docVersions.get(uri)
-    if (prev == null) {
-      this._docVersions.set(uri, 1)
-      this._notify('textDocument/didOpen', {
-        textDocument: { uri, languageId, version: 1, text },
-      })
-    } else {
-      const next = prev + 1
-      this._docVersions.set(uri, next)
-      this._notify('textDocument/didChange', {
-        textDocument: { uri, version: next },
-        contentChanges: [{ text }],
-      })
-    }
-    this._notify('textDocument/didSave', {
-      textDocument: { uri },
-      text,
-    })
+    this._syncDocumentSync(uri, text, languageId)
     return true
   }
 
   /**
    * Wait up to `waitMs` for a fresh `textDocument/publishDiagnostics` push
-   * notification, resolving to `null` on timeout.
+   * notification matching `minVersion`, resolving to `null` on timeout.
    * @private
    */
-  _awaitPushDiagnostics(uri, waitMs = 450) {
+  _awaitPushDiagnostics(uri, waitMs = 450, minVersion = null) {
     const key = normalizeUriKey(uri)
     return new Promise((resolve) => {
       if (waitMs <= 0) {
-        resolve(this._diagnosticsByUri.get(key) ?? null)
+        const cached = this._diagnosticsByUri.get(key)
+        if (cached && (minVersion == null || (cached.version != null && cached.version >= minVersion))) {
+          resolve(cached.diagnostics)
+        } else {
+          resolve(null)
+        }
         return
       }
       let waiters = this._diagnosticWaiters.get(key)
@@ -454,6 +575,7 @@ class LspClient {
         this._diagnosticWaiters.set(key, waiters)
       }
       const entry = {
+        minVersion,
         resolve,
         timer: setTimeout(() => {
           waiters.delete(entry)
@@ -468,28 +590,57 @@ class LspClient {
 
   /**
    * Sync document content and collect diagnostics using push first, falling
-   * back to LSP 3.17 pull (`textDocument/diagnostic`) if no push arrives.
+   * back to LSP 3.17 pull (`textDocument/diagnostic`) if no push arrives,
+   * all bounded under a single overall deadline.
    * @param {string} uri
    * @param {string} text
-   * @param {{ languageId?: string, waitMs?: number }} [opts]
+   * @param {{ languageId?: string, waitMs?: number, deadlineMs?: number }} [opts]
    * @returns {Promise<Array<{ severity: number, message: string, line: number, source?: string|null, code?: string|number|null }> | null>}
    */
-  async syncAndCollectDiagnostics(uri, text, { languageId = 'plaintext', waitMs = 450 } = {}) {
-    if (!(await this._ensureStarted())) return null
+  async syncAndCollectDiagnostics(uri, text, { languageId = 'plaintext', waitMs = 450, deadlineMs } = {}) {
+    const hasExplicitDeadline = typeof deadlineMs === 'number'
+    const effectiveDeadlineMs = hasExplicitDeadline
+      ? deadlineMs
+      : Math.max(waitMs + this.timeoutMs, 3000)
+    const deadlineAt = Date.now() + effectiveDeadlineMs
+
+    const startTimeoutMs = hasExplicitDeadline
+      ? Math.max(50, effectiveDeadlineMs)
+      : Math.min(this.timeoutMs, Math.max(50, effectiveDeadlineMs))
+    if (!(await this._ensureStarted({ timeoutMs: startTimeoutMs }))) return null
+
     const key = normalizeUriKey(uri)
+    const expectedVersion = (this._docVersions.get(key) || 0) + 1
+    const remainingBudget = Math.max(0, deadlineAt - Date.now())
+    const remainingForPush = Math.min(waitMs, remainingBudget)
+
     // Register push waiter BEFORE sending notifications to avoid missing fast pushes.
-    const pushPromise = this._awaitPushDiagnostics(uri, waitMs)
-    await this.syncDocument(uri, text, languageId)
+    const pushPromise = this._awaitPushDiagnostics(uri, remainingForPush, expectedVersion)
+    this._syncDocumentSync(uri, text, languageId)
     const pushed = await pushPromise
     if (Array.isArray(pushed)) return pushed
 
-    // Push did not arrive in time; try pull diagnostics if server supports it.
-    try {
-      const pulled = await this.getDiagnostics(uri)
-      if (Array.isArray(pulled) && pulled.length > 0) return pulled
-    } catch { /* server may not implement textDocument/diagnostic */ }
+    // Push did not arrive in time; try pull diagnostics within the remaining deadline.
+    // Use killOnTimeout: false so a slow optional pull does not tear down the server.
+    const remainingForPull = deadlineAt - Date.now()
+    if (remainingForPull > 20) {
+      try {
+        const pullRes = await this._pullDiagnostics(uri, {
+          timeoutMs: remainingForPull,
+          killOnTimeout: false,
+        })
+        if (pullRes.authoritative) {
+          return pullRes.diagnostics
+        }
+      } catch { /* server may not implement textDocument/diagnostic or timed out */ }
+    }
 
-    return this._diagnosticsByUri.get(key) || []
+    // Only reuse cached diagnostics if they match the current edit version.
+    const cached = this._diagnosticsByUri.get(key)
+    if (cached && cached.version != null && cached.version >= expectedVersion) {
+      return cached.diagnostics
+    }
+    return []
   }
 
   /**
@@ -562,30 +713,64 @@ class LspClient {
   }
 
   /**
+   * Pull-style diagnostics for a file (LSP 3.17 `textDocument/diagnostic`),
+   * distinguishing an authoritative server report from an unsupported/empty reply.
+   * @private
+   */
+  async _pullDiagnostics(uri, { timeoutMs, killOnTimeout = true } = {}) {
+    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
+    const key = normalizeUriKey(uri)
+    const reqTimeout = typeof timeoutMs === 'number' ? timeoutMs : this.timeoutMs
+    const raw = await this._send(
+      'textDocument/diagnostic',
+      { textDocument: { uri }, identifier: 'aether-lsp' },
+      reqTimeout,
+      { killOnTimeout }
+    )
+    if (!raw || typeof raw !== 'object') return { authoritative: false, diagnostics: [] }
+    const currentVersion = this._docVersions.get(key) ?? null
+    if (raw.kind === 'unchanged') {
+      const cached = this._diagnosticsByUri.get(key)
+      if (cached) {
+        this._diagnosticsByUri.set(key, {
+          version: currentVersion ?? cached.version,
+          diagnostics: cached.diagnostics,
+        })
+        return { authoritative: true, diagnostics: cached.diagnostics }
+      }
+      return { authoritative: true, diagnostics: [] }
+    }
+    if (raw.kind === 'full' || Array.isArray(raw.items)) {
+      const items = Array.isArray(raw.items) ? raw.items : []
+      const normalized = items.map(d => ({
+        severity: d.severity ?? 1,
+        message: d.message || '',
+        line: (d.range && d.range.start && d.range.start.line) ?? 0,
+        source: d.source || null,
+        code: d.code ?? null,
+      }))
+      // Overwrite/clear cached diagnostics even when empty so fixed errors stay cleared.
+      this._diagnosticsByUri.set(key, { version: currentVersion, diagnostics: normalized })
+      return { authoritative: true, diagnostics: normalized }
+    }
+    return { authoritative: false, diagnostics: [] }
+  }
+
+  /**
    * Pull-style diagnostics for a file (LSP 3.17 `textDocument/diagnostic`).
    * Falls back to `[]` on servers that do not support the pull model.
    * @returns {Promise<Array<{ severity: number, message: string, line: number }>>}
    */
-  async getDiagnostics(uri) {
-    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
-    const raw = await this._send('textDocument/diagnostic', {
-      textDocument: { uri },
-      identifier: 'aether-lsp',
-    })
-    if (!raw) return []
-    const items = raw.kind === 'full' && Array.isArray(raw.items) ? raw.items : []
-    return items.map(d => ({
-      severity: d.severity ?? 1,
-      message: d.message || '',
-      line: (d.range && d.range.start && d.range.start.line) ?? 0,
-      source: d.source || null,
-      code: d.code ?? null,
-    }))
+  async getDiagnostics(uri, opts) {
+    const res = await this._pullDiagnostics(uri, opts)
+    return res.diagnostics
   }
 
   dispose() {
     if (this._disposed) return
     this._disposed = true
+    this._initialized = false
+    this._startPromise = null
     const proc = this._proc
     this._proc = null
     for (const { reject, timer } of this._pending.values()) {
@@ -633,6 +818,7 @@ const clientCache = new Map()
  * @returns {Promise<Array<{ file: string, line: number, name: string }> | null>}
  */
 async function searchWorkspace(root, query, { language = 'javascript', timeoutMs } = {}) {
+  if (unavailableLangs.has(language)) return null
   const server = serverOverrides.get(language) || defaultServerFor(language)
   if (!server) return null
   const key = `${root}|${language}`
@@ -644,16 +830,24 @@ async function searchWorkspace(root, query, { language = 'javascript', timeoutMs
   try {
     return await client.searchSymbols(query)
   } catch {
+    if (client._startErrorCode === 'ENOENT') unavailableLangs.add(language)
     clientCache.delete(key)
     try { client.dispose() } catch { /* already disposed */ }
     return null
   }
 }
 
-/** Override the launch config for a language (tests / power users). */
-function configureServer(language, { command, args }) {
+/** Override (or clear when config is null) the launch config for a language (tests / power users). */
+function configureServer(language, config) {
   unavailableLangs.delete(language)
-  serverOverrides.set(language, { command, args })
+  for (const k of serverCooldowns.keys()) {
+    if (k.endsWith(`|${language}`)) serverCooldowns.delete(k)
+  }
+  if (!config) {
+    serverOverrides.delete(language)
+    return
+  }
+  serverOverrides.set(language, { command: config.command, args: config.args || [] })
 }
 
 // ─── Full-LSP workspace entry points ────────────────────────────────────────
@@ -663,10 +857,12 @@ function configureServer(language, { command, args }) {
 
 /** Get a client for a workspace+language (cached), or null when unavailable. */
 function clientFor(root, language = 'javascript') {
-  if (!serverOverrides.has(language) && unavailableLangs.has(language)) return null
+  if (unavailableLangs.has(language)) return null
+  const key = `${root}|${language}`
+  const cooldownUntil = serverCooldowns.get(key)
+  if (cooldownUntil && Date.now() < cooldownUntil) return null
   const server = serverOverrides.get(language) || defaultServerFor(language)
   if (!server) return null
-  const key = `${root}|${language}`
   let client = clientCache.get(key)
   if (!client) {
     client = createClient({ command: server.command, args: server.args, root })
@@ -675,24 +871,66 @@ function clientFor(root, language = 'javascript') {
   return client
 }
 
+function isLanguageUnavailable(language) {
+  return unavailableLangs.has(language)
+}
+
 // One-shot wrapper: run fn on the cached client; on ANY error dispose the
 // client, drop the cache entry and return null (never throw).
-async function withClient(root, language, fn) {
+async function withClient(root, language, fn, { onDegraded } = {}) {
+  const key = `${root}|${language}`
+  const cooldownUntil = serverCooldowns.get(key)
+  if (cooldownUntil && Date.now() < cooldownUntil) {
+    try { onDegraded?.({ reason: 'timeout', language, message: 'LSP server in cooldown after prior failure' }) } catch {}
+    return null
+  }
+  if (unavailableLangs.has(language)) {
+    try { onDegraded?.({ reason: 'missing', language, message: 'LSP server binary unavailable' }) } catch {}
+    return null
+  }
   const client = clientFor(root, language)
-  if (!client) return null
+  if (!client) {
+    try { onDegraded?.({ reason: 'missing', language, message: 'no LSP server configured or on PATH' }) } catch {}
+    return null
+  }
   try {
     const res = await fn(client)
-    if (client._startErrorCode === 'ENOENT' && !serverOverrides.has(language)) {
+    if (client._startErrorCode === 'ENOENT') {
       unavailableLangs.add(language)
-      clientCache.delete(`${root}|${language}`)
+      clientCache.delete(key)
       try { client.dispose() } catch { /* already disposed */ }
+      try { onDegraded?.({ reason: 'missing', language, message: `${client.command} not found (ENOENT)` }) } catch {}
+      return null
+    }
+    if (client._startFailed) {
+      serverCooldowns.set(key, Date.now() + STARTUP_COOLDOWN_MS)
+      clientCache.delete(key)
+      try { client.dispose() } catch { /* already disposed */ }
+      try {
+        onDegraded?.({
+          reason: client._startTimedOut ? 'timeout' : 'error',
+          language,
+          message: client._lastErrorMessage || 'LSP server failed to start',
+        })
+      } catch {}
+      return null
     }
     return res
-  } catch {
-    if (client._startErrorCode === 'ENOENT' && !serverOverrides.has(language)) {
+  } catch (err) {
+    if (client._startErrorCode === 'ENOENT') {
       unavailableLangs.add(language)
+      try { onDegraded?.({ reason: 'missing', language, message: `${client.command} not found (ENOENT)` }) } catch {}
+    } else {
+      serverCooldowns.set(key, Date.now() + STARTUP_COOLDOWN_MS)
+      try {
+        onDegraded?.({
+          reason: client._startTimedOut ? 'timeout' : 'error',
+          language,
+          message: (err && err.message) || client._lastErrorMessage || 'LSP request failed',
+        })
+      } catch {}
     }
-    clientCache.delete(`${root}|${language}`)
+    clientCache.delete(key)
     try { client.dispose() } catch { /* already disposed */ }
     return null
   }
@@ -751,10 +989,10 @@ function diagnosticsWorkspace(root, file, { language } = {}) {
  * Never throws; returns `null` when language has no LSP or server fails.
  * @param {string} root
  * @param {string} file
- * @param {{ content?: string, language?: string, waitMs?: number }} [opts]
+ * @param {{ content?: string, language?: string, waitMs?: number, deadlineMs?: number, onDegraded?: Function }} [opts]
  * @returns {Promise<Array<{ severity: number, message: string, line: number, source?: string|null, code?: string|number|null }> | null>}
  */
-async function diagnosticsAfterEdit(root, file, { content, language, waitMs = 450 } = {}) {
+async function diagnosticsAfterEdit(root, file, { content, language, waitMs = 450, deadlineMs, onDegraded } = {}) {
   const lang = language || extToLanguage(file)
   if (!lang) return null
   const absFile = path.resolve(file)
@@ -769,7 +1007,12 @@ async function diagnosticsAfterEdit(root, file, { content, language, waitMs = 45
       return null
     }
   }
-  return withClient(root, lang, (client) => client.syncAndCollectDiagnostics(uri, text, { languageId, waitMs }))
+  return withClient(
+    root,
+    lang,
+    (client) => client.syncAndCollectDiagnostics(uri, text, { languageId, waitMs, deadlineMs }),
+    { onDegraded }
+  )
 }
 
 const SEVERITY_LABELS = { 1: 'Error', 2: 'Warning', 3: 'Info', 4: 'Hint' }
@@ -809,6 +1052,7 @@ function disposeAll() {
   }
   clientCache.clear()
   unavailableLangs.clear()
+  serverCooldowns.clear()
 }
 
 module.exports = {
@@ -816,6 +1060,10 @@ module.exports = {
   MessageParser,
   extToLanguage,
   uriToFilePath,
+  resolveCommandOnPath,
+  isCommandOnPath,
+  buildSpawnInvocation,
+  isLanguageUnavailable,
   LspClient,
   createClient,
   searchWorkspace,

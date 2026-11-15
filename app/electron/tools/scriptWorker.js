@@ -21,17 +21,6 @@ function sendFrame(frame) {
   } catch { /* parent closed pipe */ }
 }
 
-function formatArg(val) {
-  if (typeof val === 'string') return val
-  if (val === undefined) return 'undefined'
-  if (val === null) return 'null'
-  try {
-    return JSON.stringify(val)
-  } catch {
-    return String(val)
-  }
-}
-
 function safeSerializeValue(val) {
   if (val === undefined) return null
   try {
@@ -46,111 +35,233 @@ const pendingCalls = new Map()
 let callSeq = 0
 let started = false
 
+function parseSerializedResult(payloadJson) {
+  try {
+    const parsed = JSON.parse(String(payloadJson || '{}'))
+    if (parsed && typeof parsed === 'object') {
+      return {
+        ok: Boolean(parsed.ok),
+        value: parsed.value === undefined ? null : parsed.value,
+        error: parsed.error ? String(parsed.error) : null,
+      }
+    }
+  } catch { /* fall through */ }
+  return { ok: false, value: null, error: 'Script returned an invalid response payload' }
+}
+
 async function executeRun({ code, inputs }) {
   const logs = []
-  const pushLog = (level, args) => {
+  const pushLog = (level, line) => {
     if (logs.length >= MAX_LOG_LINES) return
-    const text = Array.from(args).map(formatArg).join(' ').slice(0, MAX_LOG_CHARS)
+    const text = String(line === undefined ? '' : line).slice(0, MAX_LOG_CHARS)
     logs.push(level === 'log' ? text : `[${level}] ${text}`)
   }
 
-  // Host dispatch bridge — crosses the boundary via serialized JSON strings only
-  // so no host object prototypes ever enter the sandbox realm.
-  const dispatchToolJson = (name, argsJson, onResolve, onReject) => {
-    const id = ++callSeq
-    pendingCalls.set(id, {
-      resolve: (payloadJson) => onResolve(String(payloadJson)),
-      reject: (errMsg) => onReject(String(errMsg || 'tool error')),
-    })
-    let parsedArgs = {}
-    try {
-      const parsed = argsJson ? JSON.parse(argsJson) : {}
-      parsedArgs = parsed && typeof parsed === 'object' ? parsed : {}
-    } catch {
-      parsedArgs = {}
-    }
-    sendFrame({ type: 'tool_call', id, name: String(name || ''), args: parsedArgs })
+  let safeInputsJson = '{}'
+  try {
+    const serialized = JSON.stringify(inputs === undefined ? {} : inputs)
+    safeInputsJson = serialized === undefined ? '{}' : serialized
+  } catch {
+    safeInputsJson = '{}'
   }
 
-  const hostBridge = Object.freeze({
-    dispatchToolJson,
-    log: (level, line) => pushLog(level, [line]),
-    inputsJson: JSON.stringify(inputs === undefined ? {} : inputs),
+  // Host callbacks cross the VM boundary strictly with primitive strings so no
+  // host Error, prototype, or object reference ever enters the sandbox realm.
+  const dispatchTool = (name, argsJson, onResolve, onReject) => {
+    try {
+      const id = ++callSeq
+      pendingCalls.set(id, {
+        resolve: (payloadJson) => {
+          try { onResolve(String(payloadJson)) } catch { /* ignore */ }
+        },
+        reject: (errMsg) => {
+          try { onReject(String(errMsg || 'tool error')) } catch { /* ignore */ }
+        },
+      })
+      let parsedArgs = {}
+      try {
+        const parsed = argsJson ? JSON.parse(String(argsJson)) : {}
+        parsedArgs = parsed && typeof parsed === 'object' ? parsed : {}
+      } catch {
+        parsedArgs = {}
+      }
+      sendFrame({ type: 'tool_call', id, name: String(name || ''), args: parsedArgs })
+    } catch {
+      try { onReject('Failed to dispatch tool call') } catch { /* ignore */ }
+    }
+  }
+
+  const logLine = (level, line) => {
+    try {
+      pushLog(String(level || 'log'), line)
+    } catch { /* ignore */ }
+  }
+
+  // Null-prototype context object + codeGeneration disabled prevents host
+  // Function/constructor traversal (`globalThis.constructor.constructor`, etc.).
+  const sandbox = vm.createContext(Object.create(null), {
+    codeGeneration: { strings: false, wasm: false },
   })
 
-  const sandbox = vm.createContext(
-    {
-      __bridge: hostBridge,
-      setTimeout,
-      clearTimeout,
-      TextEncoder,
-      TextDecoder,
-      URL,
-      URLSearchParams,
-    },
-    { codeGeneration: { strings: false, wasm: false } }
-  )
+  const bootstrapBody = `
+    "use strict";
+    const freeze = Object.freeze;
+    const ownKeys = Object.keys;
+    const createNull = Object.create;
+    const jsonParse = JSON.parse;
+    const jsonStringify = JSON.stringify;
+    const VmPromise = Promise;
+    const vmPromiseThen = Promise.prototype.then;
+    const VmError = Error;
+    const VmProxy = Proxy;
+    const toString = String;
+    const arrayMap = Array.prototype.map;
+    const arrayJoin = Array.prototype.join;
+    const applyFn = Reflect.apply;
 
-  // Construct `inputs`, `console`, and `tools` Proxy entirely inside the VM realm.
-  const bootstrapCode = `
-    (function(__b) {
-      "use strict";
-      const safeInputs = Object.freeze(JSON.parse(__b.inputsJson || '{}'));
-      const fmt = (v) => {
-        if (typeof v === 'string') return v;
-        if (v === undefined) return 'undefined';
-        if (v === null) return 'null';
-        try { return JSON.stringify(v); } catch { return String(v); }
-      };
-      const safeConsole = Object.freeze({
-        log: (...a) => __b.log('log', a.map(fmt).join(' ')),
-        info: (...a) => __b.log('info', a.map(fmt).join(' ')),
-        warn: (...a) => __b.log('warn', a.map(fmt).join(' ')),
-        error: (...a) => __b.log('error', a.map(fmt).join(' ')),
-        debug: (...a) => __b.log('debug', a.map(fmt).join(' ')),
-      });
-      const toolsProxy = new Proxy(Object.create(null), {
-        get(_target, prop) {
-          if (typeof prop !== 'string' || prop === 'then' || prop.startsWith('__')) return undefined;
-          return (args) => new Promise((resolve, reject) => {
-            let serialized = '{}';
-            try { serialized = JSON.stringify(args === undefined ? {} : args); } catch (e) {
-              reject(new Error('Failed to serialize tool arguments: ' + (e && e.message ? e.message : String(e))));
-              return;
-            }
-            __b.dispatchToolJson(
-              prop,
-              serialized,
-              (resJson) => {
-                try {
-                  const parsed = JSON.parse(resJson);
-                  resolve(parsed);
-                } catch {
-                  resolve(resJson);
-                }
-              },
-              (errMsg) => reject(new Error(errMsg))
-            );
-          });
+    const deepFreeze = (obj) => {
+      if (obj && typeof obj === 'object') {
+        freeze(obj);
+        const keys = ownKeys(obj);
+        for (let i = 0; i < keys.length; i++) {
+          deepFreeze(obj[keys[i]]);
         }
-      });
-      return { inputs: safeInputs, tools: toolsProxy, console: safeConsole };
-    })(__bridge);
+      }
+      return obj;
+    };
+
+    const safeInputs = deepFreeze(jsonParse(inputsJson || '{}'));
+
+    const fmt = (v) => {
+      if (typeof v === 'string') return v;
+      if (v === undefined) return 'undefined';
+      if (v === null) return 'null';
+      try { return jsonStringify(v); } catch {
+        try { return toString(v); } catch { return '[unprintable]'; }
+      }
+    };
+
+    const safeConsole = freeze({
+      log: (...a) => logLine('log', applyFn(arrayJoin, applyFn(arrayMap, a, [fmt]), [' '])),
+      info: (...a) => logLine('info', applyFn(arrayJoin, applyFn(arrayMap, a, [fmt]), [' '])),
+      warn: (...a) => logLine('warn', applyFn(arrayJoin, applyFn(arrayMap, a, [fmt]), [' '])),
+      error: (...a) => logLine('error', applyFn(arrayJoin, applyFn(arrayMap, a, [fmt]), [' '])),
+      debug: (...a) => logLine('debug', applyFn(arrayJoin, applyFn(arrayMap, a, [fmt]), [' '])),
+    });
+
+    const toolsProxy = new VmProxy(createNull(null), {
+      get(_target, prop) {
+        if (
+          typeof prop !== 'string' ||
+          prop === 'then' ||
+          prop === 'constructor' ||
+          prop === 'toString' ||
+          prop === 'valueOf' ||
+          prop.startsWith('__')
+        ) {
+          return undefined;
+        }
+        return (args) => new VmPromise((resolve, reject) => {
+          let serialized = '{}';
+          try {
+            const out = jsonStringify(args === undefined ? {} : args);
+            serialized = out === undefined ? '{}' : out;
+          } catch (e) {
+            const msg = e && typeof e.message === 'string' ? e.message : toString(e);
+            reject(new VmError('Failed to serialize tool arguments: ' + msg));
+            return;
+          }
+          dispatchTool(
+            prop,
+            serialized,
+            (resJson) => {
+              try {
+                resolve(jsonParse(resJson));
+              } catch {
+                resolve(resJson);
+              }
+            },
+            (errMsg) => reject(new VmError(errMsg))
+          );
+        });
+      }
+    });
+
+    const toSerializable = (val) => {
+      if (val === undefined) return null;
+      try {
+        const json = jsonStringify(val);
+        return json === undefined ? null : jsonParse(json);
+      } catch {
+        try {
+          return toString(val);
+        } catch {
+          return '[unserializable]';
+        }
+      }
+    };
+
+    const extractErrMsg = (err) => {
+      try {
+        if (err && typeof err === 'object' && typeof err.message === 'string') return err.message;
+        return toString(err);
+      } catch {
+        return 'Script execution failed';
+      }
+    };
+
+    try {
+      const promise = userFn(safeInputs, toolsProxy, safeConsole);
+      applyFn(vmPromiseThen, promise, [
+        (val) => {
+          finishRun(jsonStringify({ ok: true, value: toSerializable(val) }));
+        },
+        (err) => {
+          finishRun(jsonStringify({ ok: false, error: extractErrMsg(err) }));
+        }
+      ]);
+    } catch (syncErr) {
+      finishRun(jsonStringify({ ok: false, error: extractErrMsg(syncErr) }));
+    }
   `
 
   try {
-    const envObjs = vm.runInContext(bootstrapCode, sandbox, { filename: 'script-bootstrap.js' })
-    vm.runInContext('delete globalThis.__bridge;', sandbox)
+    const userFn = vm.compileFunction(
+      `"use strict";\nreturn (async function(inputs, tools, console) {\n${String(code || '')}\n})(inputs, tools, console);`,
+      ['inputs', 'tools', 'console'],
+      { parsingContext: sandbox, filename: 'agent-script.js' }
+    )
+    const bootstrapFactory = vm.compileFunction(
+      bootstrapBody,
+      ['userFn', 'dispatchTool', 'logLine', 'inputsJson', 'finishRun'],
+      { parsingContext: sandbox, filename: 'script-bootstrap.js' }
+    )
 
-    sandbox.__runEnv = envObjs
-    const userWrapper = `(async function(inputs, tools, console) { "use strict";\n${String(code || '')}\n})(__runEnv.inputs, __runEnv.tools, __runEnv.console)`
-    const value = await vm.runInContext(userWrapper, sandbox, { filename: 'agent-script.js' })
-    sendFrame({
-      type: 'result',
-      ok: true,
-      value: safeSerializeValue(value),
-      logs,
+    const resultPayload = await new Promise((resolve) => {
+      let settled = false
+      const finishRun = (payloadJson) => {
+        if (settled) return
+        settled = true
+        resolve(parseSerializedResult(payloadJson))
+      }
+      bootstrapFactory(userFn, dispatchTool, logLine, safeInputsJson, finishRun)
     })
+
+    if (resultPayload.ok) {
+      sendFrame({
+        type: 'result',
+        ok: true,
+        value: safeSerializeValue(resultPayload.value),
+        logs,
+      })
+    } else {
+      sendFrame({
+        type: 'result',
+        ok: false,
+        error: resultPayload.error || 'Script execution failed',
+        logs,
+      })
+    }
   } catch (err) {
     sendFrame({
       type: 'result',

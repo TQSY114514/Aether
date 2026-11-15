@@ -15,6 +15,13 @@ const SLOW = process.argv.includes('--slow')
 const CRASH = process.argv.includes('--crash')
 const DEFUNCT = process.argv.includes('--defunct')
 const PUSH_DIAG = process.argv.includes('--push-diag')
+const HANG_INIT = process.argv.includes('--hang-init')
+const HANG_DIAG = process.argv.includes('--hang-diag')
+const EMPTY_PULL_ON_CLEAN = process.argv.includes('--empty-pull-on-clean')
+const STALE_PUSH = process.argv.includes('--stale-push')
+const LOG_ARG = process.argv.find(a => a.startsWith('--log-file='))
+const LOG_FILE = LOG_ARG ? LOG_ARG.slice('--log-file='.length) : null
+const docTexts = new Map()
 
 if (DEFUNCT) {
   process.exit(1)
@@ -60,7 +67,16 @@ const write = (msg) => {
 }
 
 const handle = (msg) => {
+  if (LOG_FILE && msg.method) {
+    try {
+      require('fs').appendFileSync(
+        LOG_FILE,
+        JSON.stringify({ method: msg.method, version: msg.params?.textDocument?.version ?? null }) + '\n'
+      )
+    } catch {}
+  }
   if (msg.method === 'initialize') {
+    if (HANG_INIT) return // never respond — exercises init deadline
     write({
       jsonrpc: '2.0',
       id: msg.id,
@@ -136,6 +152,16 @@ const handle = (msg) => {
     return
   }
   if (msg.method === 'textDocument/diagnostic') {
+    if (HANG_DIAG) return // never respond — exercises pull deadline
+    const uri = msg.params?.textDocument?.uri
+    if (EMPTY_PULL_ON_CLEAN && uri && docTexts.has(uri)) {
+      const text = docTexts.get(uri) || ''
+      const items = text.includes('BAD_SYNTAX')
+        ? [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' }]
+        : []
+      write({ jsonrpc: '2.0', id: msg.id, result: { kind: 'full', items } })
+      return
+    }
     write({
       jsonrpc: '2.0',
       id: msg.id,
@@ -150,22 +176,56 @@ const handle = (msg) => {
     return
   }
   if (msg.method === 'textDocument/didOpen' || msg.method === 'textDocument/didChange') {
-    if (PUSH_DIAG && msg.params && msg.params.textDocument && msg.params.textDocument.uri) {
+    if (msg.params && msg.params.textDocument && msg.params.textDocument.uri) {
       const uri = msg.params.textDocument.uri
+      const version = msg.params.textDocument.version
       const text = msg.method === 'textDocument/didOpen'
         ? (msg.params.textDocument.text || '')
         : ((msg.params.contentChanges && msg.params.contentChanges[0] && msg.params.contentChanges[0].text) || '')
-      const diags = text.includes('BAD_SYNTAX')
-        ? [
-            { severity: 2, message: 'Style hint on line 1', range: { start: { line: 0, character: 0 } } },
-            { severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' },
-          ]
-        : []
-      write({
-        jsonrpc: '2.0',
-        method: 'textDocument/publishDiagnostics',
-        params: { uri, diagnostics: diags },
-      })
+      docTexts.set(uri, text)
+
+      if (STALE_PUSH && typeof version === 'number' && version >= 2) {
+        // Emit a stale push for version - 1 before emitting the current version
+        write({
+          jsonrpc: '2.0',
+          method: 'textDocument/publishDiagnostics',
+          params: {
+            uri,
+            version: version - 1,
+            diagnostics: [{ severity: 1, message: 'STALE_ERR_FROM_OLD_VERSION', range: { start: { line: 0, character: 0 } } }],
+          },
+        })
+        setTimeout(() => {
+          const diags = text.includes('BAD_SYNTAX')
+            ? [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' }]
+            : []
+          write({
+            jsonrpc: '2.0',
+            method: 'textDocument/publishDiagnostics',
+            params: { uri, version, diagnostics: diags },
+          })
+        }, 30)
+        return
+      }
+
+      if (PUSH_DIAG) {
+        if (EMPTY_PULL_ON_CLEAN && !text.includes('BAD_SYNTAX')) {
+          // Intentionally omit push when clean so the client exercises empty pull fallback
+          return
+        }
+        const diags = text.includes('BAD_SYNTAX')
+          ? [
+              { severity: 2, message: 'Style hint on line 1', range: { start: { line: 0, character: 0 } } },
+              { severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' },
+            ]
+          : []
+        const params = typeof version === 'number' ? { uri, version, diagnostics: diags } : { uri, diagnostics: diags }
+        write({
+          jsonrpc: '2.0',
+          method: 'textDocument/publishDiagnostics',
+          params,
+        })
+      }
     }
     return
   }

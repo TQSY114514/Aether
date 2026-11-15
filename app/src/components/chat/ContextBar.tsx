@@ -114,6 +114,8 @@ export default function ContextBar() {
         
         {/* Compact button */}
         <button
+          type="button"
+          disabled={!currentSessionId}
           onClick={async (e) => {
             e.stopPropagation()
             if (!currentSessionId) return
@@ -135,7 +137,7 @@ export default function ContextBar() {
             }
           }}
           title={t('chat.compact_hint')}
-          className="text-[11px] font-medium px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors shrink-0"
+          className="text-[11px] font-medium px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] active:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer text-[var(--text-primary)] motion-reduce:transition-none transition-colors shrink-0"
         >
           {t('chat.compact')}
         </button>
@@ -143,19 +145,22 @@ export default function ContextBar() {
         {/* Handoff button */}
         <button
           type="button"
+          disabled={!currentSessionId}
           onClick={(e) => {
             e.stopPropagation()
             if (!currentSessionId) return
             useStore.getState().setHandoffOpen(true, '')
           }}
           title={t('chat.handoff_hint')}
-          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors motion-reduce:transition-none shrink-0"
+          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] active:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors motion-reduce:transition-none shrink-0"
         >
           {t('chat.handoff')}
         </button>
 
         {/* Fork button */}
         <button
+          type="button"
+          disabled={!currentSessionId}
           onClick={async (e) => {
             e.stopPropagation()
             if (!currentSessionId) return
@@ -168,7 +173,7 @@ export default function ContextBar() {
             }
           }}
           title={t('chat.fork_hint')}
-          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+          className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] active:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)] motion-reduce:transition-none transition-colors shrink-0"
         >
           {t('chat.fork')}
         </button>

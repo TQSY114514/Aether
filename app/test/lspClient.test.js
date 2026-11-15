@@ -16,6 +16,9 @@ import {
   MessageParser,
   extToLanguage,
   uriToFilePath,
+  resolveCommandOnPath,
+  isCommandOnPath,
+  isLanguageUnavailable,
   createClient,
   searchWorkspace,
   definitionWorkspace,
@@ -163,7 +166,7 @@ describe('createClient + searchSymbols (healthy fixture)', () => {
 
 describe('searchWorkspace (module-level, degrade-to-null)', () => {
   it('returns null when the language has no configured LSP server (regex fallback)', async () => {
-    const result = await searchWorkspace(tmpDir, 'findMe', { language: 'python' })
+    const result = await searchWorkspace(tmpDir, 'findMe', { language: 'elixir' })
     expect(result).toBe(null)
   })
 
@@ -284,19 +287,252 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     expect(summary).toContain('Syntax error near BAD_SYNTAX')
   })
 
-  it('formatDiagnosticsSummary caps output at maxItems (15)', () => {
+  it('formatDiagnosticsSummary caps output at maxItems (15) and omits the 16th+', () => {
     const many = Array.from({ length: 20 }, (_, i) => ({ severity: 1, line: i, message: `err ${i}` }))
     const summary = formatDiagnosticsSummary('big.js', many, { maxItems: 15 })
     expect(summary).toContain('[LSP Diagnostics] big.js (20):')
+    const diagLines = summary.split('\n').filter((line) => line.startsWith('  - [Error] line '))
+    expect(diagLines).toHaveLength(15)
+    expect(summary).toContain('err 14')
+    expect(summary).not.toContain('err 15')
+    expect(summary).not.toContain('err 19')
     expect(summary).toContain('... (+5 more)')
   })
 
-  it('caches ENOENT unavailable languages and resets on disposeAll()', async () => {
+  it('caches ENOENT unavailable languages across repeated calls and resets on disposeAll()', async () => {
     configureServer('python', { command: '__nonexistent_lsp_bin_aether__', args: [] })
     const pyFile = path.join(tmpDir, 'app.py')
     fs.writeFileSync(pyFile, 'x = 1\n', 'utf8')
-    const first = await diagnosticsAfterEdit(tmpDir, pyFile, { waitMs: 500 })
+    expect(isLanguageUnavailable('python')).toBe(false)
+
+    const degraded = []
+    const first = await diagnosticsAfterEdit(tmpDir, pyFile, {
+      waitMs: 500,
+      onDegraded: (evt) => degraded.push(evt),
+    })
     expect(first).toBeNull()
+    expect(isLanguageUnavailable('python')).toBe(true)
+    expect(degraded).toHaveLength(1)
+    expect(degraded[0].reason).toBe('missing')
+
+    // Second call skips spawn immediately via cached unavailable status and does not emit a second missing event
+    const t0 = Date.now()
+    const second = await diagnosticsAfterEdit(tmpDir, pyFile, {
+      waitMs: 500,
+      onDegraded: (evt) => degraded.push(evt),
+    })
+    expect(second).toBeNull()
+    expect(Date.now() - t0).toBeLessThan(200)
+    expect(degraded).toHaveLength(2)
+    expect(degraded[0].message).toContain('ENOENT')
+    expect(degraded[1].message).toContain('unavailable')
+
+    disposeAll()
+    expect(isLanguageUnavailable('python')).toBe(false)
+  })
+
+  it('openDocument is idempotent once opened and syncDocument increments versions', async () => {
+    const logFile = path.join(tmpDir, 'lsp-open-sync.jsonl')
+    const client = createClient({
+      command: process.execPath,
+      args: [FIXTURE, `--log-file=${logFile}`],
+      root: tmpDir,
+    })
+    try {
+      const target = path.join(tmpDir, 'idemp.js')
+      fs.writeFileSync(target, 'const a = 1\n', 'utf8')
+      const uri = `file:///${target.replace(/\\/g, '/')}`
+
+      await client.openDocument(uri, 'const a = 1\n', 'javascript')
+      await client.openDocument(uri, 'const a = 1\n', 'javascript')
+      await client.syncDocument(uri, 'const a = 2\n', 'javascript')
+      await client.openDocument(uri, 'const a = 2\n', 'javascript')
+
+      // Allow notification writes on fixture stdin to flush
+      await new Promise((r) => setTimeout(r, 100))
+      const entries = fs
+        .readFileSync(logFile, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+
+      const opens = entries.filter((e) => e.method === 'textDocument/didOpen')
+      const changes = entries.filter((e) => e.method === 'textDocument/didChange')
+      expect(opens).toHaveLength(1)
+      expect(opens[0].version).toBe(1)
+      expect(changes).toHaveLength(1)
+      expect(changes[0].version).toBe(2)
+    } finally {
+      await client.dispose()
+    }
+  })
+
+  it('clears cached diagnostics when pull diagnostics returns an empty list on a clean edit', async () => {
+    configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag', '--empty-pull-on-clean'],
+    })
+    const target = path.join(tmpDir, 'clean-pull.js')
+    fs.writeFileSync(target, 'const a = 1\n// BAD_SYNTAX\n', 'utf8')
+
+    const dirty = await diagnosticsAfterEdit(tmpDir, target, {
+      content: 'const a = 1\n// BAD_SYNTAX\n',
+      waitMs: 1500,
+    })
+    expect(Array.isArray(dirty)).toBe(true)
+    expect(dirty.length).toBeGreaterThan(0)
+
+    const cleanText = 'const a = 1\n'
+    fs.writeFileSync(target, cleanText, 'utf8')
+    const cleaned = await diagnosticsAfterEdit(tmpDir, target, {
+      content: cleanText,
+      waitMs: 300,
+    })
+    expect(cleaned).toEqual([])
+
+    const cached = await diagnosticsWorkspace(tmpDir, target, { waitMs: 0 })
+    expect(cached).toEqual([])
+  })
+
+  it('ignores stale publishDiagnostics from an older document version', async () => {
+    configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag', '--stale-push'],
+    })
+    const target = path.join(tmpDir, 'stale-ver.js')
+    const dirtyText = 'const a = 1\n// BAD_SYNTAX\n'
+    fs.writeFileSync(target, dirtyText, 'utf8')
+
+    const v1 = await diagnosticsAfterEdit(tmpDir, target, {
+      content: dirtyText,
+      waitMs: 1500,
+    })
+    expect(Array.isArray(v1)).toBe(true)
+    expect(v1.length).toBeGreaterThan(0)
+
+    // v2 is clean; fixture emits stale version:1 diagnostic before version:2 empty list
+    const cleanText = 'const a = 2\n'
+    fs.writeFileSync(target, cleanText, 'utf8')
+    const v2 = await diagnosticsAfterEdit(tmpDir, target, {
+      content: cleanText,
+      waitMs: 1500,
+    })
+    expect(v2).toEqual([])
+  })
+
+  it('resolves Windows executables with PATHEXT extensions and avoids extensionless POSIX shims', async () => {
+    const binDir = path.join(tmpDir, 'win bin')
+    fs.mkdirSync(binDir, { recursive: true })
+    const posixShim = path.join(binDir, 'fake-lsp')
+    const cmdShim = path.join(binDir, 'fake-lsp.cmd')
+    fs.writeFileSync(posixShim, '#!/bin/sh\necho posix\n', 'utf8')
+    fs.writeFileSync(
+      cmdShim,
+      `@echo off\r\n"${process.execPath}" "${FIXTURE}" --push-diag %*\r\n`,
+      'utf8'
+    )
+
+    const prevPath = process.env.PATH
+    process.env.PATH = binDir
+    try {
+      const resolved = resolveCommandOnPath('fake-lsp')
+      if (process.platform === 'win32') {
+        expect(resolved).toBe(cmdShim)
+        expect(isCommandOnPath('fake-lsp')).toBe(true)
+
+        // End-to-end spawn of a .cmd shim inside a path with spaces
+        configureServer('javascript', { command: 'fake-lsp', args: [] })
+        const target = path.join(tmpDir, 'cmd-shim.js')
+        const content = 'const x = 1\n// BAD_SYNTAX\n'
+        fs.writeFileSync(target, content, 'utf8')
+        const diags = await diagnosticsAfterEdit(tmpDir, target, { content, waitMs: 1500 })
+        expect(Array.isArray(diags)).toBe(true)
+        expect(diags.some((d) => d.message.includes('BAD_SYNTAX'))).toBe(true)
+      } else {
+        expect(resolved).toBe(posixShim)
+        expect(isCommandOnPath('fake-lsp')).toBe(true)
+      }
+    } finally {
+      if (prevPath === undefined) delete process.env.PATH
+      else process.env.PATH = prevPath
+    }
+  })
+
+  it('bounds hanging server initialization under short deadline and keeps hanging pull non-fatal', async () => {
+    const target = path.join(tmpDir, 'hang-diag.js')
+    fs.writeFileSync(target, 'function hello() { return 1 }\n', 'utf8')
+
+    // 1. Hanging pull diagnostics should finish within deadlineMs without killing the server
+    configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--hang-diag'],
+    })
+    // Pre-warm the server process so cold-start spawn doesn't consume the pull deadline
+    const warmDefs = await definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
+    expect(Array.isArray(warmDefs)).toBe(true)
+
+    const t0 = Date.now()
+    const diags = await diagnosticsAfterEdit(tmpDir, target, {
+      content: 'function hello() { return 2 }\n',
+      waitMs: 150,
+      deadlineMs: 450,
+    })
+    const elapsed = Date.now() - t0
+    expect(elapsed).toBeLessThan(1500)
+    expect(Array.isArray(diags) ? diags : []).toEqual([])
+
+    // Server must remain alive after pull timeout
+    const defs = await definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
+    expect(Array.isArray(defs)).toBe(true)
+    expect(defs.length).toBeGreaterThan(0)
+    disposeAll()
+
+    // 2. Hanging initialization on write_file must return fast (never 8s), emit lsp_degraded once, and trigger cooldown
+    const lspCjs = require('../electron/context/lspClient')
+    lspCjs.configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--hang-init'],
+    })
+    const { getTool } = require('../electron/tools/registry')
+    const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
+    const sid = 'lsp-hang-init-sess'
+    setWorkspaceRootForSession(sid, tmpDir)
+    const statusEvents = []
+    try {
+      const tInit0 = Date.now()
+      const out1 = await getTool('write_file').run(
+        { path: path.join(tmpDir, 'hang1.ts'), content: 'export const x = 1\n' },
+        { sessionId: sid, agentMode: 'act', onStatus: (evt) => statusEvents.push(evt) }
+      )
+      const initElapsed = Date.now() - tInit0
+      expect(out1).toContain('wrote ')
+      expect(out1).not.toContain('[LSP Diagnostics]')
+      expect(initElapsed).toBeLessThan(2000)
+      expect(statusEvents.filter((e) => e.kind === 'lsp_degraded')).toHaveLength(1)
+
+      // Second write in the same session hits cooldown immediately and does not spam onStatus
+      const tCooldown0 = Date.now()
+      const out2 = await getTool('write_file').run(
+        { path: path.join(tmpDir, 'hang2.ts'), content: 'export const y = 2\n' },
+        { sessionId: sid, agentMode: 'act', onStatus: (evt) => statusEvents.push(evt) }
+      )
+      expect(out2).toContain('wrote ')
+      expect(Date.now() - tCooldown0).toBeLessThan(500)
+      expect(statusEvents.filter((e) => e.kind === 'lsp_degraded')).toHaveLength(1)
+
+      // Missing binary fallback must NOT emit lsp_degraded to UI status
+      lspCjs.configureServer('python', { command: '__nonexistent_lsp_bin_ui__', args: [] })
+      const outPy = await getTool('write_file').run(
+        { path: path.join(tmpDir, 'silent.py'), content: 'x = 1\n' },
+        { sessionId: sid, agentMode: 'act', onStatus: (evt) => statusEvents.push(evt) }
+      )
+      expect(outPy).toContain('wrote ')
+      expect(statusEvents.filter((e) => e.kind === 'lsp_degraded')).toHaveLength(1)
+    } finally {
+      lspCjs.disposeAll()
+      clearSessionWorkspaces(sid)
+    }
   })
 
   it('write_file, edit_file, and apply_patch append [LSP Diagnostics] unless lsp.autoDiagnostics is disabled', async () => {

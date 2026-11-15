@@ -3,7 +3,14 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-const { runScript, buildSanitizedEnv } = require('../electron/tools/scriptRunner')
+const {
+  runScript,
+  authorizeAndExecuteTool,
+  buildSanitizedEnv,
+  spillLargeOutput,
+  INLINE_OUTPUT_CAP,
+  MAX_SPILLED_LOG_FILES,
+} = require('../electron/tools/scriptRunner')
 const { getTool, toolsPayload } = require('../electron/tools/registry')
 const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
 
@@ -52,7 +59,7 @@ describe('scriptRunner isolated batch execution', () => {
     expect(res.logs).toContain('batch done 2')
     // Safe read_file calls inside `ask` mode must NOT prompt for permission
     expect(permCalls).toHaveLength(0)
-  })
+  }, 15000)
 
   it('blocks access to require, process, eval, and Function constructor inside sandbox', async () => {
     const r1 = await runScript({
@@ -68,7 +75,7 @@ describe('scriptRunner isolated batch execution', () => {
     })
     expect(r2.ok).toBe(false)
     expect(r2.error).toMatch(/Code generation from strings disallowed|EvalError/i)
-  })
+  }, 15000)
 
   it('strips secrets and env noise in buildSanitizedEnv()', () => {
     const prevKey = process.env.OPENAI_API_KEY
@@ -133,7 +140,7 @@ describe('scriptRunner isolated batch execution', () => {
     expect(res.ok).toBe(true)
     expect(prompted).toEqual(['write_file'])
     expect(fs.readFileSync(targetFile, 'utf8')).toBe('hello-ask')
-  })
+  }, 15000)
 
   it('rejects nested run_script and enforces maxToolCalls cap + timeout kill', async () => {
     const nested = await runScript({
@@ -171,7 +178,7 @@ describe('scriptRunner isolated batch execution', () => {
     })
     expect(timedOut.ok).toBe(false)
     expect(timedOut.error).toMatch(/timed out/i)
-  })
+  }, 15000)
 
   it('registers run_script as dangerous and gates visibility behind agent.script flag', () => {
     const tool = getTool('run_script')
@@ -190,5 +197,230 @@ describe('scriptRunner isolated batch execution', () => {
     expect(actEnabled).toContain('run_script')
     const planEnabled = toolsPayload('plan', { db: mockDbOn }).map(t => t.function.name)
     expect(planEnabled).not.toContain('run_script')
+  })
+
+  it('blocks VM sandbox escape vectors and leaks no host constructors or globals', async () => {
+    const res = await runScript({
+      code: `
+        const outcomes = {};
+        const tryEval = (label, fn) => {
+          try {
+            outcomes[label] = 'ESCAPED:' + String(fn());
+          } catch (e) {
+            outcomes[label] = 'BLOCKED:' + (e && e.name ? e.name : String(e));
+          }
+        };
+
+        tryEval('toolsCtor', () => tools.read_file.constructor('return process')());
+        tryEval('asyncCtor', () => (async () => {}).constructor('return process')());
+        tryEval('globalCtor', () => globalThis.constructor.constructor('return process')());
+        tryEval('objCtor', () => ({}).constructor.constructor('return process')());
+        tryEval('prepareStack', () => {
+          let leaked = null;
+          Error.prepareStackTrace = (_err, stack) => {
+            leaked = stack.map((s) => typeof s.getFunction === 'function' ? s.getFunction() : null).filter(Boolean);
+            return 'ok';
+          };
+          const err = new Error('probe');
+          void err.stack;
+          return leaked && leaked.some((f) => String(f).includes('dispatchTool') || String(f).includes('finishRun')) ? 'leaked' : 'safe';
+        });
+
+        outcomes.runEnvType = typeof __runEnv;
+        outcomes.bridgeType = typeof __bridge;
+        outcomes.setTimeoutType = typeof setTimeout;
+        outcomes.urlType = typeof URL;
+        outcomes.frozenNested = Object.isFrozen(inputs.nested);
+        return outcomes;
+      `,
+      inputs: { nested: { secret: 'unchanged' } },
+      ctx: { agentMode: 'act' },
+    })
+
+    expect(res.ok).toBe(true)
+    expect(res.value.toolsCtor).toMatch(/^BLOCKED:/)
+    expect(res.value.asyncCtor).toMatch(/^BLOCKED:/)
+    expect(res.value.globalCtor).toMatch(/^BLOCKED:/)
+    expect(res.value.objCtor).toMatch(/^BLOCKED:/)
+    expect(res.value.prepareStack).toBe('ESCAPED:safe')
+    expect(res.value.runEnvType).toBe('undefined')
+    expect(res.value.bridgeType).toBe('undefined')
+    expect(res.value.setTimeoutType).toBe('undefined')
+    expect(res.value.urlType).toBe('undefined')
+    expect(res.value.frozenNested).toBe(true)
+  })
+
+  it('cancels pending permission prompt and aborts in-flight nested tool on timeout/abort', async () => {
+    let executedAfterAbort = false
+    let permissionSignal = null
+    let resolvePermission = null
+    const permAbortCtrl = new AbortController()
+
+    const abortRun = await runScript({
+      code: `await tools.fake_dangerous({ target: 'x' }); return 'done';`,
+      timeoutMs: 15000,
+      getTool: () => ({
+        name: 'fake_dangerous',
+        risk: 'dangerous',
+        run: async () => {
+          executedAfterAbort = true
+          return 'should-never-run'
+        },
+      }),
+      checkToolAllowed: () => ({ allowed: true, requiresPrompt: true, reason: 'confirm' }),
+      ctx: {
+        agentMode: 'ask',
+        signal: permAbortCtrl.signal,
+        requestPermission: (req) => new Promise((resolve) => {
+          permissionSignal = req.signal
+          resolvePermission = resolve
+          setTimeout(() => permAbortCtrl.abort(), 50)
+        }),
+      },
+    })
+
+    expect(abortRun.ok).toBe(false)
+    expect(abortRun.error).toMatch(/aborted/i)
+    expect(permissionSignal?.aborted).toBe(true)
+    // Even if UI resolves late after abort, tool.run must never execute
+    resolvePermission?.(true)
+    await new Promise((r) => setTimeout(r, 30))
+    expect(executedAfterAbort).toBe(false)
+
+    // Also verify external AbortController aborts an in-flight signal-aware tool
+    const ctrl = new AbortController()
+    let nestedAborted = false
+    const aborted = await runScript({
+      code: `await tools.slow_tool({}); return 'done';`,
+      timeoutMs: 15000,
+      getTool: () => ({
+        name: 'slow_tool',
+        risk: 'safe',
+        run: (_args, toolCtx) => new Promise((_res, rej) => {
+          toolCtx.signal.addEventListener('abort', () => {
+            nestedAborted = true
+            rej(new Error('aborted'))
+          }, { once: true })
+          setTimeout(() => ctrl.abort(), 50)
+        }),
+      }),
+      ctx: { agentMode: 'act', signal: ctrl.signal },
+    })
+    expect(aborted.ok).toBe(false)
+    expect(aborted.error).toMatch(/aborted/i)
+    expect(nestedAborted).toBe(true)
+  }, 20000)
+
+  it('fails fast on maxToolCalls even when script catches tool errors in a loop', async () => {
+    const t0 = Date.now()
+    const res = await runScript({
+      code: `
+        for (let i = 0; i < 1000; i++) {
+          try {
+            await tools.echo_tool({ i });
+          } catch {}
+        }
+        return 'finished-loop';
+      `,
+      timeoutMs: 25000,
+      maxToolCalls: 2,
+      getTool: () => ({ name: 'echo_tool', risk: 'safe', run: async (a) => String(a.i) }),
+      ctx: { agentMode: 'act' },
+    })
+    const elapsed = Date.now() - t0
+    expect(res.ok).toBe(false)
+    expect(res.error).toMatch(/max_tool_calls/i)
+    expect(elapsed).toBeLessThan(15000)
+  }, 20000)
+
+  it('enforces feature flags, subagent blocks, disabledTools, boundaryAllowlist, and projectConfig', async () => {
+    const mockDbOff = { getSetting: (k) => (k === 'feature_flag.agent.browser' ? 'false' : null) }
+    const browserTool = { name: 'agent_browser', risk: 'safe', run: async () => 'ok' }
+    const deps = {
+      getTool: (name) => (name === 'agent_browser' ? browserTool : { name, risk: 'safe', run: async () => 'ok' }),
+      checkToolAllowed: () => ({ allowed: true }),
+      applyMiddleware: (t) => t,
+    }
+
+    await expect(
+      authorizeAndExecuteTool('agent_browser', { action: 'navigate' }, { db: mockDbOff, agentMode: 'act' }, deps)
+    ).rejects.toThrow(/feature flag/i)
+    await expect(
+      authorizeAndExecuteTool('agent_browser', { action: 'close' }, { db: mockDbOff, agentMode: 'act' }, deps)
+    ).resolves.toBe('ok')
+
+    await expect(
+      authorizeAndExecuteTool('dispatch_subagent', {}, { agentMode: 'act' }, deps)
+    ).rejects.toThrow(/cannot be called/i)
+    await expect(
+      authorizeAndExecuteTool('spawn_subagent', {}, { agentMode: 'act' }, deps)
+    ).rejects.toThrow(/cannot be called/i)
+
+    await expect(
+      authorizeAndExecuteTool('read_file', {}, { agentMode: 'act', disabledTools: ['read_file'] }, deps)
+    ).rejects.toThrow(/disabled/i)
+
+    await expect(
+      authorizeAndExecuteTool('grep_search', {}, { agentMode: 'act', allowedTools: new Set(['read_file']) }, deps)
+    ).rejects.toThrow(/not permitted/i)
+
+    fs.mkdirSync(path.join(tmpDir, '.aether'), { recursive: true })
+    fs.writeFileSync(
+      path.join(tmpDir, '.aether', 'config.json'),
+      JSON.stringify({ tools: { deny: ['read_file'] } }),
+      'utf8'
+    )
+    await expect(
+      authorizeAndExecuteTool('read_file', {}, { agentMode: 'act', workspaceRoot: tmpDir }, deps)
+    ).rejects.toThrow(/deny list|\.aether\/config\.json/i)
+  })
+
+  it('spills outputs over 8000 chars and bounds spilled log files in tmpdir', () => {
+    expect(INLINE_OUTPUT_CAP).toBe(8000)
+    const created = []
+    try {
+      for (let i = 0; i < MAX_SPILLED_LOG_FILES + 5; i++) {
+        const out = spillLargeOutput('x'.repeat(INLINE_OUTPUT_CAP + 50))
+        expect(out.spilledPath).toBeTruthy()
+        created.push(out.spilledPath)
+      }
+      const remaining = fs
+        .readdirSync(os.tmpdir())
+        .filter((f) => /^aether-script-\d+-[0-9a-f]+\.log$/.test(f))
+      expect(remaining.length).toBeLessThanOrEqual(MAX_SPILLED_LOG_FILES)
+    } finally {
+      for (const p of created) {
+        try { fs.unlinkSync(p) } catch {}
+      }
+    }
+  })
+
+  it('captures checkpoints for mutating nested tools before execution', async () => {
+    const recorded = []
+    const deps = {
+      getTool: () => ({ name: 'write_file', risk: 'safe', run: async () => 'written' }),
+      checkToolAllowed: () => ({ allowed: true }),
+      applyMiddleware: (t) => t,
+      createCheckpoint: (payload) => {
+        recorded.push(payload)
+        return 1
+      },
+    }
+
+    const res = await authorizeAndExecuteTool(
+      'write_file',
+      { path: 'note.txt', content: 'hi' },
+      { agentMode: 'act', sessionId: 's1', messageId: 'm1', turnId: 't1', workspaceRoot: tmpDir },
+      deps
+    )
+    expect(res).toBe('written')
+    expect(recorded).toHaveLength(1)
+    expect(recorded[0]).toMatchObject({
+      sessionId: 's1',
+      messageId: 'm1',
+      turnId: 't1',
+      workspaceRoot: tmpDir,
+      toolName: 'write_file',
+    })
   })
 })

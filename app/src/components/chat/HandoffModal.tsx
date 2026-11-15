@@ -18,28 +18,44 @@ export default function HandoffModal() {
   const [error, setError] = useState('')
   const [sourceTag, setSourceTag] = useState<'llm' | 'fallback' | null>(null)
   const promptRef = useRef<HTMLTextAreaElement>(null)
+  const draftSeqRef = useRef(0)
+  const activeSessionRef = useRef<number | null>(currentSessionId)
+  const submittingRef = useRef(false)
+  activeSessionRef.current = currentSessionId
 
   const generateDraft = useCallback(async (sid: number, focusGoal: string) => {
+    const seq = ++draftSeqRef.current
     setLoading(true)
     setError('')
     try {
       const res = await window.electronAPI.chat.handoffDraft({ sessionId: sid, goal: focusGoal })
+      if (draftSeqRef.current !== seq || activeSessionRef.current !== sid || !useStore.getState().handoffOpen) {
+        return
+      }
       if (!res.ok) {
-        setError(res.error || 'Failed to generate handoff draft')
+        setError(res.error || t('chat.handoff_draft_failed'))
       } else {
         setTitle(res.title || '')
         setPrompt(res.draftPrompt || '')
         setSourceTag(res.source || null)
       }
     } catch (err: any) {
-      setError(err?.message || String(err))
+      if (draftSeqRef.current !== seq || activeSessionRef.current !== sid || !useStore.getState().handoffOpen) {
+        return
+      }
+      setError(err?.message || t('chat.handoff_draft_failed'))
     } finally {
-      setLoading(false)
+      if (draftSeqRef.current === seq) {
+        setLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    if (!open || !currentSessionId) return
+    if (!open || !currentSessionId) {
+      draftSeqRef.current += 1
+      return
+    }
     const seedGoal = initialGoal || ''
     setGoal(seedGoal)
     setPrompt('')
@@ -64,18 +80,34 @@ export default function HandoffModal() {
 
   const handleCommit = async (autoSend: boolean) => {
     const cleanPrompt = prompt.trim()
-    if (!cleanPrompt || submitting) return
+    if (!cleanPrompt || submitting || submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     setError('')
     try {
+      let willAutoSend = autoSend
+      if (autoSend) {
+        const s = useStore.getState()
+        let hasModel = Boolean(s.sessionConfigs?.[currentSessionId]?.modelId)
+        if (!hasModel) {
+          try {
+            const enabledProviders = (await window.electronAPI.provider.list()).filter((p) => p.enabled)
+            if (enabledProviders.length > 0) {
+              const models = await window.electronAPI.model.list(enabledProviders[0].id)
+              hasModel = Array.isArray(models) && models.length > 0
+            }
+          } catch {}
+        }
+        if (!hasModel) willAutoSend = false
+      }
       const res = await window.electronAPI.chat.handoffCommit({
         sessionId: currentSessionId,
         prompt: cleanPrompt,
         title: title.trim() || null,
-        insertInitialMessage: !autoSend,
+        insertInitialMessage: !willAutoSend,
       })
       if (!res.ok || !res.id) {
-        setError(res.error || 'Failed to create handoff session')
+        setError(res.error || t('chat.handoff_commit_failed'))
         return
       }
       const store = useStore.getState()
@@ -83,12 +115,13 @@ export default function HandoffModal() {
       await store.selectSession(res.id)
       setHandoffOpen(false)
       store.triggerToast(t('chat.handoff_success'), 'success')
-      if (autoSend) {
+      if (willAutoSend) {
         await store.sendMessage(cleanPrompt)
       }
     } catch (err: any) {
-      setError(err?.message || String(err))
+      setError(err?.message || t('chat.handoff_commit_failed'))
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -132,7 +165,7 @@ export default function HandoffModal() {
             type="button"
             disabled={submitting}
             onClick={() => setHandoffOpen(false)}
-            className="p-1 rounded hover:bg-[var(--content-bg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer motion-reduce:transition-none transition-colors"
+            className="p-1 rounded hover:bg-[var(--content-bg)] active:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer motion-reduce:transition-none transition-colors"
             style={{ color: 'var(--text-secondary)' }}
             aria-label={t('chat.handoff_cancel')}
           >
@@ -152,10 +185,11 @@ export default function HandoffModal() {
               </label>
               <input
                 type="text"
+                disabled={submitting}
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
                 placeholder={t('chat.handoff_goal_placeholder')}
-                className="w-full px-2.5 py-1.5 text-xs rounded border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+                className="w-full px-2.5 py-1.5 text-xs rounded border hover:border-[var(--accent)] active:border-[var(--accent)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50 transition-colors motion-reduce:transition-none"
                 style={{
                   backgroundColor: 'var(--content-bg)',
                   borderColor: 'var(--border)',
@@ -181,9 +215,10 @@ export default function HandoffModal() {
             </label>
             <input
               type="text"
+              disabled={loading || submitting}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs rounded border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+              className="w-full px-2.5 py-1.5 text-xs rounded border hover:border-[var(--accent)] active:border-[var(--accent)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50 transition-colors motion-reduce:transition-none"
               style={{
                 backgroundColor: 'var(--content-bg)',
                 borderColor: 'var(--border)',
@@ -206,9 +241,10 @@ export default function HandoffModal() {
             <textarea
               ref={promptRef}
               rows={11}
+              disabled={loading || submitting}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs font-mono rounded border resize-y focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+              className="w-full px-2.5 py-2 text-xs font-mono rounded border resize-y hover:border-[var(--accent)] active:border-[var(--accent)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50 transition-colors motion-reduce:transition-none"
               style={{
                 backgroundColor: 'var(--content-bg)',
                 borderColor: 'var(--border)',
@@ -250,11 +286,11 @@ export default function HandoffModal() {
             type="button"
             disabled={loading || submitting || !prompt.trim()}
             onClick={() => handleCommit(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border active:opacity-90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer motion-reduce:transition-none transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border hover:opacity-90 active:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer motion-reduce:transition-none transition-colors"
             style={{
               backgroundColor: 'var(--accent)',
               borderColor: 'var(--accent)',
-              color: '#ffffff',
+              color: 'var(--accent-fg)',
             }}
           >
             <Send size={12} />

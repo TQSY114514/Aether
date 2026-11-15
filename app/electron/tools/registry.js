@@ -28,21 +28,105 @@ const { checkSSRF, checkSSRFHostname } = require('./ssrf')
 const { resolveBackendForMode } = require('../exec/resolveBackend')
 const { dockerBackend } = require('../exec/dockerBackend')
 
+const POST_WRITE_LSP_DEADLINE_MS = 700
+const SCRIPT_LSP_WAIT_MS = 120
+const SCRIPT_LSP_DEADLINE_MS = 250
+const SCRIPT_LSP_DEBOUNCE_MS = 200
+const _reportedLspDegraded = new Set()
+const _loggedMissingLsp = new Set()
+const _recentScriptDiagAt = new Map()
+
+function reportLspDegradedOnce(ctx, lang, reason, detail) {
+  const key = `${ctx?.sessionId || 'global'}|${lang || 'unknown'}`
+  if (reason === 'missing') {
+    if (_loggedMissingLsp.has(key)) return
+    if (_loggedMissingLsp.size > 500) _loggedMissingLsp.clear()
+    _loggedMissingLsp.add(key)
+    try {
+      require('../logger').debug(`[LSP] ${lang || 'language'} server unavailable (${detail || 'not installed'})`)
+    } catch {}
+    return
+  }
+  if (_reportedLspDegraded.has(key)) return
+  if (_reportedLspDegraded.size > 500) _reportedLspDegraded.clear()
+  _reportedLspDegraded.add(key)
+
+  const msg = `[LSP] ${lang || 'language'} diagnostics skipped (${reason}${detail ? `: ${detail}` : ''})`
+  try {
+    require('../logger').warn(msg)
+  } catch {}
+  const onStatus = ctx?.onStatus || ctx?.callbacks?.onStatus
+  if (typeof onStatus === 'function') {
+    try {
+      onStatus({ kind: 'lsp_degraded', text: msg })
+    } catch {}
+  }
+}
+
 async function collectPostWriteDiagnostics(filePath, content, ctx) {
+  if (ctx?.skipPostWriteDiagnostics) return ''
+  let lang = null
   try {
     const lsp = require('../context/lspClient')
-    if (!lsp.extToLanguage(filePath)) return ''
+    lang = lsp.extToLanguage(filePath)
+    if (!lang) return ''
     const featureFlags = require('../featureFlags')
     if (!featureFlags.isEnabled(ctx?.db, 'lsp.autoDiagnostics')) return ''
     let root
     try { root = getWorkspaceRoot(ctx?.sessionId) } catch { /* ignore */ }
     if (!root) root = path.dirname(path.resolve(filePath))
-    const diags = await lsp.diagnosticsAfterEdit(root, filePath, {
+
+    const baseWaitMs = typeof ctx?.lspWaitMs === 'number' ? ctx.lspWaitMs : 450
+    const waitMs = ctx?.viaScript ? Math.min(baseWaitMs, SCRIPT_LSP_WAIT_MS) : baseWaitMs
+    const deadlineMs = typeof ctx?.lspDeadlineMs === 'number'
+      ? ctx.lspDeadlineMs
+      : ctx?.viaScript
+        ? Math.min(waitMs + 130, SCRIPT_LSP_DEADLINE_MS)
+        : (typeof ctx?.lspWaitMs === 'number' ? Math.max(waitMs + 300, POST_WRITE_LSP_DEADLINE_MS) : POST_WRITE_LSP_DEADLINE_MS)
+
+    if (ctx?.viaScript) {
+      const absKey = `${ctx?.sessionId || 'global'}|${path.resolve(filePath).toLowerCase()}`
+      const now = Date.now()
+      const last = _recentScriptDiagAt.get(absKey)
+      if (last && now - last < SCRIPT_LSP_DEBOUNCE_MS) return ''
+      if (_recentScriptDiagAt.size > 500) _recentScriptDiagAt.clear()
+      _recentScriptDiagAt.set(absKey, now)
+    }
+
+    let degradedInfo = null
+    let timer = null
+    const timedOutSentinel = Symbol('lsp-deadline')
+    const diagPromise = lsp.diagnosticsAfterEdit(root, filePath, {
       content,
-      waitMs: typeof ctx?.lspWaitMs === 'number' ? ctx.lspWaitMs : 450,
+      waitMs,
+      deadlineMs,
+      onDegraded: (info) => { degradedInfo = info },
+    }).catch((err) => {
+      degradedInfo = { reason: 'error', language: lang, message: err?.message || String(err) }
+      return null
     })
+    const timeoutPromise = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(timedOutSentinel), deadlineMs)
+      if (timer.unref) timer.unref()
+    })
+
+    let diags
+    try {
+      diags = await Promise.race([diagPromise, timeoutPromise])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+
+    if (diags === timedOutSentinel) {
+      reportLspDegradedOnce(ctx, lang, 'timeout', `exceeded ${deadlineMs}ms`)
+      return ''
+    }
+    if (degradedInfo) {
+      reportLspDegradedOnce(ctx, lang, degradedInfo.reason, degradedInfo.message)
+    }
     return diags && diags.length ? lsp.formatDiagnosticsSummary(filePath, diags, { maxItems: 15 }) : ''
-  } catch {
+  } catch (err) {
+    reportLspDegradedOnce(ctx, lang, 'error', err?.message || String(err))
     return ''
   }
 }
