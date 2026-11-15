@@ -318,6 +318,8 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
 
   let demoEpoch = 0
   const pendingTimers = new Set<ReturnType<typeof setTimeout>>()
+  const pendingCancelResolvers = new Set<() => void>()
+  const activeStreams = new Map<number, number>()
 
   const scheduleTimer = (fn: () => void, ms: number) => {
     const epoch = demoEpoch
@@ -334,6 +336,13 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
     demoEpoch++
     for (const id of pendingTimers) clearTimeout(id)
     pendingTimers.clear()
+    for (const [sessionId, messageId] of activeStreams.entries()) {
+      bus.emit('chat:chunk', { messageId, sessionId, delta: '', done: true })
+      bus.emit('chat:tool-loop-end', { sessionId })
+    }
+    activeStreams.clear()
+    for (const settle of pendingCancelResolvers) settle()
+    pendingCancelResolvers.clear()
     state = createInitialState(lang)
     for (const k of Object.keys(arenaResultsBySession)) delete arenaResultsBySession[Number(k)]
   }
@@ -552,6 +561,7 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
           '+    if (!(await this.hasMaterial())) return { ran: false }',
         ].join('\n')
 
+        activeStreams.set(sessionId, msgId)
         scheduleTimer(() => {
           bus.emit('chat:tool-loop-start', { sessionId })
           bus.emit('chat:status', { messageId: msgId, sessionId, text: lang === 'zh' ? '正在执行 Act 工具链与写前快照...' : 'Running Act tool loop & snapshot...' })
@@ -607,6 +617,7 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
             const isLast = idx === chunks.length - 1
             bus.emit('chat:chunk', { messageId: msgId, sessionId, delta, done: isLast })
             if (isLast) {
+              activeStreams.delete(sessionId)
               bus.emit('chat:turn-summary', {
                 messageId: msgId,
                 sessionId,
@@ -702,8 +713,11 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
         scheduleTimer(() => bus.emit('arena:model-done', { sessionId, result: resA }), 380)
         scheduleTimer(() => bus.emit('arena:model-done', { sessionId, result: resB }), 680)
         await new Promise<void>((r) => {
+          const settle = () => r()
+          pendingCancelResolvers.add(settle)
           const id = setTimeout(() => {
             pendingTimers.delete(id)
+            pendingCancelResolvers.delete(settle)
             r()
           }, 760)
           pendingTimers.add(id)

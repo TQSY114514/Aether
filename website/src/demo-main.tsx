@@ -12,6 +12,8 @@ const lang = params.get('lang') === 'en' ? 'en' : 'zh'
 const { reset } = installDemoBridge(lang)
 applyTheme('light', false)
 
+let resetNonce = 0
+
 // Listen for step orchestration commands from the outer Site showcase chrome
 window.addEventListener('message', async (event) => {
   const data = event.data as { type?: string; step?: string } | null
@@ -19,7 +21,18 @@ window.addEventListener('message', async (event) => {
   const store = useStore.getState()
 
   if (data.step === 'reset') {
+    resetNonce++
     reset()
+    useStore.setState({
+      sending: false,
+      arenaPending: 0,
+      arenaResults: [],
+      arenaResultsSessionId: null,
+      arenaVoted: false,
+      arenaVoteWinnerId: null,
+      arenaError: null,
+      streamingBySession: {},
+    })
     await store.loadSessions()
     await store.loadScores()
     store.setCurrentView('chat')
@@ -29,6 +42,7 @@ window.addEventListener('message', async (event) => {
   }
 
   if (data.step === 'arena') {
+    const myReset = resetNonce
     store.setCurrentView('chat')
     await store.selectSession(101)
     store.setArenaModelIds([11, 12])
@@ -37,6 +51,7 @@ window.addEventListener('message', async (event) => {
         ? '对比修复 IdleGate 并发重入的最小补丁方案：先写冷却时间戳再检查 hasMaterial()。'
         : 'Compare minimal patches for IdleGate concurrency: stamp cooldown before hasMaterial().',
     )
+    if (myReset !== resetNonce) return
     window.parent?.postMessage(
       { type: 'aether-demo:arena-done', count: useStore.getState().arenaResults.length },
       '*',

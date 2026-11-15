@@ -731,7 +731,7 @@ function prune(db, maxAgeDays = 90, opts = {}) {
     const nonConsolidatableOnly = opts.onlyNonConsolidatable === true
     const extraConds = []
     if (preserveDigest) extraConds.push("type != 'digest'")
-    if (nonConsolidatableOnly) extraConds.push("(origin = 'user' OR type NOT IN ('fact','context','entity','relation'))")
+    if (nonConsolidatableOnly) extraConds.push("origin = 'external'")
     const suffix = extraConds.length ? ` AND ${extraConds.join(' AND ')}` : ''
     const c1 = db.run(
       `DELETE FROM memory WHERE access_count = 0 AND created_at < ?${suffix}`,

@@ -128,15 +128,19 @@ describe('IdleGate', () => {
       const db = {
         run: (sql, params) => raw.prepare(sql).run(...(Array.isArray(params) ? params : [params])),
       }
+      raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Old external web snippet', 'fact', 'external', 0, '2020-01-01T00:00:00Z')
       raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Old user fact', 'fact', 'user', 0, '2020-01-01T00:00:00Z')
       raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Old consolidatable assistant fact', 'fact', 'assistant', 0, '2020-01-01T00:00:00Z')
+      raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Project architecture rule', 'project', 'user', 0, '2020-01-01T00:00:00Z')
       raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('## Old Digest', 'digest', 'assistant', 0, '2020-01-01T00:00:00Z')
 
       const res = autoMemory.prune(db, 90, { onlyNonConsolidatable: true, preserveDigest: true })
       expect(res.deleted).toBeGreaterThanOrEqual(1)
       const remaining = raw.prepare('SELECT content, type FROM memory ORDER BY id').all()
       expect(remaining.map(r => r.content)).toEqual([
+        'Old user fact',
         'Old consolidatable assistant fact',
+        'Project architecture rule',
         '## Old Digest',
       ])
     } finally {

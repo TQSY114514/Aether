@@ -128,9 +128,12 @@ defineTask('memory-cleanup', 6 * 3600 * 1000, async (db, ctx = {}) => {
       const res = await autoMemory.consolidate(db, { shouldYield: ctx.shouldYield })
       let pruned = 0
       if (!res?.yielded) {
-        const failedOrSkipped = !res?.ok || (Array.isArray(res?.errors) && res.errors.length > 0) || res?.skipped === 'no_provider'
+        // Always restrict post-consolidation prune to non-consolidatable rows
+        // (`origin = 'external'`), because consolidate() processes at most one
+        // batch (25 rows) per workspace per run and failed scopes keep candidates
+        // queued for subsequent idle passes.
         const pruneRes = autoMemory.prune(db, 90, {
-          onlyNonConsolidatable: failedOrSkipped,
+          onlyNonConsolidatable: true,
           preserveDigest: true,
         })
         pruned = (pruneRes?.deleted || 0) + (res?.pruned || 0)
