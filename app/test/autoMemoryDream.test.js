@@ -357,13 +357,15 @@ describe('autoMemory dream economy loop', () => {
     const idStable = insertMem(db, { content: 'Old A stable sibling', workspace: '/ws/a', created_at: '2026-09-01 00:00:00' })
 
     let llmAttempt = 0
+    const seenPrompts = []
     const res = await autoMemory.consolidate(db, {
       nowMs: Date.parse('2026-11-15T12:00:00Z'),
       scopeKeys: ['/ws/a'],
       provider: { id: 1, name: 'mock' },
       model: { id: 1, model_name: 'mock' },
-      completeChat: async () => {
+      completeChat: async ({ messages }) => {
         llmAttempt++
+        seenPrompts.push(String(messages?.[1]?.content || ''))
         if (llmAttempt === 1) {
           // Concurrent user edit touches idA while LLM is in flight; on retry idA is now fresh so skipped
           db.prepare("UPDATE memory SET content = 'Edited A by user', access_count = 5, last_accessed_at = '2026-11-15T11:55:00Z' WHERE id = ?").run(idA)
@@ -373,10 +375,69 @@ describe('autoMemory dream economy loop', () => {
     })
     expect(res.ok).toBe(true)
     expect(llmAttempt).toBe(2)
+    expect(seenPrompts[0]).not.toContain('Old B')
+    expect(seenPrompts[1]).toContain('Old A stable sibling')
+    expect(seenPrompts[1]).not.toContain('Old A\n')
+    expect(seenPrompts[1]).not.toContain('Edited A by user')
+    expect(seenPrompts[1]).not.toContain('Old B')
     // Modified idA must NOT be deleted; untouched idStable in /ws/a WAS consolidated; /ws/b was untouched due to scopeKeys
     expect(db.prepare('SELECT content FROM memory WHERE id = ?').get(idA)?.content).toBe('Edited A by user')
     expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idStable)).toBeUndefined()
     expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idB)).toBeTruthy()
+  })
+
+  it('reinforceEchoes skips edited rows; consolidate rolls back on FTS failure and detects last_accessed_at change', async () => {
+    const idEcho = insertMem(db, {
+      content: 'Use vitest with module _load hook for Electron tests',
+      workspace: '/ws/echo',
+      created_at: '2026-11-10 00:00:00',
+    })
+    db.prepare("UPDATE memory SET content = 'Completely different edited content' WHERE id = ?").run(idEcho)
+    const echoRes = autoMemory.reinforceEchoes(
+      db,
+      [{ id: idEcho, type: 'fact', content: 'Use vitest with module _load hook for Electron tests' }],
+      'I will run vitest with module _load hook now.',
+      { nowMs: Date.parse('2026-11-15T12:00:00Z') }
+    )
+    expect(echoRes.reinforcedIds).toEqual([])
+    expect(db.prepare('SELECT access_count FROM memory WHERE id = ?').get(idEcho)?.access_count).toBe(0)
+
+    // Verify last_accessed_at bump during consolidate triggers STALE_SNAPSHOT retry and preserves newly accessed memory
+    const idAccessed = insertMem(db, { content: 'Aging touched during consolidate', workspace: '/ws/acc', created_at: '2026-09-01 00:00:00' })
+    const idUntouched = insertMem(db, { content: 'Aging untouched sibling', workspace: '/ws/acc', created_at: '2026-09-01 00:00:00' })
+    let accAttempt = 0
+    const accRes = await autoMemory.consolidate(db, {
+      nowMs: Date.parse('2026-11-15T12:00:00Z'),
+      scopeKeys: ['/ws/acc'],
+      provider: { id: 1, name: 'mock' },
+      model: { id: 1, model_name: 'mock' },
+      completeChat: async () => {
+        accAttempt++
+        if (accAttempt === 1) {
+          db.prepare("UPDATE memory SET access_count = 1, last_accessed_at = '2026-11-15T11:59:00Z' WHERE id = ?").run(idAccessed)
+        }
+        return '## Access Guarded Digest\n- Untouched consolidated only'
+      },
+    })
+    expect(accRes.ok).toBe(true)
+    expect(accAttempt).toBe(2)
+    expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idAccessed)).toBeTruthy()
+    expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idUntouched)).toBeUndefined()
+
+    // Verify FTS failure inside transaction rolls back digest insert AND preserves source rows
+    const idFtsFail = insertMem(db, { content: 'Old fact FTS fail rollback check', workspace: '/ws/ftsfail', created_at: '2026-09-01 00:00:00' })
+    db.raw.exec('DROP TABLE memories_fts')
+    const ftsRes = await autoMemory.consolidate(db, {
+      nowMs: Date.parse('2026-11-15T12:00:00Z'),
+      scopeKeys: ['/ws/ftsfail'],
+      provider: { id: 1, name: 'mock' },
+      model: { id: 1, model_name: 'mock' },
+      completeChat: async () => '## Rollback Digest\n- Should roll back cleanly',
+    })
+    expect(ftsRes.ok).toBe(false)
+    expect(ftsRes.errors?.length).toBe(1)
+    expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idFtsFail)).toBeTruthy()
+    expect(db.prepare("SELECT id FROM memory WHERE type = 'digest' AND workspace = '/ws/ftsfail'").get()).toBeUndefined()
   })
 
   it('ensureMemDb exposes getSetting on raw sqlite db and serializes concurrent consolidate calls', async () => {

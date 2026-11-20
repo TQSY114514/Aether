@@ -240,7 +240,7 @@ interface Window {
       fork: (params: { sessionId: number; messageId?: number | null; title?: string }) => Promise<{ id: number; title: string }>
     }
     arena: {
-      send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[] }>
+      send: (params: { sessionId: number; content: string; modelIds: number[]; personaId?: number | null; temperatures?: number[] | null }) => Promise<{ results: ArenaResult[]; cancelled?: boolean }>
       vote: (data: { prompt: string; winnerModelId: number; winnerModelName: string; loserModelIds: number[]; loserModelNames: string[]; intent?: string }) => Promise<{ success: boolean }>
       scores: () => Promise<ModelScore[]>
       metrics: () => Promise<ArenaModelMetrics[]>

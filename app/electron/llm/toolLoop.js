@@ -1338,6 +1338,7 @@ Reply ONLY with JSON:
                 try {
                   onJournalEntry({
                     tool: fn.name,
+                    ...(fn.name === 'call_extended_tool' && args?.tool_name ? { innerTool: String(args.tool_name) } : {}),
                     argsHash: currentArgsHash,
                     result: typeof r.result === 'string' ? (r.result.length > 4000 ? r.result.slice(0, 4000) + '...[truncated]' : r.result) : r.result,
                     success: true,

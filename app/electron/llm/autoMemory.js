@@ -730,21 +730,24 @@ function prune(db, maxAgeDays = 90, opts = {}) {
     const preserveDigest = opts.preserveDigest !== false
     const nonConsolidatableOnly = opts.onlyNonConsolidatable === true
     const extraConds = []
-    if (preserveDigest) extraConds.push("type != 'digest'")
+    if (preserveDigest) extraConds.push("(type IS NULL OR type != 'digest')")
     if (nonConsolidatableOnly) extraConds.push("origin = 'external'")
     const suffix = extraConds.length ? ` AND ${extraConds.join(' AND ')}` : ''
-    const c1 = db.run(
-      `DELETE FROM memory WHERE access_count = 0 AND created_at < ?${suffix}`,
-      [new Date(Date.now() - maxAgeDays * 86400000).toISOString()]
-    )
-    const c2 = db.run(
-      `DELETE FROM memory WHERE created_at < ?${suffix}`,
-      [new Date(Date.now() - 365 * 86400000).toISOString()]
-    )
-    const deleted = Number(c1?.changes || 0) + Number(c2?.changes || 0)
-    return { deleted }
-  } catch {
-    return { deleted: 0 }
+    const sql1 = `DELETE FROM memory WHERE access_count = 0 AND created_at < ?${suffix}`
+    const sql2 = `DELETE FROM memory WHERE created_at < ?${suffix}`
+    const cutoff1 = new Date(Date.now() - maxAgeDays * 86400000).toISOString()
+    const cutoff2 = new Date(Date.now() - 365 * 86400000).toISOString()
+
+    const execDeletes = () => {
+      const c1 = typeof db.prepare === 'function' ? db.prepare(sql1).run(cutoff1) : db.run(sql1, [cutoff1])
+      const c2 = typeof db.prepare === 'function' ? db.prepare(sql2).run(cutoff2) : db.run(sql2, [cutoff2])
+      return Number(c1?.changes || 0) + Number(c2?.changes || 0)
+    }
+
+    const deleted = typeof db.transaction === 'function' ? db.transaction(execDeletes)() : execDeletes()
+    return { ok: true, deleted }
+  } catch (err) {
+    return { ok: false, deleted: 0, error: err?.message || 'prune_failed' }
   }
 }
 
@@ -854,19 +857,21 @@ function reinforceEchoes(db, injectedHits, assistantReply, opts = {}) {
     let hasEchoCol = true
     try {
       row = db.prepare
-        ? db.prepare('SELECT id, last_echoed_at, last_accessed_at, access_count, confidence FROM memory WHERE id = ?').get(id)
-        : (db.allRows?.('SELECT id, last_echoed_at, last_accessed_at, access_count, confidence FROM memory WHERE id = ?', [id]) || [])[0]
+        ? db.prepare('SELECT id, content, last_echoed_at, last_accessed_at, access_count, confidence FROM memory WHERE id = ?').get(id)
+        : (db.allRows?.('SELECT id, content, last_echoed_at, last_accessed_at, access_count, confidence FROM memory WHERE id = ?', [id]) || [])[0]
     } catch {
       hasEchoCol = false
       try {
         row = db.prepare
-          ? db.prepare('SELECT id, last_accessed_at, access_count, confidence FROM memory WHERE id = ?').get(id)
-          : (db.allRows?.('SELECT id, last_accessed_at, access_count, confidence FROM memory WHERE id = ?', [id]) || [])[0]
+          ? db.prepare('SELECT id, content, last_accessed_at, access_count, confidence FROM memory WHERE id = ?').get(id)
+          : (db.allRows?.('SELECT id, content, last_accessed_at, access_count, confidence FROM memory WHERE id = ?', [id]) || [])[0]
       } catch {
         continue
       }
     }
     if (!row) continue
+    // Skip reinforcement if the live row content was edited since context injection.
+    if (String(row.content ?? '') !== String(hit.content ?? '')) continue
 
     const guardTs = hasEchoCol ? row.last_echoed_at : row.last_accessed_at
     if (guardTs) {
@@ -1170,6 +1175,7 @@ async function _consolidateInner(db, opts = {}) {
         type: r.type ?? null,
         origin: r.origin ?? null,
         workspace: r.workspace ? String(r.workspace) : null,
+        lastAccessedAt: r.last_accessed_at ?? null,
       }))
 
       try {
@@ -1188,10 +1194,8 @@ async function _consolidateInner(db, opts = {}) {
             if (!info || Number(info.changes) !== 1) {
               throw _staleSnapshotError('stale_digest_update')
             }
-            try {
-              const ftsUpd = 'UPDATE memories_fts SET content = ? WHERE memory_id = ?'
-              if (db.prepare) db.prepare(ftsUpd).run(nextContent, digestId)
-            } catch {}
+            const ftsUpd = 'UPDATE memories_fts SET content = ? WHERE memory_id = ?'
+            if (db.prepare) db.prepare(ftsUpd).run(nextContent, digestId)
           } else {
             if (currentDigest) {
               throw _staleSnapshotError('concurrent_digest_inserted')
@@ -1201,13 +1205,11 @@ async function _consolidateInner(db, opts = {}) {
               ? db.prepare(ins).run(nextContent, nextNorm, wsKey, nowStr, nowStr)
               : db.run?.(ins, nextContent, nextNorm, wsKey, nowStr, nowStr)
             digestId = Number(info?.lastInsertRowid)
-            try {
-              const ftsIns = "INSERT INTO memories_fts (content, type, memory_id) VALUES (?, 'digest', ?)"
-              if (db.prepare && Number.isFinite(digestId)) db.prepare(ftsIns).run(nextContent, digestId)
-            } catch {}
+            const ftsIns = "INSERT INTO memories_fts (content, type, memory_id) VALUES (?, 'digest', ?)"
+            if (db.prepare && Number.isFinite(digestId)) db.prepare(ftsIns).run(nextContent, digestId)
           }
 
-          const checkSql = 'SELECT id, content, type, origin, workspace FROM memory WHERE id = ?'
+          const checkSql = 'SELECT id, content, type, origin, workspace, last_accessed_at FROM memory WHERE id = ?'
           const checkStmt = db.prepare ? db.prepare(checkSql) : null
           const delSql = 'DELETE FROM memory WHERE id = ?'
           const delFtsSql = 'DELETE FROM memories_fts WHERE memory_id = ?'
@@ -1226,6 +1228,7 @@ async function _consolidateInner(db, opts = {}) {
               || (liveRow.type ?? null) !== cand.type
               || (liveRow.origin ?? null) !== cand.origin
               || liveWs !== cand.workspace
+              || (liveRow.last_accessed_at ?? null) !== cand.lastAccessedAt
             ) {
               throw _staleSnapshotError('stale_candidate_modified')
             }
@@ -1233,15 +1236,15 @@ async function _consolidateInner(db, opts = {}) {
             if (delInfo && Number(delInfo.changes) !== 1) {
               throw _staleSnapshotError('stale_candidate_delete')
             }
-            try {
-              if (db.prepare) db.prepare(delFtsSql).run(cand.id)
-            } catch {}
+            if (db.prepare) db.prepare(delFtsSql).run(cand.id)
           }
           return digestId
         }
 
         const txn = db.transaction(applyScopeUpdate)
         const savedId = txn()
+        _memCache = null
+        _memV++
         digestIds.push(savedId)
         consolidatedCount += snapshotCandidates.length
         workspacesUpdated++
@@ -1267,11 +1270,6 @@ async function _consolidateInner(db, opts = {}) {
         break
       }
     }
-  }
-
-  if (consolidatedCount > 0) {
-    _memCache = null
-    _memV++
   }
 
   return {

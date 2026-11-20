@@ -175,7 +175,10 @@ async function _runSubagent({
     }
     const trackMutation = (entry) => {
       if (!entry || entry.error) return
-      const name = String(entry.name || entry.tool || '')
+      const rawName = String(entry.innerTool || entry.name || entry.tool || '')
+      const name = (rawName === 'call_extended_tool' && entry.args?.tool_name)
+        ? String(entry.args.tool_name)
+        : rawName
       const succeeded = entry.success === true || (entry.result !== undefined && entry.result !== null)
       if (WORKSPACE_MUTATING_TOOLS.has(name) && succeeded) {
         hasWorkspaceMutations = true

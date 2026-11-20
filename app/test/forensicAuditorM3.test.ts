@@ -355,18 +355,21 @@ describe('Forensic Auditor Independent Verification Suite (Milestone 3)', () => 
       fs.writeFileSync(path.join(tmpDir, 'target.js'), 'const a = 1\nconst b = 2\n', 'utf8')
       try {
         let loopCount = 0
+        let staleOnStreamDelta: ((delta: string) => void) | null = null
+        let staleOnThinkingDelta: ((delta: string) => void) | null = null
         const mockLoop = async (opts) => {
           loopCount++
           if (loopCount === 1) {
+            staleOnStreamDelta = opts.onStreamDelta
+            staleOnThinkingDelta = opts.onThinkingDelta
             opts.findingsLedger?.add({ claim: 'Initial pre-swap finding', cites: ['target.js:1'] })
             return new Promise((resolve) => {
               opts.signal?.addEventListener('abort', () => {
-                // Simulate stale late callback trying to clobber after swap
-                opts.onChunk?.('stale chunk')
                 resolve('stale abort output')
               }, { once: true })
             })
           }
+          opts.onStreamDelta?.('valid post-swap stream text')
           opts.findingsLedger?.add({ claim: 'Post-swap verified finding', cites: ['target.js:2'] })
           return 'Completed analysis after swap'
         }
@@ -391,12 +394,22 @@ describe('Forensic Auditor Independent Verification Suite (Milestone 3)', () => 
         })
         expect(swapRes.ok).toBe(true)
 
+        // Invoke old generation's actual stream callbacks after hot-swap generation bumped
+        staleOnStreamDelta?.('stale late stream delta')
+        staleOnThinkingDelta?.('stale late thinking delta')
+
         const rec = subagentSupervisor.activeSubagents.get(spawned.subagentId)
         await rec.completionPromise
+        const peeks = subagentSupervisor.peekSubagentStream({ subagentIds: [spawned.subagentId] })
+        expect(peeks[0]?.recentTextTail || '').not.toContain('stale late stream delta')
+        expect(peeks[0]?.recentThinkingTail || '').not.toContain('stale late thinking delta')
+        expect(rec.liveBuffer.accumulatedText).not.toContain('stale late stream delta')
+        expect(rec.liveBuffer.accumulatedText).toContain('valid post-swap stream text')
+
         const finalReport = subagentSupervisor.formatSubagentReport(rec)
         expect(finalReport.status).toBe('completed')
         expect(finalReport.finalOutput).toContain('Completed analysis after swap')
-        expect(finalReport.finalOutput).not.toContain('stale chunk')
+        expect(finalReport.finalOutput).not.toContain('stale late stream delta')
         expect(finalReport.finalOutput).toContain('## Verified Findings')
         expect(finalReport.findings?.length).toBe(2)
         expect(finalReport.findings?.map((f) => f.claim)).toEqual([

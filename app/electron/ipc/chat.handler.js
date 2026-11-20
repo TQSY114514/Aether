@@ -114,6 +114,7 @@ function registerChatHandlers(ipcMain, db, getWebContents) {
     if (!sessionId || typeof question !== 'string' || !question.trim()) {
       return { ok: false, error: 'sessionId and non-empty question are required' }
     }
+    try { require('../cron/scheduler').noteUserActivity() } catch {}
     const sid = Number(sessionId) || sessionId
     const prev = sideAbortControllers.get(sid)
     if (prev) {

@@ -722,7 +722,7 @@ export function installDemoBridge(lang: 'zh' | 'en' = 'zh'): { bus: EventBus; re
           }, 760)
           pendingTimers.add(id)
         })
-        if (epoch !== demoEpoch) return { results: [] }
+        if (epoch !== demoEpoch) return { results: [], cancelled: true }
         const results = [resA, resB]
         arenaResultsBySession[sessionId] = results
         return { results }

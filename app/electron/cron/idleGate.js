@@ -63,10 +63,11 @@ class IdleGate {
     return this.opts.enabled !== false
   }
 
-  makeYieldChecker(startSeq = this.activitySeq) {
+  makeYieldChecker(startSeq = this.activitySeq, opts = {}) {
+    const ignoreBusy = Boolean(opts && opts.ignoreBusy)
     return () => {
       if (this.activitySeq > startSeq) return true
-      if (typeof this.opts.isBusy === 'function' && this.opts.isBusy() === true) return true
+      if (!ignoreBusy && typeof this.opts.isBusy === 'function' && this.opts.isBusy() === true) return true
       return false
     }
   }
@@ -118,7 +119,7 @@ class IdleGate {
 
     this.running = true
     const startSeq = this.activitySeq
-    const shouldYield = this.makeYieldChecker(startSeq)
+    const shouldYield = this.makeYieldChecker(startSeq, { ignoreBusy: force })
     try {
       const result = await this.opts.runPass({ shouldYield })
       return { ran: true, yielded: Boolean(result && result.yielded), result }

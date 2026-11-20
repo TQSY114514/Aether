@@ -320,6 +320,12 @@ async function _reflectInner(db, opts = {}) {
     return { ok: false, reason: 'llm-error', error }
   }
 
+  if (shouldYield && shouldYield()) {
+    restoreTraces(claimedLines)
+    setStatus(db, { last_reason: 'yielded', last_error: '' })
+    return { ok: false, reason: 'yielded', yielded: true }
+  }
+
   const ops = parseOps(text)
   const applied = { added: [], replaced: [], removed: [], rejected: [] }
   for (const op of ops) {

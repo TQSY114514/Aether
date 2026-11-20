@@ -126,7 +126,8 @@ describe('IdleGate', () => {
         );
       `)
       const db = {
-        run: (sql, params) => raw.prepare(sql).run(...(Array.isArray(params) ? params : [params])),
+        prepare: (sql) => raw.prepare(sql),
+        transaction: (fn) => raw.transaction(fn),
       }
       raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Old external web snippet', 'fact', 'external', 0, '2020-01-01T00:00:00Z')
       raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('Old user fact', 'fact', 'user', 0, '2020-01-01T00:00:00Z')
@@ -135,6 +136,7 @@ describe('IdleGate', () => {
       raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, ?, ?, ?, ?)").run('## Old Digest', 'digest', 'assistant', 0, '2020-01-01T00:00:00Z')
 
       const res = autoMemory.prune(db, 90, { onlyNonConsolidatable: true, preserveDigest: true })
+      expect(res.ok).toBe(true)
       expect(res.deleted).toBeGreaterThanOrEqual(1)
       const remaining = raw.prepare('SELECT content, type FROM memory ORDER BY id').all()
       expect(remaining.map(r => r.content)).toEqual([
@@ -143,8 +145,37 @@ describe('IdleGate', () => {
         'Project architecture rule',
         '## Old Digest',
       ])
+
+      // Also verify NULL-type aging rows are pruned by default while digests remain protected
+      raw.prepare("INSERT INTO memory (content, type, origin, access_count, created_at) VALUES (?, NULL, ?, ?, ?)").run('Old null type', 'user', 0, '2020-01-01T00:00:00Z')
+      const resNull = autoMemory.prune(db, 90, { preserveDigest: true })
+      expect(resNull.ok).toBe(true)
+      const afterNull = raw.prepare('SELECT content, type FROM memory ORDER BY id').all()
+      expect(afterNull.map(r => r.content)).toEqual(['## Old Digest'])
     } finally {
       raw.close()
     }
+  })
+
+  it('force: true ignores pre-existing isBusy while still yielding on fresh user activity', async () => {
+    let observedInitialYield = null
+    let observedAfterActivityYield = null
+    let gate
+    gate = new IdleGate({
+      idleMs: 999_999,
+      cooldownMs: 999_999,
+      now: () => 1000,
+      isBusy: () => true,
+      runPass: async ({ shouldYield }) => {
+        observedInitialYield = shouldYield()
+        gate.noteActivity()
+        observedAfterActivityYield = shouldYield()
+        return { ok: true, yielded: observedAfterActivityYield }
+      },
+    })
+    const res = await gate.tick({ force: true })
+    expect(res.ran).toBe(true)
+    expect(observedInitialYield).toBe(false)
+    expect(observedAfterActivityYield).toBe(true)
   })
 })

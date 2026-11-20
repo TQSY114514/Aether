@@ -156,4 +156,18 @@ describe('runSubagent — 回调透传', () => {
     })
     expect(out.hasWorkspaceMutations).toBe(true)
   })
+
+  it('onJournalEntry 记录经 call_extended_tool 执行的写入工具时正确识别 innerTool 变更', async () => {
+    runToolLoop.mockImplementationOnce(async (opts) => {
+      opts.onJournalEntry?.({ tool: 'call_extended_tool', innerTool: 'edit_file', result: 'patched', success: true })
+      return 'done'
+    })
+    const out = await subAgent.runSubagent({
+      db: mkDb(),
+      provider: { id: 1 },
+      model: { model_name: 'test' },
+      prompt: 'edit via gateway',
+    })
+    expect(out.hasWorkspaceMutations).toBe(true)
+  })
 })

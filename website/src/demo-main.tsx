@@ -13,6 +13,7 @@ const { reset } = installDemoBridge(lang)
 applyTheme('light', false)
 
 let resetNonce = 0
+let activeArenaPromise: Promise<unknown> | null = null
 
 // Listen for step orchestration commands from the outer Site showcase chrome
 window.addEventListener('message', async (event) => {
@@ -23,6 +24,11 @@ window.addEventListener('message', async (event) => {
   if (data.step === 'reset') {
     resetNonce++
     reset()
+    // Wait for any canceled in-flight runArena() promise to settle its error/finally
+    // handling before wiping the store so it cannot overwrite arenaError afterwards.
+    if (activeArenaPromise) {
+      await activeArenaPromise.catch(() => {})
+    }
     useStore.setState({
       sending: false,
       arenaPending: 0,
@@ -32,6 +38,7 @@ window.addEventListener('message', async (event) => {
       arenaVoteWinnerId: null,
       arenaError: null,
       streamingBySession: {},
+      queuedMessages: [],
     })
     await store.loadSessions()
     await store.loadScores()
@@ -46,11 +53,17 @@ window.addEventListener('message', async (event) => {
     store.setCurrentView('chat')
     await store.selectSession(101)
     store.setArenaModelIds([11, 12])
-    await store.runArena(
+    const run = store.runArena(
       lang === 'zh'
         ? '对比修复 IdleGate 并发重入的最小补丁方案：先写冷却时间戳再检查 hasMaterial()。'
         : 'Compare minimal patches for IdleGate concurrency: stamp cooldown before hasMaterial().',
     )
+    let tracked: Promise<unknown> | null = null
+    tracked = run.finally(() => {
+      if (activeArenaPromise === tracked) activeArenaPromise = null
+    })
+    activeArenaPromise = tracked
+    await tracked
     if (myReset !== resetNonce) return
     window.parent?.postMessage(
       { type: 'aether-demo:arena-done', count: useStore.getState().arenaResults.length },

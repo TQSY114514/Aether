@@ -126,8 +126,9 @@ defineTask('memory-cleanup', 6 * 3600 * 1000, async (db, ctx = {}) => {
     const featureFlags = require('../featureFlags')
     if (featureFlags.isEnabled(db, 'memory.dreamConsolidation') && typeof autoMemory.consolidate === 'function') {
       const res = await autoMemory.consolidate(db, { shouldYield: ctx.shouldYield })
+      const yieldedNow = Boolean(res?.yielded || ctx.shouldYield?.())
       let pruned = 0
-      if (!res?.yielded) {
+      if (!yieldedNow) {
         // Always restrict post-consolidation prune to non-consolidatable rows
         // (`origin = 'external'`), because consolidate() processes at most one
         // batch (25 rows) per workspace per run and failed scopes keep candidates
@@ -136,14 +137,17 @@ defineTask('memory-cleanup', 6 * 3600 * 1000, async (db, ctx = {}) => {
           onlyNonConsolidatable: true,
           preserveDigest: true,
         })
+        if (pruneRes && pruneRes.ok === false) {
+          log.warn('cron: memory-cleanup prune failed:', pruneRes.error || 'unknown')
+        }
         pruned = (pruneRes?.deleted || 0) + (res?.pruned || 0)
       }
       log.info('cron: memory-cleanup (dreamConsolidation) completed:', JSON.stringify({
         consolidated: res?.consolidated || 0,
         pruned,
-        yielded: Boolean(res?.yielded),
+        yielded: yieldedNow,
       }))
-      return res
+      return yieldedNow ? { ...(res || {}), yielded: true } : res
     }
     autoMemory.prune(db, 90, { preserveDigest: true })
     log.info('cron: memory-cleanup completed')
@@ -403,7 +407,7 @@ function runTask(name, opts = {}) {
 
 // Run a specific task immediately (for manual triggers — bypasses idle/cooldown gates).
 function runNow(name) {
-  if (!TASKS[name]) return false
+  if (!TASKS[name] || TASKS[name].running) return false
   runTask(name, { force: true })
   return true
 }
