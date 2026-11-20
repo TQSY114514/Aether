@@ -18,7 +18,7 @@ import { userAssistantIndexOf } from './compact.js'
 export function findUndoBoundary(messages) {
   if (!Array.isArray(messages) || !messages.length) return null
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i] && messages[i].role === 'user') {
+    if (messages[i] && messages[i].role === 'user' && !messages[i].ephemeral) {
       return { lastUserIndex: i, lastUserMsgId: Number(messages[i].id) }
     }
   }

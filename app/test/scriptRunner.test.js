@@ -423,4 +423,72 @@ describe('scriptRunner isolated batch execution', () => {
       toolName: 'write_file',
     })
   })
+
+  it('blocks tool execution when PreToolUse hook returns failed: true', async () => {
+    let executed = false
+    const deps = {
+      getTool: () => ({
+        name: 'write_file',
+        risk: 'safe',
+        run: async () => {
+          executed = true
+          return 'ok'
+        },
+      }),
+      checkToolAllowed: () => ({ allowed: true }),
+      applyMiddleware: (t) => t,
+      runHooks: async () => [{ denied: false, failed: true, messages: ['lint hook failed'] }],
+    }
+
+    await expect(
+      authorizeAndExecuteTool('write_file', { path: 'a.txt', content: 'x' }, { agentMode: 'act' }, deps)
+    ).rejects.toThrow(/PreToolUse hook: lint hook failed/i)
+    expect(executed).toBe(false)
+  })
+
+  it('flushes large result frames across stdout before worker exit and handles stdin pipe errors cleanly', async () => {
+    const largeRes = await runScript({
+      code: `return 'Z'.repeat(140000);`,
+      timeoutMs: 15000,
+      ctx: { agentMode: 'act' },
+    })
+    try {
+      expect(largeRes.ok).toBe(true)
+      expect(largeRes.value).toHaveLength(140000)
+      expect(largeRes.spilledPath).toBeTruthy()
+    } finally {
+      if (largeRes.spilledPath) {
+        try { fs.unlinkSync(largeRes.spilledPath) } catch {}
+      }
+    }
+
+    // Worker closes stdin while alive so parent's tool_result write triggers async stdin error (EPIPE)
+    const epipeWorker = path.join(tmpDir, 'epipe-worker.js')
+    fs.writeFileSync(
+      epipeWorker,
+      `
+      process.stdout.write(JSON.stringify({ type: 'tool_call', id: 1, name: 'slow_ok', args: {} }) + '\\n');
+      process.stdin.destroy();
+      setTimeout(() => process.exit(1), 150);
+      `,
+      'utf8'
+    )
+
+    const epipeRes = await runScript({
+      code: 'return 1;',
+      workerPath: epipeWorker,
+      timeoutMs: 10000,
+      getTool: () => ({
+        name: 'slow_ok',
+        risk: 'safe',
+        run: async () => {
+          await new Promise((r) => setTimeout(r, 30))
+          return 'ok'
+        },
+      }),
+      ctx: { agentMode: 'act' },
+    })
+    expect(epipeRes.ok).toBe(false)
+    expect(epipeRes.error).toMatch(/stdin error|exited unexpectedly/i)
+  }, 20000)
 })

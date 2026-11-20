@@ -254,8 +254,8 @@ export default function App() {
       when: () => !shortcutsOpenRef.current, // ShortcutOverlay handles its own ESC
       run: () => {
         const s = useStore.getState()
-        if (s.btwOpen) {
-          // If BTW drawer is open, Escape closes the drawer, do not stop main generation
+        if (s.btwOpen || s.handoffOpen) {
+          // If BTW drawer or Handoff modal is open, Escape closes the overlay, do not stop main generation
           return
         }
         if (s.sending) {

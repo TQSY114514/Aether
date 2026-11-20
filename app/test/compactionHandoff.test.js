@@ -282,4 +282,151 @@ describe('Amp-style 2-step Editable Handoff', () => {
     expect(parseSessionCommand('/handoff')).toEqual({ type: 'handoff' })
     expect(parseSessionCommand('/handoff verify build')).toEqual({ type: 'handoff', goal: 'verify build' })
   })
+
+  it('extracts persisted tool errors from agent_execution_log into handoff draft', async () => {
+    const { db, cleanup } = createRealTestDb()
+    try {
+      const parentId = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('Audit Error Session').lastInsertRowid)
+      db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
+        parentId,
+        'user',
+        'Build the desktop app',
+        'success'
+      )
+      db.prepare('INSERT INTO agent_execution_log (session_id, turn_id, payload) VALUES (?, ?, ?)').run(
+        parentId,
+        'turn-1',
+        JSON.stringify({
+          toolCalls: [
+            { name: 'run_command', args: { cmd: 'npm run build' }, error: 'ENOENT: missing dist/app.js' },
+            { name: 'read_file', args: {}, result: 'TypeError: cannot read properties of undefined\nline 2' },
+          ],
+          finalStatus: 'error',
+        })
+      )
+      const draft = await generateHandoffDraft({ db, sessionId: parentId, goal: 'fix build' })
+      expect(draft.source).toBe('fallback')
+      expect(draft.draftPrompt).toContain('[tool:run_command] ENOENT: missing dist/app.js')
+      expect(draft.draftPrompt).toContain('[tool:read_file] TypeError: cannot read properties of undefined')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('dedup rejects distinct insertInitialMessage:false prompts and progressed children, while deduping untouched exact retries', () => {
+    const { db, cleanup } = createRealTestDb()
+    try {
+      const parentId = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('Dedup Parent').lastInsertRowid)
+      const a = commitHandoff({ db, parentSessionId: parentId, prompt: 'Brief A', title: 'Child', insertInitialMessage: false })
+      const b = commitHandoff({ db, parentSessionId: parentId, prompt: 'Brief B', title: 'Child', insertInitialMessage: false })
+      expect(b.sessionId).not.toBe(a.sessionId)
+      expect(b.deduplicated).not.toBe(true)
+
+      const first = commitHandoff({ db, parentSessionId: parentId, prompt: 'Same brief', title: 'Retry Child' })
+      const dup = commitHandoff({ db, parentSessionId: parentId, prompt: 'Same brief', title: 'Retry Child' })
+      expect(dup.sessionId).toBe(first.sessionId)
+      expect(dup.deduplicated).toBe(true)
+
+      // Once child has progressed with an extra message, a repeat commit is a fresh handoff.
+      db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
+        first.sessionId,
+        'assistant',
+        'Started work on brief',
+        'success'
+      )
+      const afterProgress = commitHandoff({ db, parentSessionId: parentId, prompt: 'Same brief', title: 'Retry Child' })
+      expect(afterProgress.sessionId).not.toBe(first.sessionId)
+      expect(afterProgress.deduplicated).not.toBe(true)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('runSession compacts oversized prior DB history against model.context_window before calling runAgentImpl', async () => {
+    const { db, dbPath, cleanup } = createRealTestDb()
+    try {
+      const sid = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('Long TUI Session').lastInsertRowid)
+      for (let i = 0; i < 12; i++) {
+        db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
+          sid,
+          i % 2 === 0 ? 'user' : 'assistant',
+          `turn ${i}: ` + 'alpha beta gamma delta '.repeat(60),
+          'success'
+        )
+      }
+
+      let capturedOpts = null
+      const budget = 600
+      const res = await runSession({
+        dbPath,
+        dbSessionId: sid,
+        prompt: 'Latest follow-up task',
+        apiKey: 'sk-test',
+        dispatch: () => {},
+        resolveImpl: () => ({
+          provider: { name: 'mock', api_format: 'openai' },
+          model: { id: 1, model_name: 'mock-model', context_window: budget },
+          db,
+        }),
+        runAgentImpl: async (opts) => {
+          capturedOpts = opts
+          return { text: 'ok', messages: [] }
+        },
+      })
+      expect(res.dbSessionId).toBe(sid)
+      expect(Array.isArray(capturedOpts?.messages)).toBe(true)
+      expect(capturedOpts.messages[capturedOpts.messages.length - 1]).toEqual({
+        role: 'user',
+        content: 'Latest follow-up task',
+      })
+      const { estimateMessagesTokens } = require('../electron/llm/compaction')
+      expect(estimateMessagesTokens(capturedOpts.messages, { api_format: 'openai' }, { model_name: 'mock-model' }))
+        .toBeLessThanOrEqual(budget)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('TUI end-to-end /handoff commit delivers the brief on the next runSession turn', async () => {
+    const { db, dbPath, cleanup } = createRealTestDb()
+    try {
+      const parentId = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('Parent E2E').lastInsertRowid)
+      db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
+        parentId,
+        'user',
+        'Original work',
+        'success'
+      )
+      const created = commitHandoff({
+        db,
+        parentSessionId: parentId,
+        prompt: 'HANDOFF BRIEF: fix cache key validation in store.ts',
+        title: 'Handoff: cache key',
+      })
+
+      let capturedOpts = null
+      await runSession({
+        dbPath,
+        dbSessionId: created.sessionId,
+        prompt: 'Proceed with step 1',
+        apiKey: 'sk-test',
+        dispatch: () => {},
+        resolveImpl: () => ({
+          provider: { name: 'mock', api_format: 'openai' },
+          model: { id: 1, model_name: 'mock-model', context_window: 8000 },
+          db,
+        }),
+        runAgentImpl: async (opts) => {
+          capturedOpts = opts
+          return { text: 'done', messages: [] }
+        },
+      })
+      expect(capturedOpts.messages).toEqual([
+        { role: 'user', content: 'HANDOFF BRIEF: fix cache key validation in store.ts' },
+        { role: 'user', content: 'Proceed with step 1' },
+      ])
+    } finally {
+      cleanup()
+    }
+  })
 })

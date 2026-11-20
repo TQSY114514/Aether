@@ -12,6 +12,8 @@ const THEMES: Record<string, Record<string, string>> = {
     '--error': '#DC2626',
     '--success': '#16A34A',
     '--warning': '#D97706',
+    // TODO(ui-design): Legacy translucent tokens retained only for user-configured
+    // background-image overlay panels; do not use in new UI components (solid surface rule).
     '--glass-bg': 'rgba(255,255,255,0.7)',
     '--glass-border': 'rgba(228,228,231,0.6)',
     '--content-bg-trans': 'rgba(255,255,255,0.85)',

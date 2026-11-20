@@ -32,10 +32,10 @@ export const COMPRESS_KEEP_LAST = 8
 export function userAssistantIndexOf(messages, messageIndex) {
   if (!Array.isArray(messages) || !Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= messages.length) return -1
   const target = messages[messageIndex]
-  if (!target || (target.role !== 'user' && target.role !== 'assistant')) return -1
+  if (!target || target.ephemeral || (target.role !== 'user' && target.role !== 'assistant')) return -1
   let pos = 0
   for (let i = 0; i < messageIndex; i++) {
-    if (messages[i].role === 'user' || messages[i].role === 'assistant') pos++
+    if (!messages[i].ephemeral && (messages[i].role === 'user' || messages[i].role === 'assistant')) pos++
   }
   return pos
 }
@@ -43,7 +43,7 @@ export function userAssistantIndexOf(messages, messageIndex) {
 /** user/assistant 消息计数（DB 行数的理论值）。 */
 export function userAssistantCount(messages) {
   if (!Array.isArray(messages)) return 0
-  return messages.reduce((n, m) => n + (m.role === 'user' || m.role === 'assistant' ? 1 : 0), 0)
+  return messages.reduce((n, m) => n + (!m.ephemeral && (m.role === 'user' || m.role === 'assistant') ? 1 : 0), 0)
 }
 
 /**

@@ -88,7 +88,14 @@ async function collectPostWriteDiagnostics(filePath, content, ctx) {
       const absKey = `${ctx?.sessionId || 'global'}|${path.resolve(filePath).toLowerCase()}`
       const now = Date.now()
       const last = _recentScriptDiagAt.get(absKey)
-      if (last && now - last < SCRIPT_LSP_DEBOUNCE_MS) return ''
+      if (last && now - last < SCRIPT_LSP_DEBOUNCE_MS) {
+        // Still push the updated buffer to any active LSP client so later
+        // lsp_diagnostics calls do not analyze stale edits.
+        if (typeof lsp.syncDocumentAfterEdit === 'function') {
+          lsp.syncDocumentAfterEdit(root, filePath, { content, language: lang })
+        }
+        return ''
+      }
       if (_recentScriptDiagAt.size > 500) _recentScriptDiagAt.clear()
       _recentScriptDiagAt.set(absKey, now)
     }

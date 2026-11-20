@@ -95,33 +95,57 @@ function isCommandOnPath(cmd) {
   return Boolean(resolveCommandOnPath(cmd))
 }
 
-function quoteCmdArg(value) {
+function assertNoControlChars(value) {
   const str = String(value)
   if (/[\r\n\0]/.test(str)) throw new Error('Invalid control character in LSP command argument')
-  if (str === '') return '""'
-  if (!/[\s"&|<>^()%!]/.test(str)) return str
-  return `"${str.replace(/"/g, '\\"')}"`
+  return str
+}
+
+function resolveNpmCmdJsTarget(cmdPath) {
+  try {
+    const fs = require('fs')
+    const stat = fs.statSync(cmdPath)
+    if (!stat.isFile() || stat.size > 8192) return null
+    const body = fs.readFileSync(cmdPath, 'utf8')
+    const match = /["']?%~?dp0%\\([^"'\r\n]+?\.(?:mjs|cjs|js))["']?/i.exec(body)
+    if (!match) return null
+    const target = path.resolve(path.dirname(cmdPath), match[1])
+    return fs.statSync(target).isFile() ? target : null
+  } catch {
+    return null
+  }
 }
 
 function buildSpawnInvocation(command, args) {
-  let resolvedCmd = command
+  let resolvedCmd = assertNoControlChars(command)
+  const safeArgs = (args || []).map(assertNoControlChars)
   if (process.platform === 'win32') {
     if (!path.isAbsolute(resolvedCmd) && !resolvedCmd.includes('/') && !resolvedCmd.includes('\\')) {
       resolvedCmd = resolveCommandOnPath(resolvedCmd) || resolvedCmd
     }
     if (/\.(cmd|bat)$/i.test(resolvedCmd)) {
-      const comspec = process.env.ComSpec || 'cmd.exe'
-      const cmdLine = [quoteCmdArg(resolvedCmd), ...(args || []).map(quoteCmdArg)].join(' ')
+      const jsTarget = resolveNpmCmdJsTarget(resolvedCmd)
+      if (jsTarget) {
+        return {
+          file: process.execPath,
+          args: [jsTarget, ...safeArgs],
+          options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
+        }
+      }
+      // Invoke batch shims via explicit arg array (`cmd.exe /d /c call <file> ...args`)
+      // so libuv preserves every quoted argument without manual command-line string escaping.
+      const fs = require('fs')
+      const sysCmd = 'C:\\Windows\\System32\\cmd.exe'
       return {
-        file: comspec,
-        args: ['/d', '/s', '/c', `"${cmdLine}"`],
-        options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, windowsVerbatimArguments: true },
+        file: fs.existsSync(sysCmd) ? sysCmd : 'cmd.exe',
+        args: ['/d', '/c', 'call', resolvedCmd, ...safeArgs],
+        options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
       }
     }
   }
   return {
     file: resolvedCmd,
-    args: args || [],
+    args: safeArgs,
     options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
   }
 }
@@ -331,6 +355,15 @@ class LspClient {
   /** Reject everything in flight and tear the process down. */
   _fail(reason) {
     this._initialized = false
+    this._docVersions.clear()
+    this._diagnosticsByUri.clear()
+    for (const waiters of this._diagnosticWaiters.values()) {
+      for (const w of waiters) {
+        clearTimeout(w.timer)
+        w.resolve(null)
+      }
+    }
+    this._diagnosticWaiters.clear()
     for (const { reject, timer } of this._pending.values()) {
       clearTimeout(timer)
       reject(new Error(reason))
@@ -361,16 +394,23 @@ class LspClient {
           source: d.source || null,
           code: d.code ?? null,
         }))
-        const effectiveVersion = diagVersion !== null ? diagVersion : currentDocVersion
         const existing = this._diagnosticsByUri.get(key)
-        if (!existing || existing.version == null || effectiveVersion == null || effectiveVersion >= existing.version) {
-          this._diagnosticsByUri.set(key, { version: effectiveVersion, diagnostics: normalized })
+        if (diagVersion !== null) {
+          if (!existing || existing.version == null || diagVersion >= existing.version) {
+            this._diagnosticsByUri.set(key, { version: diagVersion, diagnostics: normalized })
+          }
+        } else if (!existing || existing.version == null) {
+          // Keep unversioned push state explicitly unknown so it cannot masquerade as currentDocVersion.
+          this._diagnosticsByUri.set(key, { version: null, diagnostics: normalized })
         }
         const waiters = this._diagnosticWaiters.get(key)
         if (waiters && waiters.size > 0) {
           const matched = []
           for (const w of waiters) {
-            if (diagVersion === null || w.minVersion == null || diagVersion >= w.minVersion) {
+            const versionMatches = w.minVersion == null
+              ? true
+              : (diagVersion !== null && diagVersion >= w.minVersion)
+            if (versionMatches) {
               matched.push(w)
             }
           }
@@ -434,6 +474,8 @@ class LspClient {
         if (this._proc === proc) {
           this._proc = null
           this._initialized = false
+          this._docVersions.clear()
+          this._diagnosticsByUri.clear()
         }
         if (this._pending.size) this._fail(`LSP server exited (code=${code}, signal=${signal})`)
       })
@@ -445,7 +487,7 @@ class LspClient {
           rootUri,
           capabilities: {
             textDocument: {
-              publishDiagnostics: { relatedInformation: false },
+              publishDiagnostics: { relatedInformation: false, versionSupport: true },
               synchronization: { dynamicRegistration: false, didSave: true },
             },
           },
@@ -604,10 +646,29 @@ class LspClient {
       : Math.max(waitMs + this.timeoutMs, 3000)
     const deadlineAt = Date.now() + effectiveDeadlineMs
 
-    const startTimeoutMs = hasExplicitDeadline
-      ? Math.max(50, effectiveDeadlineMs)
-      : Math.min(this.timeoutMs, Math.max(50, effectiveDeadlineMs))
-    if (!(await this._ensureStarted({ timeoutMs: startTimeoutMs }))) return null
+    // Never pass the short optional write deadline as the server's initialize
+    // timeout; otherwise slow healthy servers are killed and put in cooldown.
+    let started = this._proc && this._initialized
+    if (!started) {
+      const startPromise = this._ensureStarted()
+      const remainingStartWait = Math.max(10, deadlineAt - Date.now())
+      let waitTimer = null
+      const waitTimeoutSentinel = Symbol('lsp-init-wait-timeout')
+      try {
+        const res = await Promise.race([
+          startPromise,
+          new Promise((resolve) => {
+            waitTimer = setTimeout(() => resolve(waitTimeoutSentinel), remainingStartWait)
+            if (waitTimer.unref) waitTimer.unref()
+          }),
+        ])
+        if (res === waitTimeoutSentinel || !res) return null
+        started = true
+      } finally {
+        if (waitTimer) clearTimeout(waitTimer)
+      }
+    }
+    if (!started) return null
 
     const key = normalizeUriKey(uri)
     const expectedVersion = (this._docVersions.get(key) || 0) + 1
@@ -720,6 +781,7 @@ class LspClient {
   async _pullDiagnostics(uri, { timeoutMs, killOnTimeout = true } = {}) {
     if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
     const key = normalizeUriKey(uri)
+    const sentVersion = this._docVersions.get(key) ?? null
     const reqTimeout = typeof timeoutMs === 'number' ? timeoutMs : this.timeoutMs
     const raw = await this._send(
       'textDocument/diagnostic',
@@ -728,15 +790,22 @@ class LspClient {
       { killOnTimeout }
     )
     if (!raw || typeof raw !== 'object') return { authoritative: false, diagnostics: [] }
-    const currentVersion = this._docVersions.get(key) ?? null
+    // Discard stale pull replies if a newer edit bumped the document version in flight.
+    const latestVersion = this._docVersions.get(key) ?? null
+    if (sentVersion !== latestVersion) {
+      return { authoritative: false, diagnostics: [] }
+    }
     if (raw.kind === 'unchanged') {
       const cached = this._diagnosticsByUri.get(key)
-      if (cached) {
+      if (cached && (sentVersion == null || cached.version === sentVersion)) {
         this._diagnosticsByUri.set(key, {
-          version: currentVersion ?? cached.version,
+          version: sentVersion ?? cached.version,
           diagnostics: cached.diagnostics,
         })
         return { authoritative: true, diagnostics: cached.diagnostics }
+      }
+      if (cached && sentVersion != null && cached.version != null && cached.version < sentVersion) {
+        return { authoritative: false, diagnostics: [] }
       }
       return { authoritative: true, diagnostics: [] }
     }
@@ -750,7 +819,7 @@ class LspClient {
         code: d.code ?? null,
       }))
       // Overwrite/clear cached diagnostics even when empty so fixed errors stay cleared.
-      this._diagnosticsByUri.set(key, { version: currentVersion, diagnostics: normalized })
+      this._diagnosticsByUri.set(key, { version: sentVersion, diagnostics: normalized })
       return { authoritative: true, diagnostics: normalized }
     }
     return { authoritative: false, diagnostics: [] }
@@ -915,6 +984,31 @@ async function withClient(root, language, fn, { onDegraded } = {}) {
       } catch {}
       return null
     }
+    if (res === null && client._startPromise) {
+      // Server is still initializing in background; keep cached client alive so
+      // slow-starting healthy servers finish booting without poisoning cooldown.
+      if (!client._bgFailureWired) {
+        client._bgFailureWired = true
+        Promise.resolve(client._startPromise).then((ok) => {
+          if (ok || client._disposed) return
+          if (client._startErrorCode === 'ENOENT') {
+            unavailableLangs.add(language)
+          } else if (client._startFailed) {
+            serverCooldowns.set(key, Date.now() + STARTUP_COOLDOWN_MS)
+          }
+          if (clientCache.get(key) === client) clientCache.delete(key)
+          try { client.dispose() } catch { /* already disposed */ }
+        }).catch(() => {})
+      }
+      try {
+        onDegraded?.({
+          reason: 'timeout',
+          language,
+          message: 'LSP server still initializing',
+        })
+      } catch {}
+      return null
+    }
     return res
   } catch (err) {
     if (client._startErrorCode === 'ENOENT') {
@@ -1015,6 +1109,56 @@ async function diagnosticsAfterEdit(root, file, { content, language, waitMs = 45
   )
 }
 
+/**
+ * Lightweight fire-and-forget document buffer sync for debounced rapid edits.
+ * Sends didOpen/didChange/didSave to an already-cached initialized client (or
+ * once an in-flight startup finishes) without waiting for diagnostics.
+ */
+function syncDocumentAfterEdit(root, file, { content, language } = {}) {
+  const lang = language || extToLanguage(file)
+  if (!lang || unavailableLangs.has(lang)) return false
+  const key = `${root}|${lang}`
+  const cooldownUntil = serverCooldowns.get(key)
+  if (cooldownUntil && Date.now() < cooldownUntil) return false
+  const client = clientCache.get(key)
+  if (!client || client._disposed || client._startFailed) return false
+
+  const absFile = path.resolve(file)
+  const ext = path.extname(absFile).toLowerCase()
+  const languageId = LSP_LANGUAGE_IDS[ext] || lang
+  const uri = pathToFileURL(absFile).href
+  let text = content
+  if (typeof text !== 'string') {
+    try {
+      text = require('fs').readFileSync(absFile, 'utf8')
+    } catch {
+      return false
+    }
+  }
+  if (client._proc && client._initialized) {
+    client._syncDocumentSync(uri, text, languageId)
+    return true
+  }
+  if (client._startPromise) {
+    if (!client._pendingSyncs) client._pendingSyncs = new Map()
+    const normKey = normalizeUriKey(uri)
+    const hadPending = client._pendingSyncs.size > 0
+    client._pendingSyncs.set(normKey, { uri, text, languageId })
+    if (!hadPending) {
+      Promise.resolve(client._startPromise).then((ok) => {
+        const pending = client._pendingSyncs
+        client._pendingSyncs = null
+        if (!ok || client._disposed || !pending) return
+        for (const item of pending.values()) {
+          client._syncDocumentSync(item.uri, item.text, item.languageId)
+        }
+      }).catch(() => {})
+    }
+    return true
+  }
+  return false
+}
+
 const SEVERITY_LABELS = { 1: 'Error', 2: 'Warning', 3: 'Info', 4: 'Hint' }
 
 /**
@@ -1073,6 +1217,7 @@ module.exports = {
   codeActionsWorkspace,
   diagnosticsWorkspace,
   diagnosticsAfterEdit,
+  syncDocumentAfterEdit,
   formatDiagnosticsSummary,
   configureServer,
   disposeAll,

@@ -434,7 +434,7 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     )
 
     const prevPath = process.env.PATH
-    process.env.PATH = binDir
+    process.env.PATH = prevPath ? `${binDir}${path.delimiter}${prevPath}` : binDir
     try {
       const resolved = resolveCommandOnPath('fake-lsp')
       if (process.platform === 'win32') {
@@ -511,14 +511,14 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       expect(initElapsed).toBeLessThan(2000)
       expect(statusEvents.filter((e) => e.kind === 'lsp_degraded')).toHaveLength(1)
 
-      // Second write in the same session hits cooldown immediately and does not spam onStatus
+      // Second write while init is still pending stays bounded under deadline and does not spam onStatus
       const tCooldown0 = Date.now()
       const out2 = await getTool('write_file').run(
         { path: path.join(tmpDir, 'hang2.ts'), content: 'export const y = 2\n' },
         { sessionId: sid, agentMode: 'act', onStatus: (evt) => statusEvents.push(evt) }
       )
       expect(out2).toContain('wrote ')
-      expect(Date.now() - tCooldown0).toBeLessThan(500)
+      expect(Date.now() - tCooldown0).toBeLessThan(1500)
       expect(statusEvents.filter((e) => e.kind === 'lsp_degraded')).toHaveLength(1)
 
       // Missing binary fallback must NOT emit lsp_degraded to UI status
@@ -529,6 +529,159 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       )
       expect(outPy).toContain('wrote ')
       expect(statusEvents.filter((e) => e.kind === 'lsp_degraded')).toHaveLength(1)
+    } finally {
+      lspCjs.disposeAll()
+      clearSessionWorkspaces(sid)
+    }
+  })
+
+  it('does not kill a slow-starting healthy server when post-write deadline expires', async () => {
+    configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag', '--slow-init=900'],
+    })
+    const target = path.join(tmpDir, 'slow-healthy.js')
+    const content = 'const a = 1\n// BAD_SYNTAX\n'
+    fs.writeFileSync(target, content, 'utf8')
+
+    // First write expires before 900ms init completes -> returns null fast without killing server
+    const t0 = Date.now()
+    const first = await diagnosticsAfterEdit(tmpDir, target, {
+      content,
+      waitMs: 150,
+      deadlineMs: 300,
+    })
+    expect(first).toBeNull()
+    expect(Date.now() - t0).toBeLessThan(1000)
+
+    // Allow the background initialize handshake to finish, then verify same client works
+    await new Promise((r) => setTimeout(r, 1000))
+    const second = await diagnosticsAfterEdit(tmpDir, target, {
+      content,
+      waitMs: 1000,
+    })
+    expect(Array.isArray(second)).toBe(true)
+    expect(second.some((d) => d.message.includes('BAD_SYNTAX'))).toBe(true)
+  })
+
+  it('does not settle versioned push waits with an unversioned publishDiagnostics', async () => {
+    configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag', '--unversioned-stale-push'],
+    })
+    const target = path.join(tmpDir, 'unversioned-push.js')
+    const dirty = 'const a = 1\n// BAD_SYNTAX\n'
+    fs.writeFileSync(target, dirty, 'utf8')
+
+    const v1 = await diagnosticsAfterEdit(tmpDir, target, { content: dirty, waitMs: 1500 })
+    expect(Array.isArray(v1) && v1.length > 0).toBe(true)
+
+    const clean = 'const a = 2\n'
+    fs.writeFileSync(target, clean, 'utf8')
+    const v2 = await diagnosticsAfterEdit(tmpDir, target, { content: clean, waitMs: 1500 })
+    expect(v2).toEqual([])
+  })
+
+  it('clears _docVersions when server process exits so the restarted server receives didOpen', async () => {
+    const marker = path.join(tmpDir, 'exited-once.flag')
+    const logFile = path.join(tmpDir, 'restart-didopen.jsonl')
+    const client = createClient({
+      command: process.execPath,
+      args: [FIXTURE, `--exit-once-marker=${marker}`, `--log-file=${logFile}`],
+      root: tmpDir,
+    })
+    try {
+      const target = path.join(tmpDir, 'restart-sync.js')
+      fs.writeFileSync(target, 'const a = 1\n', 'utf8')
+      const uri = `file:///${target.replace(/\\/g, '/')}`
+
+      await client.syncDocument(uri, 'const a = 1\n', 'javascript')
+      // Wait for first process to exit on didSave
+      await new Promise((r) => setTimeout(r, 250))
+
+      // Sync again on the same LspClient instance: must restart and send didOpen (version 1)
+      await client.syncDocument(uri, 'const a = 2\n', 'javascript')
+      await new Promise((r) => setTimeout(r, 100))
+
+      const entries = fs
+        .readFileSync(logFile, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+
+      const opens = entries.filter((e) => e.method === 'textDocument/didOpen')
+      const changes = entries.filter((e) => e.method === 'textDocument/didChange')
+      expect(opens).toHaveLength(2)
+      expect(opens[1].version).toBe(1)
+      expect(changes).toHaveLength(0)
+    } finally {
+      await client.dispose()
+    }
+  })
+
+  it('ignores stale pull diagnostics responses if the document changed while pulling', async () => {
+    const client = createClient({
+      command: process.execPath,
+      args: [FIXTURE, '--empty-pull-on-clean', '--slow-pull=250'],
+      root: tmpDir,
+    })
+    try {
+      const target = path.join(tmpDir, 'stale-pull.js')
+      fs.writeFileSync(target, 'const a = 1\n// BAD_SYNTAX\n', 'utf8')
+      const uri = `file:///${target.replace(/\\/g, '/')}`
+
+      await client.syncDocument(uri, 'const a = 1\n// BAD_SYNTAX\n', 'javascript')
+      // Allow didOpen to arrive at fixture before starting v1 pull
+      await new Promise((r) => setTimeout(r, 60))
+
+      const v1PullPromise = client._pullDiagnostics(uri, { timeoutMs: 2000 })
+      // Bump document to clean v2 while v1 pull is in flight
+      await new Promise((r) => setTimeout(r, 40))
+      await client.syncDocument(uri, 'const a = 2\n', 'javascript')
+
+      const v1Res = await v1PullPromise
+      expect(v1Res.authoritative).toBe(false)
+
+      // Fresh pull on v2 reflects clean buffer and was never overwritten by v1
+      const v2Res = await client.getDiagnostics(uri)
+      expect(v2Res).toEqual([])
+    } finally {
+      await client.dispose()
+    }
+  })
+
+  it('viaScript debounce skips wait/pull but still syncs latest document text to active LSP', async () => {
+    const lspCjs = require('../electron/context/lspClient')
+    lspCjs.configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-diag', '--empty-pull-on-clean'],
+    })
+    const { getTool } = require('../electron/tools/registry')
+    const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
+    const sid = 'lsp-script-debounce-sess'
+    setWorkspaceRootForSession(sid, tmpDir)
+    try {
+      const target = path.join(tmpDir, 'script-debounced.ts')
+      // 1st write inside script has BAD_SYNTAX
+      const out1 = await getTool('write_file').run(
+        { path: target, content: 'export const x = 1\n// BAD_SYNTAX\n' },
+        { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 1500, lspDeadlineMs: 1800 }
+      )
+      expect(out1).toContain('[LSP Diagnostics] script-debounced.ts')
+
+      // 2nd rapid write fixes it within <200ms debounce window: debounced wait skips suffix,
+      // yet syncDocumentAfterEdit still sends clean buffer to the active server.
+      const out2 = await getTool('write_file').run(
+        { path: target, content: 'export const x = 1\n' },
+        { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 1500, lspDeadlineMs: 1800 }
+      )
+      expect(out2).toContain('wrote ')
+      expect(out2).not.toContain('[LSP Diagnostics]')
+
+      await new Promise((r) => setTimeout(r, 80))
+      const diags = await lspCjs.diagnosticsWorkspace(tmpDir, target)
+      expect(diags).toEqual([])
     } finally {
       lspCjs.disposeAll()
       clearSessionWorkspaces(sid)

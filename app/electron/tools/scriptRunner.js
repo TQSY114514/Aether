@@ -322,9 +322,10 @@ async function authorizeAndExecuteTool(name, args, ctx, deps, runGuard = null) {
           overrideReason = hr.messages[0]
         }
       }
-      if (hr.denied) {
+      if (hr.denied || hr.failed) {
         const detail = Array.isArray(hr.messages) && hr.messages.length ? `: ${hr.messages.join('; ')}` : ''
-        throw new Error(`Tool "${name}" blocked by PreToolUse hook${detail}`)
+        const verb = hr.denied ? 'blocked' : 'failed'
+        throw new Error(`Tool "${name}" ${verb} by PreToolUse hook${detail}`)
       }
     }
   }
@@ -539,6 +540,7 @@ function runScript(opts = {}) {
 
     let timer = null
     let onAbort = null
+    let rl = null
 
     const finish = ({ ok, value = null, error = null, logs = [] }) => {
       if (settled) return
@@ -547,6 +549,9 @@ function runScript(opts = {}) {
       if (timer) clearTimeout(timer)
       if (onAbort && ctx?.signal) {
         try { ctx.signal.removeEventListener('abort', onAbort) } catch { /* ignore */ }
+      }
+      if (rl) {
+        try { rl.close() } catch { /* ignore */ }
       }
       terminateChild()
       const elapsedMs = Date.now() - startedAt
@@ -568,7 +573,16 @@ function runScript(opts = {}) {
       ctx.signal.addEventListener('abort', onAbort, { once: true })
     }
 
-    const rl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity })
+    if (child.stdin) {
+      child.stdin.on('error', (err) => {
+        finish({ ok: false, error: `Script worker stdin error: ${err && err.message ? err.message : String(err)}` })
+      })
+    }
+    if (child.stdout) {
+      child.stdout.on('error', () => { /* ignore pipe close errors */ })
+    }
+
+    rl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity })
 
     rl.on('line', (line) => {
       if (settled) return
@@ -621,15 +635,27 @@ function runScript(opts = {}) {
       }
     })
 
+    let exitInfo = null
+    let rlClosed = false
+    const maybeFinishOnClose = () => {
+      if (!settled && exitInfo && rlClosed) {
+        const detail = stderrBuf.trim() ? `: ${stderrBuf.trim()}` : ''
+        finish({ ok: false, error: `Script worker exited unexpectedly (code=${exitInfo.code}, signal=${exitInfo.signal})${detail}` })
+      }
+    }
+
+    rl.on('close', () => {
+      rlClosed = true
+      maybeFinishOnClose()
+    })
+
     child.on('error', (err) => {
       finish({ ok: false, error: `Failed to start script worker: ${err.message}` })
     })
 
-    child.on('exit', (code, signal) => {
-      if (!settled) {
-        const detail = stderrBuf.trim() ? `: ${stderrBuf.trim()}` : ''
-        finish({ ok: false, error: `Script worker exited unexpectedly (code=${code}, signal=${signal})${detail}` })
-      }
+    child.on('close', (code, signal) => {
+      exitInfo = { code, signal }
+      maybeFinishOnClose()
     })
 
     sendToWorker({

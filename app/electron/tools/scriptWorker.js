@@ -15,10 +15,35 @@ const readline = require('readline')
 const MAX_LOG_LINES = 200
 const MAX_LOG_CHARS = 1000
 
-function sendFrame(frame) {
+if (process.stdout) {
+  process.stdout.on('error', () => { /* parent closed pipe */ })
+}
+
+function sendFrame(frame, onWritten) {
+  let called = false
+  const done = () => {
+    if (called) return
+    called = true
+    if (typeof onWritten === 'function') onWritten()
+  }
   try {
-    process.stdout.write(JSON.stringify(frame) + '\n')
-  } catch { /* parent closed pipe */ }
+    const payload = JSON.stringify(frame) + '\n'
+    if (!process.stdout || process.stdout.destroyed || !process.stdout.writable) {
+      done()
+      return
+    }
+    if (typeof onWritten === 'function') {
+      process.stdout.write(payload, done)
+    } else {
+      process.stdout.write(payload)
+    }
+  } catch {
+    done()
+  }
+}
+
+function sendFrameAndFlush(frame) {
+  return new Promise((resolve) => sendFrame(frame, resolve))
 }
 
 function safeSerializeValue(val) {
@@ -248,14 +273,14 @@ async function executeRun({ code, inputs }) {
     })
 
     if (resultPayload.ok) {
-      sendFrame({
+      await sendFrameAndFlush({
         type: 'result',
         ok: true,
         value: safeSerializeValue(resultPayload.value),
         logs,
       })
     } else {
-      sendFrame({
+      await sendFrameAndFlush({
         type: 'result',
         ok: false,
         error: resultPayload.error || 'Script execution failed',
@@ -263,7 +288,7 @@ async function executeRun({ code, inputs }) {
       })
     }
   } catch (err) {
-    sendFrame({
+    await sendFrameAndFlush({
       type: 'result',
       ok: false,
       error: err && err.message ? err.message : String(err),

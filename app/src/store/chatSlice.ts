@@ -164,27 +164,28 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
   },
 
-  sendMessage: async (content, attachments, overrides?: { agentMode?: AgentMode }) => {
+  sendMessage: async (content, attachments, overrides?: { agentMode?: AgentMode; targetSessionId?: number }) => {
     const { currentSessionId, agentMode, effortLevel, thinkingEnabled, maxTokens, temperature, topP, systemPrefix, chatMode } = get()
+    const targetSessionId = overrides?.targetSessionId ?? currentSessionId
     const effMode = overrides?.agentMode ?? agentMode
-    const cfg = currentSessionId ? get().sessionConfigs[currentSessionId] : null
+    const cfg = targetSessionId ? get().sessionConfigs[targetSessionId] : null
     let modelId = cfg?.modelId
     if (!modelId) {
       const enabledProviders = (await window.electronAPI.provider.list()).filter(p => p.enabled)
-      if (enabledProviders.length > 0 && currentSessionId) {
+      if (enabledProviders.length > 0 && targetSessionId) {
         const providerId = enabledProviders[0].id
         const models = await window.electronAPI.model.list(providerId)
         const primary = models.find(m => m.is_primary) || models[0]
         modelId = primary?.id
         if (modelId) {
           const newCfg = { providerId, modelId, personaId: cfg?.personaId || null }
-          await window.electronAPI.session.setConfig(currentSessionId, newCfg)
-          set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [currentSessionId]: newCfg } }))
+          await window.electronAPI.session.setConfig(targetSessionId, newCfg)
+          set((s) => ({ sessionConfigs: { ...s.sessionConfigs, [targetSessionId]: newCfg } }))
           get().loadModels(providerId)
         }
       }
     }
-    if (!currentSessionId || !modelId) {
+    if (!targetSessionId || !modelId) {
       log.warn("sendMessage: no session or model configured")
       return
     }
@@ -208,7 +209,7 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
     }
 
     const tempUserMsg: Message = {
-      id: Date.now(), session_id: currentSessionId, role: "user",
+      id: Date.now(), session_id: targetSessionId, role: "user",
       content: finalContent, model_used: null, provider_used: null,
       token_count: null, latency_ms: null,
       status: "success", error_message: null,
@@ -218,17 +219,17 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
 
     set((s) => ({
       sending: true,
-      streamingBySession: { ...s.streamingBySession, [currentSessionId]: { content: "", messageId: null } },
-      messages: [...s.messages, tempUserMsg],
+      streamingBySession: { ...s.streamingBySession, [targetSessionId]: { content: "", messageId: null } },
+      ...(s.currentSessionId === targetSessionId ? { messages: [...s.messages, tempUserMsg] } : {}),
     }))
     get().loadSessions()
 
     ensureAllChatListeners()
-    get().resetTurnUsage(currentSessionId)
+    get().resetTurnUsage(targetSessionId)
 
     try {
       const result = await window.electronAPI.chat.send({
-        sessionId: currentSessionId,
+        sessionId: targetSessionId,
         content: finalContent,
         modelId,
         mode: chatMode,
@@ -244,11 +245,11 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       // Non-tool turns report usage in the chat.send result; fold it into the
       // same accumulator (tool turns arrive via chat:usage events instead).
       if (result?.usage && result.messageId) {
-        get().recordReturnUsage(currentSessionId, result.messageId, result.usage)
+        get().recordReturnUsage(targetSessionId, result.messageId, result.usage)
       }
     } catch (err) {
       log.error("[Aether] chat.send FAILED:", err)
-      set(clearStreaming(currentSessionId))
+      set(clearStreaming(targetSessionId))
       log.error("chat error", err)
     }
   },

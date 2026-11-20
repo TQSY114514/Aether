@@ -178,9 +178,11 @@ export function tuiReducer(state = initialTuiState, action) {
     case 'APPEND_USER': {
       const text = String(action.text || '').trim()
       if (!text) return state
+      const msg = { id: nextMessageId(state), role: 'user', text }
+      if (action.ephemeral) msg.ephemeral = true
       return {
         ...state,
-        messages: [...state.messages, { id: nextMessageId(state), role: 'user', text }],
+        messages: [...state.messages, msg],
       }
     }
 

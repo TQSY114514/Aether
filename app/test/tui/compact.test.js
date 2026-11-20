@@ -113,6 +113,20 @@ describe('userAssistantIndexOf（界面消息 → DB 行位置映射, W1-t10/t13
     expect(userAssistantIndexOf([msg(1, 'user')], 5)).toBe(-1)
     expect(userAssistantIndexOf([msg(1, 'user')], -1)).toBe(-1)
   })
+  it('ephemeral:true 未落库消息不占位（防止 DB 行号漂移）', () => {
+    const msgs = [
+      msg(1, 'user'),
+      { id: 2, role: 'user', text: '!ls', ephemeral: true },
+      msg(3, 'assistant'),
+      { id: 4, role: 'user', text: '[Handoff Draft Preview]', ephemeral: true },
+      msg(5, 'user'),
+    ]
+    expect(userAssistantIndexOf(msgs, 0)).toBe(0)
+    expect(userAssistantIndexOf(msgs, 1)).toBe(-1)
+    expect(userAssistantIndexOf(msgs, 2)).toBe(1)
+    expect(userAssistantIndexOf(msgs, 3)).toBe(-1)
+    expect(userAssistantIndexOf(msgs, 4)).toBe(2)
+  })
 })
 
 describe('syncCompactToDb（真实 temp DB, W1-t10）', () => {

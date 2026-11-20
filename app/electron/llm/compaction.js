@@ -224,11 +224,49 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
   function fitBlockToBudget(text, tokenBudget) {
     if (!text) return ''
     if (!tokenBudget || tokenBudget <= 0) return ''
-    const est = estimateTextTokens(text)
-    if (est <= tokenBudget) return text
-    const maxChars = Math.floor(tokenBudget * 3)
-    if (maxChars < 50) return ''
-    return text.slice(0, maxChars) + '\n... [truncated to fit context budget]'
+    const measure = (s) => estimateMessageTokens({ role: 'system', content: s }, provider, model)
+    if (measure(text) <= tokenBudget) return text
+    const suffix = '\n... [truncated to fit context budget]'
+    if (measure(suffix) >= tokenBudget) return ''
+    let lo = 0
+    let hi = text.length
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if (measure(text.slice(0, mid) + suffix) <= tokenBudget) lo = mid
+      else hi = mid - 1
+    }
+    if (lo < 20) return ''
+    return text.slice(0, lo) + suffix
+  }
+
+  function buildBudgetedSystemMessage(baseText, { errorBlock, rehydrationBlock, planBlock, tailMsgs }) {
+    const planSuffix = planBlock || ''
+    const baseOnlyMsg = { role: 'system', content: `${baseText}${planSuffix}` }
+    const roomAfterBase = Math.floor(
+      (budget - estimateMessagesTokens([...systemMsgs, baseOnlyMsg, ...tailMsgs], provider, model)) / SAFETY_MARGIN
+    )
+    let safeErrors = roomAfterBase > 0 ? fitBlockToBudget(errorBlock, roomAfterBase) : ''
+    let roomAfterErrors = safeErrors
+      ? Math.floor(
+          (budget - estimateMessagesTokens([...systemMsgs, { role: 'system', content: `${baseText}${safeErrors}${planSuffix}` }, ...tailMsgs], provider, model)) / SAFETY_MARGIN
+        )
+      : roomAfterBase
+    let safeRehydration = roomAfterErrors > 0 ? fitBlockToBudget(rehydrationBlock, roomAfterErrors) : ''
+
+    const makeMsg = (errPart, rehydPart) => ({
+      role: 'system',
+      content: `${baseText}${errPart}${rehydPart}${planSuffix}`,
+    })
+    let msg = makeMsg(safeErrors, safeRehydration)
+    if (estimateMessagesTokens([...systemMsgs, msg, ...tailMsgs], provider, model) > budget && safeRehydration) {
+      safeRehydration = ''
+      msg = makeMsg(safeErrors, '')
+    }
+    if (estimateMessagesTokens([...systemMsgs, msg, ...tailMsgs], provider, model) > budget && safeErrors) {
+      safeErrors = ''
+      msg = makeMsg('', '')
+    }
+    return msg
   }
 
   // Helper to build post-compaction rehydration and active plan blocks
@@ -420,15 +458,18 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
         '[context compaction] Earlier messages could not be summarized (the summarizer failed) and were dropped from the window. ' +
         `Anything referenced there may be missing — re-read files before editing and continue from the most recent user request.[${keep.length} of ${nonSystemOlder.length} older messages retained${note}]`
 
-      const usedSoFar = estimateMessagesTokens(systemMsgs) + estimateMessagesTokens(recent) + estimateMessagesTokens(keep) + estimateTextTokens(baseTruncated + (planBlock || ''))
-      const safeFbErrors = fitBlockToBudget(errorBlock, budget - usedSoFar)
-      const safeFbRehydration = fitBlockToBudget(rehydrationBlock, budget - usedSoFar - estimateTextTokens(safeFbErrors))
-      const truncated = baseTruncated + safeFbErrors + safeFbRehydration + (planBlock || '')
-
-      let fbResult = [...systemMsgs, { role: 'system', content: truncated }, ...keep, ...recent]
+      const tailMsgs = [...keep, ...recent]
+      const fbSummaryMsg = buildBudgetedSystemMessage(baseTruncated, { errorBlock, rehydrationBlock, planBlock, tailMsgs })
+      let fbResult = [...systemMsgs, fbSummaryMsg, ...keep, ...recent]
       if (fbResult.length >= messages.length) {
         const forcedKeep = keep.slice(Math.max(0, keep.length - Math.max(1, messages.length - systemMsgs.length - 2)))
-        fbResult = [...systemMsgs, { role: 'system', content: truncated }, ...forcedKeep, ...recent]
+        const forcedSummaryMsg = buildBudgetedSystemMessage(baseTruncated, {
+          errorBlock,
+          rehydrationBlock,
+          planBlock,
+          tailMsgs: [...forcedKeep, ...recent],
+        })
+        fbResult = [...systemMsgs, forcedSummaryMsg, ...forcedKeep, ...recent]
       }
       if (force && fbResult.length >= messages.length) return null
       return fbResult
@@ -444,16 +485,13 @@ async function maybeCompact({ provider, model, messages, budget, signal, session
 
   const { rehydrationBlock, planBlock, errorBlock } = buildRehydrationAndPlanBlocks()
   const baseSummaryText = `${COMPACTION_HANDOFF_PREFIX}\n\nSummary of earlier conversation:\n${summary}`
-  const usedSoFar = estimateMessagesTokens(systemMsgs) + estimateMessagesTokens(recent) + estimateTextTokens(baseSummaryText + (planBlock || ''))
-  const safeErrors = fitBlockToBudget(errorBlock, budget - usedSoFar)
-  const safeRehydration = fitBlockToBudget(rehydrationBlock, budget - usedSoFar - estimateTextTokens(safeErrors))
-  const summaryMsg = { role: 'system', content: `${baseSummaryText}${safeErrors}${safeRehydration}${planBlock || ''}` }
+  const summaryMsg = buildBudgetedSystemMessage(baseSummaryText, {
+    errorBlock,
+    rehydrationBlock,
+    planBlock,
+    tailMsgs: recent,
+  })
   let result = [...systemMsgs, summaryMsg, ...recent]
-
-  if (estimateMessagesTokens(result) > budget && safeRehydration) {
-    summaryMsg.content = `${baseSummaryText}${safeErrors}${planBlock || ''}`
-    result = [...systemMsgs, summaryMsg, ...recent]
-  }
 
   if (force && (result.length >= messages.length || estimateMessagesTokens(result) > budget)) return null
 

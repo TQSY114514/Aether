@@ -354,13 +354,58 @@ export async function runSession({
   try { require('../electron/tools/sandbox').setWorkspaceRoot(ws) } catch {}
   try { await connectMcpServers({ db }) } catch {}
   try { await runSessionHooks('SessionStart', { sessionId, timestamp: new Date().toISOString() }) } catch {}
+  let initialMessagesOption = {}
+  if (priorMessages.length > 0) {
+    let bounded = [...priorMessages, { role: 'user', content: String(prompt || '') }]
+    try {
+      const compMod = await import('../electron/llm/compaction.js')
+      const maybeCompact = compMod.maybeCompact || compMod.default?.maybeCompact
+      const estimateMessagesTokens = compMod.estimateMessagesTokens || compMod.default?.estimateMessagesTokens
+      let effectiveBudget = Number(model?.context_window) > 0 ? Number(model.context_window) : 0
+      if (!effectiveBudget && db && model?.id != null) {
+        try {
+          const mRow = db.prepare('SELECT context_window FROM model WHERE id = ?').get(model.id)
+          if (Number(mRow?.context_window) > 0) effectiveBudget = Number(mRow.context_window)
+        } catch { /* ignore */ }
+      }
+      if (!effectiveBudget) effectiveBudget = 32000
+
+      if (typeof maybeCompact === 'function') {
+        const canCallLlm = Boolean(effectiveProvider && effectiveProvider.base_url)
+        const compacted = await maybeCompact({
+          provider: canCallLlm ? effectiveProvider : null,
+          model,
+          messages: bounded,
+          budget: effectiveBudget,
+          sessionId: sessionRowId,
+          db,
+          wsRoot: ws,
+        })
+        if (Array.isArray(compacted) && compacted.length > 0) {
+          bounded = compacted
+        }
+      }
+      if (typeof estimateMessagesTokens === 'function' && estimateMessagesTokens(bounded, effectiveProvider, model) > effectiveBudget) {
+        const newest = bounded[bounded.length - 1]
+        const kept = newest ? [newest] : []
+        for (let i = bounded.length - 2; i >= 0; i--) {
+          const candidate = [bounded[i], ...kept]
+          if (estimateMessagesTokens(candidate, effectiveProvider, model) > effectiveBudget) break
+          kept.unshift(bounded[i])
+        }
+        bounded = kept
+      }
+    } catch { /* best-effort context cap; keep bounded priorMessages + current prompt */ }
+    initialMessagesOption = { messages: bounded }
+  }
+
   let result
   let hasAppendedText = false
   let hasAppendedError = false
   try {
     result = await runAgentImpl({
       prompt: String(prompt || ''),
-      ...(priorMessages.length > 0 ? { messages: [...priorMessages, { role: 'user', content: String(prompt || '') }] } : {}),
+      ...initialMessagesOption,
       provider: effectiveProvider,
       model,
       db,

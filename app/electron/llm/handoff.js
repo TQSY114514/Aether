@@ -11,6 +11,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 'use strict'
 
+const crypto = require('crypto')
 const path = require('path')
 
 function localNow() {
@@ -50,6 +51,53 @@ function getPlanForSession(db, sessionId) {
     }
   } catch { /* table may be absent in minimal tests */ }
   return null
+}
+
+function getAuditToolErrorAnchors(db, sessionId, maxItems = 4) {
+  if (!db) return []
+  try {
+    let errorRe = /(?:error|exception|failed|enoent|eperm|eacces|typeerror|syntaxerror|referenceerror|sqlite_error)/i
+    try {
+      const { ERROR_ANCHOR_RE } = require('./compaction')
+      if (ERROR_ANCHOR_RE instanceof RegExp) errorRe = ERROR_ANCHOR_RE
+    } catch { /* fallback regex */ }
+    const rows = db.prepare(
+      'SELECT payload FROM agent_execution_log WHERE session_id = ? ORDER BY id DESC LIMIT 10'
+    ).all(sessionId)
+    const anchors = []
+    const seen = new Set()
+    for (const row of rows) {
+      if (!row?.payload) continue
+      let payload
+      try {
+        payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload
+      } catch {
+        continue
+      }
+      const toolCalls = Array.isArray(payload?.toolCalls) ? payload.toolCalls : []
+      for (const tc of toolCalls) {
+        if (!tc) continue
+        const toolName = String(tc.name || 'tool').replace(/[\r\n]+/g, ' ').trim().slice(0, 48)
+        let snippet = ''
+        if (tc.error) {
+          snippet = String(tc.error).replace(/[\r\n]+/g, ' ').trim().slice(0, 180)
+        } else if (typeof tc.result === 'string' && errorRe.test(tc.result)) {
+          const hit = tc.result.split(/\r?\n/).find(l => errorRe.test(l))
+          if (hit) snippet = hit.replace(/[\r\n]+/g, ' ').trim().slice(0, 180)
+        }
+        if (!snippet) continue
+        const entry = `[tool:${toolName}] ${snippet}`
+        if (!seen.has(entry)) {
+          seen.add(entry)
+          anchors.push(entry)
+          if (anchors.length >= maxItems) return anchors
+        }
+      }
+    }
+    return anchors
+  } catch {
+    return []
+  }
 }
 
 function parseSessionConfig(rawConfig) {
@@ -205,6 +253,17 @@ async function generateHandoffDraft(opts = {}) {
       errorAnchors = extractErrorAnchors(history, 4)
     }
   } catch { errorAnchors = [] }
+  const auditErrors = getAuditToolErrorAnchors(db, sId, 4)
+  if (auditErrors.length > 0) {
+    const seenErr = new Set(errorAnchors)
+    for (const ae of auditErrors) {
+      if (!seenErr.has(ae)) {
+        seenErr.add(ae)
+        errorAnchors.push(ae)
+      }
+      if (errorAnchors.length >= 6) break
+    }
+  }
 
   const resolved = resolveModelAndProvider(db, session)
   const targetProvider = opts.provider || resolved.provider
@@ -367,32 +426,57 @@ function buildChildSessionConfig(db, parentConfig, modelId) {
   return JSON.stringify(cfg)
 }
 
-function findRecentDuplicateHandoff(db, pId, newTitle, cleanPrompt, insertInitialMessage) {
+const _recentCommitFingerprintsByDb = new WeakMap()
+
+function getDbFingerprintMap(db) {
+  let map = _recentCommitFingerprintsByDb.get(db)
+  if (!map) {
+    map = new Map()
+    _recentCommitFingerprintsByDb.set(db, map)
+  }
+  if (map.size > 128) {
+    const oldestKey = map.keys().next().value
+    if (oldestKey !== undefined) map.delete(oldestKey)
+  }
+  return map
+}
+
+function buildCommitFingerprint(pId, newTitle, cleanPrompt, targetModelId, insertInitialMessage) {
+  return crypto.createHash('sha256').update(JSON.stringify({
+    pId,
+    newTitle,
+    cleanPrompt,
+    targetModelId: targetModelId ?? null,
+    insertInitialMessage: insertInitialMessage !== false,
+  })).digest('hex')
+}
+
+function findRecentDuplicateHandoff(db, fingerprint, newTitle, cleanPrompt) {
   try {
-    const latestChild = db.prepare(
-      'SELECT id, title, updated_at FROM session WHERE parent_session_id = ? ORDER BY id DESC LIMIT 1'
-    ).get(pId)
-    if (!latestChild || latestChild.title !== newTitle || !latestChild.updated_at) return null
-    const ageMs = Date.now() - new Date(String(latestChild.updated_at).replace(' ', 'T')).getTime()
-    if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 5000) return null
-    if (insertInitialMessage !== false) {
-      const firstMsg = db.prepare(
-        'SELECT role, content FROM message WHERE session_id = ? ORDER BY id ASC LIMIT 1'
-      ).get(latestChild.id)
-      if (!firstMsg || firstMsg.role !== 'user' || firstMsg.content !== cleanPrompt) return null
-    } else {
-      const lastParentMsg = db.prepare(
-        'SELECT content FROM message WHERE session_id = ? ORDER BY id DESC LIMIT 1'
-      ).get(pId)
-      if (!lastParentMsg || typeof lastParentMsg.content !== 'string' || !lastParentMsg.content.startsWith(`[Handoff -> #${latestChild.id}]`)) {
-        return null
-      }
+    const map = _recentCommitFingerprintsByDb.get(db)
+    const entry = map?.get(fingerprint)
+    if (!entry) return null
+    const ageMs = Date.now() - entry.createdAtMs
+    if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 5000) {
+      map.delete(fingerprint)
+      return null
+    }
+    const childRow = db.prepare('SELECT id, title FROM session WHERE id = ?').get(entry.sessionId)
+    if (!childRow) {
+      map.delete(fingerprint)
+      return null
+    }
+    const countRow = db.prepare('SELECT COUNT(*) AS cnt FROM message WHERE session_id = ?').get(entry.sessionId)
+    if (Number(countRow?.cnt || 0) !== entry.expectedMsgCount) {
+      // Child session already has new messages — treat a retry as a fresh handoff.
+      map.delete(fingerprint)
+      return null
     }
     return {
-      id: Number(latestChild.id),
-      sessionId: Number(latestChild.id),
-      parentSessionId: pId,
-      title: latestChild.title,
+      id: Number(childRow.id),
+      sessionId: Number(childRow.id),
+      parentSessionId: entry.parentSessionId,
+      title: childRow.title || newTitle,
       initialPrompt: cleanPrompt,
       deduplicated: true,
     }
@@ -436,16 +520,19 @@ function commitHandoff({ db, parentSessionId, prompt, title = null, modelId = nu
       ? title.trim().slice(0, 255)
       : deriveHandoffTitle(parent, cleanPrompt.split('\n').find(l => l.trim() && !l.startsWith('#')) || '')
 
+    const parentCfg = parseSessionConfig(parent.config)
+    const targetModelId = modelId != null ? Number(modelId) : (parentCfg?.modelId ?? parent.model_id ?? null)
+    const initialMsgExpected = insertInitialMessage !== false
+    const fingerprint = buildCommitFingerprint(pId, newTitle, cleanPrompt, targetModelId, initialMsgExpected)
+
     if (!idemKey) {
-      const dup = findRecentDuplicateHandoff(db, pId, newTitle, cleanPrompt, insertInitialMessage)
+      const dup = findRecentDuplicateHandoff(db, fingerprint, newTitle, cleanPrompt)
       if (dup) return dup
     }
 
     const now = localNow()
     const sessionCols = getTableColumns(db, 'session')
     const cwd = parent.cwd ? path.resolve(parent.cwd) : process.cwd()
-    const parentCfg = parseSessionConfig(parent.config)
-    const targetModelId = modelId != null ? Number(modelId) : (parentCfg?.modelId ?? parent.model_id ?? null)
     const childConfig = buildChildSessionConfig(db, parent.config, modelId)
 
     let info
@@ -513,6 +600,12 @@ function commitHandoff({ db, parentSessionId, prompt, title = null, modelId = nu
     if (idemKey) {
       getDbIdempotencyMap(db).set(idemKey, result)
     }
+    getDbFingerprintMap(db).set(fingerprint, {
+      sessionId: newSessionId,
+      parentSessionId: pId,
+      createdAtMs: Date.now(),
+      expectedMsgCount: initialMsgExpected ? 1 : 0,
+    })
     return result
   }
 
