@@ -153,9 +153,10 @@ function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
     const cmdDir = path.dirname(cmdPath)
 
     // Pattern 1: npm / pnpm / yarn `.cmd` shims targeting a JS entrypoint via %dp0%.
-    const npmMatch = /["']?%~?dp0%\\([^"'\r\n]+?\.(?:mjs|cjs|js))["']?/i.exec(body)
+    const npmMatch = /["']?%~?dp0%?(?:\\|\/)([^"'\r\n]+?\.(?:mjs|cjs|js))["']?/i.exec(body)
     if (npmMatch) {
-      const target = path.resolve(cmdDir, npmMatch[1])
+      const relSegments = npmMatch[1].split(/[\\/]+/).filter(Boolean)
+      const target = path.resolve(cmdDir, ...relSegments)
       if (fs.statSync(target).isFile()) {
         return {
           file: process.execPath,
@@ -187,7 +188,10 @@ function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
     const expandedTokens = []
     for (const tok of rawTokens) {
       if (/^%~?(?:\*|[0-9])$/.test(tok)) continue
-      const expanded = tok.replace(/%~?dp0%?\\?/gi, `${cmdDir}${path.sep}`)
+      const expanded = tok.replace(/%~?dp0%?[\\/]?([^"']*)/gi, (_, rest) => {
+        const parts = String(rest || '').split(/[\\/]+/).filter(Boolean)
+        return parts.length ? path.resolve(cmdDir, ...parts) : `${cmdDir}${path.sep}`
+      })
       expandedTokens.push(assertNoControlChars(expanded))
     }
     if (expandedTokens.length === 0) return null
