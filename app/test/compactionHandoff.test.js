@@ -429,4 +429,68 @@ describe('Amp-style 2-step Editable Handoff', () => {
       cleanup()
     }
   })
+
+  it('runSession treats provider.api_url as LLM-capable for maybeCompact (Greptile R3 P1)', async () => {
+    const http = require('node:http')
+    const { db, dbPath, cleanup } = createRealTestDb()
+    let hitCount = 0
+    const server = http.createServer((req, res) => {
+      let body = ''
+      req.on('data', (c) => { body += c })
+      req.on('end', () => {
+        hitCount += 1
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          choices: [{ message: { content: '## Goal\nLLM-compacted summary via api_url' } }],
+        }))
+      })
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const { port } = server.address()
+      const sid = Number(db.prepare('INSERT INTO session (title) VALUES (?)').run('LLM ApiUrl Compaction').lastInsertRowid)
+      // Total tokens > 85% of budget (2600 -> threshold 2210), while kept tail + SUMMARIZATION_OVERHEAD <= 2600
+      for (let i = 0; i < 6; i++) {
+        db.prepare('INSERT INTO message (session_id, role, content, status) VALUES (?, ?, ?, ?)').run(
+          sid,
+          i % 2 === 0 ? 'user' : 'assistant',
+          `message ${i}: ` + 'alpha beta gamma delta epsilon '.repeat(55),
+          'success'
+        )
+      }
+
+      let capturedOpts = null
+      const budget = 2600
+      await runSession({
+        dbPath,
+        dbSessionId: sid,
+        prompt: 'Next step after compaction',
+        apiKey: 'sk-test',
+        dispatch: () => {},
+        resolveImpl: () => ({
+          provider: {
+            id: 1,
+            name: 'mock-openai',
+            api_format: 'openai',
+            api_url: `http://127.0.0.1:${port}/v1`,
+          },
+          model: { id: 1, model_name: 'mock-model', context_window: budget },
+          db,
+        }),
+        runAgentImpl: async (opts) => {
+          capturedOpts = opts
+          return { text: 'ok', messages: [] }
+        },
+      })
+
+      expect(hitCount).toBeGreaterThanOrEqual(1)
+      expect(Array.isArray(capturedOpts?.messages)).toBe(true)
+      expect(capturedOpts.messages.some(m =>
+        m.role === 'system' && String(m.content || '').includes('LLM-compacted summary via api_url')
+      )).toBe(true)
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+      cleanup()
+    }
+  })
 })

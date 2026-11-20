@@ -101,16 +101,112 @@ function assertNoControlChars(value) {
   return str
 }
 
-function resolveNpmCmdJsTarget(cmdPath) {
+function hasUnquotedShellOperator(line) {
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+    if (!inQuotes && '&|<>^;`'.includes(ch)) {
+      return true
+    }
+  }
+  return false
+}
+
+function tokenizeBatchLine(line) {
+  const tokens = []
+  let current = ''
+  let inToken = false
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      inQuotes = !inQuotes
+      inToken = true
+      continue
+    }
+    if (!inQuotes && /\s/.test(ch)) {
+      if (inToken) {
+        tokens.push(current)
+        current = ''
+        inToken = false
+      }
+      continue
+    }
+    current += ch
+    inToken = true
+  }
+  if (inQuotes) return null
+  if (inToken) tokens.push(current)
+  return tokens
+}
+
+function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
   try {
     const fs = require('fs')
     const stat = fs.statSync(cmdPath)
-    if (!stat.isFile() || stat.size > 8192) return null
+    if (!stat.isFile() || stat.size > 16384) return null
     const body = fs.readFileSync(cmdPath, 'utf8')
-    const match = /["']?%~?dp0%\\([^"'\r\n]+?\.(?:mjs|cjs|js))["']?/i.exec(body)
-    if (!match) return null
-    const target = path.resolve(path.dirname(cmdPath), match[1])
-    return fs.statSync(target).isFile() ? target : null
+    const cmdDir = path.dirname(cmdPath)
+
+    // Pattern 1: npm / pnpm / yarn `.cmd` shims targeting a JS entrypoint via %dp0%.
+    const npmMatch = /["']?%~?dp0%\\([^"'\r\n]+?\.(?:mjs|cjs|js))["']?/i.exec(body)
+    if (npmMatch) {
+      const target = path.resolve(cmdDir, npmMatch[1])
+      if (fs.statSync(target).isFile()) {
+        return {
+          file: process.execPath,
+          args: [target, ...safeArgs],
+          options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
+        }
+      }
+    }
+
+    // Pattern 2: direct-executable batch wrapper without shell operators.
+    const lines = body.split(/\r?\n/)
+    const candidateLines = []
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim()
+      if (!trimmed) continue
+      if (/^(?:@?echo(?:\s|$)|rem(?:\s|$)|::|@?(?:setlocal|endlocal)(?:\s|$)|@?if(?:\s|\(|$)|:)/i.test(trimmed)) {
+        continue
+      }
+      const line = trimmed.replace(/^@+/, '').trim()
+      if (!line) continue
+      if (hasUnquotedShellOperator(line)) return null
+      candidateLines.push(line)
+    }
+    if (candidateLines.length !== 1) return null
+
+    const rawTokens = tokenizeBatchLine(candidateLines[0])
+    if (!rawTokens || rawTokens.length === 0) return null
+
+    const expandedTokens = []
+    for (const tok of rawTokens) {
+      if (/^%~?(?:\*|[0-9])$/.test(tok)) continue
+      const expanded = tok.replace(/%~?dp0%?\\?/gi, `${cmdDir}${path.sep}`)
+      expandedTokens.push(assertNoControlChars(expanded))
+    }
+    if (expandedTokens.length === 0) return null
+
+    let exe = expandedTokens[0]
+    if (!path.isAbsolute(exe) && !exe.includes('/') && !exe.includes('\\')) {
+      exe = resolveCommandOnPath(exe) || ''
+    } else {
+      exe = path.resolve(exe)
+    }
+    if (!exe || /\.(cmd|bat)$/i.test(exe)) return null
+    if (!fs.statSync(exe).isFile()) return null
+
+    const staticArgs = expandedTokens.slice(1)
+    return {
+      file: exe,
+      args: [...staticArgs, ...safeArgs],
+      options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
+    }
   } catch {
     return null
   }
@@ -124,23 +220,7 @@ function buildSpawnInvocation(command, args) {
       resolvedCmd = resolveCommandOnPath(resolvedCmd) || resolvedCmd
     }
     if (/\.(cmd|bat)$/i.test(resolvedCmd)) {
-      const jsTarget = resolveNpmCmdJsTarget(resolvedCmd)
-      if (jsTarget) {
-        return {
-          file: process.execPath,
-          args: [jsTarget, ...safeArgs],
-          options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
-        }
-      }
-      // Invoke batch shims via explicit arg array (`cmd.exe /d /c call <file> ...args`)
-      // so libuv preserves every quoted argument without manual command-line string escaping.
-      const fs = require('fs')
-      const sysCmd = 'C:\\Windows\\System32\\cmd.exe'
-      return {
-        file: fs.existsSync(sysCmd) ? sysCmd : 'cmd.exe',
-        args: ['/d', '/c', 'call', resolvedCmd, ...safeArgs],
-        options: { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
-      }
+      return resolveWindowsCmdShim(resolvedCmd, safeArgs)
     }
   }
   return {
@@ -308,6 +388,8 @@ class LspClient {
     this._parser = new MessageParser()
     this._pending = new Map() // id -> { resolve, reject, timer }
     this._diagnosticsByUri = new Map() // normalizedUri -> { version: number|null, diagnostics: Diagnostic[] }
+    this._unversionedPushByUri = new Map() // normalizedUri -> { diagnostics: Diagnostic[], receivedAt: number }
+    this._serverSupportsPushVersions = false
     this._diagnosticWaiters = new Map() // normalizedUri -> Set<{ resolve, timer, minVersion: number|null }>
     this._docVersions = new Map() // normalizedUri -> version number
     this._id = 0
@@ -355,8 +437,10 @@ class LspClient {
   /** Reject everything in flight and tear the process down. */
   _fail(reason) {
     this._initialized = false
+    this._serverSupportsPushVersions = false
     this._docVersions.clear()
     this._diagnosticsByUri.clear()
+    this._unversionedPushByUri.clear()
     for (const waiters of this._diagnosticWaiters.values()) {
       for (const w of waiters) {
         clearTimeout(w.timer)
@@ -396,12 +480,14 @@ class LspClient {
         }))
         const existing = this._diagnosticsByUri.get(key)
         if (diagVersion !== null) {
+          this._serverSupportsPushVersions = true
           if (!existing || existing.version == null || diagVersion >= existing.version) {
             this._diagnosticsByUri.set(key, { version: diagVersion, diagnostics: normalized })
           }
-        } else if (!existing || existing.version == null) {
-          // Keep unversioned push state explicitly unknown so it cannot masquerade as currentDocVersion.
-          this._diagnosticsByUri.set(key, { version: null, diagnostics: normalized })
+        } else {
+          // Record unversioned push separately so it never overwrites versioned entries
+          // or masquerades as currentDocVersion when settling versioned waiters.
+          this._unversionedPushByUri.set(key, { diagnostics: normalized, receivedAt: Date.now() })
         }
         const waiters = this._diagnosticWaiters.get(key)
         if (waiters && waiters.size > 0) {
@@ -458,6 +544,11 @@ class LspClient {
         this._lastErrorMessage = err && err.message ? err.message : 'Invalid LSP command'
         return false
       }
+      if (!invocation) {
+        this._startFailed = true
+        this._lastErrorMessage = `Cannot directly execute batch shim without a shell: ${this.command}`
+        return false
+      }
       const proc = spawn(invocation.file, invocation.args, invocation.options)
       this._proc = proc
       proc.stdout.on('data', (chunk) => {
@@ -474,8 +565,10 @@ class LspClient {
         if (this._proc === proc) {
           this._proc = null
           this._initialized = false
+          this._serverSupportsPushVersions = false
           this._docVersions.clear()
           this._diagnosticsByUri.clear()
+          this._unversionedPushByUri.clear()
         }
         if (this._pending.size) this._fail(`LSP server exited (code=${code}, signal=${signal})`)
       })
@@ -676,6 +769,8 @@ class LspClient {
     const remainingForPush = Math.min(waitMs, remainingBudget)
 
     // Register push waiter BEFORE sending notifications to avoid missing fast pushes.
+    this._unversionedPushByUri.delete(key)
+    const syncStartedAt = Date.now()
     const pushPromise = this._awaitPushDiagnostics(uri, remainingForPush, expectedVersion)
     this._syncDocumentSync(uri, text, languageId)
     const pushed = await pushPromise
@@ -700,6 +795,12 @@ class LspClient {
     const cached = this._diagnosticsByUri.get(key)
     if (cached && cached.version != null && cached.version >= expectedVersion) {
       return cached.diagnostics
+    }
+    if (!this._serverSupportsPushVersions) {
+      const unversioned = this._unversionedPushByUri.get(key)
+      if (unversioned && unversioned.receivedAt >= syncStartedAt) {
+        return unversioned.diagnostics
+      }
     }
     return []
   }
@@ -855,6 +956,8 @@ class LspClient {
     }
     this._diagnosticWaiters.clear()
     this._diagnosticsByUri.clear()
+    this._unversionedPushByUri.clear()
+    this._serverSupportsPushVersions = false
     this._docVersions.clear()
     if (!proc) return
     try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: ++this._id, method: 'shutdown', params: null })) } catch { /* gone */ }
@@ -1206,6 +1309,7 @@ module.exports = {
   uriToFilePath,
   resolveCommandOnPath,
   isCommandOnPath,
+  resolveWindowsCmdShim,
   buildSpawnInvocation,
   isLanguageUnavailable,
   LspClient,

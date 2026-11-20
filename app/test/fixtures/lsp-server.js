@@ -20,6 +20,7 @@ const HANG_DIAG = process.argv.includes('--hang-diag')
 const EMPTY_PULL_ON_CLEAN = process.argv.includes('--empty-pull-on-clean')
 const STALE_PUSH = process.argv.includes('--stale-push')
 const UNVERSIONED_STALE_PUSH = process.argv.includes('--unversioned-stale-push')
+const PUSH_UNVERSIONED_ONLY = process.argv.includes('--push-unversioned-only')
 const SLOW_INIT_ARG = process.argv.find(a => a.startsWith('--slow-init='))
 const SLOW_INIT_MS = SLOW_INIT_ARG ? parseInt(SLOW_INIT_ARG.slice('--slow-init='.length), 10) : 0
 const SLOW_PULL_ARG = process.argv.find(a => a.startsWith('--slow-pull='))
@@ -162,6 +163,10 @@ const handle = (msg) => {
   }
   if (msg.method === 'textDocument/diagnostic') {
     if (HANG_DIAG) return // never respond — exercises pull deadline
+    if (PUSH_UNVERSIONED_ONLY) {
+      write({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } })
+      return
+    }
     const uri = msg.params?.textDocument?.uri
     const sendPull = () => {
       if (EMPTY_PULL_ON_CLEAN && uri && docTexts.has(uri)) {
@@ -241,7 +246,7 @@ const handle = (msg) => {
         return
       }
 
-      if (PUSH_DIAG) {
+      if (PUSH_DIAG || PUSH_UNVERSIONED_ONLY) {
         if (EMPTY_PULL_ON_CLEAN && !text.includes('BAD_SYNTAX')) {
           // Intentionally omit push when clean so the client exercises empty pull fallback
           return
@@ -252,7 +257,9 @@ const handle = (msg) => {
               { severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 4 } }, source: 'fixture-ts' },
             ]
           : []
-        const params = typeof version === 'number' ? { uri, version, diagnostics: diags } : { uri, diagnostics: diags }
+        const params = (!PUSH_UNVERSIONED_ONLY && typeof version === 'number')
+          ? { uri, version, diagnostics: diags }
+          : { uri, diagnostics: diags }
         write({
           jsonrpc: '2.0',
           method: 'textDocument/publishDiagnostics',

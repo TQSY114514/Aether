@@ -260,6 +260,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
   // /handoff 两步预览/编辑/确认——持有 { parentSessionId, title, prompt, source }
   const pendingHandoffRef = useRef(null)
   const handoffEpochRef = useRef(0)
+  const handoffInFlightRef = useRef(false)
   const allowRulesRef = useRef(null)
   // W4-t24: 三态规则存储（allow/deny/ask）。创建时从 settings 表载入持久化规则
   // （loadPersistedRules 已复制进内存 Map, db 连接用完即关——不跨渲染持有连接）。
@@ -374,6 +375,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     if (sessionBusyRef.current) return
     pendingDeleteRef.current = null // W2-t16: 普通输入取消待确认的删除
     pendingHandoffRef.current = null
+    handoffInFlightRef.current = false
     handoffEpochRef.current += 1
     sessionBusyRef.current = true
     try {
@@ -441,6 +443,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     if (!parsed) return
     pendingDeleteRef.current = null
     pendingHandoffRef.current = null
+    handoffInFlightRef.current = false
     handoffEpochRef.current += 1
     // 与 enter 提交同款清理: 清输入 + 入历史（重复 push 由去重兜底）
     historyRef.current = [...historyRef.current.filter((x) => x !== text), text].slice(-100)
@@ -885,6 +888,7 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
     if (cmd.type !== 'delete') pendingDeleteRef.current = null
     if (cmd.type !== 'handoff') {
       pendingHandoffRef.current = null
+      handoffInFlightRef.current = false
       handoffEpochRef.current += 1
     }
     const db = openSessionDb(dbPath)
@@ -906,12 +910,21 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
           try {
             const sub = String(cmd.goal || '').trim().toLowerCase()
             const pending = pendingHandoffRef.current
-            if (pending && pending.parentSessionId === st.dbSessionId && sub === 'cancel') {
+            if (sub === 'cancel') {
+              const hadDraftOrInFlight = Boolean(
+                (pending && pending.parentSessionId === st.dbSessionId) || handoffInFlightRef.current
+              )
               pendingHandoffRef.current = null
+              handoffInFlightRef.current = false
               handoffEpochRef.current += 1
-              dispatch({ type: 'STATUS', text: 'handoff: 已取消草稿' })
+              dispatch({
+                type: 'STATUS',
+                text: hadDraftOrInFlight
+                  ? 'handoff: 已取消草稿'
+                  : 'handoff: 当前没有待确认草稿 — 请先执行 /handoff [goal]',
+              })
             } else if (pending && pending.parentSessionId === st.dbSessionId && sub === 'edit') {
-              const editEpoch = handoffEpochRef.current
+              const editEpoch = ++handoffEpochRef.current
               try { db?.close() } catch {}
               const file = editorTempPath()
               try {
@@ -955,35 +968,43 @@ export function App({ dbPath, modelName, apiKey, apiUrl, apiFormat, statusLineCm
                 title: pending.title,
               })
               pendingHandoffRef.current = null
+              handoffInFlightRef.current = false
               handoffEpochRef.current += 1
               dispatch({ type: 'RESET' })
               dispatch({ type: 'SESSION_ID_SET', sessionId: created.sessionId })
               dispatch({ type: 'SESSIONS_SET', sessions: listSessions(db) })
               dispatch({ type: 'MESSAGES_LOAD', messages: loadSessionMessages(db, created.sessionId) })
               dispatch({ type: 'STATUS', text: `handoff: 已交接至新会话 #${created.sessionId} (${pending.source})` })
-            } else if (sub === 'confirm' || sub === 'edit' || sub === 'cancel') {
+            } else if (sub === 'confirm' || sub === 'edit') {
               dispatch({ type: 'STATUS', text: 'handoff: 当前没有待确认草稿 — 请先执行 /handoff [goal]' })
             } else {
               const draftEpoch = ++handoffEpochRef.current
+              handoffInFlightRef.current = true
               dispatch({ type: 'STATUS', text: 'handoff: 正在提炼上下文...' })
-              const cjs = await import('../electron/llm/handoff.js')
-              const handoff = cjs.generateHandoffDraft ? cjs : (cjs.default || {})
-              const draft = await handoff.generateHandoffDraft({
-                db,
-                sessionId: st.dbSessionId,
-                goal: cmd.goal || '',
-              })
-              if (handoffEpochRef.current !== draftEpoch || latestState.current.dbSessionId !== st.dbSessionId) {
-                return
+              try {
+                const cjs = await import('../electron/llm/handoff.js')
+                const handoff = cjs.generateHandoffDraft ? cjs : (cjs.default || {})
+                const draft = await handoff.generateHandoffDraft({
+                  db,
+                  sessionId: st.dbSessionId,
+                  goal: cmd.goal || '',
+                })
+                if (handoffEpochRef.current !== draftEpoch || latestState.current.dbSessionId !== st.dbSessionId) {
+                  return
+                }
+                pendingHandoffRef.current = {
+                  parentSessionId: st.dbSessionId,
+                  title: draft.title,
+                  prompt: draft.draftPrompt,
+                  source: draft.source,
+                }
+                dispatch({ type: 'APPEND_USER', text: `[Handoff Draft Preview (${draft.source}) — ${draft.title}]\n\n${draft.draftPrompt}`, ephemeral: true })
+                dispatch({ type: 'STATUS', text: 'handoff: 草稿已预览 — 输入 /handoff confirm (或 /handoff) 创建，/handoff edit 编辑，/handoff cancel 取消' })
+              } finally {
+                if (handoffEpochRef.current === draftEpoch) {
+                  handoffInFlightRef.current = false
+                }
               }
-              pendingHandoffRef.current = {
-                parentSessionId: st.dbSessionId,
-                title: draft.title,
-                prompt: draft.draftPrompt,
-                source: draft.source,
-              }
-              dispatch({ type: 'APPEND_USER', text: `[Handoff Draft Preview (${draft.source}) — ${draft.title}]\n\n${draft.draftPrompt}`, ephemeral: true })
-              dispatch({ type: 'STATUS', text: 'handoff: 草稿已预览 — 输入 /handoff confirm (或 /handoff) 创建，/handoff edit 编辑，/handoff cancel 取消' })
             }
           } catch (err) {
             dispatch({ type: 'STATUS', text: `handoff failed: ${err && err.message ? err.message : String(err)}` })

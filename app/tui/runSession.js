@@ -371,7 +371,7 @@ export async function runSession({
       if (!effectiveBudget) effectiveBudget = 32000
 
       if (typeof maybeCompact === 'function') {
-        const canCallLlm = Boolean(effectiveProvider && effectiveProvider.base_url)
+        const canCallLlm = Boolean(effectiveProvider && (effectiveProvider.api_url || effectiveProvider.base_url))
         const compacted = await maybeCompact({
           provider: canCallLlm ? effectiveProvider : null,
           model,

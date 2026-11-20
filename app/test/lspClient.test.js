@@ -18,6 +18,7 @@ import {
   uriToFilePath,
   resolveCommandOnPath,
   isCommandOnPath,
+  resolveWindowsCmdShim,
   isLanguageUnavailable,
   createClient,
   searchWorkspace,
@@ -562,6 +563,74 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     })
     expect(Array.isArray(second)).toBe(true)
     expect(second.some((d) => d.message.includes('BAD_SYNTAX'))).toBe(true)
+  })
+
+  it('resolves npm %dp0% .cmd shims directly and rejects unsafe shell-operator shims', async () => {
+    const shimDir = path.join(tmpDir, 'shim-cases')
+    const nestedDir = path.join(shimDir, 'node_modules', 'pkg')
+    fs.mkdirSync(nestedDir, { recursive: true })
+    const targetJs = path.join(nestedDir, 'server.js')
+    fs.copyFileSync(FIXTURE, targetJs)
+
+    // 1. npm-style %dp0% shim resolves directly to process.execPath + targetJs
+    const npmShim = path.join(shimDir, 'pkg-lsp.cmd')
+    fs.writeFileSync(
+      npmShim,
+      `@ECHO off\r\n"%_prog%" "%dp0%\\node_modules\\pkg\\server.js" %*\r\n`,
+      'utf8'
+    )
+    const resolvedNpm = resolveWindowsCmdShim(npmShim, ['--stdio'])
+    expect(resolvedNpm).not.toBeNull()
+    expect(resolvedNpm.file).toBe(process.execPath)
+    expect(resolvedNpm.args).toEqual([targetJs, '--stdio'])
+
+    // 2. Direct-executable shim resolves to exe + static args + forwarded args
+    const directShim = path.join(shimDir, 'direct-lsp.cmd')
+    fs.writeFileSync(
+      directShim,
+      `@echo off\r\n"${process.execPath}" "${targetJs}" --push-diag %*\r\n`,
+      'utf8'
+    )
+    const resolvedDirect = resolveWindowsCmdShim(directShim, ['--extra'])
+    expect(resolvedDirect).not.toBeNull()
+    expect(resolvedDirect.file).toBe(process.execPath)
+    expect(resolvedDirect.args).toEqual([targetJs, '--push-diag', '--extra'])
+
+    // 3. Unsafe shell-operator shim is rejected cleanly without spawning cmd.exe
+    const unsafeShim = path.join(shimDir, 'unsafe-lsp.cmd')
+    fs.writeFileSync(
+      unsafeShim,
+      `@echo off\r\n"${process.execPath}" "${targetJs}" & echo INJECTED\r\n`,
+      'utf8'
+    )
+    expect(resolveWindowsCmdShim(unsafeShim, ['--stdio'])).toBeNull()
+
+    if (process.platform === 'win32') {
+      configureServer('javascript', { command: unsafeShim, args: [] })
+      const target = path.join(tmpDir, 'unsafe-target.js')
+      fs.writeFileSync(target, 'const x = 1\n', 'utf8')
+      const res = await diagnosticsAfterEdit(tmpDir, target, { content: 'const x = 1\n', waitMs: 300 })
+      expect(res).toBeNull()
+    }
+  })
+
+  it('reports and clears diagnostics for unversioned-only push servers', async () => {
+    configureServer('javascript', {
+      command: process.execPath,
+      args: [FIXTURE, '--push-unversioned-only'],
+    })
+    const target = path.join(tmpDir, 'unversioned-only.js')
+    const dirty = 'const a = 1\n// BAD_SYNTAX\n'
+    fs.writeFileSync(target, dirty, 'utf8')
+
+    const v1 = await diagnosticsAfterEdit(tmpDir, target, { content: dirty, waitMs: 300 })
+    expect(Array.isArray(v1)).toBe(true)
+    expect(v1.some((d) => d.message.includes('BAD_SYNTAX'))).toBe(true)
+
+    const clean = 'const a = 1\n'
+    fs.writeFileSync(target, clean, 'utf8')
+    const v2 = await diagnosticsAfterEdit(tmpDir, target, { content: clean, waitMs: 300 })
+    expect(v2).toEqual([])
   })
 
   it('does not settle versioned push waits with an unversioned publishDiagnostics', async () => {
