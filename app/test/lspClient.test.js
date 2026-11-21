@@ -778,6 +778,10 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
     const sid = 'lsp-ab-startup-sess'
     setWorkspaceRootForSession(sid, tmpDir)
+    let fakeNow = 1_700_000_000_000
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow)
+    const syncSpy = vi.spyOn(lspCjs, 'syncDocumentAfterEdit')
+    const diagSpy = vi.spyOn(lspCjs, 'diagnosticsAfterEdit')
     try {
       const abFile = path.join(tmpDir, 'ab-order.ts')
       const textA = 'export const v = 1 // BAD_SYNTAX\n'
@@ -787,11 +791,14 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
         { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 50, lspDeadlineMs: 150 }
       )
       await waitForLogEntries(log2, (entries) => entries.some((e) => e.method === 'initialize'))
+      fakeNow += 50
       const pB = getTool('write_file').run(
         { path: abFile, content: textB },
         { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 50, lspDeadlineMs: 150 }
       )
       await Promise.all([pA, pB])
+      expect(syncSpy).toHaveBeenCalledTimes(1)
+      expect(diagSpy).toHaveBeenCalledTimes(1)
       fs.writeFileSync(gate2, 'open', 'utf8')
       const log2Entries = await waitForLogEntries(log2, (entries) =>
         entries.some((e) => e.method === 'textDocument/didOpen' || e.method === 'textDocument/didChange')
@@ -800,6 +807,9 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       expect(docSyncs.length).toBeGreaterThanOrEqual(1)
       expect(docSyncs[docSyncs.length - 1].text).toBe(textB)
     } finally {
+      syncSpy.mockRestore()
+      diagSpy.mockRestore()
+      nowSpy.mockRestore()
       lspCjs.disposeAll()
       clearSessionWorkspaces(sid)
     }
@@ -956,6 +966,200 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       const res2 = await lspCjs.diagnosticsAfterEdit(tmpDir, target, { content, waitMs: 1500 })
       expect(Array.isArray(res2)).toBe(true)
       expect(res2.some((d) => d.message.includes('BAD_SYNTAX'))).toBe(true)
+    } finally {
+      lspCjs.disposeAll()
+      spawnSpy.mockRestore()
+    }
+  })
+
+  it('sends ranged didChange for incremental textDocumentSync (2) and full text for Full sync (1)', async () => {
+    const childProcess = require('child_process')
+    const lspCjs = require('../electron/context/lspClient')
+    const recordedChanges = []
+    const makeSyncProc = (syncKind) => makeFakeLspProc({
+      onMessage: (msg, p) => {
+        if (msg.method === 'initialize') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: { capabilities: { textDocumentSync: syncKind } },
+          }), 'utf8'))
+        } else if (msg.method === 'textDocument/didChange') {
+          recordedChanges.push({ syncKind, changes: msg.params.contentChanges })
+        }
+      },
+    })
+    const incProc = makeSyncProc(2)
+    const fullProc = makeSyncProc(1)
+    const spawnSpy = vi.spyOn(childProcess, 'spawn')
+      .mockImplementationOnce(() => incProc)
+      .mockImplementationOnce(() => fullProc)
+
+    const target = path.join(tmpDir, 'sync-kind.js')
+    const uri = `file:///${target.replace(/\\/g, '/')}`
+    const incClient = lspCjs.createClient({ command: process.execPath, args: [FIXTURE], root: tmpDir })
+    const fullClient = lspCjs.createClient({ command: process.execPath, args: [FIXTURE], root: tmpDir })
+    try {
+      await incClient.syncDocument(uri, 'line0\nline1!', 'javascript')
+      await incClient.syncDocument(uri, 'updated', 'javascript')
+
+      await fullClient.syncDocument(uri, 'line0\nline1!', 'javascript')
+      await fullClient.syncDocument(uri, 'updated', 'javascript')
+
+      expect(recordedChanges).toHaveLength(2)
+      expect(recordedChanges[0]).toEqual({
+        syncKind: 2,
+        changes: [{
+          range: { start: { line: 0, character: 0 }, end: { line: 1, character: 6 } },
+          text: 'updated',
+        }],
+      })
+      expect(recordedChanges[1]).toEqual({
+        syncKind: 1,
+        changes: [{ text: 'updated' }],
+      })
+    } finally {
+      incClient.dispose()
+      fullClient.dispose()
+      spawnSpy.mockRestore()
+    }
+  })
+
+  it('returns empty array for superseded write A when write B with BAD_SYNTAX lands mid-wait', async () => {
+    const childProcess = require('child_process')
+    const lspCjs = require('../electron/context/lspClient')
+    const target = path.join(tmpDir, 'superseded-a.js')
+    fs.writeFileSync(target, 'const a = 1\n', 'utf8')
+    let didOpenSeen = false
+    let notifyBReady
+    const bReady = new Promise((r) => { notifyBReady = r })
+
+    const proc = makeFakeLspProc({
+      onMessage: (msg, p) => {
+        if (msg.method === 'initialize') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } }), 'utf8'))
+        } else if (msg.method === 'textDocument/didOpen') {
+          didOpenSeen = true
+        } else if (msg.method === 'textDocument/didChange') {
+          // Only push BAD_SYNTAX for version 2 (write B)
+          const uri = msg.params.textDocument.uri
+          const version = msg.params.textDocument.version
+          notifyBReady?.()
+          setTimeout(() => {
+            p.stdout.emit('data', Buffer.from(encodeMessage({
+              jsonrpc: '2.0',
+              method: 'textDocument/publishDiagnostics',
+              params: {
+                uri,
+                version,
+                diagnostics: [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 0, character: 0 } } }],
+              },
+            }), 'utf8'))
+          }, 20)
+        }
+      },
+    })
+    const spawnSpy = vi.spyOn(childProcess, 'spawn').mockImplementationOnce(() => proc)
+    lspCjs.configureServer('javascript', { command: process.execPath, args: [FIXTURE] })
+
+    try {
+      const pA = lspCjs.diagnosticsAfterEdit(tmpDir, target, {
+        content: 'const a = 1\n',
+        waitMs: 400,
+        deadlineMs: 600,
+      })
+      // Wait until write A sent didOpen (and is inside pushWaiter), then send write B
+      await waitForCondition(() => didOpenSeen)
+      expect(lspCjs.syncDocumentAfterEdit(tmpDir, target, { content: '// BAD_SYNTAX\n' })).toBe(true)
+      await bReady
+      const resA = await pA
+      expect(resA).toEqual([])
+    } finally {
+      lspCjs.disposeAll()
+      spawnSpy.mockRestore()
+    }
+  })
+
+  it('handles unsupported pull (-32601) without closing client or triggering cooldown', async () => {
+    const childProcess = require('child_process')
+    const lspCjs = require('../electron/context/lspClient')
+    const proc = makeFakeLspProc({
+      onMessage: (msg, p) => {
+        if (msg.method === 'initialize') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } }), 'utf8'))
+        } else if (msg.method === 'textDocument/diagnostic') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({
+            jsonrpc: '2.0',
+            id: msg.id,
+            error: { code: -32601, message: 'Method not found' },
+          }), 'utf8'))
+        } else if (msg.method === 'textDocument/definition') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: { uri: 'file:///workspace/src/app.js', range: { start: { line: 2, character: 0 } } },
+          }), 'utf8'))
+        }
+      },
+    })
+    const spawnSpy = vi.spyOn(childProcess, 'spawn').mockImplementation(() => proc)
+    lspCjs.configureServer('javascript', { command: process.execPath, args: [FIXTURE] })
+    const target = path.join(tmpDir, 'no-pull.js')
+    fs.writeFileSync(target, 'const x = 1\n', 'utf8')
+
+    try {
+      const diags = await lspCjs.diagnosticsWorkspace(tmpDir, target)
+      expect(diags).toEqual([])
+      // Client must remain open and NOT in cooldown: definitionWorkspace reuses the same proc
+      const defs = await lspCjs.definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
+      expect(Array.isArray(defs)).toBe(true)
+      expect(defs).toHaveLength(1)
+      expect(spawnSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      lspCjs.disposeAll()
+      spawnSpy.mockRestore()
+    }
+  })
+
+  it('does not write serverCooldowns when withClient catches an error on a disposed client', async () => {
+    const childProcess = require('child_process')
+    const lspCjs = require('../electron/context/lspClient')
+    let spawnCount = 0
+    const makeDefProc = () => makeFakeLspProc({
+      onMessage: (msg, p) => {
+        if (msg.method === 'initialize') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } }), 'utf8'))
+        } else if (msg.method === 'textDocument/definition') {
+          if (spawnCount === 1) {
+            // Dispose while definition request is in flight -> _send rejects with 'LSP client disposed'
+            setImmediate(() => lspCjs.disposeAll())
+          } else {
+            p.stdout.emit('data', Buffer.from(encodeMessage({
+              jsonrpc: '2.0',
+              id: msg.id,
+              result: { uri: 'file:///workspace/src/app.js', range: { start: { line: 4, character: 0 } } },
+            }), 'utf8'))
+          }
+        }
+      },
+    })
+    const spawnSpy = vi.spyOn(childProcess, 'spawn').mockImplementation(() => {
+      spawnCount++
+      return makeDefProc()
+    })
+    lspCjs.configureServer('javascript', { command: process.execPath, args: [FIXTURE] })
+    const target = path.join(tmpDir, 'disposed-err.js')
+    fs.writeFileSync(target, 'const x = 1\n', 'utf8')
+
+    try {
+      const first = await lspCjs.definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
+      expect(first).toBeNull()
+
+      // Must NOT have entered cooldown: immediate follow-up spawns proc2 and succeeds
+      const second = await lspCjs.definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
+      expect(Array.isArray(second)).toBe(true)
+      expect(second).toHaveLength(1)
+      expect(spawnSpy).toHaveBeenCalledTimes(2)
     } finally {
       lspCjs.disposeAll()
       spawnSpy.mockRestore()

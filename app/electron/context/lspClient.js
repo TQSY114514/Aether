@@ -499,6 +499,8 @@ class LspClient {
     this._serverSupportsPushVersions = false
     this._diagnosticWaiters = new Map() // normalizedUri -> Set<{ resolve, timer, minVersion: number|null }>
     this._docVersions = new Map() // normalizedUri -> version number
+    this._docTexts = new Map() // normalizedUri -> last synced text
+    this._syncKind = 1 // 1 = Full, 2 = Incremental (negotiated on initialize)
     this._pendingSyncByUri = new Map() // normalizedUri -> { uri, text, languageId, seq }
     this._syncSeq = 0
     this._wiredStartPromise = null
@@ -566,7 +568,9 @@ class LspClient {
   _fail(reason) {
     this._initialized = false
     this._serverSupportsPushVersions = false
+    this._syncKind = 1
     this._docVersions.clear()
+    this._docTexts.clear()
     this._diagnosticsByUri.clear()
     this._unversionedPushByUri.clear()
     this._pendingSyncByUri.clear()
@@ -650,8 +654,11 @@ class LspClient {
     }
     clearTimeout(pending.timer)
     this._pending.delete(msg.id)
-    if (msg.error) pending.reject(new Error(msg.error.message || 'LSP error'))
-    else pending.resolve(msg.result)
+    if (msg.error) {
+      pending.reject(Object.assign(new Error(msg.error.message || 'LSP error'), { code: msg.error.code }))
+    } else {
+      pending.resolve(msg.result)
+    }
   }
 
   /** Spawn + initialize handshake. Returns true when the server is ready. */
@@ -703,7 +710,9 @@ class LspClient {
         this._proc = null
         this._initialized = false
         this._serverSupportsPushVersions = false
+        this._syncKind = 1
         this._docVersions.clear()
+        this._docTexts.clear()
         this._diagnosticsByUri.clear()
         this._unversionedPushByUri.clear()
         this._pendingSyncByUri.clear()
@@ -714,7 +723,7 @@ class LspClient {
       try {
         const rootUri = pathToFileURL(path.resolve(this.root)).href
         const initTimeoutMs = typeof timeoutMs === 'number' ? timeoutMs : this.timeoutMs
-        await this._send('initialize', {
+        const initRes = await this._send('initialize', {
           processId: process.pid,
           rootUri,
           capabilities: {
@@ -726,6 +735,11 @@ class LspClient {
           workspaceFolders: [{ uri: rootUri, name: path.basename(path.resolve(this.root)) }],
         }, initTimeoutMs)
         if (this._proc !== proc || this._disposed) return false
+        const syncCap = initRes && initRes.capabilities && initRes.capabilities.textDocumentSync
+        const syncChange = typeof syncCap === 'number'
+          ? syncCap
+          : (syncCap && typeof syncCap.change === 'number' ? syncCap.change : 1)
+        this._syncKind = syncChange === 2 ? 2 : 1
         this._initialized = true
         if (proc.stdin && !proc.stdin.destroyed && !proc.stdin.writableEnded) {
           try {
@@ -791,6 +805,7 @@ class LspClient {
       return false
     }
     this._docVersions.set(key, 1)
+    this._docTexts.set(key, '')
     return true
   }
 
@@ -801,16 +816,32 @@ class LspClient {
     const key = normalizeUriKey(uri)
     const prev = this._docVersions.get(key)
     const ver = prev == null ? 1 : prev + 1
-    const okDoc = prev == null
-      ? this._notify('textDocument/didOpen', {
-          textDocument: { uri, languageId, version: ver, text },
-        })
-      : this._notify('textDocument/didChange', {
-          textDocument: { uri, version: ver },
-          contentChanges: [{ text }],
-        })
+    let okDoc
+    if (prev == null) {
+      okDoc = this._notify('textDocument/didOpen', {
+        textDocument: { uri, languageId, version: ver, text },
+      })
+    } else if (this._syncKind === 2) {
+      const prevText = this._docTexts.get(key) ?? ''
+      const prevLines = prevText.split(/\r?\n/)
+      const endLine = prevLines.length - 1
+      const endChar = prevLines[endLine].length
+      okDoc = this._notify('textDocument/didChange', {
+        textDocument: { uri, version: ver },
+        contentChanges: [{
+          range: { start: { line: 0, character: 0 }, end: { line: endLine, character: endChar } },
+          text,
+        }],
+      })
+    } else {
+      okDoc = this._notify('textDocument/didChange', {
+        textDocument: { uri, version: ver },
+        contentChanges: [{ text }],
+      })
+    }
     if (!okDoc) return null
     this._docVersions.set(key, ver)
+    this._docTexts.set(key, text)
     const okSave = this._notify('textDocument/didSave', {
       textDocument: { uri },
       text,
@@ -1001,8 +1032,9 @@ class LspClient {
       return null
     }
     const pushed = await pushWaiter.promise
-    if (Array.isArray(pushed)) return pushed
     if (this._proc !== activeProc || !this._initialized || this._disposed) return null
+    if (this._docVersions.get(key) !== syncedVer) return []
+    if (Array.isArray(pushed)) return pushed
 
     // Push did not arrive in time; try pull diagnostics within the remaining deadline.
     // Use killOnTimeout: false so a slow optional pull does not tear down the server.
@@ -1014,12 +1046,15 @@ class LspClient {
           killOnTimeout: false,
           expectedProc: activeProc,
         })
+        if (this._proc !== activeProc || !this._initialized || this._disposed) return null
+        if (this._docVersions.get(key) !== syncedVer) return []
         if (pullRes.authoritative) {
           return pullRes.diagnostics
         }
       } catch { /* server may not implement textDocument/diagnostic or timed out */ }
     }
     if (this._proc !== activeProc || !this._initialized || this._disposed) return null
+    if (this._docVersions.get(key) !== syncedVer) return []
 
     // Only reuse cached diagnostics if they match the current edit version.
     const cached = this._diagnosticsByUri.get(key)
@@ -1121,12 +1156,20 @@ class LspClient {
     const key = normalizeUriKey(uri)
     const sentVersion = this._docVersions.get(key) ?? null
     const reqTimeout = typeof timeoutMs === 'number' ? timeoutMs : this.timeoutMs
-    const raw = await this._send(
-      'textDocument/diagnostic',
-      { textDocument: { uri }, identifier: 'aether-lsp' },
-      reqTimeout,
-      { killOnTimeout }
-    )
+    let raw
+    try {
+      raw = await this._send(
+        'textDocument/diagnostic',
+        { textDocument: { uri }, identifier: 'aether-lsp' },
+        reqTimeout,
+        { killOnTimeout }
+      )
+    } catch (err) {
+      if (err && err.code === -32601) {
+        return { authoritative: false, diagnostics: [], unsupported: true }
+      }
+      throw err
+    }
     if (this._proc !== reqProc || !this._initialized) {
       return { authoritative: false, diagnostics: [] }
     }
@@ -1200,7 +1243,9 @@ class LspClient {
     this._pendingSyncByUri.clear()
     this._wiredStartPromise = null
     this._serverSupportsPushVersions = false
+    this._syncKind = 1
     this._docVersions.clear()
+    this._docTexts.clear()
     if (!proc) return
     if (proc.stdin && !proc.stdin.destroyed && !proc.stdin.writableEnded) {
       try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: ++this._id, method: 'shutdown', params: null })) } catch { /* gone */ }
@@ -1358,6 +1403,7 @@ async function withClient(root, language, fn, { onDegraded } = {}) {
     }
     return res
   } catch (err) {
+    if (client._disposed || clientCache.get(key) !== client) return null
     if (client._startErrorCode === 'ENOENT') {
       unavailableLangs.add(language)
       try { onDegraded?.({ reason: 'missing', language, message: `${client.command} not found (ENOENT)` }) } catch {}
