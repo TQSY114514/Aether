@@ -57,8 +57,9 @@ function summarizeArgs(name: string, args: unknown): string {
 /** Render pending tool-permission requests and their available decisions. */
 export default function PermissionDialog() {
   const requests = useStore((s) => s.permissionRequests)
+  const currentSessionId = useStore((s) => s.currentSessionId)
   const resolve = useStore((s) => s.resolvePermission)
-  const req = requests[0]
+  const req = requests.find((r) => r.sessionId == null || r.sessionId === currentSessionId) || null
   if (!req) return null
   const meta = TOOL_META[req.name] || { icon: ShieldAlert, labelKey: 'tool.unknown' }
   const Icon = meta.icon

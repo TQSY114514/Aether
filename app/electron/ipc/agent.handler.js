@@ -1,45 +1,57 @@
-const { setWorkspaceRoot, setWorkspaceRootForSession, getWorkspaceRoot } = require('../tools/sandbox')
+const { getWorkspaceRoot, setWorkspaceRootForSession, isDangerousRoot, hasUnsafeWindowsPrefix, _isShadowActive } = require('../tools/sandbox')
 const checkpointMgr = require('../llm/checkpointManager')
 const { invalidateCache, hasProjectInstructions, loadProjectInstructions, loadModularRules } = require('../llm/projectInstructions')
 
 function registerAgentHandlers(ipcMain, db) {
-  // Get the current agent workspace root.
+  // Get the current session CWD / fallback default directory without locking sandbox containment.
   ipcMain.handle('agent:workspace:get', (_e, sessionId) => {
-    const saved = db.getSetting('agent_workspace_root')
-    if (saved) setWorkspaceRoot(saved)
-    // If a sessionId is provided, check for per-session override.
     if (sessionId) {
+      try {
+        const sess = typeof db.getSession === 'function' ? db.getSession(sessionId) : null
+        if (sess?.cwd) return sess.cwd
+      } catch {}
       const cfg = db.getSessionConfig(sessionId)
       if (cfg?.workspace) return cfg.workspace
     }
-    return getWorkspaceRoot()
+    const saved = db.getSetting('agent_workspace_root')
+    if (saved) return saved
+    return getWorkspaceRoot(sessionId)
   })
 
-  // Set the agent workspace root. Pass null/empty to reset to default.
-  // Optionally accepts { dir, sessionId } for per-session workspace.
+  // Set the active directory (CWD) for a session or global default.
+  // Terminal-style CWD roaming: updates session.cwd / config without locking sandbox containment.
   ipcMain.handle('agent:workspace:set', async (_e, opts) => {
     const dir = typeof opts === 'string' ? opts : opts?.dir
     const sessionId = typeof opts === 'object' ? opts?.sessionId : undefined
-    const v = dir ? String(dir) : null
+    const v = dir ? String(dir).trim() : null
+    if (v && (hasUnsafeWindowsPrefix(v) || isDangerousRoot(v))) {
+      throw new Error(`Forbidden directory: ${v} is a system-critical path`)
+    }
     if (sessionId) {
+      if (_isShadowActive?.(sessionId)) {
+        throw new Error('Cannot change working directory while a shadow workspace run is active')
+      }
       const cfg = db.getSessionConfig(sessionId) || {}
       cfg.workspace = v
       db.setSessionConfig(sessionId, cfg)
-      setWorkspaceRootForSession(sessionId, v || null)
+      if (typeof db.setSessionCwd === 'function') {
+        db.setSessionCwd(sessionId, v)
+      }
+      // Clear any residual session sandbox pin so CWD roaming stays unconstrained
+      setWorkspaceRootForSession(sessionId, null)
       invalidateCache()
-      return { success: true, root: v || getWorkspaceRoot() }
+      return { success: true, root: v || getWorkspaceRoot(sessionId) }
     }
     if (v) await db.setSetting('agent_workspace_root', v)
     else await db.setSetting('agent_workspace_root', '')
-    setWorkspaceRoot(v || null)
     invalidateCache()
-    // Invalidate the project context graph cache for the new workspace.
+    // Invalidate the project context graph cache for the new directory.
     try {
       const ctx = require('../context')
       ctx.projectIndexer.invalidateCache(v || null)
       ctx.repoMap.invalidateCache(v || null)
     } catch {}
-    return { success: true, root: getWorkspaceRoot() }
+    return { success: true, root: v || getWorkspaceRoot() }
   })
 
   // Check whether the current workspace has project instructions (CLAUDE.md etc.) and modular rules (.aether/rules).
