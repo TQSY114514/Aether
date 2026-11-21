@@ -45,6 +45,7 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
   const imgRef = useRef<HTMLImageElement>(null)
   const interactionTimerRef = useRef<any>(null)
   const idleTimerRef = useRef<any>(null)
+  const dragMouseStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
 
   const [currentIndex, setCurrentIndex] = useState(
     Math.max(0, Math.min(initialIndex, images.length - 1))
@@ -286,14 +287,24 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
     }, 2800)
 
     if (!isDragging) return
-    const dx = e.clientX - dragStart.x
-    const dy = e.clientY - dragStart.y
-
-    if (Math.hypot(dx - position.x, dy - position.y) > 3) {
+    if (Math.hypot(e.clientX - dragMouseStartRef.current.x, e.clientY - dragMouseStartRef.current.y) > 3) {
       setHasDragged(true)
     }
 
-    setPosition({ x: dx, y: dy })
+    const rawX = e.clientX - dragStart.x
+    const rawY = e.clientY - dragStart.y
+
+    if (containerRef.current) {
+      const stageRect = containerRef.current.getBoundingClientRect()
+      const maxOffsetX = (stageRect.width * scale) / 2 + 100
+      const maxOffsetY = (stageRect.height * scale) / 2 + 100
+      setPosition({
+        x: Math.max(-maxOffsetX, Math.min(maxOffsetX, rawX)),
+        y: Math.max(-maxOffsetY, Math.min(maxOffsetY, rawY)),
+      })
+    } else {
+      setPosition({ x: rawX, y: rawY })
+    }
   }
 
   // Mouse drag handlers with drag-vs-click threshold discrimination
@@ -302,6 +313,7 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
     setIsInteracting(true)
     setIsDragging(true)
     setHasDragged(false)
+    dragMouseStartRef.current = { x: e.clientX, y: e.clientY }
     setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y })
   }
 
@@ -313,22 +325,23 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!currentImage?.preview) return
-    try {
-      const res = await fetch(currentImage.preview)
-      const blob = await res.blob()
-      if (navigator.clipboard?.write && window.ClipboardItem) {
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+      try {
+        const res = await fetch(currentImage.preview)
+        const blob = await res.blob()
         await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })])
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
         return
+      } catch {
+        // Fallback to electronAPI if web API throws
       }
-    } catch {
-      // Fallback to electronAPI
-      if ((window as any).electronAPI?.system?.clipboardWrite) {
-        ;(window as any).electronAPI.system.clipboardWrite(currentImage.preview)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
-      }
+    }
+    // Fallback to electronAPI
+    if ((window as any).electronAPI?.system?.clipboardWrite) {
+      ;(window as any).electronAPI.system.clipboardWrite(currentImage.preview)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
     }
   }
 
