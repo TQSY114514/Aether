@@ -85,7 +85,10 @@ async function collectPostWriteDiagnostics(filePath, content, ctx) {
         : (typeof ctx?.lspWaitMs === 'number' ? Math.max(waitMs + 300, POST_WRITE_LSP_DEADLINE_MS) : POST_WRITE_LSP_DEADLINE_MS)
 
     if (ctx?.viaScript) {
-      const absKey = `${ctx?.sessionId || 'global'}|${path.resolve(filePath).toLowerCase()}`
+      const isCaseSensitive = process.platform !== 'win32' && process.platform !== 'darwin'
+      const resolved = path.resolve(filePath)
+      const normalizedPath = isCaseSensitive ? resolved : resolved.toLowerCase()
+      const absKey = `${ctx?.sessionId || 'global'}|${normalizedPath}`
       const now = Date.now()
       const last = _recentScriptDiagAt.get(absKey)
       if (last && now - last < SCRIPT_LSP_DEBOUNCE_MS) {

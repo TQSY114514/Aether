@@ -610,16 +610,34 @@ ipcMain.handle('chat:complete', handleChatComplete)
           }
         }
         let loopReturned = ''
+        let orchestrateFailed = false
+        let orchestrateErrorMsg = null
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
             const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', parentSessionId: sessionId, callbacks: {
               ...cb,
               onFileSummary: (summary) => { mergeFileSummary(summary) },
             } })
-            loopReturned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
+            if (orc && orc.ok && orc.summary) {
+              const hasFailedSubtask = Array.isArray(orc.results) && orc.results.some(r => r && r.success === false)
+              loopReturned = orc.summary
+              if (hasFailedSubtask) {
+                orchestrateFailed = true
+                const failed = orc.results.find(r => r && r.success === false)
+                orchestrateErrorMsg = (failed && (failed.error || failed.output)) || 'Orchestration subtask failed'
+              }
+            } else if (orc && orc.ok === false) {
+              orchestrateFailed = true
+              orchestrateErrorMsg = orc.error || 'Orchestration failed'
+              loopReturned = `[agent error: ${orchestrateErrorMsg}]`
+            } else {
+              loopReturned = await runWithOverflowHeal()
+            }
             finalContent = streamedContent || loopReturned || ''
-          } catch {
-            loopReturned = await runWithOverflowHeal()
+          } catch (err) {
+            orchestrateFailed = true
+            orchestrateErrorMsg = (err && err.message) || String(err)
+            loopReturned = `[agent error: ${orchestrateErrorMsg}]`
             finalContent = streamedContent || loopReturned || ''
           }
         } else {
@@ -627,11 +645,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
           finalContent = streamedContent || loopReturned || ''
         }
         const loopError =
-          (typeof loopReturned === 'string' && /^\[agent error:/i.test(loopReturned.trim()))
-            ? loopReturned.trim()
-            : (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim()))
-              ? finalContent.trim()
-              : null
+          orchestrateFailed
+            ? (orchestrateErrorMsg ? `[agent error: ${orchestrateErrorMsg}]` : '[agent error: Orchestration failed]')
+            : (typeof loopReturned === 'string' && /^\[agent error:/i.test(loopReturned.trim()))
+              ? loopReturned.trim()
+              : (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim()))
+                ? finalContent.trim()
+                : null
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
         const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)

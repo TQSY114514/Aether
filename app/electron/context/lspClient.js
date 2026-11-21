@@ -69,12 +69,23 @@ function resolveCommandOnPath(cmd) {
   // (.exe/.cmd/.bat/.com) rather than matching extensionless POSIX shims.
   const exts = isWin ? (hasExt ? [''] : WIN_EXECUTABLE_EXTS) : ['']
 
+  function isUsableFile(filePath) {
+    try {
+      const stat = fs.statSync(filePath)
+      if (!stat.isFile()) return false
+      if (!isWin) {
+        fs.accessSync(filePath, fs.constants.X_OK)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
   if (hasSep) {
     for (const ext of exts) {
       const candidate = ext ? cmd + ext : cmd
-      try {
-        if (fs.statSync(candidate).isFile()) return path.resolve(candidate)
-      } catch {}
+      if (isUsableFile(candidate)) return path.resolve(candidate)
     }
     return null
   }
@@ -83,9 +94,7 @@ function resolveCommandOnPath(cmd) {
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = path.join(dir, ext ? cmd + ext : cmd)
-      try {
-        if (fs.statSync(candidate).isFile()) return candidate
-      } catch {}
+      if (isUsableFile(candidate)) return candidate
     }
   }
   return null
@@ -501,6 +510,7 @@ class LspClient {
     this._docVersions = new Map() // normalizedUri -> version number
     this._docTexts = new Map() // normalizedUri -> last synced text
     this._syncKind = 1 // 1 = Full, 2 = Incremental (negotiated on initialize)
+    this._diagnosticIdentifier = null
     this._pendingSyncByUri = new Map() // normalizedUri -> { uri, text, languageId, seq }
     this._syncSeq = 0
     this._wiredStartPromise = null
@@ -641,17 +651,27 @@ class LspClient {
       }
       return
     }
-    const pending = this._pending.get(msg.id)
-    if (!pending) {
-      // Server-initiated request (e.g. workspace/configuration, client/registerCapability):
-      // acknowledge with null so strict servers do not block waiting on the client.
-      if (msg.method && this._proc && this._proc.stdin && !this._proc.stdin.destroyed && !this._proc.stdin.writableEnded) {
+    // Server-initiated request vs Client-response:
+    if (msg.method) {
+      // Server-initiated request with an id: respond with -32601 Method not found
+      // Never match this._pending!
+      if (msg.id !== undefined && this._proc && this._proc.stdin && !this._proc.stdin.destroyed && !this._proc.stdin.writableEnded) {
         try {
-          this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: null }))
+          this._proc.stdin.write(encodeMessage({
+            jsonrpc: '2.0',
+            id: msg.id,
+            error: { code: -32601, message: 'Method not found' },
+          }))
         } catch { /* ignore */ }
       }
       return
     }
+
+    if (msg.id === undefined) return
+
+    const pending = this._pending.get(msg.id)
+    if (!pending) return
+
     clearTimeout(pending.timer)
     this._pending.delete(msg.id)
     if (msg.error) {
@@ -740,6 +760,8 @@ class LspClient {
           ? syncCap
           : (syncCap && typeof syncCap.change === 'number' ? syncCap.change : 1)
         this._syncKind = syncChange === 2 ? 2 : 1
+        const diagCap = initRes && initRes.capabilities && initRes.capabilities.diagnosticProvider
+        this._diagnosticIdentifier = diagCap && typeof diagCap.identifier === 'string' ? diagCap.identifier : null
         this._initialized = true
         if (proc.stdin && !proc.stdin.destroyed && !proc.stdin.writableEnded) {
           try {
@@ -823,7 +845,7 @@ class LspClient {
       })
     } else if (this._syncKind === 2) {
       const prevText = this._docTexts.get(key) ?? ''
-      const prevLines = prevText.split(/\r?\n/)
+      const prevLines = prevText.split(/\r\n|\r|\n/)
       const endLine = prevLines.length - 1
       const endChar = prevLines[endLine].length
       okDoc = this._notify('textDocument/didChange', {
@@ -1158,9 +1180,13 @@ class LspClient {
     const reqTimeout = typeof timeoutMs === 'number' ? timeoutMs : this.timeoutMs
     let raw
     try {
+      const pullParams = { textDocument: { uri } }
+      if (this._diagnosticIdentifier) {
+        pullParams.identifier = this._diagnosticIdentifier
+      }
       raw = await this._send(
         'textDocument/diagnostic',
-        { textDocument: { uri }, identifier: 'aether-lsp' },
+        pullParams,
         reqTimeout,
         { killOnTimeout }
       )
@@ -1467,8 +1493,17 @@ function codeActionsWorkspace(root, file, { language, line = 1 }) {
 /** Diagnostics for one file. */
 function diagnosticsWorkspace(root, file, { language } = {}) {
   const lang = language || extToLanguage(file) || 'javascript'
-  const uri = pathToFileURL(file).href
-  return withClient(root, lang, async (client) => client.getDiagnostics(uri))
+  const absFile = path.resolve(file)
+  const uri = pathToFileURL(absFile).href
+  return withClient(root, lang, async (client) => {
+    try {
+      const text = fs.readFileSync(absFile, 'utf8')
+      const ext = path.extname(absFile).toLowerCase()
+      const languageId = LSP_LANGUAGE_IDS[ext] || lang
+      await client.syncDocument(uri, text, languageId)
+    } catch { /* proceed with currently cached or in-memory state */ }
+    return client.getDiagnostics(uri)
+  })
 }
 
 /**

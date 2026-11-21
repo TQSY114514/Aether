@@ -526,25 +526,32 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       command: process.execPath,
       args: [FIXTURE, '--hang-diag'],
     })
-    // Pre-warm the server process so cold-start spawn doesn't consume the pull deadline
-    const warmDefs = await definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
-    expect(Array.isArray(warmDefs)).toBe(true)
+    const childProcess = require('child_process')
+    const spawnSpy = vi.spyOn(childProcess, 'spawn')
+    try {
+      // Pre-warm the server process so cold-start spawn doesn't consume the pull deadline
+      const warmDefs = await definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
+      expect(Array.isArray(warmDefs)).toBe(true)
 
-    const t0 = Date.now()
-    const diags = await diagnosticsAfterEdit(tmpDir, target, {
-      content: 'function hello() { return 2 }\n',
-      waitMs: 150,
-      deadlineMs: 450,
-    })
-    const elapsed = Date.now() - t0
-    expect(elapsed).toBeLessThan(1500)
-    expect(Array.isArray(diags) ? diags : []).toEqual([])
+      const t0 = Date.now()
+      const diags = await diagnosticsAfterEdit(tmpDir, target, {
+        content: 'function hello() { return 2 }\n',
+        waitMs: 150,
+        deadlineMs: 450,
+      })
+      const elapsed = Date.now() - t0
+      expect(elapsed).toBeLessThan(1500)
+      expect(diags).toEqual([])
 
-    // Server must remain alive after pull timeout
-    const defs = await definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
-    expect(Array.isArray(defs)).toBe(true)
-    expect(defs.length).toBeGreaterThan(0)
-    disposeAll()
+      // Server must remain alive after pull timeout
+      const defs = await definitionWorkspace(tmpDir, target, { line: 1, character: 1 })
+      expect(Array.isArray(defs)).toBe(true)
+      expect(defs.length).toBeGreaterThan(0)
+      expect(spawnSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      spawnSpy.mockRestore()
+      disposeAll()
+    }
 
     // 2. Hanging initialization on write_file must return fast (never 8s), emit lsp_degraded once, and trigger cooldown
     const lspCjs = require('../electron/context/lspClient')
