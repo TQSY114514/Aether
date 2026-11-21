@@ -194,7 +194,25 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
                 </div>
               </div>
             ) : (
-              renderedContent
+              <>
+                {message.attachment && message.attachment.kind === 'image' && (
+                  <div className={`flex flex-wrap gap-2 justify-end ${message.content ? 'mb-2' : ''}`}>
+                    {(message.attachment.all && message.attachment.all.length > 0
+                      ? message.attachment.all
+                      : [{ name: message.attachment.name, preview: message.attachment.preview || message.attachment.mime }]
+                    ).map((att, i) => (
+                      <div key={i} className="rounded-md overflow-hidden border max-w-sm" style={{ borderColor: 'var(--border)' }}>
+                        <img
+                          src={att.preview}
+                          alt={att.name || 'image'}
+                          className="max-w-full max-h-[300px] object-contain bg-black/5"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {renderedContent}
+              </>
             )}
           </div>
           <div className="flex items-center gap-1 px-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -369,15 +387,6 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
             )}
             {subagents && subagents.length > 0 && (
               <SubagentDeck items={subagents} />
-            )}
-            {message.attachment && message.attachment.kind === 'image' && (
-              <div className="mb-2 rounded-md overflow-hidden border max-w-sm" style={{ borderColor: 'var(--border)' }}>
-                <img
-                  src={message.attachment.preview || message.attachment.mime}
-                  alt={message.attachment.name}
-                  className="max-w-full max-h-[300px] object-contain bg-black/5"
-                />
-              </div>
             )}
             {renderedContent}
             {fileSummary && (
