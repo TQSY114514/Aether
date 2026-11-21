@@ -47,7 +47,7 @@ function getShadowReposRoot() {
 function getShadowRepoDir(sessionId, workspaceRoot) {
   if (workspaceRoot) {
     const crypto = require('crypto')
-    const wsHash = crypto.createHash('sha1').update(path.resolve(workspaceRoot).toLowerCase()).digest('hex').slice(0, 8)
+    const wsHash = crypto.createHash('sha256').update(path.resolve(workspaceRoot).toLowerCase()).digest('hex').slice(0, 8)
     return path.join(getShadowReposRoot(), `${sessionId}_${wsHash}.git`)
   }
   return path.join(getShadowReposRoot(), `${sessionId}.git`)
