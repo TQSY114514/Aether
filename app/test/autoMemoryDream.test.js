@@ -482,8 +482,13 @@ describe('autoMemory dream economy loop', () => {
       { scopeKeys: null },
       { scopeKeys: [{}] },
       { scopeKey: 123 },
+      [],
+      ['/ws/keep'],
+      'bad-string-opts',
     ]) {
-      const r = await autoMemory.consolidate(db, { force: true, nowMs: Date.parse('2026-11-15T12:00:00Z'), ...badOpts })
+      const r = await autoMemory.consolidate(db, typeof badOpts === 'object' && !Array.isArray(badOpts) && badOpts !== null
+        ? { force: true, nowMs: Date.parse('2026-11-15T12:00:00Z'), ...badOpts }
+        : badOpts)
       expect(r.ok).toBe(false)
       expect(r.error).toBe('invalid_scope')
       expect(r.consolidated).toBe(0)
@@ -502,6 +507,8 @@ describe('autoMemory dream economy loop', () => {
       { scopeKeys: [123] },
       { scopeKey: { ws: '/ws/keep' } },
       'bad-string-opts',
+      [],
+      ['/ws/keep'],
     ]) {
       const res = await consolidateHandler(null, badArg)
       expect(res.ok).toBe(false)
@@ -509,5 +516,14 @@ describe('autoMemory dream economy loop', () => {
       expect(res.consolidated).toBe(0)
     }
     expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idKept)).toBeTruthy()
+
+    // Verify {} and omitted opts still execute full-scope path cleanly (not invalid_scope)
+    const resObj = await autoMemory.consolidate(db, {})
+    expect(resObj.error).not.toBe('invalid_scope')
+
+    const hEmpty = await consolidateHandler(null, {})
+    expect(hEmpty.error).not.toBe('invalid_scope')
+    const hOmitted = await consolidateHandler(null)
+    expect(hOmitted.error).not.toBe('invalid_scope')
   })
 })

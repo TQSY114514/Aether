@@ -1018,6 +1018,9 @@ async function consolidate(db, opts = {}) {
 }
 
 async function _consolidateInner(db, opts = {}) {
+  if (opts !== undefined && opts !== null && (typeof opts !== 'object' || Array.isArray(opts))) {
+    return { ok: false, error: 'invalid_scope', consolidated: 0, workspaces: 0 }
+  }
   if (!opts.force && !_isDreamEnabled(db)) {
     return { ok: true, skipped: 'flag_disabled', consolidated: 0, workspaces: 0 }
   }

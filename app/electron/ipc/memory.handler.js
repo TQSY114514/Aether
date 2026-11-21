@@ -172,7 +172,7 @@ function registerMemoryHandlers(ipcMain, db) {
   ipcMain.handle('memory:consolidate', async (_e, opts = {}) => {
     try {
       const autoMemory = require('../llm/autoMemory')
-      if (opts !== undefined && opts !== null && typeof opts !== 'object') {
+      if (opts !== undefined && opts !== null && (typeof opts !== 'object' || Array.isArray(opts))) {
         return { ok: false, consolidated: 0, workspaces: 0, error: 'invalid_scope' }
       }
       const isScope = (k) => k === null || typeof k === 'string'
