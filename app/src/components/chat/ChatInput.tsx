@@ -615,6 +615,8 @@ export default function ChatInput() {
 
         {/* Unified Floating Composer Card */}
         <div
+          data-cwd={activeCwd || undefined}
+          title={activeCwd ? undefined : undefined}
           className={cn(
             'relative flex flex-col rounded-[10px] border px-3.5 pt-2.5 pb-2 transition-colors input-ring',
             dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]'
