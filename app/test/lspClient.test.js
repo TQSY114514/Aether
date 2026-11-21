@@ -6,7 +6,8 @@
 //     deduplication, timeouts, mid-request crash, and graceful degradation
 //     to null (so find_symbol falls back to the regex indexer).
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { EventEmitter } from 'events'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -35,6 +36,59 @@ import {
 } from '../electron/context/lspClient'
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'lsp-server.js')
+const realDateNow = Date.now.bind(Date)
+
+async function waitForCondition(fn, { timeoutMs = 4000, intervalMs = 20 } = {}) {
+  const deadline = realDateNow() + timeoutMs
+  for (;;) {
+    const val = await fn()
+    if (val) return val
+    if (realDateNow() >= deadline) {
+      throw new Error(`waitForCondition timed out after ${timeoutMs}ms`)
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
+async function waitForLogEntries(logPath, predicate, { timeoutMs = 4000, intervalMs = 20 } = {}) {
+  return waitForCondition(() => {
+    if (!fs.existsSync(logPath)) return null
+    const entries = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => {
+        try { return JSON.parse(l) } catch { return null }
+      })
+      .filter(Boolean)
+    return predicate(entries) ? entries : null
+  }, { timeoutMs, intervalMs })
+}
+
+function makeFakeLspProc({ onMessage } = {}) {
+  const proc = new EventEmitter()
+  proc.stdout = new EventEmitter()
+  proc.stderr = new EventEmitter()
+  const stdin = new EventEmitter()
+  stdin.destroyed = false
+  stdin.writableEnded = false
+  const parser = new MessageParser()
+  stdin.write = (chunk) => {
+    if (stdin.destroyed || stdin.writableEnded) return false
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8')
+    for (const msg of parser.push(buf)) {
+      onMessage?.(msg, proc)
+    }
+    return true
+  }
+  proc.stdin = stdin
+  proc.kill = () => {
+    stdin.destroyed = true
+    proc.emit('exit', 0, 'SIGTERM')
+  }
+  return proc
+}
 
 let tmpDir
 
@@ -43,7 +97,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   disposeAll()
+  try { require('../electron/context/lspClient').disposeAll() } catch {}
   try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
 })
 
@@ -636,6 +692,45 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     )
     expect(resolveWindowsCmdShim(unexpandedVarShim, ['--stdio'])).toBeNull()
 
+    // 6. cmd-shim 9.0.2 `set PATHEXT=... &` boilerplate accepted; arbitrary `set EVIL=1 &` rejected
+    const shim902 = path.join(shimDir, 'cmd-shim-902.cmd')
+    fs.writeFileSync(
+      shim902,
+      `@ECHO off\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & set PATHEXT=%PATHEXT:;.JS;=;% & "%_prog%" "%dp0%\\node_modules\\pkg\\server.js" %*\r\n`,
+      'utf8'
+    )
+    const resolved902 = resolveWindowsCmdShim(shim902, ['--stdio'])
+    expect(resolved902).not.toBeNull()
+    expect(resolved902.file).toBe(process.execPath)
+    expect(resolved902.args).toEqual([targetJs, '--stdio'])
+
+    const evilSetShim = path.join(shimDir, 'evil-set.cmd')
+    fs.writeFileSync(
+      evilSetShim,
+      `@ECHO off\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & set EVIL=1 & "%_prog%" "%dp0%\\node_modules\\pkg\\server.js" %*\r\n`,
+      'utf8'
+    )
+    expect(resolveWindowsCmdShim(evilSetShim, ['--stdio'])).toBeNull()
+
+    // 7. --require="%dp0%\bootstrap.cjs" and --require "%dp0%\bootstrap.cjs" keep server.js entrypoint; missing entrypoint with --require rejected
+    const eqReqShim = path.join(shimDir, 'eq-require.cmd')
+    fs.writeFileSync(
+      eqReqShim,
+      `@ECHO off\r\n"%_prog%" --require="%dp0%\\node_modules\\pkg\\bootstrap.cjs" "%dp0%\\node_modules\\pkg\\server.js" %*\r\n`,
+      'utf8'
+    )
+    const resolvedEq = resolveWindowsCmdShim(eqReqShim, ['--stdio'])
+    expect(resolvedEq).not.toBeNull()
+    expect(resolvedEq.args).toEqual([`--require=${bootJs}`, targetJs, '--stdio'])
+
+    const missingEntryWithReqShim = path.join(shimDir, 'missing-entry-req.cmd')
+    fs.writeFileSync(
+      missingEntryWithReqShim,
+      `@ECHO off\r\n"%_prog%" --require "%dp0%\\node_modules\\pkg\\bootstrap.cjs"\r\n`,
+      'utf8'
+    )
+    expect(resolveWindowsCmdShim(missingEntryWithReqShim, ['--stdio'])).toBeNull()
+
     if (process.platform === 'win32') {
       configureServer('javascript', { command: unsafeShim, args: [] })
       const target = path.join(tmpDir, 'unsafe-target.js')
@@ -646,11 +741,12 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
   })
 
   it('syncs pending writes once slow init completes and preserves last write B over A during startup', async () => {
-    // 1. Single write during slow init: returns null at deadline yet auto-syncs didOpen once startup finishes
+    // 1. Single write during gated init: returns null at deadline yet auto-syncs didOpen once gate opens
+    const gate1 = path.join(tmpDir, 'init-gate-1.flag')
     const log1 = path.join(tmpDir, 'slow-single-sync.jsonl')
     configureServer('javascript', {
       command: process.execPath,
-      args: [FIXTURE, '--push-diag', '--slow-init=500', `--log-file=${log1}`],
+      args: [FIXTURE, '--push-diag', `--gate-init-file=${gate1}`, `--log-file=${log1}`],
     })
     const singleFile = path.join(tmpDir, 'single-slow.js')
     const singleText = 'const onlyWrite = 42\n'
@@ -661,19 +757,22 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       deadlineMs: 150,
     })
     expect(singleRes).toBeNull()
-    await new Promise((r) => setTimeout(r, 650))
-    const log1Entries = fs.readFileSync(log1, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    fs.writeFileSync(gate1, 'open', 'utf8')
+    const log1Entries = await waitForLogEntries(log1, (entries) =>
+      entries.some((e) => e.method === 'textDocument/didOpen')
+    )
     const singleOpen = log1Entries.find((e) => e.method === 'textDocument/didOpen')
     expect(singleOpen).toBeTruthy()
     expect(singleOpen.text).toBe(singleText)
     disposeAll()
 
-    // 2. Write A (BAD_SYNTAX) during slow init followed by debounced write B (clean) keeps B
+    // 2. Write A (BAD_SYNTAX) during gated init followed by debounced write B (clean) keeps B
     const lspCjs = require('../electron/context/lspClient')
+    const gate2 = path.join(tmpDir, 'init-gate-2.flag')
     const log2 = path.join(tmpDir, 'slow-ab-sync.jsonl')
     lspCjs.configureServer('javascript', {
       command: process.execPath,
-      args: [FIXTURE, '--push-diag', '--slow-init=500', `--log-file=${log2}`],
+      args: [FIXTURE, '--push-diag', `--gate-init-file=${gate2}`, `--log-file=${log2}`],
     })
     const { getTool } = require('../electron/tools/registry')
     const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
@@ -687,14 +786,16 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
         { path: abFile, content: textA },
         { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 50, lspDeadlineMs: 150 }
       )
-      await new Promise((r) => setTimeout(r, 30))
+      await waitForLogEntries(log2, (entries) => entries.some((e) => e.method === 'initialize'))
       const pB = getTool('write_file').run(
         { path: abFile, content: textB },
         { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 50, lspDeadlineMs: 150 }
       )
       await Promise.all([pA, pB])
-      await new Promise((r) => setTimeout(r, 700))
-      const log2Entries = fs.readFileSync(log2, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      fs.writeFileSync(gate2, 'open', 'utf8')
+      const log2Entries = await waitForLogEntries(log2, (entries) =>
+        entries.some((e) => e.method === 'textDocument/didOpen' || e.method === 'textDocument/didChange')
+      )
       const docSyncs = log2Entries.filter((e) => e.method === 'textDocument/didOpen' || e.method === 'textDocument/didChange')
       expect(docSyncs.length).toBeGreaterThanOrEqual(1)
       expect(docSyncs[docSyncs.length - 1].text).toBe(textB)
@@ -704,36 +805,161 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     }
   })
 
-  it('ignores late stdout data from an exited process after client restart', () => {
-    const client = createClient({ command: process.execPath, args: [FIXTURE], root: tmpDir })
-    const fakeProc1 = { pid: 1001 }
-    const fakeProc2 = { pid: 1002 }
-    const parser1 = new MessageParser()
-    const targetUri = `file:///${path.join(tmpDir, 'stale-proc.js').replace(/\\/g, '/')}`
-
-    client._proc = fakeProc2
-    client._initialized = true
-
-    const frame = encodeMessage({
-      jsonrpc: '2.0',
-      method: 'textDocument/publishDiagnostics',
-      params: {
-        uri: targetUri,
-        version: 1,
-        diagnostics: [{ severity: 1, message: 'LATE_EXITED_PROC_ERR', range: { start: { line: 0, character: 0 } } }],
-      },
-    })
-    // Simulate trailing chunk emitted by exited fakeProc1 when client._proc is already fakeProc2
-    const deliverFromProc1 = (chunk) => {
-      if (client._proc !== fakeProc1) return
-      for (const msg of parser1.push(chunk)) {
-        if (client._proc !== fakeProc1) return
-        client._handleMessage(msg)
+  it('ignores late stdout data from an exited process after client restart', async () => {
+    const childProcess = require('child_process')
+    const lspCjs = require('../electron/context/lspClient')
+    const autoReplyInit = (msg, proc) => {
+      if (msg.method === 'initialize') {
+        proc.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } }), 'utf8'))
       }
     }
-    deliverFromProc1(frame)
-    expect(client._diagnosticsByUri.size).toBe(0)
-    expect(client._unversionedPushByUri.size).toBe(0)
+    const proc1 = makeFakeLspProc({ onMessage: autoReplyInit })
+    const proc2 = makeFakeLspProc({ onMessage: autoReplyInit })
+    const spawnSpy = vi.spyOn(childProcess, 'spawn')
+      .mockImplementationOnce(() => proc1)
+      .mockImplementationOnce(() => proc2)
+
+    const client = lspCjs.createClient({ command: process.execPath, args: [FIXTURE], root: tmpDir })
+    try {
+      const targetUri = `file:///${path.join(tmpDir, 'stale-proc.js').replace(/\\/g, '/')}`
+      expect(await client._ensureStarted()).toBe(true)
+
+      // Exit proc1 and restart client onto proc2
+      proc1.emit('exit', 0, null)
+      expect(await client._ensureStarted()).toBe(true)
+      expect(spawnSpy).toHaveBeenCalledTimes(2)
+
+      // Emit late diagnostic on exited proc1.stdout directly through the production listener
+      const lateFrame = Buffer.from(encodeMessage({
+        jsonrpc: '2.0',
+        method: 'textDocument/publishDiagnostics',
+        params: {
+          uri: targetUri,
+          version: 1,
+          diagnostics: [{ severity: 1, message: 'LATE_EXITED_PROC_ERR', range: { start: { line: 0, character: 0 } } }],
+        },
+      }), 'utf8')
+      proc1.stdout.emit('data', lateFrame)
+      expect(client._diagnosticsByUri.size).toBe(0)
+      expect(client._unversionedPushByUri.size).toBe(0)
+
+      // Emit diagnostic on active proc2.stdout -> accepted by production listener
+      const freshFrame = Buffer.from(encodeMessage({
+        jsonrpc: '2.0',
+        method: 'textDocument/publishDiagnostics',
+        params: {
+          uri: targetUri,
+          version: 1,
+          diagnostics: [{ severity: 1, message: 'FRESH_PROC2_ERR', range: { start: { line: 0, character: 0 } } }],
+        },
+      }), 'utf8')
+      proc2.stdout.emit('data', freshFrame)
+      expect(client._diagnosticsByUri.size).toBe(1)
+    } finally {
+      client.dispose()
+      spawnSpy.mockRestore()
+    }
+  })
+
+  it('handles proc.stdin async errors cleanly and fails invalidated sync writes', async () => {
+    const childProcess = require('child_process')
+    const lspCjs = require('../electron/context/lspClient')
+    const makeReadyFakeProc = () => makeFakeLspProc({
+      onMessage: (msg, p) => {
+        if (msg.method === 'initialize') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } }), 'utf8'))
+        } else if (msg.method === 'textDocument/definition') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: [] }), 'utf8'))
+        }
+      },
+    })
+    const proc1 = makeReadyFakeProc()
+    const proc2 = makeReadyFakeProc()
+    const spawnSpy = vi.spyOn(childProcess, 'spawn')
+      .mockImplementationOnce(() => proc1)
+      .mockImplementationOnce(() => proc2)
+    lspCjs.configureServer('javascript', { command: process.execPath, args: [FIXTURE] })
+    const target = path.join(tmpDir, 'stdin-err.js')
+    fs.writeFileSync(target, 'const x = 1\n', 'utf8')
+    const uri = `file:///${target.replace(/\\/g, '/')}`
+
+    try {
+      // 1. Cached workspace client torn down by async proc1.stdin error -> syncDocumentAfterEdit returns false
+      expect(await lspCjs.definitionWorkspace(tmpDir, target, { line: 1, character: 1 })).toEqual([])
+      proc1.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
+      expect(lspCjs.syncDocumentAfterEdit(tmpDir, target, { content: 'const x = 2\n' })).toBe(false)
+
+      // 2. Direct client torn down by proc2.stdin error -> _syncDocumentSync returns null and _send rejects
+      const client = lspCjs.createClient({ command: process.execPath, args: [FIXTURE], root: tmpDir })
+      expect(await client._ensureStarted()).toBe(true)
+      proc2.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
+      expect(client._initialized).toBe(false)
+      expect(client._syncDocumentSync(uri, 'const x = 2\n', 'javascript')).toBeNull()
+      await expect(client._send('workspace/symbol', { query: 'x' })).rejects.toThrow(/stdin/i)
+      client.dispose()
+    } finally {
+      lspCjs.disposeAll()
+      spawnSpy.mockRestore()
+    }
+  })
+
+  it('settles in-flight push waiter to null when server exits cleanly before responding', async () => {
+    const childProcess = require('child_process')
+    const lspCjs = require('../electron/context/lspClient')
+    let spawnCount = 0
+    const proc1 = makeFakeLspProc({
+      onMessage: (msg, p) => {
+        if (msg.method === 'initialize') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } }), 'utf8'))
+        } else if (msg.method === 'textDocument/didSave') {
+          // Exit with zero _pending requests right after sync
+          setImmediate(() => p.emit('exit', 0, null))
+        }
+      },
+    })
+    const proc2 = makeFakeLspProc({
+      onMessage: (msg, p) => {
+        if (msg.method === 'initialize') {
+          p.stdout.emit('data', Buffer.from(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: { capabilities: {} } }), 'utf8'))
+        } else if (msg.method === 'textDocument/didOpen' || msg.method === 'textDocument/didChange') {
+          const uri = msg.params.textDocument.uri
+          const version = msg.params.textDocument.version
+          p.stdout.emit('data', Buffer.from(encodeMessage({
+            jsonrpc: '2.0',
+            method: 'textDocument/publishDiagnostics',
+            params: {
+              uri,
+              version,
+              diagnostics: [{ severity: 1, message: 'Syntax error near BAD_SYNTAX', range: { start: { line: 1, character: 0 } } }],
+            },
+          }), 'utf8'))
+        }
+      },
+    })
+    const spawnSpy = vi.spyOn(childProcess, 'spawn').mockImplementation(() => {
+      spawnCount++
+      return spawnCount === 1 ? proc1 : proc2
+    })
+    lspCjs.configureServer('javascript', { command: process.execPath, args: [FIXTURE] })
+    const target = path.join(tmpDir, 'exit-mid-wait.js')
+    const content = 'const x = 1\n// BAD_SYNTAX\n'
+    fs.writeFileSync(target, content, 'utf8')
+
+    try {
+      // Write 1: proc1 exits cleanly with _pending.size === 0 while push waiter is active -> settles to null promptly
+      const t0 = Date.now()
+      const res1 = await lspCjs.diagnosticsAfterEdit(tmpDir, target, { content, waitMs: 2500, deadlineMs: 3000 })
+      expect(res1).toBeNull()
+      expect(Date.now() - t0).toBeLessThan(1500)
+
+      // Write 2: fresh proc2 spawns and returns BAD_SYNTAX
+      const res2 = await lspCjs.diagnosticsAfterEdit(tmpDir, target, { content, waitMs: 1500 })
+      expect(Array.isArray(res2)).toBe(true)
+      expect(res2.some((d) => d.message.includes('BAD_SYNTAX'))).toBe(true)
+    } finally {
+      lspCjs.disposeAll()
+      spawnSpy.mockRestore()
+    }
   })
 
   it('reports and clears diagnostics for unversioned-only push servers', async () => {
@@ -788,18 +1014,13 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
 
       await client.syncDocument(uri, 'const a = 1\n', 'javascript')
       // Wait for first process to exit on didSave
-      await new Promise((r) => setTimeout(r, 250))
+      await waitForCondition(() => fs.existsSync(marker) && !client._proc)
 
       // Sync again on the same LspClient instance: must restart and send didOpen (version 1)
       await client.syncDocument(uri, 'const a = 2\n', 'javascript')
-      await new Promise((r) => setTimeout(r, 100))
-
-      const entries = fs
-        .readFileSync(logFile, 'utf8')
-        .trim()
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line))
+      const entries = await waitForLogEntries(logFile, (list) =>
+        list.filter((e) => e.method === 'textDocument/didOpen').length >= 2
+      )
 
       const opens = entries.filter((e) => e.method === 'textDocument/didOpen')
       const changes = entries.filter((e) => e.method === 'textDocument/didChange')
@@ -853,6 +1074,8 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
     const { setWorkspaceRootForSession, clearSessionWorkspaces } = require('../electron/tools/sandbox')
     const sid = 'lsp-script-debounce-sess'
     setWorkspaceRootForSession(sid, tmpDir)
+    let fakeNow = 1_700_000_000_000
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow)
     try {
       const target = path.join(tmpDir, 'script-debounced.ts')
       // 1st write inside script has BAD_SYNTAX
@@ -861,11 +1084,14 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
         { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 1500, lspDeadlineMs: 1800 }
       )
       expect(out1).toContain('[LSP Diagnostics] script-debounced.ts')
-      const postWrite1Entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      const postWrite1Entries = await waitForLogEntries(logFile, (list) =>
+        list.some((e) => e.method === 'textDocument/didOpen')
+      )
       const pullsAfterWrite1 = postWrite1Entries.filter((e) => e.method === 'textDocument/diagnostic').length
 
-      // 2nd rapid write fixes it within <200ms debounce window: debounced wait skips suffix,
-      // yet syncDocumentAfterEdit still sends clean buffer to the active server.
+      // 2nd rapid write fixes it deterministically 50ms into the 200ms debounce window:
+      // debounced wait skips suffix, yet syncDocumentAfterEdit still sends clean buffer.
+      fakeNow += 50
       const out2 = await getTool('write_file').run(
         { path: target, content: 'export const x = 1\n' },
         { sessionId: sid, agentMode: 'act', viaScript: true, lspWaitMs: 1500, lspDeadlineMs: 1800 }
@@ -873,16 +1099,18 @@ describe('Post-write push/pull diagnostics & tool integration', () => {
       expect(out2).toContain('wrote ')
       expect(out2).not.toContain('[LSP Diagnostics]')
 
-      await new Promise((r) => setTimeout(r, 80))
       // Before explicit diagnosticsWorkspace, fixture log must show didChange from 2nd write
       // and ZERO additional textDocument/diagnostic pull requests caused by the 2nd write.
-      const preEntries = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      const preEntries = await waitForLogEntries(logFile, (list) =>
+        list.some((e) => e.method === 'textDocument/didChange')
+      )
       expect(preEntries.filter((e) => e.method === 'textDocument/didChange')).toHaveLength(1)
       expect(preEntries.filter((e) => e.method === 'textDocument/diagnostic')).toHaveLength(pullsAfterWrite1)
 
       const diags = await lspCjs.diagnosticsWorkspace(tmpDir, target)
       expect(diags).toEqual([])
     } finally {
+      nowSpy.mockRestore()
       lspCjs.disposeAll()
       clearSessionWorkspaces(sid)
     }

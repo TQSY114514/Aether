@@ -27,6 +27,8 @@ const SLOW_PULL_ARG = process.argv.find(a => a.startsWith('--slow-pull='))
 const SLOW_PULL_MS = SLOW_PULL_ARG ? parseInt(SLOW_PULL_ARG.slice('--slow-pull='.length), 10) : 0
 const EXIT_MARKER_ARG = process.argv.find(a => a.startsWith('--exit-once-marker='))
 const EXIT_MARKER = EXIT_MARKER_ARG ? EXIT_MARKER_ARG.slice('--exit-once-marker='.length) : null
+const GATE_INIT_ARG = process.argv.find(a => a.startsWith('--gate-init-file='))
+const GATE_INIT_FILE = GATE_INIT_ARG ? GATE_INIT_ARG.slice('--gate-init-file='.length) : null
 const LOG_ARG = process.argv.find(a => a.startsWith('--log-file='))
 const LOG_FILE = LOG_ARG ? LOG_ARG.slice('--log-file='.length) : null
 const docTexts = new Map()
@@ -102,8 +104,24 @@ const handle = (msg) => {
         serverInfo: { name: 'fixture-lsp', version: '1.0.0' },
       },
     })
-    if (SLOW_INIT_MS > 0) setTimeout(reply, SLOW_INIT_MS)
-    else reply()
+    if (GATE_INIT_FILE) {
+      const fs = require('fs')
+      if (fs.existsSync(GATE_INIT_FILE)) {
+        reply()
+      } else {
+        const poll = setInterval(() => {
+          if (fs.existsSync(GATE_INIT_FILE)) {
+            clearInterval(poll)
+            reply()
+          }
+        }, 15)
+        if (poll.unref) poll.unref()
+      }
+    } else if (SLOW_INIT_MS > 0) {
+      setTimeout(reply, SLOW_INIT_MS)
+    } else {
+      reply()
+    }
     return
   }
   if (msg.method === 'initialized') return // notification

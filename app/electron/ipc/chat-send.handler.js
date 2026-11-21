@@ -608,22 +608,29 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           }
         }
+        let loopReturned = ''
         if (featureFlags.isEnabled(db, 'agent.orchestrator') && isComplexRequest(content, 0)) {
           try {
             const orc = await orchestrate({ db, request: content, provider, model, signal: controller.signal, agentMode: agentMode || 'ask', parentSessionId: sessionId, callbacks: {
               ...cb,
               onFileSummary: (summary) => { mergeFileSummary(summary) },
             } })
-            const returned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
-            finalContent = streamedContent || returned || ''
+            loopReturned = (orc && orc.ok && orc.summary) ? orc.summary : await runWithOverflowHeal()
+            finalContent = streamedContent || loopReturned || ''
           } catch {
-            const returned = await runWithOverflowHeal()
-            finalContent = streamedContent || returned || ''
+            loopReturned = await runWithOverflowHeal()
+            finalContent = streamedContent || loopReturned || ''
           }
         } else {
-          const returned = await runWithOverflowHeal()
-          finalContent = streamedContent || returned || ''
+          loopReturned = await runWithOverflowHeal()
+          finalContent = streamedContent || loopReturned || ''
         }
+        const loopError =
+          (typeof loopReturned === 'string' && /^\[agent error:/i.test(loopReturned.trim()))
+            ? loopReturned.trim()
+            : (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim()))
+              ? finalContent.trim()
+              : null
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         // Report final context budget.
         const budgetAfter = estimateMessagesTokens(compacted) + estimateTextTokens(finalContent)
@@ -635,15 +642,16 @@ ipcMain.handle('chat:complete', handleChatComplete)
         const _thinking = cb.getThinkingData ? cb.getThinkingData() : null
         db.updateMessage(msgId, {
           content: finalContent,
-          status: 'success',
+          status: loopError ? 'error' : 'success',
+          ...(loopError ? { error_message: loopError } : {}),
           token_count: tokens,
           thinking_content: _thinking?.content || null,
           thinking_duration_ms: _thinking?.durationMs || null,
         })
-        if (needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
+        if (!loopError && needsAiSummary) await generateSummaryTitle({ sessionId, content, fullContent: finalContent, model, provider, titleLanguage, db })
         // Auto-memory sync (Hermes-style): fire-and-forget extraction of facts
         // worth remembering. Not awaited — must never add latency to the reply.
-        if (autoMemoryOn) {
+        if (!loopError && autoMemoryOn) {
           autoMemory.sync({
             db, provider, model, userMessage: content, assistantReply: finalContent, sessionId, workspace: wsRoot,
             onMemorySaved: (payload) => {
@@ -657,11 +665,11 @@ ipcMain.handle('chat:complete', handleChatComplete)
         try { db.setSetting('llm.lastProvider', String(provider?.id || provider || '')); db.setSetting('llm.lastModel', String(model?.model_name || model?.id || model || '')) } catch {}
         // Habit learner: detect recurring preferences and promote them to a
         // user-habits skill once they repeat. Also fire-and-forget.
-        if (autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
+        if (!loopError && autoMemoryOn) habitLearner.detectAndLearn({ db, provider, model, userMessage: content, assistantReply: finalContent, onPropose: (h) => { try { getWebContents()?.send('chat:habit-proposed', h) } catch {} } })
         // Memory → Skill bridge: every 20 messages, run a memory audit to
         // detect patterns and draft new skills from accumulated memories.
         // Fire-and-forget, never blocks the reply.
-        if (autoMemoryOn && sessionId && db) {
+        if (!loopError && autoMemoryOn && sessionId && db) {
           try {
             const msgCount = (db.allRows('SELECT COUNT(*) as c FROM message WHERE session_id = ?', [sessionId]) || [])[0]?.c || 0
             if (msgCount > 0 && msgCount % 20 === 0) {
@@ -688,7 +696,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             }
           } catch {}
         }
-        if (autoMemoryOn && sessionId && db) {
+        if (!loopError && autoMemoryOn && sessionId && db) {
           try {
             const bridge = require('../llm/memorySkillBridge')
             const mems = (db.getMemoriesScoped && recallWs) ? db.getMemoriesScoped(recallWs, 30) : (db.getMemories ? db.getMemories(30) : [])
@@ -721,8 +729,8 @@ ipcMain.handle('chat:complete', handleChatComplete)
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
-        if (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim())) {
-          return { messageId: msgId, error: finalContent.trim(), modelSuggestion }
+        if (loopError) {
+          return { messageId: msgId, error: loopError, modelSuggestion }
         }
         return { messageId: msgId, modelSuggestion }
       } catch (err) {

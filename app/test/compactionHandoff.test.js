@@ -626,4 +626,115 @@ describe('Amp-style 2-step Editable Handoff', () => {
     expect(queued).toEqual({ messageId: 0, queued: true })
     expect(queued.error).toBeUndefined()
   })
+
+  it('chat:send preserves partial streamed text & file_summary while returning error when runToolLoop returns [agent error:] (CodeRabbit R5 #5)', async () => {
+    const Module = require('node:module')
+    const handlerPath = require.resolve('../electron/ipc/chat-send.handler')
+    const origLoad = Module._load
+    const origCached = require.cache[handlerPath]
+    delete require.cache[handlerPath]
+
+    let runToolLoopImpl = async () => ''
+    let autoMemorySyncCalls = 0
+    let habitLearnCalls = 0
+    Module._load = function mockedLoad(request, parent, isMain) {
+      if (request === '../llm/toolLoop' || request.endsWith('/toolLoop') || request.endsWith('\\toolLoop')) {
+        return { runToolLoop: (opts) => runToolLoopImpl(opts) }
+      }
+      if (request === '../llm/autoMemory' || request.endsWith('/autoMemory') || request.endsWith('\\autoMemory')) {
+        return {
+          recall: () => [],
+          sync: () => { autoMemorySyncCalls += 1 },
+        }
+      }
+      if (request === '../llm/habitLearner' || request.endsWith('/habitLearner') || request.endsWith('\\habitLearner')) {
+        return {
+          buildHabitsPrompt: () => '',
+          detectAndLearn: () => { habitLearnCalls += 1 },
+        }
+      }
+      return origLoad.call(this, request, parent, isMain)
+    }
+
+    try {
+      const { registerChatSendHandler } = require('../electron/ipc/chat-send.handler')
+      const handlers = {}
+      const ipcMain = { handle: (ch, fn) => { handlers[ch] = fn }, on: () => {} }
+      let nextMsgId = 100
+      const updates = []
+      const stubDb = {
+        getSetting: (k) => (k === 'auto_memory_enabled' ? '1' : k === 'autoTitle' ? '0' : null),
+        addMessage: () => ({ lastInsertRowid: ++nextMsgId }),
+        updateMessage: (id, data) => { updates.push({ id, ...data }) },
+        touchSession: () => {},
+        renameSession: () => {},
+        setSessionConfig: () => {},
+        classifyIntent: () => 'coding',
+        getAllModels: () => [{ id: 1, provider_id: 1, model_name: 'm1', context_window: 32000 }],
+        getModel: () => ({ id: 1, provider_id: 1, model_name: 'm1', context_window: 32000 }),
+        getProvider: () => ({ id: 1, name: 'p1', enabled: 1, api_format: 'openai', api_url: 'http://127.0.0.1:9/v1', api_key: 'k' }),
+        getFallbackChain: () => [],
+        getModelScores: () => [],
+        getSession: () => ({ id: 10, title: 'Chat', cwd: process.cwd(), config: null }),
+        getPersona: () => null,
+        getMessages: () => [{ id: 1, session_id: 10, role: 'user', content: 'check' }],
+      }
+      registerChatSendHandler({
+        ipcMain,
+        db: stubDb,
+        getWebContents: () => ({ send: () => {}, isDestroyed: () => false }),
+        ctx: {
+          abortControllers: new Map(),
+          activeToolLoops: new Set(),
+          pendingInjections: new Map(),
+          sessionMessagesMap: new Map(),
+          registerSessionMessages: () => {},
+          allowRulesStore: null,
+        },
+      })
+
+      // (a) Partial streamed text + file summary + [agent error: ...] return
+      runToolLoopImpl = async (opts) => {
+        opts.onStreamDelta?.('正在检查...')
+        opts.onFileSummary?.({ files: [{ path: 'foo.js', added: 3, removed: 1 }] })
+        return '[agent error: network failed]'
+      }
+      const errRes = await handlers['chat:send']({}, { sessionId: 10, content: 'check', modelId: 1, useTools: true })
+      expect(errRes.error).toBe('[agent error: network failed]')
+      expect(errRes.messageId).toBe(102)
+      const errMainUpdate = updates.find(u => u.id === 102 && u.status === 'error')
+      expect(errMainUpdate).toMatchObject({
+        id: 102,
+        content: '正在检查...',
+        status: 'error',
+        error_message: '[agent error: network failed]',
+      })
+      const fileSummaryUpdate = updates.find(u => u.id === 102 && typeof u.file_summary === 'string')
+      expect(fileSummaryUpdate).toBeDefined()
+      expect(JSON.parse(fileSummaryUpdate.file_summary).fileCount).toBe(1)
+      expect(autoMemorySyncCalls).toBe(0)
+      expect(habitLearnCalls).toBe(0)
+
+      // (b) Normal completion returns without error and saves status='success'
+      updates.length = 0
+      runToolLoopImpl = async (opts) => {
+        opts.onStreamDelta?.('检查完成')
+        return '检查完成'
+      }
+      const okRes = await handlers['chat:send']({}, { sessionId: 10, content: 'check ok', modelId: 1, useTools: true })
+      expect(okRes.error).toBeUndefined()
+      expect(okRes.messageId).toBe(104)
+      expect(updates[0]).toMatchObject({
+        id: 104,
+        content: '检查完成',
+        status: 'success',
+      })
+      expect(autoMemorySyncCalls).toBe(1)
+      expect(habitLearnCalls).toBe(1)
+    } finally {
+      Module._load = origLoad
+      delete require.cache[handlerPath]
+      if (origCached) require.cache[handlerPath] = origCached
+    }
+  })
 })

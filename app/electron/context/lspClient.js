@@ -13,7 +13,7 @@
 // Anything unavailable → degrade to null.
 // ───────────────────────────────────────────────────────────────────────────
 
-const { spawn } = require('child_process')
+const childProcess = require('child_process')
 const { fileURLToPath, pathToFileURL } = require('url')
 const path = require('path')
 
@@ -164,6 +164,21 @@ function expandDp0AndCheckVars(tok, cmdDir) {
   return assertNoControlChars(expanded)
 }
 
+const NODE_OPTIONS_WITH_VALUE = new Set([
+  '-r', '--require', '--import', '--loader', '--experimental-loader',
+  '--env-file', '--env-file-if-exists', '-C', '--conditions', '--input-type',
+  '--title', '--redirect-warnings', '--diagnostic-dir', '--report-directory',
+  '--report-filename', '--report-signal', '--heapsnapshot-signal',
+  '--cpu-prof-dir', '--cpu-prof-interval', '--cpu-prof-name',
+  '--heap-prof-dir', '--heap-prof-interval', '--heap-prof-name',
+  '--inspect-port', '--debug-port', '--max-http-header-size',
+  '--icu-data-dir', '--openssl-config', '--tls-cipher-list',
+  '--dns-result-order', '--experimental-policy', '--policy-integrity',
+  '--watch-path',
+])
+
+const DISALLOWED_NODE_CODE_FLAGS = new Set(['-e', '--eval', '-p', '--print'])
+
 function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
   try {
     const fs = require('fs')
@@ -175,7 +190,7 @@ function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
 
     // Pattern 1: npm / pnpm / yarn `.cmd` shims targeting a JS entrypoint via %dp0%.
     // Preserve interpreter flags (e.g. --require, --enable-source-maps) and static post-args.
-    const npmBoilerplateRe = /^endLocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&\s*/i
+    const npmBoilerplateRe = /^endLocal\s*&\s*goto\s+#_undefined_#\s+2>NUL\s*\|\|\s*title\s+%COMSPEC%\s*&\s*(?:set\s+(?:"PATHEXT=%PATHEXT:;\.JS;=;%"|PATHEXT=%PATHEXT:;\.JS;=;%)\s*&\s*)?/i
     for (const rawLine of lines) {
       let line = rawLine.trim().replace(/^@+/, '').trim()
       if (!line) continue
@@ -188,21 +203,58 @@ function resolveWindowsCmdShim(cmdPath, safeArgs = []) {
       if (!tokens || tokens.length < 2) return null
       if (!/^(?:%_prog%|(?:%~?dp0%?[\\/]?)?node(?:\.exe)?)$/i.test(tokens[0])) continue
 
-      const entryIdx = tokens.findIndex(
-        (t, idx) => idx >= 1 && /%~?dp0%?(?:\\|\/).+?\.(?:mjs|cjs|js)$/i.test(t)
-      )
-      if (entryIdx < 1) return null
-
       const interpArgs = []
-      for (const tok of tokens.slice(1, entryIdx)) {
-        if (/^%~?(?:\*|[0-9])$/.test(tok)) return null
-        const expanded = expandDp0AndCheckVars(tok, cmdDir)
-        if (expanded === null) return null
-        interpArgs.push(expanded)
+      let entryIdx = -1
+      let sawDoubleDash = false
+      let i = 1
+      while (i < tokens.length) {
+        const tok = tokens[i]
+        if (tok === '--') {
+          sawDoubleDash = true
+          i++
+          break
+        }
+        if (tok.startsWith('-')) {
+          if (tok.includes('=')) {
+            const eqIdx = tok.indexOf('=')
+            const optName = tok.slice(0, eqIdx)
+            const optVal = tok.slice(eqIdx + 1)
+            if (!/^--?[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(optName)) return null
+            if (DISALLOWED_NODE_CODE_FLAGS.has(optName)) return null
+            if (/^%~?(?:\*|[0-9])$/.test(optVal)) return null
+            const expandedVal = expandDp0AndCheckVars(optVal, cmdDir)
+            if (expandedVal === null) return null
+            interpArgs.push(`${optName}=${expandedVal}`)
+            i++
+          } else if (NODE_OPTIONS_WITH_VALUE.has(tok)) {
+            if (i + 1 >= tokens.length) return null
+            const valTok = tokens[i + 1]
+            if (/^%~?(?:\*|[0-9])$/.test(valTok)) return null
+            const expandedVal = expandDp0AndCheckVars(valTok, cmdDir)
+            if (expandedVal === null) return null
+            interpArgs.push(tok, expandedVal)
+            i += 2
+          } else {
+            if (DISALLOWED_NODE_CODE_FLAGS.has(tok)) return null
+            const expandedFlag = expandDp0AndCheckVars(tok, cmdDir)
+            if (expandedFlag === null) return null
+            interpArgs.push(expandedFlag)
+            i++
+          }
+        } else {
+          entryIdx = i
+          break
+        }
       }
+      if (sawDoubleDash && i < tokens.length) {
+        entryIdx = i
+      }
+      if (entryIdx < 1 || entryIdx >= tokens.length) return null
 
-      const relMatch = /%~?dp0%?(?:\\|\/)(.+?\.(?:mjs|cjs|js))$/i.exec(tokens[entryIdx])
+      const entryTok = tokens[entryIdx]
+      const relMatch = /^%~?dp0%?(?:\\|\/)(.+?\.(?:mjs|cjs|js))$/i.exec(entryTok)
       if (!relMatch) return null
+      if (expandDp0AndCheckVars(entryTok, cmdDir) === null) return null
       const target = path.resolve(cmdDir, ...relMatch[1].split(/[\\/]+/).filter(Boolean))
       if (!fs.statSync(target).isFile()) return null
 
@@ -463,6 +515,9 @@ class LspClient {
   /** Send a request and await its response. Rejects on timeout / crash. */
   _send(method, params, timeoutMs = this.timeoutMs, { killOnTimeout = true } = {}) {
     if (this._disposed) return Promise.reject(new Error('LSP client disposed'))
+    if (!this._proc || !this._proc.stdin || this._proc.stdin.destroyed || this._proc.stdin.writableEnded) {
+      return Promise.reject(new Error('LSP server stdin unavailable'))
+    }
     const id = ++this._id
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -486,10 +541,25 @@ class LspClient {
 
   /** Send a one-way notification (no response expected). */
   _notify(method, params) {
+    if (!this._proc || !this._proc.stdin || this._proc.stdin.destroyed || this._proc.stdin.writableEnded) {
+      return false
+    }
     try {
       this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method, params: params ?? {} }))
       return true
     } catch { return false }
+  }
+
+  _settleDiagnosticWaiters(targetProc = null) {
+    for (const [key, waiters] of this._diagnosticWaiters.entries()) {
+      for (const w of Array.from(waiters)) {
+        if (targetProc && w.proc && w.proc !== targetProc) continue
+        waiters.delete(w)
+        clearTimeout(w.timer)
+        w.resolve(null)
+      }
+      if (waiters.size === 0) this._diagnosticWaiters.delete(key)
+    }
   }
 
   /** Reject everything in flight and tear the process down. */
@@ -501,13 +571,7 @@ class LspClient {
     this._unversionedPushByUri.clear()
     this._pendingSyncByUri.clear()
     this._wiredStartPromise = null
-    for (const waiters of this._diagnosticWaiters.values()) {
-      for (const w of waiters) {
-        clearTimeout(w.timer)
-        w.resolve(null)
-      }
-    }
-    this._diagnosticWaiters.clear()
+    this._settleDiagnosticWaiters()
     for (const { reject, timer } of this._pending.values()) {
       clearTimeout(timer)
       reject(new Error(reason))
@@ -553,6 +617,7 @@ class LspClient {
         if (waiters && waiters.size > 0) {
           const matched = []
           for (const w of waiters) {
+            if (w.proc && w.proc !== this._proc) continue
             const versionMatches = w.minVersion == null
               ? true
               : (diagVersion !== null && diagVersion >= w.minVersion)
@@ -576,7 +641,7 @@ class LspClient {
     if (!pending) {
       // Server-initiated request (e.g. workspace/configuration, client/registerCapability):
       // acknowledge with null so strict servers do not block waiting on the client.
-      if (msg.method && this._proc && this._proc.stdin) {
+      if (msg.method && this._proc && this._proc.stdin && !this._proc.stdin.destroyed && !this._proc.stdin.writableEnded) {
         try {
           this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: msg.id, result: null }))
         } catch { /* ignore */ }
@@ -610,8 +675,14 @@ class LspClient {
         return false
       }
       const parser = new MessageParser()
-      const proc = spawn(invocation.file, invocation.args, invocation.options)
+      const proc = childProcess.spawn(invocation.file, invocation.args, invocation.options)
       this._proc = proc
+      if (proc.stdin) {
+        proc.stdin.on('error', () => {
+          if (this._proc !== proc) return
+          this._fail('LSP server stdin closed')
+        })
+      }
       proc.stdout.on('data', (chunk) => {
         if (this._proc !== proc) return
         for (const msg of parser.push(chunk)) {
@@ -637,6 +708,7 @@ class LspClient {
         this._unversionedPushByUri.clear()
         this._pendingSyncByUri.clear()
         this._wiredStartPromise = null
+        this._settleDiagnosticWaiters(proc)
         if (this._pending.size) this._fail(`LSP server exited (code=${code}, signal=${signal})`)
       })
       try {
@@ -653,10 +725,13 @@ class LspClient {
           },
           workspaceFolders: [{ uri: rootUri, name: path.basename(path.resolve(this.root)) }],
         }, initTimeoutMs)
+        if (this._proc !== proc || this._disposed) return false
         this._initialized = true
-        try {
-          this._proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method: 'initialized', params: {} }))
-        } catch { /* server already gone — searchSymbols will surface it */ }
+        if (proc.stdin && !proc.stdin.destroyed && !proc.stdin.writableEnded) {
+          try {
+            proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method: 'initialized', params: {} }))
+          } catch { /* server already gone — searchSymbols will surface it */ }
+        }
         return true
       } catch (err) {
         this._startFailed = true
@@ -712,30 +787,35 @@ class LspClient {
     if (!(await this._ensureStarted())) return false
     const key = normalizeUriKey(uri)
     if (this._docVersions.has(key)) return true
+    if (!this._notify('textDocument/didOpen', { textDocument: { uri, languageId: 'plaintext', version: 1, text: '' } })) {
+      return false
+    }
     this._docVersions.set(key, 1)
-    this._notify('textDocument/didOpen', { textDocument: { uri, languageId: 'plaintext', version: 1, text: '' } })
     return true
   }
 
   _syncDocumentSync(uri, text, languageId = 'plaintext') {
+    if (!this._proc || !this._initialized || !this._proc.stdin || this._proc.stdin.destroyed || this._proc.stdin.writableEnded) {
+      return null
+    }
     const key = normalizeUriKey(uri)
     const prev = this._docVersions.get(key)
     const ver = prev == null ? 1 : prev + 1
+    const okDoc = prev == null
+      ? this._notify('textDocument/didOpen', {
+          textDocument: { uri, languageId, version: ver, text },
+        })
+      : this._notify('textDocument/didChange', {
+          textDocument: { uri, version: ver },
+          contentChanges: [{ text }],
+        })
+    if (!okDoc) return null
     this._docVersions.set(key, ver)
-    if (prev == null) {
-      this._notify('textDocument/didOpen', {
-        textDocument: { uri, languageId, version: ver, text },
-      })
-    } else {
-      this._notify('textDocument/didChange', {
-        textDocument: { uri, version: ver },
-        contentChanges: [{ text }],
-      })
-    }
-    this._notify('textDocument/didSave', {
+    const okSave = this._notify('textDocument/didSave', {
       textDocument: { uri },
       text,
     })
+    if (!okSave) return null
     return ver
   }
 
@@ -750,27 +830,26 @@ class LspClient {
    */
   async syncDocument(uri, text, languageId = 'plaintext') {
     if (!(await this._ensureStarted())) return false
-    this._syncDocumentSync(uri, text, languageId)
-    return true
+    return this._syncDocumentSync(uri, text, languageId) !== null
   }
 
   /**
    * Wait up to `waitMs` for a fresh `textDocument/publishDiagnostics` push
    * notification matching `minVersion`, resolving to `null` on timeout.
+   * Returns `{ promise, cancel }`.
    * @private
    */
-  _awaitPushDiagnostics(uri, waitMs = 450, minVersion = null) {
+  _createPushWaiter(uri, waitMs = 450, minVersion = null, proc = null) {
     const key = normalizeUriKey(uri)
-    return new Promise((resolve) => {
-      if (waitMs <= 0) {
-        const cached = this._diagnosticsByUri.get(key)
-        if (cached && (minVersion == null || (cached.version != null && cached.version >= minVersion))) {
-          resolve(cached.diagnostics)
-        } else {
-          resolve(null)
-        }
-        return
-      }
+    if (waitMs <= 0) {
+      const cached = this._diagnosticsByUri.get(key)
+      const val = (cached && (minVersion == null || (cached.version != null && cached.version >= minVersion)))
+        ? cached.diagnostics
+        : null
+      return { promise: Promise.resolve(val), cancel: () => {} }
+    }
+    let cancelFn = () => {}
+    const promise = new Promise((resolve) => {
       let waiters = this._diagnosticWaiters.get(key)
       if (!waiters) {
         waiters = new Set()
@@ -778,6 +857,7 @@ class LspClient {
       }
       const entry = {
         minVersion,
+        proc,
         resolve,
         timer: setTimeout(() => {
           waiters.delete(entry)
@@ -787,7 +867,23 @@ class LspClient {
       }
       if (entry.timer.unref) entry.timer.unref()
       waiters.add(entry)
+      cancelFn = () => {
+        if (!waiters.delete(entry)) return
+        clearTimeout(entry.timer)
+        if (waiters.size === 0) this._diagnosticWaiters.delete(key)
+        resolve(null)
+      }
     })
+    return { promise, cancel: cancelFn }
+  }
+
+  /**
+   * Wait up to `waitMs` for a fresh `textDocument/publishDiagnostics` push
+   * notification matching `minVersion`, resolving to `null` on timeout.
+   * @private
+   */
+  _awaitPushDiagnostics(uri, waitMs = 450, minVersion = null) {
+    return this._createPushWaiter(uri, waitMs, minVersion).promise
   }
 
   queuePendingSync(uri, text, languageId = 'plaintext', { activeWaiter = false } = {}) {
@@ -812,7 +908,7 @@ class LspClient {
         const cur = this._pendingSyncByUri.get(k)
         if (!cur || cur.seq !== item.seq || cur.activeWaiter) continue
         this._pendingSyncByUri.delete(k)
-        this._syncDocumentSync(item.uri, item.text, item.languageId)
+        if (this._syncDocumentSync(item.uri, item.text, item.languageId) === null) break
       }
     }).catch(() => {})
   }
@@ -869,7 +965,19 @@ class LspClient {
         if (waitTimer) clearTimeout(waitTimer)
       }
     }
-    if (!started) return null
+    if (
+      !started ||
+      !this._proc ||
+      !this._initialized ||
+      !this._proc.stdin ||
+      this._proc.stdin.destroyed ||
+      this._proc.stdin.writableEnded
+    ) {
+      const cur = this._pendingSyncByUri.get(key)
+      if (cur && cur.seq === syncSeq) this._pendingSyncByUri.delete(key)
+      return null
+    }
+    const activeProc = this._proc
 
     // If a newer write (e.g. debounced script write B) superseded this call during
     // startup, do not overwrite B with stale text A.
@@ -886,10 +994,15 @@ class LspClient {
     // Register push waiter BEFORE sending notifications to avoid missing fast pushes.
     this._unversionedPushByUri.delete(key)
     const syncStartedAt = Date.now()
-    const pushPromise = this._awaitPushDiagnostics(uri, remainingForPush, expectedVersion)
-    this._syncDocumentSync(uri, text, languageId)
-    const pushed = await pushPromise
+    const pushWaiter = this._createPushWaiter(uri, remainingForPush, expectedVersion, activeProc)
+    const syncedVer = this._syncDocumentSync(uri, text, languageId)
+    if (syncedVer === null) {
+      pushWaiter.cancel()
+      return null
+    }
+    const pushed = await pushWaiter.promise
     if (Array.isArray(pushed)) return pushed
+    if (this._proc !== activeProc || !this._initialized || this._disposed) return null
 
     // Push did not arrive in time; try pull diagnostics within the remaining deadline.
     // Use killOnTimeout: false so a slow optional pull does not tear down the server.
@@ -899,12 +1012,14 @@ class LspClient {
         const pullRes = await this._pullDiagnostics(uri, {
           timeoutMs: remainingForPull,
           killOnTimeout: false,
+          expectedProc: activeProc,
         })
         if (pullRes.authoritative) {
           return pullRes.diagnostics
         }
       } catch { /* server may not implement textDocument/diagnostic or timed out */ }
     }
+    if (this._proc !== activeProc || !this._initialized || this._disposed) return null
 
     // Only reuse cached diagnostics if they match the current edit version.
     const cached = this._diagnosticsByUri.get(key)
@@ -994,8 +1109,15 @@ class LspClient {
    * distinguishing an authoritative server report from an unsupported/empty reply.
    * @private
    */
-  async _pullDiagnostics(uri, { timeoutMs, killOnTimeout = true } = {}) {
-    if (!(await this._ensureStarted())) throw new Error('LSP server unavailable')
+  async _pullDiagnostics(uri, { timeoutMs, killOnTimeout = true, expectedProc = null } = {}) {
+    if (expectedProc) {
+      if (this._proc !== expectedProc || !this._initialized) {
+        return { authoritative: false, diagnostics: [] }
+      }
+    } else if (!(await this._ensureStarted())) {
+      throw new Error('LSP server unavailable')
+    }
+    const reqProc = expectedProc || this._proc
     const key = normalizeUriKey(uri)
     const sentVersion = this._docVersions.get(key) ?? null
     const reqTimeout = typeof timeoutMs === 'number' ? timeoutMs : this.timeoutMs
@@ -1005,6 +1127,9 @@ class LspClient {
       reqTimeout,
       { killOnTimeout }
     )
+    if (this._proc !== reqProc || !this._initialized) {
+      return { authoritative: false, diagnostics: [] }
+    }
     if (!raw || typeof raw !== 'object') return { authoritative: false, diagnostics: [] }
     // Discard stale pull replies if a newer edit bumped the document version in flight.
     const latestVersion = this._docVersions.get(key) ?? null
@@ -1077,8 +1202,10 @@ class LspClient {
     this._serverSupportsPushVersions = false
     this._docVersions.clear()
     if (!proc) return
-    try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: ++this._id, method: 'shutdown', params: null })) } catch { /* gone */ }
-    try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method: 'exit', params: null })) } catch { /* gone */ }
+    if (proc.stdin && !proc.stdin.destroyed && !proc.stdin.writableEnded) {
+      try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', id: ++this._id, method: 'shutdown', params: null })) } catch { /* gone */ }
+      try { proc.stdin.write(encodeMessage({ jsonrpc: '2.0', method: 'exit', params: null })) } catch { /* gone */ }
+    }
     const timer = setTimeout(() => { try { proc.kill() } catch { /* gone */ } }, 300)
     if (timer.unref) timer.unref()
   }
@@ -1358,8 +1485,7 @@ function syncDocumentAfterEdit(root, file, { content, language } = {}) {
   if (client._proc && client._initialized) {
     client._pendingSyncByUri.delete(normalizeUriKey(uri))
     client._syncSeq++
-    client._syncDocumentSync(uri, text, languageId)
-    return true
+    return client._syncDocumentSync(uri, text, languageId) !== null
   }
   if (client._startPromise) {
     client.queuePendingSync(uri, text, languageId)
