@@ -213,6 +213,16 @@ flowchart LR
 
 ---
 
+### 7. Native Multimodal Support & SQLite Attachment Persistence
+
+Aether provides first-class support for multimodal workflows without external cloud storage dependencies:
+- **Instant Paste & Drag-and-Drop**: Paste images directly from the clipboard or drag image files into the prompt composer.
+- **Local SQLite Persistence**: Attachments are stored within the SQLite `message.attachment` column with automatic startup schema migration (`addCol`).
+- **Rich In-Bubble Previews**: Single or multiple image attachments render directly inside user message bubbles with responsive thumbnails and aspect-ratio preservation.
+- **100% Session Fidelity**: Attachments remain fully accessible across session switches, forked conversations (`forkSession`), and application restarts.
+
+---
+
 ## Acknowledgements
 
 Aether stands on the shoulders of these open-source projects and engineering pioneers (traced to the codebase modules they inspired):
@@ -226,7 +236,9 @@ Aether stands on the shoulders of these open-source projects and engineering pio
 - **[Aider](https://github.com/Aider-AI/aider)** — `<<<<<<< SEARCH ... >>>>>>> REPLACE` fault-tolerant patch parser (`patchEngine.js`), Git workflow integration, and compaction handoff framing.
 - **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8-tier cascading fuzzy edit matchers (`editMatchers.js`), read-before-write file `mtime` freshness guard (`sessionContext.js`), background task `branchGeneration` isolation & notification coalescing (`backgroundTasks.js`), built-in agent & workflow profiles (`.aether/agents`, `.aether/workflows`), and GitHub URL / `owner/repo` skill installer (`skills.js`).
 - **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — Token budget estimation (`contextBudget.js`), approval mode cycling, and 50ms event-stream debounce coalescing (`runSession.js`).
-- **[Cline](https://github.com/cline/cline), [Roo Code](https://github.com/RooVetGit/Roo-Code) & [Continue](https://github.com/continuedev/continue)** — Context output folding/pruning (`compaction.js`), visible sub-step task tracking, and declarative configuration-as-code schema (`.aether/config.json`).
+- **[Cline](https://cline.ai), [Roo Code](https://github.com/RooVetGit/Roo-Code) & [Continue](https://github.com/continuedev/continue)** — Context output folding/pruning (`compaction.js`), visible sub-step task tracking, and declarative configuration-as-code schema (`.aether/config.json`).
+- **[Cursor](https://cursor.com) & [Trae](https://trae.ai)** — Native clipboard image paste (`Ctrl+V`), multi-image drag-and-drop ingestion, and responsive in-bubble media preview ergonomics (`MessageBubble.tsx`).
+- **[Google DeepMind Antigravity](https://deepmind.google)** — Native multimodal double-click zoom lightbox inspection (`MessageBubble.tsx`), end-to-end autonomous agent workflow orchestration, and continuous codebase refactoring.
 - **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — Multi-granularity local repository search & context-aware code retrieval ergonomics (`registry.js`, `repoMap.js`).
 
 ### Context, Memory & Safety Mechanisms
@@ -244,11 +256,15 @@ Aether stands on the shoulders of these open-source projects and engineering pio
 - **[Jules](https://jules.google.com)** (Google Labs), **[Grok Build](https://x.ai)**, **[Amp](https://ampcode.com)** & **[Devin Desktop (Windsurf)](https://windsurf.com)** — Asynchronous background coding agents, specialized sub-agent role profiles (`agentRoles.js`), long-running execution state machine (`longRunningTask.js`), and run timeline drawer concepts.
 - **[Kiro](https://aws.amazon.com/q/developer/)** — Adaptive reasoning level controls (`reasoning.js` / `EffortControl.tsx`) and inline subagent execution visualization (`SubagentDeck.tsx`).
 - **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** & **[Evolver](https://github.com/EvoMap/evolver)** — Pre-execution hierarchical task decomposition (`planning.js`) and Genome Evolution Protocol (GEP) strategy reflection.
-- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — Automated PR-level line-by-line review, AST-aware unsafe API interception (`.coderabbit.yaml`), and repository-wide architectural semantic graph regression defense.
+- **[CodeRabbit](https://coderabbit.ai), [Sourcery](https://sourcery.ai) & [Greptile](https://greptile.com)** — Automated PR-level line-by-line review, deserialization defensive guards (`normalizeLoadedMessages`), AST-aware unsafe API interception (`.coderabbit.yaml`), real-time code quality & refactoring advice, and repository-wide architectural semantic graph regression defense.
+- **[Amazon Q Developer](https://aws.amazon.com/q/developer/) & [GitHub CodeQL](https://codeql.github.com/)** — Automated PR cross-session data integrity verification, deep semantic code analysis, and continuous SAST vulnerability scanning.
 
 ### Core Infrastructure & UI Ecosystem
 - **Runtime & Storage**: [Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com).
+- **Testing & Verification**: [Vitest](https://vitest.dev) · [Playwright](https://playwright.dev).
+- **UI & Markdown Pipeline**: [Lucide Icons](https://lucide.dev) · [DOMPurify](https://github.com/cure53/DOMPurify) · [Marked](https://marked.js.org) · [KaTeX](https://katex.org).
 - **Components & Protocols**: [Model Context Protocol (MCP)](https://modelcontextprotocol.io) · [shadcn/ui](https://github.com/shadcn-ui/ui) · [Magic UI](https://github.com/magicuidesign/magicui) · [cc-switch](https://github.com/farion1231/cc-switch) · [new-api](https://github.com/QuantumNous/new-api).
+- **Autonomous Agent Partners**: [Google DeepMind Antigravity](https://deepmind.google) — End-to-end autonomous agent workflow orchestration and continuous codebase evolution.
 
 ---
 

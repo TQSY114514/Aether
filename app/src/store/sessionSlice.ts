@@ -138,6 +138,11 @@ export const createSessionSlice: StateCreator<AppState, [], [], Partial<AppState
           }
         } catch {}
       }
+      if ((m as any).attachment && typeof (m as any).attachment === 'string') {
+        try {
+          m.attachment = JSON.parse((m as any).attachment)
+        } catch {}
+      }
     }
     set((s) => {
       const activeStreamingMsgIds = new Set(

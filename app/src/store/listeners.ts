@@ -149,6 +149,13 @@ export function ensureChunkListener() {
         if (st.currentSessionId === sid && !isStopping) {
           window.electronAPI.message.list(sid).then(msgs => {
             if (getStore().getState().currentSessionId === sid) {
+              for (const m of msgs) {
+                if ((m as any).attachment && typeof (m as any).attachment === 'string') {
+                  try {
+                    m.attachment = JSON.parse((m as any).attachment)
+                  } catch {}
+                }
+              }
               getStore().setState((s) => {
                 const next = { ...s.streamingBySession }
                 delete next[sid]

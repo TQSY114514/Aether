@@ -1422,7 +1422,8 @@ const translations: Record<string, Record<string, string>> = {
     "chat.handoff_commit_failed": "Failed to create handoff session",
     "chat.handoff_send_failed": "Session created, but auto-send failed",
     "slash.handoff": "Handoff Session",
-    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session"
+    "slash.handoff_desc": "Distill current progress into an editable prompt for a clean new session",
+    "chat.attachment.double_click_zoom": "Double-click to expand image"
   },
   "zh-CN": {
     "common.browse": "浏览...",

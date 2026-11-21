@@ -2,6 +2,22 @@
 
 All notable changes to AetherAI are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Native Multimodal Image Persistence & In-Bubble Previews (多模态图片原生持久化与富媒体气泡渲染):**
+  - 支持直接在输入框粘贴、拖拽或选择单张/多张图片，发送后即时在用户消息气泡中以自适应紧凑网格展示缩略图预览（多于 4 张自动采用 `+N` 截断折叠，杜绝大图铺满屏幕）。
+  - 全新上线全功能 Lightbox 画廊式模态查看器（`ImageLightboxModal`）：支持非被动滚轮无级缩放（彻底解决缩放时背景跟随滚动的串扰）、双击 200% 切换、放大拖拽平移、键盘 `←`/`→` 快速切图与一键图片下载保存。
+  - SQLite `message` 表新增 `attachment TEXT` 列并支持启动平滑动态迁移 (`addCol`)，图片附件以纯本地数据完整落盘。
+  - 分叉会话 (`forkSession`)、会话切换以及应用重启后完整恢复图片附件，无需任何外部图床依赖。
+
+### Fixed & Hardened
+
+- 修复中断生成 (`stopGeneration`) 与加载消息 (`loadMessages`) 的附件反序列化不一致问题，统一由 `normalizeLoadedMessages` 处理。
+- 增强乐观更新消息的状态判定，确保存在图片附件时 `attachment.kind` 精确维持为 `'image'`。
+- 更新项目文档中的第三方开源致谢（补充 Sourcery、Amazon Q Developer、CodeQL、Vitest、Lucide Icons 等审查与生态项目）。
+
 ## [1.1.0] - 2026-11-14
 
 ### Added

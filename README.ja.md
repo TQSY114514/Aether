@@ -91,7 +91,8 @@ start.bat        # 依存関係をインストールし、フロントエンド�
 - **コンテキスト圧縮 (Compaction)**: ツール呼び出しのペアと重要な技術的決定を完全に保持した履歴の自動要約。
 - **MCP エコシステム拡張**: プレフィックス名前空間衝突防止を備えた任意の Model Context Protocol stdio サーバーをシームレスに接続。
 - **不可視 AutoMemory とスキル蒸留**: アシスタントヘッダーに埋め込まれた `[Memory · X hits]` カプセル、透明な注入理由 Popover、`AGENTS.md` へのピン留め（シンボリックリンク防御付き）、および `SKILL.md` へのインライン自動蒸留。
-- **合一 HUD & 3 本柱ナビゲーション**: 入力欄 HUD（Plan/Act、モデル、思考深度、トークン/費用と即時ロールバック）と 3 つの主要ビュー（Workspace、Arena、Settings）。
+- **合一 HUD & 3 本柱ナビゲーション**: 入力欄 HUD（Plan/Act、モデル、思考深度、トークン/費用と即时ロールバック）と 3 つの主要ビュー（Workspace、Arena、Settings）。
+- **マルチモーダル原生対応 & SQLite 画像永続化**: 入力欄でのクリップボード画像貼り付け（`Ctrl+V`）やドラッグ＆ドロップに対応。添付画像は外部ストレージに依存せず SQLite `message.attachment` に安全に永続化され、ユーザーメッセージ気泡内でレスポンシブなサムネイルとして復元・表示。
 
 ---
 
@@ -109,6 +110,8 @@ Aether の設計とコードベースは、以下のオープンソースプロ�
 - **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 段階カスケードファジー編集マッチャー（`editMatchers.js`）、書き込み前の読み取りタイムスタンプ鮮度ガード（`sessionContext.js` `readFileState`）、バックグラウンドタスクの `branchGeneration` 分離と通知集約（`backgroundTasks.js`）、組み込みマルチ Agent ロールとワークフローテンプレート（`.aether/agents`、`.aether/workflows`）、および GitHub URL / `owner/repo` スキルインストーラー（`skills.js`）。
 - **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — トークンバジェット見積もり（`contextBudget.js`）、承認モード切り替え、および 50ms イベントストリームデバウンス集約（`runSession.js`）。
 - **[Cline](https://github.com/cline/cline)、[Roo Code](https://github.com/RooVetGit/Roo-Code) & [Continue](https://github.com/continuedev/continue)** — ツール出力の折りたたみ・トリミング戦略（`compaction.js`）、可視化サブステップ追跡、および宣言的設定スキーマ（`.aether/config.json`）。
+- **[Cursor](https://cursor.com) & [Trae](https://trae.ai)** — クリップボード画像の直接貼り付け（`Ctrl+V`）、複数画像のドラッグ＆ドロップ吸着、およびレスポンシブな吹き出し内メディアプレビューの人間工学（`MessageBubble.tsx`）。
+- **[Google DeepMind Antigravity](https://deepmind.google)** — 原生マルチモーダル画像のダブルクリック拡大 Lightbox モーダル表示とスプリング微アニメーション（`MessageBubble.tsx`）、およびエンドツーエンドの自律エージェントワークフロー制御とコードベース継続進化パートナー。
 - **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — マルチ粒度ローカルリポジトリ検索とコンテキスト認識コード検索パイプラインの設計着想（`registry.js`、`repoMap.js`）。
 
 ### コンテキスト・メモリ・安全機構
@@ -126,11 +129,15 @@ Aether の設計とコードベースは、以下のオープンソースプロ�
 - **[Jules](https://jules.google.com)** (Google Labs)、**[Grok Build](https://x.ai)**、**[Amp](https://ampcode.com)** & **[Devin Desktop (Windsurf)](https://windsurf.com)** — 非同期バックグラウンドコーディング Agent、特化型サブ Agent ロール定義（`agentRoles.js`）、長時間実行状態マシン（`longRunningTask.js`）、および実行タイムラインドロワーの設計着想。
 - **[Kiro](https://aws.amazon.com/q/developer/)** — 適応型推論深度制御（`reasoning.js` / `EffortControl.tsx`）およびインラインサブエージェント実行ビジュアル（`SubagentDeck.tsx`）。
 - **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** & **[Evolver](https://github.com/EvoMap/evolver)** — 実行前の階層的タスク分解（`planning.js`）およびゲノム進化プロトコル (GEP) 戦略内省アーキテクチャ。
-- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自動 PR 行単位コードレビュー、AST 認識の高リスク API 遮断（`.coderabbit.yaml`）、およびリポジトリ全体のセマンティックグラフ回帰防御。
+- **[CodeRabbit](https://coderabbit.ai), [Sourcery](https://sourcery.ai) & [Greptile](https://greptile.com)** — 自動 PR 行単位コードレビュー、添付ファイル逆シリアル化の正規化防御（`normalizeLoadedMessages`）、AST 認識の高リスク API 遮断（`.coderabbit.yaml`）、リアルタイムコードリファクタリング提案、およびリポジトリ全体のセマンティックグラフ回帰防御。
+- **[Amazon Q Developer](https://aws.amazon.com/q/developer/) & [GitHub CodeQL](https://codeql.github.com/)** — 自動 PR 変更検証、セッション間データ整合性チェック、高度なセマンティックコード解析、および継続的静的セキュリティスキャン (SAST)。
 
 ### コアインフラストラクチャと UI エコシステム
 - **ランタイムとストレージ基盤**：[Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com)。
+- **テスト・検証基盤**：[Vitest](https://vitest.dev) · [Playwright](https://playwright.dev)。
+- **UI・コンテンツ描画パイプライン**：[Lucide Icons](https://lucide.dev) · [DOMPurify](https://github.com/cure53/DOMPurify) · [Marked](https://marked.js.org) · [KaTeX](https://katex.org)。
 - **コンポーネントとプロトコル設計**：[Model Context Protocol (MCP)](https://modelcontextprotocol.io) · [shadcn/ui](https://github.com/shadcn-ui/ui) · [Magic UI](https://github.com/magicuidesign/magicui) · [cc-switch](https://github.com/farion1231/cc-switch) · [new-api](https://github.com/QuantumNous/new-api)。
+- **自律型 Agent パートナー**：[Google DeepMind Antigravity](https://deepmind.google) — エンドツーエンドの自律 Agent ワークフロー制御およびコードベース継続進化パートナー。
 
 ---
 

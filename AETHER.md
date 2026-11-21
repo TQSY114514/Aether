@@ -13,7 +13,7 @@
 │                          AETHER ARCHITECTURE                           │
 ├────────────────────────────────────────────────────────────────────────┤
 │ 渲染层 (Renderer - app/src/)                                           │
-│  ├─ UI Framework: React 18 + TypeScript + Vite + Tailwind CSS          │
+│  ├─ UI Framework: React 19 + TypeScript + Vite + Tailwind CSS          │
 │  ├─ State: Zustand (chatSlice, sessionSlice, providerSlice, uiSlice...) │
 │  ├─ Virtualization: @tanstack/react-virtual (高性能大消息列表虚拟滚动) │
 │  ├─ Components: ChatWindow, ChatInput, AgentActionHUD, AgentTaskDeck   │

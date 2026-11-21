@@ -1,8 +1,8 @@
-import { useState, memo, useMemo, useCallback } from 'react'
+import { useState, memo, useMemo, useCallback, useEffect } from 'react'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
-import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X } from 'lucide-react'
+import { Copy, Check, RefreshCw, Pencil, Play, GitFork, Brain, Pin, X, Maximize2 } from 'lucide-react'
 import { renderMarkdown, sanitizeHtml } from '@/utils/markdown'
 import { t } from '@/utils/i18n'
 import ToolCallBlock from './ToolCallBlock'
@@ -12,6 +12,7 @@ import ThinkingBlock from './ThinkingBlock'
 import AgentTimeline from './AgentTimeline'
 import FileSummaryDeck from './FileSummaryDeck'
 import SubagentDeck from './SubagentDeck'
+import ImageLightboxModal from './ImageLightboxModal'
 
 function escapeRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
@@ -20,6 +21,27 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
   const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+
+  const attachment = useMemo(() => {
+    if (!message.attachment) return null
+    if (typeof message.attachment === 'string') {
+      try {
+        return JSON.parse(message.attachment)
+      } catch {
+        return null
+      }
+    }
+    return message.attachment
+  }, [message.attachment])
+
+  const imageList = useMemo(() => {
+    if (!attachment || attachment.kind !== 'image') return []
+    const list = attachment.all && attachment.all.length > 0
+      ? attachment.all
+      : [{ name: attachment.name, preview: attachment.preview || attachment.mime }]
+    return list.filter((img: any) => Boolean(img?.preview))
+  }, [attachment])
 
   const sending = useStore(s => s.sending)
   const bubbleWidth = useStore(s => s.bubbleWidth)
@@ -195,20 +217,69 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
               </div>
             ) : (
               <>
-                {message.attachment && message.attachment.kind === 'image' && (
-                  <div className={`flex flex-wrap gap-2 justify-end ${message.content ? 'mb-2' : ''}`}>
-                    {(message.attachment.all && message.attachment.all.length > 0
-                      ? message.attachment.all
-                      : [{ name: message.attachment.name, preview: message.attachment.preview || message.attachment.mime }]
-                    ).map((att, i) => (
-                      <div key={i} className="rounded-md overflow-hidden border max-w-sm" style={{ borderColor: 'var(--border)' }}>
+                {imageList.length > 0 && (
+                  <div className={`flex flex-col items-end ${message.content ? 'mb-2' : ''}`}>
+                    {imageList.length === 1 ? (
+                      <div
+                        className="rounded-[6px] overflow-hidden border max-w-[280px] max-h-[220px] cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5"
+                        style={{ borderColor: 'var(--border)' }}
+                        onClick={() => setLightboxIndex(0)}
+                        onDoubleClick={() => setLightboxIndex(0)}
+                        title={t('chat.attachment.double_click_zoom')}
+                      >
                         <img
-                          src={att.preview}
-                          alt={att.name || 'image'}
-                          className="max-w-full max-h-[300px] object-contain bg-black/5"
+                          src={imageList[0].preview}
+                          alt={imageList[0].name || 'image'}
+                          className="max-w-full max-h-[220px] object-contain select-none"
                         />
+                        <div className="absolute top-1.5 right-1.5 p-1 rounded bg-black/60 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm pointer-events-none shadow-sm">
+                          <Maximize2 size={11} />
+                        </div>
                       </div>
-                    ))}
+                    ) : (
+                      <div
+                        className={`grid gap-1.5 ${
+                          imageList.length === 2
+                            ? 'grid-cols-2 max-w-[260px]'
+                            : imageList.length === 3
+                            ? 'grid-cols-3 max-w-[280px]'
+                            : 'grid-cols-2 max-w-[260px]'
+                        }`}
+                      >
+                        {(imageList.length > 4 ? imageList.slice(0, 4) : imageList).map((att: any, i: number) => {
+                          const isOverflowTile = imageList.length > 4 && i === 3
+                          const remainingCount = imageList.length - 3
+                          const sizeClass = imageList.length === 3 ? 'w-22 h-22' : 'w-28 h-28'
+
+                          return (
+                            <div
+                              key={i}
+                              className={`aspect-square ${sizeClass} rounded-[6px] overflow-hidden border cursor-zoom-in hover:opacity-95 transition-opacity relative group/img bg-black/5 flex items-center justify-center`}
+                              style={{ borderColor: 'var(--border)' }}
+                              onClick={() => setLightboxIndex(i)}
+                              onDoubleClick={() => setLightboxIndex(i)}
+                              title={t('chat.attachment.double_click_zoom')}
+                            >
+                              <img
+                                src={att.preview}
+                                alt={att.name || `image-${i + 1}`}
+                                className="w-full h-full object-cover select-none"
+                              />
+                              {!isOverflowTile && (
+                                <div className="absolute top-1 right-1 p-0.5 rounded bg-black/60 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm pointer-events-none shadow-sm">
+                                  <Maximize2 size={10} />
+                                </div>
+                              )}
+                              {isOverflowTile && (
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center text-white font-mono font-semibold text-base transition-colors hover:bg-black/70">
+                                  +{remainingCount}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
                 {renderedContent}
@@ -491,6 +562,13 @@ function MessageBubble({ message, searchHighlight, active }: { message: Message;
           </div>
         </div>
         </div>
+      )}
+      {lightboxIndex !== null && imageList.length > 0 && (
+        <ImageLightboxModal
+          images={imageList}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
     </div>
   )

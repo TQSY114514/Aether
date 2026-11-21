@@ -213,6 +213,16 @@ flowchart LR
 
 ---
 
+### 七、 多模态原生支持与 SQLite 图片持久化
+
+Aether 提供第一类公民的多模态开发支持，摆脱对任何第三方图床的依赖：
+- **剪贴板即时粘贴与多图拖拽**：在输入框内直接 `Ctrl+V` 粘贴剪贴板截图或拖拽多张图片附件，实时生成缩略图。
+- **本地 SQLite 持久化**：消息附件完整落盘于 SQLite `message.attachment` 列，通过自愈动态迁移 (`addCol`) 平滑升级。
+- **富媒体气泡自适应呈现**：在用户消息气泡中以自适应卡片展示单图或多图预览，保留图片原始比例并支持点击查看。
+- **跨会话与分叉 100% 还原**：会话切换、会话分叉 (`forkSession`) 以及应用重启后图片完全保留，不发生丢失或失效。
+
+---
+
 ## 致谢 (Acknowledgements)
 
 Aether 的架构设计与具体模块实现参考并吸收了以下开源项目与工程先驱的设计思想（按模块溯源）：
@@ -227,6 +237,8 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 - **[ZCode](https://github.com/zai-org/ZCode) (Z.ai)** — 8 级级联模糊代码编辑匹配器（`editMatchers.js`）、写前只读时间戳防覆盖哨兵（`sessionContext.js` `readFileState`）、后台任务 `branchGeneration` 隔离与通知批次合并（`backgroundTasks.js`）、内置多 Agent 角色与工作流编排模板（`.aether/agents`、`.aether/workflows`）及 GitHub URL / `owner/repo` 技能一键安装（`skills.js`）。
 - **[Gemini CLI](https://github.com/google-gemini/gemini-cli) & [aichat](https://github.com/sigoden/aichat)** — 上下文 Token 预算估算（`contextBudget.js`）、审批模式切换及 50ms 事件流防抖聚合渲染（`runSession.js`）。
 - **[Cline](https://github.com/cline/cline)、[Roo Code](https://github.com/RooVetGit/Roo-Code) & [Continue](https://github.com/continuedev/continue)** — 冗余工具输出折叠裁剪（`compaction.js`）、可见子步骤任务追踪与声明式配置即代码规范（`.aether/config.json`）。
+- **[Cursor](https://cursor.com) & [Trae](https://trae.ai)** — 剪贴板图片直接粘贴（`Ctrl+V`）、多图拖拽吸附与自适应气泡富媒体预览交互规范（`MessageBubble.tsx`）。
+- **[Google DeepMind Antigravity](https://deepmind.google)** — 原生多模态图片双击全屏 Lightbox 模态放大与无 Slop 弹簧动效（`MessageBubble.tsx`），以及端到端自主 Agent 工作流编排与代码库持续重构协作伙伴。
 - **[Search](https://github.com/driceroland/Search) (`driceroland/Search`)** — 多粒度本地代码仓库检索与上下文感知搜索管线灵感（`registry.js`、`repoMap.js`）。
 
 ### 上下文、记忆与安全机制
@@ -244,11 +256,15 @@ Aether 的架构设计与具体模块实现参考并吸收了以下开源项目�
 - **[Jules](https://jules.google.com)** (Google Labs)、**[Grok Build](https://x.ai)**、**[Amp](https://ampcode.com)** & **[Devin Desktop (Windsurf)](https://windsurf.com)** — 异步后台编码 Agent、专门化子 Agent 角色划分（`agentRoles.js`）、长程任务执行状态机（`longRunningTask.js`）与运行时间线抽屉灵感。
 - **[Kiro](https://aws.amazon.com/q/developer/)** — 推理深度多档位自适应控制（`reasoning.js` / `EffortControl.tsx`）与行内子代理执行视图（`SubagentDeck.tsx`）。
 - **[DS4](https://gist.github.com/antirez) (Salvatore Sanfilippo)** & **[Evolver](https://github.com/EvoMap/evolver)** — 执行前层次化任务分解（`planning.js`）与基因组进化协议 (GEP) 策略反思架构。
-- **[CodeRabbit](https://coderabbit.ai) & [Greptile](https://greptile.com) ([`greptile-apps[bot]`](https://github.com/apps/greptile-apps))** — 自动化 PR 逐行代码审查、AST/上下文感知高危 API 拦截（`.coderabbit.yaml`）与全仓库架构级语义图谱回归防御。
+- **[CodeRabbit](https://coderabbit.ai), [Sourcery](https://sourcery.ai) & [Greptile](https://greptile.com)** — 自动化 PR 逐行代码审查、附件反序列化归一化防御（`normalizeLoadedMessages`）、AST/上下文感知高危 API 拦截（`.coderabbit.yaml`）、实时代码异味重构建议与全仓库架构级语义图谱回归防御。
+- **[Amazon Q Developer](https://aws.amazon.com/q/developer/) & [GitHub CodeQL](https://codeql.github.com/)** — 自动化 PR 变更复核、跨会话数据完整性校验、深度语义代码分析与持续静态应用程序安全测试 (SAST)。
 
 ### 核心基础设施与 UI 生态
 - **运行时与存储底座**：[Electron](https://www.electronjs.org) · [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (Joshua Wise) · [Ink v5](https://github.com/vadimdemedes/ink) (Vadim Demedes) · [React](https://react.dev) · [Zustand](https://github.com/pmndrs/zustand) (Poimandres) · [Tailwind CSS](https://tailwindcss.com)。
+- **测试与验证生态**：[Vitest](https://vitest.dev) · [Playwright](https://playwright.dev)。
+- **UI 与内容渲染管线**：[Lucide Icons](https://lucide.dev) · [DOMPurify](https://github.com/cure53/DOMPurify) · [Marked](https://marked.js.org) · [KaTeX](https://katex.org)。
 - **组件与协议设计**：[Model Context Protocol (MCP)](https://modelcontextprotocol.io) · [shadcn/ui](https://github.com/shadcn-ui/ui) · [Magic UI](https://github.com/magicuidesign/magicui) · [cc-switch](https://github.com/farion1231/cc-switch) · [new-api](https://github.com/QuantumNous/new-api)。
+- **自主 Agent 协作伙伴**：[Google DeepMind Antigravity](https://deepmind.google) — 端到端自主 Agent 编程、复杂任务编排与代码库持续重构协作伙伴。
 
 ---
 
