@@ -1028,6 +1028,15 @@ async function _consolidateInner(db, opts = {}) {
   if (typeof db.transaction !== 'function') {
     return { ok: false, error: 'db_no_transaction_support', consolidated: 0, workspaces: 0 }
   }
+  const _isScopeVal = (k) => k === null || typeof k === 'string'
+  const hasMultiScope = opts && Object.prototype.hasOwnProperty.call(opts, 'scopeKeys') && opts.scopeKeys !== undefined
+  if (hasMultiScope && (!Array.isArray(opts.scopeKeys) || !opts.scopeKeys.every(_isScopeVal))) {
+    return { ok: false, error: 'invalid_scope', consolidated: 0, workspaces: 0 }
+  }
+  const hasSingleScope = opts && Object.prototype.hasOwnProperty.call(opts, 'scopeKey') && opts.scopeKey !== undefined
+  if (hasSingleScope && !_isScopeVal(opts.scopeKey)) {
+    return { ok: false, error: 'invalid_scope', consolidated: 0, workspaces: 0 }
+  }
 
   const nowMs = Number.isFinite(Number(opts.nowMs)) ? Number(opts.nowMs) : Date.now()
   const maxAgeDays = Number.isFinite(Number(opts.maxAgeDays)) ? Number(opts.maxAgeDays) : CONSOLIDATE_MAX_AGE_DAYS
@@ -1051,8 +1060,6 @@ async function _consolidateInner(db, opts = {}) {
     return { ok: false, error: err?.message || 'memory_read_failed', consolidated: 0, workspaces: 0 }
   }
 
-  const hasSingleScope = Object.prototype.hasOwnProperty.call(opts, 'scopeKey')
-  const hasMultiScope = Array.isArray(opts.scopeKeys)
   const scopeSet = hasMultiScope
     ? new Set(opts.scopeKeys.map(k => (k ? String(k) : null)))
     : (hasSingleScope ? new Set([opts.scopeKey ? String(opts.scopeKey) : null]) : null)

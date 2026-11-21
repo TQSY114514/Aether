@@ -474,4 +474,40 @@ describe('autoMemory dream economy loop', () => {
     expect(calls).toBe(1)
     expect(r1.consolidated + r2.consolidated).toBe(1)
   })
+
+  it('rejects malformed scopeKeys and scopeKey in memory:consolidate IPC and autoMemory.consolidate without falling back to global', async () => {
+    const idKept = insertMem(db, { content: 'Should remain untouched on invalid scope', workspace: '/ws/keep', created_at: '2026-09-01 00:00:00' })
+    for (const badOpts of [
+      { scopeKeys: '/ws/keep' },
+      { scopeKeys: null },
+      { scopeKeys: [{}] },
+      { scopeKey: 123 },
+    ]) {
+      const r = await autoMemory.consolidate(db, { force: true, nowMs: Date.parse('2026-11-15T12:00:00Z'), ...badOpts })
+      expect(r.ok).toBe(false)
+      expect(r.error).toBe('invalid_scope')
+      expect(r.consolidated).toBe(0)
+    }
+
+    const { registerMemoryHandlers } = require('../electron/ipc/memory.handler')
+    const handlers = new Map()
+    const fakeIpc = { handle: (ch, fn) => handlers.set(ch, fn) }
+    registerMemoryHandlers(fakeIpc, db)
+    const consolidateHandler = handlers.get('memory:consolidate')
+    expect(typeof consolidateHandler).toBe('function')
+
+    for (const badArg of [
+      { scopeKeys: '/ws/keep' },
+      { scopeKeys: null },
+      { scopeKeys: [123] },
+      { scopeKey: { ws: '/ws/keep' } },
+      'bad-string-opts',
+    ]) {
+      const res = await consolidateHandler(null, badArg)
+      expect(res.ok).toBe(false)
+      expect(res.error).toBe('invalid_scope')
+      expect(res.consolidated).toBe(0)
+    }
+    expect(db.prepare('SELECT id FROM memory WHERE id = ?').get(idKept)).toBeTruthy()
+  })
 })
