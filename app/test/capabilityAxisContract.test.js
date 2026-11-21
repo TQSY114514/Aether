@@ -7,7 +7,7 @@
 //   4. capabilityPolicy.js's pure TOOL_AXIS classification remains consistent.
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
@@ -24,14 +24,13 @@ const ENFORCED_AXES = Object.values(AXES).filter(a => a !== AXES.UNKNOWN)
 describe('binary Plan / Act & high-risk gate contract', () => {
   const toolLoopSrc = readFileSync(join(__dirname, '../electron/llm/toolLoop.js'), 'utf8')
   const permissionsSrc = readFileSync(join(__dirname, '../electron/llm/permissions.js'), 'utf8')
-  const securityPageSrc = readFileSync(join(__dirname, '../src/pages/SecurityPage.tsx'), 'utf8')
   const agentSettingsSrc = readFileSync(join(__dirname, '../src/components/settings/AgentSettings.tsx'), 'utf8')
   const modeSelectorSrc = readFileSync(join(__dirname, '../src/components/chat/input/AgentModeSelector.tsx'), 'utf8')
   const toolCallBlockSrc = readFileSync(join(__dirname, '../src/components/chat/ToolCallBlock.tsx'), 'utf8')
 
-  it('removes 6-axis capability.* enforcement from SecurityPage, AgentSettings, toolLoop, and permissions', () => {
-    const securityKeys = [...securityPageSrc.matchAll(/key:\s*'(capability\.[a-z]+)'/g)]
-    expect(securityKeys).toEqual([])
+  it('removes 6-axis capability.* enforcement and redundant permission matrices from UI, toolLoop, and permissions', () => {
+    expect(existsSync(join(__dirname, '../src/pages/SecurityPage.tsx'))).toBe(false)
+    expect(existsSync(join(__dirname, '../src/components/settings/CustomPolicySettings.tsx'))).toBe(false)
     expect(agentSettingsSrc).not.toMatch(/capability\.(filesystem|shell|network)/)
     expect(toolLoopSrc).not.toContain('decideAxisPolicy')
     expect(permissionsSrc).not.toContain('decideAxisPolicy')

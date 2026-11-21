@@ -584,7 +584,7 @@ export default function ChatInput() {
 
   return (
     <div
-      className="border-t border-[var(--border)] bg-[var(--content-bg)] px-4 py-2.5"
+      className="px-4 pb-3.5 pt-1.5 bg-transparent"
       ref={dropZoneRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -592,7 +592,7 @@ export default function ChatInput() {
     >
       <div className="max-w-3xl mx-auto">
         {dragOver && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-blur-fade pointer-events-none">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 pointer-events-none">
             <div className="rounded-lg border-2 border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-8 py-6 text-center">
               <Paperclip size={32} className="text-[var(--accent)] mx-auto mb-2" />
               <p className="text-sm font-medium text-[var(--text-primary)]">{t('chat.drag_drop_hint')}</p>
@@ -613,56 +613,17 @@ export default function ChatInput() {
 
         <AgentTaskDeck sessionId={currentSessionId} />
 
-        {/* CWD Indicator Capsule */}
+        {/* Unified Floating Composer Card */}
         <div
-          className="mb-1.5 flex items-center justify-between gap-2 px-2.5 py-1 rounded-[6px] border text-xs"
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
-          role="region"
-          aria-label={t('cwd.aria_label', '工作目录指示器')}
-        >
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <Folder size={13} className="shrink-0 text-[var(--accent)]" />
-            <span className="text-[11px] font-medium shrink-0" style={{ color: 'var(--text-secondary)' }}>
-              {t('cwd.current', 'CWD')}:
-            </span>
-            <span
-              className="font-mono text-[11px] truncate select-all"
-              style={{ color: 'var(--text-primary)' }}
-              title={activeCwd || t('cwd.default_tooltip', '当前无特定工作目录，默认使用系统进程目录')}
-            >
-              {activeCwd || t('cwd.default', '进程默认 (process.cwd)')}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={handlePickCwd}
-              disabled={!currentSessionId || isStreaming}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] border text-[11px] font-medium hover:bg-[var(--border)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-              title={t('cwd.browse', '浏览并选择目录')}
-            >
-              <FolderOpen size={11} className="shrink-0" />
-              <span>{t('common.browse', '浏览')}</span>
-            </button>
-            {activeCwd ? (
-              <button
-                type="button"
-                onClick={handleOpenCwd}
-                disabled={isStreaming}
-                className="p-1 rounded-[4px] hover:bg-[var(--border)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                title={t('cwd.reveal', '在文件资源管理器中打开')}
-                aria-label={t('cwd.reveal', '在文件资源管理器中打开')}
-              >
-                <ExternalLink size={11} />
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <div
-          className={cn('relative flex items-end gap-2 rounded-lg border px-3.5 py-2 transition-all input-ring', dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]')}
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: dragOver ? 'var(--accent)' : 'var(--border)' }}
+          className={cn(
+            'relative flex flex-col rounded-[10px] border px-3.5 pt-2.5 pb-2 transition-colors input-ring',
+            dragOver && 'border-[var(--accent)] ring-1 ring-[var(--accent)]'
+          )}
+          style={{
+            backgroundColor: 'var(--content-bg)',
+            borderColor: dragOver ? 'var(--accent)' : 'var(--border)',
+            boxShadow: 'var(--shadow-card)',
+          }}
         >
           {showSlash && (
             <SlashCommandMenu
@@ -676,27 +637,6 @@ export default function ChatInput() {
           <InputReference value={input} cursorPos={refCursor} visible onSelect={handleReferenceSelect} />
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
 
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isStreaming}
-            title={t('chat.upload')}
-            aria-label={t('chat.upload')}
-            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky disabled:opacity-30 focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-          >
-            <Paperclip size={15} className="text-[var(--text-muted)]" />
-          </button>
-
-          <button
-            type="button"
-            onClick={toggleBtw}
-            title={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
-            aria-label={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
-            className="shrink-0 p-1.5 rounded-md hover:bg-[var(--border)] icon-btn-silky text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-          >
-            <HelpCircle size={15} />
-          </button>
-
           <textarea
             ref={textareaRef}
             value={input}
@@ -706,98 +646,123 @@ export default function ChatInput() {
             onPaste={handlePaste}
             placeholder={currentPlaceholder}
             rows={1}
-            className="flex-1 bg-transparent resize-none outline-none text-xs leading-relaxed py-1 max-h-[200px]"
+            className="w-full bg-transparent resize-none outline-none text-[13.5px] leading-[1.6] tracking-[-0.005em] py-0.5 max-h-[200px]"
+            style={{ color: 'var(--text-primary)' }}
             disabled={isArenaRunning}
           />
 
-          {isArenaRunning || (isStreaming && !input.trim()) ? (
-            <button
-              onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }}
-              className="shrink-0 p-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale"
-              title={t('chat.stop')}
-              aria-label={t('chat.stop')}
-            >
-              <Square size={13} fill="currentColor" />
-            </button>
-          ) : isStreaming && input.trim() ? (
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  if (input.trim()) {
-                    enqueueMessage(input.trim(), currentSessionId ?? undefined)
-                    setInput('')
+          {/* Integrated Bottom Toolbar inside Composer */}
+          <div className="flex items-center justify-between gap-1.5 pt-2 mt-1.5 border-t flex-nowrap min-w-0" style={{ borderColor: 'color-mix(in srgb, var(--border) 65%, transparent)' }}>
+            <div className="flex items-center gap-1.5 flex-nowrap min-w-0 shrink">
+              {/* 1. Mode: Plan / Act */}
+              <AgentModeSelector mode={agentMode} onChange={setAgentMode} compact />
+              {/* 2. Main Model Selector */}
+              <ModelSelector
+                providers={providers}
+                allModels={allModels}
+                activeModelId={activeModelId}
+                modelSuggestion={modelSuggestion}
+                scoreByModel={scoreByModel}
+                currentPrompt={input}
+                onSelect={(mid, pid) => {
+                  if (currentSessionId) {
+                    saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
+                  } else {
+                    useStore.getState().setDefaultModel(mid)
                   }
                 }}
-                className="p-1.5 px-2 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-all press-scale text-xs flex items-center gap-1 font-medium focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-                title={t('queue.add_tooltip', '加入排队队列')}
-                aria-label={t('queue.add_tooltip', '加入排队队列')}
-              >
-                <ListPlus size={13} />
-                <span className="hidden sm:inline">{t('queue.add_button', '排队')}</span>
-              </button>
+              />
+              {/* 3. Thinking Effort Control */}
+              <EffortControl
+                thinkingEnabled={thinkingEnabled}
+                onToggleThinking={setThinkingEnabled}
+                level={effortLevel}
+                onLevelChange={setEffortLevel}
+                isBinary={isBinaryReasoning}
+                compact
+              />
+
+              <div className="h-3.5 w-px mx-0.5 shrink-0" style={{ backgroundColor: 'var(--border)' }} />
+
+              {/* Attachment & Side Question triggers */}
               <button
                 type="button"
-                onClick={() => handleSubmit()}
-                className="p-1.5 px-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale shadow-sm text-xs flex items-center gap-1 font-medium"
-                title={t('inject.send_hint', '立即插队到当前回合')}
-                aria-label={t('inject.send_hint', '立即插队到当前回合')}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming}
+                title={t('chat.upload')}
+                aria-label={t('chat.upload')}
+                className="shrink-0 p-1 rounded-[5px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
               >
-                <Zap size={13} />
-                <span className="hidden sm:inline">{t('queue.inject_button', '插队')}</span>
+                <Paperclip size={13.5} />
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleBtw}
+                title={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+                aria-label={t('btw.btn_tooltip', '旁支提问 (Alt+B)')}
+                className="shrink-0 p-1 rounded-[5px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+              >
+                <HelpCircle size={13.5} />
               </button>
             </div>
-          ) : (
-            <button
-              onClick={() => handleSubmit()}
-              disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
-              className={cn('shrink-0 p-2 rounded-md bg-[var(--accent)] text-white hover:opacity-90 transition-all press-scale hover-lift', 'disabled:opacity-30')}
-              title={t('chat.send')}
-              aria-label={t('chat.send')}
-            >
-              <Send size={13} />
-            </button>
-          )}
-        </div>
 
-        <div className="flex items-center justify-between gap-1.5 px-0.5 mt-2 flex-nowrap min-w-0">
-          <div className="flex items-center gap-1.5 flex-nowrap min-w-0 shrink">
-            {/* 1. Mode: Plan / Act */}
-            <AgentModeSelector mode={agentMode} onChange={setAgentMode} compact />
-            {/* 2. Main Model Selector */}
-            <ModelSelector
-              providers={providers}
-              allModels={allModels}
-              activeModelId={activeModelId}
-              modelSuggestion={modelSuggestion}
-              scoreByModel={scoreByModel}
-              currentPrompt={input}
-              onSelect={(mid, pid) => {
-                if (currentSessionId) {
-                  saveSessionConfig(currentSessionId, { providerId: pid, modelId: mid })
-                } else {
-                  useStore.getState().setDefaultModel(mid)
-                }
-              }}
-            />
-            {/* 3. Thinking Effort Control */}
-            <EffortControl
-              thinkingEnabled={thinkingEnabled}
-              onToggleThinking={setThinkingEnabled}
-              level={effortLevel}
-              onLevelChange={setEffortLevel}
-              isBinary={isBinaryReasoning}
-              compact
-            />
-          </div>
+            <div className="flex items-center gap-1.5 min-w-0 shrink ml-auto flex-nowrap">
+              {isStreaming ? (
+                <StreamingStatusBar sessionId={currentSessionId} />
+              ) : (
+                <SessionUsageRollbackBadge sessionId={currentSessionId} />
+              )}
 
-          <div className="flex items-center gap-1.5 min-w-0 shrink ml-auto flex-nowrap">
-            {isStreaming ? (
-              <StreamingStatusBar sessionId={currentSessionId} />
-            ) : (
-              /* 4. Session Tokens / Cost & Snapshot Rollback */
-              <SessionUsageRollbackBadge sessionId={currentSessionId} />
-            )}
+              {isArenaRunning || (isStreaming && !input.trim()) ? (
+                <button
+                  onClick={() => { stopGeneration(); window.dispatchEvent(new CustomEvent('aether:generation-stopped')) }}
+                  className="shrink-0 h-6.5 w-6.5 flex items-center justify-center rounded-[6px] bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors active:scale-[0.96] cursor-pointer"
+                  title={t('chat.stop')}
+                  aria-label={t('chat.stop')}
+                >
+                  <Square size={11} fill="currentColor" />
+                </button>
+              ) : isStreaming && input.trim() ? (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (input.trim()) {
+                        enqueueMessage(input.trim(), currentSessionId ?? undefined)
+                        setInput('')
+                      }
+                    }}
+                    className="h-6.5 px-2 rounded-[6px] bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--border)] transition-colors active:scale-[0.97] text-[11px] flex items-center gap-1 font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+                    title={t('queue.add_tooltip', '加入排队队列')}
+                    aria-label={t('queue.add_tooltip', '加入排队队列')}
+                  >
+                    <ListPlus size={12} />
+                    <span className="hidden sm:inline">{t('queue.add_button', '排队')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSubmit()}
+                    className="h-6.5 px-2 rounded-[6px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity active:scale-[0.97] text-[11px] flex items-center gap-1 font-medium cursor-pointer"
+                    title={t('inject.send_hint', '立即插队到当前回合')}
+                    aria-label={t('inject.send_hint', '立即插队到当前回合')}
+                  >
+                    <Zap size={12} />
+                    <span className="hidden sm:inline">{t('queue.inject_button', '插队')}</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleSubmit()}
+                  disabled={(!input.trim() && pending.length === 0 && snippets.length === 0) || (chatMode === 'arena' && arenaModelIds.length < 2)}
+                  className="shrink-0 h-6.5 w-6.5 flex items-center justify-center rounded-[6px] bg-[var(--accent)] text-white hover:opacity-90 transition-opacity active:scale-[0.96] disabled:opacity-25 cursor-pointer"
+                  title={t('chat.send')}
+                  aria-label={t('chat.send')}
+                >
+                  <Send size={12} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

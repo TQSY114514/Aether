@@ -5,10 +5,7 @@ import { applyTheme } from '@/utils/theme'
 import Sidebar from '@/components/sidebar/Sidebar'
 import ChatPage from '@/pages/ChatPage'
 import ArenaPage from '@/pages/ArenaPage'
-import ModelPage from '@/pages/ModelPage'
 import SettingPage from '@/pages/SettingPage'
-import MemoryPage from '@/pages/MemoryPage'
-import SkillsPage from '@/pages/SkillsPage'
 import PermissionDialog from '@/components/chat/PermissionDialog'
 import QuestionDialog from '@/components/chat/QuestionDialog'
 import CommandPalette from '@/components/CommandPalette'
@@ -107,39 +104,6 @@ export default function App() {
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [])
-
-  // Window-level overscroll spring bounce: F = -k*off - b*vel
-  useEffect(() => {
-    const root = document.getElementById('root')
-    if (!root) return
-    let off = 0, vel = 0, act = false
-    const tick = () => {
-      if (!act) return
-      const f = -0.04 * off - 0.72 * vel
-      vel += f; off += vel
-      if (Math.abs(off) < 0.5 && Math.abs(vel) < 0.5) {
-        act = false; off = 0; vel = 0
-        root.style.transform = ''
-        return
-      }
-      root.style.transform = `translateY(${off}px)`
-      requestAnimationFrame(tick)
-    }
-    const kick = (v: number) => {
-      vel += v; if (!act) { act = true; requestAnimationFrame(tick) }
-    }
-    const onWheel = (e: WheelEvent) => {
-      const scroller = (e.target as HTMLElement).closest('[class*="overflow-y-auto"], .scroll-bounce')
-      if (scroller) {
-        const el = scroller as HTMLElement
-        if ((el.scrollTop <= 0 && e.deltaY < 0) || (el.scrollTop + el.clientHeight >= el.scrollHeight - 1 && e.deltaY > 0)) {
-          e.preventDefault(); kick(e.deltaY * 0.06)
-        }
-      }
-    }
-    window.addEventListener('wheel', onWheel, { passive: false })
-    return () => window.removeEventListener('wheel', onWheel)
   }, [])
 
   const bgLoadedRef = useRef(false)
@@ -281,13 +245,13 @@ export default function App() {
       case 'arena':
         return <ArenaPage />
       case 'models':
-        return <ModelPage />
+        return <SettingPage initialDomain="providers-routing" />
+      case 'memory':
+        return <SettingPage initialDomain="memory-evolution" />
+      case 'skills':
+        return <SettingPage initialDomain="extensions-mcp" />
       case 'settings':
         return <SettingPage />
-      case 'memory':
-        return <MemoryPage />
-      case 'skills':
-        return <SkillsPage />
       default:
         return <ChatPage />
     }

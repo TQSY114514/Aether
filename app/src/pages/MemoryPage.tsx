@@ -18,7 +18,7 @@ const ORIGIN_META: Record<string, { label: string; color: string }> = {
   external: { label: '外部内容', color: '#D97706' },
 }
 
-export default function MemoryPage() {
+export default function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [entries, setEntries] = useState<{ id: number; content: string; type: string; created_at: string; access_count: number; last_accessed_at: string | null; source_session_id: number | null; confidence: number; conflicts_with: number | null; origin: string; workspace?: string | null }[]>([])
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState('fact')
@@ -279,33 +279,42 @@ export default function MemoryPage() {
   })
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div ref={scrollRef} className={embedded ? "w-full" : "flex-1 overflow-y-auto"} style={embedded ? {} : { backgroundColor: 'var(--bg-primary)' }}>
       {loading ? (
-        <div className="p-8 text-center" style={{ color: 'var(--text-secondary)' }}>Loading...</div>
+        <div className="p-6 text-center text-xs" style={{ color: 'var(--text-secondary)' }}>Loading...</div>
       ) : (
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-              <Brain size={18} style={{ color: 'var(--accent)' }} />
-              <span>{t('sidebar.nav.memory')}</span>
-            </h1>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>AI 会记住这些信息并在对话中参考 · 来源追踪 · 冲突检测</p>
-          </div>
-          <div className="flex gap-2">
+      <div className={embedded ? "w-full space-y-3" : "max-w-2xl mx-auto px-6 py-8"}>
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          {!embedded ? (
+            <div>
+              <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <Brain size={18} style={{ color: 'var(--accent)' }} />
+                <span>{t('sidebar.nav.memory')}</span>
+              </h1>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>AI 会记住这些信息并在对话中参考 · 来源追踪 · 冲突检测</p>
+            </div>
+          ) : (
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              跨会话与项目级记忆条目 · 支持来源追踪、冲突消解与 MEMORY.md 同步
+            </p>
+          )}
+          <div className="flex gap-1.5">
             <button
               onClick={handleConsolidate}
               disabled={consolidating}
               title={t('memory.consolidate_tip')}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               style={{ borderColor: 'var(--border)' }}
             >
               <Layers size={12} />{t('memory.consolidate')}
             </button>
-            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)]" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={handleDedupe} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer" style={{ borderColor: 'var(--border)' }}>
+              去重
+            </button>
+            <button onClick={handleImport} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer" style={{ borderColor: 'var(--border)' }}>
               <Upload size={12} />导入
             </button>
-            <button onClick={handleExport} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border hover:bg-[var(--bg-secondary)]" style={{ borderColor: 'var(--border)' }}>
+            <button onClick={handleExport} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer" style={{ borderColor: 'var(--border)' }}>
               <Download size={12} />导出
             </button>
           </div>

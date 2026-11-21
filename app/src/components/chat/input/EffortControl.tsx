@@ -52,17 +52,16 @@ export default function EffortControl({
         <button
           type="button"
           onClick={() => onToggleThinking(!thinkingEnabled)}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded-[6px] border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-          style={{ borderColor: 'var(--border)' }}
+          className="h-6 flex items-center gap-1 px-1.5 rounded-[5px] border border-transparent hover:border-[var(--border)] text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
           title={t('effort.tooltip')}
           aria-label={t('effort.tooltip')}
         >
           <Brain
-            size={11}
+            size={11.5}
             className="shrink-0"
             style={{ color: thinkingEnabled ? 'var(--accent)' : 'var(--text-muted)' }}
           />
-          <span className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--text-primary)' }}>
+          <span className="font-mono text-[10.5px] tabular-nums" style={{ color: thinkingEnabled ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
             {thinkingEnabled ? t('thinking.on', 'On') : t('thinking.off', 'Off')}
           </span>
         </button>
@@ -75,20 +74,19 @@ export default function EffortControl({
         <button
           type="button"
           onClick={() => setDropdownOpen(!dropdownOpen)}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded-[6px] border text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
-          style={{ borderColor: 'var(--border)' }}
+          className="h-6 flex items-center gap-1 px-1.5 rounded-[5px] border border-transparent hover:border-[var(--border)] text-[11px] font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
           title={t('effort.tooltip')}
           aria-label={t('effort.tooltip')}
         >
           <Brain
-            size={11}
+            size={11.5}
             className="shrink-0"
             style={{ color: thinkingEnabled ? 'var(--accent)' : 'var(--text-muted)' }}
           />
-          <span className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--text-primary)' }}>
+          <span className="font-mono text-[10.5px] tabular-nums" style={{ color: thinkingEnabled ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
             {curTokens}
           </span>
-          <ChevronDown size={10} className="text-[var(--text-muted)] shrink-0 opacity-70" />
+          <ChevronDown size={10} className="text-[var(--text-muted)] shrink-0 opacity-60" />
         </button>
 
         {dropdownOpen && (

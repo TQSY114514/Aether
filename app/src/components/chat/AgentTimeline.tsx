@@ -59,17 +59,17 @@ function toolLabel(name: string, args: any): string {
   }
 }
 
-// Status node dot: colored based on state (square engineering node).
+// Status node dot: subtle circular indicator
 function StatusDot({ status, dangerous }: { status: 'running' | 'success' | 'error'; dangerous?: boolean }) {
   const colors = {
     running: 'var(--accent)',
-    success: 'var(--success)',
+    success: 'var(--text-muted)',
     error: 'var(--error)',
   }
   return (
     <div
-      className={`w-2 h-2 rounded-[1px] shrink-0 border ${status === 'running' ? 'animate-pulse' : ''}`}
-      style={{ backgroundColor: colors[status], borderColor: dangerous ? 'var(--warning)' : colors[status] }}
+      className={`w-1.5 h-1.5 rounded-full shrink-0 ${status === 'running' ? 'animate-pulse' : 'opacity-65'}`}
+      style={{ backgroundColor: dangerous ? 'var(--warning)' : colors[status] }}
     />
   )
 }

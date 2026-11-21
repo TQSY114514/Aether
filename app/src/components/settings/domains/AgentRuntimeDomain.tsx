@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { useUI } from '@/components/ui/feedback'
-import { Shield, Clock, Save, Check } from 'lucide-react'
+import { Clock, Save, Check } from 'lucide-react'
 import { t } from '@/utils/i18n'
 import AgentSettings from '@/components/settings/AgentSettings'
-import CustomPolicySettings from '@/components/settings/CustomPolicySettings'
 import AdvancedSettings from '@/components/settings/AdvancedSettings'
 
 export default function AgentRuntimeDomain() {
@@ -44,23 +42,6 @@ export default function AgentRuntimeDomain() {
       {/* Core Agent Execution & Workspace Settings */}
       <AgentSettings />
 
-      {/* Custom Mode Capability Matrix */}
-      <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
-        <div className="flex items-center gap-1.5 mb-1">
-          <Shield size={15} style={{ color: 'var(--accent)' }} />
-          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-            {t('settings.custom_mode', '自定义模式策略矩阵')}
-          </h2>
-        </div>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
-          {t('settings.custom_mode_desc', '配置各能力维度（文件读写、系统终端、网络请求）的权限边界与二次确认策略。')}
-        </p>
-        <CustomPolicySettings />
-      </div>
-
-      {/* Advanced Agent Engine Settings */}
-      <AdvancedSettings />
-
       {/* Timeouts & Session Budget Limits */}
       <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
         <div className="flex items-center gap-1.5 mb-1">
@@ -91,7 +72,7 @@ export default function AgentRuntimeDomain() {
                 />
                 <button
                   onClick={handleSaveTimeout}
-                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-md font-medium text-white transition-opacity active:scale-[0.98]"
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-md font-medium text-white transition-opacity active:scale-[0.98] cursor-pointer"
                   style={{ backgroundColor: 'var(--accent)' }}
                 >
                   {savedTimeout ? <Check size={12} /> : <Save size={12} />}
@@ -121,7 +102,7 @@ export default function AgentRuntimeDomain() {
                 />
                 <button
                   onClick={handleSaveBudget}
-                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-md font-medium text-white transition-opacity active:scale-[0.98]"
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-md font-medium text-white transition-opacity active:scale-[0.98] cursor-pointer"
                   style={{ backgroundColor: 'var(--accent)' }}
                 >
                   {savedBudget ? <Check size={12} /> : <Save size={12} />}
@@ -135,6 +116,9 @@ export default function AgentRuntimeDomain() {
           </div>
         </div>
       </div>
+
+      {/* Advanced Agent Engine Settings (Generation params & Titles) */}
+      <AdvancedSettings />
     </div>
   )
 }

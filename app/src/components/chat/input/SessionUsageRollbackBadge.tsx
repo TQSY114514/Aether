@@ -115,40 +115,36 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
   )
 
   return (
-    <div className="flex items-center gap-1 shrink-0 select-none">
-      {/* Session Tokens Badge */}
-      <div
-        onClick={() => setCheckpointsOpen(true)}
-        className="h-6.5 px-2 rounded-[6px] border text-[10px] font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-        style={{
-          borderColor: 'var(--border)',
-          backgroundColor: 'var(--content-bg)',
-          color: pct >= 80 ? 'var(--error)' : 'var(--text-secondary)',
-        }}
-        title={`当前会话已用 ${formatTokens(usedTokens)} / ${formatTokens(contextWindow)} tokens (${pct}%) · 点击打开时间旅行时光机`}
-      >
-        <Layers size={11} className="shrink-0 text-[var(--text-muted)]" />
-        <span className="tabular-nums">
-          {formatTokens(usedTokens)}
-          <span className="hidden sm:inline text-[var(--text-muted)]"> ({pct}%)</span>
-        </span>
-      </div>
-
-      {/* Snapshot Rollback Trigger */}
+    <div className="flex items-center gap-0.5 shrink-0 select-none">
+      {/* Session Tokens Badge (quiet ghost pill) */}
       <button
         type="button"
-        onClick={handleQuickRollback}
-        className={`h-6.5 px-2 rounded-[6px] border text-[10px] font-mono font-medium flex items-center gap-1 transition-colors cursor-pointer ${
-          hasCheckpoints
-            ? 'hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] border-[var(--border)]'
-            : 'text-[var(--text-muted)] border-[var(--border)] opacity-60'
-        }`}
-        style={{ backgroundColor: 'var(--content-bg)' }}
-        title={hasCheckpoints ? '一键回退到写前快照 (或打开快照时光机)' : '查看文件修改快照与时光机'}
+        onClick={() => setCheckpointsOpen(true)}
+        className="h-6 px-1.5 rounded-[5px] text-[10.5px] font-mono flex items-center gap-1 hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
+        style={{
+          color: pct >= 80 ? 'var(--error)' : 'var(--text-muted)',
+        }}
+        title={`当前会话已用 ${formatTokens(usedTokens)} / ${formatTokens(contextWindow)} tokens (${pct}%) · 点击打开检查点时光机`}
       >
-        <RotateCcw size={11} className={`shrink-0 ${rollingBack ? 'animate-spin' : ''}`} />
-        <span className="hidden md:inline">{rollingBack ? '回退中...' : '快照回退'}</span>
+        <Layers size={10.5} className="shrink-0 opacity-75" />
+        <span className="tabular-nums">
+          {formatTokens(usedTokens)}
+          {pct >= 50 && <span className="hidden sm:inline opacity-75"> ({pct}%)</span>}
+        </span>
       </button>
+
+      {/* Snapshot Rollback Trigger (only highlighted when checkpoints exist) */}
+      {hasCheckpoints && (
+        <button
+          type="button"
+          onClick={handleQuickRollback}
+          className="h-6 px-1.5 rounded-[5px] text-[10.5px] font-mono flex items-center gap-1 hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+          title="一键回退到上一次写前快照"
+        >
+          <RotateCcw size={10.5} className={`shrink-0 ${rollingBack ? 'animate-spin' : ''}`} />
+          <span className="hidden md:inline">{rollingBack ? '回退中' : '回退'}</span>
+        </button>
+      )}
     </div>
   )
 }

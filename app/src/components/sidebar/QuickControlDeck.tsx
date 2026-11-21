@@ -78,13 +78,11 @@ export default function QuickControlDeck() {
   }, [doctorOpen])
 
   const modeLabel = useMemo(() => {
-    switch (agentMode) {
-      case 'explore': return t('agent.mode.explore', '仅查看')
-      case 'workspace': return t('agent.mode.workspace', '工作区')
-      case 'auto_review': return t('agent.mode.auto_review', '自动审查')
-      case 'unrestricted': return t('agent.mode.unrestricted', '完全权限')
-      default: return t('agent.mode.workspace', '工作区')
+    const m = String(agentMode || '').toLowerCase()
+    if (m === 'plan' || m === 'explore' || m === 'read_only' || m === 'readonly' || m === 'review') {
+      return t('agent.mode.plan', 'Plan (只读规划)')
     }
+    return t('agent.mode.act', 'Act (自动执行)')
   }, [agentMode, language])
 
   return (

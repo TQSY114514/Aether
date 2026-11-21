@@ -216,21 +216,39 @@ export default function GeneralDomain() {
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.theme')}</h2>
         </div>
         <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{t('settings.theme_desc')}</p>
-        <div className="flex items-center gap-2">
-          {(['light', 'dark', 'system'] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setTheme(mode)}
-              className={`px-3.5 py-1.5 text-xs rounded-md border font-medium capitalize transition-all active:scale-[0.98] ${
-                theme === mode
-                  ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
-                  : 'hover:bg-[var(--bg-secondary)]'
-              }`}
-              style={theme !== mode ? { borderColor: 'var(--border)', color: 'var(--text-secondary)' } : {}}
-            >
-              {t(`theme.${mode}` as any, mode)}
-            </button>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {([
+            { id: 'light', label: t('theme.light' as any, '浅色 (Light)'), desc: '纯净高对比白昼' },
+            { id: 'dark', label: t('theme.dark' as any, '深色 (Dark)'), desc: '深邃暗夜工作台' },
+            { id: 'system', label: t('theme.system' as any, '跟随系统 (Auto)'), desc: '自动同步系统昼夜' },
+            { id: 'retro', label: t('theme.retro' as any, '古典米金 (Retro)'), desc: '暖调羊皮纸护眼' },
+            { id: 'metalheart', label: t('theme.metalheart' as any, '工业银蓝 (Metal)'), desc: '冷峻金属精密感' },
+            { id: 'postdigital', label: t('theme.postdigital' as any, '后数字 (PostDigital)'), desc: '硬朗线框高饱和' },
+            { id: 'blue', label: t('theme.blue' as any, '冷灰蓝 (Slate)'), desc: '清爽极简工程蓝' },
+          ] as const).map((item) => {
+            const active = theme === item.id || (item.id === 'system' && theme === 'auto')
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTheme(item.id)}
+                className={`text-left px-3 py-2 text-xs rounded-md border transition-all active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer ${
+                  active
+                    ? 'border-[var(--accent)] bg-[var(--bg-secondary)] font-semibold shadow-2xs'
+                    : 'hover:bg-[var(--bg-secondary)]'
+                }`}
+                style={{ borderColor: active ? 'var(--accent)' : 'var(--border)', color: 'var(--text-primary)' }}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="truncate">{item.label}</span>
+                  {active && <Check size={12} style={{ color: 'var(--accent)' }} className="shrink-0" />}
+                </div>
+                <span className="text-[10px] block mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                  {item.desc}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -299,6 +317,40 @@ export default function GeneralDomain() {
             </button>
           )}
         </div>
+        {backgroundImage && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span style={{ color: 'var(--text-primary)' }}>背景不透明度</span>
+                <span className="tabular-nums font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{backgroundOpacity}%</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                step="5"
+                value={backgroundOpacity}
+                onChange={(e) => setBackgroundOpacity(parseInt(e.target.value, 10))}
+                className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-[var(--border)]"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span style={{ color: 'var(--text-primary)' }}>背景模糊度</span>
+                <span className="tabular-nums font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{backgroundBlur}px</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="24"
+                step="1"
+                value={backgroundBlur}
+                onChange={(e) => setBackgroundBlur(parseInt(e.target.value, 10))}
+                className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-[var(--border)]"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Windows Native Integration */}

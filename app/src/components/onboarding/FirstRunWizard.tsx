@@ -6,11 +6,18 @@ import { buildProviderPayload, isComplete, EMPTY_FORM, presetForChoice, stepAfte
 import { ArrowRight, Check, Download, Shield, X } from 'lucide-react'
 
 const MODES = [
-  { key: 'off', color: 'var(--text-muted)' },
-  { key: 'plan', color: '#3b82f6' },
-  { key: 'ask', color: 'var(--accent)' },
-  { key: 'auto', color: '#f97316' },
-  { key: 'yolo', color: 'var(--error)' },
+  {
+    key: 'plan',
+    title: 'Plan (只读规划模式)',
+    desc: '允许工作区代码检索、只读 Git 与子代理探路；严格拦截文件修改与变更命令，输出结构化方案。',
+    recommended: false,
+  },
+  {
+    key: 'act',
+    title: 'Act (默认行动模式)',
+    desc: '工作区内读写编辑（含写前自动快照与一键 Diff 回滚）及常规测试命令自动执行；仅对越界路径、敏感凭证与高危 Shell 弹窗拦截。',
+    recommended: true,
+  },
 ] as const
 
 // First-screen "how do you want to use Aether?" cards. Each routes to the
@@ -284,24 +291,21 @@ export default function FirstRunWizard({ onDone }: { onDone: () => void }) {
               </p>
             )}
             {importDiagnostics(importResult)}
-            <div className="space-y-1.5">
-              {MODES.map((m) => {
-                const isAsk = m.key === 'ask'
-                return (
-                  <div key={m.key} className={`px-3 py-2 rounded-lg border ${isAsk ? '' : 'opacity-70'}`}
-                    style={{ borderColor: isAsk ? 'var(--accent)' : 'var(--border)', backgroundColor: isAsk ? 'rgba(99,102,241,0.06)' : 'var(--bg-secondary)' }}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium" style={{ color: m.color }}>{t(`agent.mode.${m.key}`)}</span>
-                      {isAsk && (
-                        <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
-                          <Check size={9} />{t('onboarding.ask_recommended')}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{t(`agent.mode.${m.key}.desc`)}</div>
+            <div className="space-y-2">
+              {MODES.map((m) => (
+                <div key={m.key} className="px-3 py-2.5 rounded-lg border"
+                  style={{ borderColor: m.recommended ? 'var(--accent)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{m.title}</span>
+                    {m.recommended && (
+                      <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+                        <Check size={9} />{t('onboarding.ask_recommended', '推荐默认')}
+                      </span>
+                    )}
                   </div>
-                )
-              })}
+                  <div className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>{m.desc}</div>
+                </div>
+              ))}
             </div>
             <div className="mt-5 flex justify-end">
               <button onClick={finish}

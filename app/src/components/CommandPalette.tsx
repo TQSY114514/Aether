@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useStore } from '@/store'
 import { t } from '@/utils/i18n'
-import { Search, MessageSquare, Cpu, Server, Sparkles, Settings as SettingsIcon, Brain, Shield, Zap } from 'lucide-react'
+import { Search, MessageSquare, Cpu, Sparkles, Settings as SettingsIcon, Brain, Shield, Zap, FlaskConical } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Global command palette (Ctrl+K). Fuzzy-search across sessions, models,
@@ -59,21 +59,19 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
 
   const commands = useMemo<Cmd[]>(() => {
     const cmds: Cmd[] = []
-    // Pages
+    // Pages (3 primary workbench views)
     const pages: [string, string, typeof Search][] = [
-      ['chat', t('sidebar.nav.chat') || 'Chat', MessageSquare],
-      ['models', t('sidebar.nav.models'), Server],
-      ['settings', t('sidebar.nav.settings'), SettingsIcon],
+      ['chat', t('sidebar.nav.workspace', '工作区'), MessageSquare],
+      ['arena', t('sidebar.nav.arena', '竞技场'), FlaskConical],
+      ['settings', t('sidebar.nav.settings', '设置'), SettingsIcon],
     ]
     pages.forEach(([view, label, icon]) => {
       cmds.push({ id: `page-${view}`, label, group: t('cmd.group.navigate'), icon, run: () => { setCurrentView(view as any); onClose() } })
     })
-    // Agent modes
+    // Binary Agent modes (Plan / Act)
     const modes: [string, string, typeof Brain][] = [
-      ['ask', t('agent.mode.ask'), Shield],
-      ['auto', t('agent.mode.auto'), Zap],
-      ['yolo', t('agent.mode.yolo'), Zap],
-      ['custom', t('agent.mode.custom', 'Custom'), Brain],
+      ['plan', t('agent.mode.plan', 'Plan (只读规划)'), Shield],
+      ['act', t('agent.mode.act', 'Act (自动执行)'), Zap],
     ]
     modes.forEach(([mode, label, icon]) => {
       cmds.push({ id: `mode-${mode}`, label: `${t('cmd.set_mode')} ${label}`, group: t('cmd.group.agent'), icon, run: () => { setAgentMode(mode as any); onClose() } })
@@ -140,7 +138,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   return (
     <div className="fixed inset-0 z-[110] flex items-start justify-center pt-[12vh] p-4">
       <div className="absolute inset-0 bg-black/40 modal-backdrop-fade" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-lg border shadow-xl overflow-hidden animate-spring-up"
+      <div className="relative w-full max-w-lg rounded-lg border shadow-xl overflow-hidden"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
           <Search size={16} className="text-gray-400 shrink-0" />

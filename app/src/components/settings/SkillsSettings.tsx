@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useUI } from '@/components/ui/feedback'
 import { t } from '@/utils/i18n'
-import { Sparkles, RefreshCw, BookOpen, Clock, Zap, Trophy, AlertTriangle, Wand2, ChevronRight } from 'lucide-react'
+import { Sparkles, RefreshCw, BookOpen, Clock, Zap, Trophy, Wand2, Power, FolderPlus, Search } from 'lucide-react'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Skills settings — discover, manage, and review Claude-Code-format skills.
 //
 // Shows each skill's name, description, usage count, success rate, last-used
-// timestamp, and metadata. Supports auto-draft from successful usage patterns.
+// timestamp, metadata, enable/disable state, and directory import.
 // ───────────────────────────────────────────────────────────────────────────
 
 function formatRelativeTime(iso: string | null): string {
@@ -44,16 +44,29 @@ export default function SkillsSettings() {
   const { toast } = useUI()
   const [skills, setSkills] = useState<SkillEntry[]>([])
   const [stats, setStats] = useState<SkillStat[]>([])
+  const [usageStates, setUsageStates] = useState<Record<string, string>>({})
+  const [stateBusy, setStateBusy] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
   const [activeTab, setActiveTab] = useState<'discover' | 'performance'>('discover')
 
   const load = async () => {
     try {
-      const list = await window.electronAPI?.skills?.list?.()
-      const skillStats = await window.electronAPI?.skills?.stats?.()
+      const [list, skillStats, usage] = await Promise.all([
+        window.electronAPI?.skills?.list?.().catch(() => []),
+        window.electronAPI?.skills?.stats?.().catch(() => []),
+        window.electronAPI?.skills?.getUsage?.().catch(() => []),
+      ])
       setSkills(list || [])
       setStats(skillStats || [])
-    } catch { setSkills([]); setStats([]) }
+      const m: Record<string, string> = {}
+      for (const u of (usage || [])) m[u.name] = u.state
+      setUsageStates(m)
+    } catch {
+      setSkills([])
+      setStats([])
+      setUsageStates({})
+    }
   }
   useEffect(() => { load() }, [])
 
@@ -61,101 +74,193 @@ export default function SkillsSettings() {
     setBusy(true)
     try {
       const res = await window.electronAPI?.skills?.rescan?.()
-      if (res?.success) { await load(); toast(t('settings.skills.rescanned', String(res.count)), { type: 'success' }) }
+      if (res?.success) {
+        await load()
+        toast(t('settings.skills.rescanned', String(res.count)), { type: 'success' })
+      }
     } catch { /* ignore */ } finally { setBusy(false) }
+  }
+
+  const importDir = async () => {
+    setBusy(true)
+    try {
+      const res = await window.electronAPI?.skills?.importDir?.()
+      if (res?.ok) {
+        await load()
+        toast(t('settings.skills.imported', String(res.count ?? 0)), { type: 'success' })
+      } else if (res?.error) {
+        toast(res.error, { type: 'error' })
+      }
+    } finally { setBusy(false) }
   }
 
   const autoDraft = async (name: string, description: string) => {
     setBusy(true)
     try {
       const res = await window.electronAPI?.skills?.autoDraft?.(name, description)
-      if (res?.ok) { toast(t('settings.skills.drafted', name), { type: 'success' }); await load() }
-      else { toast(res?.error || 'failed', { type: 'error' }) }
+      if (res?.ok) {
+        toast(t('settings.skills.drafted', name), { type: 'success' })
+        await load()
+      } else {
+        toast(res?.error || 'failed', { type: 'error' })
+      }
     } finally { setBusy(false) }
+  }
+
+  const toggleState = async (name: string, current: string) => {
+    const next = current === 'archived' ? 'active' : 'archived'
+    setStateBusy(name)
+    try {
+      const res = await window.electronAPI?.skills?.updateState?.(name, next)
+      if (res?.ok) {
+        setUsageStates((prev) => ({ ...prev, [name]: next }))
+        toast(t('settings.skills.state_updated', name), { type: 'success' })
+      }
+    } finally { setStateBusy(null) }
   }
 
   const totalUsed = skills.reduce((a, s) => a + (s.usage?.count || 0), 0)
   const statsMap = new Map(stats.map(s => [s.name, s]))
 
+  const filteredSkills = query.trim()
+    ? skills.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.description.toLowerCase().includes(query.toLowerCase()))
+    : skills
+
   const candidates = stats.filter(s => s.totalUses >= 3 && s.successRate >= 0.7 && !skills.find(sk => sk.name === s.name))
   const knownStats = stats.filter(s => skills.find(sk => sk.name === s.name))
 
   return (
-    <div className="rounded-lg p-4" style={{ border: '1px solid var(--border)' }}>
-      <div className="flex items-center justify-between mb-1">
+    <div className="rounded-lg p-4 border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+      <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
         <div className="flex items-center gap-2">
           <Sparkles size={15} style={{ color: 'var(--accent)' }} />
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('settings.skills.title')}</h2>
         </div>
-        <button onClick={rescan} disabled={busy}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
-          style={{ borderColor: 'var(--border)' }}>
-          <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />{t('settings.skills.rescan', '重新扫描')}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={importDir}
+            disabled={busy}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50 cursor-pointer active:scale-[0.98]"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          >
+            <FolderPlus size={12} />
+            <span>{t('settings.skills.import', '导入目录')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={rescan}
+            disabled={busy}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50 cursor-pointer active:scale-[0.98]"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          >
+            <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
+            <span>{t('settings.skills.rescan', '重新扫描')}</span>
+          </button>
+        </div>
       </div>
-      <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>{t('settings.skills.desc')}</p>
+      <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.skills.desc')}</p>
 
       {totalUsed > 0 && (
-        <div className="flex items-center gap-3 mb-3 px-2.5 py-1.5 rounded-lg text-[11px]" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
+        <div className="flex items-center gap-2 mb-3 px-2.5 py-1.5 rounded-md text-[11px]" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
           <Zap size={12} /> {t('settings.skills.total_used', `共使用 ${totalUsed} 次`)}
         </div>
       )}
 
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-4 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-        <button onClick={() => setActiveTab('discover')}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'discover' ? 'bg-[var(--content-bg)] shadow-sm' : ''}`}
-          style={{ color: activeTab === 'discover' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-          <BookOpen size={12} />{t('settings.skills.tab_discover', '发现')}
-        </button>
-        <button onClick={() => setActiveTab('performance')}
-          className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${activeTab === 'performance' ? 'bg-[var(--content-bg)] shadow-sm' : ''}`}
-          style={{ color: activeTab === 'performance' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-          <Trophy size={12} />{t('settings.skills.tab_performance', '成功率')}
-        </button>
+      {/* Tab bar & Search */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="flex gap-1 p-0.5 rounded-md border" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('discover')}
+            className={`px-3 py-1 text-xs rounded-[4px] transition-colors flex items-center gap-1 cursor-pointer ${activeTab === 'discover' ? 'bg-[var(--content-bg)] font-medium shadow-2xs' : ''}`}
+            style={{ color: activeTab === 'discover' ? 'var(--text-primary)' : 'var(--text-muted)' }}
+          >
+            <BookOpen size={12} />{t('settings.skills.tab_discover', '技能列表')} ({skills.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('performance')}
+            className={`px-3 py-1 text-xs rounded-[4px] transition-colors flex items-center gap-1 cursor-pointer ${activeTab === 'performance' ? 'bg-[var(--content-bg)] font-medium shadow-2xs' : ''}`}
+            style={{ color: activeTab === 'performance' ? 'var(--text-primary)' : 'var(--text-muted)' }}
+          >
+            <Trophy size={12} />{t('settings.skills.tab_performance', '成功率')}
+          </button>
+        </div>
+
+        {activeTab === 'discover' && skills.length > 0 && (
+          <div className="flex-1 min-w-[160px] flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+            <Search size={12} style={{ color: 'var(--text-muted)' }} className="shrink-0" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('settings.skills.search_placeholder', '搜索技能...')}
+              className="w-full bg-transparent outline-none text-xs"
+              style={{ color: 'var(--text-primary)' }}
+            />
+          </div>
+        )}
       </div>
 
       {activeTab === 'discover' && (
         <>
-          {skills.length === 0 ? (
+          {filteredSkills.length === 0 ? (
             <div className="text-center py-6 text-xs" style={{ color: 'var(--text-muted)' }}>
               <BookOpen size={20} className="mx-auto mb-2 opacity-40" />
-              {t('settings.skills.empty', '未找到任何技能')}
+              {query ? '无匹配技能' : t('settings.skills.empty', '未找到任何技能')}
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {skills.map((s) => {
+            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
+              {filteredSkills.map((s) => {
                 const stat = statsMap.get(s.name)
+                const isArchived = usageStates[s.name] === 'archived'
                 return (
-                  <div key={s.name} className="flex items-start gap-2 p-2.5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                    <Sparkles size={14} className="mt-0.5 shrink-0" style={{ color: "var(--accent)" }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
-                        {stat && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
-                            style={{ backgroundColor: stat.successRate >= 0.8 ? 'rgba(34,197,94,0.15)' : stat.successRate >= 0.5 ? 'rgba(234,179,8,0.15)' : 'rgba(239,68,68,0.15)',
-                              color: stat.successRate >= 0.8 ? 'var(--success)' : stat.successRate >= 0.5 ? 'var(--warning)' : 'var(--error)' }}>
-                            {Math.round(stat.successRate * 100)}% 成功
-                          </span>
-                        )}
-                        {s.usage && s.usage.count > 0 && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: 'var(--accent)', color: 'var(--bg-primary)' }}>
-                            {s.usage.count}x
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>{s.description}</div>
-                      <MetadataBadges metadata={s.metadata} />
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <div className="text-[10px] font-mono truncate" style={{ color: 'var(--text-muted)' }}>{s.filePath}</div>
-                        {s.usage && s.usage.count > 0 && (
-                          <div className="flex items-center gap-0.5 text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
-                            <Clock size={9} /> {formatRelativeTime(s.usage.lastUsedAt)}
-                          </div>
-                        )}
+                  <div key={s.name} className="flex items-start justify-between gap-2.5 p-2.5 rounded-md border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', opacity: isArchived ? 0.65 : 1 }}>
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <Sparkles size={13} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="text-xs font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
+                          {stat && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                              style={{ backgroundColor: stat.successRate >= 0.8 ? 'rgba(34,197,94,0.15)' : stat.successRate >= 0.5 ? 'rgba(234,179,8,0.15)' : 'rgba(239,68,68,0.15)',
+                                color: stat.successRate >= 0.8 ? 'var(--success)' : stat.successRate >= 0.5 ? 'var(--warning)' : 'var(--error)' }}>
+                              {Math.round(stat.successRate * 100)}% 成功
+                            </span>
+                          )}
+                          {s.usage && s.usage.count > 0 && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}>
+                              {s.usage.count}x
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>{s.description}</div>
+                        <MetadataBadges metadata={s.metadata} />
+                        <div className="flex items-center gap-3 mt-1.5">
+                          <div className="text-[10px] font-mono truncate" style={{ color: 'var(--text-muted)' }}>{s.filePath}</div>
+                          {s.usage && s.usage.count > 0 && (
+                            <div className="flex items-center gap-0.5 text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
+                              <Clock size={9} /> {formatRelativeTime(s.usage.lastUsedAt)}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleState(s.name, usageStates[s.name] || 'active')}
+                      disabled={stateBusy === s.name}
+                      title={isArchived ? t('settings.skills.enable', '启用') : t('settings.skills.disable', '停用')}
+                      className="flex items-center gap-1 shrink-0 px-2 py-1 text-[10px] rounded border transition-colors disabled:opacity-50 cursor-pointer hover:bg-[var(--content-bg)]"
+                      style={{
+                        borderColor: isArchived ? 'var(--border)' : 'var(--accent)',
+                        color: isArchived ? 'var(--text-muted)' : 'var(--accent)',
+                      }}
+                    >
+                      <Power size={10} />
+                      <span>{isArchived ? t('settings.skills.enable', '启用') : t('settings.skills.disable', '停用')}</span>
+                    </button>
                   </div>
                 )
               })}
@@ -163,8 +268,8 @@ export default function SkillsSettings() {
           )}
 
           {candidates.length > 0 && (
-            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <div className="flex items-center gap-1.5 mb-2">
+            <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-1.5 mb-1.5">
                 <Wand2 size={13} style={{ color: 'var(--accent)' }} />
                 <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t('settings.skills.auto_draft_title', '建议自动生成')}</span>
               </div>
@@ -173,14 +278,17 @@ export default function SkillsSettings() {
               </p>
               <div className="space-y-1">
                 {candidates.map((c) => (
-                  <div key={c.name} className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                  <div key={c.name} className="flex items-center gap-2 p-2 rounded-md border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                     <span className="text-xs font-mono flex-1" style={{ color: 'var(--text-secondary)' }}>
                       {c.name} <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>({c.totalUses}次 · {Math.round(c.successRate * 100)}%)</span>
                     </span>
-                    <button onClick={() => autoDraft(c.name, `Auto-drafted from ${c.totalUses} successful uses`)}
+                    <button
+                      type="button"
+                      onClick={() => autoDraft(c.name, `Auto-drafted from ${c.totalUses} successful uses`)}
                       disabled={busy}
-                      className="text-[10px] px-2 py-0.5 rounded border hover:bg-[var(--bg-primary)] transition-colors flex items-center gap-1"
-                      style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+                      className="text-[10px] px-2 py-0.5 rounded border hover:bg-[var(--bg-primary)] transition-colors flex items-center gap-1 cursor-pointer"
+                      style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                    >
                       <Wand2 size={9} /> {t('settings.skills.auto_draft', '生成技能')}
                     </button>
                   </div>
@@ -199,14 +307,14 @@ export default function SkillsSettings() {
               {t('settings.skills.no_stats', '暂无使用数据')}
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
               {knownStats
                 .sort((a, b) => b.totalUses - a.totalUses)
                 .map((s) => {
                   const barW = Math.round(s.successRate * 100)
                   const barColor = s.successRate >= 0.8 ? 'var(--success)' : s.successRate >= 0.5 ? 'var(--warning)' : 'var(--error)'
                   return (
-                    <div key={s.name} className="flex items-center gap-3 p-2 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                    <div key={s.name} className="flex items-center gap-3 p-2 rounded-md border" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-mono font-medium truncate" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
                         <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
@@ -220,27 +328,6 @@ export default function SkillsSettings() {
                     </div>
                   )
                 })}
-            </div>
-          )}
-          {candidates.length > 0 && (
-            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <div className="flex items-center gap-1.5 mb-2">
-                <Wand2 size={13} style={{ color: 'var(--accent)' }} />
-                <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t('settings.skills.auto_draft_title', '建议自动生成')}</span>
-              </div>
-              {candidates.map((c) => (
-                <div key={c.name} className="flex items-center gap-2 p-2 rounded-lg mb-1" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                  <span className="text-xs font-mono flex-1" style={{ color: 'var(--text-secondary)' }}>
-                    {c.name} <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>({c.totalUses}次 · {Math.round(c.successRate * 100)}%)</span>
-                  </span>
-                  <button onClick={() => autoDraft(c.name, `Auto-drafted from ${c.totalUses} successful uses`)}
-                    disabled={busy}
-                    className="text-[10px] px-2 py-0.5 rounded border hover:bg-[var(--bg-primary)] transition-colors flex items-center gap-1"
-                    style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-                    <Wand2 size={9} /> {t('settings.skills.auto_draft', '生成技能')}
-                  </button>
-                </div>
-              ))}
             </div>
           )}
         </>

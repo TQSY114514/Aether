@@ -149,7 +149,8 @@ export function extractSwaps(history?: SwapHistoryEntry[]): { index: number; lab
 }
 
 export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
-  const [open, setOpen] = useState(true)
+  const [userToggled, setUserToggled] = useState(false)
+  const [manualOpen, setManualOpen] = useState(true)
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [activeTabs, setActiveTabs] = useState<Record<number, StreamTab>>({})
   const [now, setNow] = useState(Date.now())
@@ -173,6 +174,9 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
   const isAllDone = items.length > 0 && items.every((x) => x.status === 'done' || x.status === 'completed')
   const isFinished = items.length > 0 && items.every((x) => x.status !== 'running')
 
+  // Stay open while running or if an error occurred; auto-collapse into a quiet summary row once all succeed
+  const open = userToggled ? manualOpen : !isAllDone
+
   const accentColor = hasError
     ? 'var(--error)'
     : hasCancelled
@@ -191,7 +195,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
 
   return (
     <div
-      className="rounded-lg border mb-2 overflow-hidden"
+      className="rounded-lg border mb-2 overflow-hidden transition-colors"
       style={{
         borderColor: 'var(--border)',
         backgroundColor: 'var(--bg-secondary)',
@@ -199,8 +203,11 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
     >
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)]/40 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.99]"
+        onClick={() => {
+          setUserToggled(true)
+          setManualOpen(!open)
+        }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--border)]/40 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:scale-[0.99] cursor-pointer"
       >
         {open ? <ChevronDown size={12} style={{ color: accentColor }} /> : <ChevronRight size={12} style={{ color: accentColor }} />}
         <Bot size={13} style={{ color: accentColor }} />
@@ -213,6 +220,11 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
         >
           {completed}/{total}
         </span>
+        {!open && items.length > 0 && (
+          <span className="text-[11px] truncate ml-1" style={{ color: 'var(--text-muted)' }}>
+            {items.map((it) => it.name || it.task).filter(Boolean).join(' · ')}
+          </span>
+        )}
       </button>
 
       {open && (
@@ -252,6 +264,7 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
             const thinkingContent = item.recentThinkingTail || item.liveThinkingTail || item.thinking || ''
             const outputContent = item.output || item.recentTextTail || item.liveOutputTail || ''
             const streamEvents = Array.isArray(item.streamEvents) ? item.streamEvents : Array.isArray(item.events) ? item.events : []
+            const showIdleWarning = (effectiveIdleMs ?? 0) >= 15000
 
             return (
               <div
@@ -262,10 +275,10 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {isRunning && <Loader2 size={12} className="animate-spin text-[var(--accent)] shrink-0" />}
-                    {isDone && <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />}
-                    {isItemError && <AlertCircle size={12} className="text-red-500 shrink-0" />}
+                    {isDone && <CheckCircle2 size={12} className="shrink-0" style={{ color: 'var(--success)' }} />}
+                    {isItemError && <AlertCircle size={12} className="shrink-0" style={{ color: 'var(--error)' }} />}
                     {isCancelled && <Ban size={12} className="text-[var(--text-muted)] shrink-0" />}
-                    {isStalled && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
+                    {isStalled && <AlertTriangle size={12} className="shrink-0" style={{ color: 'var(--warning)' }} />}
                     <span className="font-mono text-[10px] text-[var(--text-muted)] shrink-0">#{idx + 1}</span>
                     {item.name && (
                       <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] shrink-0">
@@ -308,73 +321,96 @@ export default function SubagentDeck({ items }: { items: SubagentItem[] }) {
                   </div>
                 </div>
 
-                {/* Feature 25 Metadata Bar: Provider, baseUrl Category, ModelId, TTFT, Idle, Swaps */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[10px] font-mono">
-                  {providerDisplay && (
-                    <span
-                      className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] shrink-0 font-medium"
-                      title={rawProvider}
-                    >
-                      {providerDisplay}
-                    </span>
-                  )}
+                {/* Feature 25 Metadata Bar: Provider, baseUrl Category, ModelId, TTFT (when measured), Idle (when non-trivial or expanded), Swaps */}
+                {(providerDisplay || endpointKind || item.modelId || item.ttftMs != null || isExpanded || showIdleWarning || hasSwapped) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[10px] font-mono">
+                    {providerDisplay && (
+                      <span
+                        className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] shrink-0 font-medium"
+                        title={rawProvider}
+                      >
+                        {providerDisplay}
+                      </span>
+                    )}
 
-                  {endpointKind && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded border font-medium shrink-0 ${getCategoryTagClass(endpointKind)}`}
-                      title={`Endpoint category: ${endpointKind}`}
-                    >
-                      {getEndpointKindLabel(endpointKind)}
-                    </span>
-                  )}
+                    {endpointKind && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded border font-medium shrink-0 ${getCategoryTagClass(endpointKind)}`}
+                        title={`Endpoint category: ${endpointKind}`}
+                      >
+                        {getEndpointKindLabel(endpointKind)}
+                      </span>
+                    )}
 
-                  {item.modelId && (
-                    <span
-                      className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)] truncate max-w-[150px] shrink-0"
-                      title={item.modelId}
-                    >
-                      {item.modelId}
-                    </span>
-                  )}
+                    {item.modelId && (
+                      <span
+                        className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)] truncate max-w-[150px] shrink-0"
+                        title={item.modelId}
+                      >
+                        {item.modelId}
+                      </span>
+                    )}
 
-                  <span
-                    className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)] tabular-nums shrink-0"
-                    title="Time To First Token"
-                  >
-                    TTFT: {formatTtftBadge(item.ttftMs)}
-                  </span>
+                    {(item.ttftMs != null || isExpanded) && (
+                      <span
+                        className="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)] tabular-nums shrink-0"
+                        title="Time To First Token"
+                      >
+                        TTFT: {formatTtftBadge(item.ttftMs)}
+                      </span>
+                    )}
 
-                  {(isRunning || effectiveIdleMs != null || item.idleSeconds != null) && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded border tabular-nums shrink-0 ${
-                        (effectiveIdleMs ?? 0) >= 15000
-                          ? 'border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10'
-                          : 'border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-muted)]'
-                      }`}
-                      title="Idle time elapsed since last token"
-                    >
-                      Idle: {idleDisplay}
-                    </span>
-                  )}
+                    {((isRunning && (effectiveIdleMs ?? 0) >= 3000) || showIdleWarning || isExpanded) && (
+                      <span
+                        className="px-1.5 py-0.5 rounded border tabular-nums shrink-0"
+                        style={
+                          showIdleWarning
+                            ? {
+                                borderColor: 'color-mix(in srgb, var(--warning) 40%, var(--border))',
+                                color: 'var(--warning)',
+                                backgroundColor: 'color-mix(in srgb, var(--warning) 10%, transparent)',
+                              }
+                            : {
+                                borderColor: 'var(--border)',
+                                color: 'var(--text-muted)',
+                                backgroundColor: 'var(--bg-secondary)',
+                              }
+                        }
+                        title="Idle time elapsed since last token"
+                      >
+                        Idle: {idleDisplay}
+                      </span>
+                    )}
 
-                  {hasSwapped && swaps.length > 0 && swaps.map((sw, sIdx) => (
-                    <span
-                      key={sIdx}
-                      className="px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 font-medium shrink-0"
-                      title={sw.details ? `Swapped: ${sw.details}` : 'Hot-swap occurred'}
-                    >
-                      {sw.details && sw.details.includes(' -> ') ? `Swapped: ${sw.details} (${sw.label})` : sw.label}
-                    </span>
-                  ))}
-                  {hasSwapped && swaps.length === 0 && (
-                    <span
-                      className="px-1.5 py-0.5 rounded border border-amber-500/30 text-amber-700 dark:text-amber-300 bg-amber-500/10 font-medium shrink-0"
-                      title="Hot-swap occurred"
-                    >
-                      swap 1
-                    </span>
-                  )}
-                </div>
+                    {hasSwapped && swaps.length > 0 && swaps.map((sw, sIdx) => (
+                      <span
+                        key={sIdx}
+                        className="px-1.5 py-0.5 rounded border font-medium shrink-0"
+                        style={{
+                          borderColor: 'color-mix(in srgb, var(--warning) 35%, var(--border))',
+                          color: 'var(--warning)',
+                          backgroundColor: 'color-mix(in srgb, var(--warning) 10%, transparent)',
+                        }}
+                        title={sw.details ? `Swapped: ${sw.details}` : 'Hot-swap occurred'}
+                      >
+                        {sw.details && sw.details.includes(' -> ') ? `Swapped: ${sw.details} (${sw.label})` : sw.label}
+                      </span>
+                    ))}
+                    {hasSwapped && swaps.length === 0 && (
+                      <span
+                        className="px-1.5 py-0.5 rounded border font-medium shrink-0"
+                        style={{
+                          borderColor: 'color-mix(in srgb, var(--warning) 35%, var(--border))',
+                          color: 'var(--warning)',
+                          backgroundColor: 'color-mix(in srgb, var(--warning) 10%, transparent)',
+                        }}
+                        title="Hot-swap occurred"
+                      >
+                        swap 1
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {isRunning && item.currentStatus && (
                   <div className="text-[10px] text-[var(--text-muted)] italic truncate pl-4">

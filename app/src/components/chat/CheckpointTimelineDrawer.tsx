@@ -219,9 +219,23 @@ export default function CheckpointTimelineDrawer() {
         </span>
 
         <button
+          type="button"
+          onClick={() => {
+            setOpen(false)
+            window.dispatchEvent(new CustomEvent('aether:toggle-run-timeline'))
+          }}
+          className="ms-auto flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          style={{ borderColor: 'var(--border)' }}
+          title={t('agent.timeline.view_toggle', '切换至运行时间线')}
+        >
+          <span>{t('agent.timeline.view_toggle', '运行时间线')}</span>
+        </button>
+
+        <button
+          type="button"
           onClick={loadCheckpoints}
           disabled={loading}
-          className="ms-auto p-1.5 rounded-md hover:bg-[var(--border)] transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className="p-1.5 rounded-md hover:bg-[var(--border)] transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           title={t('checkpoints.refresh', '刷新')}
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />

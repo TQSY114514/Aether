@@ -22,6 +22,7 @@ function formatPath(fullPath: string) {
 
 export default function FileSummaryDeck({ summary, sessionId, messageId }: FileSummaryDeckProps) {
   const { confirm } = useUI()
+  const [deckOpen, setDeckOpen] = useState(() => (summary?.files?.length ?? 0) > 1)
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({})
   const [modalDiffFile, setModalDiffFile] = useState<FileChangeEntry | null>(null)
   const [rollingBack, setRollingBack] = useState(false)
@@ -233,18 +234,32 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
     >
       {/* Header bar */}
       <div
-        className="flex items-center justify-between px-3 py-2 border-b"
+        className={`flex items-center justify-between px-3 py-2 ${deckOpen || (commitOpen && !committed) ? 'border-b' : ''}`}
         style={{
           borderColor: 'var(--border)',
           backgroundColor: 'var(--bg-primary)',
         }}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={() => setDeckOpen((prev) => !prev)}
+          className="flex items-center gap-2 min-w-0 text-left cursor-pointer hover:opacity-85 transition-opacity focus-visible:outline-none"
+        >
+          {deckOpen ? (
+            <ChevronDown size={13} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+          ) : (
+            <ChevronRight size={13} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+          )}
           <FileCode size={13} className="shrink-0" style={{ color: 'var(--text-secondary)' }} />
           <span className="font-semibold text-xs truncate" style={{ color: 'var(--text-primary)' }}>
             {summaryTitle}
           </span>
-          <div className="flex items-center gap-1 font-mono text-[11px] font-semibold shrink-0">
+          {!deckOpen && fileCount === 1 && files[0] && (
+            <span className="font-mono text-[11px] truncate max-w-[180px]" style={{ color: 'var(--text-muted)' }}>
+              · {formatPath(files[0].path).fileName}
+            </span>
+          )}
+          <div className="flex items-center gap-1 font-mono text-[11px] font-semibold tabular-nums shrink-0">
             {totalAdded > 0 && (
               <span className="px-1 py-0.2 rounded" style={{ color: 'var(--success)' }}>
                 +{totalAdded}
@@ -256,7 +271,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
               </span>
             )}
           </div>
-        </div>
+        </button>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
           {/* Run Tests button */}
@@ -390,6 +405,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
       )}
 
       {/* Files list */}
+      {deckOpen && (
       <div className="max-h-52 overflow-y-auto divide-y overscroll-y-contain" style={{ borderColor: 'var(--border)' }}>
         {files.map((file: FileChangeEntry) => {
           const isExpanded = !!expandedFiles[file.path]
@@ -525,6 +541,7 @@ export default function FileSummaryDeck({ summary, sessionId, messageId }: FileS
           )
         })}
       </div>
+      )}
 
       {/* Full Diff Modal */}
       {modalDiffFile && (

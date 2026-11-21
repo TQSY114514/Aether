@@ -128,6 +128,11 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
 - DB: `db.exec()` is DDL-only; parameterize every query with `prepare()...` and `?` bindings. `CURRENT_TIMESTAMP` is UTC, use `localNow()`. `lastInsertRowid` BigInt, `Number()` it. Windows Defender can lock the .exe during electron-builder (EPERM), retry or build portable.
 - Testing & IPC gates: `vi.mock` does not intercept nested CJS `require()` inside `app/electron/` (hook `Module._load` when mocking internals). Keep `preload.js` top-level namespaces at 2-space indent or `check-ipc` fails to parse them.
 - Security & streaming invariants: path-containment checks must resolve symlinks via `fs.realpathSync` (lexical `path.resolve` alone is bypassable). Stream parsers must branch on event `type` independently of `text` truthiness so empty-payload `done` signals aren't dropped.
+- Subagent & sandbox invariants: shadow workspace tracking map is `_sessionShadowOrigins` (not `_shadowOrigins`); reject `/cd` while `_isShadowActive(sid)` is true, and pass `sessionId` to `_isWorkspaceRootEnforced(sid)`. Non-idempotent spawn tools (`spawn_subagent`) must set `noRetry: true` and use `ctx.sessionSignal` (not per-attempt `attemptCtrl.signal`) so early `smart_window` returns stay abort-linked without duplicate spawns on timeout.
+- 评价或对比现有 UI 风格前,先完整读 `app/src/utils/theme.ts`(6 套主题:light/dark/blue/retro/metalheart/postdigital + auto,`retro` 为古典米色/古金)并确认用户当前所用主题;禁止凭 grep 前几行色值下结论。未渲染验收的判断要标明"仅依据代码,未看实际界面"。
+- Theme CSS tokens: UI components in `app/src` must use existing theme CSS vars (`--bg-secondary`, `--border`, `--accent`, `--text-*`) — never fixed Tailwind color palettes or undefined tokens like `--bg-tertiary`.
+- IPC & 工具入参防御性断言：范围敏感接口（如 `memory:consolidate`）必须显式拒绝顶层数组（`Array.isArray(opts)`）及非字符串范围键，严禁因未捕获的非法入参静默退化为全量/全局破坏性操作。
+- 文本行号与引用断言陷阱：依据内容计算文件总行数时（如 `findingsLedger` 的 `verifyCitation`），使用 `split(/\r?\n/)` 必须处理文件尾部换行（`content.endsWith('\n')` 时扣减 1），避免末尾空串引发 off-by-one 导致有效行被拒或伪造行越界通过。
 
 ## Before changing X, read Y
 

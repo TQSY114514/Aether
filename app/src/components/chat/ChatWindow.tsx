@@ -14,7 +14,6 @@ import ToolCallBlock from './ToolCallBlock'
 import TaskCard from './TaskCard'
 import AgentRunTimeline from './AgentRunTimeline'
 import AgentTimeline from './AgentTimeline'
-import ChatBackgroundPattern from './ChatBackgroundPattern'
 
 const EMPTY_ARRAY: any[] = []
 
@@ -141,26 +140,10 @@ function StreamingBubble({ sessionId, isAtBottom }: { sessionId: number; isAtBot
   }, [sessionId, isAtBottom, resetLocalState])
 
   return (
-    <div id={`msg-streaming-${sessionId}`} className="w-full flex flex-col message-enter py-2.5">
+    <div id={`msg-streaming-${sessionId}`} className="w-full flex flex-col message-enter py-3">
       <div className="w-full">
-        {/* Assistant Header - Calm Design Token aligned with MessageBubble */}
-        <div className="flex items-center gap-2 mb-1.5 px-0.5">
-          <div
-            className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 border"
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
-          >
-            <span className="text-[10px] font-mono font-medium" style={{ color: 'var(--text-secondary)' }}>AI</span>
-          </div>
-          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Assistant</span>
-          <span className="inline-flex items-center gap-0.5 ml-1">
-            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-            <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] typing-dot" />
-          </span>
-        </div>
-
-        {/* Assistant Content Stream */}
-        <div ref={bubbleRef} className="w-full text-xs leading-relaxed break-words relative transition-all">
+        {/* Assistant Content Stream — Quiet Precision typography without clunky [AI] box */}
+        <div ref={bubbleRef} className="w-full text-[13.5px] leading-[1.7] tracking-[-0.005em] break-words relative">
           <AgentTimeline
             thinkingText={thinkingText || undefined}
             thinkingStreaming={thinkingStreaming}
@@ -363,6 +346,8 @@ export default function ChatWindow() {
   }, [messages, debouncedQuery])
   const [matchIdx, setMatchIdx] = useState(0)
   const [showTimeline, setShowTimeline] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const matchCount = matchIds.length
   // Clamp the active index when the match set shrinks (query changed).
   useEffect(() => { if (matchIdx > matchCount - 1) setMatchIdx(Math.max(0, matchCount - 1)) }, [matchCount, matchIdx])
@@ -377,6 +362,34 @@ export default function ChatWindow() {
   // is live (only fires after the 200ms debounce).
   useEffect(() => { if (matchIds.length > 0) { setMatchIdx(0); setActiveMsgId(matchIds[0]); scrollToMsg(matchIds[0]) } /* eslint-disable-next-line */ }, [debouncedQuery])
 
+  // Header & keyboard triggers for on-demand conversation search and timeline
+  useEffect(() => {
+    const onToggleSearch = () => {
+      setSearchOpen((prev) => {
+        const next = !prev
+        if (next) setTimeout(() => searchInputRef.current?.focus(), 0)
+        else clearSearch()
+        return next
+      })
+    }
+    const onToggleTimeline = () => setShowTimeline((prev) => !prev)
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setSearchOpen(true)
+        setTimeout(() => searchInputRef.current?.focus(), 0)
+      }
+    }
+    window.addEventListener('aether:toggle-chat-search', onToggleSearch)
+    window.addEventListener('aether:toggle-run-timeline', onToggleTimeline)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('aether:toggle-chat-search', onToggleSearch)
+      window.removeEventListener('aether:toggle-run-timeline', onToggleTimeline)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [clearSearch])
+
   // Empty chat: render EmptyState safely centered via flex + my-auto.
   // When the window is short, my-auto prevents negative scroll / top clipping,
   // keeping the hero icon completely in view while allowing scroll if needed.
@@ -384,45 +397,50 @@ export default function ChatWindow() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
-      {/* Search HUD bar */}
-      <div className="px-4 py-1.5 shrink-0 flex items-center gap-2 relative z-[2]" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--content-bg, var(--bg-primary))' }}>
-        <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
-          <Search size={12} className="text-gray-400 shrink-0" />
-          <input value={messageSearchQuery} onChange={handleSearchChange}
-            placeholder={t('chat.search_placeholder')} autoComplete="off"
-            className="w-full bg-transparent outline-none text-xs" style={{ color: 'var(--text-primary)' }} />
-          {messageSearchQuery && (
-            <>
-              <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
-                {matchCount > 0 ? `${matchIdx + 1}/${matchCount}` : `0/${matchCount}`}
-              </span>
-              <button onClick={() => jumpTo(-1)} disabled={matchCount === 0} title={t('chat.search_prev')}
-                aria-label={t('chat.search_prev')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
-                <ChevronUp size={13} className="text-gray-400" />
-              </button>
-              <button onClick={() => jumpTo(1)} disabled={matchCount === 0} title={t('chat.search_next')}
-                aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30">
-                <ChevronDown size={13} className="text-gray-400" />
-              </button>
-              <button onClick={clearSearch} className="p-0.5 rounded hover:bg-[var(--border)]">
-                <X size={12} className="text-gray-400" />
-              </button>
-            </>
-          )}
+      {/* On-demand Search HUD bar (collapsed by default to keep conversation header clean) */}
+      {(searchOpen || Boolean(messageSearchQuery)) && (
+        <div className="px-4 py-1.5 shrink-0 flex items-center gap-2 relative z-[2]" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--content-bg, var(--bg-primary))' }}>
+          <div className="flex-1 flex items-center gap-2 px-2.5 py-1 rounded-md" style={{ backgroundColor: 'var(--content-secondary, var(--bg-secondary))', border: '1px solid var(--border)' }}>
+            <Search size={12} className="text-[var(--text-muted)] shrink-0" />
+            <input
+              ref={searchInputRef}
+              value={messageSearchQuery}
+              onChange={handleSearchChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  clearSearch()
+                  setSearchOpen(false)
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  jumpTo(e.shiftKey ? -1 : 1)
+                }
+              }}
+              placeholder={t('chat.search_placeholder')}
+              autoComplete="off"
+              className="w-full bg-transparent outline-none text-xs"
+              style={{ color: 'var(--text-primary)' }}
+            />
+            <span className="text-[10px] tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
+              {messageSearchQuery ? (matchCount > 0 ? `${matchIdx + 1}/${matchCount}` : `0/0`) : ''}
+            </span>
+            <button onClick={() => jumpTo(-1)} disabled={matchCount === 0} title={t('chat.search_prev')}
+              aria-label={t('chat.search_prev')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30 cursor-pointer">
+              <ChevronUp size={13} className="text-[var(--text-muted)]" />
+            </button>
+            <button onClick={() => jumpTo(1)} disabled={matchCount === 0} title={t('chat.search_next')}
+              aria-label={t('chat.search_next')} className="p-0.5 rounded hover:bg-[var(--border)] disabled:opacity-30 cursor-pointer">
+              <ChevronDown size={13} className="text-[var(--text-muted)]" />
+            </button>
+            <button
+              onClick={() => { clearSearch(); setSearchOpen(false) }}
+              className="p-0.5 rounded hover:bg-[var(--border)] cursor-pointer"
+              aria-label={t('common.close', '关闭')}
+            >
+              <X size={12} className="text-[var(--text-muted)]" />
+            </button>
+          </div>
         </div>
-
-        {currentSessionId && (
-          <button
-            onClick={() => setShowTimeline(true)}
-            className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] border hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-            title={t('agent.timeline.view_toggle')}
-          >
-            <History size={12} style={{ color: 'var(--accent)' }} />
-            <span>{t('agent.timeline.view_toggle')}</span>
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Session Taint Banner (QVD-2026-57410 Defense) */}
       {isSessionTainted && (
@@ -593,6 +611,26 @@ export default function ChatWindow() {
           <div ref={bottomRef} />
         </div>
       </div>
+
+      {/* Floating Scroll-to-Bottom capsule when reading earlier history */}
+      {!isAtBottom && !isEmptyChat && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <button
+            type="button"
+            onClick={() => {
+              setIsAtBottom(true)
+              scrollToBottom(true)
+            }}
+            className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium shadow-md hover:border-[var(--accent)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-all cursor-pointer"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            aria-label={t('chat.scroll_to_bottom', '回到最新回复')}
+          >
+            {isCurrentStreaming && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />}
+            <span>{isCurrentStreaming ? t('chat.streaming_bottom', '正在输出 · 回到最新') : t('chat.scroll_to_bottom', '回到最新回复')}</span>
+            <ChevronDown size={13} style={{ color: 'var(--text-muted)' }} />
+          </button>
+        </div>
+      )}
 
       <MessageNav messages={messages} activeId={activeMsgId} scrollTo={scrollToMsg} scrollRef={scrollRef} />
 

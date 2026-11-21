@@ -12,37 +12,36 @@ import type { Message } from '@/types'
  *   - 新消息到来时自动跟随到最新窗口
  *   - activeId 高亮当前消息
  */
-const MAX_VISIBLE = 8 // 同时展示的最大点数
-const DOT_SIZE = 7    // 固定点大小
-const DOT_GAP = 12    // 固定点间距（中心到中心）
+const MAX_VISIBLE = 10 // 同时展示的最大刻度数
+const DOT_GAP = 14     // 刻度间距（中心到中心）
 
 export default function MessageNav({
-  messages, activeId, scrollTo, scrollRef,
+  messages, activeId, scrollTo,
 }: {
   messages: Message[]
   activeId: number | null
   scrollTo: (id: number) => void
   scrollRef?: RefObject<HTMLDivElement | null>
 }) {
-  const [hoverId, setHoverId] = useState<number | null>(null)
-  const [mouseY, setMouseY] = useState(0)
+  const [hoverState, setHoverState] = useState<{ id: number; idx: number } | null>(null)
   const [scrollOffset, setScrollOffset] = useState(0)
   const navRef = useRef<HTMLDivElement>(null)
 
-  const hoverMsg = useMemo(() => hoverId ? messages.find(m => m.id === hoverId) : null, [messages, hoverId])
-  const userMsgs = useMemo(() => messages.filter(m => m.role === 'user'), [messages])
+  const hoverMsg = useMemo(
+    () => (hoverState ? messages.find((m) => m.id === hoverState.id) : null),
+    [messages, hoverState]
+  )
+  const userMsgs = useMemo(() => messages.filter((m) => m.role === 'user'), [messages])
   const count = userMsgs.length
 
-  // 非 passive wheel listener — 滑动点条窗口。必须在条件 return 之前调用,
-  // 否则违反 hooks 规则 (React error #310)。
+  // 非 passive wheel listener — 滑动刻度条窗口。必须在条件 return 之前调用
   useEffect(() => {
     const el = navRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      setScrollOffset(prev => {
+      setScrollOffset((prev) => {
         const max = Math.max(0, count - MAX_VISIBLE)
-        // 每次滚动 1 个点
         const step = 1
         const next = e.deltaY > 0 ? prev + step : prev - step
         return Math.max(0, Math.min(max, next))
@@ -52,7 +51,7 @@ export default function MessageNav({
     return () => el.removeEventListener('wheel', onWheel)
   }, [count])
 
-  // 新消息到来时自动跟随到最新窗口（像聊天软件自动滚到底部）。
+  // 新消息到来时自动跟随到最新窗口
   useEffect(() => {
     const max = Math.max(0, count - MAX_VISIBLE)
     setScrollOffset(max)
@@ -63,106 +62,100 @@ export default function MessageNav({
   const maxOffset = Math.max(0, count - MAX_VISIBLE)
   const clampedOffset = Math.min(scrollOffset, maxOffset)
 
-  // 可见窗口
   const visibleCount = Math.min(count, MAX_VISIBLE)
   const visibleMsgs = userMsgs.slice(clampedOffset, clampedOffset + visibleCount)
   const hasMoreAbove = clampedOffset > 0
   const hasMoreBelow = clampedOffset < maxOffset
 
-  // 可见窗口的总高度（用于垂直居中）
-  const windowHeight = visibleCount * DOT_GAP
-
-  // hover 时记录鼠标 Y (相对于点条容器),用于定位预览气泡
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const navRect = navRef.current?.getBoundingClientRect()
-    setMouseY(navRect ? e.clientY - navRect.top : e.clientY)
-  }
+  const windowHeight = (visibleCount - 1) * DOT_GAP
+  const getTickTop = (idx: number) => `calc(50% - ${windowHeight / 2}px + ${idx * DOT_GAP}px)`
 
   return (
-    <>
-      {/* 导航点条 — 固定在左侧,滚轮滑动自身窗口。作为 tooltip 的定位容器 */}
-      <div
-        ref={navRef}
-        onMouseMove={handleMouseMove}
-        className="absolute left-1 top-10 bottom-10 z-30"
-        style={{ width: '16px', cursor: 'pointer' }}
-      >
-        {/* 轨道线 */}
+    <div
+      ref={navRef}
+      className="absolute left-1.5 top-10 bottom-10 z-30 select-none"
+      style={{ width: '20px' }}
+    >
+      {/* 顶部微指示: 上方还有更多历史消息 */}
+      {hasMoreAbove && (
         <div
-          className="absolute left-1/2 top-2 bottom-2 -translate-x-1/2"
-          style={{ width: '1px', backgroundColor: 'var(--border)', opacity: 0.5 }}
+          className="absolute left-1.5 pointer-events-none rounded-full"
+          style={{
+            top: `calc(50% - ${windowHeight / 2}px - 12px)`,
+            width: '3px',
+            height: '3px',
+            backgroundColor: 'var(--text-muted)',
+            opacity: 0.45,
+          }}
         />
-        {/* 顶部渐变指示:上面还有更多点 */}
-        {hasMoreAbove && (
-          <div
-            className="absolute left-1/2 top-1 -translate-x-1/2 pointer-events-none"
-            style={{
-              width: '0', height: '0',
-              borderLeft: '4px solid transparent',
-              borderRight: '4px solid transparent',
-              borderTop: '5px solid var(--text-muted)',
-              opacity: 0.5,
-            }}
-          />
-        )}
-        {/* 可见点 — 在容器垂直居中区域排列，固定大小和间距 */}
-        {visibleMsgs.map((msg, idx) => {
-          const isActive = activeId === msg.id
-          // 点从窗口顶部开始向下排列，整个窗口在容器中垂直居中
-          const y = `calc(50% - ${windowHeight / 2}px + ${idx * DOT_GAP}px)`
-          return (
-            <button
-              key={msg.id}
-              onClick={() => scrollTo(msg.id)}
-              onMouseEnter={() => setHoverId(msg.id)}
-              onMouseLeave={() => setHoverId(null)}
-              className="absolute left-1/2 rounded-full transition-all duration-150 hover:scale-150"
+      )}
+
+      {/* 可见刻度 — 水平微刻度线，大热区易点击，悬停锚定不抖动 */}
+      {visibleMsgs.map((msg, idx) => {
+        const isActive = activeId === msg.id
+        const isHovered = hoverState?.id === msg.id
+        const turnNum = clampedOffset + idx + 1
+        return (
+          <button
+            key={msg.id}
+            type="button"
+            onClick={() => scrollTo(msg.id)}
+            onMouseEnter={() => setHoverState({ id: msg.id, idx })}
+            onMouseLeave={() => setHoverState((prev) => (prev?.id === msg.id ? null : prev))}
+            className="absolute left-0 w-5 h-3.5 -translate-y-1/2 flex items-center justify-start pl-1 cursor-pointer focus-visible:outline-none group"
+            style={{ top: getTickTop(idx) }}
+            aria-label={`跳转至第 ${turnNum} 条提问`}
+          >
+            <span
+              className="rounded-full transition-all duration-150"
               style={{
-                top: y,
-                transform: 'translate(-50%, -50%)',
-                width: `${DOT_SIZE}px`,
-                height: `${DOT_SIZE}px`,
-                backgroundColor: isActive ? 'var(--accent)' : 'var(--text-muted)',
-                opacity: isActive ? 1 : 0.6,
-                boxShadow: isActive ? `0 0 6px var(--accent)` : 'none',
+                width: isActive || isHovered ? '13px' : '7px',
+                height: isActive || isHovered ? '2.5px' : '2px',
+                backgroundColor: isActive || isHovered ? 'var(--accent)' : 'var(--text-muted)',
+                opacity: isActive ? 1 : isHovered ? 0.9 : 0.4,
               }}
             />
-          )
-        })}
-        {/* 底部渐变指示:下面还有更多点 */}
-        {hasMoreBelow && (
-          <div
-            className="absolute left-1/2 bottom-1 -translate-x-1/2 pointer-events-none"
-            style={{
-              width: '0', height: '0',
-              borderLeft: '4px solid transparent',
-              borderRight: '4px solid transparent',
-              borderBottom: '5px solid var(--text-muted)',
-              opacity: 0.5,
-            }}
-          />
-        )}
-        {/* hover 预览气泡 — 相对点条定位,显示在右侧,宽度随内容自适应 */}
-        {hoverMsg && (
-          <div
-            className="absolute z-50 bg-[var(--content-bg)] border border-[var(--border)] rounded-lg shadow-elevated p-2.5 text-xs pointer-events-none transition-opacity duration-100"
-            style={{
-              top: mouseY,
-              left: '100%',
-              marginLeft: '8px',
-              transform: 'translateY(-50%)',
-              maxWidth: '220px',
-              width: 'max-content',
-              wordBreak: 'break-word',
-              whiteSpace: 'normal',
-            }}
-          >
-            <span className="block leading-relaxed" style={{ color: 'var(--text-primary)' }}>
-              {hoverMsg.content.slice(0, 120)}{hoverMsg.content.length > 120 ? '…' : ''}
-            </span>
+          </button>
+        )
+      })}
+
+      {/* 底部微指示: 下方还有更多消息 */}
+      {hasMoreBelow && (
+        <div
+          className="absolute left-1.5 pointer-events-none rounded-full"
+          style={{
+            top: `calc(50% + ${windowHeight / 2}px + 10px)`,
+            width: '3px',
+            height: '3px',
+            backgroundColor: 'var(--text-muted)',
+            opacity: 0.45,
+          }}
+        />
+      )}
+
+      {/* 悬停预览卡片 — 精准锚定在当前刻度的 Y 轴中心，不随鼠标微动抖动 */}
+      {hoverMsg && hoverState && (
+        <div
+          className="absolute z-50 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg shadow-lg px-2.5 py-2 text-xs pointer-events-none transition-all duration-100"
+          style={{
+            top: getTickTop(hoverState.idx),
+            left: '100%',
+            marginLeft: '4px',
+            transform: 'translateY(-50%)',
+            maxWidth: '240px',
+            width: 'max-content',
+            wordBreak: 'break-word',
+            whiteSpace: 'normal',
+          }}
+        >
+          <div className="flex items-center gap-1.5 mb-0.5 text-[10px] font-mono tabular-nums" style={{ color: 'var(--text-muted)' }}>
+            <span>#{clampedOffset + hoverState.idx + 1}</span>
           </div>
-        )}
-      </div>
-    </>
+          <span className="block leading-relaxed text-[11.5px]" style={{ color: 'var(--text-primary)' }}>
+            {hoverMsg.content.slice(0, 120)}{hoverMsg.content.length > 120 ? '…' : ''}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }

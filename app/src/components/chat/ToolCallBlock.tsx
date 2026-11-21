@@ -216,26 +216,37 @@ export default function ToolCallBlock({ tool }: { tool: ToolCall }) {
   const fallbackDiffCounts = useMemo(() => countDiffLines(tool.diff || ''), [tool.diff])
   const diffAdded = tool.added ?? fallbackDiffCounts.added
   const diffRemoved = tool.removed ?? fallbackDiffCounts.removed
+  const isElevated = open || isFailed || dangerous || Boolean(tool.diff) || Boolean(tool.afterSnapshot)
 
   return (
-    <div className="rounded-[2px] border mb-1.5 overflow-hidden transition-all text-xs" style={{ borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+    <div
+      className={isElevated
+        ? 'rounded-[8px] border mb-1.5 overflow-hidden transition-colors text-xs'
+        : 'rounded-[6px] border border-transparent hover:bg-[var(--bg-secondary)]/70 mb-0.5 overflow-hidden transition-colors text-xs group/tool'
+      }
+      style={isElevated ? {
+        borderColor: dangerous ? 'rgba(217,119,6,0.35)' : isFailed ? 'rgba(239,68,68,0.35)' : 'var(--border)',
+        backgroundColor: 'var(--bg-secondary)',
+      } : {}}
+    >
       <div className="w-full flex items-center justify-between gap-2 px-1 text-xs">
         <button
           type="button"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
-          className="flex-1 flex items-center gap-2 min-w-0 px-1.5 py-1 text-xs hover:bg-[var(--border)]/40 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] active:opacity-90 rounded-[2px] text-left"
+          className="flex-1 flex items-center gap-1.5 min-w-0 px-1.5 py-1 text-xs transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] rounded-[5px] text-left"
           title={cmdString || tool.name}
         >
-        {open ? <ChevronDown size={12} className="text-[var(--text-muted)]" /> : <ChevronRight size={12} className="text-[var(--text-muted)]" />}
+        {open ? <ChevronDown size={11} className="text-[var(--text-muted)] shrink-0" /> : <ChevronRight size={11} className="text-[var(--text-muted)] shrink-0 opacity-70 group-hover/tool:opacity-100" />}
         {isCommand ? (
-          <Terminal size={12} className={isFailed ? "text-red-500 shrink-0" : running ? "text-amber-500 shrink-0" : "text-emerald-500 shrink-0"} />
+          <Terminal size={11.5} className={isFailed ? "text-red-500 shrink-0" : running ? "text-amber-500 shrink-0" : "text-[var(--text-muted)] shrink-0"} />
         ) : dangerous ? (
-          <ShieldAlert size={12} className="text-amber-500 shrink-0" />
-        ) : (
-          <ShieldCheck size={12} className="text-[var(--text-muted)] shrink-0" />
-        )}
-        <span className={`truncate text-left ${isCommand ? 'font-mono font-medium' : 'font-medium'}`} style={{ color: 'var(--text-primary)' }}>
+          <ShieldAlert size={11.5} className="text-amber-500 shrink-0" />
+        ) : null}
+        <span
+          className={`truncate text-left text-[11.5px] ${isCommand ? 'font-mono' : ''}`}
+          style={{ color: isElevated ? 'var(--text-primary)' : 'var(--text-secondary)' }}
+        >
           {isCommand ? `$ ${cmdString || label}` : label}
         </span>
         {isCommand && cmdCwd && (

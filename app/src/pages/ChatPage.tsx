@@ -4,18 +4,16 @@ import ChatWindow from '@/components/chat/ChatWindow'
 import ChatInput from '@/components/chat/ChatInput'
 import ContextBar from '@/components/chat/ContextBar'
 import EmptyState from '@/components/chat/EmptyState'
-import ChatBackgroundPattern from '@/components/chat/ChatBackgroundPattern'
-import PersonaSelector from '@/components/chat/PersonaSelector'
 import Tooltip from '@/components/Tooltip'
 import HoverMarquee from '@/components/ui/HoverMarquee'
-import { FlaskConical, FolderGit2, Folder, ShieldCheck } from 'lucide-react'
+import { FolderGit2, Folder, ExternalLink, Search, History } from 'lucide-react'
 import { t } from '@/utils/i18n'
 
-// Trust badge dot color → tailwind class
+// Trust badge dot color
 const TRUST_DOT: Record<string, string> = {
-  green: 'bg-green-400',
-  yellow: 'bg-yellow-400',
-  red: 'bg-red-400',
+  green: 'var(--success)',
+  yellow: 'var(--warning)',
+  red: 'var(--error)',
 }
 const TRUST_TIP: Record<string, string> = {
   green: 'trusted',
@@ -23,7 +21,7 @@ const TRUST_TIP: Record<string, string> = {
   red: 'cautious',
 }
 
-/** Compose the sidebar, conversation, and auxiliary chat panels. */
+/** Compose the conversation header, message stream, and input composer. */
 export default function ChatPage() {
   const currentSessionId = useStore((s) => s.currentSessionId)
   const sessions = useStore((s) => s.sessions)
@@ -34,24 +32,17 @@ export default function ChatPage() {
   const theme = useStore((s) => s.theme)
   const backgroundImage = useStore((s) => s.backgroundImage)
   const hasBg = !!backgroundImage
-  const personas = useStore((s) => s.personas)
-  const workspaceSoul = useStore((s) => s.workspaceSoul)
-  const providers = useStore((s) => s.providers)
-  const chatMode = useStore((s) => s.chatMode)
-  const setChatMode = useStore((s) => s.setChatMode)
-  const arenaModelIds = useStore((s) => s.arenaModelIds)
-  const setArenaModelIds = useStore((s) => s.setArenaModelIds)
-  const arenaTemperatures = useStore((s) => s.arenaTemperatures)
-  const setArenaTemperatures = useStore((s) => s.setArenaTemperatures)
   const sessionConfigs = useStore((s) => s.sessionConfigs)
-  const saveSessionConfig = useStore((s) => s.saveSessionConfig)
-  const allModels = useStore((s) => s.allModels)
-  const sidebarOpen = useStore((s) => s.sidebarOpen)
+  const setSessionCwd = useStore((s) => s.setSessionCwd)
+  const streamingBySession = useStore((s) => s.streamingBySession)
+  const isStreaming = currentSessionId ? !!streamingBySession[currentSessionId] : false
 
   const currentSession = useMemo(() => sessions.find((s) => s.id === currentSessionId), [sessions, currentSessionId])
-  const activeCwd = currentSession?.cwd || (currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null) || null
+  const [defaultWorkspace, setDefaultWorkspace] = useState<string | null>(null)
+  const activeCwd = currentSession?.cwd || (currentSessionId ? sessionConfigs[currentSessionId]?.workspace : null) || defaultWorkspace || null
+
   const displayFolder = useMemo(() => {
-    if (!activeCwd) return t('workspace.default')
+    if (!activeCwd) return t('workspace.default', '默认工作区')
     const parts = activeCwd.replace(/\\/g, '/').split('/').filter(Boolean)
     return parts[parts.length - 1] || activeCwd
   }, [activeCwd])
@@ -60,6 +51,10 @@ export default function ChatPage() {
   const [headerRule, setHeaderRule] = useState<{ has: boolean; fileName: string | null } | null>(null)
 
   useEffect(() => {
+    window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined).then((ws) => {
+      if (ws) setDefaultWorkspace(ws)
+    }).catch(() => {})
+
     window.electronAPI?.git?.status?.({ sessionId: currentSessionId ?? undefined }).then((res) => {
       if (res?.success && res.branch) {
         setHeaderGit({ branch: res.branch, isClean: (res.dirtyCount ?? 0) === 0 })
@@ -86,161 +81,64 @@ export default function ChatPage() {
     }).catch(() => {})
   }, [currentSessionId])
 
-  // Arena model selections — local state synced to store for persistence.
-  const [localArenaIds, setLocalArenaIds] = useState<[number | null, number | null]>([
-    arenaModelIds[0] ?? null,
-    arenaModelIds[1] ?? null,
-  ])
-  useEffect(() => {
-    setLocalArenaIds([arenaModelIds[0] ?? null, arenaModelIds[1] ?? null])
-  }, [arenaModelIds])
+  const handlePickCwd = useCallback(async () => {
+    if (isStreaming) return
+    try {
+      const picked = await window.electronAPI?.system?.pickDirectory?.()
+      if (!picked) return
+      if (currentSessionId) {
+        await setSessionCwd(picked)
+      } else {
+        await window.electronAPI?.agent?.setWorkspace?.({ dir: picked })
+      }
+      setDefaultWorkspace(picked)
+    } catch {}
+  }, [currentSessionId, isStreaming, setSessionCwd])
 
-  const setModelSlot = useCallback((slot: 0 | 1, modelId: number | null) => {
-    setLocalArenaIds((prev) => {
-      const next: [number | null, number | null] = slot === 0 ? [modelId, prev[1]] : [prev[0], modelId]
-      const valid = next.filter((id): id is number => id !== null && id > 0)
-      setArenaModelIds(valid)
-      return next
-    })
-  }, [setArenaModelIds])
+  const handleOpenCwd = useCallback(async () => {
+    const target = activeCwd || (await window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined))
+    if (target) window.electronAPI?.system?.openPath?.(target)
+  }, [activeCwd, currentSessionId])
 
-  const cfg = currentSessionId ? sessionConfigs[currentSessionId] : null
-  const currentPersonaId = cfg?.personaId ?? null
-
-  const allModelOptions = useMemo(() => providers.map(p => {
-    const ms = allModels.filter(m => m.provider_id === p.id)
-    if (ms.length === 0) return null
-    return { providerId: p.id, providerName: p.name, models: ms.map(m => ({ id: m.id, name: m.display_name || m.model_name })) }
-  }).filter(Boolean) as { providerId: number; providerName: string; models: { id: number; name: string }[] }[], [providers, allModels])
-
-  const allArenaModels = useMemo(() => allModelOptions?.flatMap(g => g.models.map(m => ({ ...m, providerName: g.providerName }))) || [], [allModelOptions])
-
-  // ELO scores for arena selector display
-  const scores = useStore((s) => s.scores)
-  const loadScores = useStore((s) => s.loadScores)
-  useEffect(() => { if (scores.length === 0) loadScores() }, [])
-  const scoreByModel = useMemo(() => {
-    const map: Record<number, number> = {}
-    for (const sc of scores) { map[sc.model_id] = Math.round(sc.score) }
-    return map
-  }, [scores])
-
-  // Arena bg: semi-transparent so arena mode visually differs from normal chat.
-  const arenaBgStyle = chatMode === 'arena'
-    ? { backgroundColor: 'rgba(255,255,255,0.82)' }
-    : {}
-
-  // Consolidated Header Control Group
+  // Consolidated Header Control Group: Unified Workspace/CWD Capsule + On-Demand Search & Timeline
   const renderHeaderControls = () => (
-    <div className="flex items-center gap-2 shrink-0 ml-auto app-no-drag">
-      {/* Arena model selectors with smooth expand/collapse entrance & exit transition */}
+    <div className="flex items-center gap-1.5 shrink-0 ml-auto app-no-drag">
+      {/* Unified Workspace / CWD / Git / AGENTS.md Capsule */}
       <div
-        className={`flex items-center gap-1.5 flex-nowrap whitespace-nowrap shrink-0 overflow-hidden transition-[max-width,opacity] duration-200 ease-out ${
-          chatMode === 'arena'
-            ? 'max-w-[480px] opacity-100 mr-0.5'
-            : 'max-w-0 opacity-0 pointer-events-none mr-0'
-        }`}
+        className="h-7 flex items-center rounded-[6px] border text-xs overflow-hidden"
+        style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
       >
-        <div
-          className="flex items-center gap-1 p-0.5 rounded-md border shadow-2xs"
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
-        >
-          <select
-            value={localArenaIds[0] ?? ''}
-            onChange={(e) => setModelSlot(0, Number(e.target.value) || null)}
-            className="h-6.5 text-[11px] font-medium px-2 rounded-[5px] border-0 outline-none max-w-[135px] truncate cursor-pointer transition-colors"
-            style={{ backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}
-          >
-            <option value="">{t('chat.arena.model1')}</option>
-            {allArenaModels.map(m => (
-              <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-            ))}
-          </select>
-          <span className="text-[10px] font-mono font-bold px-0.5" style={{ color: 'var(--text-muted)' }}>VS</span>
-          <select
-            value={localArenaIds[1] ?? ''}
-            onChange={(e) => setModelSlot(1, Number(e.target.value) || null)}
-            className="h-6.5 text-[11px] font-medium px-2 rounded-[5px] border-0 outline-none max-w-[135px] truncate cursor-pointer transition-colors"
-            style={{ backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}
-          >
-            <option value="">{t('chat.arena.model2')}</option>
-            {allArenaModels.map(m => (
-              <option key={m.id} value={m.id}>{m.name}{scoreByModel[m.id] ? ` (${scoreByModel[m.id]})` : ''}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Arena 2.0: same-model multi-temperature comparison */}
-        <select
-          value={arenaTemperatures ? arenaTemperatures.join(',') : ''}
-          onChange={(e) => {
-            const v = e.target.value
-            setArenaTemperatures(v ? v.split(',').map(Number) : null)
-          }}
-          title={t('chat.arena.temp_title')}
-          className="h-7.5 text-[11px] font-medium px-2 rounded-md border outline-none max-w-[110px] transition-colors cursor-pointer"
-          style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-        >
-          <option value="">{t('chat.arena.single')}</option>
-          <option value="0.2,0.8">{t('chat.arena.temp_pair')}</option>
-          <option value="0.2,0.5,0.8">{t('chat.arena.temp_triple')}</option>
-        </select>
-      </div>
-
-      {/* One-Click Split Run Toggle */}
-      <button
-        type="button"
-        onClick={() => setChatMode(chatMode === 'arena' ? 'normal' : 'arena')}
-        className={`h-7.5 flex items-center gap-1.5 px-2.5 rounded-[6px] border text-xs font-mono transition-colors cursor-pointer select-none ${
-          chatMode === 'arena'
-            ? 'bg-[var(--accent)] text-white font-semibold border-transparent shadow-xs'
-            : 'bg-[var(--content-bg)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] border-[var(--border)]'
-        }`}
-        title={chatMode === 'arena' ? '关闭同屏双模型对比' : '一键开启同屏双模型对比 (Split Run)'}
-      >
-        <FlaskConical size={13} className="shrink-0" />
-        <span>{chatMode === 'arena' ? 'Split Run 开启' : 'Split Run'}</span>
-      </button>
-
-      {/* Workspace Context Chip: Full project badge when sidebar is collapsed; concise Git/Rule chip when expanded */}
-      {(!sidebarOpen || headerRule?.has || headerGit?.branch) && (
         <Tooltip
-          text={`${displayFolder}${headerGit?.branch ? ` (${headerGit.branch})` : ''} · ${activeCwd || '~/.aetherai'}${headerRule?.has ? ` · [${headerRule.fileName || 'Rules'}]` : ''}`}
+          text={`${t('cwd.browse', '点击切换工作目录')} · ${activeCwd || '~/.aetherai'}${headerGit?.branch ? ` (${headerGit.branch})` : ''}${headerRule?.has ? ` · [${headerRule.fileName || 'Rules'}]` : ''}`}
         >
           <button
             type="button"
-            onClick={async () => {
-              const target = activeCwd || (await window.electronAPI?.agent?.getWorkspace?.(currentSessionId ?? undefined))
-              if (target) window.electronAPI?.system?.openPath?.(target)
-            }}
-            className="h-7.5 flex items-center gap-1.5 px-2 rounded-[6px] border text-xs font-medium transition-colors hover:bg-[var(--bg-secondary)] active:scale-[0.98] cursor-pointer"
-            style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            aria-label="Workspace Info"
+            onClick={handlePickCwd}
+            disabled={isStreaming}
+            className="h-full flex items-center gap-1.5 px-2 text-xs font-medium transition-colors hover:bg-[var(--content-bg)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 cursor-pointer"
+            style={{ color: 'var(--text-primary)' }}
+            aria-label="Workspace Directory"
           >
-            {!sidebarOpen ? (
-              <>
-                {headerGit ? (
-                  <FolderGit2 size={12} className="text-[var(--accent)] shrink-0" />
-                ) : (
-                  <Folder size={12} className="text-[var(--accent)] shrink-0" />
-                )}
-                <span className="truncate max-w-[90px] text-[11px] font-semibold">
-                  {displayFolder}
-                </span>
-              </>
-            ) : null}
+            {headerGit ? (
+              <FolderGit2 size={12} className="text-[var(--accent)] shrink-0" />
+            ) : (
+              <Folder size={12} className="text-[var(--accent)] shrink-0" />
+            )}
+            <span className="truncate max-w-[120px] text-[11px] font-medium">
+              {displayFolder}
+            </span>
             {headerGit?.branch && (
-              <span className="font-mono text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+              <span className="font-mono text-[10px] text-[var(--text-muted)] flex items-center gap-1 pl-0.5">
                 <span
                   className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: headerGit.isClean ? 'var(--success, #16a34a)' : 'var(--warning, #f59e0b)' }}
+                  style={{ backgroundColor: headerGit.isClean ? 'var(--success)' : 'var(--warning)' }}
                 />
-                <span className="truncate max-w-[55px]">{headerGit.branch}</span>
+                <span className="truncate max-w-[65px]">{headerGit.branch}</span>
               </span>
             )}
             {headerRule?.has && (
               <span
-                className="px-1 py-0.2 rounded-[4px] border font-mono text-[9px] text-[var(--accent)] bg-[var(--bg-secondary)] shrink-0"
+                className="px-1 py-0.2 rounded-[4px] border font-mono text-[9px] text-[var(--accent)] bg-[var(--content-bg)] shrink-0"
                 style={{ borderColor: 'var(--border)' }}
               >
                 {headerRule.fileName || 'Rules'}
@@ -248,41 +146,65 @@ export default function ChatPage() {
             )}
           </button>
         </Tooltip>
-      )}
 
-      {/* Modern Persona Selector Dropdown */}
-      <PersonaSelector
-        currentPersonaId={currentPersonaId}
-        workspaceSoul={workspaceSoul}
-        personas={personas}
-        onSelect={(personaId) => {
-          if (currentSessionId) saveSessionConfig(currentSessionId, { personaId })
-        }}
-      />
+        <Tooltip text={t('cwd.reveal', '在文件资源管理器中打开')}>
+          <button
+            type="button"
+            onClick={handleOpenCwd}
+            className="h-full px-1.5 border-l flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--content-bg)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] cursor-pointer"
+            style={{ borderColor: 'var(--border)' }}
+            aria-label={t('cwd.reveal', '在文件资源管理器中打开')}
+          >
+            <ExternalLink size={11} />
+          </button>
+        </Tooltip>
+      </div>
+
+      {/* Session-level Search & Timeline triggers */}
+      {currentSessionId && (
+        <>
+          <Tooltip text={t('chat.search_placeholder', '搜索对话内容 (Ctrl+F)')}>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('aether:toggle-chat-search'))}
+              className="h-7 w-7 flex items-center justify-center rounded-[6px] border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
+              aria-label={t('chat.search_placeholder', '搜索对话内容')}
+            >
+              <Search size={12} />
+            </button>
+          </Tooltip>
+
+          <Tooltip text={t('agent.timeline.view_toggle', '运行时间线')}>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('aether:toggle-run-timeline'))}
+              className="h-7 flex items-center gap-1 px-2 rounded-[6px] border text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}
+              aria-label={t('agent.timeline.view_toggle', '运行时间线')}
+            >
+              <History size={12} style={{ color: 'var(--accent)' }} />
+              <span className="hidden sm:inline">{t('agent.timeline.view_toggle', '时间线')}</span>
+            </button>
+          </Tooltip>
+        </>
+      )}
     </div>
   )
 
-  // ── Blank new chat — empty state with model selector in header ──
+  // ── Blank new chat — empty state ──
   if (!currentSessionId) {
     return (
       <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
-        {!hasBg && <ChatBackgroundPattern theme={theme} />}
-        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
-          <div
-            className={`flex items-center gap-2 min-w-0 overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-out ${
-              chatMode === 'arena'
-                ? 'max-w-0 opacity-0 pointer-events-none mr-0'
-                : 'max-w-[260px] opacity-100 mr-3'
-            }`}
-          >
+        <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2 min-w-0 mr-3">
             <span className="text-sm font-semibold truncate tracking-tight" style={{ color: 'var(--text-primary)' }}>{t('chat.new')}</span>
           </div>
           {renderHeaderControls()}
         </div>
-        {/* 空态容器: 确保充足的顶部呼吸空间，彻底消除方块图标被标题栏边缘截断问题 */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto scroll-bounce px-4 pt-6 pb-4 relative z-[1]">
           <div className="my-auto w-full max-w-3xl mx-auto flex flex-col items-center">
-            <EmptyState noSession={true} />
+            <EmptyState />
           </div>
         </div>
         <div className="relative z-[2]">
@@ -292,21 +214,14 @@ export default function ChatPage() {
     )
   }
 
-  // ── View 3: Active chat ──
+  // ── Active chat ──
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-transparent relative overflow-hidden" {...arenaBgStyle}>
-      {!hasBg && <ChatBackgroundPattern theme={theme} />}
-      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)]/95 backdrop-blur-sm app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
-        <div
-          className={`flex items-center gap-2.5 min-w-0 overflow-hidden transition-[max-width,opacity,margin] duration-200 ease-out app-no-drag ${
-            chatMode === 'arena'
-              ? 'max-w-0 opacity-0 pointer-events-none mr-0'
-              : 'flex-1 max-w-[340px] opacity-100 mr-3'
-          }`}
-        >
+    <div className="flex-1 flex flex-col min-h-0 bg-transparent relative overflow-hidden">
+      <div className="h-12 border-b flex items-center justify-between px-4 shrink-0 bg-[var(--content-bg)] app-drag wco-pr relative z-[2]" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 max-w-[360px] mr-3 app-no-drag">
           {trustBadge && currentSessionId && (
             <Tooltip text={`Trust: ${trustBadge.trust}/100 · ${TRUST_TIP[trustBadge.color] || trustBadge.label}`}>
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: TRUST_DOT[trustBadge.color] || '#888' }} />
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: TRUST_DOT[trustBadge.color] || 'var(--text-muted)' }} />
             </Tooltip>
           )}
           <HoverMarquee

@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useStore } from '@/store'
-import { Brain, Network, Sparkles, RefreshCw, Layers, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Brain, Sparkles, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { t } from '@/utils/i18n'
+import MemoryPage from '@/pages/MemoryPage'
 
 export default function MemoryEvolutionDomain() {
-  const setCurrentView = useStore((s) => s.setCurrentView)
   const [autoMemory, setAutoMemory] = useState(true)
   const [strategyStats, setStrategyStats] = useState<{ total: number; entries: any[]; pendingTraces?: number } | null>(null)
-  const [loading, setLoading] = useState(false)
   const [reflecting, setReflecting] = useState(false)
+  const [memoryExpanded, setMemoryExpanded] = useState(true)
 
   const loadStrategy = async () => {
     try {
@@ -51,39 +50,15 @@ export default function MemoryEvolutionDomain() {
 
   return (
     <div className="space-y-4">
-      {/* Knowledge Graph & Long-Term Memory Hub */}
-      <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <Brain size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
-            <div>
-              <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
-                {t('sidebar.nav.memory', '知识图谱与全局记忆大脑')}
-              </h2>
-              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                查看跨会话记忆实体、项目架构决策节点及实体关系图谱
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setCurrentView('memory')}
-            className="px-3.5 py-1.5 text-xs rounded-md border font-medium hover:bg-[var(--bg-secondary)] transition-colors active:scale-[0.98]"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-          >
-            {t('common.view', '进入记忆面板')}
-          </button>
-        </div>
-      </div>
-
       {/* Auto-Memory Ingestion Switch */}
       <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>
-              {t('settings.auto_memory', '会话自动记忆提炼')}
+              {t('settings.auto_memory', '会话自动记忆提炼 (AutoMemory)')}
             </h2>
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              在会话结束时自动提取用户技术偏好与项目核心设计准则存入 SQLite FTS5 记忆表
+              在对话中自动提取技术偏好与项目架构约定存入本地 SQLite FTS5，并在命中时以胶囊形式注入上下文
             </p>
           </div>
           <button
@@ -91,7 +66,7 @@ export default function MemoryEvolutionDomain() {
             role="switch"
             aria-checked={autoMemory}
             onClick={() => handleToggleAutoMemory(!autoMemory)}
-            className="relative w-10 h-5 rounded-full transition-colors shrink-0 cursor-pointer"
+            className="relative w-10 h-5 rounded-full transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
             style={{ backgroundColor: autoMemory ? 'var(--accent)' : 'var(--border)' }}
           >
             <span
@@ -112,9 +87,10 @@ export default function MemoryEvolutionDomain() {
             </h2>
           </div>
           <button
+            type="button"
             onClick={handleManualReflect}
             disabled={reflecting}
-            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border font-medium hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border font-medium hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50 cursor-pointer active:scale-[0.98]"
             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
           >
             <RefreshCw size={12} className={reflecting ? 'animate-spin' : ''} />
@@ -145,6 +121,34 @@ export default function MemoryEvolutionDomain() {
                 暂未提炼策略条目，持续使用智能体编程将自动生成高信噪比经验规则。
               </p>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Embedded Project & Global Memory Inspector */}
+      <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--content-bg)' }}>
+        <div
+          className="flex items-center justify-between p-3.5 border-b cursor-pointer select-none"
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
+          onClick={() => setMemoryExpanded(!memoryExpanded)}
+        >
+          <div className="flex items-center gap-2.5">
+            <Brain size={15} className="shrink-0" style={{ color: 'var(--accent)' }} />
+            <h2 className="text-xs font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+              {t('sidebar.nav.memory', '记忆库检视与维护 (Memory Store)')}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            aria-label="Toggle Memory Store"
+          >
+            {memoryExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
+        {memoryExpanded && (
+          <div className="p-4">
+            <MemoryPage embedded />
           </div>
         )}
       </div>
