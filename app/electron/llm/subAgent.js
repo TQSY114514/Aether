@@ -20,6 +20,9 @@ const log = require('../logger')
 const { IterationBudget } = require('./toolLoop');
 const { subagentLimit } = require('./concurrency')
 const { getWorkspaceRoot, setWorkspaceRootForSession } = require('../tools/sandbox');
+const { FindingsLedger } = require('./findingsLedger')
+
+const WORKSPACE_MUTATING_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch', 'delete_file', 'run_command'])
 
 const SUBAGENT_SYSTEM_PROMPT = `You are a sub-agent spawned by the parent agent to handle a delegated task.
 You have your own isolated context — previous conversation history is not available.
@@ -151,27 +154,55 @@ async function _runSubagent({
   let wasTimeout = false
   let hasError = false
   let errorMessage = ''
+  let hasWorkspaceMutations = false
+  const findingsLedger = new FindingsLedger({ workspaceRoot: inheritedWorkspace || process.cwd() })
   try {
     let childTools = true
     if (Array.isArray(cfg.allowedTools)) {
       try {
         const mcp = require('../mcp/manager')
-        childTools = mcp.getMergedToolsPayload(childAgentMode, { cacheStable: true })
+        childTools = mcp.getMergedToolsPayload(childAgentMode, { cacheStable: true, includeExtendedLedger: true })
           .filter(t => cfg.allowedTools.includes(t?.function?.name))
       } catch {
         try {
           const registry = require('../tools/registry')
-          childTools = registry.toolsPayload(childAgentMode, { cacheStable: true })
+          childTools = registry.toolsPayload(childAgentMode, { cacheStable: true, includeExtendedLedger: true })
             .filter(t => cfg.allowedTools.includes(t?.function?.name))
         } catch {
           childTools = []
         }
       }
     }
+    const trackMutation = (entry) => {
+      if (!entry || entry.error) return
+      const rawName = String(entry.innerTool || entry.name || entry.tool || '')
+      const name = (rawName === 'call_extended_tool' && entry.args?.tool_name)
+        ? String(entry.args.tool_name)
+        : rawName
+      const succeeded = entry.success === true || (entry.result !== undefined && entry.result !== null)
+      if (WORKSPACE_MUTATING_TOOLS.has(name) && succeeded) {
+        hasWorkspaceMutations = true
+      }
+    }
     const childCallbacks = {
       ...(callbacks || {}),
+      onAudit: (audit) => {
+        for (const c of audit?.toolCalls || []) trackMutation(c)
+        callbacks?.onAudit?.(audit)
+      },
+      onJournalEntry: (entry) => {
+        trackMutation(entry)
+        callbacks?.onJournalEntry?.(entry)
+      },
+      onFileSummary: (summary) => {
+        if (summary && Array.isArray(summary.files) && summary.files.length > 0) {
+          hasWorkspaceMutations = true
+        }
+        callbacks?.onFileSummary?.(summary)
+      },
       ...(callbacks?.onSubagentEvent ? {
         onToolCall: (entry) => {
+          trackMutation(entry)
           try {
             callbacks.onSubagentEvent({
               type: 'tool_call',
@@ -182,6 +213,8 @@ async function _runSubagent({
           } catch {}
           callbacks?.onToolCall?.(entry)
         },
+      } : {}),
+      ...(callbacks?.onSubagentEvent ? {
         onStatus: (statusObj) => {
           try {
             callbacks.onSubagentEvent({
@@ -209,6 +242,7 @@ async function _runSubagent({
       messageId: 0,
       db,
       autoCommit: false,
+      findingsLedger,
       ...childCallbacks,
     })
   } catch (e) {
@@ -290,9 +324,25 @@ async function _runSubagent({
     try { db.deleteSession(childSessionId) } catch {}
   }
 
-  // Truncate output if too long
-  if (finalContent && finalContent.length > cfg.maxOutputChars) {
-    finalContent = finalContent.slice(0, cfg.maxOutputChars) + `\n[… truncated ${finalContent.length - cfg.maxOutputChars} chars]`
+  // Append verified findings ledger if any were recorded (reserve budget so
+  // verified citations are not truncated away when prose approaches maxOutputChars).
+  const ledgerMarkdown = findingsLedger.formatMarkdown()
+  const maxChars = Math.max(200, Number(cfg.maxOutputChars) || 12000)
+  if (ledgerMarkdown) {
+    if (ledgerMarkdown.length >= maxChars) {
+      finalContent = ledgerMarkdown.slice(0, maxChars)
+    } else {
+      const sep = finalContent ? '\n\n' : ''
+      const bodyBudget = maxChars - ledgerMarkdown.length - sep.length
+      if (finalContent && finalContent.length > bodyBudget) {
+        const truncNote = '\n[… truncated to preserve findings ledger]'
+        const keepLen = Math.max(0, bodyBudget - truncNote.length)
+        finalContent = keepLen > 0 ? finalContent.slice(0, keepLen) + truncNote : ''
+      }
+      finalContent = finalContent ? `${finalContent}\n\n${ledgerMarkdown}` : ledgerMarkdown
+    }
+  } else if (finalContent && finalContent.length > maxChars) {
+    finalContent = finalContent.slice(0, maxChars) + `\n[… truncated ${finalContent.length - maxChars} chars]`
   }
 
   return {
@@ -302,6 +352,8 @@ async function _runSubagent({
     wasTimeout,
     hasError,
     error: errorMessage || (wasTimeout ? 'Timed out' : null),
+    findings: findingsLedger.all(),
+    hasWorkspaceMutations,
   }
 }
 

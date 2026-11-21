@@ -360,7 +360,6 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
   // Audit log + learning observation sink. There is intentionally one learning
   // curator now: strategy reflection. The older GEP cycle used to run beside it,
   // producing a second, opaque guidance path with different semantics.
-  let _reflectInFlight = false
   callbacks.onAudit = (trace) => {
     try { db.addAuditLog({ sessionId, turnId: msgId, payload: trace }) } catch {}
     // The Evolution page toggles this single flag. When paused, do not collect
@@ -378,15 +377,12 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
 
       const overCapacity = require('../evolution/strategyStore').stats().needsMerge
       const highSignalFailure = String(trace?.finalStatus || '') !== 'success'
-      const now = Date.now()
       if (
         (queued.count >= reflect.REFLECT_EVERY_N_TRACES || overCapacity || highSignalFailure) &&
-        reflect.canAutoReflect(db) &&
-        !_reflectInFlight
+        reflect.canAutoReflect(db)
       ) {
-
-        _reflectInFlight = true
-        reflect.reflectNow(db).catch(() => {}).finally(() => { _reflectInFlight = false })
+        const scheduler = require('../cron/scheduler')
+        scheduler.nudgeIdleTask?.('strategy-reflect', db)
       }
     } catch {}
   }

@@ -177,7 +177,7 @@ Sub-agents & Extended Tools: you may call multiple INDEPENDENT tools in one roun
  * @param {Function} [args.waitIfPaused] - Async function that suspends execution if the loop is paused.
  * @returns {Promise<Object>} The final LLM response message and metrics.
  */
-async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, onTurnComplete, options = {}, agentMode = 'act', workspaceRoot = null, requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry }) {
+async function runToolLoop({ provider, model, messages, tools = true, signal, onToolCall, onPlanStep, onPlanSnapshot, onStatus, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent, onTurnComplete, options = {}, agentMode = 'act', workspaceRoot = null, requestPermission, maxIterations, onThinkingStart, onThinkingEnd, onThinkingDelta, onUsage, sessionId, messageId, onBudgetUpdate, onAudit, onVerification, db, autoCommit = false, getPendingInjections, clearPendingInjections, budget: externalBudget, waitIfPaused, onFileSummary, toolJournal = [], onJournalEntry, findingsLedger = null }) {
   let activeProvider = provider
   let activeModel = model
   const normalizedAgentMode = normalizeAgentMode(agentMode)
@@ -642,7 +642,7 @@ Reply in this format:
     requestPermission, onTodoUpdate, onAskUser, onStream, onStreamDelta, onSubagentEvent,
     onPlanStep, onPlanSnapshot, onStatus, onThinkingStart, onThinkingEnd, onThinkingDelta, onToolCall,
   }
-  const toolCtx = { sessionId, provider: activeProvider, model: activeModel, signal, sessionSignal: signal, agentMode: normalizedAgentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db }
+  const toolCtx = { sessionId, provider: activeProvider, model: activeModel, signal, sessionSignal: signal, agentMode: normalizedAgentMode, requestPermission, onTodoUpdate, onAskUser, onStream: onStream || undefined, onSubagentEvent: onSubagentEvent || undefined, callbacks, db, findingsLedger: findingsLedger || null }
   const permissionCtx = { provider: activeProvider, model: activeModel, agentMode: normalizedAgentMode, sessionId, signal }
   const usageAccum = { input: 0, output: 0 }
 
@@ -1338,6 +1338,7 @@ Reply ONLY with JSON:
                 try {
                   onJournalEntry({
                     tool: fn.name,
+                    ...(fn.name === 'call_extended_tool' && args?.tool_name ? { innerTool: String(args.tool_name) } : {}),
                     argsHash: currentArgsHash,
                     result: typeof r.result === 'string' ? (r.result.length > 4000 ? r.result.slice(0, 4000) + '...[truncated]' : r.result) : r.result,
                     success: true,

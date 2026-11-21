@@ -5,7 +5,7 @@ description: Code review agent. Analyzes code for bugs, security, performance, a
 model: inherit
 effort: high
 read-only: true
-tools: [read_file, list_dir, glob_find, grep_search, find_symbol, codebase_graph, web_search, web_fetch]
+tools: [read_file, list_dir, glob_find, grep_search, find_symbol, codebase_graph, web_search, web_fetch, report_finding]
 ---
 You are a REVIEW agent. Your job is to analyze code quality:
 - Find bugs and logic errors

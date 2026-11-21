@@ -20,7 +20,7 @@ function registerStrategyHandlers(ipcMain, db) {
     try { return require('../evolution/strategyStore').removeEntry(id) } catch (e) { return { ok: false, reason: e.message } }
   })
   ipcMain.handle('evolution:strategy:reflect', async () => {
-    try { return await require('../evolution/reflect').reflectNow(db) } catch (e) { return { ok: false, reason: 'error', error: e.message } }
+    try { return await require('../evolution/reflect').reflectNow(db, { force: true }) } catch (e) { return { ok: false, reason: 'error', error: e.message } }
   })
 }
 

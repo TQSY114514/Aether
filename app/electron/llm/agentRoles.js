@@ -39,7 +39,7 @@ RULES:
 - Report exact file paths and line numbers
 - If something is ambiguous, list all possibilities`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch', 'report_finding'],
   },
   explorer: {
     label: 'Explorer',
@@ -56,7 +56,7 @@ You are an EXPLORER agent (read-only pathfinder). Your job is to map the codebas
 - Report exact file paths and line numbers
 - Never modify files or run mutating commands.`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'generate_repo_map', 'web_search', 'web_fetch'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'generate_repo_map', 'web_search', 'web_fetch', 'report_finding'],
   },
   build: {
     label: 'Build',
@@ -122,7 +122,7 @@ RULES:
 - Prioritize findings: Critical > High > Medium > Low
 - For each issue, explain the impact and suggest a fix`,
     defaultMode: 'plan',
-    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch'],
+    allowTools: ['read_file', 'list_dir', 'glob_find', 'glob_files', 'grep_search', 'find_symbol', 'codebase_graph', 'web_search', 'web_fetch', 'report_finding'],
   },
   research: {
     label: 'Research',
@@ -374,15 +374,25 @@ ${taskDescription}`
  * via `toolRouter.getStageToolPool`, or null for unrestricted roles (`build`).
  * Returns an array of tool names to include, or null for all tools.
  */
+const LEDGER_ENABLED_ROLES = new Set(['explore', 'explorer', 'review'])
+
 function buildToolFilter(roleName, workspaceRoot) {
   const role = getRole(roleName, workspaceRoot)
   if (!role) return null
-  if (Array.isArray(role.allowTools)) return role.allowTools
+  const withLedger = (list) => {
+    if (!Array.isArray(list)) return list
+    const key = String(roleName || '').toLowerCase()
+    if (LEDGER_ENABLED_ROLES.has(key) && !list.includes('report_finding')) {
+      return [...list, 'report_finding']
+    }
+    return list
+  }
+  if (Array.isArray(role.allowTools)) return withLedger(role.allowTools)
   if (role.stage || role.capability) {
     try {
       const { getStageToolPool } = require('./toolRouter')
       const pool = getStageToolPool(role.stage || role.capability)
-      if (Array.isArray(pool) && pool.length > 0) return pool
+      if (Array.isArray(pool) && pool.length > 0) return withLedger(pool)
     } catch {}
   }
   return null

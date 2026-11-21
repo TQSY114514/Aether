@@ -4,7 +4,7 @@
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
-const MEMORY_TYPES = new Set(['fact', 'context', 'project', 'preference', 'review'])
+const MEMORY_TYPES = new Set(['fact', 'context', 'project', 'preference', 'review', 'digest'])
 const memoryProjector = require('../llm/memoryProjector')
 const { isAuthorizedWorkspace, isWorkspaceTrusted, getWorkspaceRoot } = require('../tools/sandbox')
 
@@ -166,6 +166,33 @@ function registerMemoryHandlers(ipcMain, db) {
       return { success: !!saved, draft: saved }
     } catch (err) {
       return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('memory:consolidate', async (_e, opts = {}) => {
+    try {
+      const autoMemory = require('../llm/autoMemory')
+      if (opts !== undefined && opts !== null && (typeof opts !== 'object' || Array.isArray(opts))) {
+        return { ok: false, consolidated: 0, workspaces: 0, error: 'invalid_scope' }
+      }
+      const isScope = (k) => k === null || typeof k === 'string'
+      const callOpts = { force: true }
+      const hasScopeKeys = opts && Object.prototype.hasOwnProperty.call(opts, 'scopeKeys') && opts.scopeKeys !== undefined
+      if (hasScopeKeys) {
+        if (!Array.isArray(opts.scopeKeys) || !opts.scopeKeys.every(isScope)) {
+          return { ok: false, consolidated: 0, workspaces: 0, error: 'invalid_scope' }
+        }
+        callOpts.scopeKeys = opts.scopeKeys
+      }
+      if (opts && Object.prototype.hasOwnProperty.call(opts, 'scopeKey') && opts.scopeKey !== undefined) {
+        if (!isScope(opts.scopeKey)) {
+          return { ok: false, consolidated: 0, workspaces: 0, error: 'invalid_scope' }
+        }
+        if (!hasScopeKeys) callOpts.scopeKey = opts.scopeKey
+      }
+      return await autoMemory.consolidate(db, callOpts)
+    } catch (err) {
+      return { ok: false, consolidated: 0, workspaces: 0, error: err?.message || 'consolidate_failed' }
     }
   })
 }

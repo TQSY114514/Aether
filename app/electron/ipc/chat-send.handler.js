@@ -128,6 +128,10 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
   async function handleChatComplete(_event, { content, modelId = null, sessionId = null, context = '', systemPrefix = '' }) {
     const text = String(content || '').trim()
     if (!text) return { error: 'content is required' }
+    try { require('../cron/scheduler').noteUserActivity() } catch {}
+    const controller = new AbortController()
+    ctx.activeCompleteControllers?.add(controller)
+    const timeout = setTimeout(() => controller.abort(), 120000)
     try {
       // Resolve model: explicit id, else primary, else first enabled model.
       let model = (modelId && db.getModel(modelId)) || null
@@ -153,15 +157,8 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
       messages.push({ role: 'user', content: text })
       db.addMessage({ session_id: sid, role: 'user', content: text })
 
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 120000)
-      let replyText = ''
-      try {
-        const reply = await completeChat({ provider, model, messages, signal: controller.signal, options: { temperature: 0.3 } })
-        replyText = String(reply || '')
-      } finally {
-        clearTimeout(timeout)
-      }
+      const reply = await completeChat({ provider, model, messages, signal: controller.signal, options: { temperature: 0.3 } })
+      const replyText = String(reply || '')
       const msg = db.addMessage({
         session_id: sid, role: 'assistant', content: replyText,
         model_used: model.model_name, provider_used: String(provider.id),
@@ -170,11 +167,15 @@ function registerChatSendHandler({ ipcMain, db, getWebContents, ctx }) {
       return { content: replyText, sessionId: sid, messageId: msg.lastInsertRowid }
     } catch (e) {
       return { error: e && e.message ? e.message : String(e) }
+    } finally {
+      clearTimeout(timeout)
+      ctx.activeCompleteControllers?.delete(controller)
     }
   }
 ipcMain.handle('chat:complete', handleChatComplete)
 
   ipcMain.handle('chat:send', async (event, { sessionId, content, modelId, mode = 'normal', regenerate = false, personaId = null, attachments = [], useTools = false, agentMode = 'act', effortLevel = 'medium', thinkingEnabled = true, genParams = {}, systemPrefix = '' }) => {
+    try { require('../cron/scheduler').noteUserActivity() } catch {}
     // Backstop guard: if a tool loop is active for this session, buffer the message
     // as an injection instead of starting a new send turn. Prevents race conditions
     // when the renderer's loopingSessions state hasn't caught up with main-process reality.
@@ -650,6 +651,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
               try { wc?.send('chat:memory-saved', payload) } catch {}
             },
           })
+          if (memHits.length > 0) {
+            try { autoMemory.reinforceEchoes(db, memHits, finalContent) } catch {}
+          }
           if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
         }
         // 回写本次使用的 provider/model：定时反思（strategy-reflect）等
@@ -863,6 +867,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         // Auto-memory sync (Hermes-style): fire-and-forget fact extraction.
         if (autoMemoryOn) {
           autoMemory.sync({ db, provider: p, model: m, userMessage: content, assistantReply: fullContent, sessionId, workspace: wsRoot })
+          if (memHits.length > 0) {
+            try { autoMemory.reinforceEchoes(db, memHits, fullContent) } catch {}
+          }
           if (isMemoryAuthorized && isMemoryTrusted) memoryProjector.debounceProjectWorkspaceMemory(db, wsRoot)
         }
         try { db.setSetting('llm.lastProvider', String(p?.id || p || '')); db.setSetting('llm.lastModel', String(m || '')) } catch {}

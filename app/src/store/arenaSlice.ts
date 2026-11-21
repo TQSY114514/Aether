@@ -37,7 +37,11 @@ export const createArenaSlice: StateCreator<AppState, [], [], Partial<AppState>>
     get().loadSessions()
     ensureArenaListener()
     try {
-      const { results } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, personaId, temperatures: get().arenaTemperatures || undefined })
+      const { results, cancelled } = await window.electronAPI.arena.send({ sessionId: currentSessionId, content, modelIds: arenaModelIds, personaId, temperatures: get().arenaTemperatures || undefined })
+      if (cancelled) {
+        set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n, sending: Object.keys(n).length > 0, arenaPending: 0 } })
+        return
+      }
       if (!results || results.length === 0) {
         set({ arenaError: "没有返回结果，请检查模型/网络" })
         set((s) => { const n = { ...s.streamingBySession }; delete n[currentSessionId]; return { streamingBySession: n, sending: Object.keys(n).length > 0, arenaPending: 0 } })
