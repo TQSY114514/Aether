@@ -199,13 +199,13 @@ ipcMain.handle('chat:complete', handleChatComplete)
     if (!model) {
       db.addMessage({ session_id: sessionId, role: 'assistant', content: '错误: 模型未找到', status: 'error' })
       getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-      return { messageId: 0 }
+      return { messageId: 0, error: 'Model not found' }
     }
     let provider = db.getProvider(model.provider_id)
     if (!provider) {
       db.addMessage({ session_id: sessionId, role: 'assistant', content: '错误: 供应商未找到', status: 'error' })
       getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-      return { messageId: 0 }
+      return { messageId: 0, error: 'Provider not found' }
     }
 
         // Model suggestion (auto-routing rationale for the renderer).
@@ -721,6 +721,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         abortControllers.delete(msgId)
         // Persist agentMode to session config for next time.
         try { db.setSessionConfig(sessionId, { agentMode }) } catch {}
+        if (typeof finalContent === 'string' && /^\[agent error:/i.test(finalContent.trim())) {
+          return { messageId: msgId, error: finalContent.trim(), modelSuggestion }
+        }
         return { messageId: msgId, modelSuggestion }
       } catch (err) {
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
@@ -748,7 +751,9 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         db.updateMessage(msgId, updatePayload)
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
-        return { messageId: msgId, modelSuggestion }
+        return err.name === 'AbortError'
+          ? { messageId: msgId, aborted: true, modelSuggestion }
+          : { messageId: msgId, error: errMsg, modelSuggestion }
       } finally {
         activeToolLoops.delete(sessionId)
       }
@@ -924,7 +929,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
             thinking_duration_ms: streamThinkingDurationMs || null,
           })
           getWebContents()?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
-          return { messageId: msgId }
+          return { messageId: msgId, aborted: true }
         }
         lastError = err.message
         db.updateMessage(msgId, {
@@ -947,7 +952,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
     }
 
     if (lastError) getWebContents()?.send('chat:stream-chunk', { messageId: 0, delta: '', done: true, sessionId })
-    return { messageId: 0, modelSuggestion }
+    return { messageId: 0, error: lastError || 'Send failed', modelSuggestion }
   })
 
   // Generate a concise, summarized title for a session's first exchange.

@@ -250,6 +250,14 @@ export const createChatSlice: StateCreator<AppState, [], [], Partial<AppState>> 
       if (result?.usage && result.messageId) {
         get().recordReturnUsage(targetSessionId, result.messageId, result.usage)
       }
+      if (overrides?.throwOnError) {
+        if (result?.error) {
+          throw new Error(result.error)
+        }
+        if (!result?.queued && !result?.aborted && !(Number(result?.messageId) > 0)) {
+          throw new Error('Send failed')
+        }
+      }
     } catch (err) {
       log.error("[Aether] chat.send FAILED:", err)
       set(clearStreaming(targetSessionId))

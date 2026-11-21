@@ -582,4 +582,48 @@ describe('Amp-style 2-step Editable Handoff', () => {
       cleanup()
     }
   })
+
+  it('chat:send reports structured error on missing model/provider distinct from queued:true (Greptile R5 P2)', async () => {
+    const { registerChatSendHandler } = require('../electron/ipc/chat-send.handler')
+    const handlers = {}
+    const ipcMain = {
+      handle: (ch, fn) => { handlers[ch] = fn },
+      on: () => {},
+    }
+    const activeToolLoops = new Map()
+    const pendingInjections = new Map()
+    const stubDb = {
+      getSetting: () => null,
+      addMessage: () => ({ lastInsertRowid: 1 }),
+      touchSession: () => {},
+      getModel: (id) => (id === 2 ? { id: 2, provider_id: 999 } : null),
+      getProvider: () => null,
+    }
+    registerChatSendHandler({
+      ipcMain,
+      db: stubDb,
+      getWebContents: () => ({ send: () => {} }),
+      ctx: {
+        abortControllers: new Map(),
+        activeToolLoops,
+        pendingInjections,
+        sessionMessagesMap: new Map(),
+        registerSessionMessages: () => {},
+        allowRulesStore: null,
+      },
+    })
+
+    const missingModel = await handlers['chat:send']({}, { sessionId: 10, content: 'hello', modelId: 999 })
+    expect(missingModel).toEqual({ messageId: 0, error: 'Model not found' })
+    expect(missingModel.queued).toBeUndefined()
+
+    const missingProvider = await handlers['chat:send']({}, { sessionId: 10, content: 'hello', modelId: 2 })
+    expect(missingProvider).toEqual({ messageId: 0, error: 'Provider not found' })
+    expect(missingProvider.queued).toBeUndefined()
+
+    activeToolLoops.set(10, true)
+    const queued = await handlers['chat:send']({}, { sessionId: 10, content: 'queued msg', modelId: 2 })
+    expect(queued).toEqual({ messageId: 0, queued: true })
+    expect(queued.error).toBeUndefined()
+  })
 })
