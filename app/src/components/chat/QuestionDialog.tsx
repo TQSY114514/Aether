@@ -62,8 +62,9 @@ export default function QuestionDialog() {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       const tag = target?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || target?.isContentEditable) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.isComposing || (e as any).nativeEvent?.isComposing) return
 
       if (e.key === 'Escape') {
         e.preventDefault()
@@ -105,7 +106,7 @@ export default function QuestionDialog() {
       ref={cardRef}
       role="region"
       aria-label={t('agent.question.title')}
-      className="mb-2 rounded-[10px] border p-3 shadow-sm"
+      className="mb-2 rounded-[10px] border p-3 shadow-sm inline-card-enter"
       style={{
         backgroundColor: 'var(--bg-primary)',
         borderColor: 'var(--border)',
@@ -139,7 +140,7 @@ export default function QuestionDialog() {
         </button>
       </div>
 
-      <div className="space-y-3 max-h-[260px] overflow-y-auto pr-0.5">
+      <div className="space-y-3.5 max-h-[260px] overflow-y-auto pr-0.5">
         {req.questions.map((q, qi) => (
           <div key={qi}>
             {q.header && (
@@ -153,7 +154,7 @@ export default function QuestionDialog() {
             <p className="text-xs font-medium mb-1.5 leading-snug" style={{ color: 'var(--text-primary)' }}>
               {q.question}
             </p>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {q.options.map((o, oi) => {
                 const selected = selections[qi] === o.label
                 return (
@@ -169,12 +170,12 @@ export default function QuestionDialog() {
                     }
                   >
                     <span
-                      className="font-mono text-[10px] px-1 py-0.2 rounded-[4px] border shrink-0 mt-0.5 tabular-nums"
-                      style={{
-                        borderColor: 'var(--border)',
-                        backgroundColor: 'var(--bg-primary)',
-                        color: selected ? 'var(--accent)' : 'var(--text-muted)',
-                      }}
+                      className="font-mono text-[10px] px-1.5 py-0.2 rounded-[4px] border shrink-0 mt-0.5 tabular-nums transition-colors"
+                      style={
+                        selected
+                          ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)', color: '#fff' }
+                          : { borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }
+                      }
                     >
                       {oi + 1}
                     </span>
@@ -204,12 +205,16 @@ export default function QuestionDialog() {
                 }
               >
                 <span
-                  className="font-mono text-[10px] px-1 py-0.2 rounded-[4px] border shrink-0 tabular-nums"
-                  style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}
+                  className="font-mono text-[10px] px-1.5 py-0.2 rounded-[4px] border shrink-0 tabular-nums transition-colors"
+                  style={
+                    selections[qi] === '__other__'
+                      ? { borderColor: 'var(--accent)', backgroundColor: 'var(--accent)', color: '#fff' }
+                      : { borderColor: 'var(--border)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }
+                  }
                 >
                   {q.options.length + 1}
                 </span>
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                <span className="text-xs" style={{ color: selections[qi] === '__other__' ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                   {t('agent.question.other')}
                 </span>
               </button>
@@ -221,6 +226,7 @@ export default function QuestionDialog() {
                     value={custom[qi] || ''}
                     onChange={(e) => setCustom((s) => ({ ...s, [qi]: e.target.value }))}
                     onKeyDown={(e) => {
+                      if (e.nativeEvent?.isComposing || e.key === 'Process') return
                       if (e.key === 'Enter') {
                         const ready = !req.questions.some(
                           (_, idx) => !selections[idx] || (selections[idx] === '__other__' && !(custom[idx] || '').trim())

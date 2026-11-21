@@ -162,7 +162,7 @@ export default function ModelSelector({
         title={reasonTitle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="h-6 flex items-center gap-1.5 text-[11px] font-medium rounded-[5px] border border-transparent hover:border-[var(--border)] px-2 outline-none max-w-[160px] sm:max-w-[210px] bg-transparent hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+        className="h-6.5 flex items-center gap-1.5 text-[11px] font-medium rounded-[6px] border border-transparent hover:border-[var(--border)] px-2 outline-none max-w-[160px] sm:max-w-[215px] bg-transparent hover:bg-[var(--bg-secondary)] active:scale-[0.99] focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
         style={{
           color: open ? 'var(--text-primary)' : 'var(--text-secondary)',
           backgroundColor: open ? 'var(--bg-secondary)' : undefined,

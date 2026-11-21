@@ -187,6 +187,7 @@ export default function ChatPage() {
             <select
               value={localArenaIds[0] ?? ''}
               onChange={(e) => setModelSlot(0, Number(e.target.value) || null)}
+              aria-label={t('chat.arena.model1')}
               className="h-5.5 text-[11px] font-medium px-1.5 rounded-[4px] border-0 outline-none max-w-[125px] truncate cursor-pointer transition-colors"
               style={{ backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}
             >
@@ -203,6 +204,7 @@ export default function ChatPage() {
             <select
               value={localArenaIds[1] ?? ''}
               onChange={(e) => setModelSlot(1, Number(e.target.value) || null)}
+              aria-label={t('chat.arena.model2')}
               className="h-5.5 text-[11px] font-medium px-1.5 rounded-[4px] border-0 outline-none max-w-[125px] truncate cursor-pointer transition-colors"
               style={{ backgroundColor: 'var(--content-bg)', color: 'var(--text-primary)' }}
             >
@@ -236,8 +238,8 @@ export default function ChatPage() {
       <Tooltip
         text={
           chatMode === 'arena'
-            ? '退出双模型对比 (Split Run)'
-            : '开启双模型对比改码 (Split Run)：两个模型并排生成代码方案，一键二选一应用到当前工作区'
+            ? t('chat.split_run.exit')
+            : t('chat.split_run.desc')
         }
       >
         <button
@@ -341,7 +343,10 @@ export default function ChatPage() {
               type="button"
               onClick={() => setShowReview((v) => !v)}
               className="h-7 flex items-center gap-1.5 px-2 rounded-[6px] border text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
-              style={{ borderColor: showReview ? 'var(--accent)' : 'var(--border)', backgroundColor: 'var(--content-bg)' }}
+              style={{
+                borderColor: showReview ? 'var(--accent)' : 'var(--border)',
+                backgroundColor: showReview ? 'var(--bg-secondary)' : 'var(--content-bg)',
+              }}
               aria-label={t('chat.review_tooltip')}
             >
               <FileDiff size={12} style={{ color: reviewSummary.fileCount > 0 ? 'var(--accent)' : 'var(--text-muted)' }} />

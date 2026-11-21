@@ -125,11 +125,13 @@ export default function Sidebar() {
   }, [sessions, activeStreamingIds, needsInputIds])
 
   const cwdOptions = useMemo(() => {
+    const isWin = typeof navigator !== 'undefined' && /win/i.test(navigator.platform || navigator.userAgent)
     const map = new Map<string, { cwd: string; label: string; count: number }>()
     for (const s of visibleSessions) {
       if (!s.cwd) continue
-      const key = s.cwd.replace(/[\\/]+$/, '').toLowerCase()
-      if (!key) continue
+      const raw = s.cwd.replace(/[\\/]+$/, '')
+      if (!raw) continue
+      const key = isWin ? raw.toLowerCase() : raw
       const existing = map.get(key)
       if (existing) {
         existing.count += 1
@@ -147,9 +149,11 @@ export default function Sidebar() {
   }, [cwdFilter, cwdOptions])
 
   const filteredSessions = useMemo(() => {
+    const isWin = typeof navigator !== 'undefined' && /win/i.test(navigator.platform || navigator.userAgent)
     return visibleSessions.filter((s) => {
       if (cwdFilter) {
-        const key = (s.cwd || '').replace(/[\\/]+$/, '').toLowerCase()
+        const raw = (s.cwd || '').replace(/[\\/]+$/, '')
+        const key = isWin ? raw.toLowerCase() : raw
         if (key !== cwdFilter) return false
       }
       if (lowerQuery && !(s.title || '').toLowerCase().includes(lowerQuery)) return false
@@ -336,7 +340,7 @@ export default function Sidebar() {
             <div className="session-date flex items-center justify-between">
               <span className="flex items-center gap-1.5" style={group.kind === 'needs_input' ? { color: 'var(--warning)' } : undefined}>
                 {group.kind === 'needs_input' && (
-                  <span className="w-1.5 h-1.5 rounded-full animate-pulse motion-reduce:animate-none" style={{ backgroundColor: 'var(--warning)' }} />
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--warning)' }} />
                 )}
                 {group.label}
               </span>
@@ -395,12 +399,16 @@ export default function Sidebar() {
                       )}
                     </div>
                     {(session.last_message || dirTag) && (
-                      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                      <div className="flex items-center gap-1.5 mt-1 min-w-0">
                         {dirTag && (
                           <span
                             title={session.cwd || dirTag}
-                            className="inline-flex items-center gap-0.5 text-[9.5px] font-mono px-1 rounded-[4px] border shrink-0 max-w-[78px]"
-                            style={{ borderColor: 'var(--border)', color: 'var(--text-muted)', backgroundColor: 'var(--bg-primary)' }}
+                            className="inline-flex items-center gap-0.5 text-[9.5px] font-mono px-1 py-0.2 rounded-[4px] border shrink-0 max-w-[82px]"
+                            style={{
+                              borderColor: 'var(--border)',
+                              color: currentSessionId === session.id ? 'var(--text-secondary)' : 'var(--text-muted)',
+                              backgroundColor: 'var(--bg-primary)',
+                            }}
                           >
                             <Folder size={8.5} className="shrink-0 opacity-75" />
                             <span className="truncate">{dirTag}</span>

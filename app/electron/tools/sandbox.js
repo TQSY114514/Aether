@@ -88,7 +88,15 @@ function getWorkspaceRoot(sessionId) {
       }
     } catch {}
   }
-  return _workspaceRoot || process.cwd()
+  if (_workspaceRoot) return _workspaceRoot
+  try {
+    const db = require('../database')
+    const saved = db && typeof db.getSetting === 'function' ? db.getSetting('agent_workspace_root') : null
+    if (saved && !isDangerousRoot(saved)) {
+      return path.resolve(saved)
+    }
+  } catch {}
+  return process.cwd()
 }
 
 /**

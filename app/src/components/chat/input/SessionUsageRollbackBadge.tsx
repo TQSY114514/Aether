@@ -125,11 +125,14 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
 
   const handleCompact = useCallback(async () => {
     if (!sessionId || compacting || messages.length === 0) return
+    const targetSessionId = sessionId
     setCompacting(true)
     try {
-      const res = await window.electronAPI.chat.compact(sessionId)
+      const res = await window.electronAPI.chat.compact(targetSessionId)
+      if (useStore.getState().currentSessionId !== targetSessionId) return
       if (res?.ok) {
-        await loadMessages(sessionId)
+        await loadMessages(targetSessionId)
+        if (useStore.getState().currentSessionId !== targetSessionId) return
         useStore.getState().triggerToast(
           t('chat.compact_success', res.beforeCount ?? 0, res.afterCount ?? 0),
           'success'
@@ -142,7 +145,7 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
         )
       }
     } catch (err: any) {
-      useStore.getState().triggerToast(err?.message || 'Compact failed', 'error')
+      useStore.getState().triggerToast(err?.message || t('chat.compact_error'), 'error')
     } finally {
       setCompacting(false)
     }
@@ -185,7 +188,7 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
         aria-expanded={popoverOpen}
         aria-label={tooltipText}
         title={tooltipText}
-        className="h-6 px-1.5 rounded-[6px] text-[11px] font-mono flex items-center gap-1.5 hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
+        className="h-6.5 px-1.5 rounded-[6px] text-[11px] font-mono flex items-center gap-1.5 hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer"
         style={{ color: labelColor }}
       >
         <svg width="13" height="13" viewBox="0 0 16 16" className="shrink-0 -rotate-90" aria-hidden="true">
@@ -207,7 +210,7 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
             strokeLinecap="round"
             strokeDasharray={RING_CIRCUMFERENCE}
             strokeDashoffset={strokeDashoffset}
-            className="transition-[stroke-dashoffset] duration-300 motion-reduce:transition-none"
+            className="transition-[stroke-dashoffset] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
           />
         </svg>
         <span className="tabular-nums font-medium">{pct}%</span>
@@ -216,19 +219,19 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
       {/* Popover: Token details + One-Click Compact + Outputs Drawer */}
       {popoverOpen && (
         <div
-          className="absolute bottom-full right-0 mb-2 w-60 rounded-[10px] border p-2.5 shadow-md z-30"
+          className="absolute bottom-full right-0 mb-2 w-64 rounded-[10px] border p-3 shadow-md z-30 popover-scale-up"
           style={{
             backgroundColor: 'var(--bg-primary)',
             borderColor: 'var(--border)',
           }}
         >
-          <div className="flex items-center justify-between text-[11px] font-mono mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+          <div className="flex items-center justify-between text-[11px] font-mono mb-2" style={{ color: 'var(--text-secondary)' }}>
             <span>{formatTokens(usedTokens)} / {formatTokens(contextWindow)}</span>
             <span className="tabular-nums font-semibold" style={{ color: ringColor }}>{pct}%</span>
           </div>
-          <div className="h-1.5 w-full rounded-[6px] overflow-hidden mb-2.5" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="h-1.5 w-full rounded-[6px] overflow-hidden mb-3" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             <div
-              className="h-full rounded-[6px] transition-[width] duration-300 motion-reduce:transition-none"
+              className="h-full rounded-[6px] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
               style={{ width: `${pct}%`, backgroundColor: ringColor }}
             />
           </div>
@@ -275,7 +278,7 @@ export default function SessionUsageRollbackBadge({ sessionId }: SessionUsageRol
           type="button"
           onClick={handleQuickRollback}
           disabled={rollingBack}
-          className="h-6 px-1.5 rounded-[6px] text-[10.5px] font-mono flex items-center gap-1 hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+          className="h-6.5 px-1.5 rounded-[6px] text-[10.5px] font-mono flex items-center gap-1 hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-40 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
           title={t('hud.rollback_tooltip')}
         >
           <RotateCcw size={10.5} className={`shrink-0 ${rollingBack ? 'animate-spin' : ''}`} />

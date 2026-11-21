@@ -133,6 +133,8 @@ disk. It is a chat client, an agent workbench, and an extensibility platform
 - Theme CSS tokens: UI components in `app/src` must use existing theme CSS vars (`--bg-secondary`, `--border`, `--accent`, `--text-*`) — never fixed Tailwind color palettes or undefined tokens like `--bg-tertiary`.
 - IPC & 工具入参防御性断言：范围敏感接口（如 `memory:consolidate`）必须显式拒绝顶层数组（`Array.isArray(opts)`）及非字符串范围键，严禁因未捕获的非法入参静默退化为全量/全局破坏性操作。
 - 文本行号与引用断言陷阱：依据内容计算文件总行数时（如 `findingsLedger` 的 `verifyCitation`），使用 `split(/\r?\n/)` 必须处理文件尾部换行（`content.endsWith('\n')` 时扣减 1），避免末尾空串引发 off-by-one 导致有效行被拒或伪造行越界通过。
+- 全屏模态与祖先包含块陷阱：具有 `position: fixed; inset: 0` 的模态浮层/全屏灯箱严禁直接挂载在带有 CSS `transform`、`animation`（如 `message-enter`）或 `filter` 的组件容器内（祖先变换会创建 Containing Block 导致 `fixed` 视口脱轨），必须通过 `createPortal(..., document.body)` 传送到顶层挂载。
+- 画布缩放与手势交互铁律：图片/画布检视器缩放必须以光标为物理锚点（Focal-Point Zoom），原生挂载 `{ passive: false }` 隔离底层滚轮；拖拽与连续滚轮期间必须切为 `transition: none` 以免产生 75ms 输入延迟；平移判定须通过 Ref 绝对坐标过滤（位移 > 3px 屏蔽 click 冒泡），并动态计算视口安全边界防止图片被甩出屏幕。
 
 ## Before changing X, read Y
 

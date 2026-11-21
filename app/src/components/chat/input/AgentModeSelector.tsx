@@ -67,7 +67,7 @@ export default function AgentModeSelector({ mode, onChange, disabled = false, co
 
   return (
     <div
-      className="inline-flex items-center p-0.5 rounded-[6px] border shrink-0"
+      className="inline-flex items-center h-6.5 p-0.5 rounded-[6px] border shrink-0"
       style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
       role="group"
       aria-label={t('agent.mode.group_label', isZh ? '智能体运行模式' : 'Agent Operating Mode')}
@@ -83,8 +83,8 @@ export default function AgentModeSelector({ mode, onChange, disabled = false, co
               onClick={() => onChange(m.value)}
               aria-pressed={isActive}
               aria-label={m.tooltip}
-              className={`inline-flex items-center gap-1 rounded-[4px] font-medium outline-none select-none transition-colors duration-150 motion-reduce:transition-none motion-reduce:transform-none active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
-                compact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-0.5 text-[11px]'
+              className={`h-full inline-flex items-center gap-1 rounded-[4px] font-medium outline-none select-none transition-colors duration-150 motion-reduce:transition-none motion-reduce:transform-none active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+                compact ? 'px-2 text-[11px]' : 'px-2.5 text-[11px]'
               } ${
                 isActive
                   ? 'bg-[var(--bg-primary)] text-[var(--accent)] font-semibold border border-[var(--border)]'

@@ -38,7 +38,7 @@ export default function StreamingStatusBar({ sessionId }: StreamingStatusBarProp
   const showCost = turnCost > 0 || cumCost > 0
 
   return (
-    <div className="px-0.5 mt-1.5 min-w-0 animate-blur-fade">
+    <div className="h-6.5 flex items-center px-0.5 min-w-0 animate-blur-fade">
       <div className="flex items-center gap-1.5 text-[11px] min-w-0" style={{ color: 'var(--text-muted)' }}>
         <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse shrink-0" />
         <span className="min-w-0 truncate" title={status} aria-live="polite">{status}</span>

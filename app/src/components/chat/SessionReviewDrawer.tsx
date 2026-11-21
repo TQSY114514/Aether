@@ -7,7 +7,7 @@
 // review unified diffs, craft & commit to Git, or jump to snapshot rollback.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore } from '@/store'
 import type { Message } from '@/types'
@@ -43,8 +43,12 @@ export interface SessionReviewSummary {
   fileCount: number
 }
 
+const isCaseInsensitiveFS =
+  typeof navigator !== 'undefined' && /win|mac/i.test(navigator.platform || navigator.userAgent)
+
 function normalizePathKey(p: string): string {
-  return String(p || '').replace(/\\/g, '/').toLowerCase()
+  const norm = String(p || '').replace(/\\/g, '/')
+  return isCaseInsensitiveFS ? norm.toLowerCase() : norm
 }
 
 function splitPath(fullPath: string) {
@@ -114,7 +118,7 @@ export default function SessionReviewDrawer({
   onClose,
   summary,
 }: {
-  sessionId: number
+  sessionId: number | null
   isOpen: boolean
   onClose: () => void
   summary: SessionReviewSummary
@@ -128,29 +132,86 @@ export default function SessionReviewDrawer({
   const [crafting, setCrafting] = useState(false)
   const [committing, setCommitting] = useState(false)
   const [committedHash, setCommittedHash] = useState<string | null>(null)
+  const [committedFingerprint, setCommittedFingerprint] = useState<string | null>(null)
+  const prevOpenRef = useRef(false)
+  const drawerRef = useRef<HTMLElement>(null)
+  const prevActiveElementRef = useRef<HTMLElement | null>(null)
+  const asyncGenRef = useRef(0)
+
+  const changesFingerprint = useMemo(() => {
+    return `${summary.fileCount}:${summary.totalAdded}:${summary.totalRemoved}:${summary.files
+      .map((f) => `${f.path}:${f.added}:${f.removed}`)
+      .join(',')}`
+  }, [summary])
+
+  const isCommittedForCurrentChanges = Boolean(committedHash && committedFingerprint === changesFingerprint)
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      if (prevActiveElementRef.current && typeof prevActiveElementRef.current.focus === 'function') {
+        prevActiveElementRef.current.focus()
+        prevActiveElementRef.current = null
+      }
+      return
+    }
+    prevActiveElementRef.current = document.activeElement as HTMLElement | null
+
+    const timer = setTimeout(() => {
+      const focusable = drawerRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusable && focusable.length > 0) {
+        focusable[0].focus()
+      } else {
+        drawerRef.current?.focus()
+      }
+    }, 50)
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key === 'Tab' && drawerRef.current) {
+        const focusable = Array.from(
+          drawerRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter((el) => el.offsetParent !== null)
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('keydown', onKeyDown)
+    }
   }, [isOpen, onClose])
 
   useEffect(() => {
     setCommittedHash(null)
+    setCommittedFingerprint(null)
     setCommitOpen(false)
     setCommitMsg('')
     setSearch('')
   }, [sessionId])
 
-  // Auto-expand single file for immediate review
+  // Auto-expand single file for immediate review only on initial drawer open transition
   useEffect(() => {
-    if (isOpen && summary.files.length === 1) {
+    if (isOpen && !prevOpenRef.current && summary.files.length === 1) {
       setExpandedPaths({ [summary.files[0].path]: true })
     }
-  }, [isOpen, summary.files])
+    prevOpenRef.current = isOpen
+  }, [isOpen, summary.files.length])
 
   const filteredFiles = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -170,30 +231,42 @@ export default function SessionReviewDrawer({
     setCommitOpen(true)
     if (!commitMsg) {
       setCrafting(true)
+      const currentGen = ++asyncGenRef.current
+      const activeSessionId = sessionId
       try {
-        const res = await window.electronAPI.git.craftCommitMessage({ sessionId })
+        const res = sessionId != null
+          ? await window.electronAPI.git.craftCommitMessage({ sessionId })
+          : null
+        if (asyncGenRef.current !== currentGen || sessionId !== activeSessionId) return
         if (res?.success && res.suggestedMessage) {
           setCommitMsg(res.suggestedMessage)
         } else {
           setCommitMsg(`feat: update ${summary.fileCount} files`)
         }
       } catch {
+        if (asyncGenRef.current !== currentGen || sessionId !== activeSessionId) return
         setCommitMsg(`feat: update ${summary.fileCount} files`)
       } finally {
-        setCrafting(false)
+        if (asyncGenRef.current === currentGen) {
+          setCrafting(false)
+        }
       }
     }
   }, [commitOpen, commitMsg, sessionId, summary.fileCount])
 
   const handleCommit = useCallback(async () => {
     const trimmed = commitMsg.trim()
-    if (!trimmed || committing) return
+    if (!trimmed || committing || sessionId == null) return
     setCommitting(true)
+    const currentGen = ++asyncGenRef.current
+    const activeSessionId = sessionId
     try {
       const files = summary.files.map((f) => f.path)
       const res = await window.electronAPI.git.commit({ message: trimmed, files, sessionId })
+      if (asyncGenRef.current !== currentGen || sessionId !== activeSessionId) return
       if (res?.success) {
         setCommittedHash(res.commitHash || 'ok')
+        setCommittedFingerprint(changesFingerprint)
         setCommitOpen(false)
         useStore.getState().triggerToast(
           t('filesummary.commit_success', res.commitHash ? `${res.commitHash} - ${trimmed}` : trimmed),
@@ -206,87 +279,97 @@ export default function SessionReviewDrawer({
         )
       }
     } catch (err: any) {
+      if (asyncGenRef.current !== currentGen || sessionId !== activeSessionId) return
       useStore.getState().triggerToast(
         t('filesummary.commit_failed', err?.message || 'Error'),
         'error'
       )
     } finally {
-      setCommitting(false)
+      if (asyncGenRef.current === currentGen) {
+        setCommitting(false)
+      }
     }
-  }, [commitMsg, committing, summary.files, sessionId])
+  }, [commitMsg, committing, summary.files, sessionId, changesFingerprint])
 
   if (!isOpen) return null
 
   return createPortal(
-    <aside
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('chat.review_title')}
-      className="fixed top-0 bottom-0 end-0 w-[440px] max-w-[92vw] z-[110] flex flex-col shadow-2xl"
-      style={{
-        backgroundColor: 'var(--bg-primary)',
-        borderInlineStart: '1px solid var(--border)',
-      }}
-    >
-      {/* Header */}
+    <div className="fixed inset-0 z-[110] flex justify-end">
       <div
-        className="h-12 flex items-center gap-2 px-3 shrink-0 wco-pr app-drag"
-        style={{ borderBottom: '1px solid var(--border)' }}
+        className="absolute inset-0 bg-black/15 backdrop-fade-plain"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        ref={drawerRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('chat.review_title')}
+        className="relative w-[480px] max-w-[94vw] h-full flex flex-col shadow-2xl drawer-slide-in"
+        style={{
+          backgroundColor: 'var(--bg-primary)',
+          borderInlineStart: '1px solid var(--border)',
+        }}
       >
-        <FileDiff size={15} style={{ color: 'var(--accent)' }} className="shrink-0" />
-        <span className="text-sm font-semibold tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>
-          {t('chat.review_title')}
-        </span>
+        {/* Header */}
+        <div
+          className="h-12 flex items-center gap-2 px-3.5 shrink-0 wco-pr app-drag"
+          style={{ borderBottom: '1px solid var(--border)' }}
+        >
+          <FileDiff size={15} style={{ color: 'var(--accent)' }} className="shrink-0" />
+          <span className="text-sm font-semibold tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>
+            {t('chat.review_title')}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => {
+              onClose()
+              setCheckpointsOpen(true)
+            }}
+            className="ms-auto flex items-center gap-1 px-2 py-1 rounded-[6px] border text-[11px] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer app-no-drag shrink-0"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            title={t('hud.open_outputs')}
+          >
+            <History size={11} />
+            <span>{t('chat.review_checkpoints_btn')}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] app-no-drag shrink-0"
+            title={t('common.close')}
+            aria-label={t('common.close')}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Subheader: Metrics + Search + Commit */}
         {summary.fileCount > 0 && (
-          <div className="flex items-center gap-1 font-mono text-[11px] tabular-nums shrink-0">
-            <span
-              className="px-1.5 py-0.2 rounded-[4px] border"
-              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
-            >
-              {summary.fileCount}
-            </span>
-            {summary.totalAdded > 0 && (
-              <span style={{ color: 'var(--success)' }}>+{summary.totalAdded}</span>
-            )}
-            {summary.totalRemoved > 0 && (
-              <span style={{ color: 'var(--error)' }}>-{summary.totalRemoved}</span>
-            )}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => {
-            onClose()
-            setCheckpointsOpen(true)
-          }}
-          className="ms-auto flex items-center gap-1 px-2 py-1 rounded-[6px] border text-[11px] hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer app-no-drag"
-          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-          title={t('hud.open_outputs')}
-        >
-          <History size={11} />
-          <span>{t('chat.review_checkpoints_btn')}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1.5 rounded-[6px] hover:bg-[var(--bg-secondary)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] app-no-drag"
-          title={t('common.close')}
-          aria-label={t('common.close')}
-        >
-          <X size={14} />
-        </button>
-      </div>
-
-      {/* Subheader: Search + Commit */}
-      {summary.fileCount > 0 && (
-        <div className="p-2.5 space-y-2 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2">
-            <div
-              className="flex-1 flex items-center gap-2 rounded-[6px] border px-2.5 py-1 text-xs"
-              style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
-            >
+          <div className="p-3 space-y-2.5 shrink-0" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums">
+              <span style={{ color: 'var(--text-secondary)' }}>
+                {summary.fileCount === 1
+                  ? t('filesummary.one_changed_file', summary.totalAdded, summary.totalRemoved)
+                  : t('filesummary.changed_files', summary.fileCount, summary.totalAdded, summary.totalRemoved)}
+              </span>
+              <div className="flex items-center gap-1.5 font-semibold shrink-0">
+                {summary.totalAdded > 0 && (
+                  <span style={{ color: 'var(--success)' }}>+{summary.totalAdded}</span>
+                )}
+                {summary.totalRemoved > 0 && (
+                  <span style={{ color: 'var(--error)' }}>-{summary.totalRemoved}</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className="flex-1 flex items-center gap-2 rounded-[6px] border px-2.5 py-1 text-xs"
+                style={{ backgroundColor: 'var(--content-bg)', borderColor: 'var(--border)' }}
+              >
               <Search size={12} className="text-[var(--text-muted)] shrink-0" />
               <input
                 type="text"
@@ -299,6 +382,7 @@ export default function SessionReviewDrawer({
                 <button
                   type="button"
                   onClick={() => setSearch('')}
+                  aria-label={t('common.clear')}
                   className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
                 >
                   <X size={11} />
@@ -309,15 +393,15 @@ export default function SessionReviewDrawer({
             <button
               type="button"
               onClick={handleOpenCommit}
-              disabled={!!committedHash}
+              disabled={isCommittedForCurrentChanges}
               className="h-7 flex items-center gap-1 px-2.5 rounded-[6px] border text-[11px] font-medium hover:bg-[var(--bg-secondary)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:opacity-50 transition-colors cursor-pointer shrink-0"
               style={{
-                borderColor: committedHash ? 'var(--success)' : 'var(--border)',
-                color: committedHash ? 'var(--success)' : 'var(--text-primary)',
+                borderColor: isCommittedForCurrentChanges ? 'var(--success)' : 'var(--border)',
+                color: isCommittedForCurrentChanges ? 'var(--success)' : 'var(--text-primary)',
                 backgroundColor: 'var(--content-bg)',
               }}
             >
-              {committedHash ? (
+              {isCommittedForCurrentChanges ? (
                 <>
                   <Check size={11} />
                   <span>{t('filesummary.committed')}</span>
@@ -453,12 +537,12 @@ export default function SessionReviewDrawer({
                         return (
                           <div
                             key={i}
-                            className="flex px-2.5 py-0.5 leading-snug"
+                            className="flex px-2.5 py-0.5 leading-[1.55]"
                             style={{
                               backgroundColor: isAdd
-                                ? 'rgba(34,197,94,0.08)'
+                                ? 'color-mix(in srgb, var(--success) 8%, transparent)'
                                 : isDel
-                                ? 'rgba(239,68,68,0.08)'
+                                ? 'color-mix(in srgb, var(--error) 8%, transparent)'
                                 : isHunk
                                 ? 'var(--bg-secondary)'
                                 : 'transparent',
@@ -471,7 +555,10 @@ export default function SessionReviewDrawer({
                                 : 'var(--text-secondary)',
                             }}
                           >
-                            <span className="shrink-0 w-7 select-none text-[10px] text-right pr-2 opacity-50" style={{ color: 'var(--text-muted)' }}>
+                            <span
+                              className="shrink-0 w-7 select-none text-[10px] text-right pr-2 mr-2 border-r opacity-50 tabular-nums"
+                              style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}
+                            >
                               {i + 1}
                             </span>
                             <span className="whitespace-pre-wrap break-all">{line}</span>
@@ -486,7 +573,8 @@ export default function SessionReviewDrawer({
           })
         )}
       </div>
-    </aside>,
+    </aside>
+    </div>,
     document.body
   )
 }

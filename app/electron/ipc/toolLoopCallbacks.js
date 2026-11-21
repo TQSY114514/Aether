@@ -402,7 +402,10 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
       resolve(val)
     }
     const onReply  = (_e, r) => { if (r && r.reqId === reqId) finish(JSON.stringify(r.answers || [])) }
-    const onAbort  = () => finish(JSON.stringify([{ question: questions[0]?.question, answer: '(aborted)' }]))
+    const onAbort  = () => {
+      safeSend('chat:question-expired', { reqId })
+      finish(JSON.stringify([{ question: questions[0]?.question, answer: '(aborted)' }]))
+    }
     const onTimeout = () => {
       safeSend('chat:question-expired', { reqId })
       finish(JSON.stringify([{ answer: '(no response)' }]))
@@ -455,7 +458,10 @@ function buildToolLoopCallbacks({ db, send, getWc, sessionId, msgId, controller,
         }
         finish(!!r.allowed)
       }
-      const onAbort   = () => finish(false)
+      const onAbort   = () => {
+        safeSend('chat:permission-expired', { reqId })
+        finish(false)
+      }
       const onTimeout = () => {
         safeSend('chat:permission-expired', { reqId })
         finish(false)

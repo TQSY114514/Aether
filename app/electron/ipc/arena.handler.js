@@ -252,8 +252,12 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
       const c = abortControllers.get(sessionId)
       if (c) { c.abort(); abortControllers.delete(sessionId) }
     } else {
-      for (const [, c] of abortControllers) c.abort()
-      abortControllers.clear()
+      for (const [key, c] of abortControllers) {
+        if (!String(key).startsWith('bench:') && !String(key).startsWith('objective:')) {
+          c.abort()
+          abortControllers.delete(key)
+        }
+      }
     }
   })
 
@@ -557,21 +561,35 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     if (!content || typeof content !== 'string') {
       return { ok: false, error: 'empty_content' }
     }
-    const { getWorkspaceRoot } = require('../tools/sandbox')
-    let wsRoot = cwd
-    if (!wsRoot && sessionId != null) {
+    const { getWorkspaceRoot, isDangerousRoot, hasUnsafeWindowsPrefix, isSensitivePath } = require('../tools/sandbox')
+    let fallbackRoot = null
+    if (sessionId != null) {
       try {
         const sess = typeof db.getSession === 'function' ? db.getSession(sessionId) : null
-        if (sess && sess.cwd) wsRoot = sess.cwd
+        if (sess && sess.cwd) fallbackRoot = sess.cwd
       } catch {}
-      if (!wsRoot) {
+      if (!fallbackRoot) {
         const cfg = db.getSessionConfig(sessionId)
-        if (cfg && cfg.workspace) wsRoot = cfg.workspace
+        if (cfg && cfg.workspace) fallbackRoot = cfg.workspace
       }
     }
-    if (!wsRoot) {
-      wsRoot = getWorkspaceRoot(sessionId) || getWorkspaceRoot()
+    if (!fallbackRoot) {
+      fallbackRoot = getWorkspaceRoot(sessionId) || getWorkspaceRoot() || process.cwd()
     }
+
+    let wsRoot
+    if (cwd) {
+      if (hasUnsafeWindowsPrefix(cwd) || isDangerousRoot(cwd) || isSensitivePath(cwd)) {
+        return { ok: false, error: 'forbidden_path' }
+      }
+      wsRoot = path.isAbsolute(cwd) ? path.resolve(cwd) : resolveTaskCwd(cwd, fallbackRoot)
+      if (hasUnsafeWindowsPrefix(wsRoot) || isDangerousRoot(wsRoot) || isSensitivePath(wsRoot)) {
+        return { ok: false, error: 'forbidden_path' }
+      }
+    } else {
+      wsRoot = fallbackRoot
+    }
+
     if (!wsRoot || !require('fs').existsSync(wsRoot)) {
       return { ok: false, error: 'no_workspace_found' }
     }
@@ -579,7 +597,7 @@ function registerArenaHandlers(ipcMain, db, getWebContents = () => null) {
     try {
       const { extractAndApplyPatches } = require('../llm/objectiveArena')
       const result = extractAndApplyPatches(wsRoot, content)
-      if (result.ok && result.appliedCount > 0 && sessionId != null && Array.isArray(result.filesModified)) {
+      if (result.appliedCount > 0 && sessionId != null && Array.isArray(result.filesModified) && result.filesModified.length > 0) {
         try {
           const shadowGit = require('../llm/shadowGit')
           const absPaths = result.filesModified.map((f) => path.resolve(wsRoot, f))
