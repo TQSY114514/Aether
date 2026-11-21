@@ -735,6 +735,7 @@ class LspClient {
         this._proc = null
         this._initialized = false
         this._serverSupportsPushVersions = false
+        this._docSupportsPushVersions.clear()
         this._syncKind = 1
         this._docVersions.clear()
         this._docTexts.clear()
@@ -1323,6 +1324,7 @@ async function searchWorkspace(root, query, { language = 'javascript', timeoutMs
   try {
     return await client.searchSymbols(query)
   } catch {
+    if (client._disposed || clientCache.get(key) !== client) return null
     if (client._startErrorCode === 'ENOENT') markLanguageUnavailable(language)
     clientCache.delete(key)
     try { client.dispose() } catch { /* already disposed */ }
@@ -1404,6 +1406,7 @@ async function withClient(root, language, fn, { onDegraded } = {}) {
   }
   try {
     const res = await fn(client)
+    if (client._disposed || clientCache.get(key) !== client) return res
     if (client._startErrorCode === 'ENOENT') {
       markLanguageUnavailable(language)
       clientCache.delete(key)

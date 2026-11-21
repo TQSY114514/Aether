@@ -155,7 +155,7 @@ export default function ArenaResultsDeck({
             style={{
               borderColor: isWinner ? 'var(--success)' : isLoser ? 'var(--border)' : 'var(--border)',
               opacity: isLoser ? 0.6 : isRevealed ? 1 : 0,
-              backgroundColor: isLoser ? 'var(--bg-secondary)' : 'var(--content-bg)',
+              backgroundColor: isLoser ? 'var(--bg-secondary)' : 'var(--bg-primary)',
             }}
           >
             <div className="px-3 py-2 border-b border-[var(--border)] bg-[var(--bg-secondary)] flex items-center justify-between text-sm font-medium">

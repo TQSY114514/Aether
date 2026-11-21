@@ -767,13 +767,14 @@ ipcMain.handle('chat:complete', handleChatComplete)
       } catch (err) {
         try { wc?.send('chat:tool-loop-end', { sessionId }) } catch {}
         abortControllers.delete(msgId)
-        const errMsg = err.name === 'AbortError' ? '已中止' : (err.message || String(err))
+        const isAbort = err.name === 'AbortError' || controller.signal.aborted
+        const errMsg = isAbort ? '已中止' : (err.message || String(err))
         // Preserve accumulated content and file summary on abort (tool-loop path)
         const preserved = streamedContent || finalContent || ''
         const _errThinking = cb?.getThinkingData ? cb.getThinkingData() : null
         const updatePayload = {
           content: preserved,
-          status: 'aborted',
+          status: isAbort ? 'aborted' : 'error',
           error_message: errMsg,
           thinking_content: _errThinking?.content || null,
           thinking_duration_ms: _errThinking?.durationMs || null,
@@ -790,7 +791,7 @@ ipcMain.handle('chat:complete', handleChatComplete)
         }
         db.updateMessage(msgId, updatePayload)
         wc?.send('chat:stream-chunk', { messageId: msgId, delta: '', done: true, sessionId })
-        return err.name === 'AbortError'
+        return isAbort
           ? { messageId: msgId, aborted: true, modelSuggestion }
           : { messageId: msgId, error: errMsg, modelSuggestion }
       } finally {
