@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X,
   ZoomIn,
@@ -360,9 +361,12 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
 
   const isFit = Math.abs(scale - 1) < 0.05
 
-  return (
+  return createPortal(
     <div
       ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={currentImage.name || 'Image Preview'}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none overflow-hidden animate-fade-in"
       onClick={(e) => {
         // Clicking backdrop closes modal; dragging doesn't close
@@ -633,6 +637,7 @@ export default function ImageLightboxModal({ images, initialIndex = 0, onClose }
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
